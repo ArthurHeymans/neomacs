@@ -3062,7 +3062,7 @@ fn collect_value_symbol_names(
                 return;
             }
             if let Some(table) = value.as_hash_table() {
-                for key_value in table.key_snapshots.values().copied() {
+                for key_value in table.key_snapshots().copied() {
                     collect_value_symbol_names(key_value, symbol_names, seen);
                 }
                 for value in table.data.values().copied() {

@@ -14,11 +14,9 @@ fn hash_table_keys_values_basics() {
         let _ = table.with_hash_table_mut(|raw| {
             let test = raw.test.clone();
             let key_alpha = Value::symbol("alpha").to_hash_key(&test);
-            raw.data.insert(key_alpha.clone(), Value::fixnum(1));
-            raw.insertion_order.push(key_alpha);
+            raw.insert(key_alpha, Value::symbol("alpha"), Value::fixnum(1));
             let key_beta = Value::symbol("beta").to_hash_key(&test);
-            raw.data.insert(key_beta.clone(), Value::fixnum(2));
-            raw.insertion_order.push(key_beta);
+            raw.insert(key_beta, Value::symbol("beta"), Value::fixnum(2));
         });
     } else {
         panic!("expected hash table");
@@ -135,15 +133,15 @@ fn remhash_unlinks_entry_slot_without_compacting_table_order() {
     };
     let raw = table.as_hash_table().unwrap();
     assert_eq!(raw.data.len(), 15);
-    assert!(!raw.entry_slot_by_key.contains_key(&removed_key));
-    assert_eq!(raw.entry_slots.iter().flatten().count(), 15);
-    assert_eq!(raw.free_slots.len(), 1);
+    assert!(!raw.data.contains_key(&removed_key));
+    assert_eq!(raw.entry_slot_count(), 16);
+    assert_eq!(raw.live_hash_keys_in_slot_order().len(), 15);
 
     builtin_puthash(vec![Value::fixnum(5), Value::fixnum(50), table]).unwrap();
 
     let raw = table.as_hash_table().unwrap();
     assert_eq!(raw.data.len(), 16);
-    assert_eq!(raw.entry_slots.iter().flatten().count(), 16);
+    assert_eq!(raw.entry_slot_count(), 16);
     assert_eq!(raw.live_hash_keys_in_slot_order().len(), 16);
     assert_eq!(
         builtin_gethash(vec![Value::fixnum(5), table]).unwrap(),
@@ -616,6 +614,27 @@ fn hash_table_size_tracks_growth_boundaries() {
 }
 
 #[test]
+fn logical_hash_table_growth_does_not_eagerly_reserve_every_index() {
+    crate::test_utils::init_test_tracing();
+    let table = builtin_make_hash_table(vec![Value::keyword(":size"), Value::fixnum(1)])
+        .expect("size 1 table");
+    let _ = builtin_puthash(vec![Value::fixnum(1), Value::symbol("x"), table])
+        .expect("puthash for first tiny entry");
+    let _ = builtin_puthash(vec![Value::fixnum(2), Value::symbol("y"), table])
+        .expect("puthash crossing the logical growth boundary");
+
+    table.with_hash_table_mut(|raw| {
+        let logical_size = usize::try_from(raw.size).unwrap();
+        assert_eq!(logical_size, 24);
+        assert!(raw.data.capacity() < logical_size);
+        let five_key_legacy_floor = logical_size
+            .saturating_mul(5)
+            .saturating_mul(std::mem::size_of::<HashKey>());
+        assert!(raw.data.known_storage_bytes() < five_key_legacy_floor);
+    });
+}
+
+#[test]
 fn internal_hash_table_buckets_report_hash_diagnostics() {
     crate::test_utils::init_test_tracing();
     let table = builtin_make_hash_table(vec![
@@ -629,11 +648,9 @@ fn internal_hash_table_buckets_report_hash_diagnostics() {
         let _ = table.with_hash_table_mut(|raw| {
             let test = raw.test.clone();
             let key_a = Value::string("a").to_hash_key(&test);
-            raw.data.insert(key_a.clone(), Value::symbol("value-a"));
-            raw.insertion_order.push(key_a);
+            raw.insert(key_a, Value::string("a"), Value::symbol("value-a"));
             let key_b = Value::string("b").to_hash_key(&test);
-            raw.data.insert(key_b.clone(), Value::symbol("value-b"));
-            raw.insertion_order.push(key_b);
+            raw.insert(key_b, Value::string("b"), Value::symbol("value-b"));
         });
     } else {
         panic!("expected hash table");

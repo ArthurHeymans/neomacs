@@ -655,6 +655,21 @@ impl LispString {
         self.sbytes()
     }
 
+    /// Heap bytes reserved by an owned byte backing, including capacity for
+    /// GNU's trailing NUL. Mapped/static strings reserve no allocator-backed
+    /// payload bytes in this process; their bytes belong to the pdump mapping
+    /// or executable image instead.
+    pub(crate) fn owned_capacity(&self) -> usize {
+        match self.storage() {
+            LispStringStorage::Owned(data) => data.capacity(),
+            LispStringStorage::Static { .. } | LispStringStorage::Mapped { .. } => 0,
+        }
+    }
+
+    pub(crate) fn has_owned_storage(&self) -> bool {
+        matches!(self.storage(), LispStringStorage::Owned(_))
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         self.sbytes() == 0
     }

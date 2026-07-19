@@ -433,28 +433,11 @@ fn maybe_resize_hash_table_for_insert(table: &mut LispHashTable, inserting_new_k
     } else {
         base.saturating_mul(2)
     };
-    if let Ok(new_size) = usize::try_from(table.size.max(0)) {
-        if new_size > table.data.capacity() {
-            let additional = new_size - table.data.capacity();
-            table.data.reserve(additional);
-        }
-        if new_size > table.key_snapshots.capacity() {
-            let additional = new_size - table.key_snapshots.capacity();
-            table.key_snapshots.reserve(additional);
-        }
-        if new_size > table.insertion_order.capacity() {
-            let additional = new_size - table.insertion_order.capacity();
-            table.insertion_order.reserve(additional);
-        }
-        if new_size > table.entry_slots.capacity() {
-            let additional = new_size - table.entry_slots.capacity();
-            table.entry_slots.reserve(additional);
-        }
-        if new_size > table.entry_slot_by_key.capacity() {
-            let additional = new_size - table.entry_slot_by_key.capacity();
-            table.entry_slot_by_key.reserve(additional);
-        }
-    }
+    // `size` is the GNU-visible logical allocation size, not a requirement to
+    // reserve every Rust-side index to the same capacity. A single Lisp entry
+    // is mirrored across several maps/vectors; eagerly reserving all of them at
+    // each logical growth boundary multiplies otherwise-unused capacity. Let
+    // each backing collection grow with the entries actually inserted.
 }
 
 pub(crate) fn builtin_define_hash_table_test(args: Vec<Value>) -> EvalResult {
@@ -820,10 +803,7 @@ fn builtin_puthash_user_defined(
             *slot = value;
         } else {
             maybe_resize_hash_table_for_insert(ht, true);
-            ht.data.insert(storage_key.clone(), value);
-            ht.key_snapshots.insert(storage_key.clone(), key_value);
-            ht.insertion_order.push(storage_key.clone());
-            ht.note_hash_key_inserted(storage_key);
+            ht.insert(storage_key, key_value, value);
         }
     });
     Ok(Some(()))
@@ -845,10 +825,7 @@ fn builtin_puthash_values(
                     *slot = value;
                 } else {
                     maybe_resize_hash_table_for_insert(ht, true);
-                    ht.data.insert(key.clone(), value);
-                    ht.key_snapshots.insert(key.clone(), key_value);
-                    ht.insertion_order.push(key.clone());
-                    ht.note_hash_key_inserted(key);
+                    ht.insert(key, key_value, value);
                 }
             });
             Ok(value)
@@ -926,10 +903,7 @@ fn builtin_remhash_user_defined(
 
     if let Some(storage_key) = existing_key {
         let _ = table.with_hash_table_mut(|ht| {
-            if ht.data.remove(&storage_key).is_some() {
-                ht.key_snapshots.remove(&storage_key);
-                ht.note_hash_key_removed(&storage_key);
-            }
+            let _ = ht.data.remove(&storage_key);
         });
     }
     Ok(Some(()))
@@ -946,10 +920,7 @@ pub(crate) fn builtin_remhash_values(
             let test = table.as_hash_table().unwrap().test.clone();
             let key = key_value.to_hash_key_swp(&test, symbols_with_pos_enabled);
             let _ = table.with_hash_table_mut(|ht| {
-                if ht.data.remove(&key).is_some() {
-                    ht.key_snapshots.remove(&key);
-                    ht.note_hash_key_removed(&key);
-                }
+                let _ = ht.data.remove(&key);
             });
             Ok(Value::NIL)
         }
@@ -967,9 +938,6 @@ pub(crate) fn builtin_clrhash(args: Vec<Value>) -> EvalResult {
             check_mutable_hash_table(args[0])?;
             let _ = args[0].with_hash_table_mut(|ht| {
                 ht.data.clear();
-                ht.key_snapshots.clear();
-                ht.insertion_order.clear();
-                ht.clear_hash_slots();
             });
             // Be compatible with GNU Emacs (and XEmacs): return the table.
             Ok(args[0])

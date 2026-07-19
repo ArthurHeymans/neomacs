@@ -1433,7 +1433,7 @@ impl Obarray {
                     return;
                 }
                 if let Some(table) = value.as_hash_table() {
-                    for key_value in table.key_snapshots.values().copied() {
+                    for key_value in table.key_snapshots().copied() {
                         self.materialize_read_symbols_1(key_value, seen);
                     }
                     for value in table.data.values().copied() {

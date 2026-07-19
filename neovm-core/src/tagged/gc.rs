@@ -1792,11 +1792,10 @@ impl<T: PagedObject> Drop for ObjectPage<T> {
         // object, so strings free their byte storage + interval tables and
         // vectors free their element `Vec`. Float-v1's dealloc-only Drop does
         // NOT generalize; `needs_drop` keeps the float walk compiled out.
-        // Reached only when the owning `TaggedHeap` drops (its `Drop` joins
-        // any in-flight concurrent mark BEFORE fields — the arena vectors
-        // included — are dropped), so the GC thread can no longer be reading
-        // these slots. NO page recycling to any shared pool: this is the only
-        // place a page is freed (retired pages included).
+        // Reached either when a completed sweep removes an empty young page,
+        // or when the owning `TaggedHeap` drops. Both paths run on the mutator
+        // after any concurrent marker has joined, so no GC thread can still be
+        // reading these slots. Retired pages are freed only at heap teardown.
         if std::mem::needs_drop::<T>() {
             for word_index in 0..Self::ALLOC_WORDS {
                 let mut bits = self.alloc_bits[word_index];
@@ -1821,8 +1820,9 @@ impl<T: PagedObject> Drop for ObjectPage<T> {
 /// registry holding only its own class's pages — never merge them, with each
 /// other or with the cons registry), and the class free list.
 struct ObjectArena<T: PagedObject> {
-    /// Every page of this class, retired pages included. Freed only by this
-    /// vector's drop at heap teardown (`ObjectPage: Drop`).
+    /// Every retained page of this class, retired pages included. Completely
+    /// empty young pages are removed after a full sweep; all remaining pages
+    /// are freed by this vector's drop at heap teardown (`ObjectPage: Drop`).
     pages: Vec<ObjectPage<T>>,
     /// Page-base → `pages` index: O(1) page lookup from any slot pointer
     /// (pages are size-aligned, so `ObjectPage::page_base_for_ptr` masks the
@@ -2024,6 +2024,45 @@ impl<T: PagedObject> ObjectArena<T> {
         (live_bytes, freed)
     }
 
+    /// Release completely empty young pages after the whole class has been
+    /// swept, then rebuild every index-bearing arena structure. This must not
+    /// run between cooperative sweep slices: removing a `pages` element shifts
+    /// later indices and would invalidate both the sweep cursor and partial
+    /// chain. Slot storage has its own stable allocation, so compacting the
+    /// `Vec<ObjectPage<T>>` does not move any surviving Lisp object.
+    fn release_empty_pages(&mut self) -> usize {
+        let old_len = self.pages.len();
+        if !self
+            .pages
+            .iter()
+            .any(|page| page.allocated == 0 && !page.retired)
+        {
+            return 0;
+        }
+
+        self.pages
+            .retain(|page| page.allocated != 0 || page.retired);
+        self.pages.shrink_to_fit();
+
+        self.page_index_by_base =
+            FxHashMap::with_capacity_and_hasher(self.pages.len(), Default::default());
+        self.partial_head = PAGE_NONE;
+        for (page_index, page) in self.pages.iter_mut().enumerate() {
+            let previous = self.page_index_by_base.insert(page.base_addr(), page_index);
+            debug_assert!(previous.is_none(), "arena page base registered twice");
+
+            page.next_partial = PAGE_NONE;
+            page.on_partial = false;
+            if page.free_head != PAGE_NONE {
+                page.on_partial = true;
+                page.next_partial = self.partial_head;
+                self.partial_head = page_index;
+            }
+        }
+
+        old_len - self.pages.len()
+    }
+
     /// Collect raw pointers to every ALLOCATED slot (allocated-bit-first;
     /// retired pages INCLUDED — their slots are live tenured objects).
     /// Snapshot semantics: callers walk the returned vector while calling
@@ -2041,6 +2080,73 @@ impl<T: PagedObject> ObjectArena<T> {
             }
         }
         out
+    }
+
+    /// Exact page/slot occupancy plus directly-owned payload capacity for
+    /// diagnostics. The allocation bitmap is authoritative, just as it is for
+    /// sweep and ownership checks; unallocated slot bytes are never read.
+    fn layout_stats(&self, payload_layout: impl Fn(&T) -> PayloadLayout) -> ArenaLayoutStats {
+        let mut stats = ArenaLayoutStats {
+            class: T::CLASS,
+            pages: self.pages.len(),
+            page_bytes: self.pages.len().saturating_mul(OBJECT_PAGE_BYTES),
+            slot_bytes: T::SLOT_BYTES,
+            slots_per_page: ObjectPage::<T>::SLOTS,
+            ..ArenaLayoutStats::default()
+        };
+
+        for page in &self.pages {
+            stats.bumped_slots = stats.bumped_slots.saturating_add(page.next_index);
+            stats.allocated_slots = stats.allocated_slots.saturating_add(page.allocated);
+            stats.reclaimed_slots = stats
+                .reclaimed_slots
+                .saturating_add(page.next_index.saturating_sub(page.allocated));
+            stats.never_used_slots = stats
+                .never_used_slots
+                .saturating_add(ObjectPage::<T>::SLOTS.saturating_sub(page.next_index));
+            stats.retired_pages += usize::from(page.retired);
+            if page.allocated == 0 {
+                stats.empty_pages += 1;
+            } else if page.allocated == ObjectPage::<T>::SLOTS {
+                stats.full_pages += 1;
+            } else {
+                stats.partial_pages += 1;
+            }
+
+            for word_index in 0..ObjectPage::<T>::ALLOC_WORDS {
+                let mut bits = page.alloc_bits[word_index];
+                while bits != 0 {
+                    let bit = bits.trailing_zeros() as usize;
+                    bits &= bits - 1;
+                    let index = word_index * usize::BITS as usize + bit;
+                    let object = unsafe { &*page.slot_ptr(index) };
+                    let header = unsafe { &*(object as *const T as *const GcHeader) };
+                    if header.tenured {
+                        stats.tenured_slots += 1;
+                    } else {
+                        stats.young_slots += 1;
+                    }
+                    let payload = payload_layout(object);
+                    stats.payload_logical_bytes = stats
+                        .payload_logical_bytes
+                        .saturating_add(payload.logical_bytes);
+                    stats.payload_capacity_bytes = stats
+                        .payload_capacity_bytes
+                        .saturating_add(payload.capacity_bytes);
+                    stats.owned_payloads += usize::from(payload.owned);
+                    stats.mapped_payloads += usize::from(payload.mapped);
+                }
+            }
+        }
+
+        stats.occupied_slot_bytes = stats.allocated_slots.saturating_mul(T::SLOT_BYTES);
+        stats.object_struct_bytes = stats.allocated_slots.saturating_mul(size_of::<T>());
+        debug_assert_eq!(
+            stats.allocated_slots,
+            stats.tenured_slots + stats.young_slots,
+            "arena layout accounting lost an allocated slot",
+        );
+        stats
     }
 }
 
@@ -2357,6 +2463,105 @@ impl std::fmt::Display for DrainKinds {
             self.other,
         )
     }
+}
+
+/// A point-in-time accounting of one fixed-stride object arena. This is
+/// diagnostics-only and intentionally separates the always-resident 64 KiB
+/// page backing from payload allocations owned by live objects.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ArenaLayoutStats {
+    pub class: &'static str,
+    pub pages: usize,
+    pub page_bytes: usize,
+    pub slot_bytes: usize,
+    pub slots_per_page: usize,
+    pub allocated_slots: usize,
+    pub tenured_slots: usize,
+    pub young_slots: usize,
+    pub bumped_slots: usize,
+    pub reclaimed_slots: usize,
+    pub never_used_slots: usize,
+    pub empty_pages: usize,
+    pub partial_pages: usize,
+    pub full_pages: usize,
+    pub retired_pages: usize,
+    pub occupied_slot_bytes: usize,
+    pub object_struct_bytes: usize,
+    pub payload_logical_bytes: usize,
+    pub payload_capacity_bytes: usize,
+    pub owned_payloads: usize,
+    pub mapped_payloads: usize,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct PayloadLayout {
+    logical_bytes: usize,
+    capacity_bytes: usize,
+    owned: bool,
+    mapped: bool,
+}
+
+impl PayloadLayout {
+    fn add(self, other: Self) -> Self {
+        Self {
+            logical_bytes: self.logical_bytes.saturating_add(other.logical_bytes),
+            capacity_bytes: self.capacity_bytes.saturating_add(other.capacity_bytes),
+            owned: self.owned || other.owned,
+            mapped: self.mapped || other.mapped,
+        }
+    }
+}
+
+/// Exact ordinary-cons block occupancy. Mapped pdump conses are reported in
+/// [`MappedLayoutStats`] because they do not consume allocator-backed blocks.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ConsLayoutStats {
+    pub pages: usize,
+    pub page_bytes: usize,
+    pub capacity_slots: usize,
+    pub bumped_slots: usize,
+    pub live_slots: usize,
+    pub reclaimed_slots: usize,
+    pub never_used_slots: usize,
+    pub empty_pages: usize,
+    pub partial_pages: usize,
+    pub full_pages: usize,
+    pub occupied_bytes: usize,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct MappedLayoutStats {
+    pub conses: usize,
+    pub floats: usize,
+    pub strings: usize,
+    pub veclikes: usize,
+    pub object_image_bytes: usize,
+    pub copied_string_payloads: usize,
+    pub copied_string_capacity_bytes: usize,
+    pub copied_veclike_payloads: usize,
+    pub copied_veclike_capacity_bytes: usize,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct BoxedKindLayoutStats {
+    pub class: &'static str,
+    pub objects: usize,
+    pub tenured_objects: usize,
+    /// Object struct plus directly-owned backing capacities known to the GC.
+    /// Nested allocations inside structural hash keys are not included.
+    pub known_bytes: usize,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct HeapLayoutStats {
+    pub allocated_objects: usize,
+    pub managed_live_bytes: usize,
+    pub page_backing_bytes: usize,
+    pub known_payload_capacity_bytes: usize,
+    pub cons: ConsLayoutStats,
+    pub arenas: Vec<ArenaLayoutStats>,
+    pub mapped: MappedLayoutStats,
+    pub boxed: Vec<BoxedKindLayoutStats>,
 }
 
 /// Snapshot of the deferred-sweep cost accounting plus the concurrent-mark
@@ -3666,22 +3871,12 @@ impl TaggedHeap {
             .saturating_mul(size_of::<TaggedValue>())
     }
 
-    fn hash_map_storage_bytes<K, V, S>(values: &std::collections::HashMap<K, V, S>) -> usize {
-        values.capacity().saturating_mul(size_of::<(K, V)>())
-    }
-
     fn string_object_bytes(obj: &StringObj) -> usize {
         size_of::<StringObj>().saturating_add(obj.data.byte_len())
     }
 
     fn hash_table_object_bytes(obj: &HashTableObj) -> usize {
-        size_of::<HashTableObj>()
-            .saturating_add(Self::hash_map_storage_bytes(&obj.table.data))
-            .saturating_add(Self::hash_map_storage_bytes(&obj.table.key_snapshots))
-            .saturating_add(Self::vector_storage_bytes(&obj.table.insertion_order))
-            .saturating_add(Self::vector_storage_bytes(&obj.table.entry_slots))
-            .saturating_add(Self::hash_map_storage_bytes(&obj.table.entry_slot_by_key))
-            .saturating_add(Self::vector_storage_bytes(&obj.table.free_slots))
+        size_of::<HashTableObj>().saturating_add(obj.table.data.known_storage_bytes())
     }
 
     fn lambda_object_bytes(obj: &LambdaObj) -> usize {
@@ -3791,6 +3986,342 @@ impl TaggedHeap {
                     }
                 }
             }
+        }
+    }
+
+    fn string_payload_layout(string: &crate::heap_types::LispString) -> PayloadLayout {
+        let logical_bytes = string.byte_len().saturating_add(1);
+        let capacity_bytes = string.owned_capacity();
+        PayloadLayout {
+            logical_bytes,
+            capacity_bytes,
+            owned: string.has_owned_storage(),
+            mapped: !string.has_owned_storage(),
+        }
+    }
+
+    fn value_vec_payload_layout(values: &LispValueVec) -> PayloadLayout {
+        PayloadLayout {
+            logical_bytes: values
+                .as_slice()
+                .len()
+                .saturating_mul(size_of::<TaggedValue>()),
+            capacity_bytes: Self::lisp_value_vec_storage_bytes(values),
+            owned: values.is_owned(),
+            mapped: !values.is_owned(),
+        }
+    }
+
+    fn lambda_params_payload_layout(
+        params: &crate::emacs_core::value::LambdaParams,
+    ) -> PayloadLayout {
+        PayloadLayout {
+            logical_bytes: (params.required.len() + params.optional.len())
+                .saturating_mul(size_of::<SymId>()),
+            capacity_bytes: (params.required.capacity() + params.optional.capacity())
+                .saturating_mul(size_of::<SymId>()),
+            owned: params.required.capacity() > 0 || params.optional.capacity() > 0,
+            mapped: false,
+        }
+    }
+
+    fn bytecode_payload_layout(obj: &ByteCodeObj) -> PayloadLayout {
+        let data = &obj.data;
+        let mut stats = PayloadLayout {
+            logical_bytes: std::mem::size_of_val(data.ops.as_slice()),
+            capacity_bytes: Self::vector_storage_bytes(&data.ops),
+            owned: data.ops.capacity() > 0,
+            mapped: false,
+        };
+        stats = stats.add(PayloadLayout {
+            logical_bytes: data
+                .constants
+                .len()
+                .saturating_mul(size_of::<TaggedValue>()),
+            capacity_bytes: Self::vector_storage_bytes(&data.constants),
+            owned: data.constants.capacity() > 0,
+            mapped: false,
+        });
+        stats = stats.add(Self::lambda_params_payload_layout(&data.params));
+        if let Some(offsets) = &data.gnu_byte_offset_map {
+            stats = stats.add(PayloadLayout {
+                logical_bytes: std::mem::size_of_val(offsets.as_slice()),
+                capacity_bytes: Self::vector_storage_bytes(offsets),
+                owned: offsets.capacity() > 0,
+                mapped: false,
+            });
+        }
+        if let Some(bytes) = &data.gnu_bytecode_bytes {
+            stats = stats.add(PayloadLayout {
+                logical_bytes: bytes.len(),
+                capacity_bytes: bytes.capacity(),
+                owned: bytes.capacity() > 0,
+                mapped: false,
+            });
+        }
+        stats = stats.add(PayloadLayout {
+            logical_bytes: data
+                .extra_slots
+                .len()
+                .saturating_mul(size_of::<TaggedValue>()),
+            capacity_bytes: Self::vector_storage_bytes(&data.extra_slots),
+            owned: data.extra_slots.capacity() > 0,
+            mapped: false,
+        });
+        if let Some(docstring) = &data.docstring {
+            stats = stats.add(Self::string_payload_layout(docstring));
+        }
+        stats
+    }
+
+    fn closure_payload_layout(
+        data: &LispValueVec,
+        params: Option<&crate::emacs_core::value::LambdaParams>,
+    ) -> PayloadLayout {
+        let mut stats = Self::value_vec_payload_layout(data);
+        if let Some(params) = params {
+            stats = stats.add(Self::lambda_params_payload_layout(params));
+        }
+        stats
+    }
+
+    fn veclike_payload_layout(header: *const VecLikeHeader) -> PayloadLayout {
+        unsafe {
+            match (*header).type_tag {
+                VecLikeType::Vector => {
+                    Self::value_vec_payload_layout(&(*(header as *const VectorObj)).data)
+                }
+                VecLikeType::Lambda => {
+                    let object = &*(header as *const LambdaObj);
+                    Self::closure_payload_layout(&object.data, object.parsed_params.get())
+                }
+                VecLikeType::Macro => {
+                    let object = &*(header as *const MacroObj);
+                    Self::closure_payload_layout(&object.data, object.parsed_params.get())
+                }
+                VecLikeType::ByteCode => {
+                    Self::bytecode_payload_layout(&*(header as *const ByteCodeObj))
+                }
+                VecLikeType::Record | VecLikeType::WindowConfiguration => {
+                    Self::value_vec_payload_layout(&(*(header as *const RecordObj)).data)
+                }
+                VecLikeType::CharTable => {
+                    Self::value_vec_payload_layout(&(*(header as *const CharTableObj)).extras)
+                }
+                VecLikeType::SubCharTable => {
+                    Self::value_vec_payload_layout(&(*(header as *const SubCharTableObj)).contents)
+                }
+                VecLikeType::Obarray => {
+                    Self::value_vec_payload_layout(&(*(header as *const ObarrayObj)).buckets)
+                }
+                _ => PayloadLayout::default(),
+            }
+        }
+    }
+
+    fn boxed_class(header: *const GcHeader) -> &'static str {
+        unsafe {
+            match (*header).kind {
+                HeapObjectKind::String => "string",
+                HeapObjectKind::Float => "float",
+                HeapObjectKind::VecLike => match (*(header as *const VecLikeHeader)).type_tag {
+                    VecLikeType::Vector => "vector",
+                    VecLikeType::Bignum => "bignum",
+                    VecLikeType::Marker => "marker",
+                    VecLikeType::Overlay => "overlay",
+                    VecLikeType::Finalizer => "finalizer",
+                    VecLikeType::SymbolWithPos => "symbol-with-pos",
+                    VecLikeType::UserPtr => "user-ptr",
+                    VecLikeType::Process => "process",
+                    VecLikeType::Frame => "frame",
+                    VecLikeType::Window => "window",
+                    VecLikeType::Buffer => "buffer",
+                    VecLikeType::HashTable => "hash-table",
+                    VecLikeType::Obarray => "obarray",
+                    VecLikeType::Terminal => "terminal",
+                    VecLikeType::WindowConfiguration => "window-configuration",
+                    VecLikeType::Subr => "subr",
+                    VecLikeType::Xwidget => "xwidget",
+                    VecLikeType::XwidgetView => "xwidget-view",
+                    VecLikeType::ModuleFunction => "module-function",
+                    VecLikeType::Sqlite => "sqlite",
+                    VecLikeType::Lambda => "lambda",
+                    VecLikeType::CharTable => "char-table",
+                    VecLikeType::SubCharTable => "sub-char-table",
+                    VecLikeType::Record => "record",
+                    VecLikeType::Macro => "macro",
+                    VecLikeType::ByteCode => "bytecode",
+                    VecLikeType::Timer => "timer",
+                    VecLikeType::SurfaceHandle => "surface-handle",
+                },
+            }
+        }
+    }
+
+    fn note_boxed_list_layout(mut header: *const GcHeader, stats: &mut Vec<BoxedKindLayoutStats>) {
+        while !header.is_null() {
+            let class = Self::boxed_class(header);
+            let index = stats
+                .iter()
+                .position(|item| item.class == class)
+                .unwrap_or_else(|| {
+                    stats.push(BoxedKindLayoutStats {
+                        class,
+                        ..BoxedKindLayoutStats::default()
+                    });
+                    stats.len() - 1
+                });
+            let item = &mut stats[index];
+            item.objects += 1;
+            item.known_bytes = item
+                .known_bytes
+                .saturating_add(Self::object_bytes_from_header(header));
+            unsafe {
+                item.tenured_objects += usize::from((*header).tenured);
+                header = (*header).next;
+            }
+        }
+    }
+
+    /// Snapshot allocator-backed GC page occupancy and the directly-owned
+    /// payload capacities of live objects. This does not attempt to reproduce
+    /// process RSS: symbol registries, evaluator stacks, display caches,
+    /// allocator metadata, and nested hash-key allocations live outside this
+    /// accounting and are intentionally exposed as the RSS remainder.
+    pub(crate) fn layout_stats(&self) -> HeapLayoutStats {
+        let mut free_cells_by_block = vec![0usize; self.cons_blocks.len()];
+        let bumped_cons_slots: usize = self
+            .cons_blocks
+            .iter()
+            .map(|block| block.next_index as usize)
+            .sum();
+        let mut free = self.cons_free_list;
+        let mut free_count = 0usize;
+        while !free.is_null() && free_count < bumped_cons_slots {
+            let base = ConsBlock::block_base_for_ptr(free);
+            if let Some(&block_index) = self.cons_block_index_by_base.get(&base) {
+                free_cells_by_block[block_index] += 1;
+            }
+            free_count += 1;
+            free = unsafe { (*free).free_next() };
+        }
+        debug_assert!(free.is_null(), "cons free list exceeds bumped cell count");
+
+        let mut cons = ConsLayoutStats {
+            pages: self.cons_blocks.len(),
+            page_bytes: CONS_BLOCK_BYTES,
+            capacity_slots: self.cons_blocks.len().saturating_mul(CONS_BLOCK_SIZE),
+            bumped_slots: bumped_cons_slots,
+            live_slots: bumped_cons_slots.saturating_sub(free_count),
+            reclaimed_slots: free_count,
+            never_used_slots: self
+                .cons_blocks
+                .len()
+                .saturating_mul(CONS_BLOCK_SIZE)
+                .saturating_sub(bumped_cons_slots),
+            ..ConsLayoutStats::default()
+        };
+        for (block, reclaimed) in self.cons_blocks.iter().zip(free_cells_by_block) {
+            let live = (block.next_index as usize).saturating_sub(reclaimed);
+            if live == 0 {
+                cons.empty_pages += 1;
+            } else if live == CONS_BLOCK_SIZE {
+                cons.full_pages += 1;
+            } else {
+                cons.partial_pages += 1;
+            }
+        }
+        cons.occupied_bytes = cons.live_slots.saturating_mul(size_of::<ConsCell>());
+        debug_assert_eq!(cons.live_slots, self.cons_live_count);
+
+        let arenas = vec![
+            self.float_arena.layout_stats(|_| PayloadLayout::default()),
+            self.string_arena
+                .layout_stats(|object| Self::string_payload_layout(&object.data)),
+            self.vector_arena
+                .layout_stats(|object| Self::value_vec_payload_layout(&object.data)),
+            self.bytecode_arena
+                .layout_stats(Self::bytecode_payload_layout),
+            self.lambda_arena.layout_stats(|object| {
+                Self::closure_payload_layout(&object.data, object.parsed_params.get())
+            }),
+            self.macro_arena.layout_stats(|object| {
+                Self::closure_payload_layout(&object.data, object.parsed_params.get())
+            }),
+            self.record_arena
+                .layout_stats(|object| Self::value_vec_payload_layout(&object.data)),
+            self.symbol_with_pos_arena
+                .layout_stats(|_| PayloadLayout::default()),
+        ];
+
+        let mapped_conses = self.mapped_cons_ranges.iter().map(|range| range.len).sum();
+        let mapped_floats = self.mapped_float_ranges.iter().map(|range| range.len).sum();
+        let mut mapped = MappedLayoutStats {
+            conses: mapped_conses,
+            floats: mapped_floats,
+            strings: self.mapped_string_objects.len(),
+            veclikes: self.mapped_veclike_objects.len(),
+            object_image_bytes: mapped_conses
+                .saturating_mul(size_of::<ConsCell>())
+                .saturating_add(mapped_floats.saturating_mul(size_of::<FloatObj>()))
+                .saturating_add(
+                    self.mapped_string_objects
+                        .iter()
+                        .map(|object| object.byte_len)
+                        .sum::<usize>(),
+                )
+                .saturating_add(
+                    self.mapped_veclike_objects
+                        .iter()
+                        .map(|object| object.byte_len)
+                        .sum::<usize>(),
+                ),
+            ..MappedLayoutStats::default()
+        };
+        for object in &self.mapped_string_objects {
+            let payload = unsafe { Self::string_payload_layout(&(*object.ptr).data) };
+            if payload.owned {
+                mapped.copied_string_payloads += 1;
+                mapped.copied_string_capacity_bytes = mapped
+                    .copied_string_capacity_bytes
+                    .saturating_add(payload.capacity_bytes);
+            }
+        }
+        for object in &self.mapped_veclike_objects {
+            let payload = Self::veclike_payload_layout(object.header);
+            if payload.owned {
+                mapped.copied_veclike_payloads += 1;
+                mapped.copied_veclike_capacity_bytes = mapped
+                    .copied_veclike_capacity_bytes
+                    .saturating_add(payload.capacity_bytes);
+            }
+        }
+
+        let mut boxed = Vec::new();
+        Self::note_boxed_list_layout(self.all_objects, &mut boxed);
+        Self::note_boxed_list_layout(self.tenured_objects, &mut boxed);
+        boxed.sort_by(|left, right| right.known_bytes.cmp(&left.known_bytes));
+
+        let page_backing_bytes = cons
+            .pages
+            .saturating_mul(cons.page_bytes)
+            .saturating_add(arenas.iter().map(|arena| arena.page_bytes).sum::<usize>());
+        let known_payload_capacity_bytes = arenas
+            .iter()
+            .map(|arena| arena.payload_capacity_bytes)
+            .sum::<usize>()
+            .saturating_add(mapped.copied_string_capacity_bytes)
+            .saturating_add(mapped.copied_veclike_capacity_bytes);
+
+        HeapLayoutStats {
+            allocated_objects: self.allocated_count,
+            managed_live_bytes: self.live_bytes,
+            page_backing_bytes,
+            known_payload_capacity_bytes,
+            cons,
+            arenas,
+            mapped,
+            boxed,
         }
     }
 
@@ -5723,7 +6254,7 @@ impl TaggedHeap {
                 VecLikeType::HashTable => {
                     let ht = &(*(ptr as *const HashTableObj)).table;
                     out.extend(ht.data.values().copied());
-                    out.extend(ht.key_snapshots.values().copied());
+                    out.extend(ht.key_snapshots().copied());
                     // Custom test/hash closures (`define-hash-table-test`) live
                     // ONLY in these fields and are traced by `trace_veclike`; keep
                     // the two enumerations in sync so the remembered/SATB strong-
@@ -6007,7 +6538,7 @@ impl TaggedHeap {
                         .data
                         .iter()
                         .map(|(hk, &value)| {
-                            let key = ht.key_snapshots.get(hk).copied().unwrap_or(value);
+                            let key = ht.key_snapshot(hk).copied().unwrap_or(value);
                             (key, value)
                         })
                         .collect();
@@ -6049,7 +6580,7 @@ impl TaggedHeap {
                     .data
                     .iter()
                     .map(|(hk, &value)| {
-                        let key = ht.key_snapshots.get(hk).copied().unwrap_or(value);
+                        let key = ht.key_snapshot(hk).copied().unwrap_or(value);
                         (hk.clone(), key, value)
                     })
                     .collect();
@@ -6072,9 +6603,7 @@ impl TaggedHeap {
             // SAFETY: exclusive heap access. Mirror `builtin_remhash`'s removal.
             let ht = unsafe { &mut (*tptr).table };
             for hk in dead {
-                ht.data.remove(&hk);
-                ht.key_snapshots.remove(&hk);
-                ht.note_hash_key_removed(&hk);
+                let _ = ht.data.remove(&hk);
             }
         }
     }
@@ -6143,6 +6672,8 @@ impl TaggedHeap {
             (0, self.record_arena.pages.len()),
             (0, self.symbol_with_pos_arena.pages.len()),
         );
+        let _released_cons_blocks = self.release_empty_cons_blocks();
+        let _released_object_pages = self.release_empty_object_pages();
         let mapped_object_live_bytes = self.mapped_non_cons_live_bytes();
         self.live_bytes = cons_live_bytes
             .saturating_add(object_live_bytes)
@@ -7196,6 +7727,9 @@ impl TaggedHeap {
         }
         self.cons_live_count = recount;
 
+        let _released_cons_blocks = self.release_empty_cons_blocks();
+        let _released_object_pages = self.release_empty_object_pages();
+
         let mapped_cons_live: usize = self
             .mapped_cons_ranges
             .iter()
@@ -7541,7 +8075,7 @@ impl TaggedHeap {
                         self.mark_or_push_child(val, "hash-table-value");
                     }
                     // Trace key snapshots (original key objects)
-                    for slot in ht.key_snapshots.values() {
+                    for slot in ht.key_snapshots() {
                         let val = load_value_atomic(slot);
                         self.mark_or_push_child(val, "hash-table-key-snapshot");
                     }
@@ -7704,6 +8238,55 @@ impl TaggedHeap {
         new_live
             .saturating_add(mapped_live)
             .saturating_mul(size_of::<ConsCell>())
+    }
+
+    /// Drop ordinary cons blocks with no survivors and rebuild the intrusive
+    /// free list plus base-address registry. The free list contains pointers
+    /// into dead cells, so it must be discarded before empty block storage is
+    /// deallocated and reconstructed from the retained blocks afterward.
+    /// Call only after a complete eager or deferred sweep, when mark bits are
+    /// the authoritative live-cell set and no sweep cursor remains active.
+    fn release_empty_cons_blocks(&mut self) -> usize {
+        let old_len = self.cons_blocks.len();
+        if !self
+            .cons_blocks
+            .iter()
+            .any(|block| block.count_marked() == 0)
+        {
+            return 0;
+        }
+
+        self.cons_free_list = std::ptr::null_mut();
+        self.mark_cons_block_cache = None;
+        self.cons_blocks.retain(|block| block.count_marked() != 0);
+        self.cons_blocks.shrink_to_fit();
+
+        self.cons_block_index_by_base =
+            FxHashMap::with_capacity_and_hasher(self.cons_blocks.len(), Default::default());
+        let mut rebuilt_live = 0usize;
+        for (block_index, block) in self.cons_blocks.iter_mut().enumerate() {
+            let previous = self
+                .cons_block_index_by_base
+                .insert(block.base_addr(), block_index);
+            debug_assert!(previous.is_none(), "cons block base registered twice");
+            rebuilt_live += block.sweep(&mut self.cons_free_list);
+        }
+        debug_assert_eq!(rebuilt_live, self.cons_live_count);
+
+        old_len - self.cons_blocks.len()
+    }
+
+    /// Release every completely empty young arena page after a full sweep.
+    /// Per-class indices and partial chains are rebuilt inside each arena.
+    fn release_empty_object_pages(&mut self) -> usize {
+        self.float_arena.release_empty_pages()
+            + self.string_arena.release_empty_pages()
+            + self.vector_arena.release_empty_pages()
+            + self.bytecode_arena.release_empty_pages()
+            + self.lambda_arena.release_empty_pages()
+            + self.macro_arena.release_empty_pages()
+            + self.record_arena.release_empty_pages()
+            + self.symbol_with_pos_arena.release_empty_pages()
     }
 
     /// Sweep non-cons objects: walk intrusive list, free unmarked, rebuild list.
@@ -8709,6 +9292,84 @@ pub(crate) mod alloc_probe {
             peak_addr_set()
         ));
         out
+    }
+}
+
+#[cfg(test)]
+mod layout_stats_tests {
+    use super::*;
+    use crate::heap_types::LispString;
+
+    #[test]
+    fn layout_stats_report_exact_page_occupancy_and_payload_capacity() {
+        let mut heap = TaggedHeap::new();
+        let _cons = heap.alloc_cons(TaggedValue::NIL, TaggedValue::NIL);
+        let _string = heap.alloc_string(LispString::from_utf8("abc"));
+        let _vector = heap.alloc_vector(vec![TaggedValue::NIL; 3]);
+
+        let stats = heap.layout_stats();
+        assert_eq!(stats.allocated_objects, 3);
+        assert_eq!(stats.cons.pages, 1);
+        assert_eq!(stats.cons.live_slots, 1);
+        assert_eq!(stats.cons.reclaimed_slots, 0);
+        assert_eq!(stats.cons.occupied_bytes, size_of::<ConsCell>());
+
+        let string = stats
+            .arenas
+            .iter()
+            .find(|arena| arena.class == "string")
+            .unwrap();
+        assert_eq!(string.pages, 1);
+        assert_eq!(string.allocated_slots, 1);
+        assert_eq!(string.young_slots, 1);
+        assert_eq!(string.payload_logical_bytes, 4); // "abc" + trailing NUL
+        assert!(string.payload_capacity_bytes >= 4);
+        assert_eq!(string.owned_payloads, 1);
+
+        let vector = stats
+            .arenas
+            .iter()
+            .find(|arena| arena.class == "vector")
+            .unwrap();
+        assert_eq!(vector.pages, 1);
+        assert_eq!(vector.allocated_slots, 1);
+        assert_eq!(vector.payload_logical_bytes, 3 * size_of::<TaggedValue>());
+        assert!(vector.payload_capacity_bytes >= vector.payload_logical_bytes);
+        assert_eq!(
+            stats.page_backing_bytes,
+            3 * 64 * 1024,
+            "one cons, string, and vector page should be resident",
+        );
+    }
+
+    #[test]
+    fn completed_sweep_releases_empty_cons_blocks_and_rebuilds_free_list() {
+        let mut heap = TaggedHeap::new();
+        let survivor = heap.alloc_cons(TaggedValue::fixnum(7), TaggedValue::NIL);
+        for i in 0..CONS_BLOCK_SIZE {
+            let _ = heap.alloc_cons(TaggedValue::fixnum(i as i64), TaggedValue::NIL);
+        }
+        assert_eq!(heap.cons_blocks.len(), 2);
+
+        heap.collect_exact(std::iter::once(survivor));
+
+        assert_eq!(heap.cons_blocks.len(), 1);
+        assert_eq!(heap.cons_block_index_by_base.len(), 1);
+        assert_eq!(
+            unsafe { (*survivor.xcons_ptr()).load_car() }.as_fixnum(),
+            Some(7)
+        );
+
+        for i in 0..(CONS_BLOCK_SIZE - 1) {
+            let _ = heap.alloc_cons(TaggedValue::fixnum(i as i64), TaggedValue::NIL);
+        }
+        assert_eq!(
+            heap.cons_blocks.len(),
+            1,
+            "the rebuilt free list must reuse every dead cell in the survivor block",
+        );
+        let _ = heap.alloc_cons(TaggedValue::NIL, TaggedValue::NIL);
+        assert_eq!(heap.cons_blocks.len(), 2);
     }
 }
 
@@ -11301,10 +11962,7 @@ mod ownership_tests {
             let key = crate::emacs_core::value::HashKey::Int(i);
             let key_snapshot = TaggedValue::fixnum(i);
             crate::tagged::mutate::with_hash_table_mut(table, |ht| {
-                ht.data.insert(key.clone(), value);
-                ht.key_snapshots.insert(key.clone(), key_snapshot);
-                ht.insertion_order.push(key.clone());
-                ht.note_hash_key_inserted(key);
+                ht.insert(key, key_snapshot, value);
             });
         }
 
@@ -11357,10 +12015,7 @@ mod ownership_tests {
             let value = heap.alloc_cons(TaggedValue::fixnum(i), TaggedValue::fixnum(0));
             let key = HashKey::Int(i);
             crate::tagged::mutate::with_hash_table_mut(table, |ht| {
-                ht.data.insert(key.clone(), value);
-                ht.key_snapshots.insert(key.clone(), TaggedValue::fixnum(i));
-                ht.insertion_order.push(key.clone());
-                ht.note_hash_key_inserted(key);
+                ht.insert(key, TaggedValue::fixnum(i), value);
             });
         }
         // Pre-mark garbage: reachable from nothing.
@@ -11387,10 +12042,7 @@ mod ownership_tests {
             let key = HashKey::Int(i);
             crate::tagged::mutate::with_hash_table_mut(table, |ht| {
                 maybe_resize_for_test(ht);
-                ht.data.insert(key.clone(), value);
-                ht.key_snapshots.insert(key.clone(), TaggedValue::fixnum(i));
-                ht.insertion_order.push(key.clone());
-                ht.note_hash_key_inserted(key);
+                ht.insert(key, TaggedValue::fixnum(i), value);
             });
         }
         for _ in 0..5_000 {
@@ -12142,10 +12794,14 @@ mod float_arena_tests {
             before + 3,
             "2 full pages + 5 slots must occupy exactly 3 pages",
         );
-        // A GC in between must NOT free pages (no page recycling in v1:
-        // empty pages stay on the arena for reuse).
+        // A GC in between releases pages that have no surviving slots.
         heap.collect_exact(std::iter::empty());
-        assert_eq!(LIVE_FLOAT_PAGES.load(Ordering::Relaxed), before + 3);
+        assert_eq!(
+            LIVE_FLOAT_PAGES.load(Ordering::Relaxed),
+            before,
+            "a completed sweep must release completely empty arena pages",
+        );
+        assert!(heap.float_arena.pages.is_empty());
         heap.assert_object_arenas_coherent();
         drop(heap);
         assert_eq!(
@@ -16435,8 +17091,6 @@ fn maybe_resize_for_test(ht: &mut crate::emacs_core::value::LispHashTable) {
     if len >= ht.size {
         ht.size = if ht.size == 0 { 6 } else { ht.size * 2 };
         ht.data.reserve(ht.size as usize);
-        ht.key_snapshots.reserve(ht.size as usize);
-        ht.rebuild_iterable_hash_keys_from_data();
     }
 }
 

@@ -3208,26 +3208,7 @@ impl<'a> Vm<'a> {
                 let _ = value.with_hash_table_mut(|ht| {
                     if matches!(ht.test, HashTableTest::Eq | HashTableTest::Eql) {
                         if let (Some(old_ptr), Some(new_ptr)) = (old_ptr, new_ptr) {
-                            if let Some(existing) = ht.data.remove(&HashKey::Ptr(old_ptr)) {
-                                ht.data.insert(HashKey::Ptr(new_ptr), existing);
-                            }
-                            if ht.key_snapshots.remove(&HashKey::Ptr(old_ptr)).is_some() {
-                                ht.key_snapshots.insert(HashKey::Ptr(new_ptr), *to);
-                            }
-                            for k in &mut ht.insertion_order {
-                                if *k == HashKey::Ptr(old_ptr) {
-                                    *k = HashKey::Ptr(new_ptr);
-                                }
-                            }
-                            for k in ht.entry_slots.iter_mut().flatten() {
-                                if *k == HashKey::Ptr(old_ptr) {
-                                    *k = HashKey::Ptr(new_ptr);
-                                }
-                            }
-                            if let Some(slot) = ht.entry_slot_by_key.remove(&HashKey::Ptr(old_ptr))
-                            {
-                                ht.entry_slot_by_key.insert(HashKey::Ptr(new_ptr), slot);
-                            }
+                            ht.replace_pointer_key(old_ptr, new_ptr, *to);
                         }
                     }
                     for item in ht.data.values_mut() {

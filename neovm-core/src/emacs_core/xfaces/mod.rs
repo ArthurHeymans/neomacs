@@ -313,11 +313,7 @@ fn insert_frame_face_hash_entry_if_absent(table: Value, key: Value, value: Value
                 ValueKind::Symbol(id) => HashKey::Symbol(id),
                 _ => unreachable!("face hash keys are symbols"),
             };
-            // Key is already present (looked up above), so it is already in
-            // `insertion_order`; just refresh the snapshot and ensure a slot.
-            // `note_hash_key_inserted` is idempotent and O(1).
-            hash_table.key_snapshots.insert(hash_key.clone(), key);
-            hash_table.note_hash_key_inserted(hash_key);
+            hash_table.replace_key_snapshot(&hash_key, key);
         });
     }
 }

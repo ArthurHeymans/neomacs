@@ -6837,13 +6837,7 @@ fn try_convert_hash_table_literal(val: Value) -> Option<Value> {
                     let key_value = try_convert_nested_compiled_literal(data[idx]);
                     let val_value = try_convert_nested_compiled_literal(data[idx + 1]);
                     let key = key_value.to_hash_key(&table.test);
-                    let inserting_new_key = !table.data.contains_key(&key);
-                    table.data.insert(key.clone(), val_value);
-                    if inserting_new_key {
-                        table.key_snapshots.insert(key.clone(), key_value);
-                        table.insertion_order.push(key.clone());
-                        table.note_hash_key_inserted(key);
-                    }
+                    table.insert(key, key_value, val_value);
                     idx += 2;
                 }
             }

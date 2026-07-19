@@ -532,10 +532,10 @@ fn print_number_table_cleanup_preserves_only_labeled_entries() {
 
     let hash_table = table.as_hash_table().unwrap();
     assert_eq!(hash_table.data.len(), 2);
-    assert_eq!(hash_table.key_snapshots.len(), 2);
+    assert_eq!(hash_table.key_snapshots().count(), 2);
     assert_eq!(
-        hash_table.insertion_order,
-        vec![retained_key.clone(), alias_key.clone()]
+        hash_table.live_hash_keys_in_slot_order(),
+        vec![&retained_key, &alias_key]
     );
     assert_eq!(hash_table.data.get(&retained_key), Some(&Value::fixnum(7)));
     assert_eq!(hash_table.data.get(&alias_key), Some(&alias));

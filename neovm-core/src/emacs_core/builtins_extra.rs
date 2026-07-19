@@ -766,6 +766,122 @@ pub(crate) fn builtin_memory_use_counts(args: Vec<Value>) -> EvalResult {
     ))
 }
 
+fn layout_stat_pair(name: &str, value: usize) -> Value {
+    let value = i64::try_from(value).unwrap_or(i64::MAX);
+    Value::cons(Value::symbol(name), Value::fixnum(value))
+}
+
+fn arena_layout_value(stats: &crate::tagged::gc::ArenaLayoutStats) -> Value {
+    Value::list(vec![
+        layout_stat_pair("pages", stats.pages),
+        layout_stat_pair("page-bytes", stats.page_bytes),
+        layout_stat_pair("slot-bytes", stats.slot_bytes),
+        layout_stat_pair("slots-per-page", stats.slots_per_page),
+        layout_stat_pair("allocated-slots", stats.allocated_slots),
+        layout_stat_pair("tenured-slots", stats.tenured_slots),
+        layout_stat_pair("young-slots", stats.young_slots),
+        layout_stat_pair("bumped-slots", stats.bumped_slots),
+        layout_stat_pair("reclaimed-slots", stats.reclaimed_slots),
+        layout_stat_pair("never-used-slots", stats.never_used_slots),
+        layout_stat_pair("empty-pages", stats.empty_pages),
+        layout_stat_pair("partial-pages", stats.partial_pages),
+        layout_stat_pair("full-pages", stats.full_pages),
+        layout_stat_pair("retired-pages", stats.retired_pages),
+        layout_stat_pair("occupied-slot-bytes", stats.occupied_slot_bytes),
+        layout_stat_pair("object-struct-bytes", stats.object_struct_bytes),
+        layout_stat_pair("payload-logical-bytes", stats.payload_logical_bytes),
+        layout_stat_pair("payload-capacity-bytes", stats.payload_capacity_bytes),
+        layout_stat_pair("owned-payloads", stats.owned_payloads),
+        layout_stat_pair("mapped-payloads", stats.mapped_payloads),
+    ])
+}
+
+/// `(neomacs--heap-layout-stats)` -> diagnostics alist describing exact GC
+/// arena occupancy and known directly-owned payload capacities.
+///
+/// This is deliberately Neomacs-internal rather than a GNU compatibility
+/// primitive. Pair it with an OS RSS/PSS sample: the difference exposes
+/// memory owned by registries, evaluator/display state, allocator metadata,
+/// and nested payloads that do not live in the tagged heap's arenas.
+pub(crate) fn builtin_neomacs_heap_layout_stats(args: Vec<Value>) -> EvalResult {
+    expect_args("neomacs--heap-layout-stats", &args, 0)?;
+    let stats = crate::tagged::gc::with_tagged_heap(|heap| heap.layout_stats());
+
+    let cons = Value::list(vec![
+        layout_stat_pair("pages", stats.cons.pages),
+        layout_stat_pair("page-bytes", stats.cons.page_bytes),
+        layout_stat_pair("capacity-slots", stats.cons.capacity_slots),
+        layout_stat_pair("bumped-slots", stats.cons.bumped_slots),
+        layout_stat_pair("live-slots", stats.cons.live_slots),
+        layout_stat_pair("reclaimed-slots", stats.cons.reclaimed_slots),
+        layout_stat_pair("never-used-slots", stats.cons.never_used_slots),
+        layout_stat_pair("empty-pages", stats.cons.empty_pages),
+        layout_stat_pair("partial-pages", stats.cons.partial_pages),
+        layout_stat_pair("full-pages", stats.cons.full_pages),
+        layout_stat_pair("occupied-bytes", stats.cons.occupied_bytes),
+    ]);
+    let arenas = Value::list(
+        stats
+            .arenas
+            .iter()
+            .map(|arena| Value::cons(Value::symbol(arena.class), arena_layout_value(arena)))
+            .collect(),
+    );
+    let mapped = Value::list(vec![
+        layout_stat_pair("conses", stats.mapped.conses),
+        layout_stat_pair("floats", stats.mapped.floats),
+        layout_stat_pair("strings", stats.mapped.strings),
+        layout_stat_pair("veclikes", stats.mapped.veclikes),
+        layout_stat_pair("object-image-bytes", stats.mapped.object_image_bytes),
+        layout_stat_pair(
+            "copied-string-payloads",
+            stats.mapped.copied_string_payloads,
+        ),
+        layout_stat_pair(
+            "copied-string-capacity-bytes",
+            stats.mapped.copied_string_capacity_bytes,
+        ),
+        layout_stat_pair(
+            "copied-veclike-payloads",
+            stats.mapped.copied_veclike_payloads,
+        ),
+        layout_stat_pair(
+            "copied-veclike-capacity-bytes",
+            stats.mapped.copied_veclike_capacity_bytes,
+        ),
+    ]);
+    let boxed = Value::list(
+        stats
+            .boxed
+            .iter()
+            .map(|kind| {
+                Value::cons(
+                    Value::symbol(kind.class),
+                    Value::list(vec![
+                        layout_stat_pair("objects", kind.objects),
+                        layout_stat_pair("tenured-objects", kind.tenured_objects),
+                        layout_stat_pair("known-bytes", kind.known_bytes),
+                    ]),
+                )
+            })
+            .collect(),
+    );
+
+    Ok(Value::list(vec![
+        layout_stat_pair("allocated-objects", stats.allocated_objects),
+        layout_stat_pair("managed-live-bytes", stats.managed_live_bytes),
+        layout_stat_pair("page-backing-bytes", stats.page_backing_bytes),
+        layout_stat_pair(
+            "known-payload-capacity-bytes",
+            stats.known_payload_capacity_bytes,
+        ),
+        Value::cons(Value::symbol("cons"), cons),
+        Value::cons(Value::symbol("arenas"), arenas),
+        Value::cons(Value::symbol("mapped"), mapped),
+        Value::cons(Value::symbol("boxed"), boxed),
+    ]))
+}
+
 // ===========================================================================
 // Tests
 // ===========================================================================

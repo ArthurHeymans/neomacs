@@ -376,25 +376,14 @@ fn put_print_number_table_entry(
     entry_value: Value,
 ) {
     let _ = table_value.with_hash_table_mut(|table| {
-        let inserting_new_key = !table.data.contains_key(&key);
-        table.data.insert(key.clone(), entry_value);
-        if inserting_new_key {
-            table.key_snapshots.insert(key.clone(), key_value);
-            table.insertion_order.push(key.clone());
-            table.note_hash_key_inserted(key);
-        }
+        table.insert(key, key_value, entry_value);
     });
 }
 
 fn remove_print_number_table_t_entries(table_value: Value) {
     let _ = table_value.with_hash_table_mut(|table| {
         // GNU print.c removes all `t` status entries after preprocessing.
-        // Keep Neomacs' parallel insertion-order snapshot in sync without
-        // rescanning it once for every removed key.
         table.data.retain(|_, value| *value != Value::T);
-        let data = &table.data;
-        table.key_snapshots.retain(|key, _| data.contains_key(key));
-        table.rebuild_iterable_hash_keys_from_data();
     });
 }
 

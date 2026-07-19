@@ -134,36 +134,3 @@ fn ensure_startup_compat_variables_reseeds_existing_face_defaults_table() {
         "existing face--new-frame-defaults tables must be reseeded after dump load"
     );
 }
-
-#[test]
-fn ensure_startup_compat_variables_repairs_face_defaults_maphash_slots() {
-    crate::test_utils::init_test_tracing();
-    let mut eval = crate::emacs_core::eval::Context::new();
-    let table = Value::hash_table(HashTableTest::Eq);
-    seed_face_new_frame_defaults_table(table);
-    let _ = table.with_hash_table_mut(|hash_table| {
-        assert!(
-            hash_table.data.len() >= 2,
-            "fixture should contain multiple face defaults"
-        );
-        hash_table.insertion_order.clear();
-        hash_table.clear_hash_slots();
-    });
-    eval.set_variable("face--new-frame-defaults", table);
-
-    ensure_startup_compat_variables(&mut eval);
-
-    let table = eval
-        .obarray()
-        .symbol_value("face--new-frame-defaults")
-        .copied()
-        .expect("face hash table should stay bound");
-    let hash_table = table
-        .as_hash_table()
-        .expect("face--new-frame-defaults must remain a hash table");
-    assert_eq!(
-        crate::emacs_core::hashtab::maphash_slot_len(table),
-        hash_table.data.len(),
-        "GNU maphash over face--new-frame-defaults must see every live face entry"
-    );
-}

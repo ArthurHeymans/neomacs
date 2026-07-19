@@ -1111,13 +1111,7 @@ impl<'a> JsonParser<'a> {
                 let key_val = Value::string(&key);
                 let hash_key = HashKey::Text(key);
                 let _ = ht.with_hash_table_mut(|table| {
-                    let inserting_new_key = !table.data.contains_key(&hash_key);
-                    table.data.insert(hash_key.clone(), val);
-                    if inserting_new_key {
-                        table.key_snapshots.insert(hash_key.clone(), key_val);
-                        table.insertion_order.push(hash_key.clone());
-                        table.note_hash_key_inserted(hash_key);
-                    }
+                    table.insert(hash_key, key_val, val);
                 });
             }
 

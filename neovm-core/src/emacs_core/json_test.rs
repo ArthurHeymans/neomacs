@@ -247,9 +247,11 @@ fn serialize_hash_table() {
     crate::test_utils::init_test_tracing();
     let ht = Value::hash_table(HashTableTest::Equal);
     let _ = ht.with_hash_table_mut(|table| {
-        table
-            .data
-            .insert(HashKey::from_str("name"), Value::string("Alice"));
+        table.insert(
+            HashKey::from_str("name"),
+            Value::string("name"),
+            Value::string("Alice"),
+        );
     });
     let result = builtin_json_serialize(vec![ht]);
     assert_eq!(result.unwrap().as_utf8_str(), Some("{\"name\":\"Alice\"}"));
@@ -748,7 +750,7 @@ fn parse_object_hash_table() {
         ValueKind::Veclike(VecLikeType::HashTable) => {
             let table = val.as_hash_table().unwrap();
             assert_eq!(table.data.len(), 2);
-            assert_eq!(table.key_snapshots.len(), 2);
+            assert_eq!(table.key_snapshots().count(), 2);
             assert_eq!(
                 table
                     .data
@@ -764,11 +766,11 @@ fn parse_object_hash_table() {
                 Some(Some(2))
             );
             assert!(matches!(
-                table.key_snapshots.get(&HashKey::from_str("a")),
+                table.key_snapshot(&HashKey::from_str("a")),
                 Some(key) if (*key).as_utf8_str() == Some("a")
             ));
             assert!(matches!(
-                table.key_snapshots.get(&HashKey::from_str("b")),
+                table.key_snapshot(&HashKey::from_str("b")),
                 Some(key) if (*key).as_utf8_str() == Some("b")
             ));
         }
@@ -962,9 +964,11 @@ fn round_trip_object() {
     crate::test_utils::init_test_tracing();
     let ht = Value::hash_table(HashTableTest::Equal);
     let _ = ht.with_hash_table_mut(|table| {
-        table
-            .data
-            .insert(HashKey::from_str("key"), Value::fixnum(99));
+        table.insert(
+            HashKey::from_str("key"),
+            Value::string("key"),
+            Value::fixnum(99),
+        );
     });
     let serialized = builtin_json_serialize(vec![ht]).unwrap();
     let parsed = builtin_json_parse_string(vec![serialized]).unwrap();

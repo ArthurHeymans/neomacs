@@ -11517,10 +11517,7 @@ mod tests {
         let table = Value::hash_table(HashTableTest::Eq);
         let _ = table.with_hash_table_mut(|ht| {
             let key = Value::symbol("jit-sw-foo").to_hash_key(&ht.test);
-            ht.data.insert(key.clone(), Value::fixnum(8));
-            ht.key_snapshots
-                .insert(key.clone(), Value::symbol("jit-sw-foo"));
-            ht.insertion_order.push(key);
+            ht.insert(key, Value::symbol("jit-sw-foo"), Value::fixnum(8));
         });
         let map = vec![GnuByteOffsetMapEntry::new(8, 5)];
         let leaf = lower_leaf_with_map(

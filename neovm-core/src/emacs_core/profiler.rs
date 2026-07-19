@@ -820,7 +820,7 @@ mod tests {
         log.record_gc(9);
         let table = log.to_value();
         let table = table.as_hash_table().unwrap();
-        let key = *table.key_snapshots.values().next().unwrap();
+        let key = *table.key_snapshots().next().unwrap();
         let frames = key.as_vector_data().unwrap();
         assert_eq!(frames.len(), 2);
         assert!(frames[0].is_symbol_named("Automatic GC"));
@@ -841,8 +841,7 @@ mod tests {
         let key = *table
             .as_hash_table()
             .unwrap()
-            .key_snapshots
-            .values()
+            .key_snapshots()
             .next()
             .unwrap();
         let frame = key.as_vector_data().unwrap()[0];

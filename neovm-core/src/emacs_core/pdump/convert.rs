@@ -1571,19 +1571,19 @@ impl<'a> LoadDecoder<'a> {
                     table.weakness = weakness.as_ref().map(load_hash_table_weakness);
                     table.rehash_size = rehash_size;
                     table.rehash_threshold = rehash_threshold;
-                    table.data = entries
+                    let values = entries
                         .into_iter()
                         .map(|(k, v)| (load_hash_key_owned(self, k), self.load_value_owned(v)))
                         .collect();
-                    table.key_snapshots = key_snapshots
+                    let snapshots = key_snapshots
                         .into_iter()
                         .map(|(k, v)| (load_hash_key_owned(self, k), self.load_value_owned(v)))
                         .collect();
-                    table.insertion_order = insertion_order
+                    let order = insertion_order
                         .into_iter()
                         .map(|key| load_hash_key_owned(self, key))
                         .collect();
-                    table.rebuild_iterable_hash_keys_from_data();
+                    table.rebuild_from_parts(values, snapshots, order);
                 });
             }
             DumpHeapObject::Obarray { buckets, count } => {
@@ -2113,7 +2113,7 @@ mod tests {
 
         assert_eq!(table.data.len(), 2);
         assert_eq!(
-            table.entry_slots.iter().flatten().count(),
+            table.live_hash_keys_in_slot_order().len(),
             2,
             "loaded hash tables must keep GNU maphash traversal in sync with live entries"
         );
@@ -2380,9 +2380,12 @@ pub(crate) fn dump_hash_table(encoder: &mut DumpEncoder, ht: &LispHashTable) -> 
             .map(|(k, v)| (dump_hash_key(encoder, k), encoder.dump_value(v)))
             .collect(),
         key_snapshots: ht
-            .key_snapshots
+            .data
             .iter()
-            .map(|(k, v)| (dump_hash_key(encoder, k), encoder.dump_value(v)))
+            .map(|(key, _)| {
+                let snapshot = ht.key_snapshot(key).copied().unwrap_or(Value::NIL);
+                (dump_hash_key(encoder, key), encoder.dump_value(&snapshot))
+            })
             .collect(),
         insertion_order: ht
             .live_hash_keys_in_slot_order()
@@ -4088,24 +4091,15 @@ pub(crate) fn load_hash_table(decoder: &mut LoadDecoder, ht: &DumpLispHashTable)
         .map(|key| load_hash_key(decoder, key))
         .collect();
 
-    let mut table = LispHashTable {
-        test: load_hash_table_test(&ht.test),
-        test_name: ht.test_name.map(|s| load_sym_id(&s)),
-        user_cmp_function: None,
-        user_hash_function: None,
-        mutable: true,
-        size: ht.size,
-        weakness: ht.weakness.as_ref().map(load_hash_table_weakness),
-        rehash_size: ht.rehash_size,
-        rehash_threshold: ht.rehash_threshold,
-        data,
-        key_snapshots,
-        insertion_order,
-        entry_slots: Vec::new(),
-        entry_slot_by_key: FxHashMap::default(),
-        free_slots: Vec::new(),
-    };
-    table.rebuild_iterable_hash_keys_from_data();
+    let mut table = LispHashTable::new_unpopulated_with_options(
+        load_hash_table_test(&ht.test),
+        ht.size,
+        ht.weakness.as_ref().map(load_hash_table_weakness),
+        ht.rehash_size,
+        ht.rehash_threshold,
+    );
+    table.test_name = ht.test_name.map(|s| load_sym_id(&s));
+    table.rebuild_from_parts(data, key_snapshots, insertion_order);
     table
 }
 

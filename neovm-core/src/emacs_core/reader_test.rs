@@ -4111,7 +4111,7 @@ fn read_from_string_hash_table_literal_returns_hash_table() {
     // passes `:size' derived from the number of DATA pairs to make-hash-table.
     assert_eq!(table.size, 2);
     assert_eq!(table.data.len(), 2);
-    assert_eq!(table.key_snapshots.len(), 2);
+    assert_eq!(table.key_snapshots().count(), 2);
     assert_eq!(
         table.data.get(&HashKey::from_str("a")).copied(),
         Some(Value::fixnum(1))

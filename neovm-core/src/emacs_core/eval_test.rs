@@ -13854,9 +13854,7 @@ fn jit_switch_through_funcall_seam() {
     let _ = table.with_hash_table_mut(|ht| {
         for (name, target) in [("jit-sw-a", 5), ("jit-sw-b", 7)] {
             let key = Value::symbol(name).to_hash_key(&ht.test);
-            ht.data.insert(key.clone(), Value::fixnum(target));
-            ht.key_snapshots.insert(key.clone(), Value::symbol(name));
-            ht.insertion_order.push(key);
+            ht.insert(key, Value::symbol(name), Value::fixnum(target));
         }
     });
     // (lambda (x) (pcase x ('jit-sw-a 1) ('jit-sw-b 2) (_ 0)))

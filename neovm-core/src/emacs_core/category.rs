@@ -173,15 +173,12 @@ fn intern_category_set(table: Value, category_set: Value) -> EvalResult {
         ));
     };
     let key = category_set.to_hash_key(&hash_ref.test);
-    if let Some(existing) = hash_ref.key_snapshots.get(&key) {
+    if let Some(existing) = hash_ref.key_snapshot(&key) {
         return Ok(*existing);
     }
 
     let _ = hash.with_hash_table_mut(|hash_table| {
-        hash_table.data.insert(key.clone(), Value::NIL);
-        hash_table.key_snapshots.insert(key.clone(), category_set);
-        hash_table.insertion_order.push(key.clone());
-        hash_table.note_hash_key_inserted(key);
+        hash_table.insert(key, category_set, Value::NIL);
     });
     Ok(category_set)
 }
@@ -216,16 +213,13 @@ fn intern_category_set_bits(table: Value, bits: u128) -> EvalResult {
         ));
     };
     let key = HashKey::BoolVec(128, bits);
-    if let Some(existing) = hash_ref.key_snapshots.get(&key) {
+    if let Some(existing) = hash_ref.key_snapshot(&key) {
         return Ok(*existing);
     }
 
     let category_set = make_category_set_from_bits(bits);
     let _ = hash.with_hash_table_mut(|hash_table| {
-        hash_table.data.insert(key.clone(), Value::NIL);
-        hash_table.key_snapshots.insert(key.clone(), category_set);
-        hash_table.insertion_order.push(key.clone());
-        hash_table.note_hash_key_inserted(key);
+        hash_table.insert(key, category_set, Value::NIL);
     });
     Ok(category_set)
 }

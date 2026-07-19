@@ -103,6 +103,9 @@ pub fn decode_gnu_bytecode_with_offset_map(
 ) -> Result<(Vec<Op>, Vec<GnuByteOffsetMapEntry>), DecodeError> {
     let (raw_ops, offset_map, jump_patches) = decode_pass1(bytecodes, constants)?;
     let ops = patch_jumps(raw_ops, &offset_map, &jump_patches, bytecodes.len())?;
+    if !ops.iter().any(|op| matches!(op, Op::Switch)) {
+        return Ok((ops, Vec::new()));
+    }
     let mut offset_pairs: Vec<_> = offset_map.into_iter().collect();
     offset_pairs.sort_unstable_by_key(|(byte_offset, _)| *byte_offset);
     Ok((

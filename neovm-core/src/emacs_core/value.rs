@@ -19,7 +19,7 @@ use std::str::FromStr;
 use std::sync::OnceLock;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use strum::{EnumString, IntoStaticStr};
 
 use super::error::{Flow, signal};
@@ -618,12 +618,272 @@ pub struct LispHashTable {
     pub weakness: Option<HashTableWeakness>,
     pub rehash_size: f64,
     pub rehash_threshold: f64,
-    pub data: FxHashMap<HashKey, Value>,
-    pub key_snapshots: FxHashMap<HashKey, Value>,
-    pub insertion_order: Vec<HashKey>,
-    pub entry_slots: Vec<Option<HashKey>>,
-    pub entry_slot_by_key: FxHashMap<HashKey, usize>,
-    pub free_slots: Vec<usize>,
+    pub data: HashTableStorage,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct HashTableEntry {
+    pub key: Value,
+    pub value: Value,
+}
+
+/// Compact backing store for a Lisp hash table.
+///
+/// The hash index owns each (potentially structural) [`HashKey`] exactly once.
+/// Its value is a stable slot number; slot order provides GNU-compatible
+/// iteration while storing only the original Lisp key and value. This keeps
+/// indexing, key snapshots, insertion order, deletion holes, and slot reuse
+/// behind one interface instead of mirroring every key across five containers.
+#[derive(Clone, Debug, Default)]
+pub struct HashTableStorage {
+    index: FxHashMap<HashKey, usize>,
+    slots: Vec<Option<HashTableEntry>>,
+    free_slots: Vec<usize>,
+}
+
+pub struct HashTableIter<'a> {
+    index: std::collections::hash_map::Iter<'a, HashKey, usize>,
+    slots: &'a [Option<HashTableEntry>],
+}
+
+impl<'a> Iterator for HashTableIter<'a> {
+    type Item = (&'a HashKey, &'a Value);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        for (key, &slot) in self.index.by_ref() {
+            if let Some(entry) = self.slots.get(slot).and_then(Option::as_ref) {
+                return Some((key, &entry.value));
+            }
+        }
+        None
+    }
+}
+
+impl<'a> IntoIterator for &'a HashTableStorage {
+    type Item = (&'a HashKey, &'a Value);
+    type IntoIter = HashTableIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl std::ops::Index<&HashKey> for HashTableStorage {
+    type Output = Value;
+
+    fn index(&self, key: &HashKey) -> &Self::Output {
+        self.get(key).expect("no entry found for key")
+    }
+}
+
+impl HashTableStorage {
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            index: FxHashMap::with_capacity_and_hasher(capacity, Default::default()),
+            slots: Vec::with_capacity(capacity),
+            free_slots: Vec::new(),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.index.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.index.is_empty()
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.index.capacity()
+    }
+
+    pub fn contains_key(&self, key: &HashKey) -> bool {
+        self.index.contains_key(key)
+    }
+
+    pub fn get(&self, key: &HashKey) -> Option<&Value> {
+        let slot = *self.index.get(key)?;
+        self.slots
+            .get(slot)
+            .and_then(Option::as_ref)
+            .map(|entry| &entry.value)
+    }
+
+    pub fn get_mut(&mut self, key: &HashKey) -> Option<&mut Value> {
+        let slot = *self.index.get(key)?;
+        self.slots
+            .get_mut(slot)
+            .and_then(Option::as_mut)
+            .map(|entry| &mut entry.value)
+    }
+
+    pub fn key_snapshot(&self, key: &HashKey) -> Option<&Value> {
+        let slot = *self.index.get(key)?;
+        self.slots
+            .get(slot)
+            .and_then(Option::as_ref)
+            .map(|entry| &entry.key)
+    }
+
+    pub fn replace_key_snapshot(&mut self, key: &HashKey, key_value: Value) {
+        let Some(&slot) = self.index.get(key) else {
+            return;
+        };
+        self.slots[slot]
+            .as_mut()
+            .expect("hash index points to an empty entry slot")
+            .key = key_value;
+    }
+
+    pub fn insert(&mut self, hash_key: HashKey, key: Value, value: Value) -> Option<Value> {
+        if let Some(&slot) = self.index.get(&hash_key) {
+            let entry = self.slots[slot]
+                .as_mut()
+                .expect("hash index points to an empty entry slot");
+            return Some(std::mem::replace(&mut entry.value, value));
+        }
+
+        let slot = if let Some(slot) = self.free_slots.pop() {
+            debug_assert!(self.slots[slot].is_none());
+            self.slots[slot] = Some(HashTableEntry { key, value });
+            slot
+        } else {
+            let slot = self.slots.len();
+            self.slots.push(Some(HashTableEntry { key, value }));
+            slot
+        };
+        self.index.insert(hash_key, slot);
+        None
+    }
+
+    pub fn insert_replacing_key(
+        &mut self,
+        hash_key: HashKey,
+        key: Value,
+        value: Value,
+    ) -> Option<Value> {
+        if let Some(&slot) = self.index.get(&hash_key) {
+            let entry = self.slots[slot]
+                .as_mut()
+                .expect("hash index points to an empty entry slot");
+            entry.key = key;
+            return Some(std::mem::replace(&mut entry.value, value));
+        }
+        self.insert(hash_key, key, value)
+    }
+
+    pub fn remove(&mut self, key: &HashKey) -> Option<Value> {
+        let slot = self.index.remove(key)?;
+        let entry = self.slots[slot]
+            .take()
+            .expect("hash index points to an empty entry slot");
+        self.free_slots.push(slot);
+        Some(entry.value)
+    }
+
+    pub fn clear(&mut self) {
+        self.index.clear();
+        self.slots.clear();
+        self.free_slots.clear();
+    }
+
+    pub fn reserve(&mut self, additional: usize) {
+        self.index.reserve(additional);
+        self.slots.reserve(additional);
+    }
+
+    pub fn iter(&self) -> HashTableIter<'_> {
+        HashTableIter {
+            index: self.index.iter(),
+            slots: &self.slots,
+        }
+    }
+
+    pub fn values(&self) -> impl Iterator<Item = &Value> {
+        self.slots
+            .iter()
+            .filter_map(Option::as_ref)
+            .map(|entry| &entry.value)
+    }
+
+    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut Value> {
+        self.slots
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .map(|entry| &mut entry.value)
+    }
+
+    pub fn key_snapshots(&self) -> impl Iterator<Item = &Value> {
+        self.slots
+            .iter()
+            .filter_map(Option::as_ref)
+            .map(|entry| &entry.key)
+    }
+
+    pub fn entries_in_slot_order(&self) -> impl Iterator<Item = &HashTableEntry> {
+        self.slots.iter().filter_map(Option::as_ref)
+    }
+
+    pub fn entry_at(&self, slot: usize) -> Option<&HashTableEntry> {
+        self.slots.get(slot).and_then(Option::as_ref)
+    }
+
+    pub fn slot_count(&self) -> usize {
+        self.slots.len()
+    }
+
+    pub fn live_hash_keys_in_slot_order(&self) -> Vec<&HashKey> {
+        let mut keys = vec![None; self.slots.len()];
+        for (key, &slot) in &self.index {
+            if self.slots.get(slot).is_some_and(Option::is_some) {
+                keys[slot] = Some(key);
+            }
+        }
+        keys.into_iter().flatten().collect()
+    }
+
+    pub fn retain(&mut self, mut keep: impl FnMut(&HashKey, &mut Value) -> bool) {
+        let mut removed = Vec::new();
+        for (key, &slot) in &self.index {
+            let entry = self.slots[slot]
+                .as_mut()
+                .expect("hash index points to an empty entry slot");
+            if !keep(key, &mut entry.value) {
+                removed.push(key.clone());
+            }
+        }
+        for key in removed {
+            let _ = self.remove(&key);
+        }
+    }
+
+    pub fn replace_pointer_key(&mut self, old_ptr: usize, new_ptr: usize, new_key: Value) {
+        let old = HashKey::Ptr(old_ptr);
+        let Some(slot) = self.index.remove(&old) else {
+            return;
+        };
+        self.index.insert(HashKey::Ptr(new_ptr), slot);
+        self.slots[slot]
+            .as_mut()
+            .expect("hash index points to an empty entry slot")
+            .key = new_key;
+    }
+
+    pub(crate) fn known_storage_bytes(&self) -> usize {
+        self.index
+            .capacity()
+            .saturating_mul(size_of::<(HashKey, usize)>())
+            .saturating_add(
+                self.slots
+                    .capacity()
+                    .saturating_mul(size_of::<Option<HashTableEntry>>()),
+            )
+            .saturating_add(
+                self.free_slots
+                    .capacity()
+                    .saturating_mul(size_of::<usize>()),
+            )
+    }
 }
 
 /// Standard hash-table tests. The numeric codes mirror GNU
@@ -960,12 +1220,7 @@ impl LispHashTable {
             weakness,
             rehash_size,
             rehash_threshold,
-            data: FxHashMap::default(),
-            key_snapshots: FxHashMap::default(),
-            insertion_order: Vec::new(),
-            entry_slots: Vec::new(),
-            entry_slot_by_key: FxHashMap::default(),
-            free_slots: Vec::new(),
+            data: HashTableStorage::default(),
         }
     }
 
@@ -986,172 +1241,74 @@ impl LispHashTable {
             weakness,
             rehash_size,
             rehash_threshold,
-            data: FxHashMap::with_capacity_and_hasher(size.max(0) as usize, Default::default()),
-            key_snapshots: FxHashMap::with_capacity_and_hasher(
-                size.max(0) as usize,
-                Default::default(),
-            ),
-            insertion_order: Vec::with_capacity(size.max(0) as usize),
-            entry_slots: Vec::with_capacity(size.max(0) as usize),
-            entry_slot_by_key: FxHashMap::with_capacity_and_hasher(
-                size.max(0) as usize,
-                Default::default(),
-            ),
-            free_slots: Vec::new(),
+            data: HashTableStorage::with_capacity(size.max(0) as usize),
         }
     }
 
-    pub fn note_hash_key_inserted(&mut self, key: HashKey) {
-        if self.entry_slot_by_key.contains_key(&key) {
-            return;
-        }
-        if let Some(slot) = self.free_slots.pop()
-            && slot < self.entry_slots.len()
-        {
-            debug_assert!(self.entry_slots[slot].is_none());
-            self.entry_slots[slot] = Some(key.clone());
-            self.entry_slot_by_key.insert(key, slot);
-            return;
-        }
-        let slot = self.entry_slots.len();
-        self.entry_slots.push(Some(key.clone()));
-        self.entry_slot_by_key.insert(key, slot);
+    pub fn insert(&mut self, hash_key: HashKey, key: Value, value: Value) -> Option<Value> {
+        self.data.insert(hash_key, key, value)
     }
 
-    /// Insert or update `hash_key` -> `value`, maintaining iteration-order
-    /// bookkeeping in O(1) (mirrors the main `puthash` path).  Callers that
-    /// bypass `puthash` -- e.g. the frame face cache -- must use this instead
-    /// of `ensure_hash_key_iterable`, whose duplicate check is an O(n) scan
-    /// with `HashKey` equality and becomes O(n^2) when realising many keys (a
-    /// Doom-startup hot spot).
+    /// Insert or update an entry while replacing its original-key snapshot.
+    /// Used by internal caches whose key value is already canonical.
     pub fn upsert_iterable(&mut self, hash_key: HashKey, key_value: Value, value: Value) {
-        let is_new = !self.data.contains_key(&hash_key);
-        self.key_snapshots.insert(hash_key.clone(), key_value);
-        if is_new {
-            self.insertion_order.push(hash_key.clone());
-            self.note_hash_key_inserted(hash_key.clone());
-        }
-        self.data.insert(hash_key, value);
+        self.data.insert_replacing_key(hash_key, key_value, value);
     }
 
-    pub fn ensure_hash_key_iterable(&mut self, key: &HashKey) {
-        if !self.insertion_order.iter().any(|existing| existing == key) {
-            self.insertion_order.push(key.clone());
-        }
-        if !self.entry_slot_by_key.contains_key(key) {
-            self.note_hash_key_inserted(key.clone());
-        }
+    pub fn key_snapshot(&self, key: &HashKey) -> Option<&Value> {
+        self.data.key_snapshot(key)
     }
 
-    pub fn ensure_all_hash_keys_iterable(&mut self) {
-        let keys: Vec<HashKey> = self.data.keys().cloned().collect();
-        for key in keys {
-            self.ensure_hash_key_iterable(&key);
-        }
+    pub fn replace_key_snapshot(&mut self, key: &HashKey, key_value: Value) {
+        self.data.replace_key_snapshot(key, key_value);
     }
 
-    pub fn rebuild_iterable_hash_keys_from_data(&mut self) {
-        let live_len = self.data.len();
-        let mut seen = FxHashSet::with_capacity_and_hasher(live_len, Default::default());
-        let original_order = std::mem::take(&mut self.insertion_order);
-        let mut insertion_order = Vec::with_capacity(original_order.len().max(live_len));
+    pub fn key_snapshots(&self) -> impl Iterator<Item = &Value> {
+        self.data.key_snapshots()
+    }
 
-        for key in original_order {
-            if self.data.contains_key(&key) && seen.insert(key.clone()) {
-                insertion_order.push(key);
+    pub fn entries_in_slot_order(&self) -> impl Iterator<Item = &HashTableEntry> {
+        self.data.entries_in_slot_order()
+    }
+
+    pub fn entry_at(&self, slot: usize) -> Option<&HashTableEntry> {
+        self.data.entry_at(slot)
+    }
+
+    pub fn entry_slot_count(&self) -> usize {
+        self.data.slot_count()
+    }
+
+    pub fn replace_pointer_key(&mut self, old_ptr: usize, new_ptr: usize, new_key: Value) {
+        self.data.replace_pointer_key(old_ptr, new_ptr, new_key);
+    }
+
+    pub fn rebuild_from_parts(
+        &mut self,
+        values: FxHashMap<HashKey, Value>,
+        key_snapshots: FxHashMap<HashKey, Value>,
+        insertion_order: Vec<HashKey>,
+    ) {
+        self.data.clear();
+        self.data.reserve(values.len());
+        for hash_key in insertion_order {
+            let Some(value) = values.get(&hash_key).copied() else {
+                continue;
+            };
+            let key = key_snapshots.get(&hash_key).copied().unwrap_or(value);
+            self.insert(hash_key, key, value);
+        }
+        for (hash_key, value) in values {
+            if self.data.contains_key(&hash_key) {
+                continue;
             }
-        }
-        for key in self.data.keys() {
-            if seen.insert(key.clone()) {
-                insertion_order.push(key.clone());
-            }
-        }
-
-        self.entry_slots.clear();
-        self.entry_slots.reserve(insertion_order.len());
-        self.entry_slots
-            .extend(insertion_order.iter().cloned().map(Some));
-        self.entry_slot_by_key.clear();
-        self.entry_slot_by_key.reserve(insertion_order.len());
-        for (slot, key) in insertion_order.iter().cloned().enumerate() {
-            self.entry_slot_by_key.insert(key, slot);
-        }
-        self.free_slots.clear();
-        self.insertion_order = insertion_order;
-    }
-
-    pub fn note_hash_key_removed(&mut self, key: &HashKey) {
-        if let Some(slot) = self.entry_slot_by_key.remove(key) {
-            self.entry_slots[slot] = None;
-            self.free_slots.push(slot);
-            return;
-        }
-        if let Some(slot) = self
-            .entry_slots
-            .iter()
-            .position(|entry| entry.as_ref() == Some(key))
-        {
-            self.entry_slots[slot] = None;
-            self.free_slots.push(slot);
-        }
-    }
-
-    pub fn clear_hash_slots(&mut self) {
-        self.entry_slots.clear();
-        self.entry_slot_by_key.clear();
-        self.free_slots.clear();
-    }
-
-    pub fn rebuild_hash_slots_from_insertion_order(&mut self) {
-        self.entry_slots.clear();
-        self.entry_slot_by_key.clear();
-        self.free_slots.clear();
-        for key in &self.insertion_order {
-            if self.data.contains_key(key) {
-                let slot = self.entry_slots.len();
-                self.entry_slots.push(Some(key.clone()));
-                self.entry_slot_by_key.insert(key.clone(), slot);
-            }
+            let key = key_snapshots.get(&hash_key).copied().unwrap_or(value);
+            self.insert(hash_key, key, value);
         }
     }
 
     pub fn live_hash_keys_in_slot_order(&self) -> Vec<&HashKey> {
-        let mut keys = Vec::with_capacity(self.data.len());
-        let slots_cover_data = self.entry_slot_by_key.len() == self.data.len();
-        if slots_cover_data {
-            for slot in &self.entry_slots {
-                if let Some(key) = slot.as_ref()
-                    && self.data.contains_key(key)
-                {
-                    keys.push(key);
-                }
-            }
-            if keys.len() == self.data.len() {
-                return keys;
-            }
-            keys.clear();
-        }
-
-        let mut seen = FxHashSet::with_capacity_and_hasher(self.data.len(), Default::default());
-        for slot in &self.entry_slots {
-            if let Some(key) = slot.as_ref()
-                && self.data.contains_key(key)
-                && seen.insert(key.clone())
-            {
-                keys.push(key);
-            }
-        }
-        for key in &self.insertion_order {
-            if self.data.contains_key(key) && seen.insert(key.clone()) {
-                keys.push(key);
-            }
-        }
-        for key in self.data.keys() {
-            if seen.insert(key.clone()) {
-                keys.push(key);
-            }
-        }
-        keys
+        self.data.live_hash_keys_in_slot_order()
     }
 }
 
@@ -1172,13 +1329,7 @@ pub(crate) fn build_hash_table_literal_value(
         table.user_hash_function = None;
         for (key_value, val_value) in entries {
             let key = key_value.to_hash_key(&table.test);
-            let inserting_new_key = !table.data.contains_key(&key);
-            table.data.insert(key.clone(), val_value);
-            if inserting_new_key {
-                table.key_snapshots.insert(key.clone(), key_value);
-                table.insertion_order.push(key.clone());
-                table.note_hash_key_inserted(key);
-            }
+            table.insert(key, key_value, val_value);
         }
     });
     table_value

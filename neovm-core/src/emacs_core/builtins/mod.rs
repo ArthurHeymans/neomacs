@@ -7555,6 +7555,11 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         "memory-use-counts",
         super::builtins_extra::builtin_memory_use_counts
     );
+    defsubr_pure!(
+        ctx,
+        "neomacs--heap-layout-stats",
+        super::builtins_extra::builtin_neomacs_heap_layout_stats
+    );
 
     // -----------------------------------------------------------------------
     // Additional builtins registered via defsubr.

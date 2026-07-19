@@ -126,8 +126,7 @@ fn hash_key_to_value(key: &HashKey) -> Value {
 
 pub(crate) fn hash_key_to_visible_value(table: &LispHashTable, key: &HashKey) -> Value {
     table
-        .key_snapshots
-        .get(key)
+        .key_snapshot(key)
         .cloned()
         .unwrap_or_else(|| hash_key_to_value(key))
 }
@@ -899,15 +898,14 @@ pub(crate) fn validate_maphash_args(args: &[Value]) -> Result<(Value, Value), Fl
 pub(crate) fn maphash_slot_len(table: Value) -> usize {
     table
         .as_hash_table()
-        .map(|table| table.entry_slots.len())
+        .map(LispHashTable::entry_slot_count)
         .unwrap_or(0)
 }
 
 pub(crate) fn maphash_entry_at_slot(table: Value, slot: usize) -> Option<(Value, Value)> {
     let table = table.as_hash_table()?;
-    let key = table.entry_slots.get(slot)?.as_ref()?;
-    let value = *table.data.get(key)?;
-    Some((hash_key_to_visible_value(table, key), value))
+    let entry = table.entry_at(slot)?;
+    Some((entry.key, entry.value))
 }
 
 fn current_lisp_obarray_value(eval: &super::eval::Context) -> Value {
