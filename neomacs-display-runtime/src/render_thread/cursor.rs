@@ -5,6 +5,7 @@ use crate::core::types::{
     AnimatedCursor, CursorAnimStyle, DisplayFrameId, DisplayWindowId, ease_in_out_cubic,
     ease_linear, ease_out_cubic, ease_out_expo, ease_out_quad,
 };
+use neomacs_display_protocol::VisualConfig;
 
 /// Target position/style for cursor animation
 #[derive(Debug, Clone)]
@@ -99,15 +100,16 @@ pub(super) struct CursorState {
 
 impl Default for CursorState {
     fn default() -> Self {
+        let visual = VisualConfig::default();
         Self {
             blink_on: true,
-            blink_enabled: true,
+            blink_enabled: visual.cursor_blink.enabled,
             last_blink_toggle: std::time::Instant::now(),
-            blink_interval: std::time::Duration::from_millis(500),
-            anim_enabled: true,
-            anim_speed: 15.0,
-            anim_style: CursorAnimStyle::CriticallyDampedSpring,
-            anim_duration: 0.15,
+            blink_interval: visual.cursor_blink.interval,
+            anim_enabled: visual.cursor_motion.enabled,
+            anim_speed: visual.cursor_motion.speed,
+            anim_style: visual.cursor_motion.style,
+            anim_duration: visual.cursor_motion.duration.as_secs_f32(),
             target: None,
             current_x: 0.0,
             current_y: 0.0,
@@ -133,11 +135,11 @@ impl Default for CursorState {
                 target_y: 0.0,
                 omega: 26.7,
             }; 4],
-            trail_size: 0.7,
+            trail_size: visual.cursor_motion.trail_size,
             prev_target_cx: 0.0,
             prev_target_cy: 0.0,
-            size_transition_enabled: false,
-            size_transition_duration: 0.15,
+            size_transition_enabled: visual.cursor_size_transition.enabled,
+            size_transition_duration: visual.cursor_size_transition.duration.as_secs_f32(),
             size_animating: false,
             size_start_w: 0.0,
             size_start_h: 0.0,
@@ -149,6 +151,27 @@ impl Default for CursorState {
 }
 
 impl CursorState {
+    pub(super) fn apply_visual_config(&mut self, config: &VisualConfig) {
+        self.blink_enabled = config.cursor_blink.enabled;
+        self.blink_interval = config.cursor_blink.interval;
+        self.anim_enabled = config.cursor_motion.enabled;
+        self.anim_speed = config.cursor_motion.speed;
+        self.anim_style = config.cursor_motion.style;
+        self.anim_duration = config.cursor_motion.duration.as_secs_f32();
+        self.trail_size = config.cursor_motion.trail_size;
+        self.size_transition_enabled = config.cursor_size_transition.enabled;
+        self.size_transition_duration = config.cursor_size_transition.duration.as_secs_f32();
+        if !self.anim_enabled {
+            self.animating = false;
+        }
+        if !self.size_transition_enabled {
+            self.size_animating = false;
+        }
+        if !self.blink_enabled {
+            self.blink_on = true;
+        }
+    }
+
     pub(super) fn config_snapshot(&self) -> CursorConfigSnapshot {
         CursorConfigSnapshot {
             blink_enabled: self.blink_enabled,

@@ -224,116 +224,22 @@ impl RenderApp {
 
     pub(super) fn handle_config(&mut self, cmd: ConfigCommand) {
         match cmd {
-            ConfigCommand::SetCursorBlink {
-                enabled,
-                interval_ms,
-            } => {
-                tracing::debug!(
-                    "Cursor blink: enabled={}, interval={}ms",
-                    enabled,
-                    interval_ms
-                );
-                self.cursor_defaults.blink_enabled = enabled;
-                self.cursor_defaults.blink_interval =
-                    std::time::Duration::from_millis(interval_ms as u64);
-                if !enabled {
-                    self.cursor_defaults.blink_on = true;
-                    if let Some(primary_frame) = self
-                        .frame_windows
-                        .primary_window_mut()
-                        .map(|ws| &mut ws.render)
-                    {
-                        primary_frame.force_cursor_blink_on();
-                    }
-                }
-                self.frame_windows
-                    .sync_top_level_cursor_config(&self.cursor_defaults, false);
-                if !enabled {
-                    self.frame_windows.force_top_level_cursor_blink_on();
-                }
-            }
-            ConfigCommand::SetCursorAnimation { enabled, speed } => {
-                tracing::debug!("Cursor animation: enabled={}, speed={}", enabled, speed);
-                self.cursor_defaults.anim_enabled = enabled;
-                self.cursor_defaults.anim_speed = speed;
-                if !enabled {
-                    self.cursor_defaults.animating = false;
-                }
-                self.frame_windows
-                    .sync_top_level_cursor_config(&self.cursor_defaults, true);
-            }
-            ConfigCommand::SetAnimationConfig {
-                cursor_enabled,
-                cursor_speed,
-                cursor_style,
-                cursor_duration_ms,
-                transition_policy,
-                trail_size,
-            } => {
-                tracing::debug!(
-                    "Animation config: cursor={}/{}/style={:?}/{}ms/trail={}, crossfade={}/{}ms/effect={:?}/easing={:?}, scroll={}/{}ms/effect={:?}/easing={:?}",
-                    cursor_enabled,
-                    cursor_speed,
-                    cursor_style,
-                    cursor_duration_ms,
-                    trail_size,
-                    transition_policy.crossfade_enabled,
-                    transition_policy.crossfade_duration_ms,
-                    transition_policy.crossfade_effect,
-                    transition_policy.crossfade_easing,
-                    transition_policy.scroll_enabled,
-                    transition_policy.scroll_duration_ms,
-                    transition_policy.scroll_effect,
-                    transition_policy.scroll_easing
-                );
-                self.cursor_defaults.anim_enabled = cursor_enabled;
-                self.cursor_defaults.anim_speed = cursor_speed;
-                self.cursor_defaults.anim_style = cursor_style;
-                self.cursor_defaults.anim_duration = cursor_duration_ms as f32 / 1000.0;
-                self.cursor_defaults.trail_size = trail_size.clamp(0.0, 1.0);
-                self.transition_policy = transition_policy;
-                self.frame_windows.mark_top_level_dirty();
-                if !cursor_enabled {
-                    self.cursor_defaults.animating = false;
-                }
-                self.frame_windows
-                    .sync_top_level_cursor_config(&self.cursor_defaults, true);
-                self.frame_windows
-                    .sync_top_level_transition_policy(self.transition_policy);
-                if !self.transition_policy.crossfade_enabled {
-                    self.frame_windows.clear_top_level_crossfade_transitions();
-                }
-                if !self.transition_policy.scroll_enabled {
-                    self.frame_windows.clear_top_level_scroll_transitions();
-                }
-            }
-            ConfigCommand::SetCursorSizeTransition {
-                enabled,
-                duration_ms,
-            } => {
-                self.cursor_defaults.size_transition_enabled = enabled;
-                self.cursor_defaults.size_transition_duration = duration_ms as f32 / 1000.0;
-                if !enabled {
-                    self.cursor_defaults.size_animating = false;
-                }
-                self.frame_windows
-                    .sync_top_level_cursor_config(&self.cursor_defaults, true);
-                self.frame_windows.mark_top_level_dirty();
-            }
             ConfigCommand::SetLigaturesEnabled { enabled } => {
                 tracing::info!("Ligatures enabled: {}", enabled);
             }
-            ConfigCommand::UpdateEffect(updater) => {
-                (updater.0)(&mut self.effects);
+            ConfigCommand::SetVisualConfig(config) => {
+                self.cursor_defaults.apply_visual_config(&config);
+                self.transition_policy = neomacs_display_protocol::TransitionPolicy::from(&config);
+                self.frame_windows
+                    .apply_top_level_transition_policy(self.transition_policy);
+                self.effects = config.effects;
                 if let Some(renderer) = self.renderer.as_mut() {
                     renderer.effects = self.effects.clone();
                 }
-                self.frame_windows.mark_top_level_dirty();
-            }
-            ConfigCommand::SetCursorEffect(command) => {
-                command.apply_to(&mut self.effects);
-                if let Some(renderer) = self.renderer.as_mut() {
-                    renderer.effects = self.effects.clone();
+                self.frame_windows
+                    .sync_top_level_cursor_config(&self.cursor_defaults, true);
+                if !self.cursor_defaults.blink_enabled {
+                    self.frame_windows.force_top_level_cursor_blink_on();
                 }
                 self.frame_windows.mark_top_level_dirty();
             }
@@ -356,21 +262,6 @@ impl RenderApp {
             } => {
                 self.extra_line_spacing = line_spacing;
                 self.extra_letter_spacing = letter_spacing;
-                self.frame_windows.mark_top_level_dirty();
-            }
-            ConfigCommand::SetIndentGuideRainbow { enabled, colors } => {
-                let linear_colors: Vec<(f32, f32, f32, f32)> = colors
-                    .iter()
-                    .map(|(r, g, b, a)| {
-                        let c = crate::core::types::Color::new(*r, *g, *b, *a).srgb_to_linear();
-                        (c.r, c.g, c.b, c.a)
-                    })
-                    .collect();
-                self.effects.indent_guides.rainbow_enabled = enabled;
-                self.effects.indent_guides.rainbow_colors = linear_colors.clone();
-                if let Some(renderer) = self.renderer.as_mut() {
-                    renderer.set_indent_guide_rainbow(enabled, linear_colors);
-                }
                 self.frame_windows.mark_top_level_dirty();
             }
             ConfigCommand::SetChildFrameStyle {

@@ -197,18 +197,22 @@ The spring style also supports a **4-corner trail effect** where leading corners
 #### Configuration
 
 ```elisp
-;; All-in-one configuration:
-;; (neomacs-set-animation-config
-;;   CURSOR-ENABLED CURSOR-SPEED CURSOR-STYLE CURSOR-DURATION
-;;   CROSSFADE-ENABLED CROSSFADE-DURATION
-;;   SCROLL-ENABLED SCROLL-DURATION
-;;   &optional SCROLL-EFFECT SCROLL-EASING TRAIL-SIZE)
+;; One typed, name-based profile configures effects and animation policy.
+(neomacs-effects-apply
+ '((cursor-motion :enabled t :speed 15.0
+                  :style critically-damped-spring :duration 0.15
+                  :trail-size 0.7)
+   (crossfade-transition :enabled t :duration 0.2
+                         :effect crossfade :easing ease-out-quad)
+   (scroll-transition :enabled t :duration 0.15
+                      :effect page-curl :easing spring)))
 
-;; Example: spring cursor, crossfade buffer switch, page-curl scroll with spring easing
-(neomacs-set-animation-config t 15.0 'spring 150 t 200 t 150 7 2 0.7)
-
-;; Example: fast linear cursor, no crossfade, wobbly scroll
-(neomacs-set-animation-config t 20.0 'linear 100 nil 200 t 200 10 0 0.0)
+;; Incremental changes use the same names and properties.
+(neomacs-effect-set 'cursor-motion
+                    :speed 20.0 :style 'linear :duration 0.1)
+(neomacs-effect-set 'crossfade-transition :enabled nil)
+(neomacs-effect-set 'scroll-transition
+                    :effect 'wobbly :easing 'ease-out-quad)
 ```
 
 ### The Ambitious Vision

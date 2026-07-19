@@ -561,12 +561,6 @@ impl WgpuRenderer {
         self.effects.line_highlight.enabled = enabled;
         self.effects.line_highlight.color = color;
     }
-
-    /// Update rainbow indent guide config
-    pub fn set_indent_guide_rainbow(&mut self, enabled: bool, colors: Vec<(f32, f32, f32, f32)>) {
-        self.effects.indent_guides.rainbow_enabled = enabled;
-        self.effects.indent_guides.rainbow_colors = colors;
-    }
 }
 
 struct RendererFrameEffectsRef<'a> {

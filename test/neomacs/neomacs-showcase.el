@@ -317,45 +317,9 @@ The future of text editing is here.  It's called Neomacs.
   (when (fboundp 'neomacs-webkit-close-all)
     (let ((inhibit-message t))
       (ignore-errors (neomacs-webkit-close-all))))
-  ;; Cursor effects
-  (when (fboundp 'neomacs-set-cursor-glow) (neomacs-set-cursor-glow nil))
-  (when (fboundp 'neomacs-set-cursor-pulse) (neomacs-set-cursor-pulse nil))
-  (when (fboundp 'neomacs-set-cursor-color-cycle) (neomacs-set-cursor-color-cycle nil))
-  (when (fboundp 'neomacs-set-cursor-firework) (neomacs-set-cursor-firework nil))
-  (when (fboundp 'neomacs-set-cursor-tornado) (neomacs-set-cursor-tornado nil))
-  (when (fboundp 'neomacs-set-cursor-portal) (neomacs-set-cursor-portal nil))
-  (when (fboundp 'neomacs-set-cursor-lightning) (neomacs-set-cursor-lightning nil))
-  (when (fboundp 'neomacs-set-cursor-particles) (neomacs-set-cursor-particles nil))
-  (when (fboundp 'neomacs-set-cursor-comet) (neomacs-set-cursor-comet nil))
-  (when (fboundp 'neomacs-set-cursor-dna-helix) (neomacs-set-cursor-dna-helix nil))
-  (when (fboundp 'neomacs-set-cursor-snowflake) (neomacs-set-cursor-snowflake nil))
-  (when (fboundp 'neomacs-set-cursor-sparkle-burst) (neomacs-set-cursor-sparkle-burst nil))
-  (when (fboundp 'neomacs-set-cursor-spotlight) (neomacs-set-cursor-spotlight nil))
-  ;; Ambient effects
-  (when (fboundp 'neomacs-set-aurora) (neomacs-set-aurora nil))
-  (when (fboundp 'neomacs-set-matrix-rain) (neomacs-set-matrix-rain nil))
-  (when (fboundp 'neomacs-set-constellation) (neomacs-set-constellation nil))
-  (when (fboundp 'neomacs-set-circuit-trace) (neomacs-set-circuit-trace nil))
-  (when (fboundp 'neomacs-set-rain-effect) (neomacs-set-rain-effect nil))
-  (when (fboundp 'neomacs-set-neon-border) (neomacs-set-neon-border nil))
-  (when (fboundp 'neomacs-set-breathing-border) (neomacs-set-breathing-border nil))
-  ;; Overlays
-  (when (fboundp 'neomacs-set-scanlines) (neomacs-set-scanlines nil))
-  (when (fboundp 'neomacs-set-dot-matrix) (neomacs-set-dot-matrix nil))
-  (when (fboundp 'neomacs-set-typing-ripple) (neomacs-set-typing-ripple nil))
-  (when (fboundp 'neomacs-set-background-pattern) (neomacs-set-background-pattern 0))
-  ;; Display features
-  (when (fboundp 'neomacs-set-line-highlight) (neomacs-set-line-highlight nil))
-  (when (fboundp 'neomacs-set-indent-guides) (neomacs-set-indent-guides nil))
-  (when (fboundp 'neomacs-set-indent-guide-rainbow) (neomacs-set-indent-guide-rainbow nil))
-  (when (fboundp 'neomacs-set-show-whitespace) (neomacs-set-show-whitespace nil))
-  (when (fboundp 'neomacs-set-minimap) (neomacs-set-minimap nil))
-  (when (fboundp 'neomacs-set-focus-mode) (neomacs-set-focus-mode nil))
-  (when (fboundp 'neomacs-set-zen-mode) (neomacs-set-zen-mode nil))
-  (when (fboundp 'neomacs-set-scroll-progress) (neomacs-set-scroll-progress nil))
-  (when (fboundp 'neomacs-set-inactive-dim) (neomacs-set-inactive-dim nil))
-  (when (fboundp 'neomacs-set-focus-gradient-border) (neomacs-set-focus-gradient-border nil))
-  (when (fboundp 'neomacs-set-mode-line-separator) (neomacs-set-mode-line-separator nil)))
+  ;; Restore every renderer-defined default, then turn off the one shader
+  ;; whose Rust default is intentionally enabled.
+  (neomacs-effects-apply '((cursor-color-cycle :enabled nil))))
 
 (defun showcase--title-card (title &optional subtitle)
   "Show a title card with TITLE and optional SUBTITLE."
@@ -540,8 +504,9 @@ The future of text editing is here.  It's called Neomacs.
                   (goto-char (+ (match-beginning 0) 1)))
                 (redisplay t))))))))
   ;; Breathing border (purple, slow)
-  (when (fboundp 'neomacs-set-breathing-border)
-    (neomacs-set-breathing-border t "#9966FF" 5 40 4000)))
+  (neomacs-effect-set 'breathing-border
+                      :enabled t :color "#9966FF"
+                      :min-opacity 0.05 :max-opacity 0.4 :cycle-ms 4000))
 
 (defun showcase--section-cursor-anim ()
   "Demonstrate smooth cursor with spring physics and glow."
@@ -555,12 +520,8 @@ The future of text editing is here.  It's called Neomacs.
     (recenter)
     (redisplay t)
     ;; Enable smooth cursor + glow + line highlight
-    (when (fboundp 'neomacs-set-animation-config)
-      (neomacs-set-animation-config t 12.0 'spring 200 t 200 t 150))
-    (when (fboundp 'neomacs-set-cursor-glow)
-      (neomacs-set-cursor-glow t "#4D99FF" 40))
-    (when (fboundp 'neomacs-set-line-highlight)
-      (neomacs-set-line-highlight t))
+    (neomacs-effect-set 'cursor-glow :enabled t :color "#4D99FF" :radius 40)
+    (neomacs-effect-set 'line-highlight :enabled t)
     ;; Animate cursor through positions
     (let ((delay 0.3))
       (showcase--schedule delay
@@ -635,9 +596,9 @@ The future of text editing is here.  It's called Neomacs.
         (showcase--schedule delay
           (lambda ()
             (showcase--log "  scroll effect: %s" effect)
-            (when (fboundp 'neomacs-set-animation-config)
-              (neomacs-set-animation-config t 12.0 'spring 200 t 200 t 250
-                                            effect 'ease-out-quad 0.7))))
+            (neomacs-effect-set 'scroll-transition
+                                :enabled t :effect effect)
+            (message "Scroll Effect: %s" effect)))
         (showcase--schedule (+ delay 0.2)
           (lambda ()
             (switch-to-buffer buf)
@@ -649,7 +610,7 @@ The future of text editing is here.  It's called Neomacs.
         (setq delay (+ delay 0.9))))))
 
 (defun showcase--section-cursor-effects ()
-  "Parade through 10 cursor effects."
+  "Parade through cursor effects using stable registry names."
   (showcase--log ">>> SECTION 3: Cursor Effects Parade START")
   (showcase--reset-all-effects)
   (let ((buf (showcase--insert-rust-buffer)))
@@ -660,52 +621,44 @@ The future of text editing is here.  It's called Neomacs.
     (move-to-column 20)
     (recenter)
     (redisplay t)
-    (when (fboundp 'neomacs-set-animation-config)
-      (neomacs-set-animation-config t 12.0 'spring 200 t 200 t 150))
-    ;; Cursor effects sequence
-    (let ((effects '(("Firework" neomacs-set-cursor-firework (t))
-                     ("Tornado" neomacs-set-cursor-tornado (t))
-                     ("Portal" neomacs-set-cursor-portal (t))
-                     ("Lightning" neomacs-set-cursor-lightning (t))
-                     ("Particles" neomacs-set-cursor-particles (t nil 8 1000 100))
-                     ("Comet" neomacs-set-cursor-comet (t 8 400 nil 70))
-                     ("DNA Helix" neomacs-set-cursor-dna-helix (t))
-                     ("Snowflake" neomacs-set-cursor-snowflake (t))
-                     ("Sparkle Burst" neomacs-set-cursor-sparkle-burst (t))
-                     ("Color Cycle + Glow" neomacs-set-cursor-color-cycle (t 80 90 60))))
+    (let ((effects '(("Firework" . cursor-firework)
+                     ("Tornado" . cursor-tornado)
+                     ("Portal" . cursor-portal)
+                     ("Lightning" . cursor-lightning)
+                     ("Particles" . cursor-particles)
+                     ("Comet" . cursor-comet)
+                     ("DNA Helix" . cursor-dna-helix)
+                     ("Snowflake" . cursor-snowflake)
+                     ("Sparkle Burst" . cursor-sparkle-burst)
+                     ("Color Cycle + Glow" . cursor-color-cycle)))
           (delay 0)
-          (prev-fns nil))
-      (dolist (effect effects)
-        (let ((name (nth 0 effect))
-              (fn (nth 1 effect))
-              (args (nth 2 effect))
-              (pf prev-fns))
+          previous)
+      (dolist (entry effects)
+        (let ((name (car entry))
+              (effect (cdr entry))
+              (old previous))
           (showcase--schedule delay
             (lambda ()
-              ;; Disable previous effects
-              (dolist (p pf)
-                (when (fboundp p) (funcall p nil)))
-              ;; Enable new
-              (when (fboundp fn) (apply fn args))
-              ;; Special: Color Cycle also enables glow
-              (when (eq fn 'neomacs-set-cursor-color-cycle)
-                (when (fboundp 'neomacs-set-cursor-glow)
-                  (neomacs-set-cursor-glow t nil 35)))
+              (when old
+                (neomacs-effect-reset old))
+              (neomacs-effect-set effect :enabled t)
+              (when (eq effect 'cursor-color-cycle)
+                (neomacs-effect-set 'cursor-glow :enabled t :radius 35))
               (showcase--log "  cursor effect: %s" name)
               (message "Cursor Effect: %s" name))))
-        (push (nth 1 effect) prev-fns)
+        (setq previous (cdr entry))
         (setq delay (+ delay 0.65)))
-      ;; Cursor moves every 0.5s throughout
-      (let ((t0 0.5))
+      (let ((time 0.5))
         (dotimes (i 14)
-          (let ((dir (nth (mod i 7) '(left left left right right right right))))
-            (showcase--schedule t0
+          (let ((direction (nth (mod i 7)
+                                '(left left left right right right right))))
+            (showcase--schedule time
               (lambda ()
                 (switch-to-buffer buf)
                 (ignore-errors
-                  (if (eq dir 'right) (right-char 1) (left-char 1)))
+                  (if (eq direction 'right) (right-char 1) (left-char 1)))
                 (redisplay t))))
-          (setq t0 (+ t0 0.5)))))))
+          (setq time (+ time 0.5)))))))
 
 (defun showcase--section-atmosphere ()
   "Cycle through ambient atmospheric effects."
@@ -713,29 +666,28 @@ The future of text editing is here.  It's called Neomacs.
   (showcase--reset-all-effects)
   (switch-to-buffer (showcase--insert-rust-buffer))
   (goto-char (point-min))
-  ;; Cycle through atmospheric effects
-  (let ((effects '(("Aurora Borealis" (neomacs-set-aurora t "#33CC66" "#4D66E6" 80 18))
-                   ("Matrix Rain" (neomacs-set-matrix-rain t "#00FF33" 180 15))
-                   ("Constellation" (neomacs-set-constellation t))
-                   ("Circuit Trace" (neomacs-set-circuit-trace t))
-                   ("Rain Effect" (neomacs-set-rain-effect t "#8099CC" 40 150 18))
-                   ("Neon Border" (neomacs-set-neon-border t))))
-        (prev-fns nil)
+  ;; Each entry is a complete atomic profile.
+  (let ((effects '(("Aurora Borealis"
+                    ((aurora :enabled t :color1 "#33CC66"
+                             :color2 "#4D66E6" :height 80 :opacity 0.18)))
+                   ("Matrix Rain"
+                    ((matrix-rain :enabled t :color "#00FF33"
+                                  :speed 180 :opacity 0.15)))
+                   ("Constellation" ((constellation :enabled t)))
+                   ("Circuit Trace" ((circuit-trace :enabled t)))
+                   ("Rain Effect"
+                    ((rain-effect :enabled t :color "#8099CC"
+                                  :drop-count 40 :speed 150 :opacity 0.18)))
+                   ("Neon Border" ((neon-border :enabled t)))))
         (delay 0))
-    (dolist (effect effects)
-      (let ((name (car effect))
-            (forms (cdr effect))
-            (pf prev-fns))
+    (dolist (entry effects)
+      (let ((name (car entry))
+            (profile (cadr entry)))
         (showcase--schedule delay
           (lambda ()
-            ;; Disable previous
-            (dolist (p pf)
-              (ignore-errors (eval p t)))
-            ;; Enable new
-            (ignore-errors (eval (car forms) t))
+            (neomacs-effects-apply profile)
             (showcase--log "  atmosphere: %s" name)
             (message "Atmosphere: %s" name))))
-      (push (list (caar (cdr effect)) nil) prev-fns)
       (setq delay (+ delay 1.0)))))
 
 (defun showcase--section-code-intel ()
@@ -750,41 +702,37 @@ The future of text editing is here.  It's called Neomacs.
     (let ((features '((0.2 "Line Numbers"
                        (display-line-numbers-mode 1))
                       (0.8 "Rainbow Indent Guides"
-                       (when (fboundp 'neomacs-set-indent-guide-rainbow)
-                         (neomacs-set-indent-guide-rainbow t)))
+                       (neomacs-effect-set 'indent-guides
+                                           :enabled t :rainbow-enabled t))
                       (1.4 "Line Highlight"
-                       (when (fboundp 'neomacs-set-line-highlight)
-                         (neomacs-set-line-highlight t)))
+                       (neomacs-effect-set 'line-highlight :enabled t))
                       (2.0 "Visible Whitespace"
-                       (when (fboundp 'neomacs-set-show-whitespace)
-                         (neomacs-set-show-whitespace t "#33FF66")))
+                       (neomacs-effect-set 'show-whitespace
+                                           :enabled t :color "#33FF66"))
                       (2.6 "Minimap"
-                       (when (fboundp 'neomacs-set-minimap)
-                         (neomacs-set-minimap t)))
+                       (neomacs-effect-set 'minimap :enabled t))
                       (3.2 "Focus Mode"
-                       (when (fboundp 'neomacs-set-focus-mode)
-                         (neomacs-set-focus-mode t 30)))
+                       (neomacs-effect-set 'focus-mode
+                                           :enabled t :opacity 0.3))
                       (3.8 "Scroll Progress"
-                       (when (fboundp 'neomacs-set-scroll-progress)
-                         (neomacs-set-scroll-progress t)))
+                       (neomacs-effect-set 'scroll-progress :enabled t))
                       (4.5 "Split + Inactive Dimming"
                        (progn
                          (split-window-right)
                          (other-window 1)
                          (switch-to-buffer (showcase--insert-prose-buffer))
                          (other-window 1)
-                         (when (fboundp 'neomacs-set-inactive-dim)
-                           (neomacs-set-inactive-dim t 0.2))))
+                         (neomacs-effect-set 'inactive-dim
+                                             :enabled t :opacity 0.2)))
                       (5.5 "Zen Mode"
                        (progn
                          (delete-other-windows)
-                         (when (fboundp 'neomacs-set-focus-mode)
-                           (neomacs-set-focus-mode nil))
-                         (when (fboundp 'neomacs-set-minimap)
-                           (neomacs-set-minimap nil))
+                         (neomacs-effect-reset 'focus-mode)
+                         (neomacs-effect-reset 'minimap)
                          (switch-to-buffer (showcase--insert-prose-buffer))
-                         (when (fboundp 'neomacs-set-zen-mode)
-                           (neomacs-set-zen-mode t 60 30)))))))
+                         (neomacs-effect-set 'zen-mode :enabled t
+                                             :content-width-pct 60
+                                             :margin-opacity 0.3))))))
       (dolist (feat features)
         (let ((d (nth 0 feat))
               (name (nth 1 feat))
@@ -1007,10 +955,6 @@ The future of text editing is here.  It's called Neomacs.
   "Demonstrate buffer crossfade, window split animations, text-scale."
   (showcase--log ">>> SECTION 7: Window Transitions START")
   (showcase--reset-all-effects)
-  ;; Configure animation
-  (when (fboundp 'neomacs-set-animation-config)
-    (neomacs-set-animation-config t 12.0 'spring 200 t 200 t 300
-                                  'slide 'ease-out-quad 0.7 'crossfade))
   (let ((buf-rust (showcase--insert-rust-buffer))
         (buf-elisp (showcase--insert-elisp-buffer))
         (buf-prose (showcase--insert-prose-buffer)))
@@ -1047,8 +991,9 @@ The future of text editing is here.  It's called Neomacs.
       (lambda ()
         (showcase--log "  window-trans: focus border")
         (message "Transition: Focus Gradient Border")
-        (when (fboundp 'neomacs-set-focus-gradient-border)
-          (neomacs-set-focus-gradient-border t "#4D99FF" "#FF4DFF" 3 80))))
+        (neomacs-effect-set 'focus-gradient-border
+                            :enabled t :top-color "#4D99FF"
+                            :bot-color "#FF4DFF" :width 3 :opacity 0.8)))
     (showcase--schedule 4.3
       (lambda ()
         (other-window 1)))
@@ -1294,17 +1239,13 @@ The future of text editing is here.  It's called Neomacs.
       (erase-buffer)
       (insert (propertize "RETRO MODE ACTIVATED\n" 'face '(:height 2.0 :foreground "#4DFF4D" :weight bold)))
       (insert "\n")))
-  ;; Stack retro effects
-  (when (fboundp 'neomacs-set-scanlines)
-    (neomacs-set-scanlines t 3 12 "#000000"))
-  (when (fboundp 'neomacs-set-dot-matrix)
-    (neomacs-set-dot-matrix t))
-  (when (fboundp 'neomacs-set-background-pattern)
-    (neomacs-set-background-pattern 1 16 "#003300" 8))
-  (when (fboundp 'neomacs-set-cursor-firework)
-    (neomacs-set-cursor-firework t))
-  (when (fboundp 'neomacs-set-typing-ripple)
-    (neomacs-set-typing-ripple t 50 400))
+  ;; Stack retro effects in one renderer update.
+  (neomacs-effects-apply
+   '((scanlines :enabled t :spacing 3 :opacity 0.12 :color "#000000")
+     (dot-matrix :enabled t)
+     (bg-pattern :style 1 :spacing 16 :color "#003300" :opacity 0.08)
+     (cursor-firework :enabled t)
+     (typing-ripple :enabled t :max-radius 50 :duration-ms 400)))
   ;; Simulate typing
   (showcase--log "  retro: starting typing simulation")
   (let ((retro-buf (get-buffer "*Showcase-Retro*"))
@@ -1405,17 +1346,16 @@ The future of text editing is here.  It's called Neomacs.
                   (goto-char (+ (match-beginning 0) 1)))
                 (redisplay t))))))))
 
-  ;; Stack the prettiest effects
-  (when (fboundp 'neomacs-set-aurora)
-    (neomacs-set-aurora t "#33CC66" "#9966FF" 100 20))
-  (when (fboundp 'neomacs-set-neon-border)
-    (neomacs-set-neon-border t))
-  (when (fboundp 'neomacs-set-cursor-portal)
-    (neomacs-set-cursor-portal t))
-  (when (fboundp 'neomacs-set-cursor-color-cycle)
-    (neomacs-set-cursor-color-cycle t 60 90 60))
-  (when (fboundp 'neomacs-set-breathing-border)
-    (neomacs-set-breathing-border t "#00FFCC" 10 50 3000)))
+  ;; Stack the prettiest effects.
+  (neomacs-effects-apply
+   '((aurora :enabled t :color1 "#33CC66" :color2 "#9966FF"
+             :height 100 :opacity 0.2)
+     (neon-border :enabled t)
+     (cursor-portal :enabled t)
+     (cursor-color-cycle :enabled t :speed 0.6
+                         :saturation 0.9 :lightness 0.6)
+     (breathing-border :enabled t :color "#00FFCC"
+                       :min-opacity 0.1 :max-opacity 0.5 :cycle-ms 3000))))
 
 ;;; --- Sequencer ---
 

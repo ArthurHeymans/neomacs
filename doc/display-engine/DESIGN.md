@@ -287,32 +287,18 @@ region, excluding mode-lines and fringes.
 ## Configuration Pipeline
 
 ```
-neomacs-win.el                      neomacsterm.c                    Rust
-──────────────                      ─────────────                    ────
-(neomacs-set-animation-config       DEFUN (MANY args)                ffi.rs
-  t 15.0 'spring 150                  parse Lisp_Objects               ↓
-  t 200                                call C FFI function           RenderCommand::
-  t 150 7 2 0.7)                                                     SetAnimationConfig
-                                                                       ↓
-                                                                     render_thread.rs
-                                                                       stores in RenderApp
-                                                                       fields
-                                                                       ↓
-                                                                     renderer.rs
-                                                                       reads config per frame
+Elisp                    Evaluator / protocol              Render thread
+─────                    ────────────────────              ─────────────
+(neomacs-effect-set      validate named properties        ConfigCommand::
+ 'cursor-glow              against VisualConfig             SetVisualConfig(snapshot)
+ :enabled t                apply to cloned snapshot              ↓
+ :radius 48)               commit atomically              effect/cursor/transition state
 ```
 
-The `neomacs-set-animation-config` DEFUN accepts 8 required + 3 optional arguments
-(using `MANY` args since Emacs DEFUN macros only support up to 9 named parameters):
-
-```
-Required: cursor-enabled, cursor-speed, cursor-style, cursor-duration,
-          crossfade-enabled, crossfade-duration, scroll-enabled, scroll-duration
-Optional: scroll-effect (int 0-20), scroll-easing (int 0-4), trail-size (float 0.0-1.0)
-```
-
-Individual animation options can also be set via the `animation_config.rs` `set_option()`
-string-based API, used by the Rust-side config system.
+Each effect keeps its own typed property schema.  Profiles validate completely
+before one authoritative snapshot is published, and `VisualConfig` supplies
+the defaults and registry names.  See [EFFECTS.md](EFFECTS.md) for the Elisp
+surface, ownership rules, and extension contract.
 
 ---
 
@@ -401,17 +387,6 @@ void neomacs_display_shutdown_threaded(void);
 void neomacs_display_render_frame_glyphs(NeomacsDisplay *handle,
     const uint8_t *data, size_t len,
     uint32_t width, uint32_t height, ...);
-
-// Animation config
-void neomacs_display_set_animation_config(NeomacsDisplay *handle,
-    int cursorEnabled, float cursorSpeed, uint8_t cursorStyle,
-    uint32_t cursorDurationMs, int crossfadeEnabled, uint32_t crossfadeDurationMs,
-    int scrollEnabled, uint32_t scrollDurationMs,
-    uint32_t scrollEffect, uint32_t scrollEasing, float trailSize);
-
-// Cursor blink
-void neomacs_display_set_cursor_blink(NeomacsDisplay *handle,
-    int enabled, float interval);
 
 // Input polling
 int neomacs_display_get_threaded_wakeup_fd(void);

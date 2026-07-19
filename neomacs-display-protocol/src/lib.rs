@@ -7,7 +7,7 @@
 #![allow(clippy::too_many_arguments)]
 
 pub mod cursor;
-pub mod cursor_effect_command;
+pub mod effect_command;
 pub mod effect_config;
 pub mod face;
 pub mod font;
@@ -27,10 +27,11 @@ pub mod snapshot_text;
 pub mod transition_policy;
 pub mod types;
 pub mod ui_types;
+pub mod visual_config;
 pub use glyph_matrix::*;
 pub mod tty_rif;
 
-pub use cursor_effect_command::*;
+pub use effect_command::*;
 pub use effect_config::*;
 pub use face::*;
 pub use frame_chrome::*;
@@ -47,6 +48,7 @@ pub use sealed_frame_presentation::*;
 pub use transition_policy::*;
 pub use types::*;
 pub use ui_types::*;
+pub use visual_config::*;
 
 #[cfg(test)]
 #[path = "frame_chrome_test.rs"]

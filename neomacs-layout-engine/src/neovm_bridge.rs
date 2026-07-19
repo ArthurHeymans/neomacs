@@ -10,6 +10,9 @@ use neovm_core::buffer::{
     buffer::{BUFFER_SLOT_COUNT, lookup_buffer_slot},
     overlay::OverlayList,
 };
+use neovm_core::emacs_core::effect_profile::{
+    EffectScope, effect_name_from_lisp, effect_operation_from_lisp,
+};
 use neovm_core::emacs_core::image_catalog::image_scale_environment;
 use neovm_core::emacs_core::intern;
 use neovm_core::emacs_core::symbol::Obarray;
@@ -32,9 +35,8 @@ use crate::coords::{
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::DisplayOrigin;
 use crate::fontconfig::FontSizing;
+use neomacs_display_protocol::EffectsConfig;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind, CursorSpec};
-use neomacs_display_protocol::cursor_effect_command::{CursorEffectArg, CursorEffectCommand};
-use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BoxLineWidth;
 use neomacs_display_protocol::types::{FaceId, Rect};
 use strum::{EnumString, IntoStaticStr};
@@ -1068,63 +1070,21 @@ fn frame_cursor_color_pixel(frame: &Frame, face_table: &FaceTable) -> u32 {
     }
 }
 
-fn disabled_cursor_effects_profile() -> EffectsConfig {
-    let mut effects = EffectsConfig::default();
-    effects.cursor_color_cycle.enabled = false;
-    effects
-}
-
-fn cursor_effect_arg_from_lisp(value: Value) -> Option<CursorEffectArg> {
-    if value.is_nil() {
-        Some(CursorEffectArg::Nil)
-    } else if value.bits() == Value::T.bits() {
-        Some(CursorEffectArg::Bool(true))
-    } else if let Some(text) = value.as_utf8_str() {
-        Some(CursorEffectArg::String(text.to_owned()))
-    } else {
-        value.as_number_f64().map(CursorEffectArg::Number)
-    }
-}
-
 fn cursor_effect_name_from_symbol(value: Value) -> Option<String> {
-    let name = value.as_symbol_name()?;
-    Some(
-        name.strip_prefix("neomacs-set-cursor-")
-            .unwrap_or(name)
-            .to_owned(),
-    )
+    effect_name_from_lisp(value, EffectScope::Cursor).ok()
 }
 
 fn apply_cursor_effect_form(effects: &mut EffectsConfig, form: Value) -> bool {
     if form.is_nil() {
         return false;
     }
-    let values = if form.is_cons() {
-        let Some(values) = list_to_vec(&form) else {
-            return false;
-        };
-        values
-    } else {
-        vec![form]
-    };
-    let Some((head, args)) = values.split_first() else {
+    let Ok(operation) = effect_operation_from_lisp(form, EffectScope::Cursor) else {
         return false;
     };
-    let Some(name) = cursor_effect_name_from_symbol(*head) else {
+    let Ok(updated) = effects.apply_effects(&[operation]) else {
         return false;
     };
-    let Some(args) = args
-        .iter()
-        .copied()
-        .map(cursor_effect_arg_from_lisp)
-        .collect::<Option<Vec<_>>>()
-    else {
-        return false;
-    };
-    let Ok(command) = CursorEffectCommand::try_new(name, args) else {
-        return false;
-    };
-    command.apply_to(effects);
+    *effects = updated;
     true
 }
 
@@ -1132,7 +1092,7 @@ fn parse_cursor_effect_profile(value: Value) -> Option<EffectsConfig> {
     if value.is_nil() {
         return None;
     }
-    let mut effects = disabled_cursor_effects_profile();
+    let mut effects = EffectsConfig::cursor_profile_baseline();
     if value.is_cons() {
         let forms = list_to_vec(&value)?;
         let is_single_command = forms

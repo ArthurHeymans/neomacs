@@ -26,7 +26,6 @@ use super::x11_hints::apply_window_geometry_hints;
 #[cfg(feature = "neo-term")]
 use crate::core::frame_glyphs::FrameGlyph;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
-use neomacs_display_protocol::TransitionPolicy;
 use neomacs_display_protocol::effect_config::IdleDimConfig;
 #[cfg(feature = "wpe-webkit")]
 use neomacs_display_protocol::scene::FloatingWebKit;
@@ -2339,35 +2338,6 @@ impl GuiFrameWindowManager {
         });
     }
 
-    pub(super) fn sync_top_level_transition_policy(&mut self, policy: TransitionPolicy) {
-        self.for_each_top_level_window_mut(|window_state| {
-            window_state.render.compositor.transitions.policy = policy;
-            window_state.render.compositor.dirty = true;
-        });
-    }
-
-    pub(super) fn clear_top_level_crossfade_transitions(&mut self) {
-        self.for_each_top_level_window_mut(|window_state| {
-            window_state
-                .render
-                .compositor
-                .transitions
-                .crossfades
-                .clear();
-        });
-    }
-
-    pub(super) fn clear_top_level_scroll_transitions(&mut self) {
-        self.for_each_top_level_window_mut(|window_state| {
-            window_state
-                .render
-                .compositor
-                .transitions
-                .scroll_slides
-                .clear();
-        });
-    }
-
     pub(super) fn remove_child_frame_from_top_level_windows(&mut self, frame_id: u64) -> bool {
         let mut changed = false;
         self.for_each_top_level_window_mut(|window_state| {
@@ -2419,6 +2389,19 @@ impl GuiFrameWindowManager {
             if let Some(atlas) = window_state.render.compositor.glyph_atlas.as_mut() {
                 atlas.clear();
             }
+        });
+    }
+
+    pub(super) fn apply_top_level_transition_policy(
+        &mut self,
+        policy: neomacs_display_protocol::TransitionPolicy,
+    ) {
+        self.for_each_top_level_window_mut(|window_state| {
+            window_state
+                .render
+                .compositor
+                .transitions
+                .apply_policy(policy);
         });
     }
 

@@ -32,6 +32,7 @@ use strum::{EnumString, IntoStaticStr};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
 #[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum ScrollEffect {
     // ── Transition effects (2D, vertex position/alpha changes) ──────────
     /// Default: old content slides out, new content slides in.
@@ -144,6 +145,7 @@ pub enum ScrollEffect {
         serialize = "crt",
         serialize = "scanlines"
     )]
+    #[serde(rename = "crt-scanlines")]
     CRTScanlines,
 
     /// Center sharp, edges blurred during fast scroll.
@@ -252,6 +254,7 @@ impl ScrollEffect {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
 #[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 #[non_exhaustive]
 pub enum ScrollEasing {
     /// Standard ease-out quadratic (current default).

@@ -1,6 +1,231 @@
 use super::*;
 use crate::types::FaceId;
+use crate::{
+    CursorAnimStyle, EffectOperation, EffectValue, ScrollEasing, ScrollEffect, VisualConfig,
+};
 use std::time::Duration;
+
+#[test]
+fn named_effect_properties_apply_without_resetting_unspecified_properties() {
+    let effects = EffectsConfig::default();
+    let updated = effects
+        .apply_effects(&[EffectOperation::set(
+            "cursor-glow",
+            [
+                ("enabled", EffectValue::Bool(true)),
+                ("color", EffectValue::String("#66ccff".to_owned())),
+                ("radius", EffectValue::Number(48.0)),
+            ],
+        )])
+        .unwrap();
+
+    assert!(updated.cursor_glow.enabled);
+    let (red, green, blue) = updated.cursor_glow.color;
+    assert!((red - 0.132_868_33).abs() < f32::EPSILON);
+    assert!((green - 0.603_827_4).abs() < f32::EPSILON);
+    assert_eq!(blue, 1.0);
+    assert_eq!(updated.cursor_glow.radius, 48.0);
+    assert_eq!(updated.cursor_glow.opacity, effects.cursor_glow.opacity);
+    assert!(updated.effect_values("cursor-glow").unwrap().contains(&(
+        "color".to_owned(),
+        EffectValue::String("#66CCFF".to_owned())
+    )));
+}
+
+#[test]
+fn one_registry_handles_non_cursor_effects_and_reports_their_own_properties() {
+    let updated = EffectsConfig::default()
+        .apply_effects(&[EffectOperation::set(
+            "rain-effect",
+            [
+                ("enabled", EffectValue::Bool(true)),
+                ("drop-count", EffectValue::Integer(42)),
+                ("speed", EffectValue::Number(80.0)),
+            ],
+        )])
+        .unwrap();
+
+    assert!(updated.rain_effect.enabled);
+    assert_eq!(updated.rain_effect.drop_count, 42);
+    assert_eq!(updated.rain_effect.speed, 80.0);
+    assert!(updated.effect_names().contains(&"rain-effect".to_owned()));
+    assert!(
+        updated
+            .effect_values("rain-effect")
+            .unwrap()
+            .iter()
+            .any(|(name, value)| name == "drop-count" && value == &EffectValue::Integer(42))
+    );
+}
+
+#[test]
+fn effect_updates_reject_unknown_properties_and_wrong_types() {
+    let effects = EffectsConfig::default();
+
+    let unknown = effects
+        .apply_effects(&[EffectOperation::set(
+            "cursor-glow",
+            [("raduis", EffectValue::Number(12.0))],
+        )])
+        .unwrap_err();
+    assert_eq!(
+        unknown.to_string(),
+        "effect `cursor-glow` has no property `raduis`"
+    );
+
+    let wrong_type = effects
+        .apply_effects(&[EffectOperation::set(
+            "cursor-glow",
+            [("radius", EffectValue::String("wide".to_owned()))],
+        )])
+        .unwrap_err();
+    assert_eq!(
+        wrong_type.to_string(),
+        "effect `cursor-glow` property `radius` expects a number"
+    );
+}
+
+#[test]
+fn profiles_are_atomic_and_reset_uses_the_rust_default() {
+    let effects = EffectsConfig::default();
+    let error = effects
+        .apply_effects(&[
+            EffectOperation::set("cursor-glow", [("enabled", EffectValue::Bool(true))]),
+            EffectOperation::set("missing-effect", [("enabled", EffectValue::Bool(true))]),
+        ])
+        .unwrap_err();
+    assert_eq!(error.to_string(), "unknown effect `missing-effect`");
+    assert_eq!(effects, EffectsConfig::default());
+
+    let changed = effects
+        .apply_effects(&[EffectOperation::set(
+            "cursor-glow",
+            [
+                ("enabled", EffectValue::Bool(true)),
+                ("radius", EffectValue::Number(99.0)),
+            ],
+        )])
+        .unwrap();
+    let reset = changed
+        .apply_effects(&[EffectOperation::reset("cursor-glow")])
+        .unwrap();
+    assert_eq!(reset.cursor_glow, CursorGlowConfig::default());
+}
+
+#[test]
+fn variable_length_color_properties_do_not_depend_on_their_current_length() {
+    let configured = EffectsConfig::default()
+        .apply_effects(&[EffectOperation::set(
+            "indent-guides",
+            [(
+                "rainbow-colors",
+                EffectValue::List(vec![
+                    EffectValue::String("#808080".to_owned()),
+                    EffectValue::String("#00FF0080".to_owned()),
+                ]),
+            )],
+        )])
+        .unwrap();
+    assert_eq!(
+        configured.indent_guides.rainbow_colors,
+        vec![
+            (0.215_860_53, 0.215_860_53, 0.215_860_53, 1.0),
+            (0.0, 1.0, 0.0, 128.0 / 255.0),
+        ]
+    );
+
+    let replaced = configured
+        .apply_effects(&[EffectOperation::set(
+            "indent-guides",
+            [(
+                "rainbow-colors",
+                EffectValue::List(vec![EffectValue::String("#0000FF".to_owned())]),
+            )],
+        )])
+        .unwrap();
+    assert_eq!(
+        replaced.indent_guides.rainbow_colors,
+        vec![(0.0, 0.0, 1.0, 1.0)]
+    );
+}
+
+#[test]
+fn one_registry_configures_motion_blink_and_window_transitions() {
+    let configured = VisualConfig::default()
+        .apply_effects(&[
+            EffectOperation::set(
+                "cursor-motion",
+                [
+                    ("enabled", EffectValue::Bool(true)),
+                    ("speed", EffectValue::Number(18.0)),
+                    ("style", EffectValue::Symbol("ease-in-out-cubic".to_owned())),
+                    ("duration", EffectValue::Number(0.2)),
+                ],
+            ),
+            EffectOperation::set("cursor-blink", [("interval", EffectValue::Number(0.35))]),
+            EffectOperation::set(
+                "scroll-transition",
+                [
+                    ("effect", EffectValue::Symbol("page-curl".to_owned())),
+                    ("easing", EffectValue::Symbol("spring".to_owned())),
+                ],
+            ),
+        ])
+        .unwrap();
+
+    assert_eq!(configured.cursor_motion.speed, 18.0);
+    assert_eq!(
+        configured.cursor_motion.style,
+        CursorAnimStyle::EaseInOutCubic
+    );
+    assert_eq!(
+        configured.cursor_motion.duration,
+        Duration::from_millis(200)
+    );
+    assert_eq!(configured.cursor_blink.interval, Duration::from_millis(350));
+    assert_eq!(configured.scroll_transition.effect, ScrollEffect::PageCurl);
+    assert_eq!(configured.scroll_transition.easing, ScrollEasing::Spring);
+    assert!(
+        configured
+            .effect_names()
+            .contains(&"cursor-motion".to_owned())
+    );
+}
+
+#[test]
+fn registry_rejects_renderer_unsafe_numeric_ranges() {
+    let config = VisualConfig::default();
+
+    for (effect, property, value) in [
+        ("cursor-glow", "radius", -1.0),
+        ("cursor-motion", "speed", -1.0),
+        ("cursor-motion", "duration", -0.1),
+        ("cursor-glow", "opacity", 1.1),
+        ("cursor-motion", "trail-size", 1.1),
+        ("cursor-color-cycle", "saturation", 1.1),
+    ] {
+        let error = config
+            .apply_effects(&[EffectOperation::set(
+                effect,
+                [(property, EffectValue::Number(value))],
+            )])
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("expects"),
+            "unexpected validation error for {effect}.{property}: {error}"
+        );
+    }
+}
+
+#[test]
+fn cursor_profile_baseline_disables_default_enabled_cursor_effects() {
+    assert!(EffectsConfig::default().cursor_color_cycle.enabled);
+    assert!(
+        !EffectsConfig::cursor_profile_baseline()
+            .cursor_color_cycle
+            .enabled
+    );
+}
 
 // ── Helper: assert a config is Clone + Debug ───────────────────────
 fn assert_clone_debug<T: Clone + std::fmt::Debug>(v: &T) {

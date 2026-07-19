@@ -1494,14 +1494,6 @@ pub struct ResolvedWebKit {
     pub webkit_id: u32,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum CursorEffectArg {
-    Nil,
-    Bool(bool),
-    Number(f64),
-    String(String),
-}
-
 /// One named user uniform for a shader surface, in slot order
 /// (`doc/display-engine/SHADER_SURFACES.md`). `components` (1..=4) selects
 /// the WGSL accessor type (f32/vec2/vec3/vec4).
@@ -1756,16 +1748,9 @@ pub trait DisplayHost {
     fn destroy_shader_surface(&self, _id: u32) -> Result<(), String> {
         Ok(())
     }
-    fn set_cursor_blink(&mut self, _enabled: bool, _interval_ms: u32) -> Result<(), String> {
-        Ok(())
-    }
-    fn set_cursor_animation(&mut self, _enabled: bool, _speed: f32) -> Result<(), String> {
-        Ok(())
-    }
-    fn set_cursor_effect(
+    fn set_visual_config(
         &mut self,
-        _name: &str,
-        _args: Vec<CursorEffectArg>,
+        _config: neomacs_display_protocol::VisualConfig,
     ) -> Result<(), String> {
         Ok(())
     }
@@ -2186,6 +2171,9 @@ pub struct Context {
     pub(crate) pending_pixel_scroll: Option<(u64, f32)>,
     /// Host-display bridge for GUI frame realization.
     pub display_host: Option<Box<dyn DisplayHost>>,
+    /// Desired visual configuration.  Lisp updates this snapshot atomically;
+    /// attaching or rebuilding a display replays it as authoritative state.
+    pub(crate) visual_config: neomacs_display_protocol::VisualConfig,
     /// Native anchor for the next Lisp-driven menu-bar popup.
     pub(crate) pending_menu_bar_popup_anchor: Option<super::MenuBarPopupAnchor>,
     /// Coding system manager — encoding/decoding registry.
@@ -5620,6 +5608,7 @@ impl Context {
             frame_snapshot_fn: None,
             pending_pixel_scroll: None,
             display_host: None,
+            visual_config: neomacs_display_protocol::VisualConfig::default(),
             pending_menu_bar_popup_anchor: None,
             coding_systems: CodingSystemManager::new(),
             face_table: FaceTable::new(),
@@ -5808,6 +5797,7 @@ impl Context {
             frame_snapshot_fn: None,
             pending_pixel_scroll: None,
             display_host: None,
+            visual_config: neomacs_display_protocol::VisualConfig::default(),
             pending_menu_bar_popup_anchor: None,
             coding_systems,
             face_table,
@@ -6327,7 +6317,8 @@ impl Context {
         self.processes.wait_notifier()
     }
 
-    pub fn set_display_host(&mut self, host: Box<dyn DisplayHost>) {
+    pub fn set_display_host(&mut self, mut host: Box<dyn DisplayHost>) {
+        let _ = host.set_visual_config(self.visual_config.clone());
         self.display_host = Some(host);
     }
 

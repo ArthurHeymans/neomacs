@@ -244,7 +244,7 @@ fn default_state_animation_enabled() {
     let state = CursorState::default();
     assert!(state.anim_enabled);
     assert!(!state.animating);
-    assert_eq!(state.anim_speed, 15.0);
+    assert_eq!(state.anim_speed, 2.4);
     assert_eq!(state.anim_style, CursorAnimStyle::CriticallyDampedSpring);
     assert_eq!(state.anim_duration, 0.15);
 }
@@ -279,6 +279,34 @@ fn default_state_size_transition_disabled() {
     assert!(!state.size_transition_enabled);
     assert!(!state.size_animating);
     assert_eq!(state.size_transition_duration, 0.15);
+}
+
+#[test]
+fn visual_config_updates_every_cursor_policy_as_one_snapshot() {
+    let mut state = CursorState::default();
+    let mut config = neomacs_display_protocol::VisualConfig::default();
+    config.cursor_blink.enabled = false;
+    config.cursor_blink.interval = Duration::from_millis(275);
+    config.cursor_motion.enabled = false;
+    config.cursor_motion.speed = 19.0;
+    config.cursor_motion.style = CursorAnimStyle::Linear;
+    config.cursor_motion.duration = Duration::from_millis(225);
+    config.cursor_motion.trail_size = 0.25;
+    config.cursor_size_transition.enabled = true;
+    config.cursor_size_transition.duration = Duration::from_millis(175);
+
+    state.apply_visual_config(&config);
+
+    assert!(!state.blink_enabled);
+    assert!(state.blink_on);
+    assert_eq!(state.blink_interval, Duration::from_millis(275));
+    assert!(!state.anim_enabled);
+    assert_eq!(state.anim_speed, 19.0);
+    assert_eq!(state.anim_style, CursorAnimStyle::Linear);
+    assert_eq!(state.anim_duration, 0.225);
+    assert_eq!(state.trail_size, 0.25);
+    assert!(state.size_transition_enabled);
+    assert_eq!(state.size_transition_duration, 0.175);
 }
 
 #[test]

@@ -1356,7 +1356,11 @@ impl RenderApp {
         let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) else {
             return false;
         };
-        window_state.render.compositor.transitions.policy = self.transition_policy;
+        window_state
+            .render
+            .compositor
+            .transitions
+            .apply_policy(self.transition_policy);
 
         if let Some((output, frame)) = Self::render_frame_window_contents_to_surface(
             renderer,

@@ -75,6 +75,16 @@ impl Default for TransitionState {
 }
 
 impl TransitionState {
+    pub(super) fn apply_policy(&mut self, policy: TransitionPolicy) {
+        if !policy.crossfade.enabled {
+            self.crossfades.clear();
+        }
+        if !policy.scroll.enabled {
+            self.scroll_slides.clear();
+        }
+        self.policy = policy;
+    }
+
     /// Check if any transitions are currently active
     pub(super) fn has_active(&self) -> bool {
         !self.crossfades.is_empty() || !self.scroll_slides.is_empty()
@@ -153,7 +163,7 @@ fn apply_transition_hint(
 ) {
     match hint.kind {
         WindowTransitionKind::Crossfade => {
-            if !transitions.policy.crossfade_enabled {
+            if !transitions.policy.crossfade.enabled {
                 return;
             }
 
@@ -163,8 +173,8 @@ fn apply_transition_hint(
             if let Some((tex, view, bg)) =
                 snapshot_prev_texture(renderer, transitions, width, height)
             {
-                let effect = hint.effect.unwrap_or(transitions.policy.crossfade_effect);
-                let easing = hint.easing.unwrap_or(transitions.policy.crossfade_easing);
+                let effect = hint.effect.unwrap_or(transitions.policy.crossfade.effect);
+                let easing = hint.easing.unwrap_or(transitions.policy.crossfade.easing);
                 tracing::debug!(
                     "Starting crossfade for window {} (effect={:?}, easing={:?})",
                     hint.window_id.get(),
@@ -175,7 +185,7 @@ fn apply_transition_hint(
                     hint.window_id.get(),
                     CrossfadeTransition {
                         started: now,
-                        duration: transitions.policy.crossfade_duration(),
+                        duration: transitions.policy.crossfade.duration,
                         bounds: hint.bounds,
                         effect,
                         easing,
@@ -190,7 +200,7 @@ fn apply_transition_hint(
             direction,
             scroll_distance,
         } => {
-            if !transitions.policy.scroll_enabled {
+            if !transitions.policy.scroll.enabled {
                 return;
             }
             if hint.bounds.height < 50.0 {
@@ -205,8 +215,8 @@ fn apply_transition_hint(
             if let Some((tex, view, bg)) =
                 snapshot_prev_texture(renderer, transitions, width, height)
             {
-                let effect = hint.effect.unwrap_or(transitions.policy.scroll_effect);
-                let easing = hint.easing.unwrap_or(transitions.policy.scroll_easing);
+                let effect = hint.effect.unwrap_or(transitions.policy.scroll.effect);
+                let easing = hint.easing.unwrap_or(transitions.policy.scroll.easing);
                 tracing::debug!(
                     "Starting scroll slide for window {} (dir={}, effect={:?}, easing={:?}, scroll_px={})",
                     hint.window_id.get(),
@@ -219,7 +229,7 @@ fn apply_transition_hint(
                     hint.window_id.get(),
                     ScrollTransition {
                         started: now,
-                        duration: transitions.policy.scroll_duration(),
+                        duration: transitions.policy.scroll.duration,
                         bounds: hint.bounds,
                         direction: dir,
                         scroll_distance: scroll_px,
@@ -316,8 +326,8 @@ fn apply_effect_hint(
                         started: now,
                         duration: effects.theme_transition.duration,
                         bounds: *bounds,
-                        effect: transitions.policy.crossfade_effect,
-                        easing: transitions.policy.crossfade_easing,
+                        effect: transitions.policy.crossfade.effect,
+                        easing: transitions.policy.crossfade.easing,
                         old_texture: tex,
                         old_view: view,
                         old_bind_group: bg_group,

@@ -527,13 +527,11 @@ impl DisplayHost for RecordingDisplayHost {
     }
 }
 
-struct CursorBlinkRecordingDisplayHost {
-    calls: Rc<RefCell<Vec<(bool, u32)>>>,
-    animation_calls: Rc<RefCell<Vec<(bool, f32)>>>,
-    effect_calls: Rc<RefCell<Vec<(String, Vec<CursorEffectArg>)>>>,
+struct VisualConfigRecordingDisplayHost {
+    visual_calls: Rc<RefCell<Vec<neomacs_display_protocol::VisualConfig>>>,
 }
 
-impl DisplayHost for CursorBlinkRecordingDisplayHost {
+impl DisplayHost for VisualConfigRecordingDisplayHost {
     fn realize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
         Ok(())
     }
@@ -542,18 +540,11 @@ impl DisplayHost for CursorBlinkRecordingDisplayHost {
         Ok(())
     }
 
-    fn set_cursor_blink(&mut self, enabled: bool, interval_ms: u32) -> Result<(), String> {
-        self.calls.borrow_mut().push((enabled, interval_ms));
-        Ok(())
-    }
-
-    fn set_cursor_animation(&mut self, enabled: bool, speed: f32) -> Result<(), String> {
-        self.animation_calls.borrow_mut().push((enabled, speed));
-        Ok(())
-    }
-
-    fn set_cursor_effect(&mut self, name: &str, args: Vec<CursorEffectArg>) -> Result<(), String> {
-        self.effect_calls.borrow_mut().push((name.to_owned(), args));
+    fn set_visual_config(
+        &mut self,
+        config: neomacs_display_protocol::VisualConfig,
+    ) -> Result<(), String> {
+        self.visual_calls.borrow_mut().push(config);
         Ok(())
     }
 }
@@ -568,22 +559,117 @@ fn eval_with_explicit_lexenv_restores_outer_lexenv() {
 }
 
 #[test]
-fn neomacs_set_cursor_blink_forwards_to_display_host() {
+fn neomacs_effect_api_sets_queries_and_resets_named_properties() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    let calls = Rc::new(RefCell::new(Vec::new()));
-    let animation_calls = Rc::new(RefCell::new(Vec::new()));
     let effect_calls = Rc::new(RefCell::new(Vec::new()));
-    ev.set_display_host(Box::new(CursorBlinkRecordingDisplayHost {
-        calls: Rc::clone(&calls),
-        animation_calls,
-        effect_calls,
+    ev.set_display_host(Box::new(VisualConfigRecordingDisplayHost {
+        visual_calls: Rc::clone(&effect_calls),
     }));
+    effect_calls.borrow_mut().clear();
 
-    ev.eval_str("(neomacs-set-cursor-blink nil 0.25)")
-        .expect("set cursor blink should evaluate");
+    let value = ev
+        .eval_str(
+            r##"(progn
+                 (neomacs-effect-set 'cursor-glow
+                   :enabled t :color "#66ccff" :radius 48)
+                 (let ((config (neomacs-effect-get 'cursor-glow)))
+                   (list (plist-get config :enabled)
+                         (plist-get config :color)
+                         (plist-get config :radius))))"##,
+        )
+        .expect("named effect update should evaluate");
+    assert_eq!(value.to_string(), r##"(t "#66CCFF" 48.0)"##);
+    assert_eq!(effect_calls.borrow().len(), 1);
+    assert!(effect_calls.borrow()[0].effects.cursor_glow.enabled);
 
-    assert_eq!(*calls.borrow(), vec![(false, 250)]);
+    let reset = ev
+        .eval_str(
+            "(progn (neomacs-effect-reset 'cursor-glow)\
+             (plist-get (neomacs-effect-get 'cursor-glow) :enabled))",
+        )
+        .expect("effect reset should evaluate");
+    assert!(reset.is_nil());
+    assert_eq!(effect_calls.borrow().len(), 2);
+}
+
+#[test]
+fn neomacs_effect_profiles_validate_atomically() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let visual_calls = Rc::new(RefCell::new(Vec::new()));
+    ev.set_display_host(Box::new(VisualConfigRecordingDisplayHost {
+        visual_calls: Rc::clone(&visual_calls),
+    }));
+    visual_calls.borrow_mut().clear();
+
+    let error = ev
+        .eval_str(
+            r#"(neomacs-effects-apply
+                 '((cursor-glow :enabled t :radius 12)
+                   (missing-effect :enabled t)))"#,
+        )
+        .unwrap_err();
+    let _ = error;
+    assert!(visual_calls.borrow().is_empty());
+
+    let enabled = ev
+        .eval_str("(plist-get (neomacs-effect-get 'cursor-glow) :enabled)")
+        .unwrap();
+    assert!(enabled.is_nil());
+
+    ev.eval_str("(neomacs-effect-set 'cursor-glow :enabled t)")
+        .unwrap();
+    let replaced = ev
+        .eval_str(
+            r#"(progn
+                 (neomacs-effects-apply '((rain-effect :enabled t)))
+                 (list (plist-get (neomacs-effect-get 'cursor-glow) :enabled)
+                       (plist-get (neomacs-effect-get 'rain-effect) :enabled)
+                       (and (memq 'rain-effect (neomacs-effect-names)) t)))"#,
+        )
+        .unwrap();
+    assert_eq!(replaced.to_string(), "(nil t t)");
+    assert_eq!(visual_calls.borrow().len(), 2);
+}
+
+#[test]
+fn named_visual_behavior_configs_replace_positional_animation_setters() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    let value = ev
+        .eval_str(
+            r#"(progn
+                 (neomacs-effect-set 'cursor-motion
+                   :enabled t :speed 18.0 :style 'linear :duration 0.2)
+                 (neomacs-effect-set 'scroll-transition
+                   :effect 'page-curl :easing 'spring)
+                 (list (plist-get (neomacs-effect-get 'cursor-motion) :style)
+                       (plist-get (neomacs-effect-get 'scroll-transition) :effect)
+                       (fboundp 'neomacs-set-cursor-animation)
+                       (fboundp 'neomacs-set-cursor-blink)))"#,
+        )
+        .expect("named visual behavior settings should evaluate");
+
+    assert_eq!(value.to_string(), "(linear page-curl nil nil)");
+}
+
+#[test]
+fn effect_discovery_distinguishes_cursor_profiles_from_global_behavior() {
+    assert_eq!(
+        eval_one(
+            "(list (and (memq 'cursor-motion (neomacs-effect-names)) t)
+                   (and (memq 'cursor-glow (neomacs-effect-names 'cursor)) t)
+                   (and (memq 'cursor-motion (neomacs-effect-names 'cursor)) t))"
+        ),
+        "OK (t t nil)"
+    );
+}
+
+#[test]
+fn old_positional_cursor_effect_setters_are_not_registered() {
+    assert_eq!(eval_one("(fboundp 'neomacs-set-cursor-glow)"), "OK nil");
 }
 
 #[test]
@@ -664,40 +750,6 @@ fn neomacs_buffer_text_backend_rejects_non_symbol_and_unknown_kinds() {
                  (neomacs-default-buffer-text-backend))"#
         ),
         "OK (wrong-type-argument error rope rope)"
-    );
-}
-
-#[test]
-fn neomacs_cursor_effect_setters_forward_to_display_host() {
-    crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let calls = Rc::new(RefCell::new(Vec::new()));
-    let animation_calls = Rc::new(RefCell::new(Vec::new()));
-    let effect_calls = Rc::new(RefCell::new(Vec::new()));
-    ev.set_display_host(Box::new(CursorBlinkRecordingDisplayHost {
-        calls,
-        animation_calls: Rc::clone(&animation_calls),
-        effect_calls: Rc::clone(&effect_calls),
-    }));
-
-    ev.eval_str(
-        r##"(progn
-              (neomacs-set-cursor-animation t 240)
-              (neomacs-set-cursor-glow t "#66CCFF" 48))"##,
-    )
-    .expect("cursor effect setters should evaluate");
-
-    assert_eq!(*animation_calls.borrow(), vec![(true, 2.4)]);
-    assert_eq!(
-        *effect_calls.borrow(),
-        vec![(
-            "glow".to_owned(),
-            vec![
-                CursorEffectArg::Bool(true),
-                CursorEffectArg::String("#66CCFF".to_owned()),
-                CursorEffectArg::Number(48.0),
-            ],
-        )]
     );
 }
 

@@ -1683,7 +1683,7 @@ fn primary_window_resize_does_not_wait_for_host_acknowledgement() {
 }
 
 #[test]
-fn primary_window_display_host_forwards_cursor_blink_to_renderer() {
+fn primary_window_display_host_forwards_visual_config_to_renderer() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
     let mut host = PrimaryWindowDisplayHost {
         cmd_tx: cmd_tx.clone(),
@@ -1708,17 +1708,19 @@ fn primary_window_display_host_forwards_cursor_blink_to_renderer() {
         last_frame_shader: Mutex::new(None),
     };
 
-    neovm_core::emacs_core::DisplayHost::set_cursor_blink(&mut host, false, 250)
-        .expect("cursor blink command should forward");
+    let mut config = neomacs_display_protocol::VisualConfig::default();
+    config.cursor_blink.enabled = false;
+    config.cursor_blink.interval = std::time::Duration::from_millis(250);
+    neovm_core::emacs_core::DisplayHost::set_visual_config(&mut host, config)
+        .expect("visual config command should forward");
 
     let commands: Vec<_> = cmd_rx.try_iter().collect();
     assert_eq!(commands.len(), 1);
     assert!(matches!(
         &commands[0],
-        RenderCommand::Config(ConfigCommand::SetCursorBlink {
-            enabled: false,
-            interval_ms: 250,
-        })
+        RenderCommand::Config(ConfigCommand::SetVisualConfig(config))
+            if !config.cursor_blink.enabled
+                && config.cursor_blink.interval == std::time::Duration::from_millis(250)
     ));
 }
 

@@ -615,7 +615,11 @@ fn test_effective_cursor_spec_prefers_window_cursor_type() {
 #[test]
 fn cursor_effect_profile_accepts_known_effect() {
     let _evaluator = neovm_core::emacs_core::Context::new();
-    let profile = Value::list(vec![Value::symbol("glow"), Value::T]);
+    let profile = Value::list(vec![
+        Value::symbol("cursor-glow"),
+        Value::keyword(":enabled"),
+        Value::T,
+    ]);
 
     let effects = parse_cursor_effect_profile(profile).expect("known cursor effect");
 
@@ -625,7 +629,11 @@ fn cursor_effect_profile_accepts_known_effect() {
 #[test]
 fn cursor_effect_profile_rejects_unknown_effect() {
     let _evaluator = neovm_core::emacs_core::Context::new();
-    let profile = Value::list(vec![Value::symbol("glwo"), Value::T]);
+    let profile = Value::list(vec![
+        Value::symbol("cursor-glwo"),
+        Value::keyword(":enabled"),
+        Value::T,
+    ]);
 
     assert!(parse_cursor_effect_profile(profile).is_none());
 }
@@ -634,8 +642,16 @@ fn cursor_effect_profile_rejects_unknown_effect() {
 fn cursor_effect_profile_rejects_mixed_profile_with_unknown_effect() {
     let _evaluator = neovm_core::emacs_core::Context::new();
     let profile = Value::list(vec![
-        Value::list(vec![Value::symbol("glow"), Value::T]),
-        Value::list(vec![Value::symbol("glwo"), Value::T]),
+        Value::list(vec![
+            Value::symbol("cursor-glow"),
+            Value::keyword(":enabled"),
+            Value::T,
+        ]),
+        Value::list(vec![
+            Value::symbol("cursor-glwo"),
+            Value::keyword(":enabled"),
+            Value::T,
+        ]),
     ]);
 
     assert!(parse_cursor_effect_profile(profile).is_none());

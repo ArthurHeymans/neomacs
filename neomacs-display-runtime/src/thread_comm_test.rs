@@ -863,83 +863,6 @@ fn render_command_set_window_decorated() {
 }
 
 #[test]
-fn render_command_set_cursor_blink() {
-    let cmd = RenderCommand::Config(ConfigCommand::SetCursorBlink {
-        enabled: true,
-        interval_ms: 500,
-    });
-    match cmd {
-        RenderCommand::Config(ConfigCommand::SetCursorBlink {
-            enabled,
-            interval_ms,
-        }) => {
-            assert!(enabled);
-            assert_eq!(interval_ms, 500);
-        }
-        other => panic!("Expected SetCursorBlink, got {:?}", other),
-    }
-}
-
-#[test]
-fn render_command_set_cursor_animation() {
-    let cmd = RenderCommand::Config(ConfigCommand::SetCursorAnimation {
-        enabled: true,
-        speed: 0.85,
-    });
-    match cmd {
-        RenderCommand::Config(ConfigCommand::SetCursorAnimation { enabled, speed }) => {
-            assert!(enabled);
-            assert_eq!(speed, 0.85);
-        }
-        other => panic!("Expected SetCursorAnimation, got {:?}", other),
-    }
-}
-
-#[test]
-fn render_command_set_animation_config() {
-    let cmd = RenderCommand::Config(ConfigCommand::SetAnimationConfig {
-        cursor_enabled: true,
-        cursor_speed: 0.9,
-        cursor_style: crate::core::types::CursorAnimStyle::EaseOutCubic,
-        cursor_duration_ms: 150,
-        transition_policy: TransitionPolicy::from_indices(true, 200, 0, 0, true, 150, 1, 2),
-        trail_size: 0.5,
-    });
-    match cmd {
-        RenderCommand::Config(ConfigCommand::SetAnimationConfig {
-            cursor_enabled,
-            cursor_speed,
-            cursor_style,
-            cursor_duration_ms,
-            transition_policy,
-            trail_size,
-        }) => {
-            assert!(cursor_enabled);
-            assert_eq!(cursor_speed, 0.9);
-            assert_eq!(
-                cursor_style,
-                crate::core::types::CursorAnimStyle::EaseOutCubic
-            );
-            assert_eq!(cursor_duration_ms, 150);
-            assert!(transition_policy.crossfade_enabled);
-            assert_eq!(transition_policy.crossfade_duration_ms, 200);
-            assert!(transition_policy.scroll_enabled);
-            assert_eq!(transition_policy.scroll_duration_ms, 150);
-            assert_eq!(
-                transition_policy.scroll_effect,
-                neomacs_display_protocol::ScrollEffect::Crossfade
-            );
-            assert_eq!(
-                transition_policy.scroll_easing,
-                neomacs_display_protocol::ScrollEasing::Spring
-            );
-            assert_eq!(trail_size, 0.5);
-        }
-        other => panic!("Expected SetAnimationConfig, got {:?}", other),
-    }
-}
-
-#[test]
 fn render_command_show_popup_menu() {
     let items = vec![
         PopupMenuItem {
@@ -1085,15 +1008,11 @@ fn render_command_request_attention() {
 }
 
 #[test]
-fn render_command_update_effect() {
-    let cmd = RenderCommand::Config(ConfigCommand::UpdateEffect(EffectUpdater(Box::new(
-        |_config| {
-            // no-op for testing
-        },
-    ))));
+fn render_command_update_visual_config() {
+    let cmd = RenderCommand::Config(ConfigCommand::SetVisualConfig(VisualConfig::default()));
     match cmd {
-        RenderCommand::Config(ConfigCommand::UpdateEffect(_)) => {}
-        other => panic!("Expected UpdateEffect, got {:?}", other),
+        RenderCommand::Config(ConfigCommand::SetVisualConfig(_)) => {}
+        other => panic!("Expected SetVisualConfig, got {:?}", other),
     }
 }
 
@@ -1150,45 +1069,6 @@ fn render_command_set_extra_spacing() {
             assert_eq!(letter_spacing, 0.5);
         }
         other => panic!("Expected SetExtraSpacing, got {:?}", other),
-    }
-}
-
-#[test]
-fn render_command_set_indent_guide_rainbow() {
-    let colors = vec![
-        (1.0, 0.0, 0.0, 0.3),
-        (0.0, 1.0, 0.0, 0.3),
-        (0.0, 0.0, 1.0, 0.3),
-    ];
-    let cmd = RenderCommand::Config(ConfigCommand::SetIndentGuideRainbow {
-        enabled: true,
-        colors: colors.clone(),
-    });
-    match cmd {
-        RenderCommand::Config(ConfigCommand::SetIndentGuideRainbow { enabled, colors: c }) => {
-            assert!(enabled);
-            assert_eq!(c.len(), 3);
-            assert_eq!(c[0], (1.0, 0.0, 0.0, 0.3));
-        }
-        other => panic!("Expected SetIndentGuideRainbow, got {:?}", other),
-    }
-}
-
-#[test]
-fn render_command_set_cursor_size_transition() {
-    let cmd = RenderCommand::Config(ConfigCommand::SetCursorSizeTransition {
-        enabled: true,
-        duration_ms: 200,
-    });
-    match cmd {
-        RenderCommand::Config(ConfigCommand::SetCursorSizeTransition {
-            enabled,
-            duration_ms,
-        }) => {
-            assert!(enabled);
-            assert_eq!(duration_ms, 200);
-        }
-        other => panic!("Expected SetCursorSizeTransition, got {:?}", other),
     }
 }
 
@@ -1631,38 +1511,6 @@ fn popup_menu_item_debug() {
     };
     let debug = format!("{:?}", item);
     assert!(debug.contains("PopupMenuItem"), "Debug output: {}", debug);
-}
-
-// ===================================================================
-// EffectUpdater
-// ===================================================================
-
-#[test]
-fn effect_updater_debug_format() {
-    let updater = EffectUpdater(Box::new(|_| {}));
-    let debug = format!("{:?}", updater);
-    assert_eq!(debug, "EffectUpdater(...)");
-}
-
-#[test]
-fn effect_updater_closure_executes() {
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicBool, Ordering};
-
-    let called = Arc::new(AtomicBool::new(false));
-    let called_clone = called.clone();
-
-    let updater = EffectUpdater(Box::new(move |_config| {
-        called_clone.store(true, Ordering::SeqCst);
-    }));
-
-    let mut config = EffectsConfig::default();
-    (updater.0)(&mut config);
-
-    assert!(
-        called.load(Ordering::SeqCst),
-        "EffectUpdater closure should have been called"
-    );
 }
 
 // ===================================================================

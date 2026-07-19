@@ -10,8 +10,8 @@ use std::time::Instant;
 use neomacs_display_protocol::ImageRealization;
 use neomacs_display_protocol::SealedFramePresentation;
 pub use neomacs_display_protocol::{
-    CursorEffectCommand, EffectsConfig, MenuBarItem, PopupMenuItem, TabBarItem, ToolBarImageSource,
-    ToolBarItem, ToolBarItemType, TransitionPolicy,
+    MenuBarItem, PopupMenuItem, TabBarItem, ToolBarImageSource, ToolBarItem, ToolBarItemType,
+    VisualConfig,
 };
 use neovm_core::window::GuiFrameGeometryHints;
 
@@ -183,15 +183,6 @@ pub enum InputEvent {
 }
 
 pub type PopupAnchorRect = neomacs_display_protocol::Rect;
-
-/// Wrapper for effect update closures that implements Debug.
-pub struct EffectUpdater(pub Box<dyn FnOnce(&mut EffectsConfig) + Send>);
-
-impl std::fmt::Debug for EffectUpdater {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "EffectUpdater(...)")
-    }
-}
 
 /// Frame reference in commands flowing from Emacs to the render thread.
 ///
@@ -618,32 +609,10 @@ pub enum UiCommand {
 /// Config and styling commands.
 #[derive(Debug)]
 pub enum ConfigCommand {
-    /// Configure cursor blinking
-    SetCursorBlink { enabled: bool, interval_ms: u32 },
-    /// Configure cursor animation (smooth motion)
-    SetCursorAnimation { enabled: bool, speed: f32 },
-    /// Configure all animations
-    SetAnimationConfig {
-        cursor_enabled: bool,
-        cursor_speed: f32,
-        cursor_style: crate::core::types::CursorAnimStyle,
-        cursor_duration_ms: u32,
-        transition_policy: TransitionPolicy,
-        trail_size: f32,
-    },
-    /// Configure smooth cursor size transition on text-scale-adjust
-    SetCursorSizeTransition {
-        enabled: bool,
-        /// Transition duration in milliseconds
-        duration_ms: u32,
-    },
     /// Enable or disable font ligatures
     SetLigaturesEnabled { enabled: bool },
-    /// Update visual effect configuration.
-    /// The closure modifies the shared EffectsConfig in-place.
-    UpdateEffect(EffectUpdater),
-    /// Update a named cursor effect configuration.
-    SetCursorEffect(CursorEffectCommand),
+    /// Replace the complete, already validated visual configuration snapshot.
+    SetVisualConfig(VisualConfig),
     /// Toggle scroll indicators and focus ring
     SetScrollIndicators { enabled: bool },
     /// Set custom title bar height (0 = hidden, >0 = show with given height)
@@ -656,12 +625,6 @@ pub enum ConfigCommand {
     SetExtraSpacing {
         line_spacing: f32,
         letter_spacing: f32,
-    },
-    /// Configure rainbow indent guide colors (up to 6 cycling colors by depth)
-    SetIndentGuideRainbow {
-        enabled: bool,
-        /// Colors as sRGB 0.0-1.0 tuples with opacity
-        colors: Vec<(f32, f32, f32, f32)>,
     },
     /// Configure child frame visual style (drop shadow, rounded corners)
     SetChildFrameStyle {

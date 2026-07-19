@@ -503,7 +503,8 @@ pub struct AnimatedCursor {
 /// Cursor animation style.
 ///
 /// Controls how the smooth cursor interpolates between positions.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 #[repr(u8)]
 #[non_exhaustive]
 pub enum CursorAnimStyle {
