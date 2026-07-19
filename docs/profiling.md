@@ -37,6 +37,10 @@ HEAP_REPORT_DIR=target/profiling/doom-heap-layout \
   scripts/profile-doom-memory.sh
 ```
 
+Set `SMAPS_REPORT_DIR` to retain the matching full `/proc/PID/smaps` snapshots.
+Those snapshots distinguish anonymous heap and allocator mappings from the
+binary, pdump, shared libraries, fonts, and other file-backed mappings.
+
 For configurations that continue loading from idle timers after command-line
 processing, set `PROFILE_DELAY_SECONDS` to delay the explicit GC, heap snapshot,
 and readiness marker until that work has settled. The delay is intentionally
@@ -151,8 +155,9 @@ and an explicit Lisp GC, idles for 30 seconds, and records `/proc/PID/smaps_roll
 RSS, PSS, private, anonymous, and swap counters. Raw samples go to
 `target/profiling/doom-memory.tsv`. It also writes paired startup deltas to the
 adjacent `.startup-pairs.tsv` file. Override `RUNS`, `SETTLE_SECONDS`,
-`PROFILE_DELAY_SECONDS`, `HEAP_REPORT_DIR`, `STARTUP_TIMEOUT_SECONDS`,
-`NEOMACS_BIN`, `REPORT`, or `STARTUP_REPORT` when needed.
+`PROFILE_DELAY_SECONDS`, `HEAP_REPORT_DIR`, `SMAPS_REPORT_DIR`,
+`STARTUP_TIMEOUT_SECONDS`, `NEOMACS_BIN`, `REPORT`, or `STARTUP_REPORT` when
+needed.
 
 Memory runs intentionally settle long enough to stabilize RSS, so use a
 separate higher-repetition panel to enforce startup neutrality. This example

@@ -11,6 +11,7 @@ profile_delay_seconds="${PROFILE_DELAY_SECONDS:-0}"
 startup_timeout_seconds="${STARTUP_TIMEOUT_SECONDS:-180}"
 max_startup_regression_pct="${MAX_STARTUP_REGRESSION_PCT:-}"
 heap_report_dir="${HEAP_REPORT_DIR:-}"
+smaps_report_dir="${SMAPS_REPORT_DIR:-}"
 minimum_startup_gate_runs=20
 
 if [[ "$(uname -s)" != "Linux" ]]; then
@@ -48,6 +49,10 @@ mkdir -p "$repo_root/target/profiling"
 if [[ -n "$heap_report_dir" ]]; then
   mkdir -p "$heap_report_dir"
   heap_report_dir="$(cd "$heap_report_dir" && pwd)"
+fi
+if [[ -n "$smaps_report_dir" ]]; then
+  mkdir -p "$smaps_report_dir"
+  smaps_report_dir="$(cd "$smaps_report_dir" && pwd)"
 fi
 work_dir="$(mktemp -d "$repo_root/target/profiling/doom-memory.XXXXXX")"
 report="${REPORT:-$repo_root/target/profiling/doom-memory.tsv}"
@@ -158,6 +163,9 @@ run_sample() {
   fi
   snapshot="$work_dir/$mode-$pair.smaps_rollup"
   cp "$smaps" "$snapshot"
+  if [[ -n "$smaps_report_dir" ]]; then
+    cp "/proc/$active_pid/smaps" "$smaps_report_dir/$mode-$pair.smaps"
+  fi
 
   local rss_kib pss_kib private_clean_kib private_dirty_kib private_kib anon_kib swap_kib
   rss_kib="$(metric Rss "$snapshot")"
