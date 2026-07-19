@@ -214,6 +214,12 @@ strip = "debuginfo"
 [profile.release.package.neovm-oracle-tests]
 opt-level = 0
 
+# Nix enables `_FORTIFY_SOURCE`, which rejects the C dependency's default dev
+# `-O0` before jemalloc's configure probes can run. Keep Rust dev builds
+# unchanged while giving only jemalloc's native build the required optimization.
+[profile.dev.package.tikv-jemalloc-sys]
+opt-level = 1
+
 [profile.profiling]
 inherits = "release"
 debug = true

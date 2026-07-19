@@ -57,6 +57,60 @@ wpr -stop neomacs.etl
 wpa neomacs.etl
 ```
 
+## Native heap profiling with TiKV jemalloc
+
+Neomacs uses mimalloc by default. For an ordinary jemalloc build, disable the
+default allocator and select the `jemalloc` feature:
+
+```sh
+cargo build --release -p neomacs --no-default-features \
+  --features video,jit,jemalloc
+```
+
+The `mimalloc` and `jemalloc` features are mutually exclusive. The separate
+`jemalloc-profiling` feature includes `jemalloc` and compiles jemalloc's heap
+profiler. Keep full native debug information in an isolated target directory
+so `jeprof` can symbolize allocation stacks:
+
+```sh
+CARGO_TARGET_DIR=target/jemalloc-profile \
+CARGO_PROFILE_RELEASE_DEBUG=true \
+CARGO_PROFILE_RELEASE_STRIP=none \
+  cargo build --release -p neomacs --no-default-features \
+    --features video,jit,jemalloc-profiling
+
+RUST_LOG=warn cargo xtask fresh-build --release --skip-build \
+  --no-byte-compile --bin-dir target/jemalloc-profile/release
+```
+
+TiKV jemalloc uses a private `_rjem_` symbol prefix, so its configuration
+variable is `_RJEM_MALLOC_CONF`, not `MALLOC_CONF`. Enable sampling and periodic
+64 MiB allocation-interval dumps like this:
+
+```sh
+mkdir -p target/profiling
+_RJEM_MALLOC_CONF="prof:true,prof_active:true,lg_prof_sample:19,lg_prof_interval:26,stats_print:true,prof_prefix:$PWD/target/profiling/neomacs-heap" \
+  target/jemalloc-profile/release/neomacs
+```
+
+`stats_print:true` writes jemalloc's allocated, active, metadata, resident, and
+mapped totals when Neomacs exits normally. Those totals help distinguish live
+heap allocations from allocator fragmentation and retained pages when RSS is
+larger than the `jeprof` in-use total.
+
+Analyze a dump against the exact binary that produced it:
+
+```sh
+jeprof --inuse_space --text target/jemalloc-profile/release/neomacs \
+  target/profiling/neomacs-heap.<pid>.<sequence>.heap
+```
+
+Avoid `prof_gdump` for Neomacs startup profiling. A dump raises the process's
+virtual-memory high-water mark, which can immediately trigger another dump and
+cascade. Interval dumps do not have that feedback loop. See the
+[jemalloc profiling options](https://jemalloc.net/jemalloc.3.html) for the
+meaning of `prof`, `prof_active`, `lg_prof_sample`, and `lg_prof_interval`.
+
 ## Doom resident-memory A/B
 
 On Linux, mimalloc eagerly commits arenas by default. Commit-on-demand retains

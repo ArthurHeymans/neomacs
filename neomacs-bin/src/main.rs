@@ -13,14 +13,21 @@
 // folding them into structs is a separate refactor, out of scope for the gate.
 #![allow(clippy::too_many_arguments)]
 
-// Global allocator: mimalloc handles the heavy Rust-side small-object churn
-// (per-string StringObj boxes, Vec/String temporaries) far faster than the
-// system allocator. Feature-gated so `--no-default-features` reverts to system
-// malloc. Only affects Rust allocations, not the linked C libraries.
+// Global allocator: mimalloc is the production default; profiling builds can
+// select TiKV jemalloc instead. `--no-default-features` with neither feature
+// uses the system allocator. These affect Rust allocations, not linked C
+// libraries.
 cfg_select! {
+    all(feature = "mimalloc", feature = "jemalloc") => {
+        compile_error!("features `mimalloc` and `jemalloc` are mutually exclusive");
+    }
     feature = "mimalloc" => {
         #[global_allocator]
         static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+    }
+    feature = "jemalloc" => {
+        #[global_allocator]
+        static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
     }
     _ => {}
 }

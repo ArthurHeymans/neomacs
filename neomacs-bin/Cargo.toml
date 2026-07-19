@@ -16,6 +16,17 @@ default = ["video", "jit", "mimalloc"]
 # only Rust allocations, not the linked C libraries. `--no-default-features`
 # drops back to the system allocator.
 mimalloc = ["dep:mimalloc"]
+# Use TiKV's jemalloc fork as the global allocator. Select this instead of
+# `mimalloc`.
+jemalloc = ["dep:tikv-jemallocator"]
+# Compile jemalloc's heap profiler and allocator statistics into a jemalloc
+# build. Sampling remains inactive unless enabled at runtime through
+# `_RJEM_MALLOC_CONF`.
+jemalloc-profiling = [
+    "jemalloc",
+    "tikv-jemallocator/profiling",
+    "tikv-jemallocator/stats",
+]
 # Tiered Cranelift JIT for the Elisp VM. Qualified (soak/fuzzer/TSan clean) and
 # a measured win even on Doom startup (~5% fewer instructions; interpreter
 # dispatch cut ~60%), so it ships on by default. Build `--no-default-features`
@@ -57,6 +68,7 @@ neovm-core.workspace = true
 serde.workspace = true
 serde_json = "1"
 mimalloc = { version = "0.1", optional = true, default-features = false }
+tikv-jemallocator = { version = "0.7", optional = true, default-features = false }
 
 # Utilities
 tracing.workspace = true
