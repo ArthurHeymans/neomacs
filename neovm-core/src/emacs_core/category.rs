@@ -185,7 +185,7 @@ fn intern_category_set(table: Value, category_set: Value) -> EvalResult {
 
 fn category_set_bits(category_set: &Value) -> Option<u128> {
     match bool_vector_equal_hash_key(category_set)? {
-        HashKey::BoolVec(128, bits) => Some(bits),
+        HashKey::BoolVec(parts) if parts.0 == 128 => Some(parts.1),
         _ => None,
     }
 }
@@ -212,7 +212,7 @@ fn intern_category_set_bits(table: Value, bits: u128) -> EvalResult {
             vec![Value::symbol("hash-table-p"), hash],
         ));
     };
-    let key = HashKey::BoolVec(128, bits);
+    let key = HashKey::BoolVec(Box::new((128, bits)));
     if let Some(existing) = hash_ref.key_snapshot(&key) {
         return Ok(*existing);
     }

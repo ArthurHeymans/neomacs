@@ -1042,24 +1042,19 @@ pub enum HashKey {
     /// Structural cons key for `equal`-test hash tables.
     EqualCons(Box<HashKey>, Box<HashKey>),
     /// Structural vector/record key for `equal`-test hash tables.
-    EqualVec(Vec<HashKey>),
+    EqualVec(Box<[HashKey]>),
     /// Structural marker key for `equal`-test hash tables.
-    Marker(Option<u64>, EmacsBytePos),
+    Marker(Box<(Option<u64>, EmacsBytePos)>),
     /// Structural overlay key for `equal`-test hash tables.
-    Overlay {
-        buffer: Option<u64>,
-        start: usize,
-        end: usize,
-        plist: Box<HashKey>,
-    },
+    Overlay(Box<(Option<u64>, usize, usize, HashKey)>),
     /// Compact structural key for bool-vectors whose bits fit in one word.
-    BoolVec(usize, u128),
+    BoolVec(Box<(usize, u128)>),
     /// Structural key for symbol-with-pos objects when they are not transparent.
     SymbolWithPos(Box<HashKey>, Box<HashKey>),
     /// Back-reference marker used when structural objects recurse.
     Cycle(u32),
     /// Owned textual key used for structural hashing.
-    Text(String),
+    Text(Box<str>),
 }
 
 impl std::hash::Hash for HashKey {
@@ -1082,9 +1077,9 @@ impl std::hash::Hash for HashKey {
             HashKey::Cycle(_) => 15,
             HashKey::Text(_) => 16,
             HashKey::SymbolWithPos(_, _) => 17,
-            HashKey::Marker(_, _) => 18,
-            HashKey::Overlay { .. } => 19,
-            HashKey::BoolVec(_, _) => 20,
+            HashKey::Marker(_) => 18,
+            HashKey::Overlay(_) => 19,
+            HashKey::BoolVec(_) => 20,
         };
         tag.hash(state);
         match self {
@@ -1110,24 +1105,19 @@ impl std::hash::Hash for HashKey {
                     item.hash(state);
                 }
             }
-            HashKey::Marker(buffer, bytepos) => {
-                buffer.hash(state);
-                bytepos.hash(state);
+            HashKey::Marker(parts) => {
+                parts.0.hash(state);
+                parts.1.hash(state);
             }
-            HashKey::Overlay {
-                buffer,
-                start,
-                end,
-                plist,
-            } => {
-                buffer.hash(state);
-                start.hash(state);
-                end.hash(state);
-                plist.hash(state);
+            HashKey::Overlay(parts) => {
+                parts.0.hash(state);
+                parts.1.hash(state);
+                parts.2.hash(state);
+                parts.3.hash(state);
             }
-            HashKey::BoolVec(len, bits) => {
-                len.hash(state);
-                bits.hash(state);
+            HashKey::BoolVec(parts) => {
+                parts.0.hash(state);
+                parts.1.hash(state);
             }
             HashKey::SymbolWithPos(sym, pos) => {
                 sym.hash(state);
@@ -1158,26 +1148,9 @@ impl PartialEq for HashKey {
                 a_car == b_car && a_cdr == b_cdr
             }
             (HashKey::EqualVec(a), HashKey::EqualVec(b)) => a == b,
-            (HashKey::Marker(a_buffer, a_bytepos), HashKey::Marker(b_buffer, b_bytepos)) => {
-                a_buffer == b_buffer && a_bytepos == b_bytepos
-            }
-            (
-                HashKey::Overlay {
-                    buffer: a_buffer,
-                    start: a_start,
-                    end: a_end,
-                    plist: a_plist,
-                },
-                HashKey::Overlay {
-                    buffer: b_buffer,
-                    start: b_start,
-                    end: b_end,
-                    plist: b_plist,
-                },
-            ) => a_buffer == b_buffer && a_start == b_start && a_end == b_end && a_plist == b_plist,
-            (HashKey::BoolVec(a_len, a_bits), HashKey::BoolVec(b_len, b_bits)) => {
-                a_len == b_len && a_bits == b_bits
-            }
+            (HashKey::Marker(a), HashKey::Marker(b)) => a == b,
+            (HashKey::Overlay(a), HashKey::Overlay(b)) => a == b,
+            (HashKey::BoolVec(a), HashKey::BoolVec(b)) => a == b,
             (HashKey::SymbolWithPos(a_sym, a_pos), HashKey::SymbolWithPos(b_sym, b_pos)) => {
                 a_sym == b_sym && a_pos == b_pos
             }
@@ -1194,7 +1167,7 @@ impl HashKey {
     /// Create a string hash key by allocating on the heap.
     pub fn from_str(s: impl Into<String>) -> Self {
         // For `equal` hash tables, use text content directly
-        HashKey::Text(s.into())
+        HashKey::Text(s.into().into_boxed_str())
     }
 }
 
@@ -2521,7 +2494,7 @@ impl TaggedValue {
             ValueKind::String => {
                 // Use content for equal hashing
                 if let Some(s) = self.as_utf8_str() {
-                    HashKey::Text(s.to_string())
+                    HashKey::Text(s.into())
                 } else {
                     self.to_eq_key()
                 }
@@ -2562,23 +2535,23 @@ impl TaggedValue {
                     })
                     .collect();
                 seen.pop();
-                HashKey::EqualVec(keys)
+                HashKey::EqualVec(keys.into_boxed_slice())
             }
             ValueKind::Veclike(VecLikeType::Marker) => {
                 super::marker::marker_equal_hash_key_value(self)
             }
             ValueKind::Veclike(VecLikeType::Overlay) => {
                 if let Some(overlay) = self.as_overlay_data() {
-                    HashKey::Overlay {
-                        buffer: overlay.buffer.map(|buffer| buffer.0),
-                        start: overlay.start,
-                        end: overlay.end,
-                        plist: Box::new(overlay.plist.to_equal_key_depth_swp(
+                    HashKey::Overlay(Box::new((
+                        overlay.buffer.map(|buffer| buffer.0),
+                        overlay.start,
+                        overlay.end,
+                        overlay.plist.to_equal_key_depth_swp(
                             depth + 1,
                             seen,
                             symbols_with_pos_enabled,
-                        )),
-                    }
+                        ),
+                    )))
                 } else {
                     self.to_eq_key()
                 }
@@ -2636,7 +2609,7 @@ pub(crate) fn bool_vector_equal_hash_key(value: &Value) -> Option<HashKey> {
             _ => return None,
         }
     }
-    Some(HashKey::BoolVec(len, bits))
+    Some(HashKey::BoolVec(Box::new((len, bits))))
 }
 
 // ---------------------------------------------------------------------------
@@ -3282,41 +3255,41 @@ fn try_equal_value_inner(
 
 fn closure_params_to_equal_key(params: &LambdaParams) -> HashKey {
     let mut values = Vec::with_capacity(params.required.len() + params.optional.len() + 3);
-    values.push(HashKey::Text("params".to_string()));
+    values.push(HashKey::Text("params".into()));
     for sym in &params.required {
         values.push(HashKey::Symbol(*sym));
     }
     if !params.optional.is_empty() {
-        values.push(HashKey::Text("&optional".to_string()));
+        values.push(HashKey::Text("&optional".into()));
         for sym in &params.optional {
             values.push(HashKey::Symbol(*sym));
         }
     }
     if let Some(rest) = params.rest {
-        values.push(HashKey::Text("&rest".to_string()));
+        values.push(HashKey::Text("&rest".into()));
         values.push(HashKey::Symbol(rest));
     }
-    HashKey::EqualVec(values)
+    HashKey::EqualVec(values.into_boxed_slice())
 }
 
 fn closure_to_equal_key(value: Value, depth: usize, seen: &mut Vec<usize>) -> HashKey {
     if depth > 200 {
-        return HashKey::Text("#<lambda-depth-limit>".to_string());
+        return HashKey::Text("#<lambda-depth-limit>".into());
     }
 
     let Some(params) = value.closure_params() else {
-        return HashKey::Text("#<invalid-lambda>".to_string());
+        return HashKey::Text("#<invalid-lambda>".into());
     };
 
     let mut slots = vec![
-        HashKey::Text("lambda".to_string()),
+        HashKey::Text("lambda".into()),
         closure_params_to_equal_key(params),
         value
             .closure_body_value()
             .map_or(HashKey::Nil, |body| body.to_equal_key_depth(0, seen)),
         match value.closure_env().unwrap_or(None) {
             Some(env) => env.to_equal_key_depth(0, seen),
-            None => HashKey::Text("dynamic".to_string()),
+            None => HashKey::Text("dynamic".into()),
         },
     ];
 
@@ -3332,7 +3305,7 @@ fn closure_to_equal_key(value: Value, depth: usize, seen: &mut Vec<usize>) -> Ha
         slots.push(doc);
     }
 
-    HashKey::EqualVec(slots)
+    HashKey::EqualVec(slots.into_boxed_slice())
 }
 
 fn closure_equal(

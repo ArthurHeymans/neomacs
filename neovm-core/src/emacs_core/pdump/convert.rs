@@ -2324,28 +2324,23 @@ pub(crate) fn dump_hash_key(encoder: &mut DumpEncoder, k: &HashKey) -> DumpHashK
         HashKey::EqualVec(v) => {
             DumpHashKey::EqualVec(v.iter().map(|key| dump_hash_key(encoder, key)).collect())
         }
-        HashKey::Marker(buffer, bytepos) => DumpHashKey::Marker(*buffer, bytepos.get()),
-        HashKey::Overlay {
-            buffer,
-            start,
-            end,
-            plist,
-        } => DumpHashKey::Overlay {
-            buffer: *buffer,
-            start: *start,
-            end: *end,
-            plist: Box::new(dump_hash_key(encoder, plist)),
+        HashKey::Marker(parts) => DumpHashKey::Marker(parts.0, parts.1.get()),
+        HashKey::Overlay(parts) => DumpHashKey::Overlay {
+            buffer: parts.0,
+            start: parts.1,
+            end: parts.2,
+            plist: Box::new(dump_hash_key(encoder, &parts.3)),
         },
-        HashKey::BoolVec(len, bits) => DumpHashKey::BoolVec {
-            len: *len as u32,
-            bits: *bits,
+        HashKey::BoolVec(parts) => DumpHashKey::BoolVec {
+            len: parts.0 as u32,
+            bits: parts.1,
         },
         HashKey::SymbolWithPos(sym, pos) => DumpHashKey::SymbolWithPos(
             Box::new(dump_hash_key(encoder, sym)),
             Box::new(dump_hash_key(encoder, pos)),
         ),
         HashKey::Cycle(index) => DumpHashKey::Cycle(*index),
-        HashKey::Text(text) => DumpHashKey::Text(text.clone()),
+        HashKey::Text(text) => DumpHashKey::Text(text.to_string()),
     }
 }
 
@@ -3978,30 +3973,33 @@ pub(crate) fn load_hash_key(decoder: &mut LoadDecoder, k: &DumpHashKey) -> HashK
             Box::new(load_hash_key(decoder, a)),
             Box::new(load_hash_key(decoder, b)),
         ),
-        DumpHashKey::EqualVec(v) => {
-            HashKey::EqualVec(v.iter().map(|item| load_hash_key(decoder, item)).collect())
-        }
+        DumpHashKey::EqualVec(v) => HashKey::EqualVec(
+            v.iter()
+                .map(|item| load_hash_key(decoder, item))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        ),
         DumpHashKey::Marker(buffer, bytepos) => {
-            HashKey::Marker(*buffer, EmacsBytePos::new(*bytepos))
+            HashKey::Marker(Box::new((*buffer, EmacsBytePos::new(*bytepos))))
         }
         DumpHashKey::Overlay {
             buffer,
             start,
             end,
             plist,
-        } => HashKey::Overlay {
-            buffer: *buffer,
-            start: *start,
-            end: *end,
-            plist: Box::new(load_hash_key(decoder, plist)),
-        },
-        DumpHashKey::BoolVec { len, bits } => HashKey::BoolVec(*len as usize, *bits),
+        } => HashKey::Overlay(Box::new((
+            *buffer,
+            *start,
+            *end,
+            load_hash_key(decoder, plist),
+        ))),
+        DumpHashKey::BoolVec { len, bits } => HashKey::BoolVec(Box::new((*len as usize, *bits))),
         DumpHashKey::SymbolWithPos(sym, pos) => HashKey::SymbolWithPos(
             Box::new(load_hash_key(decoder, sym)),
             Box::new(load_hash_key(decoder, pos)),
         ),
         DumpHashKey::Cycle(index) => HashKey::Cycle(*index),
-        DumpHashKey::Text(text) => HashKey::Text(text.clone()),
+        DumpHashKey::Text(text) => HashKey::Text(text.clone().into_boxed_str()),
     }
 }
 
@@ -4032,27 +4030,30 @@ fn load_hash_key_owned(decoder: &mut LoadDecoder, k: DumpHashKey) -> HashKey {
         DumpHashKey::EqualVec(v) => HashKey::EqualVec(
             v.into_iter()
                 .map(|item| load_hash_key_owned(decoder, item))
-                .collect(),
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
         ),
-        DumpHashKey::Marker(buffer, bytepos) => HashKey::Marker(buffer, EmacsBytePos::new(bytepos)),
+        DumpHashKey::Marker(buffer, bytepos) => {
+            HashKey::Marker(Box::new((buffer, EmacsBytePos::new(bytepos))))
+        }
         DumpHashKey::Overlay {
             buffer,
             start,
             end,
             plist,
-        } => HashKey::Overlay {
+        } => HashKey::Overlay(Box::new((
             buffer,
             start,
             end,
-            plist: Box::new(load_hash_key_owned(decoder, *plist)),
-        },
-        DumpHashKey::BoolVec { len, bits } => HashKey::BoolVec(len as usize, bits),
+            load_hash_key_owned(decoder, *plist),
+        ))),
+        DumpHashKey::BoolVec { len, bits } => HashKey::BoolVec(Box::new((len as usize, bits))),
         DumpHashKey::SymbolWithPos(sym, pos) => HashKey::SymbolWithPos(
             Box::new(load_hash_key_owned(decoder, *sym)),
             Box::new(load_hash_key_owned(decoder, *pos)),
         ),
         DumpHashKey::Cycle(index) => HashKey::Cycle(index),
-        DumpHashKey::Text(text) => HashKey::Text(text),
+        DumpHashKey::Text(text) => HashKey::Text(text.into_boxed_str()),
     }
 }
 

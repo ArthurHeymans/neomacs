@@ -179,7 +179,7 @@ pub(crate) fn marker_equal_hash_key_value(v: &Value) -> HashKey {
         } else {
             EmacsBytePos::ZERO
         };
-        HashKey::Marker(marker.buffer.map(|buffer| buffer.0), bytepos)
+        HashKey::Marker(Box::new((marker.buffer.map(|buffer| buffer.0), bytepos)))
     } else {
         HashKey::Ptr(v.bits())
     }

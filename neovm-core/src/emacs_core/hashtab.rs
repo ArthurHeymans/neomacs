@@ -95,7 +95,7 @@ fn hash_key_to_value(key: &HashKey) -> Value {
         HashKey::FloatEq(bits, _id) => Value::make_float(f64::from_bits(*bits)),
         HashKey::Symbol(id) => Value::from_sym_id(*id),
         HashKey::Keyword(id) => Value::keyword_id(*id),
-        HashKey::Text(text) => Value::string(text.clone()),
+        HashKey::Text(text) => Value::string(text.to_string()),
         HashKey::Char(c) => Value::char(*c),
         HashKey::Window(id) => Value::make_window(*id),
         HashKey::Frame(id) => Value::make_frame(*id),
@@ -105,12 +105,13 @@ fn hash_key_to_value(key: &HashKey) -> Value {
             let vals: Vec<Value> = items.iter().map(hash_key_to_value).collect();
             Value::vector(vals)
         }
-        HashKey::Marker(_, _) | HashKey::Overlay { .. } => Value::NIL,
-        HashKey::BoolVec(len, bits) => {
+        HashKey::Marker(_) | HashKey::Overlay(_) => Value::NIL,
+        HashKey::BoolVec(parts) => {
+            let (len, bits) = **parts;
             let mut vals = Vec::with_capacity(len + 2);
             vals.push(Value::symbol("--bool-vector--"));
-            vals.push(Value::fixnum(*len as i64));
-            for index in 0..*len {
+            vals.push(Value::fixnum(len as i64));
+            for index in 0..len {
                 vals.push(Value::fixnum(if bits & (1_u128 << index) == 0 {
                     0
                 } else {

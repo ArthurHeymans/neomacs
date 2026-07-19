@@ -457,7 +457,7 @@ fn strip_plist_colon(name: &str) -> &str {
 /// Convert a HashKey to a string suitable as a JSON object key.
 fn hash_key_to_string(key: &HashKey) -> Result<String, Flow> {
     match key {
-        HashKey::Text(s) => Ok(s.clone()),
+        HashKey::Text(s) => Ok(s.to_string()),
         HashKey::Symbol(id) => Ok(resolve_sym(*id).to_owned()),
         HashKey::Keyword(id) => {
             let s = resolve_sym(*id);
@@ -1109,7 +1109,7 @@ impl<'a> JsonParser<'a> {
 
             {
                 let key_val = Value::string(&key);
-                let hash_key = HashKey::Text(key);
+                let hash_key = HashKey::Text(key.into_boxed_str());
                 let _ = ht.with_hash_table_mut(|table| {
                     table.insert(hash_key, key_val, val);
                 });

@@ -635,6 +635,15 @@ fn logical_hash_table_growth_does_not_eagerly_reserve_every_index() {
 }
 
 #[test]
+fn hash_key_inline_footprint_stays_within_three_words() {
+    crate::test_utils::init_test_tracing();
+    assert!(
+        std::mem::size_of::<HashKey>() <= 3 * std::mem::size_of::<usize>(),
+        "large structural variants must stay behind pointers so every hash-table bucket stays compact"
+    );
+}
+
+#[test]
 fn internal_hash_table_buckets_report_hash_diagnostics() {
     crate::test_utils::init_test_tracing();
     let table = builtin_make_hash_table(vec![
