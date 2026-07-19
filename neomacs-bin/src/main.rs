@@ -2888,9 +2888,7 @@ fn run_gui_evaluator_worker(
                             kb_event
                         );
                     }
-                    if let neovm_core::keyboard::InputEvent::KeyPress { key, .. } = &kb_event
-                        && key.is_default_quit_char()
-                    {
+                    if kb_event.requests_default_quit() {
                         quit_requested.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
                     if input_tx.send(kb_event).is_err() {
@@ -3403,9 +3401,7 @@ pub fn run(mode: RuntimeMode) {
                                 kb_event
                             );
                         }
-                        if let neovm_core::keyboard::InputEvent::KeyPress { key, .. } = &kb_event
-                            && key.is_default_quit_char()
-                        {
+                        if kb_event.requests_default_quit() {
                             quit_requested.store(true, std::sync::atomic::Ordering::Relaxed);
                         }
                         if input_tx.send(kb_event).is_err() {

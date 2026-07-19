@@ -66,6 +66,30 @@ fn key_release_is_dropped_by_core_transport_owner() {
 }
 
 #[test]
+fn raw_tty_bytes_cross_the_bridge_without_interpretation() {
+    let event = convert_display_event(&DisplayEvent::RawTtyBytes {
+        bytes: b"\x1b[A".to_vec(),
+        emacs_frame_id: 42,
+    });
+
+    assert!(matches!(
+        event.as_ref(),
+        Some(KbInputEvent::RawTtyBytes {
+            bytes,
+            emacs_frame_id: 42,
+        }) if bytes == b"\x1b[A"
+    ));
+    assert!(!event.expect("raw event").requests_default_quit());
+
+    let quit = convert_display_event(&DisplayEvent::RawTtyBytes {
+        bytes: vec![0x07],
+        emacs_frame_id: 42,
+    })
+    .expect("raw quit event");
+    assert!(quit.requests_default_quit());
+}
+
+#[test]
 fn key_transport_preserves_source_frame_identity() {
     let display_event = DisplayEvent::Key {
         keysym: 'a' as u32,

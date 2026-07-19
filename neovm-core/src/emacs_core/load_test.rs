@@ -4127,14 +4127,13 @@ fn bootstrap_runtime_read_key_sequence_follows_escape_prefix_command() {
     let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
     apply_runtime_startup_state(&mut eval).expect("runtime startup state");
 
-    eval.command_loop.keyboard.kboard.unread_events.push_back(
-        crate::keyboard::KeyEvent::named(crate::keyboard::NamedKey::Escape).to_emacs_event_value(),
-    );
-    eval.command_loop
-        .keyboard
-        .kboard
-        .unread_events
-        .push_back(Value::fixnum('x' as i64));
+    let (tx, rx) = crossbeam_channel::unbounded();
+    eval.input_rx = Some(rx);
+    tx.send(crate::keyboard::InputEvent::raw_tty_bytes(
+        b"\x1bx".to_vec(),
+        0,
+    ))
+    .expect("queue raw TTY escape prefix");
 
     let (keys, binding) = eval.read_key_sequence().expect("read ESC x sequence");
     assert_eq!(keys, vec![Value::fixnum(27), Value::fixnum('x' as i64)]);
@@ -4174,14 +4173,13 @@ fn bootstrap_runtime_escape_prefix_bypasses_input_method_function() {
     eval.eval_str("(setq input-method-function (lambda (_char) nil))")
         .expect("install dropping input method");
 
-    eval.command_loop.keyboard.kboard.unread_events.push_back(
-        crate::keyboard::KeyEvent::named(crate::keyboard::NamedKey::Escape).to_emacs_event_value(),
-    );
-    eval.command_loop
-        .keyboard
-        .kboard
-        .unread_events
-        .push_back(Value::fixnum('x' as i64));
+    let (tx, rx) = crossbeam_channel::unbounded();
+    eval.input_rx = Some(rx);
+    tx.send(crate::keyboard::InputEvent::raw_tty_bytes(
+        b"\x1bx".to_vec(),
+        0,
+    ))
+    .expect("queue raw TTY escape prefix");
 
     let (keys, binding) = eval
         .read_key_sequence()
@@ -4231,9 +4229,10 @@ fn bootstrap_runtime_input_decode_menu_item_filter_translates_escape() {
     )
     .expect("install menu-item filtered ESC input decode entry");
 
-    eval.command_loop.keyboard.kboard.unread_events.push_back(
-        crate::keyboard::KeyEvent::named(crate::keyboard::NamedKey::Escape).to_emacs_event_value(),
-    );
+    let (tx, rx) = crossbeam_channel::unbounded();
+    eval.input_rx = Some(rx);
+    tx.send(crate::keyboard::InputEvent::raw_tty_bytes(vec![0x1b], 0))
+        .expect("queue raw TTY escape");
 
     let (keys, binding) = eval
         .read_key_sequence()

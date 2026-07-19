@@ -48,6 +48,13 @@ The architectural rule for Neomacs is:
 - Rust should not replace GNU Lisp keymaps, translation maps, minibuffer input
   semantics, or command dispatch
 
+For Unix TTY input this boundary is byte-oriented, matching GNU
+`tty_read_avail_input`: the frontend forwards each successful OS read as raw
+bytes. It must not recognize ESC prefixes, CSI sequences, Meta keys, or impose
+an ESC timeout. The evaluator applies `keyboard-coding-system` incrementally;
+then `input-decode-map` and mode/package filters own terminal-sequence and ESC
+ambiguity policy.
+
 ## Current Neomacs Risk
 
 The input path is currently split across multiple layers:
@@ -148,7 +155,7 @@ This layer should own:
 - Meta / Control / Super / Hyper bit shaping
 - printable text vs command-key separation
 - `Backspace` to GNU `DEL` behavior
-- `ESC` prefix behavior
+- the distinction between a GUI Escape key and a raw TTY ESC byte
 - repeat handling
 - IME commit handling
 
@@ -157,6 +164,7 @@ This layer should not own:
 - command bindings
 - minibuffer command semantics
 - keymap policy
+- Unix TTY ESC/CSI recognition or timeout policy
 
 ### Layer 3: GNU-style command reading
 

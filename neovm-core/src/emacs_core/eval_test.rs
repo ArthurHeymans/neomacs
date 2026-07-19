@@ -1288,6 +1288,149 @@ fn read_char_applies_resize_event_before_returning_next_keypress() {
 }
 
 #[test]
+fn read_char_exposes_raw_tty_escape_without_a_native_timeout() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+
+    tx.send(crate::keyboard::InputEvent::raw_tty_bytes(vec![0x1b], 0))
+        .unwrap();
+
+    assert_eq!(ev.read_char().unwrap(), Value::fixnum(0x1b));
+}
+
+#[test]
+fn read_char_decodes_utf8_tty_input_split_across_host_reads() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+
+    let bytes = "中".as_bytes();
+    tx.send(crate::keyboard::InputEvent::raw_tty_bytes(
+        bytes[..2].to_vec(),
+        0,
+    ))
+    .unwrap();
+    tx.send(crate::keyboard::InputEvent::raw_tty_bytes(
+        bytes[2..].to_vec(),
+        0,
+    ))
+    .unwrap();
+
+    assert_eq!(ev.read_char().unwrap(), Value::fixnum('中' as i64));
+}
+
+#[test]
+fn read_char_applies_keyboard_coding_system_to_raw_tty_bytes() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    crate::emacs_core::coding::builtin_set_keyboard_coding_system(
+        &mut ev.coding_systems,
+        vec![Value::symbol("iso-latin-9")],
+    )
+    .expect("set keyboard coding system");
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+
+    tx.send(crate::keyboard::InputEvent::raw_tty_bytes(vec![0xa4], 0))
+        .unwrap();
+
+    assert_eq!(ev.read_char().unwrap(), Value::fixnum('€' as i64));
+}
+
+#[test]
+fn read_char_preserves_emacs_internal_raw_byte_characters() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    crate::emacs_core::coding::builtin_set_keyboard_coding_system(
+        &mut ev.coding_systems,
+        vec![Value::symbol("emacs-internal")],
+    )
+    .expect("set keyboard coding system");
+    let raw = crate::emacs_core::emacs_char::EmacsChar::from_byte8(0xa4);
+    let mut encoded = [0_u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+    let encoded_len = raw.char_string(&mut encoded);
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+
+    tx.send(crate::keyboard::InputEvent::raw_tty_bytes(
+        encoded[..1].to_vec(),
+        0,
+    ))
+    .unwrap();
+    tx.send(crate::keyboard::InputEvent::raw_tty_bytes(
+        encoded[1..encoded_len].to_vec(),
+        0,
+    ))
+    .unwrap();
+
+    assert_eq!(
+        ev.read_char().unwrap(),
+        Value::fixnum(i64::from(raw.code()))
+    );
+}
+
+#[test]
+fn read_char_streams_multibyte_keyboard_coding_across_host_reads() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    crate::emacs_core::coding::builtin_set_keyboard_coding_system(
+        &mut ev.coding_systems,
+        vec![Value::symbol("chinese-big5")],
+    )
+    .expect("set keyboard coding system");
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+
+    tx.send(crate::keyboard::InputEvent::raw_tty_bytes(vec![0xa4], 0))
+        .unwrap();
+    tx.send(crate::keyboard::InputEvent::raw_tty_bytes(vec![0x40], 0))
+        .unwrap();
+
+    assert_eq!(ev.read_char().unwrap(), Value::fixnum('一' as i64));
+}
+
+#[test]
+fn read_key_sequence_translates_raw_tty_csi_through_input_decode_map() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    ev.assign("global-map", global_map);
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::symbol("up")],
+        Value::symbol("neomacs-test-up-command"),
+    )
+    .expect("define up command");
+    let input_decode_map = ev
+        .eval_symbol("input-decode-map")
+        .expect("input-decode-map");
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        input_decode_map,
+        &[
+            Value::fixnum(0x1b),
+            Value::fixnum('[' as i64),
+            Value::fixnum('A' as i64),
+        ],
+        Value::vector(vec![Value::symbol("up")]),
+    )
+    .expect("define CSI translation");
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+    tx.send(crate::keyboard::InputEvent::raw_tty_bytes(
+        b"\x1b[A".to_vec(),
+        0,
+    ))
+    .unwrap();
+
+    let (keys, binding) = ev.read_key_sequence().expect("read translated CSI");
+    assert_eq!(keys, vec![Value::symbol("up")]);
+    assert_eq!(binding, Value::symbol("neomacs-test-up-command"));
+}
+
+#[test]
 fn read_char_switches_active_kboard_to_keypress_source_frame_terminal() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

@@ -4114,7 +4114,8 @@ pub(crate) fn builtin_terminal_coding_system(
 }
 
 /// `(set-keyboard-coding-system CODING-SYSTEM &optional TERMINAL)` -- set the
-/// keyboard coding system. Stub: records the value but has no functional effect.
+/// keyboard coding system. Raw TTY byte batches are decoded incrementally with
+/// this coding system before entering the key-sequence translation maps.
 pub(crate) fn builtin_set_keyboard_coding_system(
     mgr: &mut CodingSystemManager,
     args: Vec<Value>,

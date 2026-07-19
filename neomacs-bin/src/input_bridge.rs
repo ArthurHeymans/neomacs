@@ -1,9 +1,8 @@
 //! Bridge between display runtime InputEvent and neovm-core keyboard::InputEvent.
 //!
-//! The display runtime sends raw keysyms and modifier bitmasks; neovm-core
-//! expects structured `KeyEvent` / `InputEvent` types.  This module converts
-//! between the two so that `neomacs-bin` can feed render-thread input into the
-//! evaluator's command loop.
+//! GUI and non-Unix frontends send keysyms plus modifier bitmasks; Unix TTYs
+//! send uninterpreted byte batches. This module preserves that distinction
+//! while converting the display transport into the core input transport.
 
 use neomacs_display_runtime::thread_comm::{
     InputEvent as DisplayEvent, MonitorInfo as DisplayMonitorInfo,
@@ -37,6 +36,10 @@ pub(crate) fn convert_monitor_infos(monitors: &[DisplayMonitorInfo]) -> Vec<Neom
 /// releases, modifier-only keys).
 pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
     match event {
+        DisplayEvent::RawTtyBytes {
+            bytes,
+            emacs_frame_id,
+        } => Some(KbInputEvent::raw_tty_bytes(bytes.clone(), *emacs_frame_id)),
         DisplayEvent::Key {
             keysym,
             modifiers,

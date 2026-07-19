@@ -38,6 +38,12 @@ pub struct MonitorInfo {
 /// Input event from render thread to Emacs
 #[derive(Debug, Clone)]
 pub enum InputEvent {
+    /// Bytes read directly from a Unix TTY.
+    ///
+    /// This transport fact deliberately carries no terminal-sequence or
+    /// modifier interpretation.  The evaluator applies
+    /// `keyboard-coding-system` and `input-decode-map` in input order.
+    RawTtyBytes { bytes: Vec<u8>, emacs_frame_id: u64 },
     Key {
         keysym: u32,
         modifiers: u32,
@@ -813,6 +819,7 @@ impl RenderComms {
 
     fn event_name(event: &InputEvent) -> &'static str {
         match event {
+            InputEvent::RawTtyBytes { .. } => "raw-tty-bytes",
             InputEvent::Key { .. } => "key",
             InputEvent::MouseButton { .. } => "mouse-button",
             InputEvent::MouseMove { .. } => "mouse-move",

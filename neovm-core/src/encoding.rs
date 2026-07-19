@@ -703,7 +703,7 @@ pub(crate) fn decode_eol_text(bytes: &[u8], coding_system: &str) -> Vec<u8> {
     }
 }
 
-fn coding_system_family(coding_system: &str) -> &str {
+pub(crate) fn coding_system_family(coding_system: &str) -> &str {
     match coding_system_base(coding_system) {
         "utf-8-with-signature" => "utf-8",
         "latin-1" | "iso-8859-1" | "iso-latin-1" => "iso-latin-1",

@@ -833,6 +833,18 @@ pub fn keysym_to_key_event(keysym: u32, modifiers: u32) -> Option<KeyEvent> {
 /// Input events from the display layer.
 #[derive(Clone, Debug)]
 pub enum InputEvent {
+    /// Uninterpreted bytes from a Unix TTY.
+    ///
+    /// The evaluator expands this transport event through the selected
+    /// keyboard coding system before key-sequence translation.
+    RawTtyBytes { bytes: Vec<u8>, emacs_frame_id: u64 },
+    /// One character produced by expanding a [`Self::RawTtyBytes`] batch.
+    /// This evaluator-internal event keeps decoded characters in the same
+    /// ordered frontend queue as every other input fact.
+    TtyCharacter {
+        character: crate::emacs_core::emacs_char::EmacsChar,
+        emacs_frame_id: u64,
+    },
     /// Keyboard key press.
     KeyPress { key: KeyEvent, emacs_frame_id: u64 },
     /// Mouse button press.
@@ -954,6 +966,13 @@ pub enum InputEvent {
 }
 
 impl InputEvent {
+    pub fn raw_tty_bytes(bytes: Vec<u8>, emacs_frame_id: u64) -> Self {
+        Self::RawTtyBytes {
+            bytes,
+            emacs_frame_id,
+        }
+    }
+
     pub fn key_press(key: KeyEvent) -> Self {
         Self::KeyPress {
             key,
@@ -965,6 +984,17 @@ impl InputEvent {
         Self::KeyPress {
             key,
             emacs_frame_id,
+        }
+    }
+
+    /// Whether this transport fact contains GNU Emacs's default quit input,
+    /// `C-g`, and should wake an evaluator that is busy outside `read_char`.
+    pub fn requests_default_quit(&self) -> bool {
+        match self {
+            Self::RawTtyBytes { bytes, .. } => bytes.contains(&0x07),
+            Self::TtyCharacter { character, .. } => character.code() == 0x07,
+            Self::KeyPress { key, .. } => key.is_default_quit_char(),
+            _ => false,
         }
     }
 }
@@ -1042,6 +1072,8 @@ impl PrefixArg {
 /// keyboard-macro playback on `kboard` state. NeoVM still has one active
 /// keyboard, but it now models that owner explicitly.
 pub struct KBoard {
+    /// Stateful decoder for raw byte batches from this terminal.
+    tty_input_decoder: crate::keyboard_input::KeyboardInputDecoder,
     /// Deferred switch-frame/select-window event that should be delivered
     /// before ordinary unread input, matching GNU
     /// `unread_switch_frame` plus read-key-sequence delayed selection events.
@@ -1133,6 +1165,7 @@ pub(crate) struct ExecutingKbdMacroRuntimeSnapshot {
 impl KBoard {
     pub fn new() -> Self {
         Self {
+            tty_input_decoder: crate::keyboard_input::KeyboardInputDecoder::default(),
             unread_selection_event: None,
             internal_last_event_frame: None,
             mouse_pixel_position: None,
@@ -3942,6 +3975,44 @@ impl crate::emacs_core::eval::Context {
         }
 
         match event {
+            InputEvent::RawTtyBytes {
+                bytes,
+                emacs_frame_id,
+            } => {
+                self.sync_keyboard_terminal_owner_for_input_frame(emacs_frame_id);
+                let coding_system = crate::emacs_core::intern::resolve_sym(
+                    self.coding_systems.keyboard_coding_sym(),
+                )
+                .to_owned();
+                let characters = self
+                    .command_loop
+                    .keyboard
+                    .kboard
+                    .tty_input_decoder
+                    .push(&bytes, &coding_system);
+                for character in characters.into_iter().rev() {
+                    self.command_loop.keyboard.pending_input_events.push_front(
+                        InputEvent::TtyCharacter {
+                            character,
+                            emacs_frame_id,
+                        },
+                    );
+                }
+                Ok(None)
+            }
+            InputEvent::TtyCharacter {
+                character,
+                emacs_frame_id,
+            } => {
+                self.sync_keyboard_terminal_owner_for_input_frame(emacs_frame_id);
+                self.clear_current_message();
+                let emacs_event = Value::fixnum(i64::from(character.code()));
+                if self.event_is_quit_char(&emacs_event) {
+                    self.request_quit_from_keyboard_input();
+                }
+                self.command_loop.store_kbd_macro_event(emacs_event);
+                Ok(Some(emacs_event))
+            }
             InputEvent::WindowClose { emacs_frame_id } => {
                 self.handle_window_close_input_event(emacs_frame_id)?;
                 Ok(None)

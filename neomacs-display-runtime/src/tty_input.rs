@@ -5,12 +5,11 @@
 //! based for the same semantics; use crossterm's parsed events only where the
 //! platform does not expose the same Unix TTY model.
 
-use std::collections::VecDeque;
 use std::io;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crate::thread_comm::{InputEvent, LifecycleCommand, RenderCommand, RenderComms};
 #[cfg(not(unix))]
@@ -21,10 +20,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 const GNU_KBD_BUFFER_SIZE: usize = 4096;
 
 #[cfg(unix)]
-const TTY_ESCAPE_SEQUENCE_TIMEOUT: Duration = Duration::from_millis(50);
-
-#[cfg(unix)]
-const TTY_IDLE_POLL_INTERVAL: Duration = Duration::from_millis(50);
+const TTY_READER_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 // Modifier masks — must match neomacs-display-runtime/src/backend/wgpu/events.rs
 // SHIFT/CTRL/SUPER are consumed only by the non-unix crossterm key mapper below.
@@ -44,7 +40,6 @@ const XK_LEFT: u32 = 0xff51;
 const XK_UP: u32 = 0xff52;
 const XK_RIGHT: u32 = 0xff53;
 const XK_DOWN: u32 = 0xff54;
-const XK_F1: u32 = 0xffbe;
 
 // The crossterm `KeyEvent` -> `InputEvent` mapper (map_modifiers, without_control,
 // tty_control_char_keysym, map_key_event) is wired into `read_tty_events` only on
@@ -151,243 +146,12 @@ fn map_key_event(event: KeyEvent) -> Option<InputEvent> {
     })
 }
 
-fn raw_key_event(keysym: u32, modifiers: u32) -> InputEvent {
-    InputEvent::Key {
-        keysym,
-        modifiers,
-        pressed: true,
+#[cfg(unix)]
+fn raw_tty_input_event(bytes: Vec<u8>) -> InputEvent {
+    InputEvent::RawTtyBytes {
+        bytes,
         emacs_frame_id: 0,
     }
-}
-
-#[cfg(unix)]
-fn raw_tty_byte_keysym(byte: u8) -> u32 {
-    match byte {
-        b'\r' => XK_RETURN,
-        b'\t' => XK_TAB,
-        _ => byte as u32,
-    }
-}
-
-#[cfg(unix)]
-#[derive(Default)]
-struct RawTtyDecoder {
-    pending: VecDeque<u8>,
-    escape_deadline: Option<Instant>,
-}
-
-#[cfg(unix)]
-impl RawTtyDecoder {
-    fn push_bytes_at(&mut self, bytes: &[u8], now: Instant, events: &mut Vec<InputEvent>) {
-        self.advance_time(now, events);
-        self.pending.extend(bytes);
-        self.decode_pending(events);
-        self.update_escape_deadline(now);
-    }
-
-    fn advance_time(&mut self, now: Instant, events: &mut Vec<InputEvent>) {
-        let Some(deadline) = self.escape_deadline else {
-            return;
-        };
-        if now < deadline {
-            return;
-        }
-
-        debug_assert_eq!(self.pending.front(), Some(&0x1b));
-        self.pending.pop_front();
-        self.escape_deadline = None;
-        events.push(raw_key_event(0x1b, 0));
-        self.decode_pending(events);
-        self.update_escape_deadline(now);
-    }
-
-    fn next_deadline(&self) -> Option<Instant> {
-        self.escape_deadline
-    }
-
-    fn update_escape_deadline(&mut self, now: Instant) {
-        if self.pending.front() == Some(&0x1b) {
-            self.escape_deadline
-                .get_or_insert(now + TTY_ESCAPE_SEQUENCE_TIMEOUT);
-        } else {
-            self.escape_deadline = None;
-        }
-    }
-
-    fn decode_pending(&mut self, events: &mut Vec<InputEvent>) {
-        while !self.pending.is_empty() {
-            if self.pending[0] != 0x1b {
-                if !self.decode_plain_char(0, events) {
-                    break;
-                }
-                continue;
-            }
-
-            if self.pending.len() == 1 {
-                break;
-            }
-
-            if self.escape_sequence_incomplete() {
-                break;
-            }
-
-            if self.try_escape_sequence(events) {
-                continue;
-            }
-
-            if !self.decode_plain_char(NEOMACS_META_MASK, events) {
-                break;
-            }
-        }
-    }
-
-    fn decode_plain_char(&mut self, modifiers: u32, events: &mut Vec<InputEvent>) -> bool {
-        let start = usize::from(modifiers & NEOMACS_META_MASK != 0);
-        let Some(&byte) = self.pending.get(start) else {
-            return false;
-        };
-
-        if byte < 0x80 {
-            let is_meta = modifiers & NEOMACS_META_MASK != 0;
-            if is_meta {
-                self.pending.drain(0..2);
-            } else {
-                self.pending.pop_front();
-            }
-            // An ESC-prefixed ASCII control byte is GNU's `meta-<char>`: on a
-            // terminal, `ESC RET` is M-RET (meta + char 13), `ESC TAB` is M-TAB
-            // (meta + char 9) -- NOT `M-<return>` / `M-<tab>` function keys. Only
-            // the UNPREFIXED byte maps to the RET/TAB keysyms (whose `return`/
-            // `tab` symbols `function-key-map` then translates back to 13/9);
-            // there is no `[M-return]`/`[M-tab]` fkm entry, so a modified control
-            // byte must carry the control character itself or bindings like
-            // org-mode's M-RET (org-meta-return) never resolve.
-            let keysym = if is_meta {
-                u32::from(byte)
-            } else {
-                raw_tty_byte_keysym(byte)
-            };
-            events.push(raw_key_event(keysym, modifiers));
-            return true;
-        }
-
-        let utf8_len = match byte {
-            0xc2..=0xdf => 2,
-            0xe0..=0xef => 3,
-            0xf0..=0xf4 => 4,
-            _ => {
-                if modifiers & NEOMACS_META_MASK != 0 {
-                    self.pending.drain(0..2);
-                } else {
-                    self.pending.pop_front();
-                }
-                events.push(raw_key_event(byte as u32, modifiers));
-                return true;
-            }
-        };
-
-        if self.pending.len() < start + utf8_len {
-            return false;
-        }
-
-        let bytes: Vec<u8> = self
-            .pending
-            .iter()
-            .skip(start)
-            .take(utf8_len)
-            .copied()
-            .collect();
-        match std::str::from_utf8(&bytes) {
-            Ok(text) => {
-                let ch = text.chars().next().expect("utf8 character");
-                self.pending.drain(0..start + utf8_len);
-                events.push(raw_key_event(ch as u32, modifiers));
-            }
-            Err(_) => {
-                if modifiers & NEOMACS_META_MASK != 0 {
-                    self.pending.drain(0..2);
-                } else {
-                    self.pending.pop_front();
-                }
-                events.push(raw_key_event(byte as u32, modifiers));
-            }
-        }
-
-        true
-    }
-
-    fn try_escape_sequence(&mut self, events: &mut Vec<InputEvent>) -> bool {
-        if self.pending.len() >= 3 && self.pending[1] == b'[' {
-            let keysym = match self.pending[2] {
-                b'A' => Some(XK_UP),
-                b'B' => Some(XK_DOWN),
-                b'C' => Some(XK_RIGHT),
-                b'D' => Some(XK_LEFT),
-                _ => None,
-            };
-
-            if let Some(keysym) = keysym {
-                self.pending.drain(0..3);
-                events.push(raw_key_event(keysym, 0));
-                return true;
-            }
-        }
-
-        if self.pending.len() >= 5
-            && self.pending[1] == b'['
-            && self.pending[2] == b'2'
-            && self.pending[3] == b'1'
-            && self.pending[4] == b'~'
-        {
-            self.pending.drain(0..5);
-            events.push(raw_key_event(XK_F1 + 9, 0));
-            return true;
-        }
-
-        false
-    }
-
-    fn escape_sequence_incomplete(&self) -> bool {
-        if self.pending.len() < 2 || self.pending[0] != 0x1b || self.pending[1] != b'[' {
-            return false;
-        }
-
-        if self.pending.len() < 3 {
-            return true;
-        }
-
-        self.pending[2].is_ascii_digit() && self.pending.iter().skip(2).all(u8::is_ascii_digit)
-    }
-}
-
-#[cfg(unix)]
-fn raw_tty_poll_timeout_ms(decoder: &RawTtyDecoder, now: Instant) -> libc::c_int {
-    let wait = decoder
-        .next_deadline()
-        .map(|deadline| deadline.saturating_duration_since(now))
-        .unwrap_or(TTY_IDLE_POLL_INTERVAL);
-    if wait.is_zero() {
-        return 0;
-    }
-
-    // `poll` accepts whole milliseconds. Round a positive sub-millisecond
-    // remainder up so the reader cannot spin before the decoder's deadline.
-    wait.as_millis().max(1).min(libc::c_int::MAX as u128) as libc::c_int
-}
-
-#[cfg(unix)]
-fn send_raw_tty_events(
-    tx: &crossbeam_channel::Sender<InputEvent>,
-    events: Vec<InputEvent>,
-) -> bool {
-    for event in events {
-        tracing::debug!("tty_input: key event {:?}", event);
-        if tx.send(event).is_err() {
-            tracing::warn!("tty_input: channel closed");
-            return false;
-        }
-    }
-    true
 }
 
 #[cfg(unix)]
@@ -396,17 +160,9 @@ fn read_tty_events(
     stop: Arc<AtomicBool>,
     _paused: Arc<AtomicBool>,
 ) {
-    let mut decoder = RawTtyDecoder::default();
     let mut last_size = crossterm::terminal::size().ok();
 
     while !stop.load(Ordering::Relaxed) {
-        let now = Instant::now();
-        let mut elapsed_events = Vec::new();
-        decoder.advance_time(now, &mut elapsed_events);
-        if !send_raw_tty_events(&tx, elapsed_events) {
-            return;
-        }
-
         if let Ok(size) = crossterm::terminal::size()
             && last_size != Some(size)
         {
@@ -428,7 +184,9 @@ fn read_tty_events(
             events: libc::POLLIN,
             revents: 0,
         };
-        let poll_timeout_ms = raw_tty_poll_timeout_ms(&decoder, Instant::now());
+        // This timeout only lets the reader observe stop/resize state. It is
+        // not an input-sequence or ESC ambiguity deadline.
+        let poll_timeout_ms = TTY_READER_POLL_INTERVAL.as_millis() as libc::c_int;
         let poll_result = unsafe { libc::poll(&mut pollfd, 1, poll_timeout_ms) };
         if poll_result < 0 {
             let err = io::Error::last_os_error();
@@ -464,9 +222,10 @@ fn read_tty_events(
             continue;
         }
 
-        let mut events = Vec::new();
-        decoder.push_bytes_at(&buf[..nread as usize], Instant::now(), &mut events);
-        if !send_raw_tty_events(&tx, events) {
+        let event = raw_tty_input_event(buf[..nread as usize].to_vec());
+        tracing::debug!("tty_input: raw byte batch {:?}", event);
+        if tx.send(event).is_err() {
+            tracing::warn!("tty_input: channel closed");
             return;
         }
     }
@@ -606,8 +365,17 @@ mod tests {
     use crossterm::event::{KeyEventKind, KeyEventState};
 
     #[cfg(unix)]
-    fn push_raw_tty_bytes(decoder: &mut RawTtyDecoder, bytes: &[u8], events: &mut Vec<InputEvent>) {
-        decoder.push_bytes_at(bytes, Instant::now(), events);
+    #[test]
+    fn unix_tty_read_batch_is_forwarded_as_raw_bytes() {
+        let event = raw_tty_input_event(b"\x1b[A".to_vec());
+
+        assert!(matches!(
+            event,
+            InputEvent::RawTtyBytes {
+                bytes,
+                emacs_frame_id: 0,
+            } if bytes == b"\x1b[A"
+        ));
     }
 
     fn key_event(code: KeyCode, modifiers: KeyModifiers) -> KeyEvent {
@@ -666,278 +434,5 @@ mod tests {
 
         assert_eq!(keysym, 0x7f);
         assert_ne!(modifiers & NEOMACS_META_MASK, 0);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn raw_tty_decoder_keeps_more_than_crossterm_buffer() {
-        let mut decoder = RawTtyDecoder::default();
-        let input = vec![b'a'; 1500];
-        let mut events = Vec::new();
-
-        push_raw_tty_bytes(&mut decoder, &input, &mut events);
-
-        assert_eq!(events.len(), input.len());
-        for event in events {
-            match event {
-                InputEvent::Key {
-                    keysym, modifiers, ..
-                } => {
-                    assert_eq!(keysym, b'a' as u32);
-                    assert_eq!(modifiers, 0);
-                }
-                _ => panic!("expected key event"),
-            }
-        }
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn raw_tty_decoder_maps_meta_ret_and_meta_tab_to_control_chars() {
-        // ESC RET / ESC TAB are GNU's M-RET / M-TAB: meta + the control CHAR
-        // (13 / 9), not `M-<return>` / `M-<tab>` function keys (there is no
-        // [M-return]/[M-tab] function-key-map entry to translate those back).
-        let mut decoder = RawTtyDecoder::default();
-        let mut events = Vec::new();
-        push_raw_tty_bytes(&mut decoder, &[0x1b, b'\r', 0x1b, b'\t'], &mut events);
-        assert_eq!(events.len(), 2);
-        match events[0] {
-            InputEvent::Key {
-                keysym, modifiers, ..
-            } => {
-                assert_eq!(keysym, u32::from(b'\r'));
-                assert_eq!(modifiers, NEOMACS_META_MASK);
-            }
-            _ => panic!("expected key event"),
-        }
-        match events[1] {
-            InputEvent::Key {
-                keysym, modifiers, ..
-            } => {
-                assert_eq!(keysym, u32::from(b'\t'));
-                assert_eq!(modifiers, NEOMACS_META_MASK);
-            }
-            _ => panic!("expected key event"),
-        }
-        // The UNPREFIXED RET/TAB bytes still map to the function-key symbols.
-        let mut plain = Vec::new();
-        push_raw_tty_bytes(&mut RawTtyDecoder::default(), &[b'\r'], &mut plain);
-        match plain[0] {
-            InputEvent::Key { keysym, .. } => assert_eq!(keysym, XK_RETURN),
-            _ => panic!("expected key event"),
-        }
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn raw_tty_decoder_maps_meta_del_and_control_meta_backslash() {
-        let mut decoder = RawTtyDecoder::default();
-        let mut events = Vec::new();
-
-        push_raw_tty_bytes(&mut decoder, &[0x1b, 0x7f, 0x1b, 0x1c], &mut events);
-
-        assert_eq!(events.len(), 2);
-        match events[0] {
-            InputEvent::Key {
-                keysym, modifiers, ..
-            } => {
-                assert_eq!(keysym, 0x7f);
-                assert_eq!(modifiers, NEOMACS_META_MASK);
-            }
-            _ => panic!("expected key event"),
-        }
-        match events[1] {
-            InputEvent::Key {
-                keysym, modifiers, ..
-            } => {
-                assert_eq!(keysym, 0x1c);
-                assert_eq!(modifiers, NEOMACS_META_MASK);
-            }
-            _ => panic!("expected key event"),
-        }
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn raw_tty_decoder_maps_test_escape_sequences() {
-        let mut decoder = RawTtyDecoder::default();
-        let mut events = Vec::new();
-
-        push_raw_tty_bytes(
-            &mut decoder,
-            b"\x1b[A\x1b[B\x1b[C\x1b[D\x1b[21~",
-            &mut events,
-        );
-
-        let keysyms: Vec<u32> = events
-            .into_iter()
-            .map(|event| match event {
-                InputEvent::Key { keysym, .. } => keysym,
-                _ => panic!("expected key event"),
-            })
-            .collect();
-        assert_eq!(keysyms, [XK_UP, XK_DOWN, XK_RIGHT, XK_LEFT, XK_F1 + 9]);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn raw_tty_decoder_keeps_control_j_as_control_character() {
-        let mut decoder = RawTtyDecoder::default();
-        let mut events = Vec::new();
-
-        push_raw_tty_bytes(&mut decoder, &[b'\n', b'\r'], &mut events);
-
-        let keysyms: Vec<u32> = events
-            .into_iter()
-            .map(|event| match event {
-                InputEvent::Key { keysym, .. } => keysym,
-                _ => panic!("expected key event"),
-            })
-            .collect();
-        assert_eq!(keysyms, [b'\n' as u32, XK_RETURN]);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn raw_tty_decoder_decodes_utf8_characters() {
-        let mut decoder = RawTtyDecoder::default();
-        let mut events = Vec::new();
-
-        push_raw_tty_bytes(&mut decoder, "ä中".as_bytes(), &mut events);
-
-        let keysyms: Vec<u32> = events
-            .into_iter()
-            .map(|event| match event {
-                InputEvent::Key { keysym, .. } => keysym,
-                _ => panic!("expected key event"),
-            })
-            .collect();
-        assert_eq!(keysyms, ['ä' as u32, '中' as u32]);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn raw_tty_decoder_emits_standalone_escape_after_timeout() {
-        let started_at = std::time::Instant::now();
-        let mut decoder = RawTtyDecoder::default();
-        let mut events = Vec::new();
-
-        decoder.push_bytes_at(&[0x1b], started_at, &mut events);
-        assert!(events.is_empty());
-
-        decoder.advance_time(
-            started_at + TTY_ESCAPE_SEQUENCE_TIMEOUT - Duration::from_millis(1),
-            &mut events,
-        );
-        assert!(events.is_empty());
-
-        decoder.advance_time(started_at + TTY_ESCAPE_SEQUENCE_TIMEOUT, &mut events);
-        assert_eq!(events.len(), 1);
-        match events[0] {
-            InputEvent::Key {
-                keysym, modifiers, ..
-            } => {
-                assert_eq!(keysym, 0x1b);
-                assert_eq!(modifiers, 0);
-            }
-            _ => panic!("expected key event"),
-        }
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn raw_tty_decoder_reports_deadline_only_while_escape_is_ambiguous() {
-        let started_at = std::time::Instant::now();
-        let mut decoder = RawTtyDecoder::default();
-        let mut events = Vec::new();
-
-        assert_eq!(decoder.next_deadline(), None);
-        decoder.push_bytes_at(&[0x1b], started_at, &mut events);
-        assert_eq!(
-            decoder.next_deadline(),
-            Some(started_at + TTY_ESCAPE_SEQUENCE_TIMEOUT)
-        );
-
-        decoder.push_bytes_at(b"x", started_at + Duration::from_millis(1), &mut events);
-        assert_eq!(decoder.next_deadline(), None);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn raw_tty_poll_wait_is_bounded_by_decoder_deadline() {
-        let started_at = std::time::Instant::now();
-        let mut decoder = RawTtyDecoder::default();
-        let mut events = Vec::new();
-
-        assert_eq!(raw_tty_poll_timeout_ms(&decoder, started_at), 50);
-        decoder.push_bytes_at(&[0x1b], started_at, &mut events);
-        assert_eq!(
-            raw_tty_poll_timeout_ms(&decoder, started_at + Duration::from_millis(30)),
-            20
-        );
-        assert_eq!(
-            raw_tty_poll_timeout_ms(&decoder, started_at + TTY_ESCAPE_SEQUENCE_TIMEOUT),
-            0
-        );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn raw_tty_decoder_distinguishes_meta_from_late_input() {
-        let started_at = std::time::Instant::now();
-        let mut decoder = RawTtyDecoder::default();
-        let mut events = Vec::new();
-
-        decoder.push_bytes_at(&[0x1b], started_at, &mut events);
-        decoder.push_bytes_at(
-            b"x",
-            started_at + TTY_ESCAPE_SEQUENCE_TIMEOUT - Duration::from_millis(1),
-            &mut events,
-        );
-        assert!(matches!(
-            events.as_slice(),
-            [InputEvent::Key {
-                keysym,
-                modifiers,
-                ..
-            }] if *keysym == u32::from(b'x') && *modifiers == NEOMACS_META_MASK
-        ));
-
-        let mut decoder = RawTtyDecoder::default();
-        let mut events = Vec::new();
-        decoder.push_bytes_at(&[0x1b], started_at, &mut events);
-        decoder.push_bytes_at(b"x", started_at + TTY_ESCAPE_SEQUENCE_TIMEOUT, &mut events);
-        let keys: Vec<(u32, u32)> = events
-            .into_iter()
-            .map(|event| match event {
-                InputEvent::Key {
-                    keysym, modifiers, ..
-                } => (keysym, modifiers),
-                _ => panic!("expected key event"),
-            })
-            .collect();
-        assert_eq!(keys, [(0x1b, 0), (u32::from(b'x'), 0)]);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn raw_tty_decoder_accepts_split_csi_sequence_before_deadline() {
-        let started_at = std::time::Instant::now();
-        let mut decoder = RawTtyDecoder::default();
-        let mut events = Vec::new();
-
-        decoder.push_bytes_at(&[0x1b], started_at, &mut events);
-        decoder.push_bytes_at(b"[", started_at + Duration::from_millis(10), &mut events);
-        decoder.push_bytes_at(b"A", started_at + Duration::from_millis(20), &mut events);
-
-        assert!(matches!(
-            events.as_slice(),
-            [InputEvent::Key {
-                keysym: XK_UP,
-                modifiers: 0,
-                ..
-            }]
-        ));
-        assert_eq!(decoder.next_deadline(), None);
     }
 }

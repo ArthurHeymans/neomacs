@@ -6,6 +6,7 @@ mod frontend_events;
 pub mod gc_trace;
 pub mod heap_types;
 pub mod keyboard;
+mod keyboard_input;
 pub mod logging;
 pub mod tagged;
 #[cfg(test)]
