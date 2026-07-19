@@ -40,11 +40,9 @@ pub(crate) fn cannot_open_load_file_signal(file: &LispString) -> Flow {
 }
 
 fn load_name_equal(left: &LispString, right: &LispString) -> bool {
-    crate::emacs_core::value::equal_value(
-        &Value::heap_string(left.clone()),
-        &Value::heap_string(right.clone()),
-        0,
-    )
+    left.schars() == right.schars()
+        && left.sbytes() == right.sbytes()
+        && left.as_bytes() == right.as_bytes()
 }
 
 #[cfg(not(unix))]

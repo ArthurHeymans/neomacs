@@ -20,6 +20,26 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::tempdir;
 
+#[test]
+fn load_name_equal_matches_lisp_equal_without_tagged_heap_allocation() {
+    crate::test_utils::init_test_tracing();
+    let _eval = Context::new();
+    let unibyte = crate::heap_types::LispString::from_unibyte(b"same-name.el".to_vec());
+    let multibyte = crate::heap_types::LispString::from_utf8("same-name.el");
+    let different = crate::heap_types::LispString::from_unibyte(b"other-name.el".to_vec());
+    let before = crate::tagged::gc::with_tagged_heap(|heap| heap.total_allocated_bytes());
+
+    assert!(load_name_equal(&unibyte, &multibyte));
+    assert!(load_name_equal(&multibyte, &unibyte));
+    assert!(!load_name_equal(&unibyte, &different));
+
+    let after = crate::tagged::gc::with_tagged_heap(|heap| heap.total_allocated_bytes());
+    assert_eq!(
+        after, before,
+        "comparing borrowed load names must not allocate tagged heap objects",
+    );
+}
+
 fn isolated_runtime_bootstrap_eval() -> Context {
     let dump_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../target/test-cache/neovm-advice-stack-minibuffer-partial.pdump");
