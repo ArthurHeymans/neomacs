@@ -18,6 +18,14 @@ fn name_interner_dedup() {
 }
 
 #[test]
+fn ordinary_symbol_slot_stays_compact() {
+    assert!(
+        std::mem::size_of::<SymbolSlot>() <= 2 * std::mem::size_of::<u32>(),
+        "ordinary symbols must not pay for rare per-symbol metadata"
+    );
+}
+
+#[test]
 fn runtime_intern() {
     crate::test_utils::init_test_tracing();
     let a = intern("hello");

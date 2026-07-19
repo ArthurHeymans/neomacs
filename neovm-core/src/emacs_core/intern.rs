@@ -169,11 +169,6 @@ struct SymbolNameValue {
 struct SymbolSlot {
     name: NameId,
     canonical: bool,
-    /// Exact heap string object used as the symbol name when Lisp supplies
-    /// one directly.  GNU stores the Lisp string object in the symbol, so
-    /// `(symbol-name (make-symbol NAME))` is `eq` to NAME and sees later
-    /// string mutation.
-    name_value: Option<SymbolNameValue>,
 }
 
 pub(crate) struct DumpedSymbolTable {
@@ -193,13 +188,19 @@ struct SymbolRegistry {
     names: StringInterner,
     symbols: Vec<SymbolSlot>,
     canonical_by_name: FxHashMap<NameId, SymId>,
+    /// Exact heap string objects used as symbol names when Lisp supplies one
+    /// directly. GNU stores that object in the symbol, so `(symbol-name
+    /// (make-symbol NAME))` is `eq` to NAME and sees later string mutation.
+    /// Keeping this rare case out of `SymbolSlot` makes every ordinary symbol
+    /// substantially smaller.
+    name_values: FxHashMap<SymId, SymbolNameValue>,
     /// Task #7 stage 2a rider: per-heap index of the symbols carrying a
     /// `name_value`, so the GC root walk (`collect_name_value_roots`) touches
-    /// only the requesting heap's entries instead of scanning every symbol
-    /// slot (~450K) to find a handful. Maintained at the single `SymbolSlot`
-    /// construction chokepoint (`alloc_symbol`); `name_value` is immutable
-    /// after construction, so entries are never removed (a torn-down heap's
-    /// id is simply never queried again).
+    /// only the requesting heap's entries instead of scanning the sparse side
+    /// table. Maintained at the single symbol construction chokepoint
+    /// (`alloc_symbol`); `name_value` is immutable after construction, so
+    /// entries are never removed (a torn-down heap's id is simply never
+    /// queried again).
     name_value_syms_by_heap: FxHashMap<usize, Vec<SymId>>,
 }
 
@@ -215,6 +216,7 @@ impl SymbolRegistry {
             names: StringInterner::new(),
             symbols: Vec::new(),
             canonical_by_name: FxHashMap::default(),
+            name_values: FxHashMap::default(),
             name_value_syms_by_heap: FxHashMap::default(),
         };
         let nil_name = registry.names.intern("nil");
@@ -239,12 +241,10 @@ impl SymbolRegistry {
         name_value: Option<SymbolNameValue>,
     ) -> SymId {
         let id = SymId(self.symbols.len() as u32);
-        self.symbols.push(SymbolSlot {
-            name,
-            canonical,
-            name_value,
-        });
+        self.symbols.push(SymbolSlot { name, canonical });
         if let Some(name_value) = name_value {
+            let old = self.name_values.insert(id, name_value);
+            debug_assert!(old.is_none(), "new symbol id already had a name value");
             self.name_value_syms_by_heap
                 .entry(name_value.heap_id)
                 .or_default()
@@ -329,7 +329,7 @@ impl SymbolRegistry {
         let slot = self
             .slot(id)
             .unwrap_or_else(|| panic!("invalid symbol id {:?}", id));
-        if let Some(name_value) = slot.name_value
+        if let Some(name_value) = self.name_values.get(&id).copied()
             && crate::tagged::gc::current_tagged_heap_identity() == Some(name_value.heap_id)
         {
             return name_value
@@ -342,10 +342,9 @@ impl SymbolRegistry {
 
     #[inline]
     fn resolve_name_value(&self, id: SymId) -> Option<TaggedValue> {
-        let name_value = self
-            .slot(id)
-            .unwrap_or_else(|| panic!("invalid symbol id {:?}", id))
-            .name_value?;
+        self.slot(id)
+            .unwrap_or_else(|| panic!("invalid symbol id {:?}", id));
+        let name_value = self.name_values.get(&id).copied()?;
         (crate::tagged::gc::current_tagged_heap_identity() == Some(name_value.heap_id))
             .then_some(name_value.value)
     }
@@ -501,16 +500,15 @@ impl SymbolRegistry {
         // Task #7 stage 2a rider: walk only this heap's indexed entries (the
         // full-slot scan this replaced was 29-39us of both STW handshakes for
         // a handful of roots). Same SET as the old filter — `name_value` is
-        // immutable after `alloc_symbol`, the sole slot constructor. The
+        // immutable after `alloc_symbol`, the sole symbol constructor. The
         // cross-check runs in debug test builds only: the release drain
         // profilers are cfg(test) binaries, and the full-slot walk would
         // re-add the exact cost this index removed.
         #[cfg(all(test, debug_assertions))]
         {
             let full = self
-                .symbols
-                .iter()
-                .flat_map(|slot| slot.name_value)
+                .name_values
+                .values()
                 .filter(|name_value| name_value.heap_id == heap_id)
                 .count();
             let indexed = self
@@ -523,8 +521,8 @@ impl SymbolRegistry {
             return;
         };
         roots.extend(ids.iter().map(|&id| {
-            self.symbols[id.0 as usize]
-                .name_value
+            self.name_values
+                .get(&id)
                 .expect("indexed symbol lost its name_value")
                 .value
         }));
