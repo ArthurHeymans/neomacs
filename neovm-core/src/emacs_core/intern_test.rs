@@ -26,6 +26,14 @@ fn ordinary_symbol_slot_stays_compact() {
 }
 
 #[test]
+fn dense_thread_symbol_cache_stays_within_two_words() {
+    assert!(
+        std::mem::size_of::<SymbolCacheEntry>() <= 2 * std::mem::size_of::<usize>(),
+        "dense symbol cache entries must remain at most two machine words"
+    );
+}
+
+#[test]
 fn runtime_intern() {
     crate::test_utils::init_test_tracing();
     let a = intern("hello");

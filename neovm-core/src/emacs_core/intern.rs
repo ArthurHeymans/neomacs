@@ -679,12 +679,15 @@ pub fn resolve_sym_metadata(id: SymId) -> (&'static str, bool) {
         }
     }
     let registry = global_symbol_registry().read();
-    let name = registry.resolve(id);
+    let name_value = registry.resolve_lisp_string(id);
+    let name = name_value
+        .as_utf8_str()
+        .unwrap_or_else(|| panic!("symbol name {:?} is not valid UTF-8", id));
     let is_canonical = registry.is_canonical_id(id);
     drop(registry);
     thread_local_record_canonical(id, is_canonical);
     if is_canonical {
-        thread_local_record(id, name);
+        thread_local_record_name(id, name_value);
     }
     (name, is_canonical)
 }
@@ -739,12 +742,15 @@ pub fn resolve_sym(id: SymId) -> &'static str {
         }
     }
     let registry = global_symbol_registry().read();
-    let s = registry.resolve(id);
+    let name_value = registry.resolve_lisp_string(id);
+    let s = name_value
+        .as_utf8_str()
+        .unwrap_or_else(|| panic!("symbol name {:?} is not valid UTF-8", id));
     let is_canonical = registry.is_canonical_id(id);
     drop(registry);
     thread_local_record_canonical(id, is_canonical);
     if is_canonical {
-        thread_local_record(id, s);
+        thread_local_record_name(id, name_value);
     }
     s
 }
@@ -794,17 +800,40 @@ pub(crate) fn collect_symbol_name_gc_roots(roots: &mut Vec<TaggedValue>, heap_id
 // `resolve_sym` is called from many bytecode hot paths (e.g. `is_keyword`,
 // debug formatting) and acquiring the global RwLock — even with parking_lot
 // — is many extra atomic ops per call. Once a SymId is interned, the
-// underlying `&'static str` is permanently valid, so the (id -> str) mapping
-// is monotonic and stable for the lifetime of the process.
+// underlying interned `&'static LispString` is permanently valid, so the
+// (id -> name) mapping is monotonic and stable for the lifetime of the process.
+
+#[derive(Clone, Copy, Debug)]
+struct SymbolCacheEntry {
+    /// A thin pointer is enough here. Converting the interned `LispString` to
+    /// `&str` on a hit avoids paying for a 16-byte fat pointer in every dense
+    /// cache entry.
+    name: Option<&'static LispString>,
+    /// `NameId(u32::MAX)` is reserved globally and doubles as the cache-miss
+    /// sentinel, avoiding the padding of `Option<NameId>`.
+    name_id: u32,
+    canonical: Option<bool>,
+    keyword: Option<bool>,
+}
+
+impl Default for SymbolCacheEntry {
+    fn default() -> Self {
+        Self {
+            name: None,
+            name_id: SYMBOL_NAME_CACHE_MISSING,
+            canonical: None,
+            keyword: None,
+        }
+    }
+}
+
+const SYMBOL_NAME_CACHE_MISSING: u32 = u32::MAX;
 
 thread_local! {
     static THREAD_CACHE_EPOCH: RefCell<u64> = const { RefCell::new(0) };
     static INTERN_STR_CACHE: RefCell<FxHashMap<&'static str, SymId>> = RefCell::new(FxHashMap::default());
-    static SYM_NAME_CACHE: RefCell<Vec<Option<&'static str>>> = const { RefCell::new(Vec::new()) };
-    static SYM_NAME_ID_CACHE: RefCell<Vec<Option<NameId>>> = const { RefCell::new(Vec::new()) };
-    static SYM_CANONICAL_CACHE: RefCell<Vec<Option<bool>>> = const { RefCell::new(Vec::new()) };
+    static SYMBOL_CACHE: RefCell<Vec<SymbolCacheEntry>> = const { RefCell::new(Vec::new()) };
     static NAME_CANONICAL_SYMBOL_CACHE: RefCell<Vec<Option<SymId>>> = const { RefCell::new(Vec::new()) };
-    static SYM_KEYWORD_CACHE: RefCell<Vec<Option<bool>>> = const { RefCell::new(Vec::new()) };
 }
 
 fn ensure_thread_local_cache_epoch_current() {
@@ -816,11 +845,8 @@ fn ensure_thread_local_cache_epoch_current() {
         }
         *epoch = current;
         INTERN_STR_CACHE.with(|cache| cache.borrow_mut().clear());
-        SYM_NAME_CACHE.with(|cache| cache.borrow_mut().clear());
-        SYM_NAME_ID_CACHE.with(|cache| cache.borrow_mut().clear());
-        SYM_CANONICAL_CACHE.with(|cache| cache.borrow_mut().clear());
+        SYMBOL_CACHE.with(|cache| cache.borrow_mut().clear());
         NAME_CANONICAL_SYMBOL_CACHE.with(|cache| cache.borrow_mut().clear());
-        SYM_KEYWORD_CACHE.with(|cache| cache.borrow_mut().clear());
     });
 }
 
@@ -838,61 +864,72 @@ fn thread_local_record_interned_str(s: &'static str, id: SymId) {
 
 #[inline]
 fn thread_local_resolve(id: SymId) -> Option<&'static str> {
-    SYM_NAME_CACHE.with(|cache| {
+    SYMBOL_CACHE.with(|cache| {
         let cache = cache.borrow();
-        cache.get(id.0 as usize).and_then(|slot| *slot)
+        cache
+            .get(id.0 as usize)
+            .and_then(|entry| entry.name)
+            .map(|name| {
+                name.as_utf8_str()
+                    .expect("only UTF-8 symbol names enter the resolution cache")
+            })
     })
 }
 
 #[inline]
-fn thread_local_record(id: SymId, name: &'static str) {
-    SYM_NAME_CACHE.with(|cache| {
+fn thread_local_record_name(id: SymId, name: &'static LispString) {
+    SYMBOL_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
         let idx = id.0 as usize;
         if cache.len() <= idx {
-            cache.resize(idx + 1, None);
+            cache.resize(idx + 1, SymbolCacheEntry::default());
         }
-        cache[idx] = Some(name);
+        cache[idx].name = Some(name);
     });
 }
 
 #[inline]
 fn thread_local_name_id(id: SymId) -> Option<NameId> {
-    SYM_NAME_ID_CACHE.with(|cache| {
+    SYMBOL_CACHE.with(|cache| {
         let cache = cache.borrow();
-        cache.get(id.0 as usize).and_then(|slot| *slot)
+        cache
+            .get(id.0 as usize)
+            .map(|entry| entry.name_id)
+            .filter(|&name_id| name_id != SYMBOL_NAME_CACHE_MISSING)
+            .map(NameId)
     })
 }
 
 #[inline]
 fn thread_local_record_name_id(id: SymId, name_id: NameId) {
-    SYM_NAME_ID_CACHE.with(|cache| {
+    debug_assert_ne!(name_id.0, SYMBOL_NAME_CACHE_MISSING);
+    SYMBOL_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
         let idx = id.0 as usize;
         if cache.len() <= idx {
-            cache.resize(idx + 1, None);
+            cache.resize(idx + 1, SymbolCacheEntry::default());
         }
-        cache[idx] = Some(name_id);
+        cache[idx].name_id = name_id.0;
     });
 }
 
 #[inline]
 fn thread_local_is_canonical(id: SymId) -> Option<bool> {
-    SYM_CANONICAL_CACHE.with(|cache| {
+    SYMBOL_CACHE.with(|cache| {
         let cache = cache.borrow();
-        cache.get(id.0 as usize).and_then(|slot| *slot)
+        cache.get(id.0 as usize).and_then(|entry| entry.canonical)
     })
 }
 
 #[inline]
 fn thread_local_record_canonical(id: SymId, is_canonical: bool) {
-    SYM_CANONICAL_CACHE.with(|cache| {
+    SYMBOL_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
         let idx = id.0 as usize;
         if cache.len() <= idx {
-            cache.resize(idx + 1, None);
+            cache.resize(idx + 1, SymbolCacheEntry::default());
         }
-        cache[idx] = Some(is_canonical);
+        cache[idx].canonical = Some(is_canonical);
     });
 }
 
@@ -918,21 +955,21 @@ fn thread_local_record_canonical_symbol_for_name(id: NameId, sym_id: SymId) {
 
 #[inline]
 fn thread_local_keyword(id: SymId) -> Option<bool> {
-    SYM_KEYWORD_CACHE.with(|cache| {
+    SYMBOL_CACHE.with(|cache| {
         let cache = cache.borrow();
-        cache.get(id.0 as usize).and_then(|slot| *slot)
+        cache.get(id.0 as usize).and_then(|entry| entry.keyword)
     })
 }
 
 #[inline]
 fn thread_local_record_keyword(id: SymId, is_keyword: bool) {
-    SYM_KEYWORD_CACHE.with(|cache| {
+    SYMBOL_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
         let idx = id.0 as usize;
         if cache.len() <= idx {
-            cache.resize(idx + 1, None);
+            cache.resize(idx + 1, SymbolCacheEntry::default());
         }
-        cache[idx] = Some(is_keyword);
+        cache[idx].keyword = Some(is_keyword);
     });
 }
 
