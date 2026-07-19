@@ -103,6 +103,23 @@ fn name_interner_lookup_reuses_ascii_multibyte_canonical_atom() {
 }
 
 #[test]
+fn name_interner_borrowed_lookup_preserves_non_ascii_representation() {
+    crate::test_utils::init_test_tracing();
+    let mut interner = StringInterner::new();
+    let text = "lambda-λ";
+    let multibyte = crate::heap_types::LispString::from_utf8(text);
+    let unibyte = crate::heap_types::LispString::from_unibyte(text.as_bytes().to_vec());
+
+    let from_str = interner.intern(text);
+    assert_eq!(interner.lookup(text), Some(from_str));
+    assert_eq!(interner.intern_lisp_string(&multibyte), from_str);
+
+    let from_unibyte = interner.intern_lisp_string(&unibyte);
+    assert_ne!(from_unibyte, from_str);
+    assert_eq!(interner.lookup_lisp_string(&unibyte), Some(from_unibyte));
+}
+
+#[test]
 fn symid_copy_eq_hash() {
     crate::test_utils::init_test_tracing();
     let mut registry = SymbolRegistry::new();

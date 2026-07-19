@@ -10,10 +10,12 @@
 //! more closely: a symbol is an object with a name, not just "slot N in the
 //! string interner".
 
+use hashbrown::HashMap;
 use parking_lot::RwLock;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::borrow::Cow;
 use std::cell::RefCell;
+use std::hash::{BuildHasher, Hash, Hasher};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -37,8 +39,7 @@ pub const UNBOUND_SYM_ID: SymId = SymId(2);
 /// Append-only string interner used only for symbol names.
 pub struct StringInterner {
     strings: Vec<&'static LispString>,
-    map: FxHashMap<&'static LispString, NameId>,
-    utf8_map: FxHashMap<&'static str, NameId>,
+    map: HashMap<&'static LispString, NameId, FxBuildHasher>,
 }
 
 impl Default for StringInterner {
@@ -59,15 +60,34 @@ impl StringInterner {
     pub fn new() -> Self {
         Self {
             strings: Vec::new(),
-            map: FxHashMap::default(),
-            utf8_map: FxHashMap::default(),
+            map: HashMap::with_hasher(FxBuildHasher),
         }
     }
 
     fn reserve_additional_names(&mut self, additional: usize) {
         self.strings.reserve(additional);
         self.map.reserve(additional);
-        self.utf8_map.reserve(additional);
+    }
+
+    #[inline]
+    fn hash_name_parts(&self, bytes: &[u8], multibyte: bool) -> u64 {
+        // Keep this exactly aligned with `LispString::hash` so a borrowed
+        // byte/representation query lands in the canonical map's bucket.
+        let mut hasher = self.map.hasher().build_hasher();
+        bytes.hash(&mut hasher);
+        multibyte.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    #[inline]
+    fn lookup_name_parts(&self, bytes: &[u8], multibyte: bool) -> Option<NameId> {
+        let hash = self.hash_name_parts(bytes, multibyte);
+        self.map
+            .raw_entry()
+            .from_hash(hash, |candidate| {
+                candidate.is_multibyte() == multibyte && candidate.as_bytes() == bytes
+            })
+            .map(|(_, id)| *id)
     }
 
     fn name_atom_from_str(s: &str) -> LispString {
@@ -80,7 +100,8 @@ impl StringInterner {
 
     /// Intern a symbol-name atom, returning its unique id.
     pub fn intern(&mut self, s: &str) -> NameId {
-        if let Some(&idx) = self.utf8_map.get(s) {
+        let multibyte = !s.is_ascii();
+        if let Some(idx) = self.lookup_name_parts(s.as_bytes(), multibyte) {
             return idx;
         }
         let atom = Self::name_atom_from_str(s);
@@ -90,7 +111,8 @@ impl StringInterner {
     /// Intern a symbol-name atom from an exact Lisp string representation.
     pub fn intern_lisp_string(&mut self, s: &LispString) -> NameId {
         let normalized = Self::normalize_symbol_name_lisp_string(s);
-        if let Some(&idx) = self.map.get(normalized.as_ref()) {
+        if let Some(idx) = self.lookup_name_parts(normalized.as_bytes(), normalized.is_multibyte())
+        {
             return idx;
         }
         let idx = NameId(self.strings.len() as u32);
@@ -108,25 +130,18 @@ impl StringInterner {
         let leaked = Box::leak(Box::new(normalized.into_owned())) as &'static LispString;
         self.strings.push(leaked);
         self.map.insert(leaked, idx);
-        if let Some(text) = leaked.as_utf8_str() {
-            self.utf8_map.insert(text, idx);
-        }
         idx
     }
 
     /// Look up a symbol-name atom without interning it.
     pub fn lookup(&self, s: &str) -> Option<NameId> {
-        if let Some(&idx) = self.utf8_map.get(s) {
-            return Some(idx);
-        }
-        let atom = Self::name_atom_from_str(s);
-        self.lookup_lisp_string(&atom)
+        self.lookup_name_parts(s.as_bytes(), !s.is_ascii())
     }
 
     /// Look up a symbol-name atom without interning it.
     pub fn lookup_lisp_string(&self, s: &LispString) -> Option<NameId> {
         let normalized = Self::normalize_symbol_name_lisp_string(s);
-        self.map.get(normalized.as_ref()).copied()
+        self.lookup_name_parts(normalized.as_bytes(), normalized.is_multibyte())
     }
 
     /// Resolve a name id back to its string. Panics if id is invalid.

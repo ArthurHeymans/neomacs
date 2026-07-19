@@ -3480,6 +3480,7 @@ dependencies = [
  "flate2",
  "fs4",
  "getrandom 0.4.2",
+ "hashbrown 0.16.1",
  "hmac",
  "hostname",
  "itoa",
