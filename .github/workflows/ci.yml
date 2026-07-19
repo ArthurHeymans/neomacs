@@ -179,7 +179,7 @@ jobs:
       - *checkout
       - &prepare_workspace_tmp
         name: Prepare workspace temp directory
-        run: mkdir -p "$TMPDIR"
+        run: mkdir -p "$TMPDIR/nextest"
       - *install_linux_deps
       - *install_rust
       - &cache_cargo
