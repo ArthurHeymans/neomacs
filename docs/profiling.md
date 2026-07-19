@@ -27,6 +27,21 @@ boundary. Memory profiling measures bytes reported at Neomacs' managed Lisp
 object-allocation points. It does not include arbitrary Rust allocations or
 every later capacity change in an object's backing storage.
 
+Set `HEAP_REPORT_DIR` on the Doom RSS harness to save one exact
+`neomacs--heap-layout-stats` snapshot per run alongside the Linux process
+metrics. This separates managed live data and arena fragmentation from
+allocator and non-GC Rust storage without changing the measured binary:
+
+```sh
+HEAP_REPORT_DIR=target/profiling/doom-heap-layout \
+  scripts/profile-doom-memory.sh
+```
+
+For configurations that continue loading from idle timers after command-line
+processing, set `PROFILE_DELAY_SECONDS` to delay the explicit GC, heap snapshot,
+and readiness marker until that work has settled. The delay is intentionally
+opt-in because it is included in the harness's startup timestamp.
+
 ## Native sampling
 
 The `profiling` Cargo profile keeps release optimizations and native debug
@@ -127,13 +142,13 @@ cargo xtask fresh-build --release
 scripts/profile-doom-memory.sh
 ```
 
-The harness interleaves five runs of each mode, waits for Doom startup and an
-explicit Lisp GC, idles for 30 seconds, and records `/proc/PID/smaps_rollup`
+The harness interleaves five runs of each mode, waits for its readiness marker
+and an explicit Lisp GC, idles for 30 seconds, and records `/proc/PID/smaps_rollup`
 RSS, PSS, private, anonymous, and swap counters. Raw samples go to
 `target/profiling/doom-memory.tsv`. It also writes paired startup deltas to the
 adjacent `.startup-pairs.tsv` file. Override `RUNS`, `SETTLE_SECONDS`,
-`STARTUP_TIMEOUT_SECONDS`, `NEOMACS_BIN`, `REPORT`, or `STARTUP_REPORT` when
-needed.
+`PROFILE_DELAY_SECONDS`, `HEAP_REPORT_DIR`, `STARTUP_TIMEOUT_SECONDS`,
+`NEOMACS_BIN`, `REPORT`, or `STARTUP_REPORT` when needed.
 
 Memory runs intentionally settle long enough to stabilize RSS, so use a
 separate higher-repetition panel to enforce startup neutrality. This example

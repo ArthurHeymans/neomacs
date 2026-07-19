@@ -7,8 +7,10 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 neomacs_bin="${NEOMACS_BIN:-$repo_root/target/release/neomacs}"
 runs="${RUNS:-5}"
 settle_seconds="${SETTLE_SECONDS:-30}"
+profile_delay_seconds="${PROFILE_DELAY_SECONDS:-0}"
 startup_timeout_seconds="${STARTUP_TIMEOUT_SECONDS:-180}"
 max_startup_regression_pct="${MAX_STARTUP_REGRESSION_PCT:-}"
+heap_report_dir="${HEAP_REPORT_DIR:-}"
 minimum_startup_gate_runs=20
 
 if [[ "$(uname -s)" != "Linux" ]]; then
@@ -27,6 +29,10 @@ if [[ ! "$runs" =~ ^[1-9][0-9]*$ ]]; then
   echo "RUNS must be a positive integer" >&2
   exit 1
 fi
+if [[ ! "$profile_delay_seconds" =~ ^[0-9]+$ ]]; then
+  echo "PROFILE_DELAY_SECONDS must be a non-negative integer" >&2
+  exit 1
+fi
 if [[ -n "$max_startup_regression_pct" ]] \
   && [[ ! "$max_startup_regression_pct" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]]; then
   echo "MAX_STARTUP_REGRESSION_PCT must be a non-negative number" >&2
@@ -39,6 +45,10 @@ fi
 
 neomacs_bin="$(cd "$(dirname "$neomacs_bin")" && pwd)/$(basename "$neomacs_bin")"
 mkdir -p "$repo_root/target/profiling"
+if [[ -n "$heap_report_dir" ]]; then
+  mkdir -p "$heap_report_dir"
+  heap_report_dir="$(cd "$heap_report_dir" && pwd)"
+fi
 work_dir="$(mktemp -d "$repo_root/target/profiling/doom-memory.XXXXXX")"
 report="${REPORT:-$repo_root/target/profiling/doom-memory.tsv}"
 startup_report="${STARTUP_REPORT:-$report.startup-pairs.tsv}"
@@ -81,12 +91,22 @@ run_sample() {
   local marker="$work_dir/$mode-$pair.ready"
   local log="$work_dir/$mode-$pair.log"
   local marker_elisp="$marker"
-  local form command quoted_bin quoted_form
+  local form command quoted_bin quoted_form heap_report heap_report_elisp
   local start_ms deadline ready_ms startup_ms smaps snapshot
 
   marker_elisp="${marker_elisp//\\/\\\\}"
   marker_elisp="${marker_elisp//\"/\\\"}"
-  form="(progn (garbage-collect) (with-temp-file \"$marker_elisp\" (insert (number-to-string (truncate (* 1000 (float-time)))))))"
+  form="(progn (garbage-collect)"
+  if [[ -n "$heap_report_dir" ]]; then
+    heap_report="$heap_report_dir/$mode-$pair.heap-layout.el"
+    heap_report_elisp="${heap_report//\\/\\\\}"
+    heap_report_elisp="${heap_report_elisp//\"/\\\"}"
+    form+=" (with-temp-file \"$heap_report_elisp\" (prin1 (neomacs--heap-layout-stats) (current-buffer)))"
+  fi
+  form+=" (with-temp-file \"$marker_elisp\" (insert (number-to-string (truncate (* 1000 (float-time)))))))"
+  if (( profile_delay_seconds > 0 )); then
+    form="(run-at-time $profile_delay_seconds nil (lambda () $form))"
+  fi
   printf -v quoted_bin '%q' "$neomacs_bin"
   printf -v quoted_form '%q' "$form"
 
