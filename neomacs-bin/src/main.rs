@@ -13,10 +13,10 @@
 // folding them into structs is a separate refactor, out of scope for the gate.
 #![allow(clippy::too_many_arguments)]
 
-// Global allocator: mimalloc is the production default; profiling builds can
-// select TiKV jemalloc instead. `--no-default-features` with neither feature
-// uses the system allocator. These affect Rust allocations, not linked C
-// libraries.
+// Global allocator: TiKV jemalloc is the production default; mimalloc remains
+// available for allocation-throughput comparisons. `--no-default-features`
+// with neither feature uses the system allocator. These affect Rust
+// allocations, not linked C libraries.
 cfg_select! {
     all(feature = "mimalloc", feature = "jemalloc") => {
         compile_error!("features `mimalloc` and `jemalloc` are mutually exclusive");
@@ -43,6 +43,26 @@ cfg_select! {
     feature = "mimalloc" => {
         #[global_allocator]
         static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+    }
+    all(feature = "jemalloc", target_os = "linux") => {
+        // jemalloc reads this symbol before main. Keep dirty and muzzy extents
+        // out of RSS and use two arenas for the main and render workloads,
+        // while still allowing _RJEM_MALLOC_CONF to override these defaults.
+        union JemallocConfigPointer {
+            byte: &'static u8,
+            c_char: &'static libc::c_char,
+        }
+
+        #[unsafe(export_name = "_rjem_malloc_conf")]
+        pub static JEMALLOC_CONFIG: Option<&'static libc::c_char> = Some(unsafe {
+            JemallocConfigPointer {
+                byte: &b"dirty_decay_ms:0,muzzy_decay_ms:0,narenas:2\0"[0],
+            }
+            .c_char
+        });
+
+        #[global_allocator]
+        static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
     }
     feature = "jemalloc" => {
         #[global_allocator]
