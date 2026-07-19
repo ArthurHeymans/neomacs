@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   RUST_LOG: info
@@ -402,6 +402,9 @@ jobs:
   # ── GitHub Release ────────────────────────────────────────────────────
   create-release:
     name: create release
+    permissions:
+      contents: write
+      discussions: write
     needs:
       - build-linux-x86_64
       - build-linux-aarch64
@@ -421,5 +424,6 @@ jobs:
           name: NEO Emacs ${{ github.ref_name }}
           files: dist/*
           generate_release_notes: true
+          discussion_category_name: Announcements
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
