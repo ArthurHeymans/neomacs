@@ -10,7 +10,7 @@ use std::io;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::thread_comm::{InputEvent, LifecycleCommand, RenderCommand, RenderComms};
 #[cfg(not(unix))]
@@ -19,6 +19,12 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 #[cfg(unix)]
 const GNU_KBD_BUFFER_SIZE: usize = 4096;
+
+#[cfg(unix)]
+const TTY_ESCAPE_SEQUENCE_TIMEOUT: Duration = Duration::from_millis(50);
+
+#[cfg(unix)]
+const TTY_IDLE_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 // Modifier masks — must match neomacs-display-runtime/src/backend/wgpu/events.rs
 // SHIFT/CTRL/SUPER are consumed only by the non-unix crossterm key mapper below.
@@ -167,13 +173,48 @@ fn raw_tty_byte_keysym(byte: u8) -> u32 {
 #[derive(Default)]
 struct RawTtyDecoder {
     pending: VecDeque<u8>,
+    escape_deadline: Option<Instant>,
 }
 
 #[cfg(unix)]
 impl RawTtyDecoder {
-    fn push_bytes(&mut self, bytes: &[u8], events: &mut Vec<InputEvent>) {
+    fn push_bytes_at(&mut self, bytes: &[u8], now: Instant, events: &mut Vec<InputEvent>) {
+        self.advance_time(now, events);
         self.pending.extend(bytes);
+        self.decode_pending(events);
+        self.update_escape_deadline(now);
+    }
 
+    fn advance_time(&mut self, now: Instant, events: &mut Vec<InputEvent>) {
+        let Some(deadline) = self.escape_deadline else {
+            return;
+        };
+        if now < deadline {
+            return;
+        }
+
+        debug_assert_eq!(self.pending.front(), Some(&0x1b));
+        self.pending.pop_front();
+        self.escape_deadline = None;
+        events.push(raw_key_event(0x1b, 0));
+        self.decode_pending(events);
+        self.update_escape_deadline(now);
+    }
+
+    fn next_deadline(&self) -> Option<Instant> {
+        self.escape_deadline
+    }
+
+    fn update_escape_deadline(&mut self, now: Instant) {
+        if self.pending.front() == Some(&0x1b) {
+            self.escape_deadline
+                .get_or_insert(now + TTY_ESCAPE_SEQUENCE_TIMEOUT);
+        } else {
+            self.escape_deadline = None;
+        }
+    }
+
+    fn decode_pending(&mut self, events: &mut Vec<InputEvent>) {
         while !self.pending.is_empty() {
             if self.pending[0] != 0x1b {
                 if !self.decode_plain_char(0, events) {
@@ -320,6 +361,36 @@ impl RawTtyDecoder {
 }
 
 #[cfg(unix)]
+fn raw_tty_poll_timeout_ms(decoder: &RawTtyDecoder, now: Instant) -> libc::c_int {
+    let wait = decoder
+        .next_deadline()
+        .map(|deadline| deadline.saturating_duration_since(now))
+        .unwrap_or(TTY_IDLE_POLL_INTERVAL);
+    if wait.is_zero() {
+        return 0;
+    }
+
+    // `poll` accepts whole milliseconds. Round a positive sub-millisecond
+    // remainder up so the reader cannot spin before the decoder's deadline.
+    wait.as_millis().max(1).min(libc::c_int::MAX as u128) as libc::c_int
+}
+
+#[cfg(unix)]
+fn send_raw_tty_events(
+    tx: &crossbeam_channel::Sender<InputEvent>,
+    events: Vec<InputEvent>,
+) -> bool {
+    for event in events {
+        tracing::debug!("tty_input: key event {:?}", event);
+        if tx.send(event).is_err() {
+            tracing::warn!("tty_input: channel closed");
+            return false;
+        }
+    }
+    true
+}
+
+#[cfg(unix)]
 fn read_tty_events(
     tx: crossbeam_channel::Sender<InputEvent>,
     stop: Arc<AtomicBool>,
@@ -329,6 +400,13 @@ fn read_tty_events(
     let mut last_size = crossterm::terminal::size().ok();
 
     while !stop.load(Ordering::Relaxed) {
+        let now = Instant::now();
+        let mut elapsed_events = Vec::new();
+        decoder.advance_time(now, &mut elapsed_events);
+        if !send_raw_tty_events(&tx, elapsed_events) {
+            return;
+        }
+
         if let Ok(size) = crossterm::terminal::size()
             && last_size != Some(size)
         {
@@ -350,7 +428,8 @@ fn read_tty_events(
             events: libc::POLLIN,
             revents: 0,
         };
-        let poll_result = unsafe { libc::poll(&mut pollfd, 1, 50) };
+        let poll_timeout_ms = raw_tty_poll_timeout_ms(&decoder, Instant::now());
+        let poll_result = unsafe { libc::poll(&mut pollfd, 1, poll_timeout_ms) };
         if poll_result < 0 {
             let err = io::Error::last_os_error();
             if err.kind() != io::ErrorKind::Interrupted {
@@ -386,13 +465,9 @@ fn read_tty_events(
         }
 
         let mut events = Vec::new();
-        decoder.push_bytes(&buf[..nread as usize], &mut events);
-        for event in events {
-            tracing::debug!("tty_input: key event {:?}", event);
-            if tx.send(event).is_err() {
-                tracing::warn!("tty_input: channel closed");
-                return;
-            }
+        decoder.push_bytes_at(&buf[..nread as usize], Instant::now(), &mut events);
+        if !send_raw_tty_events(&tx, events) {
+            return;
         }
     }
 }
@@ -530,6 +605,11 @@ mod tests {
     use super::*;
     use crossterm::event::{KeyEventKind, KeyEventState};
 
+    #[cfg(unix)]
+    fn push_raw_tty_bytes(decoder: &mut RawTtyDecoder, bytes: &[u8], events: &mut Vec<InputEvent>) {
+        decoder.push_bytes_at(bytes, Instant::now(), events);
+    }
+
     fn key_event(code: KeyCode, modifiers: KeyModifiers) -> KeyEvent {
         KeyEvent {
             code,
@@ -595,7 +675,7 @@ mod tests {
         let input = vec![b'a'; 1500];
         let mut events = Vec::new();
 
-        decoder.push_bytes(&input, &mut events);
+        push_raw_tty_bytes(&mut decoder, &input, &mut events);
 
         assert_eq!(events.len(), input.len());
         for event in events {
@@ -619,7 +699,7 @@ mod tests {
         // [M-return]/[M-tab] function-key-map entry to translate those back).
         let mut decoder = RawTtyDecoder::default();
         let mut events = Vec::new();
-        decoder.push_bytes(&[0x1b, b'\r', 0x1b, b'\t'], &mut events);
+        push_raw_tty_bytes(&mut decoder, &[0x1b, b'\r', 0x1b, b'\t'], &mut events);
         assert_eq!(events.len(), 2);
         match events[0] {
             InputEvent::Key {
@@ -641,7 +721,7 @@ mod tests {
         }
         // The UNPREFIXED RET/TAB bytes still map to the function-key symbols.
         let mut plain = Vec::new();
-        RawTtyDecoder::default().push_bytes(&[b'\r'], &mut plain);
+        push_raw_tty_bytes(&mut RawTtyDecoder::default(), &[b'\r'], &mut plain);
         match plain[0] {
             InputEvent::Key { keysym, .. } => assert_eq!(keysym, XK_RETURN),
             _ => panic!("expected key event"),
@@ -654,7 +734,7 @@ mod tests {
         let mut decoder = RawTtyDecoder::default();
         let mut events = Vec::new();
 
-        decoder.push_bytes(&[0x1b, 0x7f, 0x1b, 0x1c], &mut events);
+        push_raw_tty_bytes(&mut decoder, &[0x1b, 0x7f, 0x1b, 0x1c], &mut events);
 
         assert_eq!(events.len(), 2);
         match events[0] {
@@ -683,7 +763,11 @@ mod tests {
         let mut decoder = RawTtyDecoder::default();
         let mut events = Vec::new();
 
-        decoder.push_bytes(b"\x1b[A\x1b[B\x1b[C\x1b[D\x1b[21~", &mut events);
+        push_raw_tty_bytes(
+            &mut decoder,
+            b"\x1b[A\x1b[B\x1b[C\x1b[D\x1b[21~",
+            &mut events,
+        );
 
         let keysyms: Vec<u32> = events
             .into_iter()
@@ -701,7 +785,7 @@ mod tests {
         let mut decoder = RawTtyDecoder::default();
         let mut events = Vec::new();
 
-        decoder.push_bytes(&[b'\n', b'\r'], &mut events);
+        push_raw_tty_bytes(&mut decoder, &[b'\n', b'\r'], &mut events);
 
         let keysyms: Vec<u32> = events
             .into_iter()
@@ -719,7 +803,7 @@ mod tests {
         let mut decoder = RawTtyDecoder::default();
         let mut events = Vec::new();
 
-        decoder.push_bytes("ä中".as_bytes(), &mut events);
+        push_raw_tty_bytes(&mut decoder, "ä中".as_bytes(), &mut events);
 
         let keysyms: Vec<u32> = events
             .into_iter()
@@ -729,5 +813,131 @@ mod tests {
             })
             .collect();
         assert_eq!(keysyms, ['ä' as u32, '中' as u32]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn raw_tty_decoder_emits_standalone_escape_after_timeout() {
+        let started_at = std::time::Instant::now();
+        let mut decoder = RawTtyDecoder::default();
+        let mut events = Vec::new();
+
+        decoder.push_bytes_at(&[0x1b], started_at, &mut events);
+        assert!(events.is_empty());
+
+        decoder.advance_time(
+            started_at + TTY_ESCAPE_SEQUENCE_TIMEOUT - Duration::from_millis(1),
+            &mut events,
+        );
+        assert!(events.is_empty());
+
+        decoder.advance_time(started_at + TTY_ESCAPE_SEQUENCE_TIMEOUT, &mut events);
+        assert_eq!(events.len(), 1);
+        match events[0] {
+            InputEvent::Key {
+                keysym, modifiers, ..
+            } => {
+                assert_eq!(keysym, 0x1b);
+                assert_eq!(modifiers, 0);
+            }
+            _ => panic!("expected key event"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn raw_tty_decoder_reports_deadline_only_while_escape_is_ambiguous() {
+        let started_at = std::time::Instant::now();
+        let mut decoder = RawTtyDecoder::default();
+        let mut events = Vec::new();
+
+        assert_eq!(decoder.next_deadline(), None);
+        decoder.push_bytes_at(&[0x1b], started_at, &mut events);
+        assert_eq!(
+            decoder.next_deadline(),
+            Some(started_at + TTY_ESCAPE_SEQUENCE_TIMEOUT)
+        );
+
+        decoder.push_bytes_at(b"x", started_at + Duration::from_millis(1), &mut events);
+        assert_eq!(decoder.next_deadline(), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn raw_tty_poll_wait_is_bounded_by_decoder_deadline() {
+        let started_at = std::time::Instant::now();
+        let mut decoder = RawTtyDecoder::default();
+        let mut events = Vec::new();
+
+        assert_eq!(raw_tty_poll_timeout_ms(&decoder, started_at), 50);
+        decoder.push_bytes_at(&[0x1b], started_at, &mut events);
+        assert_eq!(
+            raw_tty_poll_timeout_ms(&decoder, started_at + Duration::from_millis(30)),
+            20
+        );
+        assert_eq!(
+            raw_tty_poll_timeout_ms(&decoder, started_at + TTY_ESCAPE_SEQUENCE_TIMEOUT),
+            0
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn raw_tty_decoder_distinguishes_meta_from_late_input() {
+        let started_at = std::time::Instant::now();
+        let mut decoder = RawTtyDecoder::default();
+        let mut events = Vec::new();
+
+        decoder.push_bytes_at(&[0x1b], started_at, &mut events);
+        decoder.push_bytes_at(
+            b"x",
+            started_at + TTY_ESCAPE_SEQUENCE_TIMEOUT - Duration::from_millis(1),
+            &mut events,
+        );
+        assert!(matches!(
+            events.as_slice(),
+            [InputEvent::Key {
+                keysym,
+                modifiers,
+                ..
+            }] if *keysym == u32::from(b'x') && *modifiers == NEOMACS_META_MASK
+        ));
+
+        let mut decoder = RawTtyDecoder::default();
+        let mut events = Vec::new();
+        decoder.push_bytes_at(&[0x1b], started_at, &mut events);
+        decoder.push_bytes_at(b"x", started_at + TTY_ESCAPE_SEQUENCE_TIMEOUT, &mut events);
+        let keys: Vec<(u32, u32)> = events
+            .into_iter()
+            .map(|event| match event {
+                InputEvent::Key {
+                    keysym, modifiers, ..
+                } => (keysym, modifiers),
+                _ => panic!("expected key event"),
+            })
+            .collect();
+        assert_eq!(keys, [(0x1b, 0), (u32::from(b'x'), 0)]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn raw_tty_decoder_accepts_split_csi_sequence_before_deadline() {
+        let started_at = std::time::Instant::now();
+        let mut decoder = RawTtyDecoder::default();
+        let mut events = Vec::new();
+
+        decoder.push_bytes_at(&[0x1b], started_at, &mut events);
+        decoder.push_bytes_at(b"[", started_at + Duration::from_millis(10), &mut events);
+        decoder.push_bytes_at(b"A", started_at + Duration::from_millis(20), &mut events);
+
+        assert!(matches!(
+            events.as_slice(),
+            [InputEvent::Key {
+                keysym: XK_UP,
+                modifiers: 0,
+                ..
+            }]
+        ));
+        assert_eq!(decoder.next_deadline(), None);
     }
 }
