@@ -38,6 +38,13 @@
 (defvar neomacs--startup-gc-ceiling-active nil
   "Non-nil while Neomacs bounds startup GC allocation intervals.")
 
+(defconst neomacs--startup-gc-ceiling-grace-seconds 30
+  "Seconds to cover deferred initialization after `normal-top-level'.")
+
+(defun neomacs--release-startup-gc-ceiling ()
+  "Restore the user's GC allocation interval after startup settles."
+  (setq neomacs--startup-gc-ceiling-active nil))
+
 (defgroup initialization nil
   "Emacs start-up procedure."
   :group 'environment)
@@ -851,10 +858,12 @@ It is the default value of the variable `top-level'."
 	(unless inhibit-startup-hooks
 	  (run-hooks 'window-setup-hook))))
 
-    ;; Neomacs bounds GC allocation intervals while the complete GNU startup
-    ;; sequence runs, including after-init and window setup hooks.  Release the
-    ;; internal ceiling here; the user's `gc-cons-threshold' remains unchanged.
-    (setq neomacs--startup-gc-ceiling-active nil)
+    ;; Doom and other configurations continue initialization from timers after
+    ;; the GNU startup hooks return.  Keep Neomacs' internal allocation-interval
+    ;; ceiling through a bounded settling window, then restore the user's
+    ;; `gc-cons-threshold' unchanged.
+    (run-at-time neomacs--startup-gc-ceiling-grace-seconds nil
+                 #'neomacs--release-startup-gc-ceiling)
 
     ;; Subprocesses of Emacs do not have direct access to the terminal, so
     ;; unless told otherwise they should only assume a dumb terminal.

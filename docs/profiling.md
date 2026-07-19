@@ -158,10 +158,10 @@ adjacent `.startup-pairs.tsv` file. Override `RUNS`, `SETTLE_SECONDS`,
 `LOG_REPORT_DIR`, `GC_REPORT_DIR`, `STARTUP_TIMEOUT_SECONDS`, `NEOMACS_BIN`,
 `REPORT`, or `STARTUP_REPORT` when needed.
 
-Neomacs also caps the collector's allocation interval at 4 MiB until GNU's
-`normal-top-level` finishes, including its after-init and window setup hooks.
-This bounds peak arena fragmentation while leaving Lisp's explicit
-post-startup threshold unchanged. For controlled experiments, set
+Neomacs also caps the collector's allocation interval at 4 MiB through GNU's
+`normal-top-level` and a 30-second settling window for deferred startup work.
+This bounds peak arena fragmentation while leaving Lisp's explicit threshold
+unchanged once startup has settled. For controlled experiments, set
 `NEOVM_GC_THRESHOLD_CAP_BYTES` to measure the startup-time versus settled-RSS
 curve without editing the config. This is an opt-in profiling control; normal
 runs apply only the startup ceiling and otherwise honor Lisp's

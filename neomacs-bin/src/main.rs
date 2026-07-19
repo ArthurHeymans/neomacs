@@ -3926,7 +3926,7 @@ fn configure_gnu_startup_state(eval: &mut Context, frame_id: FrameId, startup: &
     // Doom and similar configs deliberately raise `gc-cons-threshold` during
     // startup. Keep the measured arena-fragmentation ceiling active through
     // GNU's complete `normal-top-level`; startup.el clears this private flag
-    // after the final startup/window hooks have run.
+    // after the final startup/window hooks and a bounded settling window.
     eval.set_variable("neomacs--startup-gc-ceiling-active", Value::T);
     let argv_strings = startup.forwarded_args.to_vec();
     let argv = argv_strings

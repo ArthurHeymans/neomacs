@@ -85,7 +85,8 @@ const LEXENV_SPECIAL_CACHE_CAPACITY: usize = 16;
 const GC_DEFAULT_THRESHOLD_BYTES: usize = 100_000 * std::mem::size_of::<usize>();
 const GC_THRESHOLD_FLOOR_BYTES: usize = GC_DEFAULT_THRESHOLD_BYTES / 10;
 /// Bound peak arena growth while startup configs deliberately defer Lisp GC.
-/// The host releases the ceiling when GNU's `normal-top-level` finishes.
+/// The host releases the ceiling after GNU's `normal-top-level` and a bounded
+/// settling window for deferred startup work.
 const GC_STARTUP_THRESHOLD_CEILING_BYTES: usize = 4 * 1024 * 1024;
 const GC_HI_THRESHOLD_BYTES: usize = (i64::MAX as usize) / 2;
 const GC_PERCENT_SCALE: u64 = 1_000_000;
