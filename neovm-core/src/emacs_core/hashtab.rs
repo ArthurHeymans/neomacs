@@ -871,9 +871,11 @@ pub(crate) fn builtin_mapatoms(eval: &mut super::eval::Context, args: Vec<Value>
     }
     let (func, symbols) = collect_mapatoms_symbols(eval, args)?;
     eval.push_specpdl_root(func);
-    for sym in &symbols {
-        eval.push_specpdl_root(*sym);
-    }
+    // The snapshot contains only immediate `SymId` values. Symbols live in
+    // the process-global append-only registry, so they cannot be reclaimed by
+    // a callback-triggered GC and do not belong in the managed-object root
+    // stack. Rooting every symbol made one Doom startup permanently retain a
+    // multi-megabyte root-vector capacity after `mapatoms` returned.
     let result = (|| -> EvalResult {
         for sym in symbols {
             eval.apply1(func, sym)?;

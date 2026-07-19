@@ -5176,9 +5176,8 @@ impl<'a> Vm<'a> {
             crate::emacs_core::hashtab::collect_mapatoms_symbols(&self.ctx, args.to_vec())?;
         self.with_dynamic_vm_roots(|vm| {
             vm.push_dynamic_vm_root(func);
-            for sym in symbols.iter().copied() {
-                vm.push_dynamic_vm_root(sym);
-            }
+            // `symbols` contains immediate IDs backed by the append-only
+            // global symbol registry, not GC-managed heap pointers.
             for sym in symbols {
                 vm.call_function1(func, sym)?;
             }
