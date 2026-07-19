@@ -828,12 +828,17 @@ impl Default for SymbolCacheEntry {
 }
 
 const SYMBOL_NAME_CACHE_MISSING: u32 = u32::MAX;
+// Canonical `nil` has SymId 0. Leaving its name-cache slot at zero merely
+// makes that one lookup miss the cache; every other canonical SymId can be
+// stored directly, which keeps this dense NameId-indexed table at four bytes
+// per entry instead of eight for `Option<SymId>`.
+const NAME_CANONICAL_CACHE_MISSING: u32 = NIL_SYM_ID.0;
 
 thread_local! {
     static THREAD_CACHE_EPOCH: RefCell<u64> = const { RefCell::new(0) };
     static INTERN_STR_CACHE: RefCell<FxHashMap<&'static str, SymId>> = RefCell::new(FxHashMap::default());
     static SYMBOL_CACHE: RefCell<Vec<SymbolCacheEntry>> = const { RefCell::new(Vec::new()) };
-    static NAME_CANONICAL_SYMBOL_CACHE: RefCell<Vec<Option<SymId>>> = const { RefCell::new(Vec::new()) };
+    static NAME_CANONICAL_SYMBOL_CACHE: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
 }
 
 fn ensure_thread_local_cache_epoch_current() {
@@ -937,7 +942,11 @@ fn thread_local_record_canonical(id: SymId, is_canonical: bool) {
 fn thread_local_canonical_symbol_for_name(id: NameId) -> Option<SymId> {
     NAME_CANONICAL_SYMBOL_CACHE.with(|cache| {
         let cache = cache.borrow();
-        cache.get(id.0 as usize).and_then(|slot| *slot)
+        cache
+            .get(id.0 as usize)
+            .copied()
+            .filter(|&sym_id| sym_id != NAME_CANONICAL_CACHE_MISSING)
+            .map(SymId)
     })
 }
 
@@ -947,9 +956,9 @@ fn thread_local_record_canonical_symbol_for_name(id: NameId, sym_id: SymId) {
         let mut cache = cache.borrow_mut();
         let idx = id.0 as usize;
         if cache.len() <= idx {
-            cache.resize(idx + 1, None);
+            cache.resize(idx + 1, NAME_CANONICAL_CACHE_MISSING);
         }
-        cache[idx] = Some(sym_id);
+        cache[idx] = sym_id.0;
     });
 }
 

@@ -34,6 +34,26 @@ fn dense_thread_symbol_cache_stays_within_two_words() {
 }
 
 #[test]
+fn dense_name_to_symbol_cache_uses_raw_u32_slots() {
+    assert_eq!(std::mem::size_of::<u32>(), 4);
+    assert_eq!(std::mem::size_of::<Option<SymId>>(), 8);
+}
+
+#[test]
+fn name_to_symbol_cache_round_trips_nonzero_ids() {
+    let name_id = NameId(7);
+    let sym_id = SymId(11);
+    thread_local_record_canonical_symbol_for_name(name_id, sym_id);
+    assert_eq!(
+        thread_local_canonical_symbol_for_name(name_id),
+        Some(sym_id)
+    );
+
+    thread_local_record_canonical_symbol_for_name(name_id, NIL_SYM_ID);
+    assert_eq!(thread_local_canonical_symbol_for_name(name_id), None);
+}
+
+#[test]
 fn runtime_intern() {
     crate::test_utils::init_test_tracing();
     let a = intern("hello");
