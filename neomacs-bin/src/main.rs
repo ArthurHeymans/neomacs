@@ -21,8 +21,6 @@ cfg_select! {
     feature = "mimalloc" => {
         #[global_allocator]
         static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
-        mod mimalloc_policy;
     }
     _ => {}
 }

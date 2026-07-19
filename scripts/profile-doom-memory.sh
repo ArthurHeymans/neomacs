@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Compare Neomacs' Linux mimalloc policy against mimalloc's eager-commit
-# default while loading the user's real Doom configuration.
+# Compare mimalloc's commit-on-demand and eager-commit policies while loading
+# the user's real Doom configuration.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -8,6 +8,8 @@ neomacs_bin="${NEOMACS_BIN:-$repo_root/target/release/neomacs}"
 runs="${RUNS:-5}"
 settle_seconds="${SETTLE_SECONDS:-30}"
 startup_timeout_seconds="${STARTUP_TIMEOUT_SECONDS:-180}"
+max_startup_regression_pct="${MAX_STARTUP_REGRESSION_PCT:-}"
+minimum_startup_gate_runs=20
 
 if [[ "$(uname -s)" != "Linux" ]]; then
   echo "this profiler reads Linux /proc memory metrics" >&2
@@ -25,11 +27,21 @@ if [[ ! "$runs" =~ ^[1-9][0-9]*$ ]]; then
   echo "RUNS must be a positive integer" >&2
   exit 1
 fi
+if [[ -n "$max_startup_regression_pct" ]] \
+  && [[ ! "$max_startup_regression_pct" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]]; then
+  echo "MAX_STARTUP_REGRESSION_PCT must be a non-negative number" >&2
+  exit 1
+fi
+if [[ -n "$max_startup_regression_pct" ]] && (( runs < minimum_startup_gate_runs )); then
+  echo "a startup regression gate requires RUNS >= $minimum_startup_gate_runs" >&2
+  exit 1
+fi
 
 neomacs_bin="$(cd "$(dirname "$neomacs_bin")" && pwd)/$(basename "$neomacs_bin")"
 mkdir -p "$repo_root/target/profiling"
 work_dir="$(mktemp -d "$repo_root/target/profiling/doom-memory.XXXXXX")"
 report="${REPORT:-$repo_root/target/profiling/doom-memory.tsv}"
+startup_report="${STARTUP_REPORT:-$report.startup-pairs.tsv}"
 active_pid=""
 active_script_pid=""
 
@@ -70,22 +82,24 @@ run_sample() {
   local log="$work_dir/$mode-$pair.log"
   local marker_elisp="$marker"
   local form command quoted_bin quoted_form
-  local start_ns deadline now_ns startup_ms smaps snapshot
+  local start_ms deadline ready_ms startup_ms smaps snapshot
 
   marker_elisp="${marker_elisp//\\/\\\\}"
   marker_elisp="${marker_elisp//\"/\\\"}"
-  form="(progn (garbage-collect) (with-temp-file \"$marker_elisp\" (insert \"ready\")))"
+  form="(progn (garbage-collect) (with-temp-file \"$marker_elisp\" (insert (number-to-string (truncate (* 1000 (float-time)))))))"
   printf -v quoted_bin '%q' "$neomacs_bin"
   printf -v quoted_form '%q' "$form"
 
   # Keep ambient tracing configuration from becoming part of the workload.
   command="exec env -u MIMALLOC_ARENA_EAGER_COMMIT RUST_LOG=warn"
-  if [[ "$mode" == "eager-commit" ]]; then
+  if [[ "$mode" == "commit-on-demand" ]]; then
+    command+=" MIMALLOC_ARENA_EAGER_COMMIT=0"
+  else
     command+=" MIMALLOC_ARENA_EAGER_COMMIT=2"
   fi
   command+=" $quoted_bin -nw --eval $quoted_form"
 
-  start_ns="$(date +%s%N)"
+  start_ms=$(($(date +%s%N) / 1000000))
   script --quiet --return --command "$command" /dev/null >"$log" 2>&1 &
   active_script_pid=$!
   deadline=$((SECONDS + startup_timeout_seconds))
@@ -110,8 +124,12 @@ run_sample() {
     return 1
   fi
 
-  now_ns="$(date +%s%N)"
-  startup_ms=$(((now_ns - start_ns) / 1000000))
+  ready_ms="$(<"$marker")"
+  if [[ ! "$ready_ms" =~ ^[0-9]+$ ]]; then
+    echo "$mode run $pair wrote an invalid startup timestamp: $ready_ms" >&2
+    return 1
+  fi
+  startup_ms=$((ready_ms - start_ms))
   sleep "$settle_seconds"
   smaps="/proc/$active_pid/smaps_rollup"
   if [[ ! -r "$smaps" ]]; then
@@ -147,6 +165,32 @@ median_for() {
       }'
 }
 
+write_startup_pairs() {
+  awk -F '\t' -v runs="$runs" '
+    $1 == "commit-on-demand" { commit[$2] = $3 }
+    $1 == "eager-commit" { eager[$2] = $3 }
+    END {
+      print "pair\tcommit_on_demand_ms\teager_commit_ms\tdelta_ms\tregression_pct"
+      for (pair = 1; pair <= runs; pair++) {
+        delta = commit[pair] - eager[pair]
+        regression = 100 * delta / eager[pair]
+        printf "%d\t%d\t%d\t%d\t%.3f\n", pair, commit[pair], eager[pair], delta, regression
+      }
+    }
+  ' "$report" >"$startup_report"
+}
+
+paired_startup_median() {
+  tail -n +2 "$startup_report" \
+    | cut -f 5 \
+    | sort -n \
+    | awk '{ values[NR] = $1 } END {
+        if (NR % 2) median = values[(NR + 1) / 2];
+        else median = (values[NR / 2] + values[NR / 2 + 1]) / 2;
+        printf "%.3f", median;
+      }'
+}
+
 printf 'mode\tpair\tstartup_ms\trss_kib\tpss_kib\tprivate_kib\tanonymous_kib\tswap_kib\n' >"$report"
 echo "Writing samples to $report"
 echo "Each mode gets $runs runs; samples are interleaved to reduce ordering bias."
@@ -161,6 +205,9 @@ for ((pair = 1; pair <= runs; pair++)); do
   fi
 done
 
+write_startup_pairs
+paired_regression_pct="$(paired_startup_median)"
+
 echo
 echo "Median results (MiB are derived from Linux KiB counters):"
 printf '%-18s %12s %12s %12s %12s\n' mode startup_ms rss_mib private_mib anonymous_mib
@@ -171,5 +218,18 @@ for mode in commit-on-demand eager-commit; do
   anon_kib="$(median_for "$mode" 7)"
   awk -v mode="$mode" -v startup="$startup_ms" -v rss="$rss_kib" \
     -v private="$private_kib" -v anon="$anon_kib" \
-    'BEGIN { printf "%-18s %12.0f %12.1f %12.1f %12.1f\n", mode, startup, rss / 1024, private / 1024, anon / 1024 }'
+      'BEGIN { printf "%-18s %12.0f %12.1f %12.1f %12.1f\n", mode, startup, rss / 1024, private / 1024, anon / 1024 }'
 done
+echo
+echo "Paired startup median: ${paired_regression_pct}% regression (negative favors commit-on-demand)."
+echo "Paired startup samples: $startup_report"
+
+if [[ -n "$max_startup_regression_pct" ]]; then
+  echo "Startup regression limit: ${max_startup_regression_pct}% across $runs pairs."
+  if awk -v actual="$paired_regression_pct" -v limit="$max_startup_regression_pct" \
+    'BEGIN { exit !(actual > limit) }'; then
+    echo "startup regression gate failed" >&2
+    exit 1
+  fi
+  echo "Startup regression gate passed."
+fi
