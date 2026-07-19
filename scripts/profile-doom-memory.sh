@@ -123,7 +123,7 @@ run_sample() {
     gc_report="$gc_report_dir/$mode-$pair.gc-runtime.el"
     gc_report_elisp="${gc_report//\\/\\\\}"
     gc_report_elisp="${gc_report_elisp//\"/\\\"}"
-    form+=" (with-temp-file \"$gc_report_elisp\" (prin1 (list (cons 'gc-cons-threshold gc-cons-threshold) (cons 'gc-cons-percentage gc-cons-percentage) (cons 'gcs-done gcs-done) (cons 'gc-elapsed gc-elapsed)) (current-buffer)))"
+    form+=" (with-temp-file \"$gc_report_elisp\" (prin1 (list (cons 'gc-cons-threshold gc-cons-threshold) (cons 'gc-cons-percentage gc-cons-percentage) (cons 'startup-gc-ceiling-active neomacs--startup-gc-ceiling-active) (cons 'gcs-done gcs-done) (cons 'gc-elapsed gc-elapsed)) (current-buffer)))"
   fi
   form+=" (with-temp-file \"$marker_elisp\" (insert (number-to-string (truncate (* 1000 (float-time)))))))"
   if (( profile_delay_seconds > 0 )); then
