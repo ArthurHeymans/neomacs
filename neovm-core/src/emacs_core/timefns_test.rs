@@ -1409,21 +1409,23 @@ fn time_add_mixed_resolutions_uses_exact_rational() {
 fn time_arith_collapses_to_integer_for_whole_second_lists() {
     crate::test_utils::init_test_tracing();
     // GNU collapses HZ back to 1 when the result is whole seconds:
-    // (time-add (encode-time 0 0 0 1 1 2024 nil) (seconds-to-time 86400))
-    //   => 1704171600 (a plain integer, NOT a (HI LO ...) list).
+    // Use an explicit UTC zone so the epoch assertions do not depend on the
+    // test runner's local timezone.
+    // (time-add (encode-time 0 0 0 1 1 2024 t) (seconds-to-time 86400))
+    //   => 1704153600 (a plain integer, NOT a (HI LO ...) list).
     let results = bootstrap_eval(
         r#"
-        (let ((t1 (encode-time 0 0 0 1 1 2024 nil)))
+        (let ((t1 (encode-time 0 0 0 1 1 2024 t)))
           (time-add t1 (seconds-to-time 86400)))
-        (let ((t1 (encode-time 0 0 0 1 1 2024 nil)))
+        (let ((t1 (encode-time 0 0 0 1 1 2024 t)))
           (time-add t1 (seconds-to-time 3600)))
-        (let ((t1 (encode-time 0 0 0 2 1 2024 nil))
-              (t2 (encode-time 0 0 0 1 1 2024 nil)))
+        (let ((t1 (encode-time 0 0 0 2 1 2024 t))
+              (t2 (encode-time 0 0 0 1 1 2024 t)))
           (time-subtract t1 t2))
         "#,
     );
-    assert_eq!(results[0], "OK 1704171600");
-    assert_eq!(results[1], "OK 1704088800");
+    assert_eq!(results[0], "OK 1704153600");
+    assert_eq!(results[1], "OK 1704070800");
     assert_eq!(results[2], "OK 86400");
 }
 
