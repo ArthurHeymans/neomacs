@@ -3304,6 +3304,7 @@ dependencies = [
  "libc",
  "libmimalloc-sys",
  "mimalloc",
+ "neomacs-allocator",
  "neomacs-diagnostics",
  "neomacs-display-protocol",
  "neomacs-display-runtime",
@@ -3316,6 +3317,14 @@ dependencies = [
  "tempfile",
  "tikv-jemallocator",
  "tracing",
+]
+
+[[package]]
+name = "neomacs-allocator"
+version = "0.0.13"
+dependencies = [
+ "mimalloc",
+ "tikv-jemallocator",
 ]
 
 [[package]]

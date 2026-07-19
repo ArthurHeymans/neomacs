@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "neomacs-allocator",
     "neomacs-bin",
     "neomacs-display-runtime",
     "neomacs-display-protocol",
@@ -45,6 +46,7 @@ unsafe_op_in_unsafe_fn = "warn"
 
 [workspace.dependencies]
 # Internal crates
+neomacs-allocator = { path = "neomacs-allocator" }
 neovm-core = { path = "neovm-core", default-features = false }
 neovm-host-abi = { path = "neovm-host-abi" }
 neovm-oracle-tests = { path = "neovm-oracle-tests" }

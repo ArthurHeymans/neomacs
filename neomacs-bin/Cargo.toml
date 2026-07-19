@@ -12,10 +12,7 @@ build = "build.rs"
 default = ["video", "jit", "platform-allocator"]
 # Use the memory-efficient allocator on Linux without changing the established
 # allocator on macOS and Windows.
-platform-allocator = [
-    "dep:linux-default-jemalloc",
-    "dep:other-default-mimalloc",
-]
+platform-allocator = ["dep:neomacs-allocator"]
 # Use mimalloc as the global allocator. Select this instead of `jemalloc` when
 # allocation throughput matters more than settled resident memory.
 mimalloc = ["dep:mimalloc", "dep:libmimalloc-sys"]
@@ -68,6 +65,7 @@ test = false
 [dependencies]
 neomacs-display-protocol.workspace = true
 neomacs-display-runtime = { workspace = true, default-features = false }
+neomacs-allocator = { workspace = true, optional = true }
 neomacs-layout-engine.workspace = true
 neomacs-diagnostics.workspace = true
 neovm-core.workspace = true
@@ -82,12 +80,6 @@ tracing.workspace = true
 crossbeam-channel.workspace = true
 libc.workspace = true
 crossterm = "0.29"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-linux-default-jemalloc = { package = "tikv-jemallocator", version = "0.7", optional = true, default-features = false }
-
-[target.'cfg(not(target_os = "linux"))'.dependencies]
-other-default-mimalloc = { package = "mimalloc", version = "0.1", optional = true, default-features = false }
 
 [dev-dependencies]
 hostname.workspace = true

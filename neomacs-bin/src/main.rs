@@ -28,13 +28,10 @@ cfg_select! {
             "features `platform-allocator`, `mimalloc`, and `jemalloc` are mutually exclusive"
         );
     }
-    all(feature = "platform-allocator", target_os = "linux") => {
-        #[global_allocator]
-        static GLOBAL: linux_default_jemalloc::Jemalloc = linux_default_jemalloc::Jemalloc;
-    }
     feature = "platform-allocator" => {
         #[global_allocator]
-        static GLOBAL: other_default_mimalloc::MiMalloc = other_default_mimalloc::MiMalloc;
+        static GLOBAL: neomacs_allocator::PlatformAllocator =
+            neomacs_allocator::PLATFORM_ALLOCATOR;
     }
     all(feature = "mimalloc", target_os = "linux") => {
         // mimalloc initializes its environment options from an ELF constructor
