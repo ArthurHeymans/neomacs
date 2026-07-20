@@ -338,7 +338,7 @@ impl WgpuRenderer {
     /// (declarative specs re-resolve on the next redisplay walk). One victim
     /// per iteration so the shrinking shortfall requeries the candidate
     /// prefix; never the surface just created.
-    fn register_surface_bytes(
+    pub(super) fn register_surface_bytes(
         &mut self,
         id: u32,
         width_px: u32,

@@ -1102,7 +1102,28 @@ impl WgpuRenderer {
 
     /// Update the display scale factor (for multi-monitor DPI changes)
     pub fn set_scale_factor(&mut self, scale_factor: f32) {
+        // Threshold above float noise but well below any real DPI step
+        // (1.0 → 1.25 → 2.0 …); avoids needless texture recreation.
+        let changed = (scale_factor - self.scale_factor).abs() > 0.001;
         self.scale_factor = scale_factor;
+        if !changed {
+            return;
+        }
+        // A monitor/DPI change: existing shader surfaces froze their physical
+        // size at create, so resample them to the new scale to stay crisp,
+        // then re-account MediaBudget for each surface whose byte cost changed
+        // (image cache owns the composite layout/sampler these surfaces use).
+        let rescaled = self.caches.surface.rescale(
+            &self.device,
+            self.caches.image.bind_group_layout(),
+            self.caches.image.sampler(),
+            self.surface_format,
+            scale_factor,
+        );
+        for (id, width_px, height_px) in rescaled {
+            let recreatable = self.surface_recreatable.get(&id).copied().unwrap_or(false);
+            self.register_surface_bytes(id, width_px, height_px, recreatable);
+        }
     }
 
     /// Set the absolute time this frame's animation samples target

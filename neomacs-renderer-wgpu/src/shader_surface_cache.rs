@@ -137,6 +137,12 @@ pub struct CachedShaderSurface {
     dirty: bool,
     /// Last time the composite phase drew this surface (plus grace).
     active_until: Option<Instant>,
+    /// Logical (scale-independent) size the surface was created with. Physical
+    /// `width_px`/`height_px` are derived from it via `clamp_size`; kept so a
+    /// DPI change can recompute the physical size EXACTLY as create would,
+    /// with no accumulating round-trip drift across repeated rescales.
+    width: u32,
+    height: u32,
     width_px: u32,
     height_px: u32,
     scale: f32,
@@ -361,6 +367,8 @@ impl ShaderSurfaceCache {
                 animate,
                 dirty: true,
                 active_until: None,
+                width,
+                height,
                 width_px,
                 height_px,
                 scale: if scale.is_finite() && scale > 0.0 {
@@ -439,6 +447,10 @@ impl ShaderSurfaceCache {
                 animate: false,
                 dirty: false,
                 active_until: None,
+                // Pixel surfaces are content-defined (the texture IS the data),
+                // so logical == physical and DPI rescale leaves them untouched.
+                width,
+                height,
                 width_px: width,
                 height_px: height,
                 scale: 1.0,
@@ -446,6 +458,54 @@ impl ShaderSurfaceCache {
         );
         tracing::info!("pixel surface {id} created: {width}x{height}px");
         Ok((width, height))
+    }
+
+    /// Resample every shader surface's render target to a new scale factor
+    /// (DPI change / monitor move). Physical size is recomputed from the
+    /// retained logical size EXACTLY as `create_shader` would at the new
+    /// scale — no round-trip drift across repeated rescales — and `iTime`,
+    /// uniforms, mouse, and animation state are preserved (the next
+    /// `render_pending` rewrites `iResolution` from the updated fields, and
+    /// re-renders because `dirty` is set). Pixel surfaces are content-defined
+    /// and left untouched. Surface-to-surface `iChannel0` wiring self-heals:
+    /// the internal channel lookup reads `surface.view`, which is replaced in
+    /// place. Returns `(id, new_width_px, new_height_px)` for each surface
+    /// whose physical size actually changed, so the caller can re-account
+    /// `MediaBudget` for the new byte cost.
+    pub fn rescale(
+        &mut self,
+        device: &wgpu::Device,
+        composite_layout: &wgpu::BindGroupLayout,
+        composite_sampler: &wgpu::Sampler,
+        target_format: wgpu::TextureFormat,
+        new_scale: f32,
+    ) -> Vec<(u32, u32, u32)> {
+        let new_scale = if new_scale.is_finite() && new_scale > 0.0 {
+            new_scale
+        } else {
+            1.0
+        };
+        let mut rescaled = Vec::new();
+        for (id, surface) in &mut self.surfaces {
+            if surface.pipeline.is_none() {
+                continue;
+            }
+            let (new_w, new_h) = Self::clamp_size(surface.width, surface.height, new_scale);
+            surface.scale = new_scale;
+            if new_w == surface.width_px && new_h == surface.height_px {
+                continue;
+            }
+            let (texture, view) = Self::make_texture(device, new_w, new_h, target_format, true);
+            surface.composite_bind_group =
+                Self::composite_bind_group(device, composite_layout, composite_sampler, &view);
+            surface.texture = texture;
+            surface.view = view;
+            surface.width_px = new_w;
+            surface.height_px = new_h;
+            surface.dirty = true;
+            rescaled.push((*id, new_w, new_h));
+        }
+        rescaled
     }
 
     /// Update one named uniform; unknown names are ignored with a warning
@@ -712,3 +772,7 @@ impl CachedShaderSurface {
         self.active_until.is_some_and(|until| now < until)
     }
 }
+
+#[cfg(test)]
+#[path = "shader_surface_cache_test.rs"]
+mod tests;
