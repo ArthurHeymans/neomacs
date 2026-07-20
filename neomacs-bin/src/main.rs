@@ -1819,6 +1819,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                         width: request.width,
                         height: request.height,
                         animate: request.animate,
+                        fps: request.fps,
                         // Safe to evict under media-budget pressure: the
                         // declarative resolver re-runs on every redisplay
                         // walk of a visible spec, so an evicted-but-visible
@@ -1932,6 +1933,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                 width: request.width,
                 height: request.height,
                 animate: request.animate,
+                fps: request.fps,
                 // Never evict imperative surfaces: Lisp holds the bare id
                 // (`neomacs-surface-create`) and nothing would ever recreate
                 // the texture — eviction would blank it permanently.

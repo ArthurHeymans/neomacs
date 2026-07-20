@@ -1567,6 +1567,10 @@ pub struct ShaderSurfaceCreateRequest {
     pub width: u32,
     pub height: u32,
     pub animate: bool,
+    /// Per-surface animation frame-rate cap (`:fps`), if any. `None` renders
+    /// at the display refresh rate; `Some(n)` re-renders at most n times/sec
+    /// and lets the compositor idle between (battery).
+    pub fps: Option<u32>,
 }
 
 /// Declarative shader-surface resolution: a `(surface :shader …)` display
@@ -1583,6 +1587,9 @@ pub struct SurfaceResolveRequest {
     pub width: u32,
     pub height: u32,
     pub animate: bool,
+    /// Per-surface animation frame-rate cap (`:fps`), part of the memo key so
+    /// specs differing only by cap are distinct surfaces.
+    pub fps: Option<u32>,
     /// Media sampled as `iChannel0` (resolved to a cache id before memoizing,
     /// so the memo key distinguishes different sources).
     pub channel0: Option<(SurfaceChannelKind, u32)>,

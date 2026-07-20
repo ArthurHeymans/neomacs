@@ -283,6 +283,7 @@ impl WgpuRenderer {
         width: u32,
         height: u32,
         animate: bool,
+        fps: Option<u32>,
         channel0: Option<crate::shader_surface::SurfaceChannelSource>,
         recreatable: bool,
     ) -> Result<(), String> {
@@ -301,6 +302,7 @@ impl WgpuRenderer {
             height,
             self.scale_factor,
             animate,
+            fps,
             channel0,
         )?;
         self.register_surface_bytes(id, width_px, height_px, recreatable);

@@ -487,6 +487,10 @@ pub enum AssetCommand {
         width: u32,
         height: u32,
         animate: bool,
+        /// Per-surface animation frame-rate cap (`:fps`); `None` = display
+        /// refresh. Throttles both the surface's own re-render and the
+        /// compositor demand cadence when it is the only active demand.
+        fps: Option<u32>,
         /// Whether the media-budget eviction driver may free this surface
         /// under memory pressure. Only the declarative display-spec resolver
         /// sends true: it re-runs on every redisplay walk of a visible spec

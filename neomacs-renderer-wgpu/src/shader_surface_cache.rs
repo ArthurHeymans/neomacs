@@ -133,6 +133,14 @@ pub struct CachedShaderSurface {
     elapsed: f32,
     frame_index: u32,
     animate: bool,
+    /// Per-surface animation rate cap (`:fps`). `None` re-renders every frame
+    /// (display refresh); `Some(n)` re-renders at most n times/sec.
+    fps: Option<u32>,
+    /// When this surface last actually re-rendered — the `:fps` cap is
+    /// measured from here, and `iTime` advances by the real wall-time since
+    /// it, so a capped cadence still plays at correct speed (just fewer
+    /// frames). `None` until the first render.
+    last_render: Option<Instant>,
     /// Needs one render even if not animating (created / uniform changed).
     dirty: bool,
     /// Last time the composite phase drew this surface (plus grace).
@@ -160,7 +168,6 @@ pub struct ShaderSurfaceCache {
     /// Surface whose `iMouse.zw` is currently held positive by a button
     /// press; `set_mouse_release` negates it and clears this.
     pressed: Option<u32>,
-    last_tick: Option<Instant>,
 }
 
 impl ShaderSurfaceCache {
@@ -213,7 +220,6 @@ impl ShaderSurfaceCache {
             channel_sampler,
             fallback_channel_view,
             pressed: None,
-            last_tick: None,
         }
     }
 
@@ -301,6 +307,7 @@ impl ShaderSurfaceCache {
         height: u32,
         scale: f32,
         animate: bool,
+        fps: Option<u32>,
         channel0: Option<SurfaceChannelSource>,
     ) -> Result<(u32, u32), String> {
         let (width_px, height_px) = Self::clamp_size(width, height, scale);
@@ -365,6 +372,8 @@ impl ShaderSurfaceCache {
                 elapsed: 0.0,
                 frame_index: 0,
                 animate,
+                fps,
+                last_render: None,
                 dirty: true,
                 active_until: None,
                 width,
@@ -445,6 +454,8 @@ impl ShaderSurfaceCache {
                 elapsed: 0.0,
                 frame_index: 0,
                 animate: false,
+                fps: None,
+                last_render: None,
                 dirty: false,
                 active_until: None,
                 // Pixel surfaces are content-defined (the texture IS the data),
@@ -654,11 +665,6 @@ impl ShaderSurfaceCache {
         external: &std::collections::HashMap<SurfaceChannelSource, wgpu::TextureView>,
     ) -> usize {
         let now = Instant::now();
-        let dt = self
-            .last_tick
-            .map(|t| now.duration_since(t).as_secs_f32().clamp(0.0, 0.1))
-            .unwrap_or(0.0);
-        self.last_tick = Some(now);
 
         let mut pending: Vec<u32> = Vec::new();
         for (id, surface) in &mut self.surfaces {
@@ -671,9 +677,29 @@ impl ShaderSurfaceCache {
             if !surface.dirty && !animating {
                 continue;
             }
-            if animating {
-                surface.elapsed += dt;
+            // `:fps` cap — skip an animated re-render arriving sooner than
+            // 1/fps since the last one. A dirty surface always renders
+            // (create / uniform change / DPI rescale), regardless of cap.
+            if !surface.dirty && animating {
+                if let (Some(fps), Some(last)) = (surface.fps, surface.last_render) {
+                    let min_interval = Duration::from_secs_f32(1.0 / fps.max(1) as f32);
+                    if now.duration_since(last) < min_interval {
+                        continue;
+                    }
+                }
             }
+            // Advance the clock by real wall-time since THIS surface last
+            // rendered, so a capped cadence plays at correct speed (fewer
+            // frames, not slow motion). Uncapped surfaces render every tick,
+            // so this equals the frame delta as before.
+            let surface_dt = surface
+                .last_render
+                .map(|last| now.duration_since(last).as_secs_f32().clamp(0.0, 0.1))
+                .unwrap_or(0.0);
+            if animating {
+                surface.elapsed += surface_dt;
+            }
+            surface.last_render = Some(now);
             surface.frame_index = surface.frame_index.wrapping_add(1);
             surface.dirty = false;
 
@@ -684,7 +710,7 @@ impl ShaderSurfaceCache {
             // uniforms[3] reserved.
             uniforms[4..8].copy_from_slice(&surface.mouse);
             uniforms[8] = surface.elapsed;
-            uniforms[9] = dt;
+            uniforms[9] = if animating { surface_dt } else { 0.0 };
             uniforms[10] = surface.frame_index as f32;
             for (slot, value) in surface.custom.iter().enumerate() {
                 uniforms[12 + slot * 4..12 + slot * 4 + 4].copy_from_slice(value);

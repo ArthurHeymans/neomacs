@@ -72,7 +72,8 @@ fn rescale_resamples_shader_surfaces_and_round_trips_without_drift() {
         120,
         1.0,
         true,
-        None,
+        None, // fps: uncapped
+        None, // channel0
     );
     let Ok((w0, h0)) = created else {
         eprintln!("skipping: device rejected the trivial pipeline: {created:?}");

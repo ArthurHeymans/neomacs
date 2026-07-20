@@ -52,6 +52,7 @@ enum DisplayMediaKey {
     Uniforms,
     Animate,
     Channel0,
+    Fps,
 }
 
 impl DisplayMediaKey {
@@ -524,6 +525,7 @@ pub(crate) fn parse_display_surface_source_layout(
     let mut height = fallback_height.max(1.0);
     let mut animate = true;
     let mut channel0 = None;
+    let mut fps = None;
 
     let mut i = 1usize;
     while i + 1 < items.len() {
@@ -552,6 +554,11 @@ pub(crate) fn parse_display_surface_source_layout(
             Some(DisplayMediaKey::Channel0) => {
                 channel0 = (!value.is_nil()).then_some(value);
             }
+            Some(DisplayMediaKey::Fps) => {
+                fps = parse_image_dimension(value)
+                    .filter(|n| *n > 0)
+                    .map(|n| n as u32);
+            }
             Some(DisplayMediaKey::Width) => {
                 if let Some(parsed) = parse_image_dimension(value) {
                     width = parsed.max(1) as f32;
@@ -575,6 +582,7 @@ pub(crate) fn parse_display_surface_source_layout(
             width: width.round().max(1.0) as u32,
             height: height.round().max(1.0) as u32,
             animate,
+            fps,
             channel0: None,
         },
         channel0_value: channel0,

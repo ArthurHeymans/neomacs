@@ -126,6 +126,8 @@ fn parse_surface_source_layout_full_spec() {
             ]),
             Value::symbol(":animate"),
             Value::NIL,
+            Value::symbol(":fps"),
+            Value::fixnum(30),
             Value::symbol(":width"),
             Value::fixnum(200),
             Value::symbol(":height"),
@@ -137,6 +139,7 @@ fn parse_surface_source_layout_full_spec() {
     .expect("declarative surface layout");
     assert!(layout.request.source.contains("mainImage"));
     assert!(!layout.request.animate);
+    assert_eq!(layout.request.fps, Some(30));
     assert_eq!(layout.request.width, 200);
     assert_eq!(layout.request.height, 80);
     assert_eq!(layout.width, 200.0);
@@ -170,8 +173,31 @@ fn parse_surface_source_layout_defaults_animate_and_dimensions() {
     )
     .expect("declarative surface layout");
     assert!(layout.request.animate);
+    // No :fps -> uncapped (render at display refresh).
+    assert_eq!(layout.request.fps, None);
     assert_eq!(layout.width, 640.0);
     assert_eq!(layout.height, 480.0);
+}
+
+#[test]
+fn parse_surface_source_layout_rejects_nonpositive_fps() {
+    let _eval = neovm_core::emacs_core::Context::new();
+    let layout = parse_display_surface_source_layout(
+        &Value::list(vec![
+            Value::symbol("surface"),
+            Value::symbol(":shader"),
+            Value::string(
+                "fn mainImage(fragCoord: vec2<f32>) -> vec4<f32> { return vec4<f32>(0.0); }",
+            ),
+            Value::symbol(":fps"),
+            Value::fixnum(0),
+        ]),
+        640.0,
+        480.0,
+    )
+    .expect("declarative surface layout");
+    // A non-positive :fps is treated as uncapped, not a 0 Hz freeze.
+    assert_eq!(layout.request.fps, None);
 }
 
 #[test]

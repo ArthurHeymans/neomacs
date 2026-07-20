@@ -455,6 +455,7 @@ impl RenderApp {
                 width,
                 height,
                 animate,
+                fps,
                 recreatable,
             } => {
                 if let Some(ref mut renderer) = self.renderer {
@@ -475,6 +476,7 @@ impl RenderApp {
                             width,
                             height,
                             animate,
+                            fps,
                             *channel0,
                             recreatable,
                         ),

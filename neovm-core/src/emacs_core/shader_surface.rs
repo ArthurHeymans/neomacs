@@ -232,6 +232,12 @@ pub(crate) fn builtin_neomacs_surface_create(eval: &mut Context, args: Vec<Value
     let animate = plist_get(&args, ":animate")
         .map(|value| !value.is_nil())
         .unwrap_or(true);
+    // `:fps N` caps the animation re-render rate; a non-positive or missing
+    // value means uncapped (render at display refresh).
+    let fps = plist_get(&args, ":fps")
+        .and_then(|value| value.as_fixnum())
+        .filter(|n| *n > 0)
+        .map(|n| n as u32);
     if wgsl.is_some() && glsl.is_some() {
         return Err(surface_error(
             "neomacs-surface-create: :shader (WGSL) and :glsl are mutually exclusive",
@@ -308,6 +314,7 @@ pub(crate) fn builtin_neomacs_surface_create(eval: &mut Context, args: Vec<Value
         width,
         height,
         animate,
+        fps,
     };
     let host = eval.display_host.as_ref().ok_or_else(|| {
         surface_error("neomacs-surface-create: no GUI display host in this session")
