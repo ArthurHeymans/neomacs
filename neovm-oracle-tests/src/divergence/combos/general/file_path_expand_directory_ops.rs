@@ -9,7 +9,7 @@ fn deficiency_expand_file_name_relative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"[ORACLE-PROJECT-ROOT]/neovm-oracle-tests/foo/bar\" \"[ORACLE-PROJECT-ROOT]/neovm-oracle-tests/bar\" \"/home/exec/test\")""#
+        r#""OK (\"[ORACLE-PROJECT-ROOT]/neovm-oracle-tests/foo/bar\" \"[ORACLE-PROJECT-ROOT]/neovm-oracle-tests/bar\" \"[ORACLE-HOME]/test\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
@@ -92,7 +92,8 @@ fn deficiency_concat_and_expand_path_combo() {
 fn deficiency_substitute_in_file_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"/home/exec/test\" \"~/exec\" \"plain/path\")""#]];
+    let expect =
+        expect_test::expect![[r#""OK (\"[ORACLE-HOME]/test\" \"~/exec\" \"plain/path\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (list (substitute-in-file-name \"$HOME/test\")\n\

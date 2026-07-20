@@ -457,6 +457,9 @@ fn org_mobile_escape_pull_push_flagsync_deep_state_combo() {
   (require 'org-mobile)
   (let* ((root (make-temp-file "org-mobile-deep" t))
          (file (expand-file-name "tasks.org" root))
+         (org-directory root)
+         (org-mobile-inbox-for-pull
+          (expand-file-name "from-mobile.org" root))
          (org-mobile-directory root)
          (org-mobile-files (list file)))
     (unwind-protect

@@ -159,7 +159,7 @@ fn div_cx68_file_coding_roundtrip_latin1_unibyte_charset_prop() {
 fn div_cx68_expand_file_name_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"/home/user/foo\" \"/var/foo\" \"/home/exec/foo\" \"/home/user/foo\" \"/home/user/foo\" \"/absolute/path\" \"/home/user/file with spaces\" \"/home/user\")""#
+        r#""OK (\"/home/user/foo\" \"/var/foo\" \"[ORACLE-HOME]/foo\" \"/home/user/foo\" \"/home/user/foo\" \"/absolute/path\" \"/home/user/file with spaces\" \"/home/user\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

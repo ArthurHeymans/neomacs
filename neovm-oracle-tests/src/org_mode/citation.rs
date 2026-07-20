@@ -463,7 +463,7 @@ fn org_cite_basic_activation_follow_completion_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK ((\"<root>/refs.bib\") (\"alpha2020\" \"beta2021\") nil (\"alpha2020\") ((\"alpha2020\" \"Alpha, Ann\" #(\"2020\" 0 4 (:parent nil)) #(\"Known Alpha\" 0 11 (:parent nil))) (\"beta2021\" \"Beta, Bob\" #(\"2021\" 0 4 (:parent nil)) #(\"Known Beta\" 0 10 (:parent nil)))) (((\"alpha2020\" \"beta2021\") (nil) (78 . 115)) ((\"alpah2020\" \"missing\") (nil) (124 . 151))) ((\"alpha2020\" (org-cite-key org-cite) highlight #(\"Alpha. Known Alpha, J, 2020.\" 0 5 (:parent nil) 5 7 (:parent nil) 7 18 (:parent nil) 18 20 (:parent nil) 20 21 (:parent nil) 21 23 (:parent nil) 23 27 (:parent nil) 27 28 (:parent nil)) t) (\"alpah2020\" (error org-cite) highlight \"Suggestions (mouse-1 to substitute): alpha2020\" t) (\"missing\" (error org-cite) highlight nil t)) (\"refs.bib\" \"@article{alpha2020,\") (user-error \"Cannot find citation key: \\\"alpah2020\\\"\") \"#+bibliography: <root>/refs.bib\nKnown [cite:see @alpha2020 p. 4; @beta2021] Missing [cite:@alpah2020; @missing].\n\")""##
+        r##""OK ((\"<root>/refs.bib\") (\"alpha2020\" \"beta2021\") nil (\"alpha2020\") ((\"alpha2020\" \"Alpha, Ann\" #(\"2020\" 0 4 (:parent nil)) #(\"Known Alpha\" 0 11 (:parent nil))) (\"beta2021\" \"Beta, Bob\" #(\"2021\" 0 4 (:parent nil)) #(\"Known Beta\" 0 10 (:parent nil)))) (((\"alpha2020\" \"beta2021\") (nil) (0 . 37)) ((\"alpah2020\" \"missing\") (nil) (0 . 27))) ((\"alpha2020\" (org-cite-key org-cite) highlight #(\"Alpha. Known Alpha, J, 2020.\" 0 28 (:parent nil)) t) (\"alpah2020\" (error org-cite) highlight \"Suggestions (mouse-1 to substitute): alpha2020\" t) (\"missing\" (error org-cite) highlight nil t)) (\"refs.bib\" \"@article{alpha2020,\") (user-error \"Cannot find citation key: \\\"alpah2020\\\"\") \"#+bibliography: <root>/refs.bib\nKnown [cite:see @alpha2020 p. 4; @beta2021] Missing [cite:@alpah2020; @missing].\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -547,9 +547,16 @@ fn org_cite_basic_activation_follow_completion_combo() {
                                        'title key info 'raw)))
                               '("alpha2020" "beta2021"))
                       (mapcar (lambda (citation)
-                                (list (org-cite-get-references citation t)
-                                      (org-cite-main-affixes citation)
-                                      (org-cite-boundaries citation)))
+                                (let* ((begin
+                                        (org-element-property :begin citation))
+                                       (bounds
+                                        (org-cite-boundaries citation)))
+                                  (list
+                                   (org-cite-get-references citation t)
+                                   (org-cite-main-affixes citation)
+                                   (and bounds
+                                        (cons (- (car bounds) begin)
+                                              (- (cdr bounds) begin))))))
                               citations)
                       props
                       follow-alpha

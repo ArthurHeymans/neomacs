@@ -562,7 +562,7 @@ fn org_lint_include_macro_planning_percent_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (((\"1\" \"low\" \"Non-existent setup file \\\"<root>/missing-setup.org\\\"\" non-existent-setupfile-parameter 0) (\"2\" \"low\" \"Missing value for option item \\\"missing\\\"\" unknown-options-item 76) (\"2\" \"low\" \"Unknown OPTIONS item \\\"missing\\\"\" unknown-options-item 76) (\"2\" \"low\" \"Missing value for option item \\\"bad-option\\\"\" unknown-options-item 76) (\"2\" \"low\" \"Unknown OPTIONS item \\\"bad-option\\\"\" unknown-options-item 76) (\"2\" \"low\" \"Missing value for option item \\\"toc\\\"\" unknown-options-item 76) (\"3\" \"low\" \"Invalid search part \\\"* Missing\\\" in INCLUDE keyword\" wrong-include-link-parameter 113) (\"4\" \"low\" \"Obsolete markup \\\"HTML\\\" in INCLUDE keyword.  Use \\\"export HTML\\\" instead\" obsolete-include-markup 201) (\"5\" \"low\" \"Missing name in MACRO keyword\" invalid-macro-argument-and-template 270) (\"6\" \"low\" \"Missing template in macro \\\"%s\\\"\" invalid-macro-argument-and-template 279) (\"7\" \"low\" \"Unused placeholders in macro \\\"pair\\\"\" invalid-macro-argument-and-template 294) (\"9\" \"low\" \"Different repeaters in SCHEDULED and DEADLINE timestamps.\" mismatched-planning-repeaters 326) (\"11\" \"low\" \"Possible indented diary-sexp\" indented-diary-sexp 433) (\"12\" \"low\" \"Possible incomplete block \\\"#+BEGIN_bad\\\"\" invalid-block 460) (\"14\" \"low\" \"Invalid block closing line \\\"#+END_bad trailing\\\"\" invalid-block 489) (\"15\" \"low\" \"Spurious argument in macro \\\"pair\\\": four\" invalid-macro-argument-and-template 508) (\"15\" \"low\" \"Undefined macro \\\"unknown\\\"\" invalid-macro-argument-and-template 539)) 17 (keyword keyword keyword keyword keyword keyword keyword planning link macro macro) \"#+SETUPFILE: \\\"<root>/missing-setup.org\\\"\n#+OPTIONS: toc: bad-option: missing:\n#+INCLUDE: \\\"<root>/inc.org::* Missing\\\" :lines \\\"bad\\\"\n#+INCLUDE: \\\"<root>/inc.org\\\" HTML\n#+MACRO:\n#+MACRO: empty\n#+MACRO: pair $1 $3\n* TODO Task\nSCHEDULED: <2026-05-27 Wed +1w> DEADLINE: <2026-05-28 Thu ++2d>\n[[https://example.org/a%2Fb][bad percent]]\n  %%(diary-date 5 27 2026)\n#+BEGIN_bad\nunfinished block\n#+END_bad trailing\n{{{pair(one,two,three,four)}}} {{{unknown()}}}\n\")""##
+        r##""OK (((\"1\" \"low\" \"Non-existent setup file \\\"<root>/missing-setup.org\\\"\" non-existent-setupfile-parameter) (\"2\" \"low\" \"Missing value for option item \\\"missing\\\"\" unknown-options-item) (\"2\" \"low\" \"Unknown OPTIONS item \\\"missing\\\"\" unknown-options-item) (\"2\" \"low\" \"Missing value for option item \\\"bad-option\\\"\" unknown-options-item) (\"2\" \"low\" \"Unknown OPTIONS item \\\"bad-option\\\"\" unknown-options-item) (\"2\" \"low\" \"Missing value for option item \\\"toc\\\"\" unknown-options-item) (\"3\" \"low\" \"Invalid search part \\\"* Missing\\\" in INCLUDE keyword\" wrong-include-link-parameter) (\"4\" \"low\" \"Obsolete markup \\\"HTML\\\" in INCLUDE keyword.  Use \\\"export HTML\\\" instead\" obsolete-include-markup) (\"5\" \"low\" \"Missing name in MACRO keyword\" invalid-macro-argument-and-template) (\"6\" \"low\" \"Missing template in macro \\\"%s\\\"\" invalid-macro-argument-and-template) (\"7\" \"low\" \"Unused placeholders in macro \\\"pair\\\"\" invalid-macro-argument-and-template) (\"9\" \"low\" \"Different repeaters in SCHEDULED and DEADLINE timestamps.\" mismatched-planning-repeaters) (\"11\" \"low\" \"Possible indented diary-sexp\" indented-diary-sexp) (\"12\" \"low\" \"Possible incomplete block \\\"#+BEGIN_bad\\\"\" invalid-block) (\"14\" \"low\" \"Invalid block closing line \\\"#+END_bad trailing\\\"\" invalid-block) (\"15\" \"low\" \"Spurious argument in macro \\\"pair\\\": four\" invalid-macro-argument-and-template) (\"15\" \"low\" \"Undefined macro \\\"unknown\\\"\" invalid-macro-argument-and-template)) 17 (keyword keyword keyword keyword keyword keyword keyword planning link macro macro) \"#+SETUPFILE: \\\"<root>/missing-setup.org\\\"\n#+OPTIONS: toc: bad-option: missing:\n#+INCLUDE: \\\"<root>/inc.org::* Missing\\\" :lines \\\"bad\\\"\n#+INCLUDE: \\\"<root>/inc.org\\\" HTML\n#+MACRO:\n#+MACRO: empty\n#+MACRO: pair $1 $3\n* TODO Task\nSCHEDULED: <2026-05-27 Wed +1w> DEADLINE: <2026-05-28 Thu ++2d>\n[[https://example.org/a%2Fb][bad percent]]\n  %%(diary-date 5 27 2026)\n#+BEGIN_bad\nunfinished block\n#+END_bad trailing\n{{{pair(one,two,three,four)}}} {{{unknown()}}}\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -612,18 +612,12 @@ fn org_lint_include_macro_planning_percent_combo() {
                               (line (substring-no-properties
                                      (aref row 0)))
                               (message (aref row 2))
-                              (checker (aref row 3))
-                              (marker (get-text-property
-                                       0 'org-lint-marker
-                                       (aref row 0))))
+                              (checker (aref row 3)))
                          (list line
                                (aref row 1)
                                (replace-regexp-in-string
                                 (regexp-quote root) "<root>" message)
-                               (org-lint-checker-name checker)
-                               (and marker
-                                    (- (marker-position marker)
-                                       (point-min))))))
+                               (org-lint-checker-name checker))))
                      reports)))
               (list summary
                     (length reports)

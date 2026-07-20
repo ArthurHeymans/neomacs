@@ -82,14 +82,14 @@ fn divergence_shell_command_output() {
 fn divergence_process_environment_var() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t 0 t 10)""#]];
+    let expect = expect_test::expect![[r#""OK (t 0 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((out (shell-command-to-string "echo $HOME")))
     (list (> (length out) 1)
           (string-match "^/" out)
           (= (string-match "^/" out) 0)
-          (string-match "\n" out)))) "#,
+          (not (null (string-match "\n\\'" out)))))) "#,
         expect,
     );
 }

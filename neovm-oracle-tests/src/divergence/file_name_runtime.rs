@@ -10,7 +10,7 @@ fn expand_file_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect =
-        expect_test::expect![[r#""OK (\"/a/b\" \"/a/c\" \"/a/d\" \"/home/exec/x\" t nil)""#]];
+        expect_test::expect![[r#""OK (\"/a/b\" \"/a/c\" \"/a/d\" \"[ORACLE-HOME]/x\" t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (expand-file-name "b" "/a") (expand-file-name "../c" "/a/b")
         (expand-file-name "./d" "/a") (expand-file-name "~/x" "/a")

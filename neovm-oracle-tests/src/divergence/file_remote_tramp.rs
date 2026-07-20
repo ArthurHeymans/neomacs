@@ -67,7 +67,7 @@ fn divergence_archive_functions() {
 fn divergence_tilde_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"/home/exec/\" t \"/root/\" t)""#]];
+    let expect = expect_test::expect![[r#""OK (\"[ORACLE-HOME]/\" t \"/root/\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (expand-file-name "~/")

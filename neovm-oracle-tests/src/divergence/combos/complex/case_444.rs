@@ -55,7 +55,7 @@ fn div_cx444_setenv_deep() {
 #[test]
 fn div_cx444_substitute_in_file_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"/home/exec/test\" \"~\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"[ORACLE-HOME]/test\" \"~\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (substitute-in-file-name "$HOME/test")
       (substitute-in-file-name "~"))
@@ -134,7 +134,7 @@ fn div_cx444_tq_ops() {
 #[test]
 fn div_cx444_printenv() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"/home/exec\" \"exec\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"[ORACLE-HOME]\" \"exec\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (getenv "HOME") (getenv "USER"))
 "##,

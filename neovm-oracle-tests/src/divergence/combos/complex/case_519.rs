@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx519_expand_file_name_tilde() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"/home/exec/test\" \"/root/test\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"[ORACLE-HOME]/test\" \"/root/test\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (expand-file-name "~/test") (expand-file-name "~root/test"))
 "##,

@@ -57,7 +57,7 @@ fn div_cx285_file_remote_p_remote_methods() {
 fn div_cx285_expand_file_name_remote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"/ssh:host:/home/user/file.txt\" \"/home/exec/file.txt\" \"/home/user/file.txt\")""#
+        r#""OK (\"/ssh:host:/home/user/file.txt\" \"[ORACLE-HOME]/file.txt\" \"/home/user/file.txt\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

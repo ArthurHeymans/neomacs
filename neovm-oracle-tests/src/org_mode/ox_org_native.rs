@@ -116,7 +116,7 @@ fn org_org_export_include_macro_custom_link_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (\"#+macro: word /$1/\n** Included\nIncluded text with /inside/.\n* Local\nMacro /local/ and [[https://tracker.example/42][org:bug]].\n\" ((2 \"Included\") (1 \"Local\")) ((\"https\" \"//tracker.example/42\" \" 2\n* Lo\")))""##
+        r##""OK (\"#+macro: word /$1/\n** Included\nIncluded text with /inside/.\n* Local\nMacro /local/ and [[https://tracker.example/42][org:bug]].\n\" ((2 \"Included\") (1 \"Local\")) ((\"https\" \"//tracker.example/42\" \"org:bug\")))""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -142,15 +142,15 @@ fn org_org_export_include_macro_custom_link_combo() {
             (insert "#+INCLUDE: \"" inc "\" :minlevel 2\n")
             (insert "* Local\n")
             (insert "Macro {{{word(local)}}} and [[issue:42][bug]].\n")
-            (let* ((exported
+            (let ((exported
                     (org-export-as
                      'org nil nil t
-                     '(:with-toc nil :time-stamp-file nil)))
-                   (parsed (with-temp-buffer
-                             (org-mode)
-                             (insert exported)
-                             (org-element-parse-buffer))))
-              (list exported
+                     '(:with-toc nil :time-stamp-file nil))))
+              (with-temp-buffer
+                (org-mode)
+                (insert exported)
+                (let ((parsed (org-element-parse-buffer)))
+                  (list exported
                     (org-element-map parsed 'headline
                       (lambda (h)
                         (list (org-element-property :level h)
@@ -162,7 +162,7 @@ fn org_org_export_include_macro_custom_link_combo() {
                               (and (org-element-property :contents-begin l)
                                    (buffer-substring-no-properties
                                     (org-element-property :contents-begin l)
-                                    (org-element-property :contents-end l))))))))))
+                                    (org-element-property :contents-end l))))))))))))
       (if old-issue
           (setcdr old-issue (cdr old-issue))
         (setq org-link-parameters

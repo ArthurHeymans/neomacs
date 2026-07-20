@@ -236,7 +236,7 @@ fn div_cx405_font_family_list_batch() {
 #[test]
 fn div_cx405_getenv_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"café世界\" \"/home/exec\" nil)""#]];
+    let expect = expect_test::expect![[r#""OK (\"café世界\" \"[ORACLE-HOME]\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((process-environment (cons "NEO_CX405_TEST=café世界" process-environment)))

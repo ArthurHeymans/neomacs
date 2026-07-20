@@ -360,13 +360,16 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
           (replace-regexp-in-string
            "%b - \\(?:GNU\\|NEO\\) Emacs at "
            "%b - [EMACS-PRODUCT] at "
-           (neovm--oracle-squash-roots v)))
+           (neovm--oracle-squash-roots
+            (neovm--oracle-coalesce-string-properties
+             (copy-sequence v)))))
          (t v)))
       (defun neovm--oracle-squash-roots (s)
         (let ((load-root (getenv "NEOVM_ORACLE_LOAD_ROOT"))
               (project-root (getenv "NEOVM_ORACLE_PROJECT_ROOT"))
               (scratch-root (getenv "NEOVM_ORACLE_SCRATCH_ROOT"))
               (session-root (getenv "NEOVM_ORACLE_SESSION_TMPDIR"))
+              (home-root (getenv "NEOVM_ORACLE_HOME"))
               (neovm--oracle-case-root (getenv "NEOVM_ORACLE_TEST_TMPDIR"))
               (pairs nil))
           (let ((proj-abs (and project-root
@@ -378,6 +381,9 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
                 (session-abs (and session-root
                                   (> (length session-root) 0)
                                   (directory-file-name session-root)))
+                (home-abs (and home-root
+                               (> (length home-root) 0)
+                               (directory-file-name home-root)))
                 (neovm--oracle-case-abs
                  (and neovm--oracle-case-root
                       (> (length neovm--oracle-case-root) 0)
@@ -422,10 +428,29 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
                             "[ORACLE-LOAD-ROOT]")
                       pairs)
                 (push (cons load-abs "[ORACLE-LOAD-ROOT]") pairs))
+              ;; HOME is nested beneath the random per-case root. Normalize
+              ;; only its absolute spelling so tilde syntax remains observable.
+              (when (and home-abs (> (length home-abs) 1))
+                (push (cons home-abs "[ORACLE-HOME]") pairs))
               (dolist (p pairs s)
                 (when (> (length (car p)) 1)
                   (setq s (replace-regexp-in-string
                            (regexp-quote (car p)) (cdr p) s t t)))))))
+      (defun neovm--oracle-coalesce-string-properties (s)
+        ;; Adjacent interval nodes with identical property lists are not a
+        ;; semantic distinction: every character exposes the same properties.
+        ;; Canonicalize that internal representation before printing results.
+        (let ((pos 0)
+              (len (length s)))
+          (while (< pos len)
+            (let* ((props (text-properties-at pos s))
+                   (end (next-property-change pos s len)))
+              (while (and (< end len)
+                          (equal props (text-properties-at end s)))
+                (setq end (next-property-change end s len)))
+              (set-text-properties pos end props s)
+              (setq pos end))))
+        s)
       (defun neovm--oracle-normalize (v)
         (neovm--oracle-normalize-1 v (make-hash-table :test 'eq)))
     (let* ((coding-system-for-read 'utf-8-unix)

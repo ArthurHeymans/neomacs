@@ -53,3 +53,54 @@ fn oracle_sandbox_pins_snapshot_locale() {
         expect,
     );
 }
+
+#[test]
+fn oracle_sandbox_pins_snapshot_time_zone() {
+    let expect = expect_test::expect![[r#""OK (\"America/New_York\" (-18000 \"EST\"))""#]];
+
+    crate::common::assert_oracle_parity_expect(
+        r#"(list (getenv "TZ")
+                  (current-time-zone (encode-time 0 0 12 15 1 2026 t)))"#,
+        expect,
+    );
+}
+
+#[test]
+fn oracle_sandbox_isolates_home_and_identity() {
+    let expect = expect_test::expect![[r#""OK (\"[ORACLE-HOME]\" \"exec\" \"exec\" t t)""#]];
+
+    crate::common::assert_oracle_parity_expect(
+        r#"(let ((home (getenv "HOME"))
+                  (scratch (getenv "NEOVM_ORACLE_SCRATCH_ROOT")))
+              (list home
+                    (getenv "USER")
+                    (getenv "LOGNAME")
+                    (file-directory-p home)
+                    (file-in-directory-p home scratch)))"#,
+        expect,
+    );
+}
+
+#[test]
+fn oracle_sandbox_blocks_parent_repository_discovery() {
+    let expect = expect_test::expect![[r#""OK t""#]];
+
+    crate::common::assert_oracle_parity_expect(
+        r#"(equal (getenv "GIT_CEILING_DIRECTORIES")
+                  (getenv "NEOVM_ORACLE_PROJECT_ROOT"))"#,
+        expect,
+    );
+}
+
+#[test]
+fn oracle_normalization_coalesces_equivalent_text_property_runs() {
+    let expect = expect_test::expect![[r#""OK #(\"abc\" 0 3 (face bold))""#]];
+
+    crate::common::assert_oracle_parity_expect(
+        r#"(let ((s (copy-sequence "abc")))
+              (put-text-property 0 1 'face 'bold s)
+              (put-text-property 1 3 'face 'bold s)
+              s)"#,
+        expect,
+    );
+}

@@ -20,8 +20,20 @@ use tempfile::{NamedTempFile, TempDir};
 /// this default and can still select another locale explicitly.
 const SNAPSHOT_LOCALE: &str = "en_US.UTF-8";
 
+/// Time zone used when recording the checked-in GNU Emacs expectations.
+///
+/// Date conversion, daylight-saving, and Org timestamp behavior all consult
+/// the process time zone. GitHub's Ubuntu runners default to UTC, while the
+/// snapshots were recorded in the America/New_York zone.
+const SNAPSHOT_TIME_ZONE: &str = "America/New_York";
+
+/// Stable process identity used by snapshot probes that inspect the
+/// environment. The home directory itself remains a fresh per-case directory.
+const SNAPSHOT_USER: &str = "exec";
+
 pub(crate) struct OracleSandbox {
     case_root: TempDir,
+    home_root: PathBuf,
     form_path: PathBuf,
     load_root: PathBuf,
     load_files: Vec<PathBuf>,
@@ -35,6 +47,13 @@ impl OracleSandbox {
     pub(crate) fn new(form: &str, load_files: &[&str], load_root: &Path) -> Result<Self, String> {
         let project_root = project_root();
         let case_root = create_case_tempdir_in(&project_root)?;
+        let home_root = case_root.path().join("home");
+        fs::create_dir(&home_root).map_err(|error| {
+            format!(
+                "failed to create oracle home directory {}: {error}",
+                home_root.display()
+            )
+        })?;
         let form_path = write_form_file(case_root.path(), form)?;
         let load_files = load_files
             .iter()
@@ -43,6 +62,7 @@ impl OracleSandbox {
 
         Ok(Self {
             case_root,
+            home_root,
             form_path,
             load_root: load_root.to_path_buf(),
             load_files,
@@ -75,7 +95,15 @@ impl OracleSandbox {
     pub(crate) fn configure(&self, command: &mut Command) {
         command
             .env("LANG", SNAPSHOT_LOCALE)
-            .env("LC_ALL", SNAPSHOT_LOCALE);
+            .env("LC_ALL", SNAPSHOT_LOCALE)
+            .env("TZ", SNAPSHOT_TIME_ZONE)
+            .env("HOME", &self.home_root)
+            .env("USER", SNAPSHOT_USER)
+            .env("LOGNAME", SNAPSHOT_USER)
+            .env("TERM", "dumb")
+            // Workspace-local scratch directories sit beneath the checkout.
+            // Prevent repository helpers from discovering the outer repo.
+            .env("GIT_CEILING_DIRECTORIES", &self.project_root);
 
         for (name, value) in &self.extra_env {
             command.env(name, value);
@@ -100,6 +128,7 @@ impl OracleSandbox {
             .env("NEOVM_ORACLE_LOAD_ROOT", &self.load_root)
             .env("NEOVM_ORACLE_PROJECT_ROOT", &self.project_root)
             .env("NEOVM_ORACLE_SCRATCH_ROOT", scratch_root)
+            .env("NEOVM_ORACLE_HOME", &self.home_root)
             .env("NEOVM_ORACLE_LOAD_FILES", load_files);
 
         if let Some(session_tmpdir) = session_tmpdir {
