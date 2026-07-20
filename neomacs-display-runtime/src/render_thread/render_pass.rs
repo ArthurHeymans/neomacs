@@ -443,16 +443,14 @@ impl RenderApp {
             _ => return None,
         };
         Self::update_fps_counter(&mut render.overlays.fps);
-        let frame_for_decision = render.current_frame_clone()?;
-        let mut frame = frame_for_decision.clone();
-        if extra_line_spacing != 0.0 || extra_letter_spacing != 0.0 {
-            Self::apply_extra_spacing(
-                &mut frame.glyphs,
-                &mut frame.window_cursors,
-                extra_line_spacing,
-                extra_letter_spacing,
-            );
-        }
+        // Read the one bit the offscreen decision needs straight out of the
+        // retained frame, and bail the same way a missing frame did before.
+        // Read it here, before `take_current_frame_for_render` below drains
+        // the hints. The frame itself is taken once, after the surface is
+        // acquired — the acquisition has several early-return paths, so
+        // materializing it earlier was work thrown away outright on any
+        // lost/outdated/occluded surface.
+        let frame_has_theme_transition = render.current_frame_theme_transition_hint()?;
         let animated_cursor = render.cursor.animated_cursor();
         let root_animated_cursor = animated_cursor
             .filter(|cursor| cursor.frame_id == DisplayFrameId::new(render.emacs_frame_id));
@@ -461,13 +459,8 @@ impl RenderApp {
         // cursor. The frame's stored cursor geometry is no longer mutated here,
         // so the materialized frame stays a pure function of the layout snapshot.
 
-        let need_offscreen = render.compositor.transitions.policy.needs_offscreen()
-            || frame_for_decision.effect_hints.iter().any(|hint| {
-                matches!(
-                    hint,
-                    crate::core::frame_glyphs::WindowEffectHint::ThemeTransition { .. }
-                )
-            });
+        let need_offscreen =
+            render.compositor.transitions.policy.needs_offscreen() || frame_has_theme_transition;
 
         let output = if let Some(output) = output {
             output
@@ -516,9 +509,8 @@ impl RenderApp {
             }
         };
 
-        let drained_frame = render.take_current_frame_for_render()?;
+        let mut frame = render.take_current_frame_for_render()?;
         render.begin_presentable_render();
-        frame = drained_frame;
         if extra_line_spacing != 0.0 || extra_letter_spacing != 0.0 {
             Self::apply_extra_spacing(
                 &mut frame.glyphs,

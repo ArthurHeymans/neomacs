@@ -69,6 +69,12 @@ pub struct WgpuRenderer {
     pub(super) height: u32,
     /// Display scale factor (physical pixels / logical pixels)
     pub(super) scale_factor: f32,
+    /// Logical screen size last written into `uniform_buffer` by [`Self::resize`],
+    /// so a resize that changes nothing does not re-upload it. `None` until the
+    /// first resize. Recording the written value (rather than comparing inputs)
+    /// keeps this correct across `set_scale_factor`, which only stores the scale
+    /// — `resize` is what pushes it to the GPU.
+    pub(super) uniform_screen_size: Option<[f32; 2]>,
     /// User full-frame post shader (doc/display-engine/SHADER_SURFACES.md).
     pub(super) frame_post: Option<crate::frame_post::FramePost>,
     /// Unified media memory accounting + surface eviction (media_budget.rs).
@@ -972,6 +978,7 @@ impl WgpuRenderer {
             width,
             height,
             scale_factor,
+            uniform_screen_size: None,
             effects: crate::effect_config::EffectsConfig::default(),
             fx: EffectsState::default(),
             clocks: EffectClocks::default(),
@@ -1067,37 +1074,59 @@ impl WgpuRenderer {
         (texture, view)
     }
 
+    /// Resize the render target, reapplying only what the new geometry
+    /// actually invalidates.
+    ///
+    /// One renderer is shared across every frame window, so each window render
+    /// brackets itself with `resize(that window)` ... `resize(previous)` —
+    /// meaning this runs twice per present, and on the common single-window
+    /// path both calls pass the dimensions already in effect. Every step here
+    /// is idempotent for unchanged inputs, so each is guarded by what it
+    /// depends on: the swapchain configuration and stencil texture on geometry,
+    /// the uniform buffer on geometry *and* scale (`set_scale_factor` only
+    /// stores the scale; this is what uploads it). A surface is only ever
+    /// installed by the constructor — device loss builds a whole new renderer —
+    /// so skipping a redundant `configure` can never leave a fresh surface
+    /// unconfigured.
     pub fn resize(&mut self, width: u32, height: u32) {
         if width == 0 || height == 0 {
             return;
         }
 
+        let geometry_changed = self.width != width || self.height != height;
         self.width = width;
         self.height = height;
 
-        // Update surface configuration
-        if let (Some(surface), Some(config)) = (&self.surface, &mut self.surface_config) {
-            config.width = width;
-            config.height = height;
-            surface.configure(&self.device, config);
+        if geometry_changed {
+            // Update surface configuration
+            if let (Some(surface), Some(config)) = (&self.surface, &mut self.surface_config) {
+                config.width = width;
+                config.height = height;
+                surface.configure(&self.device, config);
+            }
+
+            // Recreate stencil texture at new size
+            let (stencil_texture, stencil_view) =
+                Self::create_stencil_texture_static(&self.device, width, height);
+            self.stencil.texture = stencil_texture;
+            self.stencil.view = stencil_view;
         }
 
-        // Recreate stencil texture at new size
-        let (stencil_texture, stencil_view) =
-            Self::create_stencil_texture_static(&self.device, width, height);
-        self.stencil.texture = stencil_texture;
-        self.stencil.view = stencil_view;
-
         // Update uniform buffer with logical size so vertex positions from Emacs map correctly
-        let logical_w = width as f32 / self.scale_factor;
-        let logical_h = height as f32 / self.scale_factor;
-        let uniforms = Uniforms {
-            screen_size: [logical_w, logical_h],
-            time: 0.0,
-            _padding: 0.0,
-        };
-        self.queue
-            .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+        let screen_size = [
+            width as f32 / self.scale_factor,
+            height as f32 / self.scale_factor,
+        ];
+        if self.uniform_screen_size != Some(screen_size) {
+            self.uniform_screen_size = Some(screen_size);
+            let uniforms = Uniforms {
+                screen_size,
+                time: 0.0,
+                _padding: 0.0,
+            };
+            self.queue
+                .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+        }
     }
 
     /// Update the display scale factor (for multi-monitor DPI changes)

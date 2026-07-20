@@ -447,6 +447,28 @@ impl GuiFrameRenderState {
         self.compositor.current_frame.clone()
     }
 
+    /// Whether the retained frame carries a theme-transition effect hint —
+    /// `None` when there is no retained frame at all, so a caller can use `?`
+    /// exactly as it would with [`Self::current_frame_clone`].
+    ///
+    /// The offscreen-compositing decision needs this single bit, and cloning a
+    /// whole `FrameGlyphBuffer` (glyph vector, window info, cursors, hints,
+    /// per-window effects map) to read it cost a full copy on every present,
+    /// including cursor-only ones that never look at the glyphs.
+    ///
+    /// Must be consulted BEFORE [`Self::take_current_frame_for_render`], which
+    /// drains the hints out of the retained frame.
+    pub(super) fn current_frame_theme_transition_hint(&self) -> Option<bool> {
+        self.compositor.current_frame.as_ref().map(|frame| {
+            frame.effect_hints.iter().any(|hint| {
+                matches!(
+                    hint,
+                    crate::core::frame_glyphs::WindowEffectHint::ThemeTransition { .. }
+                )
+            })
+        })
+    }
+
     /// Hit-tests pointer semantics from the immutable buffer currently shown
     /// for `target_frame_id`. Coordinates are local to that target frame.
     pub(super) fn presented_pointer_hit(
