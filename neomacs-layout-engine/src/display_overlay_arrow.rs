@@ -16,7 +16,9 @@
 use crate::neovm_bridge::FaceResolver;
 use crate::window_output::TextWindowOutputTarget;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphType};
+use neomacs_display_protocol::glyph_matrix::{
+    Glyph, GlyphArea, GlyphType, NO_BUFFER_POSITION_CHARPOS,
+};
 use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::{Context, Value};
@@ -32,6 +34,7 @@ pub(crate) fn draw_text_area_overlay_arrows(
     buffer_id: BufferId,
     face_resolver: &FaceResolver,
     face_ids: &mut FrameFaceIdAllocator,
+    char_width: f32,
 ) {
     let vars = arrow_variables(evaluator);
     if vars.is_empty() {
@@ -64,7 +67,7 @@ pub(crate) fn draw_text_area_overlay_arrows(
         let Some(row_index) = find_marked_row(&mut output, charpos, arrow_seen) else {
             continue;
         };
-        if overwrite_leading_glyphs(&mut output, row_index, &text, arrow_face_id) {
+        if overwrite_leading_glyphs(&mut output, row_index, &text, arrow_face_id, char_width) {
             arrow_seen = true;
         }
     }
@@ -127,9 +130,19 @@ fn arrow_string(evaluator: &Context, var: Value) -> Option<String> {
         .and_then(|value| value.as_str_owned())
 }
 
-/// GNU's row test: the marker lies in `[start_charpos, end_charpos)` of an
-/// enabled body row, and the row either displays text or no arrow has been
-/// drawn yet this pass.
+/// GNU's row test — the marker lies within the row, and the row either
+/// displays text or no arrow has been drawn yet this pass.
+///
+/// GNU writes this as `MATRIX_ROW_START_CHARPOS (row) <= pos <
+/// MATRIX_ROW_END_CHARPOS (row)`, but its end is one PAST the newline the row
+/// consumed, whereas ours is the newline's own position (which is why the
+/// engine's other consumers either add 1 to it or, like
+/// `find_text_row_for_charpos`, compare inclusively). Translating GNU's
+/// half-open test into this convention makes the upper bound inclusive.
+///
+/// The difference is only observable on an empty line, whose entire content is
+/// that newline: there `start == end`, so an exclusive test matches nothing
+/// and the arrow silently fails to draw — measured against GNU, which draws it.
 fn find_marked_row(
     output: &mut TextWindowOutputTarget<'_>,
     charpos: usize,
@@ -142,7 +155,7 @@ fn find_marked_row(
             && row.role == GlyphRowRole::Text
             && (row.displays_text || !arrow_seen)
             && row.start_charpos <= charpos
-            && charpos < row.end_charpos
+            && charpos <= row.end_charpos
         {
             return Some(index);
         }
@@ -154,29 +167,42 @@ fn find_marked_row(
 /// Copy the arrow's characters over the row's leading text-area glyphs,
 /// GNU's `*p++ = *glyph++`. Returns whether anything was drawn.
 ///
-/// Only the character and face are replaced; each covered glyph keeps its own
-/// geometry. That is equivalent to GNU's glyph copy on the frames that take
-/// this branch (uniform cell widths) and, unlike a copy, cannot leave the row
-/// with a stale advance. A glyph the arrow only partly covers (a double-width
-/// character) is consumed whole, which is GNU's padding-glyph cleanup.
+/// Where the row already has a glyph, only its character and face are replaced
+/// and its geometry is kept. That is equivalent to GNU's glyph copy on the
+/// frames that take this branch (uniform cell widths) and, unlike a copy,
+/// cannot leave the row with a stale advance. A glyph the arrow only partly
+/// covers (a double-width character) is consumed whole, which is GNU's
+/// padding-glyph cleanup.
+///
+/// Where the row runs out — an empty line has no glyphs at all, and a line
+/// shorter than the arrow runs out partway — the remaining characters are
+/// appended. They carry no buffer position: the arrow is decoration painted
+/// over the line, so a click or cursor placement must not resolve into it.
 fn overwrite_leading_glyphs(
     output: &mut TextWindowOutputTarget<'_>,
     row_index: usize,
     text: &str,
     face_id: neomacs_display_protocol::types::FaceId,
+    char_width: f32,
 ) -> bool {
     let Some(mut row) = output.builder().current_window_row(row_index).cloned() else {
         return false;
     };
     let glyphs = &mut row.glyphs[GlyphArea::Text.index()];
-    if glyphs.is_empty() {
-        return false;
-    }
     let mut drawn = false;
-    for (slot, ch) in glyphs.iter_mut().zip(text.chars()) {
-        slot.glyph_type = GlyphType::Char { ch };
-        slot.face_id = face_id;
-        slot.wide = false;
+    for (offset, ch) in text.chars().enumerate() {
+        match glyphs.get_mut(offset) {
+            Some(slot) => {
+                slot.glyph_type = GlyphType::Char { ch };
+                slot.face_id = face_id;
+                slot.wide = false;
+            }
+            None => {
+                let mut glyph = Glyph::char(ch, face_id, NO_BUFFER_POSITION_CHARPOS);
+                glyph.pixel_width = char_width;
+                glyphs.push(glyph);
+            }
+        }
         drawn = true;
     }
     if drawn {

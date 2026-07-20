@@ -988,6 +988,7 @@ impl BufferSourceOutputSetup {
             neovm_core::buffer::BufferId(params.buffer_id),
             render_services.face_resolver(),
             render_services.face_ids(),
+            geometry.char_width,
         );
         // GNU `draw_window_fringes` (src/fringe.c): every truncated/continued
         // buffer-text row gets a left/right arrow bitmap in its fringe. neomacs's

@@ -59,3 +59,38 @@ fn overlay_arrow_matches_gnu() {
 
     assert_pair_nearly_matches("overlay_arrow", &gnu, &neo, 0);
 }
+
+/// An arrow on an EMPTY line. GNU draws it there too — the row's whole content
+/// is its newline — and this is the case that exposed the row test's bound:
+/// our `end_charpos` is the newline's own position, so `start == end` on an
+/// empty line and an exclusive upper bound matched nothing. It also has no
+/// glyphs to overwrite, so the arrow has to extend the row.
+#[test]
+fn overlay_arrow_on_empty_line_matches_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(30), scratch_ready);
+
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(progn (switch-to-buffer (get-buffer-create \"arrow-empty\")) \
+         (erase-buffer) (insert \"alpha\\n\\ngamma\\n\") \
+         (goto-char (point-min)) (forward-line 1) \
+         (setq overlay-arrow-position (point-marker)) nil)",
+    );
+
+    let arrow_drawn = |grid: &[String]| grid.iter().any(|row| row.contains("=>"));
+    gnu.read_until(Duration::from_secs(10), arrow_drawn);
+    neo.read_until(Duration::from_secs(12), arrow_drawn);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    if !arrow_drawn(&gnu.text_grid()) {
+        dump_pair_grids("overlay_arrow_empty_line", &gnu, &neo);
+    }
+    assert!(
+        arrow_drawn(&gnu.text_grid()),
+        "GNU did not draw the overlay arrow, so this test would be vacuous"
+    );
+
+    assert_pair_nearly_matches("overlay_arrow_empty_line", &gnu, &neo, 0);
+}
