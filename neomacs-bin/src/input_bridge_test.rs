@@ -30,6 +30,21 @@ fn image_terminal_state_change_becomes_layout_invalidation_instead_of_being_drop
 }
 
 #[test]
+fn surface_create_failure_reaches_the_evaluator_with_id_and_error() {
+    let event = convert_display_event(&DisplayEvent::SurfaceCreateFailed {
+        id: 0x7000_0009,
+        error: "device rejected pipeline".to_string(),
+    });
+    match event {
+        Some(KbInputEvent::SurfaceCreateFailed { id, error }) => {
+            assert_eq!(id, 0x7000_0009);
+            assert_eq!(error, "device rejected pipeline");
+        }
+        other => panic!("expected SurfaceCreateFailed, got {other:?}"),
+    }
+}
+
+#[test]
 fn presentation_lifecycle_events_reach_the_evaluator_losslessly() {
     assert!(matches!(
         convert_display_event(&DisplayEvent::PresentationActivated {

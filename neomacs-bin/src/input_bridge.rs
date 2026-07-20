@@ -253,6 +253,14 @@ pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
         // GPU device lost and rebuilt: the evaluator re-resolves media and
         // forces a full redisplay.
         DisplayEvent::DisplayReset => Some(KbInputEvent::DisplayReset),
+        // A shader surface failed to build on the render thread past naga
+        // pre-validation: hand it to the evaluator to surface to Lisp.
+        DisplayEvent::SurfaceCreateFailed { id, error } => {
+            Some(KbInputEvent::SurfaceCreateFailed {
+                id: *id,
+                error: error.clone(),
+            })
+        }
         // Ignore other events (WebKit title changes, etc.)
         _ => None,
     }

@@ -135,6 +135,12 @@ pub enum InputEvent {
     WebKitLoadFinished { id: u32 },
     /// Image decoding reached a terminal state (ready or failed).
     ImageStateChanged { id: u32 },
+    /// A shader surface failed to build on the render thread AFTER the Lisp
+    /// thread's naga pre-validation accepted it (the naga-accepts /
+    /// wgpu-rejects edge, e.g. a device limit). Carries the surface id and the
+    /// renderer's error so the evaluator can surface it to Lisp instead of the
+    /// failure only living in a log line + a silently-blank quad.
+    SurfaceCreateFailed { id: u32, error: String },
     /// Terminal child process exited
     #[cfg(feature = "neo-term")]
     TerminalExited { id: u32 },
@@ -806,6 +812,7 @@ impl RenderComms {
             #[cfg(feature = "wpe-webkit")]
             InputEvent::WebKitLoadFinished { .. } => "webkit-load-finished",
             InputEvent::ImageStateChanged { .. } => "image-state-changed",
+            InputEvent::SurfaceCreateFailed { .. } => "surface-create-failed",
             InputEvent::MenuSelection { .. } => "menu-selection",
             InputEvent::FileDrop { .. } => "file-drop",
             InputEvent::ToolBarClick { .. } => "toolbar-click",

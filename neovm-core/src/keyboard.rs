@@ -963,6 +963,10 @@ pub enum InputEvent {
     /// media objects are gone: the display host must re-resolve them and a
     /// full redisplay must be forced.
     DisplayReset,
+    /// A shader surface failed to build on the render thread after naga
+    /// pre-validation accepted it. Runs `neomacs-surface-error-functions`
+    /// with the surface id and the renderer's error string.
+    SurfaceCreateFailed { id: u32, error: String },
 }
 
 impl InputEvent {
@@ -3324,6 +3328,11 @@ impl crate::emacs_core::eval::Context {
                     outcome = outcome.merge(SpecialInputServiceOutcome::resize_with_redisplay());
                     self.handle_display_reset_input_event();
                 }
+                InputEvent::SurfaceCreateFailed { id, error } => {
+                    // Not user activity and needs no redisplay — just run the
+                    // hook (mirrors MonitorsChanged running its hook here).
+                    self.handle_surface_create_failed_input_event(id, &error)?;
+                }
                 _ => {}
             }
         }
@@ -3351,6 +3360,25 @@ impl crate::emacs_core::eval::Context {
             host.display_reset();
         }
         self.invalidate_redisplay();
+    }
+
+    /// A shader surface failed to build on the render thread past naga
+    /// pre-validation (a device-specific wgpu rejection). Run
+    /// `neomacs-surface-error-functions` with the surface id and the error
+    /// string so Lisp can report it (the default member messages the user);
+    /// without this the failure only appears in a log line while the quad
+    /// renders blank. Mirrors `MonitorsChanged` running its hook here.
+    fn handle_surface_create_failed_input_event(
+        &mut self,
+        id: u32,
+        error: &str,
+    ) -> crate::emacs_core::error::EvalResult {
+        let args = [
+            Value::symbol("neomacs-surface-error-functions"),
+            Value::fixnum(i64::from(id)),
+            Value::string(error),
+        ];
+        crate::emacs_core::hook_runtime::run_named_hook_with_args(self, &args)
     }
 
     fn handle_window_close_input_event(
@@ -4035,6 +4063,10 @@ impl crate::emacs_core::eval::Context {
                 self.handle_display_reset_input_event();
                 self.redisplay();
                 self.timer_resume_idle();
+                Ok(None)
+            }
+            InputEvent::SurfaceCreateFailed { id, error } => {
+                self.handle_surface_create_failed_input_event(id, &error)?;
                 Ok(None)
             }
             InputEvent::Focus {

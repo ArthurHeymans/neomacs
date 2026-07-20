@@ -486,6 +486,13 @@ impl RenderApp {
                     };
                     if let Err(err) = result {
                         tracing::warn!("shader surface {id} create failed: {err}");
+                        // Naga (on the Lisp thread) already accepted this
+                        // shader, so the failure is a device-specific
+                        // wgpu rejection the evaluator never saw. Report it
+                        // back so Lisp can surface it, not just this log line.
+                        self.comms.send_input(
+                            crate::thread_comm::InputEvent::SurfaceCreateFailed { id, error: err },
+                        );
                     }
                 } else {
                     tracing::warn!("Renderer not initialized, cannot create surface {id}");

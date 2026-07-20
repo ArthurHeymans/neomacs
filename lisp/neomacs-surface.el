@@ -53,6 +53,21 @@
 
 ;;; Code:
 
+(defun neomacs-surface--report-create-error (id error)
+  "Default handler for `neomacs-surface-error-functions': message ID and ERROR."
+  (message "neomacs shader surface %s failed to build: %s" id error))
+
+(defvar neomacs-surface-error-functions
+  (list #'neomacs-surface--report-create-error)
+  "Abnormal hook run when a shader surface fails to build on the GPU.
+Each function is called with two arguments, the surface id and an error
+string.  This fires only for the rare case where the render thread's
+wgpu pipeline build fails AFTER the synchronous naga validation in
+`neomacs-surface-create' already accepted the shader (e.g. a
+device-specific limit); ordinary shader syntax errors are signaled
+synchronously from `neomacs-surface-create' instead.  The default member
+reports it with `message'.")
+
 (defun neomacs-surface-insert (id width height)
   "Insert surface ID at point as a WIDTH x HEIGHT display object."
   (insert (propertize " " 'display (list 'surface :id id :width width :height height)

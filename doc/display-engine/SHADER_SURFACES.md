@@ -322,8 +322,13 @@ offscreen pass and runtime WGSL compilation.
   re-accounting `MediaBudget`; physical size is recomputed from the retained
   logical size so repeated rescales never drift. Pixel (`:pixels`) surfaces
   are content-defined and left untouched.
-- Failed *render-thread* compiles (naga-accepts/wgpu-rejects edge) log and
-  blank the quad instead of surfacing to Lisp.
+- ~~Failed *render-thread* compiles (naga-accepts/wgpu-rejects edge) only
+  logged~~ FIXED: a render-thread build failure past naga pre-validation now
+  sends `InputEvent::SurfaceCreateFailed { id, error }` back to the evaluator
+  (mirroring the DisplayReset path), which runs the
+  `neomacs-surface-error-functions` abnormal hook with the surface id and
+  error; the default member `message`s it. (Ordinary shader syntax errors are
+  still signaled synchronously from `neomacs-surface-create` via naga.)
 - ~~TTY backend ignores surfaces~~ FIXED: the TTY renderer fills a surface's
   reserved columns with a `[shader]` placeholder centered in a light-shade
   fill (`surface_tty_placeholder`, `tty_rif.rs`) instead of blank space —
