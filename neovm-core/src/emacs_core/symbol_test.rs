@@ -821,8 +821,8 @@ fn uninterned_keyword_and_nil_names_are_not_canonical_constants() {
 // read side of the per-chunk seqlock) never returns a value read from the WRONG
 // union arm under a concurrent writer that flips a symbol between two redirect
 // states. The positive test asserts zero torn reads under the real protocol; the
-// negative control proves the SAME writer/timing reliably produces torn reads
-// when the seqlock retry is removed — i.e. the race is genuinely exercised.
+// negative control holds the writer inside the torn window and proves that the
+// same read without the seqlock retry accepts an inconsistent arm/value pair.
 
 /// Two distinct "heap-looking" `Value`s minted from raw tagged bits.
 ///
@@ -850,9 +850,7 @@ fn heap_b() -> Value {
 struct Shared(*mut LispSymbol, *const std::sync::atomic::AtomicU32);
 unsafe impl Send for Shared {}
 
-/// Number of writer arm-flips per run. Large enough that, without the seqlock,
-/// the broken reader observes many torn reads (see the negative control), and
-/// large enough that the protected reader gets many chances to tear if it could.
+/// Number of writer arm-flips in the protected concurrent stress test.
 const SEQLOCK_WRITER_ITERS: u64 = 4_000_000;
 
 /// Drive the shared writer loop: flip the symbol between
@@ -884,6 +882,23 @@ fn run_seqlock_writer(shared: Shared, done: &std::sync::atomic::AtomicBool) {
         seq.fetch_add(1, Ordering::Release); // -> even
     }
     done.store(true, Ordering::Release);
+}
+
+fn run_paused_seqlock_writer(
+    shared: Shared,
+    arm_published: &std::sync::Barrier,
+    reader_sampled: &std::sync::Barrier,
+) {
+    use std::sync::atomic::Ordering;
+    let sym: &mut LispSymbol = unsafe { &mut *shared.0 };
+    let seq: &std::sync::atomic::AtomicU32 = unsafe { &*shared.1 };
+
+    seq.fetch_add(1, Ordering::Release); // odd: arm change in flight
+    sym.flags.set_redirect(SymbolRedirect::Plainval);
+    arm_published.wait();
+    reader_sampled.wait();
+    crate::tagged::header::store_value_atomic(unsafe { &mut sym.val.plain }, heap_a());
+    seq.fetch_add(1, Ordering::Release); // even: stable State P
 }
 
 #[test]
@@ -941,58 +956,40 @@ fn seqlock_symbol_read_never_tears_arm() {
 #[test]
 fn seqlock_negative_control_tears_without_protocol() {
     crate::test_utils::init_test_tracing();
-    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::sync::Barrier;
 
-    // Identical setup + writer to the positive test.
+    // Begin in State V. The writer will publish the Plainval redirect, then
+    // pause before replacing HEAP_B with HEAP_A so the reader deterministically
+    // samples the exact torn window that the seqlock protects.
     let mut sym = LispSymbol::new(intern("vm-seqlock-test-sym"));
-    sym.flags.set_redirect(SymbolRedirect::Plainval);
-    sym.val = SymbolVal { plain: heap_a() };
+    sym.flags.set_redirect(SymbolRedirect::Varalias);
+    sym.val = SymbolVal { plain: heap_b() };
     sym.function = Value::NIL;
     sym.plist = Value::NIL;
 
     let seq = std::sync::atomic::AtomicU32::new(0);
-    let done = AtomicBool::new(false);
-    // Count of torn reads observed by the DELIBERATELY-BROKEN reader.
-    let tears = AtomicU64::new(0);
+    let arm_published = Barrier::new(2);
+    let reader_sampled = Barrier::new(2);
     let b = heap_b();
 
-    std::thread::scope(|scope| {
+    let (redirect, value) = std::thread::scope(|scope| {
         let shared = Shared(&mut sym as *mut LispSymbol, &seq as *const _);
-        let writer = scope.spawn(|| run_seqlock_writer(shared, &done));
+        let writer =
+            scope.spawn(|| run_paused_seqlock_writer(shared, &arm_published, &reader_sampled));
 
         // BROKEN reader: read the redirect tag, then read the val word, with NO
         // seqlock retry (no odd-check, no re-read of seq). This is exactly the
-        // bug the real protocol defends against. When the writer is mid-flip
-        // V->P (redirect already Plainval, val word not yet updated from HEAP_B
-        // to HEAP_A), this reader pushes the Varalias-arm word HEAP_B while
-        // believing redirect==Plainval — a torn-arm read.
-        let mut local_tears: u64 = 0;
-        while !done.load(Ordering::Acquire) {
-            for _ in 0..1024 {
-                let r = sym.flags.load_redirect();
-                let v = crate::tagged::header::load_value_atomic(unsafe { &sym.val.plain });
-                if r == SymbolRedirect::Plainval && v.is_heap_object() && v.bits() == b.bits() {
-                    local_tears += 1;
-                }
-            }
-        }
-        tears.store(local_tears, Ordering::Release);
+        // bug the real protocol defends against. The barriers hold the writer
+        // mid-flip V->P: redirect is Plainval while the word is still HEAP_B.
+        arm_published.wait();
+        let redirect = sym.flags.load_redirect();
+        let value = crate::tagged::header::load_value_atomic(unsafe { &sym.val.plain });
+        reader_sampled.wait();
         writer.join().unwrap();
+        (redirect, value)
     });
 
-    let observed = tears.load(Ordering::Acquire);
-    if std::env::var_os("SEQLOCK_TEST_DEBUG").is_some() {
-        eprintln!(
-            "NEGATIVE CONTROL: observed {observed} torn reads over {SEQLOCK_WRITER_ITERS} flips"
-        );
-    }
-    // The negative control MUST observe at least one tear over the full writer
-    // budget; otherwise the test is not exercising the race and the positive
-    // test above proves nothing. In practice this tears thousands of times.
-    assert!(
-        observed > 0,
-        "NEGATIVE CONTROL FAILED: the broken (no-seqlock) reader observed ZERO \
-         torn reads over {SEQLOCK_WRITER_ITERS} writer flips. The race is not \
-         being exercised — raise SEQLOCK_WRITER_ITERS or tighten the writer.",
-    );
+    assert_eq!(redirect, SymbolRedirect::Plainval);
+    assert!(value.is_heap_object());
+    assert_eq!(value.bits(), b.bits(), "broken reader must accept HEAP_B");
 }
