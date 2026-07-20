@@ -1,9 +1,14 @@
 //! Per-face *face-all-attributes* matrix (all GNU faces).
 //!
 //! One focused #[test] per face in `(face-list)`: query face-all-attributes
-//! against the selected frame. The divergence root cause is the `:inherit`
-//! plist cell: Neomacs emits `(:inherit)` (improper) vs GNU's
-//! `(:inherit . unspecified)`. Each face surfaces its own divergence.
+//! against the selected frame.
+//!
+//! These are parity GOLDENS, not known divergences. The face-attribute cluster
+//! they were written for was fixed on 2026-07-13 by `a604c3a19`
+//! (internal-get-lisp-face-attribute returned the realized face, whose colors
+//! were realized against a color-capable display during the bootstrap image
+//! build, instead of the lisp face GNU returns). The snapshots below carry the
+//! GNU-correct `(:inherit . unspecified)` form.
 
 use crate::common::assert_oracle_parity;
 use crate::common::return_if_neovm_enable_oracle_proptest_not_set;

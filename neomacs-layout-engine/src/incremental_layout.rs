@@ -661,7 +661,10 @@ impl RetainedWindowMatrix {
         // BOUND the walk to the edited line. The render validates post-walk (the
         // walked edited row must stay one non-continued row ending exactly where
         // the first reused-below row begins); on failure it bails to above-only.
-        // Gated by `allow_below_reuse` until the render integration lands.
+        // `allow_below_reuse` is the kill switch for this path, not a staging
+        // gate: it defaults to TRUE at every `LayoutEngine` construction site,
+        // so below-reuse is the production path. Tests flip it off to isolate
+        // above-only reuse.
         if allow_below_reuse {
             let delta = curr.buffer_size - self.key.buffer_size;
             let text_glyphs = &dirty_row.glyphs[GlyphArea::Text.index()];

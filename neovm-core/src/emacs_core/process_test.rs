@@ -3565,21 +3565,36 @@ fn process_attributes_runtime_shape_matches_oracle() {
 #[test]
 fn process_attributes_pipe_child_args_ttname_and_running_child_match_oracle() {
     crate::test_utils::init_test_tracing();
+    // This raced the child's EXEC, not its exit. /proc/PID/cmdline is empty
+    // between fork and execve, and the reader then falls back to the bracketed
+    // comm name ("[sh]") exactly as GNU does — a correct reading of a real
+    // transient state, but not the one being asserted, so the test failed
+    // roughly once in 30 local runs. Wait for the exec to land instead of
+    // racing it; the bracketed form is the precise, self-limiting signal that
+    // it has not. (Lengthening the child's sleep does NOT fix this, which is
+    // why it now sleeps only long enough to outlive the polling window.)
     let result = eval_one(
         r#"(let ((proc (make-process
                         :name "neo-attrs-pipe-child"
-                        :command '("/bin/sh" "-c" "sleep 0.5")
+                        :command '("/bin/sh" "-c" "sleep 300")
                         :connection-type 'pipe)))
              (unwind-protect
-                 (let* ((attrs (process-attributes (process-id proc)))
-                        (args (cdr (assq 'args attrs)))
-                        (ttname (cdr (assq 'ttname attrs))))
+                 (let ((args nil) (ttname nil) (tries 0))
+                   (while (progn
+                            (let ((attrs (process-attributes (process-id proc))))
+                              (setq args (cdr (assq 'args attrs))
+                                    ttname (cdr (assq 'ttname attrs))))
+                            (and (< tries 200)
+                                 (stringp args)
+                                 (string-prefix-p "[" args)))
+                     (setq tries (1+ tries))
+                     (sleep-for 0.01))
                    (and (eq (process-running-child-p proc) t)
                         ;; GNU's Linux implementation reads live /proc/PID/cmdline
                         ;; and shell state can expose either the shell invocation
                         ;; or the final exec'd command.
-                        (or (equal args "/bin/sh -c sleep\\ 0.5")
-                            (equal args "sleep 0.5"))
+                        (or (equal args "/bin/sh -c sleep\\ 300")
+                            (equal args "sleep 300"))
                         (equal ttname "")))
                (when (process-live-p proc)
                  (delete-process proc))))"#,

@@ -1,23 +1,19 @@
-//! Cranelift codegen backend for the baseline JIT (Phase 3).
+//! Cranelift codegen toolchain smoke test.
 //!
-//! This module is the *foundation* the bytecode baseline JIT will lower onto. It
-//! is compiled only with the `jit` cargo feature (it links Cranelift), and today
-//! it exposes a single self-contained smoke path: [`smoke_compile_add`] builds a
-//! trivial native function with Cranelift, commits it to executable memory, and
-//! calls it. If that round-trips, the entire codegen toolchain
+//! Compiled only with the `jit` cargo feature (it links Cranelift). This module
+//! is **not** the lowering path — all real bytecode lowering lives in
+//! `jit/compile.rs` (baseline + Tier-2 MIR) and has since well before this
+//! comment was corrected. What survives here is the original bring-up probe:
+//! [`smoke_compile_add`] builds a trivial native function, commits it to
+//! executable memory, and calls it, proving the whole codegen toolchain
 //! (`JITBuilder` → `JITModule` → `FunctionBuilder` → `finalize_definitions` →
 //! `get_finalized_function` → indirect call) is live inside neovm-core's own
-//! build.
+//! build. It stays because it isolates a toolchain/linking failure from a
+//! lowering bug — when it passes and compilation still fails, the fault is in
+//! `compile.rs`, not in Cranelift or the build.
 //!
-//! This mirrors the discipline used for the concurrent GC: prove the dangerous
-//! tool works in isolation (there, a TSan-clean micro-run; here, a one-function
-//! JIT) *before* building the real machinery on top of it. No bytecode is lowered
-//! yet — that is the next increment.
-//!
-//! The Cranelift API usage was cross-checked against the workspace's separate
-//! `neovm-compiler` crate (same locked Cranelift 0.131.x), but nothing is ported
-//! from it — `neovm-compiler` is an unrelated, possibly-unsound clean-room stack
-//! with its own value/GC model and is treated as a cautious reference only.
+//! (The earlier note here about cross-checking against a `neovm-compiler` crate
+//! is obsolete: that crate was deleted from the workspace on 2026-07-03.)
 
 use cranelift_codegen::ir::{AbiParam, Function, InstBuilder, Signature, UserFuncName, types};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};

@@ -1,18 +1,37 @@
-//! Baseline bytecode → native lowering.
+//! Bytecode → native lowering.
 //!
-//! Real compilation of neovm-core bytecode to machine code, grown as a series of
-//! always-correct vertical slices. It compiles **leaf** functions with 0+
-//! required (stack) arguments and arbitrary intra-function control flow: the
-//! operand-stack ops, branches `{Goto, GotoIf*}`, fixnum arithmetic
-//! `{+, -, *, 1+, 1-, neg}` and comparisons `{=, <, >, <=, >=}`, the
-//! non-allocating type predicates `{null, not, consp, stringp, listp}`,
-//! `car`/`cdr`, and the allocating `cons`. It **bails to the interpreter**
-//! (returns [`CompileError`]) on anything else — `&optional`/`&rest`/dynamic
-//! params, dynamic-binding bytecode, variables, function `Call`/`Apply`,
-//! `switch`, `eq`/`symbolp`, `Div`/`Rem`, and non-fixnum arithmetic.
+//! Real compilation of neovm-core bytecode to machine code. Coverage is now
+//! broad rather than a narrow leaf subset: **87 of the 88 bytecode opcodes
+//! lower**, `MakeClosure` being the sole exception. `&optional`/`&rest`,
+//! `catch`/`throw`, `condition-case`, `unwind-protect`, dynamic binding
+//! (`varbind`/`unbind`), `save-excursion`/`save-restriction`/
+//! `save-current-buffer`, static `switch` tables, `eq`/`symbolp` and
+//! `Div`/`Rem` are all supported — the pre-2026-07 header claiming otherwise
+//! long outlived the code and kept re-seeding a false "JIT coverage is narrow"
+//! backlog item.
 //!
-//! Control flow builds a CLIF basic-block CFG (`analyze_cfg` + `lower_leaf`); the
-//! operand stack flows across edges through per-slot SSA variables, so Cranelift
+//! Non-fixnum arithmetic does **not** refuse compilation: floats and bignums
+//! **deopt at runtime** through fixnum tag guards, precisely and mid-function
+//! ([`NativeRun::DeoptAt`], resumed by `Vm::run_resumed_frame`).
+//!
+//! Whole-function bails ([`CompileError`]) are correspondingly narrow:
+//! dynamically-bound parameters ([`CompileError::TakesArguments`]), malformed
+//! or unbalanced bytecode, dynamic `switch` jump tables, and Cranelift backend
+//! failures.
+//!
+//! The remaining refusal is deliberate and is the real constraint on JIT
+//! reach: [`CompileError::NotProfitable`], decided by `body_is_jit_profitable`
+//! (`calls <= arith`). The baseline tier removes per-op interpreter *dispatch*,
+//! but a native call costs more than a VM call — it GC-roots its live operands
+//! and trampolines through a runtime shim. Call-dominated bodies therefore
+//! measured net-negative, so widening opcode coverage cannot reach them;
+//! lowering per-call overhead is what would.
+//!
+//! Two tiers live here. The optimizing Tier-2 path builds MIR (`jit/mir.rs`)
+//! for pure required-only bodies and lowers it via `lower_mir_pure`; anything
+//! else falls back to the baseline single-pass lowering. Baseline control flow
+//! builds a CLIF basic-block CFG (`analyze_cfg` + `lower_leaf`); the operand
+//! stack flows across edges through per-slot SSA variables, so Cranelift
 //! inserts the phi nodes and branches carry no explicit block arguments.
 //!
 //! ## Speculation + deopt
