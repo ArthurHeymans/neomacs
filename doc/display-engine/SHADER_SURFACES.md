@@ -306,12 +306,16 @@ offscreen pass and runtime WGSL compilation.
   accounted but not evicted — their caches keep their own lifecycle
   (catalog re-decode, video playback, live WPE views).
   `NEOMACS_MEDIA_BUDGET_MB` overrides the 256MB limit for testing.
-- DPI captured at create; no rescale on monitor change.
+- ~~DPI captured at create; no rescale on monitor change~~ FIXED:
+  `WgpuRenderer::set_scale_factor` resamples every shader surface's render
+  target to the new physical resolution on a scale change
+  (`ShaderSurfaceCache::rescale`), preserving `iTime`/uniforms and
+  re-accounting `MediaBudget`; physical size is recomputed from the retained
+  logical size so repeated rescales never drift. Pixel (`:pixels`) surfaces
+  are content-defined and left untouched.
 - Failed *render-thread* compiles (naga-accepts/wgpu-rejects edge) log and
   blank the quad instead of surfacing to Lisp.
 - TTY backend ignores surfaces (like image/video/xwidget).
-- Media windows forfeit the scroll/edit incremental fast paths (full rebuild
-  instead — see below); cursor-only replay carries media and stays fast.
 
 ## Two traps hit while wiring this (checklist for the next media kind)
 
