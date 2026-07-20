@@ -46,7 +46,7 @@ impl OracleSandbox {
         })
     }
 
-    pub(crate) fn with_shared_tmpdir(mut self) -> Self {
+    pub(crate) fn expose_case_root_as_test_tmpdir(mut self) -> Self {
         self.expose_case_root = true;
         self
     }
@@ -96,7 +96,7 @@ impl OracleSandbox {
         }
     }
 
-    pub(crate) fn create_case_tempdir() -> Result<TempDir, String> {
+    pub(crate) fn create_fixture_tempdir() -> Result<TempDir, String> {
         create_case_tempdir_in(&project_root())
     }
 }

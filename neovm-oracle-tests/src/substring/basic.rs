@@ -4,7 +4,6 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 use crate::common::{
     assert_err_kind, assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm, run_neovm_eval,
-    run_oracle_eval,
 };
 
 #[test]
@@ -70,8 +69,7 @@ fn oracle_prop_substring_out_of_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r####"(substring "hello" 0 100)"####;
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_err_kind(&oracle, &neovm, "args-out-of-range");
 }
 

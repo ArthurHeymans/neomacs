@@ -4,15 +4,14 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 use proptest::prelude::*;
 
-use crate::common::{ORACLE_PROP_CASES, assert_err_kind, run_neovm_eval, run_oracle_eval};
+use crate::common::{ORACLE_PROP_CASES, assert_err_kind, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_prop_compare_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r#"(< 1 "x")"#;
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
 
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
@@ -30,8 +29,7 @@ proptest! {
         let form = format!("(= {} {})", a, b);
         let expected = if a == b { "OK t" } else { "OK nil" };
 
-        let oracle = run_oracle_eval(&form).expect("oracle eval should succeed");
-        let neovm = run_neovm_eval(&form).expect("neovm eval should succeed");
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
 
         prop_assert_eq!(oracle.as_str(), expected);
         prop_assert_eq!(neovm.as_str(), expected);
@@ -48,8 +46,7 @@ proptest! {
         let form = format!("(/= {} {})", a, b);
         let expected = if a != b { "OK t" } else { "OK nil" };
 
-        let oracle = run_oracle_eval(&form).expect("oracle eval should succeed");
-        let neovm = run_neovm_eval(&form).expect("neovm eval should succeed");
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
 
         prop_assert_eq!(oracle.as_str(), expected);
         prop_assert_eq!(neovm.as_str(), expected);
@@ -66,8 +63,7 @@ proptest! {
         let form = format!("(< {} {})", a, b);
         let expected = if a < b { "OK t" } else { "OK nil" };
 
-        let oracle = run_oracle_eval(&form).expect("oracle eval should succeed");
-        let neovm = run_neovm_eval(&form).expect("neovm eval should succeed");
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
 
         prop_assert_eq!(oracle.as_str(), expected);
         prop_assert_eq!(neovm.as_str(), expected);
@@ -84,8 +80,7 @@ proptest! {
         let form = format!("(<= {} {})", a, b);
         let expected = if a <= b { "OK t" } else { "OK nil" };
 
-        let oracle = run_oracle_eval(&form).expect("oracle eval should succeed");
-        let neovm = run_neovm_eval(&form).expect("neovm eval should succeed");
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
 
         prop_assert_eq!(oracle.as_str(), expected);
         prop_assert_eq!(neovm.as_str(), expected);
@@ -102,8 +97,7 @@ proptest! {
         let form = format!("(> {} {})", a, b);
         let expected = if a > b { "OK t" } else { "OK nil" };
 
-        let oracle = run_oracle_eval(&form).expect("oracle eval should succeed");
-        let neovm = run_neovm_eval(&form).expect("neovm eval should succeed");
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
 
         prop_assert_eq!(oracle.as_str(), expected);
         prop_assert_eq!(neovm.as_str(), expected);
@@ -120,8 +114,7 @@ proptest! {
         let form = format!("(>= {} {})", a, b);
         let expected = if a >= b { "OK t" } else { "OK nil" };
 
-        let oracle = run_oracle_eval(&form).expect("oracle eval should succeed");
-        let neovm = run_neovm_eval(&form).expect("neovm eval should succeed");
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
 
         prop_assert_eq!(oracle.as_str(), expected);
         prop_assert_eq!(neovm.as_str(), expected);
@@ -145,8 +138,7 @@ proptest! {
         ];
 
         for form in &forms {
-            let oracle = run_oracle_eval(form).expect("oracle eval should succeed");
-            let neovm = run_neovm_eval(form).expect("neovm eval should succeed");
+            let (oracle, neovm) = eval_oracle_and_neovm(form);
             prop_assert_eq!(neovm.as_str(), oracle.as_str());
         }
     }

@@ -163,7 +163,7 @@ fn oracle_prop_advice_non_callable_advice_function_error_shape() {
 fn debug_advice_add_non_callable_steps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    use crate::common::{run_neovm_eval, run_oracle_eval};
+    use crate::common::eval_oracle_and_neovm;
 
     let cases: &[(&str, &str)] = &[
         // Step 1: advice--make on a user symbol — should succeed
@@ -189,8 +189,7 @@ fn debug_advice_add_non_callable_steps() {
     ];
 
     for (label, form) in cases {
-        let oracle = run_oracle_eval(form).expect("oracle eval should run");
-        let neovm = run_neovm_eval(form).expect("neovm eval should run");
+        let (oracle, neovm) = eval_oracle_and_neovm(form);
         eprintln!("[debug] {label}:");
         eprintln!("  oracle: {oracle}");
         eprintln!("  neovm:  {neovm}");

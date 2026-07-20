@@ -34,7 +34,7 @@
 //! The two bugs this audit FIXED — non-greedy `??` behaving greedily, and
 //! `\\b`/`\\B` at string edges — are exercised in-subset and guarded here.
 
-use crate::common::{oracle_prop_enabled, run_neovm_eval, run_oracle_eval};
+use crate::common::{eval_oracle_and_neovm, oracle_prop_enabled};
 
 /// Numerical-Recipes LCG — fully deterministic so any failure reproduces from
 /// its seed.
@@ -309,8 +309,7 @@ fn run_sweep(seed: u64, batches: u64, k: usize) -> usize {
             })
             .collect();
         let form = build_batch(&cases);
-        let neo = run_neovm_eval(&form).expect("neomacs eval");
-        let gnu = run_oracle_eval(&form).expect("oracle eval");
+        let (gnu, neo) = eval_oracle_and_neovm(&form);
         let neo_lines: Vec<&str> = neo.trim_end().split('\n').collect();
         let gnu_lines: Vec<&str> = gnu.trim_end().split('\n').collect();
         assert_eq!(

@@ -1,6 +1,6 @@
 #[test]
 fn load_root_normalization_precedes_project_root_normalization() {
-    let load_root = crate::common::oracle_sandbox::OracleSandbox::create_case_tempdir()
+    let load_root = crate::common::oracle_sandbox::OracleSandbox::create_fixture_tempdir()
         .expect("external oracle load root");
     let expect =
         expect_test::expect![[r#""OK (\"[ORACLE-LOAD-ROOT]\" \"[ORACLE-PROJECT-ROOT]\")""#]];

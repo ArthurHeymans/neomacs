@@ -4,15 +4,14 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 use proptest::prelude::*;
 
-use crate::common::{ORACLE_PROP_CASES, assert_err_kind, run_neovm_eval, run_oracle_eval};
+use crate::common::{ORACLE_PROP_CASES, assert_err_kind, eval_oracle_and_neovm, run_neovm_eval};
 
 #[test]
 fn oracle_prop_eq_symbol_identity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(eq 'x 'x)";
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
 
     assert_eq!(oracle.as_str(), "OK t");
     assert_eq!(neovm.as_str(), "OK t");
@@ -24,8 +23,7 @@ fn oracle_prop_eq_symbol_distinct() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(eq 'x 'y)";
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
 
     assert_eq!(oracle.as_str(), "OK nil");
     assert_eq!(neovm.as_str(), "OK nil");
@@ -37,8 +35,7 @@ fn oracle_prop_eq_wrong_arity_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(eq 1)";
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
 
     assert_err_kind(&oracle, &neovm, "wrong-number-of-arguments");
 }
@@ -48,8 +45,7 @@ fn oracle_prop_eq_float_corner_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(list (eq 1.0 1.0) (let ((x 1.0)) (eq x x)) (eq 0.0 -0.0) (eql 0.0 -0.0))";
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
 
     assert_eq!(oracle.as_str(), "OK (nil t nil nil)");
     assert_eq!(neovm.as_str(), "OK (nil t nil nil)");
@@ -65,8 +61,7 @@ fn oracle_prop_eq_float_through_setq() {
 
     // (let ((x 1.0)) (eq x (setq x x)))  — setq returns the same float
     let form = r####"(let ((x 1.0)) (eq x (setq x x)))"####;
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
 
     assert_eq!(oracle.as_str(), "OK t");
     assert_eq!(neovm.as_str(), "OK t");
@@ -80,8 +75,7 @@ fn oracle_prop_eq_float_from_funcall() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r####"(let ((x 1.5)) (eq x (identity x)))"####;
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
 
     assert_eq!(oracle.as_str(), "OK t");
     assert_eq!(neovm.as_str(), "OK t");
@@ -103,8 +97,7 @@ fn oracle_prop_eq_float_macroexpand_pattern() {
            (eq form (setq new-form (identity form)))
            (eq form new-form)))
     "####;
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
 
     assert_eq!(oracle.as_str(), "OK (t t)");
     assert_eq!(neovm.as_str(), "OK (t t)");
@@ -117,8 +110,7 @@ fn oracle_prop_eq_float_distinct_literals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(eq 3.14 3.14)";
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
 
     assert_eq!(oracle.as_str(), "OK nil");
     assert_eq!(neovm.as_str(), "OK nil");
@@ -131,8 +123,7 @@ fn oracle_prop_eq_float_different_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(let ((x 1.0) (y 2.0)) (eq x y))";
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
 
     assert_eq!(oracle.as_str(), "OK nil");
     assert_eq!(neovm.as_str(), "OK nil");
@@ -145,8 +136,7 @@ fn oracle_prop_eq_float_via_funcall() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(funcall 'eq 1.0 1.0)";
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
 
     assert_eq!(oracle.as_str(), "OK nil");
     assert_eq!(neovm.as_str(), oracle.as_str());
@@ -158,8 +148,7 @@ fn oracle_prop_eq_computed_floats_not_identical() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(eq (+ 0.5 0.5) (- 2.0 1.0))";
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
 
     assert_eq!(oracle.as_str(), "OK nil");
     assert_eq!(neovm.as_str(), oracle.as_str());
@@ -171,8 +160,7 @@ fn oracle_prop_eq_function_returned_floats_not_identical() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(let ((f (lambda () (+ 0.5 0.5)))) (eq (funcall f) (funcall f)))";
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
 
     assert_eq!(oracle.as_str(), "OK nil");
     assert_eq!(neovm.as_str(), oracle.as_str());
@@ -297,8 +285,7 @@ proptest! {
         return_if_neovm_enable_oracle_proptest_not_set!(Ok(()));
 
         let form = format!("(eq {} {})", a, b);
-        let oracle = run_oracle_eval(&form).expect("oracle eval should succeed");
-        let neovm = run_neovm_eval(&form).expect("neovm eval should succeed");
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
 
         prop_assert_eq!(neovm.as_str(), oracle.as_str());
     }
@@ -312,8 +299,7 @@ proptest! {
 
         let form = format!("(eql {} {})", a, b);
         let expected = if a == b { "OK t" } else { "OK nil" };
-        let oracle = run_oracle_eval(&form).expect("oracle eval should succeed");
-        let neovm = run_neovm_eval(&form).expect("neovm eval should succeed");
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
 
         prop_assert_eq!(oracle.as_str(), expected);
         prop_assert_eq!(neovm.as_str(), expected);
@@ -328,8 +314,7 @@ proptest! {
         return_if_neovm_enable_oracle_proptest_not_set!(Ok(()));
 
         let form = format!("(equal (list {} {}) (list {} {}))", a, b, a, b);
-        let oracle = run_oracle_eval(&form).expect("oracle eval should succeed");
-        let neovm = run_neovm_eval(&form).expect("neovm eval should succeed");
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
 
         prop_assert_eq!(oracle.as_str(), "OK t");
         prop_assert_eq!(neovm.as_str(), "OK t");
@@ -346,8 +331,7 @@ proptest! {
         prop_assume!(a != c || b != c);
 
         let form = format!("(equal (list {} {}) (list {} {}))", a, b, c, c);
-        let oracle = run_oracle_eval(&form).expect("oracle eval should succeed");
-        let neovm = run_neovm_eval(&form).expect("neovm eval should succeed");
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
 
         prop_assert_eq!(neovm.as_str(), oracle.as_str());
     }

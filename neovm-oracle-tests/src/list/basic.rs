@@ -4,15 +4,14 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 use proptest::prelude::*;
 
-use crate::common::{ORACLE_PROP_CASES, assert_err_kind, run_neovm_eval, run_oracle_eval};
+use crate::common::{ORACLE_PROP_CASES, assert_err_kind, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_prop_car_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(car 1)";
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
 
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
@@ -22,8 +21,7 @@ fn oracle_prop_nth_wrong_index_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r#"(nth "x" (list 1 2))"#;
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
 
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
@@ -33,8 +31,7 @@ fn oracle_prop_append_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(append 1 (list 2))";
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
 
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
@@ -44,8 +41,7 @@ fn oracle_prop_list_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = "(list)";
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    let neovm = run_neovm_eval(form).expect("neovm eval should run");
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
 
     assert_eq!(oracle.as_str(), "OK nil");
     assert_eq!(neovm.as_str(), "OK nil");
@@ -65,8 +61,7 @@ proptest! {
         let form = format!("(cons {} {})", a, b);
         let expected = format!("OK ({} . {})", a, b);
 
-        let oracle = run_oracle_eval(&form).expect("oracle eval should succeed");
-        let neovm = run_neovm_eval(&form).expect("neovm eval should succeed");
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
 
         prop_assert_eq!(oracle.as_str(), expected.as_str());
         prop_assert_eq!(neovm.as_str(), expected.as_str());
@@ -83,8 +78,7 @@ proptest! {
         let form = format!("(car (cons {} {}))", a, b);
         let expected = format!("OK {}", a);
 
-        let oracle = run_oracle_eval(&form).expect("oracle eval should succeed");
-        let neovm = run_neovm_eval(&form).expect("neovm eval should succeed");
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
 
         prop_assert_eq!(oracle.as_str(), expected.as_str());
         prop_assert_eq!(neovm.as_str(), expected.as_str());
@@ -101,8 +95,7 @@ proptest! {
         let form = format!("(cdr (cons {} {}))", a, b);
         let expected = format!("OK {}", b);
 
-        let oracle = run_oracle_eval(&form).expect("oracle eval should succeed");
-        let neovm = run_neovm_eval(&form).expect("neovm eval should succeed");
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
 
         prop_assert_eq!(oracle.as_str(), expected.as_str());
         prop_assert_eq!(neovm.as_str(), expected.as_str());
@@ -120,8 +113,7 @@ proptest! {
         let form = format!("(list {} {} {})", a, b, c);
         let expected = format!("OK ({} {} {})", a, b, c);
 
-        let oracle = run_oracle_eval(&form).expect("oracle eval should succeed");
-        let neovm = run_neovm_eval(&form).expect("neovm eval should succeed");
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
 
         prop_assert_eq!(oracle.as_str(), expected.as_str());
         prop_assert_eq!(neovm.as_str(), expected.as_str());
@@ -140,8 +132,7 @@ proptest! {
         let form = format!("(length (list {} {} {} {}))", a, b, c, d);
         let expected = "OK 4";
 
-        let oracle = run_oracle_eval(&form).expect("oracle eval should succeed");
-        let neovm = run_neovm_eval(&form).expect("neovm eval should succeed");
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
 
         prop_assert_eq!(oracle.as_str(), expected);
         prop_assert_eq!(neovm.as_str(), expected);
@@ -167,8 +158,7 @@ proptest! {
             "OK nil".to_string()
         };
 
-        let oracle = run_oracle_eval(&form).expect("oracle eval should succeed");
-        let neovm = run_neovm_eval(&form).expect("neovm eval should succeed");
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
 
         prop_assert_eq!(oracle.as_str(), expected.as_str());
         prop_assert_eq!(neovm.as_str(), expected.as_str());
@@ -187,8 +177,7 @@ proptest! {
         let form = format!("(append (list {} {}) (list {} {}))", a, b, c, d);
         let expected = format!("OK ({} {} {} {})", a, b, c, d);
 
-        let oracle = run_oracle_eval(&form).expect("oracle eval should succeed");
-        let neovm = run_neovm_eval(&form).expect("neovm eval should succeed");
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
 
         prop_assert_eq!(oracle.as_str(), expected.as_str());
         prop_assert_eq!(neovm.as_str(), expected.as_str());
