@@ -43,3 +43,13 @@ fn oracle_sandbox_owns_child_tmpdir() {
         expect,
     );
 }
+
+#[test]
+fn oracle_sandbox_pins_snapshot_locale() {
+    let expect = expect_test::expect![[r#""OK (\"en_US.UTF-8\" \"en_US.UTF-8\")""#]];
+
+    crate::common::assert_oracle_parity_expect(
+        r#"(list (getenv "LANG") (getenv "LC_ALL"))"#,
+        expect,
+    );
+}

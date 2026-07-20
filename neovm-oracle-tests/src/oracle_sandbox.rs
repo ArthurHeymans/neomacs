@@ -13,6 +13,13 @@ use std::process::Command;
 
 use tempfile::TempDir;
 
+/// Locale used when recording the checked-in GNU Emacs expectations.
+///
+/// Collation is locale-sensitive, so inheriting the developer's locale would
+/// make snapshot mode non-deterministic. Per-case overrides are applied after
+/// this default and can still select another locale explicitly.
+const SNAPSHOT_LOCALE: &str = "en_US.UTF-8";
+
 pub(crate) struct OracleSandbox {
     case_root: TempDir,
     form_path: PathBuf,
@@ -66,6 +73,10 @@ impl OracleSandbox {
     }
 
     pub(crate) fn configure(&self, command: &mut Command) {
+        command
+            .env("LANG", SNAPSHOT_LOCALE)
+            .env("LC_ALL", SNAPSHOT_LOCALE);
+
         for (name, value) in &self.extra_env {
             command.env(name, value);
         }

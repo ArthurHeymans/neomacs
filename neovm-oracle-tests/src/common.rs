@@ -355,19 +355,12 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
          ;; <checkout>/neovm-oracle-tests/ -- so squash any remaining
          ;; occurrences of it to a second, coarser token AFTER the
          ;; more-specific lisp/ squash, keeping lisp paths on the finer
-         ;; token.  Apply those exact domain roots before generic temp-path
-         ;; scrubbing, which could otherwise consume an external load root.
+         ;; token. Exact-domain replacement avoids masking unrelated paths.
          ((stringp v)
           (replace-regexp-in-string
-           "/tmp/nix-shell\\.[A-Za-z0-9]+"
-           "[SESSION-TMPDIR]"
-           (replace-regexp-in-string
-            "/[^ \n\"]*neovm-oracle-case-[A-Za-z0-9]+"
-            "[ORACLE-TMPDIR]"
-            (replace-regexp-in-string
-             "%b - \\(?:GNU\\|NEO\\) Emacs at "
-             "%b - [EMACS-PRODUCT] at "
-             (neovm--oracle-squash-roots v)))))
+           "%b - \\(?:GNU\\|NEO\\) Emacs at "
+           "%b - [EMACS-PRODUCT] at "
+           (neovm--oracle-squash-roots v)))
          (t v)))
       (defun neovm--oracle-squash-roots (s)
         (let ((load-root (getenv "NEOVM_ORACLE_LOAD_ROOT"))
