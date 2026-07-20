@@ -109,7 +109,7 @@ Key contract points verified empirically this cycle:
 | D11 | `process-send-string` = `write_all`+`flush`; never re-enters the wait; `write_queue` field exists unused | **FIXED — S8** |
 | D12 | DNS always blocking, even for `:nowait` | **FIXED — S9** |
 | D13 | 50ms polling cap per wait iteration instead of exact timeouts | **FIXED — S9** |
-| D14 | Lisp threads: mutex ownership error where GNU blocks; dynamic `let` leaks across threads; `all-threads` misses blocked workers; `thread-signal` handler detail | **OPEN — S10** (separate subsystem) |
+| D14 | Lisp threads: mutex ownership error where GNU blocks; dynamic `let` leaks across threads; `all-threads` misses blocked workers; `thread-signal` handler detail | **RESOLVED — S10** (all four verified 2026-07-20 at live parity vs GNU 31.0.90; see §5) |
 
 ## 3. Landed slices (all pushed to main)
 
@@ -458,7 +458,21 @@ Validated gates for this slice:
 
 ## 5. REMAINING SLICES — detailed execution guidance
 
-### S10 — Lisp threads (D14) — separate subsystem effort
+### S10 — Lisp threads (D14) — RESOLVED
+
+**Status (verified 2026-07-20):** all four divergences below now match GNU.
+Live-mode parity against GNU 31.0.90 passes for **153** thread/mutex/
+condition oracle tests (`NEOVM_ORACLE_MODE=live`), plus 65 neovm-core
+`threads` unit tests. neomacs's cooperative simulation (`threads.rs` —
+single OS thread, `make-thread` runs the thunk and parks it at cooperative
+blocking points) was extended to cover the GNU semantics: a second
+`mutex-lock` parks the worker (it stays `thread-live-p` t and appears in
+`all-threads`) instead of erroring, and dynamic bindings are swapped per
+thread (a `let` in one thread is invisible in another). The four
+`div_core_divergence_surface_*` tests in
+`core_subsystems_strict.rs` now assert the GNU value and pass; their inline
+"Neomacs: …" comments document the historical (pre-fix) divergence only.
+The original spec is retained below for reference.
 
 - GNU model (`thread.c`): every Lisp thread is an OS thread holding THE
   global lock while running Lisp; switches happen only at blocking points
