@@ -186,24 +186,22 @@ fn div_cx304_directory_files_recursively_pattern() {
 #[test]
 fn div_cx304_file_attributes_full_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    // The last element pins (car (file-attribute-modification-time)) — the
-    // epoch high word, which ticks every 65536 s (~18.2 h) on a live clock
-    // and made this expect a time bomb. The frozen-clock harness (libfaketime
-    // intercepts stat, so file mtimes freeze too) makes it deterministic.
-    let expect = expect_test::expect![[r#""OK (10 \"-rw-------\" nil 1 27184)""#]];
-    crate::common::assert_oracle_parity_frozen_time_expect(
+    let expect = expect_test::expect![[r#""OK (10 \"-rw-------\" nil 1 t)""#]];
+    crate::common::assert_oracle_parity_expect(
         r##"
-(let* ((path (make-temp-file "neo-cx304-attr")))
+(let* ((path (make-temp-file "neo-cx304-attr"))
+       (fixed-time (seconds-to-time 100)))
   (with-temp-buffer
     (insert "0123456789")
     (write-region (point-min) (point-max) path nil 'silent))
+  (set-file-times path fixed-time)
   (let ((a (file-attributes path)))
     (delete-file path)
     (list (file-attribute-size a)
           (file-attribute-modes a)
           (file-attribute-type a)
           (file-attribute-link-number a)
-          (car (file-attribute-modification-time a)))))
+          (time-equal-p (file-attribute-modification-time a) fixed-time))))
 "##,
         expect,
     )

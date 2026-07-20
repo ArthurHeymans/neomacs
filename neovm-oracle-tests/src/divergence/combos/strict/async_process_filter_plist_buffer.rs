@@ -104,10 +104,8 @@ fn div_j0_process_connection_type_and_contact() {
 fn div_j0_process_stderr_separate_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[r#""OK (\"out\n\" \"err\n\")""#]];
-    // A single targeted wait on the main process may drain both stdout and the
-    // implicit stderr pipe-process bytes, but GNU does not run either default
-    // sentinel before this form reads the buffers.  Later waits can still
-    // insert the usual "Process ... finished" messages.
+    // stdout and stderr are separate process objects. Wait for both and ignore
+    // their sentinels so buffer contents do not depend on pipe scheduling.
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((outbuf (generate-new-buffer " *probe-stderr-out*"))
@@ -121,8 +119,20 @@ fn div_j0_process_stderr_separate_buffer() {
     (let ((stderr-proc (get-buffer-process errbuf)))
       (when stderr-proc
         (set-process-query-on-exit-flag stderr-proc nil)
-        (set-process-sentinel stderr-proc #'ignore)))
-    (accept-process-output proc 1)
+        (set-process-sentinel stderr-proc #'ignore))
+      (let ((attempts 0))
+        (while (and (or (process-live-p proc)
+                        (and stderr-proc (process-live-p stderr-proc)))
+                    (< attempts 100))
+          (accept-process-output nil 0.05)
+          (setq attempts (1+ attempts)))
+        (when (or (process-live-p proc)
+                  (and stderr-proc (process-live-p stderr-proc)))
+          (error "process did not exit")))
+      (let ((drains 0))
+        (while (and (< drains 100)
+                    (accept-process-output nil 0.01))
+          (setq drains (1+ drains)))))
     (list (with-current-buffer outbuf (buffer-string))
           (with-current-buffer errbuf (buffer-string)))))
 "##,

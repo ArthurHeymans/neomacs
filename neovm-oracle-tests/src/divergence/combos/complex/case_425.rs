@@ -111,13 +111,17 @@ fn div_cx425_file_case_ownership() {
 #[test]
 fn div_cx425_system_users_groups() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((\"nobody\" \"nixbld32\" \"nixbld31\" \"nixbld30\" \"nixbld29\" \"nixbld28\" \"nixbld27\" \"nixbld26\" \"nixbld25\" \"nixbld24\" \"nixbld23\" \"nixbld22\" \"nixbld21\" \"nixbld20\" \"nixbld19\" \"nixbld18\" \"nixbld17\" \"nixbld16\" \"nixbld15\" \"nixbld14\" \"nixbld13\" \"nixbld12\" \"nixbld11\" \"nixbld10\" \"nixbld9\" \"nixbld8\" \"nixbld7\" \"nixbld6\" \"nixbld5\" \"nixbld4\" \"nixbld3\" \"nixbld2\" \"nixbld1\" \"sftpuser\" \"exec\" \"nscd\" \"rtkit\" \"systemd-oom\" \"sshd\" \"avahi\" \"dhcpcd\" \"flatpak\" \"jackaudio\" \"ollama\" \"guixbuilder0\" \"guixbuilder1\" \"guixbuilder2\" \"guixbuilder3\" \"guixbuilder4\" \"guixbuilder5\" \"guixbuilder6\" \"guixbuilder7\" \"guixbuilder8\" \"guixbuilder9\" \"fwupd-refresh\" \"geoclue\" \"distcc\" \"minio\" \"sddm\" \"systemd-timesync\" \"systemd-resolve\" \"systemd-network\" \"systemd-coredump\" \"polkituser\" \"messagebus\" \"root\") (\"nogroup\" \"nixbld\" \"nscd\" \"polkituser\" \"rtkit\" \"systemd-coredump\" \"systemd-oom\" \"sshd\" \"avahi\" \"dhcpcd\" \"ydotool\" \"flatpak\" \"jackaudio\" \"resolvconf\" \"ollama\" \"guixbuild\" \"sftp\" \"fwupd-refresh\" \"geoclue\" \"clock\" \"pipewire\" \"distcc\" \"shadow\" \"sgx\" \"render\" \"kvm\" \"minio\" \"sddm\" \"input\" \"systemd-timesync\" \"systemd-resolve\" \"systemd-network\" \"docker\" \"users\" \"keys\" \"vboxusers\" \"systemd-journal\" \"adm\" \"utmp\" \"dialout\" \"video\" \"tape\" \"cdrom\" \"lp\" \"uucp\" \"floppy\" \"audio\" \"disk\" \"messagebus\" \"tty\" \"kmem\" \"wheel\" \"root\"))""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
-(list (condition-case e (system-users) (error (car e)))
-      (condition-case e (system-groups) (error (car e))))
+(let ((users (system-users))
+      (groups (system-groups)))
+  (list (and (listp users) (> (length users) 0))
+        (not (memq nil (mapcar #'stringp users)))
+        (and (member "root" users) t)
+        (and (listp groups) (> (length groups) 0))
+        (not (memq nil (mapcar #'stringp groups)))
+        (and (member "root" groups) t)))
 "##,
         expect,
     );

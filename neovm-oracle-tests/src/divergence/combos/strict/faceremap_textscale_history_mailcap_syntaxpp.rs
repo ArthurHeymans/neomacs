@@ -63,9 +63,12 @@ fn div_o5_mailcap_extension_to_mime() {
     let expect = expect_test::expect![[r#""OK (\"text/plain\" \"text/html\" nil)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
-(list (mailcap-extension-to-mime "txt")
-      (mailcap-extension-to-mime "html")
-      (mailcap-extension-to-mime "json"))
+(let ((mailcap-mimetypes-parsed-p t)
+      (mailcap-mime-extensions '((".txt" . "text/plain")
+                                 (".html" . "text/html"))))
+  (list (mailcap-extension-to-mime "txt")
+        (mailcap-extension-to-mime "html")
+        (mailcap-extension-to-mime "json")))
 "##,
         &["net/mailcap.el"],
         expect,

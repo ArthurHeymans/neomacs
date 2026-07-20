@@ -67,7 +67,9 @@ fn oracle_sandbox_pins_snapshot_time_zone() {
 
 #[test]
 fn oracle_sandbox_isolates_home_and_identity() {
-    let expect = expect_test::expect![[r#""OK (\"[ORACLE-HOME]\" \"exec\" \"exec\" t t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"[ORACLE-HOME]\" \"exec\" \"exec\" \"oracle-host\" \"exec@oracle-host\" \"oracle-host\" \"oracle-host\" \"exec@oracle-host\" t t)""#
+    ]];
 
     crate::common::assert_oracle_parity_expect(
         r#"(let ((home (getenv "HOME"))
@@ -75,6 +77,11 @@ fn oracle_sandbox_isolates_home_and_identity() {
               (list home
                     (getenv "USER")
                     (getenv "LOGNAME")
+                    (getenv "HOSTNAME")
+                    (getenv "EMAIL")
+                    system-name
+                    (system-name)
+                    user-mail-address
                     (file-directory-p home)
                     (file-in-directory-p home scratch)))"#,
         expect,

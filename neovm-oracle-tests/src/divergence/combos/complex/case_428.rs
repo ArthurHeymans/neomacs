@@ -99,14 +99,17 @@ fn div_cx428_file_symlink() {
 #[test]
 fn div_cx428_executable_find() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"/nix/store/i27rhb3nr65rkrwz36bchkwmav6ggsmn-bash-5.3p9/bin/sh\" nil \"/nix/store/jjxngswsb214vb58qx485jhmilf0kxxy-coreutils-9.10/bin/echo\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t \"sh\" nil t \"echo\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
-(list (executable-find "sh")
-      (executable-find "nonexistent-command-cx428")
-      (executable-find "echo"))
+(let ((sh (executable-find "sh"))
+      (missing (executable-find "nonexistent-command-cx428"))
+      (echo (executable-find "echo")))
+  (list (and sh (file-executable-p sh))
+        (and sh (file-name-nondirectory sh))
+        missing
+        (and echo (file-executable-p echo))
+        (and echo (file-name-nondirectory echo))))
 "##,
         expect,
     );
@@ -116,12 +119,16 @@ fn div_cx428_executable_find() {
 #[test]
 fn div_cx428_user_real_uid_gid() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1001 100 t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
-(list (user-real-uid)
-      (group-gid)
-      (stringp (user-real-login-name)))
+(let ((path (make-temp-file "neo-cx428-owner-")))
+  (unwind-protect
+      (let ((attributes (file-attributes path 'integer)))
+        (list (= (user-real-uid) (file-attribute-user-id attributes))
+              (= (group-gid) (file-attribute-group-id attributes))
+              (stringp (user-real-login-name))))
+    (delete-file path)))
 "##,
         expect,
     );

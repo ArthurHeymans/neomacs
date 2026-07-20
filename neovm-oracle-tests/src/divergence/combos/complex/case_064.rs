@@ -8,22 +8,29 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx64_process_filter_chunked_utf8_decoding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"\nProcess neo-cx64-pf finished\n\" 30 1 8)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"\nProcess neo-cx64-pf finished\n\" 30 \"hello 世界\" 8)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx64-pf*"))
        (chunks nil))
   (let ((p (make-process :name "neo-cx64-pf"
-                         :command '("sh" "-c" "printf 'hello \\xe4\\xb8\\x96\\xe7\\x95\\x8c'")
+                         :command '("printf" "hello 世界")
                          :buffer buf
                          :filter (lambda (proc data) (push data chunks))
                          :coding 'utf-8-unix)))
-    (accept-process-output p 2)
-    (sit-for 0.05)
-    (let ((output (with-current-buffer buf (buffer-string))))
+    (let ((attempts 0))
+      (while (and (process-live-p p) (< attempts 100))
+        (accept-process-output p 0.05)
+        (setq attempts (1+ attempts)))
+      (when (process-live-p p)
+        (error "process did not exit")))
+    (while (accept-process-output p 0.01))
+    (let ((output (with-current-buffer buf (buffer-string)))
+          (decoded (apply #'concat (nreverse chunks))))
       (kill-buffer buf)
-      (list output (length output) (length chunks)
-            (apply #'+ (mapcar #'length chunks))))))
+      (list output (length output) decoded (length decoded)))))
 "##,
         expect,
     );

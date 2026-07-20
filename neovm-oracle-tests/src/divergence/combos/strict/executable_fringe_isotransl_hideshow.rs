@@ -11,15 +11,17 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_o3_executable_set_magic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r##""OK \"#!/nix/store/i27rhb3nr65rkrwz36bchkwmav6ggsmn-bash-5.3p9/bin/sh\nline1\nline2\n\"""##
-    ]];
+    let expect = expect_test::expect![[r#""OK (t \"line1\nline2\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "line1\nline2\n")
   (executable-set-magic "sh")
-  (buffer-string))
+  (goto-char (point-min))
+  (let ((valid-magic (and (looking-at "#!.*/sh$") t)))
+    (forward-line 1)
+    (list valid-magic
+          (buffer-substring-no-properties (point) (point-max)))))
 "##,
         expect,
     );

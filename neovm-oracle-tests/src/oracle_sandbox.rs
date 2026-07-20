@@ -31,6 +31,10 @@ const SNAPSHOT_TIME_ZONE: &str = "America/New_York";
 /// environment. The home directory itself remains a fresh per-case directory.
 const SNAPSHOT_USER: &str = "exec";
 
+/// Stable host identity for forms and libraries that derive output from the
+/// machine name (for example TRAMP defaults, Org macros, and email addresses).
+const SNAPSHOT_HOST: &str = "oracle-host";
+
 pub(crate) struct OracleSandbox {
     case_root: TempDir,
     home_root: PathBuf,
@@ -100,6 +104,9 @@ impl OracleSandbox {
             .env("HOME", &self.home_root)
             .env("USER", SNAPSHOT_USER)
             .env("LOGNAME", SNAPSHOT_USER)
+            .env("HOSTNAME", SNAPSHOT_HOST)
+            .env("EMAIL", format!("{SNAPSHOT_USER}@{SNAPSHOT_HOST}"))
+            .env("NEOVM_ORACLE_SYSTEM_NAME", SNAPSHOT_HOST)
             .env("TERM", "dumb")
             // Workspace-local scratch directories sit beneath the checkout.
             // Prevent repository helpers from discovering the outer repo.

@@ -145,13 +145,18 @@ fn div_cx299_process_output_with_coding_system() {
     let expect = expect_test::expect![[r#""OK (\"世界\nProcess neo-cx299-cs finished\n\" 33)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
-(let* ((buf (get-buffer-create " *neo-cx299-cs*"))
+  (let* ((buf (get-buffer-create " *neo-cx299-cs*"))
        (p (make-process :name "neo-cx299-cs"
-                        :command '("sh" "-c" "printf '\\xe4\\xb8\\x96\\xe7\\x95\\x8c'")
+                        :command '("printf" "世界")
                         :buffer buf)))
   (set-process-coding-system p 'utf-8-unix 'utf-8-unix)
-  (accept-process-output p 1)
-  (sit-for 0.05)
+  (let ((attempts 0))
+    (while (and (process-live-p p) (< attempts 100))
+      (accept-process-output p 0.05)
+      (setq attempts (1+ attempts)))
+    (when (process-live-p p)
+      (error "process did not exit")))
+  (while (accept-process-output p 0.01))
   (let ((content (with-current-buffer buf (buffer-string))))
     (kill-buffer buf)
     (list content (length content))))

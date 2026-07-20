@@ -23,16 +23,18 @@ fn div_j2_process_lines_sync() {
 #[test]
 fn div_j2_process_lines_with_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""ERR (error \"/nix/store/i27rhb3nr65rkrwz36bchkwmav6ggsmn-bash-5.3p9/bin/bash exited with status 7\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK ((\"single\") 5 (error t))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (process-lines shell-file-name shell-command-switch "echo single")
       (length (process-lines shell-file-name shell-command-switch "seq 1 5"))
       (condition-case err
           (process-lines shell-file-name shell-command-switch "exit 7")
-        (file-error (car (cdr err)))))
+        (error
+         (list (car err)
+               (and (string-match-p "exited with status 7\\'"
+                                    (error-message-string err))
+                    t)))))
 "##,
         expect,
     );

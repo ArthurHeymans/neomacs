@@ -135,13 +135,22 @@ fn divergence_path_separators() {
 fn divergence_file_executable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (nil t nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (nil 420 t 493 t)""#]];
     crate::common::assert_oracle_parity_expect(
-        r#"(list
-  (file-executable-p "/bin/ls")
-  (file-executable-p "/bin/sh")
-  (file-modes "/bin/ls")
-  (integerp (file-modes "/bin/ls")))"#,
+        r#"(let ((path (make-temp-file "neovm-executable-")))
+  (unwind-protect
+      (progn
+        (set-file-modes path #o644)
+        (let ((before (file-executable-p path))
+              (before-modes (file-modes path)))
+          (set-file-modes path #o755)
+          (let ((after-modes (file-modes path)))
+            (list before
+                  before-modes
+                  (file-executable-p path)
+                  after-modes
+                  (integerp after-modes)))))
+    (delete-file path)))"#,
         expect,
     );
 }

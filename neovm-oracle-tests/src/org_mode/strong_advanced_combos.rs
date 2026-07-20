@@ -392,7 +392,7 @@ fn strong_headline_with_drawers() {
 fn strong_export_custom_backend() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((#(\"Test\" 0 4 (:parent (#(\"Test\" 0 4 (:parent #4)))))) nil \"exec@Matrix\" ((1 \"Heading\") (2 \"Sub\")))""#
+        r#""OK ((#(\"Test\" 0 4 (:parent (#(\"Test\" 0 4 (:parent #4)))))) nil \"exec@oracle-host\" ((1 \"Heading\") (2 \"Sub\")))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

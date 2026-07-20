@@ -457,6 +457,11 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
            (coding-system-for-write 'utf-8-unix)
            (_ (set-language-environment "UTF-8"))
            (_ (setq system-time-locale "C"))
+           (_ (let ((stable-system-name
+                     (getenv "NEOVM_ORACLE_SYSTEM_NAME")))
+                (when (and stable-system-name
+                           (> (length stable-system-name) 0))
+                  (setq system-name stable-system-name))))
            (load-root (getenv "NEOVM_ORACLE_LOAD_ROOT"))
            (load-files (split-string (or (getenv "NEOVM_ORACLE_LOAD_FILES") "") "\n" t))
            (form-file (getenv "NEOVM_ORACLE_FORM_FILE"))
@@ -500,6 +505,11 @@ const EVAL_PROGRAM_RAW: &str = r#"(condition-case err
              (coding-system-for-write 'utf-8-unix)
              (_ (set-language-environment "UTF-8"))
              (_ (setq system-time-locale "C"))
+             (_ (let ((stable-system-name
+                       (getenv "NEOVM_ORACLE_SYSTEM_NAME")))
+                  (when (and stable-system-name
+                             (> (length stable-system-name) 0))
+                    (setq system-name stable-system-name))))
              (load-root (getenv "NEOVM_ORACLE_LOAD_ROOT"))
              (load-files (split-string (or (getenv "NEOVM_ORACLE_LOAD_FILES") "") "\n" t))
              (form-file (getenv "NEOVM_ORACLE_FORM_FILE"))

@@ -201,7 +201,7 @@ fn combo48_visibility_parse_reparse() {
 fn combo48_macro_expand_export() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:raw-value \"{{{name}}} Report\") (:exported \"1 Project NeoMACS Report\n========================\n\n  Version: 0.1.0.  Hello from Matrix\n\n\n1.1 Sub-section\n~~~~~~~~~~~~~~~\n\n  More about Project NeoMACS 0.1.0.\n\") (:macro-count 3))""#
+        r#""OK ((:raw-value \"{{{name}}} Report\") (:exported \"1 Project NeoMACS Report\n========================\n\n  Version: 0.1.0.  Hello from oracle-host\n\n\n1.1 Sub-section\n~~~~~~~~~~~~~~~\n\n  More about Project NeoMACS 0.1.0.\n\") (:macro-count 3))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
