@@ -25,17 +25,10 @@ use support::*;
 /// into the leading columns of that line, OVERWRITING them — for a line
 /// "beta" GNU displays "=>ta".
 ///
-/// IGNORED: this documents an unimplemented feature, not a regression.
-/// Neomacs defines `overlay-arrow-position`, `overlay-arrow-string` and
-/// `overlay-arrow-variable-list` (emacs_core/xdisp.rs) and maps the
-/// `overlay-arrow` logical fringe indicator, but no display code consumes
-/// them, so the arrow is never drawn: measured GNU `|=>ta|` vs neomacs
-/// `|beta|`. Implementing it means having the buffer-text row walk consult
-/// `overlay-arrow-variable-list` at each row start and overwrite the leading
-/// columns with the arrow string (GNU xdisp.c `overlay_arrow_at_row` /
-/// `display_line`). Remove the ignore in the same change.
+/// This was red when written — neomacs defined the variables but no display
+/// code consumed them, so it drew "beta" where GNU drew "=>ta". Implemented in
+/// `display_overlay_arrow.rs`.
 #[test]
-#[ignore = "overlay arrow is not implemented on the TTY; GNU draws \"=>ta\", neomacs draws \"beta\""]
 fn overlay_arrow_matches_gnu() {
     let (mut gnu, mut neo) = boot_pair("");
     wait_for_both(&mut gnu, &mut neo, Duration::from_secs(30), scratch_ready);

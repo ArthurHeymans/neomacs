@@ -57,6 +57,7 @@ pub(crate) mod display_output_install_request;
 pub(crate) mod display_output_row_request;
 pub(crate) mod display_output_window_request;
 pub(crate) mod display_output_window_state;
+mod display_overlay_arrow;
 pub mod display_pixel_calc;
 pub(crate) mod display_property;
 pub(crate) mod display_rendered_row_output_install;
