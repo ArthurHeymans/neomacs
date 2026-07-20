@@ -418,13 +418,14 @@ fn org_capture_finalize_hooks_stats_narrow_prompt_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((17 40 t) (\"CAPTURE-org-capture-hooks.org\" t \"*** TODO Hooked Title\nSCHEDULED: <2026-05-27 Wed>\nFrom: [[file:[ORACLE-TMPDIR]/org-capture-hooks.org::*Inbox][Inbox]]\nInitial body\n\" nil) (t 17 40 \"** Inbox\n- [ ] Existing\") (\"CAPTURE-org-capture-hooks.org\" \"- Captured checkbox\" 62) ((prompt \"Title (default Default): \" nil) (prepare \"CAPTURE-org-capture-hooks.org\" t 42 204) (before \"CAPTURE-org-capture-hooks.org\" 41 219) (after \"e\" 176 42) (check-after \"c\" 41)) nil 41 \"* Project [stamp]\n** Inbox\n- [ ] Existing\n- Captured checkbox\n\n*** TODO Hooked Title\nSCHEDULED: <2026-05-27 Wed>\nFrom: [[file:[ORACLE-TMPDIR]/org-capture-hooks.org::*Inbox][Inbox]]\nInitial body\nPrepared line\n\n** Archive\n\")""#
+        r#""OK ((17 40 t) (\"CAPTURE-org-capture-hooks.org\" t \"*** TODO Hooked Title\nSCHEDULED: <2026-05-27 Wed>\nFrom: [[file:[ORACLE-TMPDIR]/org-capture-hooks.org::*Inbox][Inbox]]\nInitial body\n\" nil) (t 17 40 \"** Inbox\n- [ ] Existing\") (\"CAPTURE-org-capture-hooks.org\" \"- Captured checkbox\" 62) ((prompt \"Title (default Default): \" nil) (prepare \"CAPTURE-org-capture-hooks.org\" t 42 157) (before \"CAPTURE-org-capture-hooks.org\" 41 172) (after \"e\" 129 42) (check-after \"c\" 41)) nil 41 \"* Project [stamp]\n** Inbox\n- [ ] Existing\n- Captured checkbox\n\n*** TODO Hooked Title\nSCHEDULED: <2026-05-27 Wed>\nFrom: [[file:[ORACLE-TMPDIR]/org-capture-hooks.org::*Inbox][Inbox]]\nInitial body\nPrepared line\n\n** Archive\n\")""#
     ]];
     crate::common::assert_oracle_parity_with_shared_tempdir_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)
   (let* ((root (file-name-as-directory (getenv "NEOVM_ORACLE_TEST_TMPDIR")))
+         (root-display-length (length (abbreviate-file-name root)))
          (file (expand-file-name "org-capture-hooks.org" root))
          (events nil)
          (answers '("Hooked Title"))
@@ -442,7 +443,7 @@ fn org_capture_finalize_hooks_stats_narrow_prompt_combo() {
                             (buffer-name)
                             (buffer-narrowed-p)
                             (point-min)
-                            (point-max))
+                            (- (point-max) root-display-length))
                       events)
                 (goto-char (point-max))
                 (insert "Prepared line\n"))
@@ -452,15 +453,17 @@ fn org_capture_finalize_hooks_stats_narrow_prompt_combo() {
                             (buffer-name)
                             (marker-position
                              (org-capture-get :begin-marker 'local))
-                            (marker-position
-                             (org-capture-get :end-marker 'local)))
+                            (- (marker-position
+                                (org-capture-get :end-marker 'local))
+                               root-display-length))
                       events))
              :after-finalize
              ,(lambda ()
                 (push (list 'after
                             (plist-get org-capture-plist :key)
-                            (plist-get org-capture-plist
-                                       :captured-entry-size)
+                            (- (plist-get org-capture-plist
+                                          :captured-entry-size)
+                               root-display-length)
                             (marker-position
                              org-capture-last-stored-marker))
                       events)))

@@ -5,13 +5,13 @@
 //! environment overrides. Keeping that setup here prevents the two engine
 //! runners from drifting apart.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use tempfile::TempDir;
+use tempfile::{NamedTempFile, TempDir};
 
 /// Locale used when recording the checked-in GNU Emacs expectations.
 ///
@@ -82,6 +82,13 @@ impl OracleSandbox {
         }
 
         let scratch_root = self.case_root.path();
+        let session_tmpdir = self
+            .extra_env
+            .iter()
+            .rev()
+            .find(|(name, _)| name.as_os_str() == OsStr::new("TMPDIR"))
+            .map(|(_, value)| value.clone())
+            .or_else(|| std::env::var_os("TMPDIR"));
         let load_files = self
             .load_files
             .iter()
@@ -93,8 +100,13 @@ impl OracleSandbox {
             .env("NEOVM_ORACLE_LOAD_ROOT", &self.load_root)
             .env("NEOVM_ORACLE_PROJECT_ROOT", &self.project_root)
             .env("NEOVM_ORACLE_SCRATCH_ROOT", scratch_root)
-            .env("NEOVM_ORACLE_LOAD_FILES", load_files)
-            .env("TMPDIR", scratch_root);
+            .env("NEOVM_ORACLE_LOAD_FILES", load_files);
+
+        if let Some(session_tmpdir) = session_tmpdir {
+            command.env("NEOVM_ORACLE_SESSION_TMPDIR", session_tmpdir);
+        } else {
+            command.env_remove("NEOVM_ORACLE_SESSION_TMPDIR");
+        }
 
         if self.use_case_working_dir {
             command.current_dir(scratch_root);
@@ -130,7 +142,31 @@ fn scratch_base(project_root: &Path) -> Result<PathBuf, String> {
             root.display()
         )
     })?;
+    ensure_dir_locals_barrier(&root)?;
     Ok(root)
+}
+
+fn ensure_dir_locals_barrier(scratch_root: &Path) -> Result<(), String> {
+    let barrier = scratch_root.join(".dir-locals.el");
+    if barrier.is_file() {
+        return Ok(());
+    }
+
+    let mut staged = NamedTempFile::new_in(scratch_root)
+        .map_err(|error| format!("failed to stage oracle dir-locals barrier: {error}"))?;
+    staged
+        .write_all(b"((nil . nil))\n")
+        .and_then(|()| staged.flush())
+        .map_err(|error| format!("failed to write oracle dir-locals barrier: {error}"))?;
+    match staged.persist_noclobber(&barrier) {
+        Ok(_) => Ok(()),
+        Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(error) => Err(format!(
+            "failed to install oracle dir-locals barrier {}: {}",
+            barrier.display(),
+            error.error
+        )),
+    }
 }
 
 fn create_case_tempdir_in(project_root: &Path) -> Result<TempDir, String> {

@@ -30,16 +30,16 @@ fn oracle_sandbox_keeps_case_files_under_workspace_tmp() {
 }
 
 #[test]
-fn oracle_sandbox_owns_child_tmpdir() {
+fn oracle_sandbox_preserves_explicit_child_tmpdir() {
     let expect = expect_test::expect![[r#""OK (t t)""#]];
 
     crate::common::assert_oracle_parity_with_env_expect(
         r#"(let ((scratch (file-name-as-directory
                           (getenv "NEOVM_ORACLE_SCRATCH_ROOT"))))
-            (list (equal (file-name-as-directory (getenv "TMPDIR")) scratch)
+            (list (equal (getenv "TMPDIR") "/should-win")
                   (file-in-directory-p
                    (getenv "NEOVM_ORACLE_FORM_FILE") scratch)))"#,
-        &[("TMPDIR", "/should-not-win")],
+        &[("TMPDIR", "/should-win")],
         expect,
     );
 }

@@ -366,7 +366,8 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
         (let ((load-root (getenv "NEOVM_ORACLE_LOAD_ROOT"))
               (project-root (getenv "NEOVM_ORACLE_PROJECT_ROOT"))
               (scratch-root (getenv "NEOVM_ORACLE_SCRATCH_ROOT"))
-              (case-root (getenv "NEOVM_ORACLE_TEST_TMPDIR"))
+              (session-root (getenv "NEOVM_ORACLE_SESSION_TMPDIR"))
+              (neovm--oracle-case-root (getenv "NEOVM_ORACLE_TEST_TMPDIR"))
               (pairs nil))
           (let ((proj-abs (and project-root
                                (> (length project-root) 0)
@@ -374,9 +375,13 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
                 (scratch-abs (and scratch-root
                                   (> (length scratch-root) 0)
                                   (directory-file-name scratch-root)))
-                (case-abs (and case-root
-                               (> (length case-root) 0)
-                               (directory-file-name case-root)))
+                (session-abs (and session-root
+                                  (> (length session-root) 0)
+                                  (directory-file-name session-root)))
+                (neovm--oracle-case-abs
+                 (and neovm--oracle-case-root
+                      (> (length neovm--oracle-case-root) 0)
+                      (directory-file-name neovm--oracle-case-root)))
                 (load-abs (and load-root
                                (> (length load-root) 0)
                                (directory-file-name load-root))))
@@ -397,13 +402,21 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
                             "[SESSION-TMPDIR]")
                       pairs)
                 (push (cons scratch-abs "[SESSION-TMPDIR]") pairs))
+              ;; The child inherits (or explicitly overrides) TMPDIR. Replace
+              ;; that exact directory instead of matching arbitrary /tmp paths.
+              (when (and session-abs (> (length session-abs) 1))
+                (push (cons (abbreviate-file-name session-abs)
+                            "[SESSION-TMPDIR]")
+                      pairs)
+                (push (cons session-abs "[SESSION-TMPDIR]") pairs))
               ;; A shared case directory is nested inside scratch. Normalize
               ;; it first so snapshots preserve the more-specific token.
-              (when (and case-abs (> (length case-abs) 1))
-                (push (cons (abbreviate-file-name case-abs)
+              (when (and neovm--oracle-case-abs
+                         (> (length neovm--oracle-case-abs) 1))
+                (push (cons (abbreviate-file-name neovm--oracle-case-abs)
                             "[ORACLE-TMPDIR]")
                       pairs)
-                (push (cons case-abs "[ORACLE-TMPDIR]") pairs))
+                (push (cons neovm--oracle-case-abs "[ORACLE-TMPDIR]") pairs))
               (when (and load-abs (> (length load-abs) 1))
                 (push (cons (abbreviate-file-name load-abs)
                             "[ORACLE-LOAD-ROOT]")
