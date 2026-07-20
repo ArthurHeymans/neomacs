@@ -8608,9 +8608,9 @@ impl TaggedHeap {
         }
     }
 
-    /// Tag-less union oracle used by debug checks that have not decoded the
-    /// value's heap tag yet.
-    #[cfg(debug_assertions)]
+    /// Tag-less union oracle used by debug checks and GC tests that have not
+    /// decoded the value's heap tag yet.
+    #[cfg(any(debug_assertions, test))]
     fn owns_non_cons_object(&self, ptr: *const u8) -> bool {
         !ptr.is_null()
             && (self.string_arena.owns(ptr)
