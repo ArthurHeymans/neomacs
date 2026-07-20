@@ -158,10 +158,7 @@ fn oracle_emacs_available() -> bool {
 
 fn neomacs_binary_path() -> String {
     std::env::var("NEOVM_BINARY_PATH").unwrap_or_else(|_| {
-        let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        manifest
-            .parent()
-            .expect("project root")
+        oracle_sandbox::project_root()
             .join("target/release/neomacs")
             .to_string_lossy()
             .into_owned()
@@ -251,12 +248,8 @@ fn frozen_time_env() -> Vec<(String, String)> {
     ]
 }
 
-fn project_root() -> PathBuf {
-    oracle_sandbox::project_root()
-}
-
 fn project_lisp_dir() -> PathBuf {
-    project_root().join("lisp")
+    oracle_sandbox::project_root().join("lisp")
 }
 
 fn ensure_nonempty_form(form: &str) -> Result<(), String> {
@@ -512,17 +505,11 @@ const NATIVE_COMP_SUPPRESSION_PRELUDE: &str = "(setq native-comp-jit-compilation
 // Oracle (GNU Emacs) subprocess evaluation
 // ---------------------------------------------------------------------------
 
-fn run_oracle_eval_inner_with_tmpdir(
-    form: &str,
-    load_files: &[&str],
-    shared_tmpdir: Option<&Path>,
-    extra_env: &[(&str, &str)],
-    load_root: &Path,
+fn run_oracle_eval_with_sandbox(
+    sandbox: &OracleSandbox,
+    eval_program: &str,
 ) -> Result<String, String> {
     let oracle_bin = oracle_emacs_path();
-    let sandbox = OracleSandbox::new(form, load_files, load_root)?
-        .with_shared_tmpdir(shared_tmpdir)
-        .with_extra_env(extra_env);
 
     let mem_limit = oracle_mem_limit_bytes();
     let mut cmd = Command::new(&oracle_bin);
@@ -533,7 +520,7 @@ fn run_oracle_eval_inner_with_tmpdir(
         "--eval",
         NATIVE_COMP_SUPPRESSION_PRELUDE,
         "--eval",
-        EVAL_PROGRAM_WITH_NORMALIZER,
+        eval_program,
     ]);
 
     apply_virtual_memory_limit(&mut cmd, mem_limit);
@@ -555,42 +542,13 @@ fn run_oracle_eval_inner_with_tmpdir(
 }
 
 fn run_oracle_eval_inner(form: &str, load_files: &[&str]) -> Result<String, String> {
-    run_oracle_eval_inner_with_tmpdir(form, load_files, None, &[], &project_lisp_dir())
+    let sandbox = OracleSandbox::new(form, load_files, &project_lisp_dir())?;
+    run_oracle_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
 }
 
 fn run_oracle_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<String, String> {
-    let oracle_bin = oracle_emacs_path();
-    let lisp_dir = project_lisp_dir();
-    let sandbox = OracleSandbox::new(form, load_files, &lisp_dir)?;
-
-    let mem_limit = oracle_mem_limit_bytes();
-    let mut cmd = Command::new(&oracle_bin);
-    sandbox.configure(&mut cmd);
-    cmd.env("EMACSNATIVELOADPATH", "/dev/null").args([
-        "--batch",
-        "-Q",
-        "--eval",
-        NATIVE_COMP_SUPPRESSION_PRELUDE,
-        "--eval",
-        EVAL_PROGRAM_RAW,
-    ]);
-
-    apply_virtual_memory_limit(&mut cmd, mem_limit);
-
-    let output = cmd
-        .output()
-        .map_err(|e| format!("failed to run oracle Emacs: {e}"))?;
-
-    if !output.status.success() {
-        return Err(format!(
-            "oracle Emacs failed: status={}\nstdout:\n{}\nstderr:\n{}",
-            output.status,
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        ));
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    let sandbox = OracleSandbox::new(form, load_files, &project_lisp_dir())?;
+    run_oracle_eval_with_sandbox(&sandbox, EVAL_PROGRAM_RAW)
 }
 
 pub(crate) fn run_oracle_eval(form: &str) -> Result<String, String> {
@@ -633,12 +591,13 @@ pub(crate) fn run_oracle_eval_with_load_root(
     load_files: &[&str],
     load_root: &Path,
 ) -> Result<String, String> {
+    let sandbox = OracleSandbox::new(form, load_files, load_root)?;
     match OracleMode::from_env() {
         OracleMode::Snapshot => {
-            run_neomacs_binary_eval_inner_with_tmpdir(form, load_files, None, &[], load_root)
+            run_neomacs_binary_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
         }
         OracleMode::Verify | OracleMode::Refresh | OracleMode::Live => {
-            run_oracle_eval_inner_with_tmpdir(form, load_files, None, &[], load_root)
+            run_oracle_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
         }
     }
 }
@@ -647,17 +606,11 @@ pub(crate) fn run_oracle_eval_with_load_root(
 // Neomacs binary subprocess evaluation
 // ---------------------------------------------------------------------------
 
-fn run_neomacs_binary_eval_inner_with_tmpdir(
-    form: &str,
-    load_files: &[&str],
-    shared_tmpdir: Option<&Path>,
-    extra_env: &[(&str, &str)],
-    load_root: &Path,
+fn run_neomacs_binary_eval_with_sandbox(
+    sandbox: &OracleSandbox,
+    eval_program: &str,
 ) -> Result<String, String> {
     let neomacs_bin = neomacs_binary_path();
-    let sandbox = OracleSandbox::new(form, load_files, load_root)?
-        .with_shared_tmpdir(shared_tmpdir)
-        .with_extra_env(extra_env);
 
     let mut cmd = Command::new(&neomacs_bin);
     sandbox.configure(&mut cmd);
@@ -667,7 +620,7 @@ fn run_neomacs_binary_eval_inner_with_tmpdir(
         "--eval",
         NATIVE_COMP_SUPPRESSION_PRELUDE,
         "--eval",
-        EVAL_PROGRAM_WITH_NORMALIZER,
+        eval_program,
     ]);
 
     if let Some(mem_limit) = neomacs_binary_mem_limit_bytes() {
@@ -691,43 +644,13 @@ fn run_neomacs_binary_eval_inner_with_tmpdir(
 }
 
 fn run_neomacs_binary_eval_inner(form: &str, load_files: &[&str]) -> Result<String, String> {
-    run_neomacs_binary_eval_inner_with_tmpdir(form, load_files, None, &[], &project_lisp_dir())
+    let sandbox = OracleSandbox::new(form, load_files, &project_lisp_dir())?;
+    run_neomacs_binary_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
 }
 
 fn run_neomacs_binary_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<String, String> {
-    let lisp_dir = project_lisp_dir();
-    let neomacs_bin = neomacs_binary_path();
-    let sandbox = OracleSandbox::new(form, load_files, &lisp_dir)?;
-
-    let mut cmd = Command::new(&neomacs_bin);
-    sandbox.configure(&mut cmd);
-    cmd.args([
-        "--batch",
-        "-Q",
-        "--eval",
-        NATIVE_COMP_SUPPRESSION_PRELUDE,
-        "--eval",
-        EVAL_PROGRAM_RAW,
-    ]);
-
-    if let Some(mem_limit) = neomacs_binary_mem_limit_bytes() {
-        apply_virtual_memory_limit(&mut cmd, mem_limit);
-    }
-
-    let output = cmd
-        .output()
-        .map_err(|e| format!("failed to run Neomacs binary: {e}"))?;
-
-    if !output.status.success() {
-        return Err(format!(
-            "Neomacs binary failed: status={}\nstdout:\n{}\nstderr:\n{}",
-            output.status,
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        ));
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    let sandbox = OracleSandbox::new(form, load_files, &project_lisp_dir())?;
+    run_neomacs_binary_eval_with_sandbox(&sandbox, EVAL_PROGRAM_RAW)
 }
 
 pub(crate) fn run_neovm_eval(form: &str) -> Result<String, String> {
@@ -781,12 +704,15 @@ pub(crate) fn assert_oracle_parity(form: &str) {
     let log_timing = oracle_timing_enabled();
 
     ensure_nonempty_form(form).expect("form should not be empty");
+    let sandbox = OracleSandbox::new(form, &[], &project_lisp_dir())
+        .expect("oracle sandbox should be created");
 
     if log_timing {
         eprintln!("oracle-timing: neomacs-binary-start");
     }
     let neomacs_t0 = std::time::Instant::now();
-    let neovm = run_neomacs_binary_eval_inner(form, &[]).expect("neomacs binary eval should run");
+    let neovm = run_neomacs_binary_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
+        .expect("neomacs binary eval should run");
     if OracleMode::from_env() == OracleMode::Snapshot {
         if log_timing {
             eprintln!(
@@ -804,7 +730,8 @@ pub(crate) fn assert_oracle_parity(form: &str) {
         eprintln!("oracle-timing: oracle-start");
     }
     let oracle_t0 = std::time::Instant::now();
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
+    let oracle = run_oracle_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
+        .expect("oracle eval should run");
     if log_timing {
         eprintln!("oracle-timing: oracle-done {:.3?}", oracle_t0.elapsed());
     }
@@ -812,46 +739,51 @@ pub(crate) fn assert_oracle_parity(form: &str) {
     assert_neovm_oracle_parity(&neovm, &oracle, form);
 }
 
-fn assert_oracle_parity_expect_with_runners<N, O>(
+fn assert_oracle_parity_expect_with_sandbox(
     form: &str,
     expected: expect_test::Expect,
-    run_neomacs: N,
-    run_oracle: O,
-) where
-    N: FnOnce() -> Result<String, String>,
-    O: FnOnce() -> Result<String, String>,
-{
+    sandbox: &OracleSandbox,
+    eval_program: &str,
+) {
     ensure_nonempty_form(form).expect("form should not be empty");
 
     match OracleMode::from_env() {
         OracleMode::Snapshot => {
-            let neovm = run_neomacs().expect("neomacs binary eval should run");
+            let neovm = run_neomacs_binary_eval_with_sandbox(sandbox, eval_program)
+                .expect("neomacs binary eval should run");
             expected.assert_eq(&inline_expect_payload(&neovm));
         }
         OracleMode::Verify => {
-            let oracle = run_oracle().expect("oracle eval should run");
-            let neovm = run_neomacs().expect("neomacs binary eval should run");
+            let oracle = run_oracle_eval_with_sandbox(sandbox, eval_program)
+                .expect("oracle eval should run");
+            let neovm = run_neomacs_binary_eval_with_sandbox(sandbox, eval_program)
+                .expect("neomacs binary eval should run");
             expected.assert_eq(&inline_expect_payload(&oracle));
             assert_neovm_oracle_parity(&neovm, &oracle, form);
         }
         OracleMode::Refresh => {
-            let oracle = run_oracle().expect("oracle eval should run");
+            let oracle = run_oracle_eval_with_sandbox(sandbox, eval_program)
+                .expect("oracle eval should run");
             expected.assert_eq(&inline_expect_payload(&oracle));
         }
         OracleMode::Live => {
-            let oracle = run_oracle().expect("oracle eval should run");
-            let neovm = run_neomacs().expect("neomacs binary eval should run");
+            let oracle = run_oracle_eval_with_sandbox(sandbox, eval_program)
+                .expect("oracle eval should run");
+            let neovm = run_neomacs_binary_eval_with_sandbox(sandbox, eval_program)
+                .expect("neomacs binary eval should run");
             assert_neovm_oracle_parity(&neovm, &oracle, form);
         }
     }
 }
 
 pub(crate) fn assert_oracle_parity_expect(form: &str, expected: expect_test::Expect) {
-    assert_oracle_parity_expect_with_runners(
+    let sandbox = OracleSandbox::new(form, &[], &project_lisp_dir())
+        .expect("oracle sandbox should be created");
+    assert_oracle_parity_expect_with_sandbox(
         form,
         expected,
-        || run_neomacs_binary_eval_inner(form, &[]),
-        || run_oracle_eval(form),
+        &sandbox,
+        EVAL_PROGRAM_WITH_NORMALIZER,
     );
 }
 
@@ -859,29 +791,30 @@ pub(crate) fn assert_oracle_parity_with_shared_tempdir_expect(
     form: &str,
     expected: expect_test::Expect,
 ) {
-    let tmpdir =
-        OracleSandbox::create_case_tempdir().expect("shared oracle tempdir should be created");
-    assert_oracle_parity_expect_with_runners(
+    let sandbox = OracleSandbox::new(form, &[], &project_lisp_dir())
+        .expect("oracle sandbox should be created")
+        .with_shared_tmpdir();
+    assert_oracle_parity_expect_with_sandbox(
         form,
         expected,
-        || {
-            run_neomacs_binary_eval_inner_with_tmpdir(
-                form,
-                &[],
-                Some(tmpdir.path()),
-                &[],
-                &project_lisp_dir(),
-            )
-        },
-        || {
-            run_oracle_eval_inner_with_tmpdir(
-                form,
-                &[],
-                Some(tmpdir.path()),
-                &[],
-                &project_lisp_dir(),
-            )
-        },
+        &sandbox,
+        EVAL_PROGRAM_WITH_NORMALIZER,
+    );
+}
+
+pub(crate) fn assert_oracle_parity_with_case_workdir_expect(
+    form: &str,
+    expected: expect_test::Expect,
+) {
+    let sandbox = OracleSandbox::new(form, &[], &project_lisp_dir())
+        .expect("oracle sandbox should be created")
+        .with_shared_tmpdir()
+        .with_case_working_dir();
+    assert_oracle_parity_expect_with_sandbox(
+        form,
+        expected,
+        &sandbox,
+        EVAL_PROGRAM_WITH_NORMALIZER,
     );
 }
 
@@ -890,19 +823,14 @@ pub(crate) fn assert_oracle_parity_with_env_expect(
     extra_env: &[(&str, &str)],
     expected: expect_test::Expect,
 ) {
-    assert_oracle_parity_expect_with_runners(
+    let sandbox = OracleSandbox::new(form, &[], &project_lisp_dir())
+        .expect("oracle sandbox should be created")
+        .with_extra_env(extra_env);
+    assert_oracle_parity_expect_with_sandbox(
         form,
         expected,
-        || {
-            run_neomacs_binary_eval_inner_with_tmpdir(
-                form,
-                &[],
-                None,
-                extra_env,
-                &project_lisp_dir(),
-            )
-        },
-        || run_oracle_eval_inner_with_tmpdir(form, &[], None, extra_env, &project_lisp_dir()),
+        &sandbox,
+        EVAL_PROGRAM_WITH_NORMALIZER,
     );
 }
 
@@ -931,29 +859,15 @@ pub(crate) fn assert_oracle_parity_frozen_time_with_load_expect(
         .iter()
         .map(|(k, v)| (k.as_str(), v.as_str()))
         .collect();
-    let tmpdir =
-        OracleSandbox::create_case_tempdir().expect("shared oracle tempdir should be created");
-    assert_oracle_parity_expect_with_runners(
+    let sandbox = OracleSandbox::new(form, load_files, &project_lisp_dir())
+        .expect("oracle sandbox should be created")
+        .with_shared_tmpdir()
+        .with_extra_env(&extra_env);
+    assert_oracle_parity_expect_with_sandbox(
         form,
         expected,
-        || {
-            run_neomacs_binary_eval_inner_with_tmpdir(
-                form,
-                load_files,
-                Some(tmpdir.path()),
-                &extra_env,
-                &project_lisp_dir(),
-            )
-        },
-        || {
-            run_oracle_eval_inner_with_tmpdir(
-                form,
-                load_files,
-                Some(tmpdir.path()),
-                &extra_env,
-                &project_lisp_dir(),
-            )
-        },
+        &sandbox,
+        EVAL_PROGRAM_WITH_NORMALIZER,
     );
 }
 
@@ -962,11 +876,13 @@ pub(crate) fn assert_oracle_parity_with_load_expect(
     load_files: &[&str],
     expected: expect_test::Expect,
 ) {
-    assert_oracle_parity_expect_with_runners(
+    let sandbox = OracleSandbox::new(form, load_files, &project_lisp_dir())
+        .expect("oracle sandbox should be created");
+    assert_oracle_parity_expect_with_sandbox(
         form,
         expected,
-        || run_neomacs_binary_eval_inner(form, load_files),
-        || run_oracle_eval_with_load(form, load_files),
+        &sandbox,
+        EVAL_PROGRAM_WITH_NORMALIZER,
     );
 }
 
@@ -975,65 +891,64 @@ pub(crate) fn assert_oracle_parity_with_load_raw_expect(
     load_files: &[&str],
     expected: expect_test::Expect,
 ) {
-    assert_oracle_parity_expect_with_runners(
-        form,
-        expected,
-        || run_neomacs_binary_eval_inner_raw(form, load_files),
-        || run_oracle_eval_with_load_raw(form, load_files),
-    );
+    let sandbox = OracleSandbox::new(form, load_files, &project_lisp_dir())
+        .expect("oracle sandbox should be created");
+    assert_oracle_parity_expect_with_sandbox(form, expected, &sandbox, EVAL_PROGRAM_RAW);
 }
 
 pub(crate) fn assert_oracle_parity_with_shared_tempdir(form: &str) {
     ensure_nonempty_form(form).expect("form should not be empty");
-    let tmpdir =
-        OracleSandbox::create_case_tempdir().expect("shared oracle tempdir should be created");
-    let neovm = run_neomacs_binary_eval_inner_with_tmpdir(
-        form,
-        &[],
-        Some(tmpdir.path()),
-        &[],
-        &project_lisp_dir(),
-    )
-    .expect("neomacs binary eval should run");
+    let sandbox = OracleSandbox::new(form, &[], &project_lisp_dir())
+        .expect("oracle sandbox should be created")
+        .with_shared_tmpdir();
+    let neovm = run_neomacs_binary_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
+        .expect("neomacs binary eval should run");
     if OracleMode::from_env() == OracleMode::Snapshot {
         return;
     }
-    let oracle =
-        run_oracle_eval_inner_with_tmpdir(form, &[], Some(tmpdir.path()), &[], &project_lisp_dir())
-            .expect("oracle eval should run");
+    let oracle = run_oracle_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
+        .expect("oracle eval should run");
     assert_neovm_oracle_parity(&neovm, &oracle, form);
 }
 
 pub(crate) fn assert_oracle_parity_with_env(form: &str, extra_env: &[(&str, &str)]) {
     ensure_nonempty_form(form).expect("form should not be empty");
-    let neovm =
-        run_neomacs_binary_eval_inner_with_tmpdir(form, &[], None, extra_env, &project_lisp_dir())
-            .expect("neomacs binary eval should run");
+    let sandbox = OracleSandbox::new(form, &[], &project_lisp_dir())
+        .expect("oracle sandbox should be created")
+        .with_extra_env(extra_env);
+    let neovm = run_neomacs_binary_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
+        .expect("neomacs binary eval should run");
     if OracleMode::from_env() == OracleMode::Snapshot {
         return;
     }
-    let oracle = run_oracle_eval_inner_with_tmpdir(form, &[], None, extra_env, &project_lisp_dir())
+    let oracle = run_oracle_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
         .expect("oracle eval should run");
     assert_neovm_oracle_parity(&neovm, &oracle, form);
 }
 
 pub(crate) fn assert_oracle_parity_with_load(form: &str, load_files: &[&str]) {
-    let neovm =
-        run_neomacs_binary_eval_inner(form, load_files).expect("neomacs binary eval should run");
-    if OracleMode::from_env() == OracleMode::Snapshot {
-        return;
-    }
-    let oracle = run_oracle_eval_with_load(form, load_files).expect("oracle eval should run");
-    assert_neovm_oracle_parity(&neovm, &oracle, form);
-}
-
-pub(crate) fn assert_oracle_parity_with_load_raw(form: &str, load_files: &[&str]) {
-    let neovm = run_neomacs_binary_eval_inner_raw(form, load_files)
+    let sandbox = OracleSandbox::new(form, load_files, &project_lisp_dir())
+        .expect("oracle sandbox should be created");
+    let neovm = run_neomacs_binary_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
         .expect("neomacs binary eval should run");
     if OracleMode::from_env() == OracleMode::Snapshot {
         return;
     }
-    let oracle = run_oracle_eval_with_load_raw(form, load_files).expect("oracle eval should run");
+    let oracle = run_oracle_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
+        .expect("oracle eval should run");
+    assert_neovm_oracle_parity(&neovm, &oracle, form);
+}
+
+pub(crate) fn assert_oracle_parity_with_load_raw(form: &str, load_files: &[&str]) {
+    let sandbox = OracleSandbox::new(form, load_files, &project_lisp_dir())
+        .expect("oracle sandbox should be created");
+    let neovm = run_neomacs_binary_eval_with_sandbox(&sandbox, EVAL_PROGRAM_RAW)
+        .expect("neomacs binary eval should run");
+    if OracleMode::from_env() == OracleMode::Snapshot {
+        return;
+    }
+    let oracle =
+        run_oracle_eval_with_sandbox(&sandbox, EVAL_PROGRAM_RAW).expect("oracle eval should run");
     assert_neovm_oracle_parity(&neovm, &oracle, form);
 }
 
@@ -1047,11 +962,13 @@ pub(crate) fn assert_oracle_parity_with_load_root_expect(
     load_root: &Path,
     expected: expect_test::Expect,
 ) {
-    assert_oracle_parity_expect_with_runners(
+    let sandbox =
+        OracleSandbox::new(form, load_files, load_root).expect("oracle sandbox should be created");
+    assert_oracle_parity_expect_with_sandbox(
         form,
         expected,
-        || run_neomacs_binary_eval_inner_with_tmpdir(form, load_files, None, &[], load_root),
-        || run_oracle_eval_with_load_root(form, load_files, load_root),
+        &sandbox,
+        EVAL_PROGRAM_WITH_NORMALIZER,
     );
 }
 
@@ -1062,24 +979,30 @@ pub(crate) fn assert_oracle_parity_with_load_root(
     load_files: &[&str],
     load_root: &Path,
 ) {
-    let neovm = run_neomacs_binary_eval_inner_with_tmpdir(form, load_files, None, &[], load_root)
+    let sandbox =
+        OracleSandbox::new(form, load_files, load_root).expect("oracle sandbox should be created");
+    let neovm = run_neomacs_binary_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
         .expect("neomacs binary eval should run");
     if OracleMode::from_env() == OracleMode::Snapshot {
         return;
     }
-    let oracle = run_oracle_eval_with_load_root(form, load_files, load_root)
+    let oracle = run_oracle_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
         .expect("oracle eval should run");
     assert_neovm_oracle_parity(&neovm, &oracle, form);
 }
 
 pub(crate) fn eval_oracle_and_neovm(form: &str) -> (String, String) {
+    let sandbox = OracleSandbox::new(form, &[], &project_lisp_dir())
+        .expect("oracle sandbox should be created");
     if OracleMode::from_env() == OracleMode::Snapshot {
-        let neovm =
-            run_neomacs_binary_eval_inner(form, &[]).expect("neomacs binary eval should run");
+        let neovm = run_neomacs_binary_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
+            .expect("neomacs binary eval should run");
         return (neovm.clone(), neovm);
     }
-    let neovm = run_neomacs_binary_eval_inner(form, &[]).expect("neomacs binary eval should run");
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
+    let neovm = run_neomacs_binary_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
+        .expect("neomacs binary eval should run");
+    let oracle = run_oracle_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
+        .expect("oracle eval should run");
     (oracle, neovm)
 }
 
@@ -1088,28 +1011,41 @@ pub(crate) fn eval_oracle_and_neovm_expect(
     expected: expect_test::Expect,
 ) -> (String, String) {
     ensure_nonempty_form(form).expect("form should not be empty");
+    let sandbox = OracleSandbox::new(form, &[], &project_lisp_dir())
+        .expect("oracle sandbox should be created");
 
     match OracleMode::from_env() {
         OracleMode::Snapshot => {
             let neovm =
-                run_neomacs_binary_eval_inner(form, &[]).expect("neomacs binary eval should run");
+                run_neomacs_binary_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
+                    .expect("neomacs binary eval should run");
             expected.assert_eq(&inline_expect_payload(&neovm));
             (neovm.clone(), neovm)
         }
         OracleMode::Verify => {
-            let oracle = run_oracle_eval(form).expect("oracle eval should run");
+            let oracle = run_oracle_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
+                .expect("oracle eval should run");
             let neovm =
-                run_neomacs_binary_eval_inner(form, &[]).expect("neomacs binary eval should run");
+                run_neomacs_binary_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
+                    .expect("neomacs binary eval should run");
             expected.assert_eq(&inline_expect_payload(&oracle));
             assert_neovm_oracle_parity(&neovm, &oracle, form);
             (oracle, neovm)
         }
         OracleMode::Refresh => {
-            let oracle = run_oracle_eval(form).expect("oracle eval should run");
+            let oracle = run_oracle_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
+                .expect("oracle eval should run");
             expected.assert_eq(&inline_expect_payload(&oracle));
             (oracle.clone(), oracle)
         }
-        OracleMode::Live => eval_oracle_and_neovm(form),
+        OracleMode::Live => {
+            let oracle = run_oracle_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
+                .expect("oracle eval should run");
+            let neovm =
+                run_neomacs_binary_eval_with_sandbox(&sandbox, EVAL_PROGRAM_WITH_NORMALIZER)
+                    .expect("neomacs binary eval should run");
+            (oracle, neovm)
+        }
     }
 }
 

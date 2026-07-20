@@ -47,9 +47,10 @@ fn local_seqpacket_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[r#""OK (listen open t \"ping-seqpacket\")""#]];
-    crate::common::assert_oracle_parity_with_shared_tempdir_expect(
+    crate::common::assert_oracle_parity_with_case_workdir_expect(
         r##"(let* ((dir (or (getenv "NEOVM_ORACLE_TEST_TMPDIR") temporary-file-directory))
-       (path (expand-file-name "neo-seqpacket.sock" dir))
+       (default-directory (file-name-as-directory dir))
+       (path "neo-seqpacket.sock")
        (srv nil)
        (cli nil)
        (accepted nil)

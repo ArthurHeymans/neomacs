@@ -13,7 +13,8 @@ fn div_v8_network_process_server_local_socket_outcome() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let form = r##"
 (condition-case err
-    (let* ((sock (expand-file-name "probe-net-test.sock" temporary-file-directory))
+    (let* ((default-directory temporary-file-directory)
+           (sock "probe-net-test.sock")
            (proc (make-network-process :name "probe-net"
                                        :family 'local
                                        :service sock
@@ -27,7 +28,7 @@ fn div_v8_network_process_server_local_socket_outcome() {
   (error (list 'caught-error)))
 "##;
     let expect = expect_test::expect![[r#""OK (bound t nil)""#]];
-    crate::common::assert_oracle_parity_expect(form, expect);
+    crate::common::assert_oracle_parity_with_case_workdir_expect(form, expect);
 }
 
 #[test]

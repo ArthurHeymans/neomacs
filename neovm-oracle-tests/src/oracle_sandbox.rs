@@ -11,42 +11,48 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use tempfile::{TempDir, TempPath};
+use tempfile::TempDir;
 
 pub(crate) struct OracleSandbox {
-    form_path: TempPath,
+    case_root: TempDir,
+    form_path: PathBuf,
     load_root: PathBuf,
-    load_files: String,
+    load_files: Vec<PathBuf>,
     project_root: PathBuf,
-    scratch_root: PathBuf,
-    shared_tmpdir: Option<PathBuf>,
+    expose_case_root: bool,
+    use_case_working_dir: bool,
     extra_env: Vec<(OsString, OsString)>,
 }
 
 impl OracleSandbox {
     pub(crate) fn new(form: &str, load_files: &[&str], load_root: &Path) -> Result<Self, String> {
         let project_root = project_root();
-        let scratch_root = scratch_root(&project_root)?;
-        let form_path = write_form_file(&scratch_root, form)?;
+        let case_root = create_case_tempdir_in(&project_root)?;
+        let form_path = write_form_file(case_root.path(), form)?;
         let load_files = load_files
             .iter()
-            .map(|file| load_root.join(file).to_string_lossy().into_owned())
-            .collect::<Vec<_>>()
-            .join("\n");
+            .map(|file| load_root.join(file))
+            .collect::<Vec<_>>();
 
         Ok(Self {
+            case_root,
             form_path,
             load_root: load_root.to_path_buf(),
             load_files,
             project_root,
-            scratch_root,
-            shared_tmpdir: None,
+            expose_case_root: false,
+            use_case_working_dir: false,
             extra_env: Vec::new(),
         })
     }
 
-    pub(crate) fn with_shared_tmpdir(mut self, shared_tmpdir: Option<&Path>) -> Self {
-        self.shared_tmpdir = shared_tmpdir.map(Path::to_path_buf);
+    pub(crate) fn with_shared_tmpdir(mut self) -> Self {
+        self.expose_case_root = true;
+        self
+    }
+
+    pub(crate) fn with_case_working_dir(mut self) -> Self {
+        self.use_case_working_dir = true;
         self
     }
 
@@ -60,36 +66,38 @@ impl OracleSandbox {
     }
 
     pub(crate) fn configure(&self, command: &mut Command) {
-        command
-            .env("NEOVM_ORACLE_FORM_FILE", self.form_path.as_os_str())
-            .env("NEOVM_ORACLE_LOAD_ROOT", &self.load_root)
-            .env("NEOVM_ORACLE_PROJECT_ROOT", &self.project_root)
-            .env("NEOVM_ORACLE_SCRATCH_ROOT", &self.scratch_root)
-            .env("NEOVM_ORACLE_LOAD_FILES", &self.load_files)
-            .env("TMPDIR", &self.scratch_root);
-
-        if let Some(shared_tmpdir) = &self.shared_tmpdir {
-            command.env("NEOVM_ORACLE_TEST_TMPDIR", shared_tmpdir);
-        }
         for (name, value) in &self.extra_env {
             command.env(name, value);
+        }
+
+        let scratch_root = self.case_root.path();
+        let load_files = self
+            .load_files
+            .iter()
+            .map(|file| file.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("\n");
+        command
+            .env("NEOVM_ORACLE_FORM_FILE", &self.form_path)
+            .env("NEOVM_ORACLE_LOAD_ROOT", &self.load_root)
+            .env("NEOVM_ORACLE_PROJECT_ROOT", &self.project_root)
+            .env("NEOVM_ORACLE_SCRATCH_ROOT", scratch_root)
+            .env("NEOVM_ORACLE_LOAD_FILES", load_files)
+            .env("TMPDIR", scratch_root);
+
+        if self.use_case_working_dir {
+            command.current_dir(scratch_root);
+        }
+
+        if self.expose_case_root {
+            command.env("NEOVM_ORACLE_TEST_TMPDIR", scratch_root);
+        } else {
+            command.env_remove("NEOVM_ORACLE_TEST_TMPDIR");
         }
     }
 
     pub(crate) fn create_case_tempdir() -> Result<TempDir, String> {
-        let root = project_root();
-        let scratch_root = scratch_root(&root)?;
-        tempfile::Builder::new()
-            // Keep this deliberately short: Unix-domain socket paths created
-            // inside a case directory are limited to roughly 108 bytes.
-            .prefix("case-")
-            .tempdir_in(&scratch_root)
-            .map_err(|error| {
-                format!(
-                    "failed to create oracle case directory in {}: {error}",
-                    scratch_root.display()
-                )
-            })
+        create_case_tempdir_in(&project_root())
     }
 }
 
@@ -103,7 +111,7 @@ pub(crate) fn project_root() -> PathBuf {
     manifest.parent().expect("project root").to_path_buf()
 }
 
-fn scratch_root(project_root: &Path) -> Result<PathBuf, String> {
+fn scratch_base(project_root: &Path) -> Result<PathBuf, String> {
     let root = project_root.join("tmp/oracle");
     fs::create_dir_all(&root).map_err(|error| {
         format!(
@@ -114,15 +122,28 @@ fn scratch_root(project_root: &Path) -> Result<PathBuf, String> {
     Ok(root)
 }
 
-fn write_form_file(scratch_root: &Path, form: &str) -> Result<TempPath, String> {
-    let mut file = tempfile::Builder::new()
-        .prefix("neovm-oracle-form-")
-        .suffix(".el")
-        .tempfile_in(scratch_root)
+fn create_case_tempdir_in(project_root: &Path) -> Result<TempDir, String> {
+    let scratch_base = scratch_base(project_root)?;
+    tempfile::Builder::new()
+        // Keep this deliberately short: some cases create relative Unix-domain
+        // socket names inside this directory.
+        .prefix("case-")
+        .tempdir_in(&scratch_base)
+        .map_err(|error| {
+            format!(
+                "failed to create oracle case directory in {}: {error}",
+                scratch_base.display()
+            )
+        })
+}
+
+fn write_form_file(case_root: &Path, form: &str) -> Result<PathBuf, String> {
+    let form_path = case_root.join("form.el");
+    let mut file = fs::File::create(&form_path)
         .map_err(|error| format!("failed to create oracle form file: {error}"))?;
     file.write_all(form.as_bytes())
         .map_err(|error| format!("failed to write oracle form file: {error}"))?;
     file.flush()
         .map_err(|error| format!("failed to flush oracle form file: {error}"))?;
-    Ok(file.into_temp_path())
+    Ok(form_path)
 }
