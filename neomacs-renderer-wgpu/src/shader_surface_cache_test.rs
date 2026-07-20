@@ -151,3 +151,52 @@ fn rescale_leaves_pixel_surfaces_untouched() {
         "pixel surfaces must be skipped by DPI rescale, got {rescaled:?}"
     );
 }
+
+#[test]
+fn active_animation_max_fps_takes_max_cap_and_uncapped_forces_full_rate() {
+    let Some((device, _queue)) = try_device() else {
+        eprintln!("skipping: no headless wgpu adapter");
+        return;
+    };
+    let image = ImageCache::new(&device);
+    let mut cache = ShaderSurfaceCache::new(&device);
+    let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+    let mut make = |cache: &mut ShaderSurfaceCache, id: u32, fps: Option<u32>| -> bool {
+        cache
+            .create_shader(
+                &device,
+                image.bind_group_layout(),
+                image.sampler(),
+                format,
+                id,
+                SurfaceShaderLanguage::Wgsl,
+                TRIVIAL_WGSL,
+                &[],
+                64,
+                64,
+                1.0,
+                true,
+                fps,
+                None,
+            )
+            .is_ok()
+    };
+
+    // Nothing composited yet → no sustained animation demand.
+    assert_eq!(cache.active_animation_max_fps(), None);
+
+    // Two capped surfaces, both composited → highest cap wins.
+    if !make(&mut cache, 1, Some(10)) {
+        eprintln!("skipping: device rejected the trivial pipeline");
+        return;
+    }
+    assert!(make(&mut cache, 2, Some(30)));
+    cache.mark_drawn(1);
+    cache.mark_drawn(2);
+    assert_eq!(cache.active_animation_max_fps(), Some(30));
+
+    // An uncapped active surface forces the full display rate (None).
+    assert!(make(&mut cache, 3, None));
+    cache.mark_drawn(3);
+    assert_eq!(cache.active_animation_max_fps(), None);
+}

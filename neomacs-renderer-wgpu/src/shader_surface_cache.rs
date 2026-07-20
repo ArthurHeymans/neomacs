@@ -629,6 +629,28 @@ impl ShaderSurfaceCache {
             .any(|s| s.pipeline.is_some() && (s.dirty || (s.animate && s.is_active(now))))
     }
 
+    /// The frame-rate cap the currently-animating surfaces collectively need.
+    /// `None` means "run at the full display rate" — either an uncapped
+    /// (`:fps`-less) animated surface is active, or none is (the caller gates
+    /// submit/retract on [`Self::has_active_surfaces`]). `Some(n)` means every
+    /// active animated surface is `:fps`-capped and the highest cap is `n`.
+    /// Only sustained animation counts; a one-shot `dirty` surface gets its
+    /// single frame via the redraw request regardless of cadence.
+    pub fn active_animation_max_fps(&self) -> Option<u32> {
+        let now = Instant::now();
+        let mut max_cap: Option<u32> = None;
+        for surface in self.surfaces.values() {
+            if surface.pipeline.is_none() || !surface.animate || !surface.is_active(now) {
+                continue;
+            }
+            match surface.fps {
+                None => return None,
+                Some(cap) => max_cap = Some(max_cap.map_or(cap, |m| m.max(cap))),
+            }
+        }
+        max_cap
+    }
+
     /// Cache ids of every image/video channel referenced by a shader surface
     /// (surface-to-surface channels resolve internally). The caller resolves
     /// these against the image/video caches and passes the views into

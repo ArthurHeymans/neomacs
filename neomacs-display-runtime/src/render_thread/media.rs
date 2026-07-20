@@ -359,6 +359,15 @@ impl RenderApp {
             .is_some_and(|r| r.has_active_shader_surfaces())
     }
 
+    /// The cadence the shader-surface demand should run at (max of active
+    /// `:fps` caps, else the display rate); see
+    /// `WgpuRenderer::shader_surface_demand_rate`.
+    pub(super) fn shader_surface_demand_rate(&self, display_rate: u32) -> u32 {
+        self.renderer
+            .as_ref()
+            .map_or(display_rate, |r| r.shader_surface_demand_rate(display_rate))
+    }
+
     /// Check if any WebKit view needs redraw
     #[cfg(feature = "wpe-webkit")]
     pub(super) fn has_webkit_needing_redraw(&self) -> bool {

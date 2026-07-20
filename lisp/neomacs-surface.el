@@ -26,7 +26,8 @@
 ;; inline display objects.  See doc/display-engine/SHADER_SURFACES.md.
 ;;
 ;;   (neomacs-surface-create :width W :height H
-;;                           :shader WGSL &optional :uniforms ALIST :animate BOOL)
+;;                           :shader WGSL &optional :uniforms ALIST :animate BOOL
+;;                           :fps N)   ; :fps caps the animation rate (battery)
 ;;   (neomacs-surface-create :width W :height H :pixels RGBA-UNIBYTE-STRING)
 ;;     => surface handle (opaque, GC-managed); signals on WGSL compile
 ;;        errors.  Dropping the handle frees the GPU objects at the next

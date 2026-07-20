@@ -454,17 +454,30 @@ impl RenderApp {
                 }
             }
 
-            for (active, reason) in [
-                (webkit_active, DemandReason::WebKit),
-                (videos_active, DemandReason::Video),
-                (surfaces_active, DemandReason::ShaderSurface),
+            // Shader surfaces may cap their animation rate (`:fps`): when they
+            // are the demand, throttle the compositor cadence to the max of
+            // their caps so an ambient background shader lets the frame idle
+            // instead of pinning it at display refresh (battery). WebKit and
+            // video have no such cap and stay at full rate.
+            let surface_rate = if surfaces_active {
+                let capped = self.shader_surface_demand_rate(u32::from(max_rate.get()));
+                std::num::NonZeroU16::new(capped.min(u32::from(max_rate.get())) as u16)
+                    .unwrap_or(max_rate)
+            } else {
+                max_rate
+            };
+
+            for (active, reason, rate) in [
+                (webkit_active, DemandReason::WebKit, max_rate),
+                (videos_active, DemandReason::Video, max_rate),
+                (surfaces_active, DemandReason::ShaderSurface, surface_rate),
             ] {
                 if active {
                     let media_action = self.frame_coordinator.submit_demand(
                         id,
                         FrameDemand {
                             invalidation: legacy_repaint,
-                            cadence: Cadence::MaxRate(max_rate),
+                            cadence: Cadence::MaxRate(rate),
                             reason,
                         },
                         now,

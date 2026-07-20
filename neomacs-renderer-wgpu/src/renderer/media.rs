@@ -464,6 +464,23 @@ impl WgpuRenderer {
         self.caches.surface.has_active_surfaces() || self.frame_post.is_some()
     }
 
+    /// The cadence the `DemandReason::ShaderSurface` demand should run at,
+    /// given the window's display refresh as the ceiling. The frame post
+    /// shader re-shades the whole composited frame (cursor blink, transitions)
+    /// so it forces the full rate; otherwise the rate is the max of the active
+    /// surfaces' `:fps` caps (uncapped active surfaces also force full rate).
+    /// Result is clamped to `[1, display_rate]`.
+    pub fn shader_surface_demand_rate(&self, display_rate: u32) -> u32 {
+        let ceiling = display_rate.max(1);
+        if self.frame_post.is_some() {
+            return ceiling;
+        }
+        match self.caches.surface.active_animation_max_fps() {
+            Some(cap) => cap.clamp(1, ceiling),
+            None => ceiling,
+        }
+    }
+
     // =========== Frame post shader (doc/display-engine/SHADER_SURFACES.md) ===========
 
     /// Install (or replace) the full-frame post shader from an

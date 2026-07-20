@@ -59,8 +59,17 @@ with ordinary `condition-case`.
   '(surface :shader "fn mainImage(fragCoord: vec2<f32>) -> vec4<f32> { ... }"
             :uniforms ((speed . 2.0))
             :animate t
+            :fps 30           ; optional: cap animation to 30 Hz (battery)
             :width 320 :height 120)))
 ```
+
+`:fps N` caps a surface's animation rate: it re-renders at most N times/sec
+(with `iTime` still advancing in real wall-time, so motion plays at correct
+speed — just fewer frames), and when shader surfaces are the only compositor
+demand, the frame loop itself idles down to the highest active cap instead of
+running at display refresh. Omit it (or pass a non-positive value) for the
+full display-rate behavior. Works on both forms (`neomacs-surface-create
+:fps 30` too).
 
 No create call, no id: the resolver memoizes the spec content into a host
 surface id exactly like `(video :file …)` (`DisplayHost::request_surface`,
