@@ -9,6 +9,28 @@ use crate::emacs_core::Context;
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::intern::resolve_sym;
 use crate::heap_types::LispString;
+use std::path::{Path, PathBuf};
+
+fn workspace_temp_dir(prefix: &str) -> tempfile::TempDir {
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("neovm-core should be inside the workspace")
+        .to_path_buf();
+    let temp_root = workspace_root.join("tmp");
+    std::fs::create_dir_all(&temp_root).expect("create workspace tmp directory");
+    tempfile::Builder::new()
+        .prefix(prefix)
+        .tempdir_in(temp_root)
+        .expect("create workspace-local temp directory")
+}
+
+fn directory_name(path: &Path) -> String {
+    let mut name = path.to_string_lossy().into_owned();
+    if !name.ends_with(std::path::MAIN_SEPARATOR) {
+        name.push(std::path::MAIN_SEPARATOR);
+    }
+    name
+}
 
 fn find_bin(name: &str) -> String {
     for dir in ["/bin", "/usr/bin", "/run/current-system/sw/bin"] {
@@ -55,10 +77,10 @@ fn data_string(value: &Value) -> String {
 #[test]
 fn call_process_signals_setting_current_directory_for_missing_dir() {
     crate::test_utils::init_test_tracing();
+    let temp = workspace_temp_dir("callproc-missing-dir-");
+    let missing = directory_name(&temp.path().join("missing"));
     let mut eval = Context::new();
-    let missing =
-        "/home/exec/Projects/github.com/eval-exec/neomacs-main/tmp/no_such_dir_xyz_callproc_test/";
-    set_default_directory(&mut eval, missing);
+    set_default_directory(&mut eval, &missing);
 
     let r = builtin_call_process(
         &mut eval,
@@ -83,11 +105,10 @@ fn call_process_signals_setting_current_directory_for_missing_dir() {
 #[test]
 fn call_process_runs_with_valid_default_directory() {
     crate::test_utils::init_test_tracing();
+    let temp = workspace_temp_dir("callproc-valid-dir-");
+    let dir = directory_name(temp.path());
     let mut eval = Context::new();
-    set_default_directory(
-        &mut eval,
-        "/home/exec/Projects/github.com/eval-exec/neomacs-main/tmp/",
-    );
+    set_default_directory(&mut eval, &dir);
 
     let r = builtin_call_process(
         &mut eval,
@@ -109,14 +130,15 @@ fn call_process_runs_with_valid_default_directory() {
 #[test]
 fn call_process_expands_relative_infile_against_default_directory() {
     crate::test_utils::init_test_tracing();
-    let dir = "/home/exec/Projects/github.com/eval-exec/neomacs-main/tmp/";
-    let infile = format!("{dir}callproc_relinfile_test.txt");
+    let temp = workspace_temp_dir("callproc-relative-infile-");
+    let dir = directory_name(temp.path());
+    let infile = temp.path().join("callproc_relinfile_test.txt");
     std::fs::write(&infile, b"alpha beta gamma\n").expect("write infile");
 
     let mut eval = Context::new();
     let buffer_id = eval.buffers.create_buffer("callproc-relinfile-out");
     assert!(eval.buffers.switch_current(buffer_id));
-    set_default_directory(&mut eval, dir);
+    set_default_directory(&mut eval, &dir);
 
     let r = builtin_call_process(
         &mut eval,
@@ -138,8 +160,6 @@ fn call_process_expands_relative_infile_against_default_directory() {
         String::from_utf8_lossy(text.as_bytes()),
         "alpha beta gamma\n"
     );
-
-    let _ = std::fs::remove_file(&infile);
 }
 
 /// Bug 10: `call-process-region` with DELETE=t honors `buffer-read-only` — GNU
@@ -193,16 +213,19 @@ fn call_process_region_delete_respects_buffer_read_only() {
 #[test]
 fn call_process_missing_infile_error_data_matches_gnu() {
     crate::test_utils::init_test_tracing();
+    let temp = workspace_temp_dir("callproc-missing-infile-");
+    let missing = temp
+        .path()
+        .join("missing.txt")
+        .to_string_lossy()
+        .into_owned();
     let mut eval = Context::new();
-    let missing =
-        "/home/exec/Projects/github.com/eval-exec/neomacs-main/tmp/p7_nonexistent_infile_test.txt";
-    let _ = std::fs::remove_file(missing);
 
     let r = builtin_call_process(
         &mut eval,
         vec![
             Value::string(find_bin("cat")),
-            Value::string(missing),
+            Value::string(&missing),
             Value::NIL,
             Value::NIL,
         ],
@@ -225,15 +248,21 @@ fn call_process_missing_infile_error_data_matches_gnu() {
 #[test]
 fn call_process_file_output_open_error_data_matches_gnu() {
     crate::test_utils::init_test_tracing();
+    let temp = workspace_temp_dir("callproc-missing-output-dir-");
+    let dest = temp
+        .path()
+        .join("missing")
+        .join("out.txt")
+        .to_string_lossy()
+        .into_owned();
     let mut eval = Context::new();
-    let dest = "/home/exec/Projects/github.com/eval-exec/neomacs-main/tmp/no_such_dir_xyz_out_test/out.txt";
 
     let r = builtin_call_process(
         &mut eval,
         vec![
             Value::string(find_bin("echo")),
             Value::NIL,
-            Value::list(vec![Value::keyword(":file"), Value::string(dest)]),
+            Value::list(vec![Value::keyword(":file"), Value::string(&dest)]),
             Value::NIL,
             Value::string("hi"),
         ],
@@ -254,10 +283,10 @@ fn call_process_file_output_open_error_data_matches_gnu() {
 #[test]
 fn call_process_setting_current_directory_reports_enotdir() {
     crate::test_utils::init_test_tracing();
-    let base =
-        "/home/exec/Projects/github.com/eval-exec/neomacs-main/tmp/callproc_enotdir_test_file";
-    std::fs::write(base, b"x").expect("write file");
-    let dir = format!("{base}/sub/");
+    let temp = workspace_temp_dir("callproc-enotdir-");
+    let base = temp.path().join("file");
+    std::fs::write(&base, b"x").expect("write file");
+    let dir = directory_name(&base.join("sub"));
 
     let mut eval = Context::new();
     set_default_directory(&mut eval, &dir);
@@ -277,6 +306,4 @@ fn call_process_setting_current_directory_reports_enotdir() {
     assert_eq!(data_string(&data[0]), "Setting current directory");
     assert_eq!(data_string(&data[1]), "Not a directory");
     assert_eq!(data_string(&data[2]), dir);
-
-    let _ = std::fs::remove_file(base);
 }

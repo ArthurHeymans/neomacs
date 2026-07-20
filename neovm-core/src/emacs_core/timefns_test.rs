@@ -1362,17 +1362,18 @@ fn parse_zone_rule_accepts_raw_unibyte_string_without_panicking() {
 #[test]
 fn float_time_reads_back_bignum_ticks_hz_from_encode_time_float() {
     crate::test_utils::init_test_tracing();
-    // GNU: (float-time (encode-time 30.5 30 14 16 6 2026 nil)) => 1781634630.5
+    // GNU: (float-time (encode-time 30.5 30 14 16 6 2026 t)) => 1781620230.5
+    // Use an explicit UTC zone so this regression is independent of the host TZ.
     // The encode-time result has bignum TICKS at HZ=2**48; the old i64 path
     // signalled `wrong-type-argument integerp <bignum>` instead of decoding it.
     let results = bootstrap_eval(
         r#"
-        (float-time (encode-time 30.5 30 14 16 6 2026 nil))
-        (float-time (encode-time 30.0 30 14 16 6 2026 nil))
+        (float-time (encode-time 30.5 30 14 16 6 2026 t))
+        (float-time (encode-time 30.0 30 14 16 6 2026 t))
         "#,
     );
-    assert_eq!(results[0], "OK 1781634630.5");
-    assert_eq!(results[1], "OK 1781634630.0");
+    assert_eq!(results[0], "OK 1781620230.5");
+    assert_eq!(results[1], "OK 1781620230.0");
 }
 
 #[test]
@@ -1470,15 +1471,16 @@ fn format_time_string_subsecond_from_cons_second() {
     crate::test_utils::init_test_tracing();
     // GNU: encode-time with a cons SECOND (30 0 0) (= (HIGH LOW USEC)) yields a
     // (... . 1000000) timestamp; %3N/%6N read its sub-second field exactly.
+    // Use an explicit UTC zone so the timestamp is independent of the host TZ.
     let results = bootstrap_eval(
         r#"
-        (encode-time '(30 0 0) 0 12 15 6 2024 nil)
-        (let ((t0 (encode-time '(30 0 0) 0 12 15 6 2024 nil)))
+        (encode-time '(30 0 0) 0 12 15 6 2024 t)
+        (let ((t0 (encode-time '(30 0 0) 0 12 15 6 2024 t)))
           (list (format-time-string "%S.%3N" t0 t)
                 (format-time-string "%S.%6N" t0 t)))
         "#,
     );
-    assert_eq!(results[0], "OK (1720433280000000 . 1000000)");
+    assert_eq!(results[0], "OK (1720418880000000 . 1000000)");
     assert_eq!(results[1], "OK (\"00.000\" \"00.000000\")");
 }
 
