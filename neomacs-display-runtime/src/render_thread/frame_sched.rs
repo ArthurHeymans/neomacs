@@ -429,6 +429,13 @@ impl FrameCoordinator {
         if demand.invalidation == Invalidation::None {
             return PacingAction::Sleep;
         }
+        tracing::trace!(
+            target: "neomacs::demand_trace",
+            "submit id={id:?} reason={:?} cadence={:?} inval={:?}",
+            demand.reason,
+            demand.cadence,
+            demand.invalidation
+        );
         let ws = self.window(id);
         match demand.cadence {
             Cadence::OnDemand => {
