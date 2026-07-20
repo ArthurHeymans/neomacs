@@ -55,7 +55,8 @@ jobs:
         with:
           rust-version: ${{ env.RUST_VERSION }}
           command: check
-          arguments: --all-features --hide-inclusion-graph
+          arguments: --all-features
+          command-arguments: --hide-inclusion-graph
 
   check:
     name: cargo check workspace (${{ matrix.label }})
