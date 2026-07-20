@@ -133,13 +133,18 @@ impl TuiSession {
     /// Spawn GNU Emacs in TUI mode WITHOUT `-Q`, loading the user's init
     /// file (e.g. Doom config).  Uses the real HOME so Doom is found.
     /// For face/theme comparison tests.
-    pub fn gnu_emacs_with_init() -> Self {
+    pub fn gnu_emacs_with_init(extra_args: &str) -> Self {
         let (pty, pts) = pty_process::blocking::open().expect("open pty");
         pty.resize(pty_process::Size::new(ROWS, COLS))
             .expect("resize pty");
         let real_home = PathBuf::from(std::env::var("HOME").expect("HOME"));
         let mut command = pty_process::blocking::Command::new("emacs");
         command = command.arg("-nw");
+        if !extra_args.is_empty() {
+            for arg in extra_args.split_whitespace() {
+                command = command.arg(arg);
+            }
+        }
         command = command.env("TERM", "screen-256color");
         command = command.env("COLUMNS", COLS.to_string());
         command = command.env("LINES", ROWS.to_string());
