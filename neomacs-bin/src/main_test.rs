@@ -2686,7 +2686,15 @@ fn bootstrap_buffers_seed_frame_with_renderer_metrics() {
 fn startup_dimensions_gui_matches_gnu_default_text_grid() {
     let metrics = bootstrap_frame_metrics();
     let (width, height) = startup_dimensions(FrontendKind::Gui, metrics, false);
-    assert_eq!(width, (80.0 * metrics.char_width).round() as u32);
+    // GNU's gui_figure_window_size makes 80 columns the *text* width and adds the
+    // scroll bar (one char wide) and both 8px fringes outside it. The requested
+    // window must therefore be wider than 80*char_width, or the chrome eats into
+    // the columns and the frame comes up 78 wide instead of 80.
+    let side_chrome = metrics.char_width + 2.0 * 8.0;
+    assert_eq!(
+        width,
+        (80.0 * metrics.char_width + side_chrome).round() as u32
+    );
     assert_eq!(height, (36.0 * metrics.char_height).round() as u32);
 }
 

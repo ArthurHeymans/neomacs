@@ -846,11 +846,23 @@ fn startup_dimensions(
 ) -> (u32, u32) {
     match frontend {
         FrontendKind::Gui => {
-            // GNU gui_figure_window_size seeds the first GUI frame from an
-            // 80x36 text grid using the default frame font metrics.
+            // GNU gui_figure_window_size (frame.c) seeds the first GUI frame from
+            // an 80x36 grid of *text*, then adds the scroll bar, fringes, and bars
+            // *outside* that text area (`text_width = 80 * FRAME_COLUMN_WIDTH`).
+            // The window we request here is later divided into chrome + text, so to
+            // land on 80 text columns we must reserve the side chrome up front —
+            // otherwise the scroll bar and fringes eat into the 80 columns and the
+            // frame comes up 78 wide (see window/display.rs for the fallbacks that
+            // set the reserved widths: 1-column scroll bar + 8px fringes each side).
             let cols = 80u32;
             let lines = 36u32;
-            let width = (cols as f32 * frame_metrics.char_width).round() as u32;
+            // Side chrome that the layout reserves outside the text columns: a
+            // default vertical scroll bar (one char wide) plus the two 8px fringes.
+            // Height chrome (menu/tool bar) is not known until the frame lays out,
+            // so the line count still folds those bars in for now.
+            const DEFAULT_FRINGE_PX: f32 = 8.0;
+            let side_chrome = frame_metrics.char_width + 2.0 * DEFAULT_FRINGE_PX;
+            let width = (cols as f32 * frame_metrics.char_width + side_chrome).round() as u32;
             let height = (lines as f32 * frame_metrics.char_height).round() as u32;
             (width.max(200), height.max(100))
         }
