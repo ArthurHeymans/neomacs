@@ -838,6 +838,47 @@ fn create_frame_and_window() {
 }
 
 #[test]
+fn gui_default_parameters_seed_scroll_bar_and_fringe_chrome() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
+    let frame = mgr.get_mut(fid).expect("frame");
+    frame.install_gnu_gui_default_parameters();
+
+    // GNU's gui_default_parameter (xfns.c) seeds these on every GUI frame.
+    // Without them, `(frame-parameter f 'vertical-scroll-bars)` reports nil even
+    // though the layout already reserves and draws the scroll bar — the frame
+    // parameter lied about what is on screen. Each seeded value equals the layout
+    // fallback in window/display.rs, so this is a reporting fix, not a geometry
+    // change. scroll-bar-width stays unseeded on purpose: its fallback tracks the
+    // live char width, so a fixed seed would go stale across a font change.
+    assert_eq!(
+        frame.known_parameter(FrameParam::VerticalScrollBars),
+        Some(Value::symbol("right"))
+    );
+    assert_eq!(
+        frame.known_parameter(FrameParam::HorizontalScrollBars),
+        Some(Value::NIL)
+    );
+    assert_eq!(
+        frame.known_parameter(FrameParam::LeftFringe),
+        Some(Value::fixnum(8))
+    );
+    assert_eq!(
+        frame.known_parameter(FrameParam::RightFringe),
+        Some(Value::fixnum(8))
+    );
+    assert_eq!(
+        frame.known_parameter(FrameParam::InternalBorderWidth),
+        Some(Value::fixnum(0))
+    );
+    assert_eq!(
+        frame.known_parameter(FrameParam::BorderWidth),
+        Some(Value::fixnum(0))
+    );
+}
+
+#[test]
 fn selected_window_accessor_includes_minibuffer_leaf() {
     crate::test_utils::init_test_tracing();
     let mut mgr = FrameManager::new();

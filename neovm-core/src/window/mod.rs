@@ -2191,6 +2191,25 @@ impl Frame {
         self.set_known_parameter(FrameParam::CursorColor, Value::string("black"));
         self.set_known_parameter(FrameParam::BorderColor, Value::string("black"));
         self.set_known_parameter(FrameParam::CursorType, Value::symbol("box"));
+
+        // Chrome parameters that GNU's xfns.c seeds through gui_default_parameter
+        // for every GUI frame. Without these, `(frame-parameter f 'vertical-scroll-bars)`
+        // and friends report nil even though the layout already reserves and draws
+        // the corresponding chrome — the frame parameter lies about what is on screen.
+        //
+        // Each value equals the fallback the layout (window/display.rs) already
+        // applies for the missing parameter, so seeding them changes reporting only,
+        // never geometry: GTK builds default vertical scroll bars to the right,
+        // horizontal off, the standard 8px fringes, and a zero internal/outer border.
+        // scroll-bar-width is intentionally left unset: its fallback tracks the live
+        // char width, so a fixed seed would go stale when the frame font changes
+        // (GNU re-resolves it on font change; our fallback already follows the font).
+        self.set_known_parameter(FrameParam::VerticalScrollBars, Value::symbol("right"));
+        self.set_known_parameter(FrameParam::HorizontalScrollBars, Value::NIL);
+        self.set_known_parameter(FrameParam::LeftFringe, Value::fixnum(8));
+        self.set_known_parameter(FrameParam::RightFringe, Value::fixnum(8));
+        self.set_known_parameter(FrameParam::InternalBorderWidth, Value::fixnum(0));
+        self.set_known_parameter(FrameParam::BorderWidth, Value::fixnum(0));
     }
 
     pub fn parameter(&self, key: &str) -> Option<Value> {
