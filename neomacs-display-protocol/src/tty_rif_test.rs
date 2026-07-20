@@ -144,6 +144,58 @@ fn glyph_to_char_returns_space_for_stretch() {
     assert_eq!(glyph_to_char(&g), ' ');
 }
 
+#[test]
+fn surface_tty_placeholder_labels_and_fills_the_reserved_width() {
+    // Exactly the label width: no fill.
+    assert_eq!(surface_tty_placeholder(8), "[shader]");
+    // Wider: label centered in a light-shade fill, exactly width_cols wide.
+    let p = surface_tty_placeholder(12);
+    assert_eq!(p.chars().count(), 12);
+    assert_eq!(p, "░░[shader]░░");
+    // Odd remainder: extra fill goes on the right.
+    assert_eq!(surface_tty_placeholder(11), "░[shader]░░");
+    // Too narrow for the label: pure fill, still visible (never blank).
+    let narrow = surface_tty_placeholder(3);
+    assert_eq!(narrow.chars().count(), 3);
+    assert!(narrow.chars().all(|c| c == '░'));
+    assert_eq!(surface_tty_placeholder(1), "░");
+}
+
+#[test]
+fn rasterize_shows_placeholder_for_surface_glyph() {
+    let cols = 12;
+    let mut state = FrameDisplayState::new(cols, 3, 8.0, 16.0);
+    state.background = Color::rgb(0.0, 0.0, 0.0);
+
+    let mut matrix = GlyphMatrix::new(3, cols);
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    // A shader-surface glyph spanning the full 12 columns (as push_media builds
+    // it: a stretch glyph whose type is overwritten to Surface).
+    let mut surface = Glyph::stretch(cols as u16, FaceId::new(0));
+    surface.glyph_type = GlyphType::Surface {
+        surface_id: 0x7000_0001u32 as i32,
+        width_cols: cols as u16,
+    };
+    row.glyphs[GlyphArea::Text as usize].push(surface);
+    matrix.rows[0] = row;
+
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: DisplayWindowId::new(1),
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * 8.0, 3.0 * 16.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * 8.0, 3.0 * 16.0),
+        text_clip_bounds: None,
+        selected: true,
+    });
+
+    let mut rif = TtyRif::new(cols, 3);
+    rif.rasterize(&state);
+
+    // The reserved columns show the labeled placeholder, not blank space.
+    let rendered: String = (0..cols).map(|c| desired_char(&rif, 0, c)).collect();
+    assert_eq!(rendered, "░░[shader]░░");
+}
+
 // ---------------------------------------------------------------------------
 // color_to_rgb8
 // ---------------------------------------------------------------------------

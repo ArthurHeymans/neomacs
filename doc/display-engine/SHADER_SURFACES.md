@@ -324,7 +324,11 @@ offscreen pass and runtime WGSL compilation.
   are content-defined and left untouched.
 - Failed *render-thread* compiles (naga-accepts/wgpu-rejects edge) log and
   blank the quad instead of surfacing to Lisp.
-- TTY backend ignores surfaces (like image/video/xwidget).
+- ~~TTY backend ignores surfaces~~ FIXED: the TTY renderer fills a surface's
+  reserved columns with a `[shader]` placeholder centered in a light-shade
+  fill (`surface_tty_placeholder`, `tty_rif.rs`) instead of blank space —
+  GPU-only content a terminal cannot draw, now discoverable. (Image / video /
+  xwidget still render blank on TTY.)
 
 ## Two traps hit while wiring this (checklist for the next media kind)
 

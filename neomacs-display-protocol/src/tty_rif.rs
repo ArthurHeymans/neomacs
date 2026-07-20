@@ -790,6 +790,22 @@ impl TtyRif {
                             col += 1;
                         }
                     }
+                    GlyphType::Surface { width_cols, .. } => {
+                        // A shader surface is GPU-only; a terminal cannot draw
+                        // it. Fill its reserved columns with a visible labeled
+                        // placeholder instead of blank space (surfaces are a
+                        // neomacs extension, so there is no GNU TTY behavior to
+                        // match). This also occupies the full width_cols, which
+                        // the single-char fallthrough arm would not.
+                        let width_cols = usize::from((*width_cols).max(1));
+                        for ch in surface_tty_placeholder(width_cols).chars() {
+                            if col >= self.desired.width {
+                                break;
+                            }
+                            self.desired.set(screen_row, col, ch, attrs, false);
+                            col += 1;
+                        }
+                    }
                     _ => {
                         let ch = glyph_to_char(glyph);
                         self.desired.set(screen_row, col, ch, attrs, false);
@@ -986,6 +1002,27 @@ fn glyph_to_char(glyph: &Glyph) -> char {
         | GlyphType::Xwidget { .. }
         | GlyphType::Surface { .. } => ' ',
         GlyphType::Glyphless { ch } => *ch,
+    }
+}
+
+/// A `width_cols`-wide TTY placeholder for a shader surface: `[shader]`
+/// centered in a light-shade fill, or just the fill when the reserved width is
+/// too narrow for the label. Surfaces are GPU-only, so a terminal shows this
+/// marker rather than the blank space the reserved columns would otherwise be.
+fn surface_tty_placeholder(width_cols: usize) -> String {
+    const LABEL: &str = "[shader]";
+    let label_len = LABEL.chars().count();
+    if width_cols >= label_len {
+        let fill = width_cols - label_len;
+        let left = fill / 2;
+        let right = fill - left;
+        let mut s = String::with_capacity(width_cols + LABEL.len());
+        s.extend(std::iter::repeat_n('░', left));
+        s.push_str(LABEL);
+        s.extend(std::iter::repeat_n('░', right));
+        s
+    } else {
+        std::iter::repeat_n('░', width_cols).collect()
     }
 }
 
