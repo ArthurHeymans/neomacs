@@ -794,7 +794,8 @@ Task B body
               (org-refile-reverse
                nil nil (list "Target" file nil target-pos) "Reverse")
               (save-buffer)
-              (list (nreverse events)
+              (list (mapcar #'neovm--oracle-coalesce-string-properties
+                            (nreverse events))
                     (plist-get org-bookmark-names-plist :last-refile)
                     (replace-regexp-in-string
                      "- Refiled on \\[.*\\]"

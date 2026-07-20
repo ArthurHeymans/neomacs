@@ -511,7 +511,12 @@ fn org_cite_basic_activation_follow_completion_combo() {
                            (list key
                                  (get-text-property pos 'face)
                                  (get-text-property pos 'mouse-face)
-                                 (get-text-property pos 'help-echo)
+                                 (let ((help
+                                        (get-text-property pos 'help-echo)))
+                                   (if (stringp help)
+                                       (neovm--oracle-coalesce-string-properties
+                                        help)
+                                     help))
                                  (keymapp
                                   (get-text-property pos 'keymap))))))
                      '("alpha2020" "alpah2020" "missing"))))

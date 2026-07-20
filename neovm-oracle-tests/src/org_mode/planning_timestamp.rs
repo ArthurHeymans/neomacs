@@ -401,7 +401,8 @@ Body <2026-05-27 Wed 11:00-12:15>
               (org-todo "DONE")
               (setq checklist-state
                     (list (org-get-todo-state)
-                          (org-get-heading t t t t)
+                          (neovm--oracle-coalesce-string-properties
+                           (org-get-heading t t t t))
                           (org-entry-get nil "CLOSED"))))
             (save-buffer)
             (org-agenda-list nil "2026-05-27" 3)

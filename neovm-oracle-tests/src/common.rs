@@ -360,9 +360,7 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
           (replace-regexp-in-string
            "%b - \\(?:GNU\\|NEO\\) Emacs at "
            "%b - [EMACS-PRODUCT] at "
-           (neovm--oracle-squash-roots
-            (neovm--oracle-coalesce-string-properties
-             (copy-sequence v)))))
+           (neovm--oracle-squash-roots v)))
          (t v)))
       (defun neovm--oracle-squash-roots (s)
         (let ((load-root (getenv "NEOVM_ORACLE_LOAD_ROOT"))
@@ -437,20 +435,22 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
                   (setq s (replace-regexp-in-string
                            (regexp-quote (car p)) (cdr p) s t t)))))))
       (defun neovm--oracle-coalesce-string-properties (s)
-        ;; Adjacent interval nodes with identical property lists are not a
-        ;; semantic distinction: every character exposes the same properties.
-        ;; Canonicalize that internal representation before printing results.
-        (let ((pos 0)
-              (len (length s)))
+        ;; Some probes care about per-character properties but not the
+        ;; implementation-specific interval boundaries used to store them.
+        ;; Keep this normalization opt-in so unrelated snapshots retain their
+        ;; exact printed representation.
+        (let* ((out (copy-sequence s))
+               (pos 0)
+               (len (length out)))
           (while (< pos len)
-            (let* ((props (text-properties-at pos s))
-                   (end (next-property-change pos s len)))
+            (let* ((props (text-properties-at pos out))
+                   (end (next-property-change pos out len)))
               (while (and (< end len)
-                          (equal props (text-properties-at end s)))
-                (setq end (next-property-change end s len)))
-              (set-text-properties pos end props s)
-              (setq pos end))))
-        s)
+                          (equal props (text-properties-at end out)))
+                (setq end (next-property-change end out len)))
+              (set-text-properties pos end props out)
+              (setq pos end)))
+          out))
       (defun neovm--oracle-normalize (v)
         (neovm--oracle-normalize-1 v (make-hash-table :test 'eq)))
     (let* ((coding-system-for-read 'utf-8-unix)

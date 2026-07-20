@@ -93,14 +93,14 @@ fn oracle_sandbox_blocks_parent_repository_discovery() {
 }
 
 #[test]
-fn oracle_normalization_coalesces_equivalent_text_property_runs() {
+fn oracle_string_property_coalescing_is_explicit() {
     let expect = expect_test::expect![[r#""OK #(\"abc\" 0 3 (face bold))""#]];
 
     crate::common::assert_oracle_parity_expect(
         r#"(let ((s (copy-sequence "abc")))
               (put-text-property 0 1 'face 'bold s)
               (put-text-property 1 3 'face 'bold s)
-              s)"#,
+              (neovm--oracle-coalesce-string-properties s))"#,
         expect,
     );
 }

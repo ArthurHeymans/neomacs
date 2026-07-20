@@ -139,7 +139,8 @@ fn org_capture_olp_datetree_week_clock_template_combo() {
         (progn
           (org-capture-string "Captured body" "w")
           (let ((during (list (org-clocking-p)
-                              org-clock-current-task
+                              (neovm--oracle-coalesce-string-properties
+                               org-clock-current-task)
                               (and (markerp org-clock-marker)
                                    (marker-buffer org-clock-marker)))))
             (org-capture-finalize)
