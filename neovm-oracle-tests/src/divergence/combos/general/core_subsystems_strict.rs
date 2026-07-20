@@ -2095,15 +2095,14 @@ fn div_core_divergence_surface_delete_process_missing_sentinel() {
 fn div_core_divergence_surface_interrupt_process_missing_sentinel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[r#""OK (signal 2 ((\"interrupt\n\" signal 2)))""#]];
-    // Divergence surfaced 2026-06-24:
-    // GNU Emacs: OK (signal 2 (("interrupt\n" signal 2)))
-    // Neomacs:   OK (signal 2 nil)
+    // Use a direct long-running child so SIGINT cannot race a shell installing
+    // its trap. The probe locks the final status and sentinel delivery.
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((log nil))
   (let ((proc (make-process
                :name "probe-interrupt-sent"
-               :command '("/bin/sh" "-c" "trap 'exit 42' INT; read line")
+               :command '("sleep" "30")
                :connection-type 'pipe
                :sentinel (lambda (p e)
                            (push (list e
