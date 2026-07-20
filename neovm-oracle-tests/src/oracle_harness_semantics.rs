@@ -1,8 +1,6 @@
 #[test]
 fn external_load_root_does_not_replace_the_project_root_domain() {
-    let load_root = tempfile::Builder::new()
-        .prefix("neovm-external-load-root-")
-        .tempdir()
+    let load_root = crate::common::oracle_sandbox::OracleSandbox::create_case_tempdir()
         .expect("external oracle load root");
     let expect =
         expect_test::expect![[r#""OK (\"[ORACLE-LOAD-ROOT]\" \"[ORACLE-PROJECT-ROOT]\")""#]];
@@ -12,6 +10,21 @@ fn external_load_root_does_not_replace_the_project_root_domain() {
                   (getenv "NEOVM_ORACLE_PROJECT_ROOT"))"#,
         &[],
         load_root.path(),
+        expect,
+    );
+}
+
+#[test]
+fn oracle_sandbox_keeps_case_files_under_workspace_tmp() {
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
+
+    crate::common::assert_oracle_parity_with_shared_tempdir_expect(
+        r#"(let ((scratch (file-name-as-directory
+                          (getenv "NEOVM_ORACLE_SCRATCH_ROOT"))))
+            (list (file-in-directory-p
+                   (getenv "NEOVM_ORACLE_FORM_FILE") scratch)
+                  (file-in-directory-p
+                   (getenv "NEOVM_ORACLE_TEST_TMPDIR") scratch)))"#,
         expect,
     );
 }

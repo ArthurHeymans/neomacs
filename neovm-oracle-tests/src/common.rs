@@ -6,12 +6,16 @@
 //! via `NEOVM_FORCE_ORACLE_PATH`).
 
 use colored::Colorize;
-use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;
+
+#[path = "oracle_sandbox.rs"]
+pub(crate) mod oracle_sandbox;
+
+use oracle_sandbox::OracleSandbox;
 
 #[cfg(unix)]
 fn apply_virtual_memory_limit(cmd: &mut Command, mem_limit: u64) {
@@ -164,33 +168,6 @@ fn neomacs_binary_path() -> String {
     })
 }
 
-fn write_temp_elisp_file(
-    prefix: &str,
-    suffix: &str,
-    content: &str,
-) -> Result<tempfile::TempPath, String> {
-    let mut file = tempfile::Builder::new()
-        .prefix(prefix)
-        .suffix(suffix)
-        .tempfile()
-        .map_err(|e| format!("failed to create oracle form file: {e}"))?;
-    file.write_all(content.as_bytes())
-        .map_err(|e| format!("failed to write oracle form file: {e}"))?;
-    file.flush()
-        .map_err(|e| format!("failed to flush oracle form file: {e}"))?;
-    Ok(file.into_temp_path())
-}
-
-fn write_oracle_form_file(form: &str) -> Result<tempfile::TempPath, String> {
-    write_temp_elisp_file("neovm-oracle-form-", ".el", form)
-}
-
-fn apply_extra_env(cmd: &mut Command, extra_env: &[(&str, &str)]) {
-    for (name, value) in extra_env {
-        cmd.env(name, value);
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Frozen wall clock (libfaketime) for date/time-sensitive oracle tests
 // ---------------------------------------------------------------------------
@@ -275,8 +252,7 @@ fn frozen_time_env() -> Vec<(String, String)> {
 }
 
 fn project_root() -> PathBuf {
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest.parent().expect("project root").to_path_buf()
+    oracle_sandbox::project_root()
 }
 
 fn project_lisp_dir() -> PathBuf {
@@ -358,8 +334,8 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
          ;; frame_vars.rs).  Canonicalize the product name on BOTH engines so the
          ;; frame-title-format STRUCTURE stays a real parity lock while this one
          ;; intentional brand difference is ignored.  The per-run tempdir
-         ;; (`temporary-file-directory' / a `neovm-oracle-case-XXX' path under the
-         ;; nix-shell sandbox) is shared within a run but differs across
+         ;; (`temporary-file-directory' / an OracleSandbox case directory) is
+         ;; shared within a run but differs across
          ;; record/replay, so it is squashed to a stable token.
          ;;
          ;; Wall-clock date/time is NOT scrubbed here.  Date-sensitive tests run
@@ -399,10 +375,18 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
       (defun neovm--oracle-squash-roots (s)
         (let ((load-root (getenv "NEOVM_ORACLE_LOAD_ROOT"))
               (project-root (getenv "NEOVM_ORACLE_PROJECT_ROOT"))
+              (scratch-root (getenv "NEOVM_ORACLE_SCRATCH_ROOT"))
+              (case-root (getenv "NEOVM_ORACLE_TEST_TMPDIR"))
               (pairs nil))
           (let ((proj-abs (and project-root
                                (> (length project-root) 0)
                                (directory-file-name project-root)))
+                (scratch-abs (and scratch-root
+                                  (> (length scratch-root) 0)
+                                  (directory-file-name scratch-root)))
+                (case-abs (and case-root
+                               (> (length case-root) 0)
+                               (directory-file-name case-root)))
                 (load-abs (and load-root
                                (> (length load-root) 0)
                                (directory-file-name load-root))))
@@ -415,6 +399,21 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
                             "[ORACLE-PROJECT-ROOT]")
                       pairs)
                 (push (cons proj-abs "[ORACLE-PROJECT-ROOT]") pairs))
+              ;; Scratch is inside the project checkout, so normalize it before
+              ;; the coarser project root. Preserve the established snapshot
+              ;; token used for temporary-file-directory.
+              (when (and scratch-abs (> (length scratch-abs) 1))
+                (push (cons (abbreviate-file-name scratch-abs)
+                            "[SESSION-TMPDIR]")
+                      pairs)
+                (push (cons scratch-abs "[SESSION-TMPDIR]") pairs))
+              ;; A shared case directory is nested inside scratch. Normalize
+              ;; it first so snapshots preserve the more-specific token.
+              (when (and case-abs (> (length case-abs) 1))
+                (push (cons (abbreviate-file-name case-abs)
+                            "[ORACLE-TMPDIR]")
+                      pairs)
+                (push (cons case-abs "[ORACLE-TMPDIR]") pairs))
               (when (and load-abs (> (length load-abs) 1))
                 (push (cons (abbreviate-file-name load-abs)
                             "[ORACLE-LOAD-ROOT]")
@@ -520,34 +519,22 @@ fn run_oracle_eval_inner_with_tmpdir(
     extra_env: &[(&str, &str)],
     load_root: &Path,
 ) -> Result<String, String> {
-    let form_path = write_oracle_form_file(form)?;
     let oracle_bin = oracle_emacs_path();
-    let lisp_dir = load_root.to_path_buf();
-    let oracle_load_files = load_files
-        .iter()
-        .map(|file| lisp_dir.join(file).to_string_lossy().into_owned())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let sandbox = OracleSandbox::new(form, load_files, load_root)?
+        .with_shared_tmpdir(shared_tmpdir)
+        .with_extra_env(extra_env);
 
     let mem_limit = oracle_mem_limit_bytes();
     let mut cmd = Command::new(&oracle_bin);
-    cmd.env("NEOVM_ORACLE_FORM_FILE", form_path.as_os_str())
-        .env("NEOVM_ORACLE_LOAD_ROOT", &lisp_dir)
-        .env("NEOVM_ORACLE_PROJECT_ROOT", project_root())
-        .env("NEOVM_ORACLE_LOAD_FILES", oracle_load_files)
-        .env("EMACSNATIVELOADPATH", "/dev/null")
-        .args([
-            "--batch",
-            "-Q",
-            "--eval",
-            NATIVE_COMP_SUPPRESSION_PRELUDE,
-            "--eval",
-            EVAL_PROGRAM_WITH_NORMALIZER,
-        ]);
-    if let Some(dir) = shared_tmpdir {
-        cmd.env("NEOVM_ORACLE_TEST_TMPDIR", dir.as_os_str());
-    }
-    apply_extra_env(&mut cmd, extra_env);
+    sandbox.configure(&mut cmd);
+    cmd.env("EMACSNATIVELOADPATH", "/dev/null").args([
+        "--batch",
+        "-Q",
+        "--eval",
+        NATIVE_COMP_SUPPRESSION_PRELUDE,
+        "--eval",
+        EVAL_PROGRAM_WITH_NORMALIZER,
+    ]);
 
     apply_virtual_memory_limit(&mut cmd, mem_limit);
 
@@ -572,30 +559,21 @@ fn run_oracle_eval_inner(form: &str, load_files: &[&str]) -> Result<String, Stri
 }
 
 fn run_oracle_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<String, String> {
-    let form_path = write_oracle_form_file(form)?;
     let oracle_bin = oracle_emacs_path();
     let lisp_dir = project_lisp_dir();
-    let oracle_load_files = load_files
-        .iter()
-        .map(|file| lisp_dir.join(file).to_string_lossy().into_owned())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let sandbox = OracleSandbox::new(form, load_files, &lisp_dir)?;
 
     let mem_limit = oracle_mem_limit_bytes();
     let mut cmd = Command::new(&oracle_bin);
-    cmd.env("NEOVM_ORACLE_FORM_FILE", form_path.as_os_str())
-        .env("NEOVM_ORACLE_LOAD_ROOT", &lisp_dir)
-        .env("NEOVM_ORACLE_PROJECT_ROOT", project_root())
-        .env("NEOVM_ORACLE_LOAD_FILES", oracle_load_files)
-        .env("EMACSNATIVELOADPATH", "/dev/null")
-        .args([
-            "--batch",
-            "-Q",
-            "--eval",
-            NATIVE_COMP_SUPPRESSION_PRELUDE,
-            "--eval",
-            EVAL_PROGRAM_RAW,
-        ]);
+    sandbox.configure(&mut cmd);
+    cmd.env("EMACSNATIVELOADPATH", "/dev/null").args([
+        "--batch",
+        "-Q",
+        "--eval",
+        NATIVE_COMP_SUPPRESSION_PRELUDE,
+        "--eval",
+        EVAL_PROGRAM_RAW,
+    ]);
 
     apply_virtual_memory_limit(&mut cmd, mem_limit);
 
@@ -676,32 +654,21 @@ fn run_neomacs_binary_eval_inner_with_tmpdir(
     extra_env: &[(&str, &str)],
     load_root: &Path,
 ) -> Result<String, String> {
-    let form_path = write_oracle_form_file(form)?;
-    let lisp_dir = load_root.to_path_buf();
     let neomacs_bin = neomacs_binary_path();
-    let load_files_str = load_files
-        .iter()
-        .map(|file| lisp_dir.join(file).to_string_lossy().into_owned())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let sandbox = OracleSandbox::new(form, load_files, load_root)?
+        .with_shared_tmpdir(shared_tmpdir)
+        .with_extra_env(extra_env);
 
     let mut cmd = Command::new(&neomacs_bin);
-    cmd.env("NEOVM_ORACLE_FORM_FILE", form_path.as_os_str())
-        .env("NEOVM_ORACLE_LOAD_ROOT", &lisp_dir)
-        .env("NEOVM_ORACLE_PROJECT_ROOT", project_root())
-        .env("NEOVM_ORACLE_LOAD_FILES", load_files_str)
-        .args([
-            "--batch",
-            "-Q",
-            "--eval",
-            NATIVE_COMP_SUPPRESSION_PRELUDE,
-            "--eval",
-            EVAL_PROGRAM_WITH_NORMALIZER,
-        ]);
-    if let Some(dir) = shared_tmpdir {
-        cmd.env("NEOVM_ORACLE_TEST_TMPDIR", dir.as_os_str());
-    }
-    apply_extra_env(&mut cmd, extra_env);
+    sandbox.configure(&mut cmd);
+    cmd.args([
+        "--batch",
+        "-Q",
+        "--eval",
+        NATIVE_COMP_SUPPRESSION_PRELUDE,
+        "--eval",
+        EVAL_PROGRAM_WITH_NORMALIZER,
+    ]);
 
     if let Some(mem_limit) = neomacs_binary_mem_limit_bytes() {
         apply_virtual_memory_limit(&mut cmd, mem_limit);
@@ -728,28 +695,20 @@ fn run_neomacs_binary_eval_inner(form: &str, load_files: &[&str]) -> Result<Stri
 }
 
 fn run_neomacs_binary_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<String, String> {
-    let form_path = write_oracle_form_file(form)?;
     let lisp_dir = project_lisp_dir();
     let neomacs_bin = neomacs_binary_path();
-    let load_files_str = load_files
-        .iter()
-        .map(|file| lisp_dir.join(file).to_string_lossy().into_owned())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let sandbox = OracleSandbox::new(form, load_files, &lisp_dir)?;
 
     let mut cmd = Command::new(&neomacs_bin);
-    cmd.env("NEOVM_ORACLE_FORM_FILE", form_path.as_os_str())
-        .env("NEOVM_ORACLE_LOAD_ROOT", &lisp_dir)
-        .env("NEOVM_ORACLE_PROJECT_ROOT", project_root())
-        .env("NEOVM_ORACLE_LOAD_FILES", load_files_str)
-        .args([
-            "--batch",
-            "-Q",
-            "--eval",
-            NATIVE_COMP_SUPPRESSION_PRELUDE,
-            "--eval",
-            EVAL_PROGRAM_RAW,
-        ]);
+    sandbox.configure(&mut cmd);
+    cmd.args([
+        "--batch",
+        "-Q",
+        "--eval",
+        NATIVE_COMP_SUPPRESSION_PRELUDE,
+        "--eval",
+        EVAL_PROGRAM_RAW,
+    ]);
 
     if let Some(mem_limit) = neomacs_binary_mem_limit_bytes() {
         apply_virtual_memory_limit(&mut cmd, mem_limit);
@@ -900,10 +859,8 @@ pub(crate) fn assert_oracle_parity_with_shared_tempdir_expect(
     form: &str,
     expected: expect_test::Expect,
 ) {
-    let tmpdir = tempfile::Builder::new()
-        .prefix("neovm-oracle-case-")
-        .tempdir()
-        .expect("shared oracle tempdir should be created");
+    let tmpdir =
+        OracleSandbox::create_case_tempdir().expect("shared oracle tempdir should be created");
     assert_oracle_parity_expect_with_runners(
         form,
         expected,
@@ -974,10 +931,8 @@ pub(crate) fn assert_oracle_parity_frozen_time_with_load_expect(
         .iter()
         .map(|(k, v)| (k.as_str(), v.as_str()))
         .collect();
-    let tmpdir = tempfile::Builder::new()
-        .prefix("neovm-oracle-case-")
-        .tempdir()
-        .expect("shared oracle tempdir should be created");
+    let tmpdir =
+        OracleSandbox::create_case_tempdir().expect("shared oracle tempdir should be created");
     assert_oracle_parity_expect_with_runners(
         form,
         expected,
@@ -1030,10 +985,8 @@ pub(crate) fn assert_oracle_parity_with_load_raw_expect(
 
 pub(crate) fn assert_oracle_parity_with_shared_tempdir(form: &str) {
     ensure_nonempty_form(form).expect("form should not be empty");
-    let tmpdir = tempfile::Builder::new()
-        .prefix("neovm-oracle-case-")
-        .tempdir()
-        .expect("shared oracle tempdir should be created");
+    let tmpdir =
+        OracleSandbox::create_case_tempdir().expect("shared oracle tempdir should be created");
     let neovm = run_neomacs_binary_eval_inner_with_tmpdir(
         form,
         &[],

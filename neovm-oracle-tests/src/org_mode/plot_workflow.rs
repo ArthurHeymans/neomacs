@@ -122,7 +122,9 @@ fn org_plot_radar_script_normalized_combo() {
           (not (null (string-match-p "Speed" script)))
           (not (null (string-match-p "filledcurves" script)))
           (replace-regexp-in-string
-           "/tmp/[^\"\n]+"
+           (concat
+            (regexp-quote (file-name-as-directory temporary-file-directory))
+            "[^\"\n]+")
            "<tmp-file>"
            script))))"##,
         expect,

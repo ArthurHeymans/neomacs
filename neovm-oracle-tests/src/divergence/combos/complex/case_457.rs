@@ -95,11 +95,12 @@ fn div_cx457_rename_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
-        r##"(let ((src (make-temp-file "neo-cx457-rn-")))
+        r##"(let* ((src (make-temp-file "neo-cx457-rn-"))
+       (dst (expand-file-name "neo-cx457-renamed" temporary-file-directory)))
   (unwind-protect
-      (progn (rename-file src "/tmp/neo-cx457-renamed" t)
-             (file-exists-p "/tmp/neo-cx457-renamed"))
-    (ignore-errors (delete-file "/tmp/neo-cx457-renamed"))))"##,
+      (progn (rename-file src dst t)
+             (file-exists-p dst))
+    (ignore-errors (delete-file dst))))"##,
         expect,
     );
 }
@@ -109,12 +110,13 @@ fn div_cx457_add_name_to_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
-        r##"(let ((f (make-temp-file "neo-cx457-an-")))
+        r##"(let* ((f (make-temp-file "neo-cx457-an-"))
+       (link (expand-file-name "neo-cx457-hardlink" temporary-file-directory)))
   (unwind-protect
-      (progn (add-name-to-file f "/tmp/neo-cx457-hardlink" t)
-             (file-exists-p "/tmp/neo-cx457-hardlink"))
+      (progn (add-name-to-file f link t)
+             (file-exists-p link))
     (delete-file f)
-    (ignore-errors (delete-file "/tmp/neo-cx457-hardlink"))))"##,
+    (ignore-errors (delete-file link))))"##,
         expect,
     );
 }
