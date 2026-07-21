@@ -189,7 +189,7 @@ impl BufferWindowSourceRequest {
             return adjusted;
         }
 
-        if self.should_forward_scroll_without_layout(window_start) {
+        if self.should_forward_scroll_without_layout(&byte_at_charpos) {
             let rows_above = self.forward_scroll_rows_above(&byte_at_charpos);
             let adjusted = self.scan_back_from_point(rows_above, &byte_at_charpos);
             tracing::debug!(
@@ -232,15 +232,19 @@ impl BufferWindowSourceRequest {
             // (GNU `recenter:` centering_position, xdisp.c:21188).
             (self.max_rows / 2) + 1
         } else {
-            // Near jump within `scroll-conservatively`: GNU scrolls minimally,
-            // leaving point at the bottom scroll-margin. Placing point on the
-            // very last row here can land it on a partially-clipped row (this
-            // window fits ~1 fewer full row than GNU), which makes the later
-            // visibility retry over-scroll point to the top. Until that geometry
-            // gap and the retry's scroll-conservatively handling are addressed,
-            // keep the long-standing heuristic that leaves point comfortably
-            // above the bottom (~3/4 down) — non-regressing for near jumps.
-            ((self.max_rows * 3) / 4).max(1)
+            // Near jump within `scroll-conservatively`: GNU `try_scrolling`
+            // scrolls the window start down by exactly `dy` (point's distance
+            // below the bottom scroll margin), leaving point on the LAST FULLY
+            // VISIBLE row at the bottom margin (xdisp.c:19487-19526,
+            // `amount_to_scroll = min(max(dy, line), scroll_conservatively)` with
+            // scroll-margin 0). `scan_back_from_point(n)` lands window_start on a
+            // newline, which renders as a leading partial row, so the effective
+            // context is one row more than `n`: passing `max_rows - 1` leaves
+            // point on the last fully-visible row (row `max_rows - 1`) rather than
+            // one past the bottom, which would trip the page-down visibility
+            // retry. (Was a `~3/4 down` heuristic working around a believed ~1-row
+            // geometry gap that measurement disproved.)
+            self.max_rows.saturating_sub(1).max(1)
         }
     }
 
@@ -273,7 +277,10 @@ impl BufferWindowSourceRequest {
         false
     }
 
-    fn should_forward_scroll_without_layout(self, window_start: i64) -> bool {
+    fn should_forward_scroll_without_layout(
+        self,
+        byte_at_charpos: &impl Fn(i64) -> Option<u8>,
+    ) -> bool {
         if self.point_charpos <= 0 || self.kind.is_minibuffer() {
             return false;
         }
@@ -291,9 +298,18 @@ impl BufferWindowSourceRequest {
         let has_prev_end = self
             .previous_window_end
             .is_some_and(|end| self.point_charpos > end);
-        let max_visible_chars = (self.max_rows.max(1) as i64) * self.visible_cols;
-        let far_below_without_prev_end = self.previous_window_end.is_none()
-            && self.point_charpos - window_start > max_visible_chars;
+        // When `previous_window_end` is unavailable (window_end_valid was false,
+        // e.g. the first redisplay after a large motion), fall back to a LINE
+        // distance test, not a character-count one. GNU `try_scrolling` decides
+        // to scroll from point's line distance below the window bottom; a
+        // character threshold (`max_rows * visible_cols`) misfires in wide
+        // windows, where an off-bottom line jump is only a few hundred chars --
+        // far under a full screenful of columns -- so point stays undetected and
+        // the display falls to the crude page-down visibility retry. `forward_
+        // jump_exceeds(0)` is true exactly when point sits below the last visible
+        // row (more than `max_rows - 1` newlines below window_start).
+        let far_below_without_prev_end =
+            self.previous_window_end.is_none() && self.forward_jump_exceeds(0, byte_at_charpos);
         has_prev_end || far_below_without_prev_end
     }
 

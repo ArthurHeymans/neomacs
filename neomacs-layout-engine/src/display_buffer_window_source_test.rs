@@ -165,9 +165,10 @@ fn source_request_recenters_far_forward_jump() {
 #[test]
 fn source_request_near_forward_jump_does_not_recenter() {
     // A jump within `scroll-conservatively` of the viewport bottom does NOT
-    // recenter; it keeps the minimal forward-scroll heuristic (~3/4 down, the
-    // 6th newline above point -> charpos 15 for an 8-row window). Distinct from
-    // the recentered result (17) above.
+    // recenter; GNU `try_scrolling` scrolls minimally, leaving point on the last
+    // fully-visible row (bottom scroll-margin). For an 8-row window that is
+    // `max_rows - 1` newlines above point -> charpos 13 (point on the last
+    // visible row, row 7). Distinct from the recentered result (17) above.
     let resolved = request(
         0,
         Some(4),
@@ -179,14 +180,14 @@ fn source_request_near_forward_jump_does_not_recenter() {
     )
     .resolve_window_start(byte_at_charpos(LINES16));
 
-    assert_eq!(resolved, 15);
+    assert_eq!(resolved, 13);
 }
 
 #[test]
 fn source_request_high_scroll_conservatively_never_recenters() {
     // scroll-conservatively above GNU's SCROLL_LIMIT (100) disables recentering;
-    // even a far jump keeps the minimal forward-scroll (same result as the near
-    // jump, not the recentered 17).
+    // even a far jump keeps the minimal forward-scroll (point on the last visible
+    // row, same result as the near jump, not the recentered 17).
     let resolved = request(
         0,
         Some(4),
@@ -198,7 +199,7 @@ fn source_request_high_scroll_conservatively_never_recenters() {
     )
     .resolve_window_start(byte_at_charpos(LINES16));
 
-    assert_eq!(resolved, 15);
+    assert_eq!(resolved, 13);
 }
 
 #[test]
