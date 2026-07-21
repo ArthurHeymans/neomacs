@@ -16383,6 +16383,110 @@ fn jit_bench_loop() {
     );
 }
 
+/// GATE-RELAXATION BENCH: a CALL-DOMINATED body (4 calls + 2 arith per iter, so
+/// `calls > arith` -> `body_is_jit_profitable` DECLINES it) that the JIT normally
+/// keeps interpreted. Forces the gate OFF so it tiers to native, then A/Bs native
+/// vs interp: ratio > 1 means tiering a call-heavy body is now NET-POSITIVE, so
+/// the gate could relax (the workstream's end goal). Pair with `NEOVM_JIT_LEVER1`
+/// on/off to see how much lever 1 moved it (the pre-lever-1 baseline was ~+5.6%
+/// SLOWER when forced open). Callee is a hot trivial `(lambda (x) x)` so the calls
+/// hit the native-to-native spec fast path.
+#[cfg(feature = "jit")]
+fn jit_bench_call_bound_caller(tier: BenchTier) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    // (lambda (n) (while (> n 0) (cbleaf n)(cbleaf n)(cbleaf n)(cbleaf n)
+    //                            (setq n (1- n))) n)  ; slot0 = n
+    f.ops = vec![
+        Op::StackRef(0),   // 0  n
+        Op::Constant(0),   // 1  0
+        Op::Gtr,           // 2  n>0
+        Op::GotoIfNil(24), // 3  -> exit
+        Op::Constant(1),   // 4  'cbleaf
+        Op::StackRef(1),   // 5  n
+        Op::Call(1),       // 6  (cbleaf n)
+        Op::Pop,           // 7
+        Op::Constant(1),   // 8
+        Op::StackRef(1),   // 9
+        Op::Call(1),       // 10
+        Op::Pop,           // 11
+        Op::Constant(1),   // 12
+        Op::StackRef(1),   // 13
+        Op::Call(1),       // 14
+        Op::Pop,           // 15
+        Op::Constant(1),   // 16
+        Op::StackRef(1),   // 17
+        Op::Call(1),       // 18
+        Op::Pop,           // 19
+        Op::StackRef(0),   // 20 n
+        Op::Sub1,          // 21 n-1
+        Op::StackSet(1),   // 22 slot0 = n-1
+        Op::Goto(0),       // 23 loop
+        Op::StackRef(0),   // 24 exit: n (=0)
+        Op::Return,        // 25
+    ];
+    f.constants = vec![Value::make_int(0), Value::symbol("jit-bench-cbleaf")];
+    f.max_stack = 16;
+    tier.apply(&f.runtime);
+    Value::make_bytecode(f)
+}
+
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_call_bound_loop() {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    // Hot trivial callee (lambda (x) x) so the calls hit the native fast path.
+    let mut leaf = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    leaf.lexical = true;
+    // (lambda (x) (if x x x)) — multi-block so the caller CANNOT inline it (which
+    // would DCE the discarded calls and defeat the call-bound measurement). Returns
+    // x for the non-nil fixnum args this bench passes.
+    leaf.ops = vec![
+        Op::StackRef(0),  // 0  x
+        Op::GotoIfNil(4), // 1  (never taken for fixnum x)
+        Op::StackRef(0),  // 2  x
+        Op::Return,       // 3
+        Op::StackRef(0),  // 4  x (else)
+        Op::Return,       // 5
+    ];
+    leaf.max_stack = 8;
+    leaf.runtime.set_hot_for_test();
+    let ValueKind::Symbol(cbleaf_id) = Value::symbol("jit-bench-cbleaf").kind() else {
+        panic!("symbol")
+    };
+    ev.obarray
+        .set_symbol_function_id(cbleaf_id, Value::make_bytecode(leaf));
+    // Force the profitability gate OFF so the call-dominated caller actually tiers
+    // (else NotProfitable keeps BOTH copies interpreted -> interp-vs-interp ~1x).
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let native = jit_bench_call_bound_caller(BenchTier::Hot);
+    let cold = jit_bench_call_bound_caller(BenchTier::Cold);
+    let n = 200_000i64;
+    let want = Value::make_int(0);
+    let nat = jit_bench_min(&mut ev, native, n, want, 9);
+    let int = jit_bench_min(&mut ev, cold, n, want, 9);
+    panic!(
+        "BENCH call-bound-loop(n={n}, 4 calls/iter): native {nat:?} interp {int:?} -> {:.3}x (>1 = tiering net-positive, gate could relax)",
+        int.as_secs_f64() / nat.as_secs_f64()
+    );
+}
+
 /// R2-D DECISIVE BENCH (the AOT sweet spot): a COMPUTE-heavy AOT-candidate body
 /// called FEWER than `HOT_THRESHOLD` (10k) times — so the JIT NEVER tiers it up
 /// (it stays interpreted), but AOT serves it NATIVE FROM CALL 1. This is the case
