@@ -3687,6 +3687,32 @@ fn is_fixnum_const(fb: &FunctionBuilder, v: ClifValue) -> bool {
     false
 }
 
+/// True if `v` is a compile-time constant (`iconst`) whose bits are a NON-HEAP
+/// immediate — a fixnum, or a symbol (`nil`/`t`/keywords/interned names are all
+/// symbol-tagged). Such a value provably never needs operand-stack GC rooting, so
+/// a residual push can be skipped ENTIRELY at compile time — the baseline (no-MIR)
+/// analogue of [`LispType::never_needs_gc_root`]. The predicate is exactly the one
+/// [`emit_conditional_gc_push`] inlines at run time, so it can never mis-skip a
+/// heap value; and heap constants are `iconst`-immune in the baseline anyway (R1a
+/// routes them through the reloc load, never a baked pointer). Because the
+/// baseline runs Cranelift at `opt_level="none"` (no constant folding), skipping
+/// here removes a dead tag-test the optimizer would otherwise leave in.
+fn is_nonheap_const(fb: &FunctionBuilder, v: ClifValue) -> bool {
+    use cranelift_codegen::ir::{InstructionData, Opcode, ValueDef};
+    if let ValueDef::Result(inst, _) = fb.func.dfg.value_def(v) {
+        if let InstructionData::UnaryImm {
+            opcode: Opcode::Iconst,
+            imm,
+        } = fb.func.dfg.insts[inst]
+        {
+            let bits = imm.bits() as usize;
+            return (bits & FIXNUM_CHECK_MASK) == FIXNUM_CHECK_VALUE
+                || (bits & TAG_MASK) == TAG_SYMBOL;
+        }
+    }
+    false
+}
+
 /// True if `v` PROVABLY holds the tagged bits of symbol `sym` at this point:
 /// an `iconst` of exactly those bits (the JIT bake of a symbol constant, see
 /// the `Op::Constant` lowering) or a load of the symbol's slot from the
@@ -4176,6 +4202,28 @@ fn emit_conditional_gc_push(fb: &mut FunctionBuilder, gc_push: FuncRef, v: ClifV
     fb.ins().jump(cont_bb, &[]);
     fb.switch_to_block(cont_bb);
     fb.seal_block(cont_bb);
+}
+
+/// Root a BASELINE residual operand-stack slice across a GC safepoint, applying
+/// lever 1 (the inlined `is_heap_object` tag test) so a non-heap operand skips
+/// the `neovm_jit_gc_push` shim CALL at run time. Two buckets (the baseline has
+/// no MIR type lattice, only per-value constant knowledge):
+///   * a compile-time non-heap constant ([`is_nonheap_const`]) — skip the push
+///     entirely, no runtime test emitted;
+///   * everything else — [`emit_conditional_gc_push`] inlines the tag test.
+///
+/// Every `values` slot MUST already be a tagged `Value` (the caller runs
+/// `retag_all_raw` before any gc_push-bearing op — see [`op_preserves_raw`]),
+/// EXACTLY the precondition the previous unconditional `gc_push` loop relied on
+/// (a raw fixnum reaching `neovm_jit_gc_push` would already be a UAF). This is
+/// the baseline counterpart of the MIR tier's three-bucket residual lowering.
+fn emit_residual_roots(fb: &mut FunctionBuilder, gc_push: FuncRef, values: &[ClifValue]) {
+    for &v in values {
+        if is_nonheap_const(fb, v) {
+            continue; // provably non-heap immediate: nothing to root.
+        }
+        emit_conditional_gc_push(fb, gc_push, v);
+    }
 }
 
 /// The deopt landing block for a guard-emitting MIR inst. In a CALL-BEARING body
@@ -5737,9 +5785,7 @@ fn emit_pending_dispatches(
         } else {
             let c = fb.ins().call(rt.refs.gc_save, &[]);
             let s = fb.inst_results(c)[0];
-            for &v in pd.stack.iter() {
-                fb.ins().call(rt.refs.gc_push, &[v]);
-            }
+            emit_residual_roots(fb, rt.refs.gc_push, &pd.stack);
             Some(s)
         };
         let vmctx = fb.use_var(rt.vmctx_var);
@@ -6230,9 +6276,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                for &v in stack.iter() {
-                    fb.ins().call(rt.refs.gc_push, &[v]);
-                }
+                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
                 Some(s)
             };
             let vmctx = fb.use_var(rt.vmctx_var);
@@ -6263,9 +6307,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                for &v in stack.iter() {
-                    fb.ins().call(rt.refs.gc_push, &[v]);
-                }
+                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
                 Some(s)
             };
             let vmctx = fb.use_var(rt.vmctx_var);
@@ -6347,9 +6389,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                for &v in stack.iter() {
-                    fb.ins().call(rt.refs.gc_push, &[v]);
-                }
+                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
                 Some(s)
             };
             let vmctx = fb.use_var(rt.vmctx_var);
@@ -6464,9 +6504,7 @@ fn lower_simple_op(
                 } else {
                     let c = fb.ins().call(rt.refs.gc_save, &[]);
                     let s = fb.inst_results(c)[0];
-                    for &v in stack.iter() {
-                        fb.ins().call(rt.refs.gc_push, &[v]);
-                    }
+                    emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
                     Some(s)
                 };
                 let vmctx_gen = fb.use_var(rt.vmctx_var);
@@ -6504,9 +6542,7 @@ fn lower_simple_op(
                     let c = fb.ins().call(rt.refs.gc_save, &[]);
                     fb.inst_results(c)[0]
                 };
-                for &v in stack.iter() {
-                    fb.ins().call(rt.refs.gc_push, &[v]);
-                }
+                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
                 let call = fb.ins().call(rt.refs.cons, &[car, cdr]);
                 let r = fb.inst_results(call)[0];
                 fb.ins().call(rt.refs.gc_restore, &[saved]);
@@ -6533,9 +6569,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                for &v in stack.iter() {
-                    fb.ins().call(rt.refs.gc_push, &[v]);
-                }
+                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
                 Some(s)
             };
             fb.ins().call(rt.refs.varbind, &[vmctx, sym_v, val]);
@@ -6556,9 +6590,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                for &v in stack.iter() {
-                    fb.ins().call(rt.refs.gc_push, &[v]);
-                }
+                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
                 Some(s)
             };
             fb.ins().call(rt.refs.unbind, &[vmctx, n_v]);
@@ -6598,9 +6630,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                for &v in stack.iter() {
-                    fb.ins().call(rt.refs.gc_push, &[v]);
-                }
+                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
                 Some(s)
             };
             let vmctx = fb.use_var(rt.vmctx_var);
@@ -6674,9 +6704,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                for &v in stack.iter() {
-                    fb.ins().call(rt.refs.gc_push, &[v]);
-                }
+                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
                 Some(s)
             };
             let vmctx = fb.use_var(rt.vmctx_var);
@@ -6760,9 +6788,7 @@ fn lower_simple_op(
                 } else {
                     let c = fb.ins().call(rt.refs.gc_save, &[]);
                     let s = fb.inst_results(c)[0];
-                    for &v in stack.iter() {
-                        fb.ins().call(rt.refs.gc_push, &[v]);
-                    }
+                    emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
                     Some(s)
                 };
                 let vmctx_gen = fb.use_var(rt.vmctx_var);
@@ -6806,9 +6832,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                for &v in stack.iter() {
-                    fb.ins().call(rt.refs.gc_push, &[v]);
-                }
+                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
                 Some(s)
             };
             let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
@@ -6840,9 +6864,7 @@ fn lower_simple_op(
                 } else {
                     let c = fb.ins().call(rt.refs.gc_save, &[]);
                     let s = fb.inst_results(c)[0];
-                    for &v in stack.iter() {
-                        fb.ins().call(rt.refs.gc_push, &[v]);
-                    }
+                    emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
                     Some(s)
                 };
                 let idx_v = fb.ins().iconst(types::I64, idx as i64);
@@ -6888,9 +6910,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                for &v in stack.iter() {
-                    fb.ins().call(rt.refs.gc_push, &[v]);
-                }
+                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
                 Some(s)
             };
             let vmctx = fb.use_var(rt.vmctx_var);
@@ -8399,9 +8419,7 @@ fn emit_backedge_jump(
     } else {
         let call = fb.ins().call(rt.refs.gc_save, &[]);
         let s = fb.inst_results(call)[0];
-        for &v in vals.iter() {
-            fb.ins().call(rt.refs.gc_push, &[v]);
-        }
+        emit_residual_roots(fb, rt.refs.gc_push, &vals);
         Some(s)
     };
     let vmctx = fb.use_var(rt.vmctx_var);

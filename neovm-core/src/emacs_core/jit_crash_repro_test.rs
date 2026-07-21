@@ -360,6 +360,91 @@ fn repro_mir_any_typed_heap_residual_generic() {
     }
 }
 
+/// BASELINE TIER, lever-1 residual rooting (the deterministic counterpart to the
+/// weak `make-list`-churn repros above, which never actually collect). A fresh
+/// heap cons `H=(cons 1 2)` is held across a call that DETERMINISTICALLY collects
+/// (`gcchurn2` = `(garbage-collect) (make-list 4096 0)`). The body inlines
+/// NOTHING, so the call-bearing body takes the BASELINE tier (asserted via
+/// `inline_epoch().is_none()`), exercising `emit_residual_roots` /
+/// `emit_conditional_gc_push` in `lower_op`'s `Op::Call` lowering. `H` is an
+/// `Op::Cons` SSA value (not a nonheap const), so it flows through the inlined
+/// `is_heap_object` tag test and MUST be pushed; an inverted test frees it and the
+/// churn's `make-list` reuses its slot -> car reads `0` not `1` (verified
+/// adversarially).
+///
+/// (defun f () (let ((H (cons 1 2))) (gcchurn2) H))
+/// (defun gcchurn2 () (garbage-collect) (make-list 4096 0))
+#[test]
+#[ignore = "diagnostic JIT-rooting repro (gc_stress); run with --run-ignored"]
+fn repro_baseline_heap_residual_survives_exact_gc() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    ev.gc_stress = true;
+    bind_fn(
+        &mut ev,
+        "gcchurn2",
+        bc(
+            0,
+            vec![
+                Op::Constant(0), // 'garbage-collect
+                Op::Call(0),     // -> gc_collect_exact
+                Op::Pop,
+                Op::Constant(1), // 'make-list
+                Op::Constant(2), // 4096
+                Op::Constant(3), // 0
+                Op::Call(2),     // reclaims + reuses freed slots
+                Op::Return,
+            ],
+            vec![
+                Value::symbol("garbage-collect"),
+                Value::symbol("make-list"),
+                Value::make_int(4096),
+                Value::make_int(0),
+            ],
+            false,
+        ),
+    );
+    let cbc = bc(
+        0,
+        vec![
+            Op::Constant(0), // 1
+            Op::Constant(1), // 2
+            Op::Cons,        // H=(cons 1 2)  heap residual
+            Op::Constant(2), // 'gcchurn2
+            Op::Call(0),     // (gcchurn2)  residual=[H] -> emit_residual_roots
+            Op::Pop,
+            Op::Return, // -> H
+        ],
+        vec![
+            Value::make_int(1),
+            Value::make_int(2),
+            Value::symbol("gcchurn2"),
+        ],
+        true,
+    );
+    // The call-bearing body inlines nothing -> BASELINE tier (not MIR): this test
+    // exercises lower_op's residual rooting, distinct from the MIR path above.
+    {
+        let leaf = crate::emacs_core::jit::compile::compile_bytecode_function_with(
+            &cbc,
+            Some(&ev.obarray),
+        )
+        .expect("caller compiles");
+        assert!(
+            leaf.inline_epoch().is_none(),
+            "no inlinable callee -> baseline tier, exercising lower_op residual rooting"
+        );
+    }
+    let caller = Value::make_bytecode(cbc);
+    for _ in 0..20 {
+        let r = ev
+            .funcall_general_untraced(caller, vec![])
+            .expect("baseline heap residual across exact-GC call");
+        assert_cons_1_2(r);
+    }
+}
+
 /// BASELINE, generic path, BIGNUM (Vec-backed) residual — the reported
 /// "corrupted bignum Vec" shape. `B=(* BIG BIG)` (fixnum overflow -> heap bignum
 /// with an internal digit Vec) is held across a generic allocating call, then
