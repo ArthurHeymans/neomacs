@@ -16755,7 +16755,7 @@ fn jit_bench_call_heavy_fontlock_reweight() {
 
     // Shape report: op histogram (documents that this really is call-heavy).
     let (mut n_call, mut n_cbsym, mut n_arith) = (0usize, 0usize, 0usize);
-    for op in &bc.ops {
+    for op in bc.executable_ops() {
         match op {
             Op::Call(_) | Op::Apply(_) | Op::CallBuiltin(..) => n_call += 1,
             Op::CallBuiltinSym(..) => n_cbsym += 1,
@@ -16780,7 +16780,8 @@ fn jit_bench_call_heavy_fontlock_reweight() {
 
     // CONFIRM the #1 Op::Call Many-spec (or round-1 fixed) sites are actually
     // present — so the Hot side really is native+spec, not a silent fallback.
-    let has_spec = compile::has_op_call_spec_sites(&bc.ops, &bc.constants, arity, &ev.obarray);
+    let has_spec =
+        compile::has_op_call_spec_sites(bc.executable_ops(), &bc.constants, arity, &ev.obarray);
     assert!(
         has_spec,
         "the byte-compiled sweep must carry >=1 Op::Call spec site (re-search-forward / looking-at / parse-partial-sexp); \
@@ -16850,7 +16851,7 @@ fn jit_bench_call_heavy_fontlock_reweight() {
     panic!(
         "BENCH call-heavy-fontlock(buf={sz:?} matches={want:?} | ops={} call={n_call} cbsym={n_cbsym} arith={n_arith}): \
          native+spec {nat:?} interp {int:?} -> {:.3}x",
-        bc.ops.len(),
+        bc.executable_ops().len(),
         int.as_secs_f64() / nat.as_secs_f64()
     );
 }
@@ -16894,7 +16895,7 @@ fn jit_bench_spec_call_dispatch_upper_bound() {
         .expect("microloop must be byte-compiled");
     let arity = bc.params.required.len();
     assert!(
-        compile::has_op_call_spec_sites(&bc.ops, &bc.constants, arity, &ev.obarray),
+        compile::has_op_call_spec_sites(bc.executable_ops(), &bc.constants, arity, &ev.obarray),
         "microloop must carry the looking-at Op::Call Many-spec site"
     );
 
