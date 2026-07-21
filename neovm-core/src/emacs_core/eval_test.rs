@@ -16487,6 +16487,78 @@ fn jit_bench_call_bound_loop() {
     );
 }
 
+/// GATE-RELAXATION BENCH, BUILTIN variant — the font-lock case the user-fn bench
+/// above could NOT answer. Same call-dominated shape but the 4 calls/iter are
+/// `CallBuiltinSym` to a cheap NON-intrinsified builtin (`abs`), so they take the
+/// generic builtin-dispatch shim (NOT the native-to-native user-fn fast path).
+/// `abs` is trivial, so this isolates the builtin CALL DISPATCH cost (native vs
+/// interp) — real font-lock builtins (re-search-forward) do buffer work that's
+/// identical either way, so dispatch is the only thing tiering changes. ratio > 1
+/// => even builtin-heavy bodies are net-positive tiered (gate can relax broadly);
+/// ratio < 1 => builtin dispatch is the gate's remaining valid concern.
+#[cfg(feature = "jit")]
+fn jit_bench_builtin_bound_caller(tier: BenchTier) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::intern::intern;
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    let abs = intern("abs");
+    // (lambda (n) (while (> n 0) (abs n)(abs n)(abs n)(abs n) (setq n (1- n))) n)
+    f.ops = vec![
+        Op::StackRef(0),            // 0  n
+        Op::Constant(0),            // 1  0
+        Op::Gtr,                    // 2  n>0
+        Op::GotoIfNil(20),          // 3  -> exit
+        Op::StackRef(0),            // 4  n
+        Op::CallBuiltinSym(abs, 1), // 5  (abs n)
+        Op::Pop,                    // 6
+        Op::StackRef(0),            // 7
+        Op::CallBuiltinSym(abs, 1), // 8
+        Op::Pop,                    // 9
+        Op::StackRef(0),            // 10
+        Op::CallBuiltinSym(abs, 1), // 11
+        Op::Pop,                    // 12
+        Op::StackRef(0),            // 13
+        Op::CallBuiltinSym(abs, 1), // 14
+        Op::Pop,                    // 15
+        Op::StackRef(0),            // 16 n
+        Op::Sub1,                   // 17 n-1
+        Op::StackSet(1),            // 18 slot0 = n-1
+        Op::Goto(0),                // 19 loop
+        Op::StackRef(0),            // 20 exit: n (=0)
+        Op::Return,                 // 21
+    ];
+    f.constants = vec![Value::make_int(0)];
+    f.max_stack = 16;
+    tier.apply(&f.runtime);
+    Value::make_bytecode(f)
+}
+
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_builtin_bound_loop() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let native = jit_bench_builtin_bound_caller(BenchTier::Hot);
+    let cold = jit_bench_builtin_bound_caller(BenchTier::Cold);
+    let n = 200_000i64;
+    let want = Value::make_int(0);
+    let nat = jit_bench_min(&mut ev, native, n, want, 9);
+    let int = jit_bench_min(&mut ev, cold, n, want, 9);
+    panic!(
+        "BENCH builtin-bound-loop(n={n}, 4 CallBuiltinSym abs/iter): native {nat:?} interp {int:?} -> {:.3}x (>1 = tiering net-positive)",
+        int.as_secs_f64() / nat.as_secs_f64()
+    );
+}
+
 /// R2-D DECISIVE BENCH (the AOT sweet spot): a COMPUTE-heavy AOT-candidate body
 /// called FEWER than `HOT_THRESHOLD` (10k) times — so the JIT NEVER tiers it up
 /// (it stays interpreted), but AOT serves it NATIVE FROM CALL 1. This is the case
