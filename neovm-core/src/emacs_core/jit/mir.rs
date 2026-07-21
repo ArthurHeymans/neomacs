@@ -106,6 +106,22 @@ impl LispType {
         )
     }
 
+    /// True when a value of this type is *definitely* a heap object, so the GC
+    /// root push across a call/allocation is unconditionally required. This is
+    /// the exact complement partner of [`never_needs_gc_root`] on the KNOWN
+    /// types: for a residual with one of these types, an inlined runtime
+    /// `is_heap_object` tag test would only ever fall through to the push, so
+    /// the caller emits an *unconditional* `neovm_jit_gc_push` and skips the
+    /// test. Only `Unknown`/`Any` (neither provably immediate nor provably
+    /// heap) are worth an inlined runtime tag test — and both return `false`
+    /// from BOTH methods, which is how the codegen distinguishes them.
+    pub fn provably_heap(self) -> bool {
+        matches!(
+            self,
+            LispType::Cons | LispType::Str | LispType::Float | LispType::Veclike
+        )
+    }
+
     /// The lattice join (least upper bound) used at block-parameter merges:
     /// identical types stay; `Unknown` is the identity; anything else widens to
     /// `Any`. (A richer lattice with unions — `fixnum|nil` etc. — is a later
@@ -1306,6 +1322,22 @@ mod tests {
             assert!(
                 !ty.never_needs_gc_root(),
                 "{ty:?} can be heap (or unknown) and MUST be rooted"
+            );
+        }
+        // The three GC-root codegen buckets must partition the type lattice:
+        // provably-immediate (skip), provably-heap (unconditional push), and
+        // Unknown/Any (inlined runtime tag test). No type may fall in two
+        // buckets, or the codegen would both skip and unconditionally push it.
+        for ty in [Fixnum, Nil, True, Boolean, Symbol] {
+            assert!(!ty.provably_heap(), "{ty:?} is immediate, not heap");
+        }
+        for ty in [Cons, Str, Float, Veclike] {
+            assert!(ty.provably_heap(), "{ty:?} is always a heap object");
+        }
+        for ty in [Unknown, Any] {
+            assert!(
+                !ty.never_needs_gc_root() && !ty.provably_heap(),
+                "{ty:?} is ambiguous — runtime tag test, neither skip nor unconditional push"
             );
         }
     }

@@ -248,6 +248,118 @@ fn repro_mir_inlined_plus_residual_generic() {
     }
 }
 
+/// MIR TIER, `Any`-TYPED heap residual — the lever-1 runtime-inline path. Unlike
+/// every residual above (a fresh `Op::Cons` / bignum, whose MIR type is provably
+/// heap, so the codegen emits an UNCONDITIONAL `neovm_jit_gc_push`), the residual
+/// here is the RESULT of a generic `(make-list 1 7)` call, whose MIR type is
+/// `Any`. For `Any`/`Unknown` residuals the codegen inlines the `is_heap_object`
+/// tag test (`emit_conditional_gc_push`) so a fixnum/symbol operand skips the
+/// shim call at run time — but a HEAP `Any` value like `(7)` MUST still be pushed.
+/// An inverted/wrong tag test would skip rooting the live cons; the `gcchurn`
+/// callee then `garbage-collect`s it (exact GC, no native-stack scan -> the
+/// unrooted cons is definitely swept) and reallocates 4096 conses that pop its
+/// freed slot, so the returned car reads back `0` (verified: the inverted branch
+/// fails here with left=0 right=7) instead of `7`.
+///
+/// The body inlines `jitinc` (a pure single-block callee) so the tier gate routes
+/// the call-bearing body to the MIR tier, then keeps the `Any` cons live across
+/// the `gcchurn` call.
+///
+/// (defun f () (jitinc 41) (let ((X (make-list 1 7))) (gcchurn) X))
+/// (defun gcchurn () (garbage-collect) (make-list 4096 0))
+#[test]
+#[ignore = "diagnostic JIT-rooting repro (gc_stress); run with --run-ignored"]
+fn repro_mir_any_typed_heap_residual_generic() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    ev.gc_stress = true;
+    // Pure, required-only, inlinable callee: (lambda (x) (1+ x)) — earns MIR tier.
+    bind_fn(
+        &mut ev,
+        "jitinc",
+        bc(
+            1,
+            vec![Op::StackRef(0), Op::Add1, Op::Return],
+            vec![],
+            false,
+        ),
+    );
+    // Callee that DETERMINISTICALLY collects (`garbage-collect` -> gc_collect_exact,
+    // which ignores the native stack, so an unrooted residual is definitely swept)
+    // and then reallocates 4096 conses, popping the freed cons off the free list so
+    // a dropped root reads corrupted contents. Bound (not hot) so it stays
+    // interpreted and both builtins run for real.
+    bind_fn(
+        &mut ev,
+        "gcchurn",
+        bc(
+            0,
+            vec![
+                Op::Constant(0), // 'garbage-collect
+                Op::Call(0),     // (garbage-collect) -> gc_collect_exact
+                Op::Pop,
+                Op::Constant(1), // 'make-list
+                Op::Constant(2), // 4096
+                Op::Constant(3), // 0
+                Op::Call(2),     // (make-list 4096 0)  reclaims + reuses freed slots
+                Op::Return,
+            ],
+            vec![
+                Value::symbol("garbage-collect"),
+                Value::symbol("make-list"),
+                Value::make_int(4096),
+                Value::make_int(0),
+            ],
+            false,
+        ),
+    );
+    let caller = Value::make_bytecode(bc(
+        0,
+        vec![
+            // --- inline a call to earn the MIR tier ---
+            Op::Constant(0), // 'jitinc
+            Op::Constant(1), // 41
+            Op::Call(1),     // (jitinc 41) -> 42 [inlined]
+            Op::Pop,
+            // --- X = (make-list 1 7) = (7): a generic-call result, MIR type Any ---
+            Op::Constant(2), // 'make-list
+            Op::Constant(3), // 1
+            Op::Constant(4), // 7
+            Op::Call(2),     // X = (7)   [Any-typed heap residual]
+            // --- residual X live across a call that GC-collects then reallocates ---
+            Op::Constant(5), // 'gcchurn
+            Op::Call(0),     // (gcchurn)  residual = [X] -> conditional gc_push
+            Op::Pop,
+            Op::Return, // -> X
+        ],
+        vec![
+            Value::symbol("jitinc"),
+            Value::make_int(41),
+            Value::symbol("make-list"),
+            Value::make_int(1),
+            Value::make_int(7),
+            Value::symbol("gcchurn"),
+        ],
+        true,
+    ));
+    for _ in 0..20 {
+        let r = ev
+            .funcall_general_untraced(caller, vec![])
+            .expect("MIR Any-typed heap residual generic call");
+        assert!(
+            r.is_cons(),
+            "Any-typed residual cons must survive the collect (got {r:?})"
+        );
+        assert_eq!(
+            r.cons_car(),
+            Value::make_int(7),
+            "car intact — a dropped root would read the reused slot's contents"
+        );
+        assert_eq!(r.cons_cdr(), Value::NIL, "cdr intact (single-element list)");
+    }
+}
+
 /// BASELINE, generic path, BIGNUM (Vec-backed) residual — the reported
 /// "corrupted bignum Vec" shape. `B=(* BIG BIG)` (fixnum overflow -> heap bignum
 /// with an internal digit Vec) is held across a generic allocating call, then

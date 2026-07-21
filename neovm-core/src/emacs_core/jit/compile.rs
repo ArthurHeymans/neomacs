@@ -4135,6 +4135,49 @@ fn mir_force_tagged(
     }
 }
 
+/// Root one live residual `v` (already tagged) across a GC safepoint, inlining
+/// the `is_heap_object` tag test so a non-heap value (fixnum or symbol) skips
+/// the `neovm_jit_gc_push` shim CALL entirely at run time.
+///
+/// Used for residuals whose MIR type is `Unknown`/`Any` — not provably
+/// immediate (those skip the push at *compile* time, [`LispType::never_needs_gc_root`])
+/// and not provably heap (those get an unconditional push,
+/// [`LispType::provably_heap`]). Empirically most such residuals resolve to
+/// fixnum accumulators or symbol arguments at run time, so the branch is
+/// overwhelmingly not-taken and predicts well.
+///
+/// CORRECTNESS: the emitted test skips the push ONLY for values the tag layout
+/// guarantees are non-heap. Every non-heap `Value` is either a fixnum
+/// (`bits & FIXNUM_CHECK_MASK == FIXNUM_CHECK_VALUE`) or a symbol
+/// (`bits & TAG_MASK == TAG_SYMBOL`) — nil/t are symbols, chars are fixnums —
+/// while every heap tag (cons/string/veclike/float) satisfies NEITHER predicate.
+/// So `!(is_fixnum | is_symbol)` is an exact, layout-anchored `is_heap_object`
+/// and can never drop a live heap root (which under GC would be a
+/// use-after-free). The shim additionally re-checks `is_heap_object`, so even
+/// the unused tag `0b001` (never produced) would be handled safely if pushed.
+fn emit_conditional_gc_push(fb: &mut FunctionBuilder, gc_push: FuncRef, v: ClifValue) {
+    // is_fixnum: (v & FIXNUM_CHECK_MASK) == FIXNUM_CHECK_VALUE
+    let fx_bits = fb.ins().band_imm(v, FIXNUM_CHECK_MASK as i64);
+    let is_fixnum = fb
+        .ins()
+        .icmp_imm(IntCC::Equal, fx_bits, FIXNUM_CHECK_VALUE as i64);
+    // is_symbol: (v & TAG_MASK) == TAG_SYMBOL
+    let tag = fb.ins().band_imm(v, TAG_MASK as i64);
+    let is_symbol = fb.ins().icmp_imm(IntCC::Equal, tag, TAG_SYMBOL as i64);
+    // non_heap = is_fixnum | is_symbol  ->  push only when NOT non_heap.
+    let non_heap = fb.ins().bor(is_fixnum, is_symbol);
+    let push_bb = fb.create_block();
+    let cont_bb = fb.create_block();
+    // non_heap true -> skip to cont; false (heap) -> push_bb.
+    fb.ins().brif(non_heap, cont_bb, &[], push_bb, &[]);
+    fb.switch_to_block(push_bb);
+    fb.seal_block(push_bb);
+    fb.ins().call(gc_push, &[v]);
+    fb.ins().jump(cont_bb, &[]);
+    fb.switch_to_block(cont_bb);
+    fb.seal_block(cont_bb);
+}
+
 /// The deopt landing block for a guard-emitting MIR inst. In a CALL-BEARING body
 /// (`precise`), every guard gets a fresh PER-SITE STATUS_DEOPT_AT block capturing
 /// the inst's pre-op operand stack from `inst.pre_stack` (snapshotted EAGERLY
@@ -4879,17 +4922,28 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                             let s = fb.inst_results(c)[0];
                             for k in 0..residual_len {
                                 let rv = inst.pre_stack[k];
-                                // A residual whose MIR type is provably non-heap
-                                // (fixnum/nil/t/boolean/symbol) never needs
-                                // rooting — `neovm_jit_gc_push` would reconstruct
-                                // it, test `is_heap_object`, and drop it. Skip the
-                                // shim CALL for it at compile time (the expensive
-                                // part; `gc_save`/`gc_restore` around a shorter
-                                // push range stays correct). Force-tagging is
-                                // left intact so no downstream `cval` state moves.
+                                // Force-tagging happens unconditionally so no
+                                // downstream `cval` state moves; only the GC-root
+                                // push is elided/specialized, by the residual's
+                                // inferred MIR type:
+                                //   * provably non-heap (fixnum/nil/t/boolean/
+                                //     symbol) — `neovm_jit_gc_push` would
+                                //     reconstruct it, test `is_heap_object`, and
+                                //     drop it; skip the shim CALL at COMPILE time.
+                                //   * provably heap (cons/string/float/veclike) —
+                                //     an inlined tag test would always fall through
+                                //     to the push, so emit it UNCONDITIONALLY.
+                                //   * Unknown/Any — inline the `is_heap_object` tag
+                                //     test so a fixnum/symbol operand skips the
+                                //     shim CALL at RUN time (lever 1 follow-up).
                                 let v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, rv)?;
-                                if !m.value_type(rv).never_needs_gc_root() {
+                                let ty = m.value_type(rv);
+                                if ty.never_needs_gc_root() {
+                                    // provably immediate: nothing to root.
+                                } else if ty.provably_heap() {
                                     fb.ins().call(rt.refs.gc_push, &[v]);
+                                } else {
+                                    emit_conditional_gc_push(&mut fb, rt.refs.gc_push, v);
                                 }
                             }
                             Some(s)
@@ -4949,17 +5003,28 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                             let s = fb.inst_results(c)[0];
                             for k in 0..residual_len {
                                 let rv = inst.pre_stack[k];
-                                // A residual whose MIR type is provably non-heap
-                                // (fixnum/nil/t/boolean/symbol) never needs
-                                // rooting — `neovm_jit_gc_push` would reconstruct
-                                // it, test `is_heap_object`, and drop it. Skip the
-                                // shim CALL for it at compile time (the expensive
-                                // part; `gc_save`/`gc_restore` around a shorter
-                                // push range stays correct). Force-tagging is
-                                // left intact so no downstream `cval` state moves.
+                                // Force-tagging happens unconditionally so no
+                                // downstream `cval` state moves; only the GC-root
+                                // push is elided/specialized, by the residual's
+                                // inferred MIR type:
+                                //   * provably non-heap (fixnum/nil/t/boolean/
+                                //     symbol) — `neovm_jit_gc_push` would
+                                //     reconstruct it, test `is_heap_object`, and
+                                //     drop it; skip the shim CALL at COMPILE time.
+                                //   * provably heap (cons/string/float/veclike) —
+                                //     an inlined tag test would always fall through
+                                //     to the push, so emit it UNCONDITIONALLY.
+                                //   * Unknown/Any — inline the `is_heap_object` tag
+                                //     test so a fixnum/symbol operand skips the
+                                //     shim CALL at RUN time (lever 1 follow-up).
                                 let v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, rv)?;
-                                if !m.value_type(rv).never_needs_gc_root() {
+                                let ty = m.value_type(rv);
+                                if ty.never_needs_gc_root() {
+                                    // provably immediate: nothing to root.
+                                } else if ty.provably_heap() {
                                     fb.ins().call(rt.refs.gc_push, &[v]);
+                                } else {
+                                    emit_conditional_gc_push(&mut fb, rt.refs.gc_push, v);
                                 }
                             }
                             Some(s)
