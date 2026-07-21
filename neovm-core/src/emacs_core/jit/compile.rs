@@ -113,7 +113,7 @@ use crate::tagged::value::{
 /// `dlopen` against the host's dynamic symbol table (the host/test binary is
 /// linked `-rdynamic`). The JIT path is unaffected — it binds shims by ADDRESS
 /// via `builder.symbol(...)`, so the only effect of `no_mangle` is an exported
-/// symbol name. All 40 shims the MIR tier can emit ([`MIR_SHIM_NAMES`]) carry it.
+/// symbol name. All 41 shims the MIR tier can emit ([`MIR_SHIM_NAMES`]) carry it.
 #[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
 #[unsafe(no_mangle)]
 pub extern "C" fn neovm_jit_gc_save() -> i64 {
@@ -135,6 +135,29 @@ pub extern "C" fn neovm_jit_gc_push(bits: i64) {
     let v = Value::from_bits(bits as usize);
     if v.is_heap_object() {
         push_scratch_gc_root(v);
+    }
+}
+
+/// Root a BATCH of `count` live residual `Value`s (raw bits at `ptr[0..count]`)
+/// across an upcoming allocation/call — the same heap-only filter as
+/// [`neovm_jit_gc_push`], but ONE shim call for the whole residual set instead of
+/// N (lever 2). The generated code stores each not-provably-immediate residual
+/// into a stack buffer at a STATIC offset (cheap `stack_store`, no per-value shim
+/// call) and calls this once; this tight loop re-tests `is_heap_object` and pushes
+/// the heap ones. Byte-compile profiles showed `neovm_jit_gc_push` as the #1 hot
+/// symbol (7.35%): heap-dense residuals paid a full function call each.
+///
+/// SAFETY: `ptr` addresses exactly `count` tagged-bits words the generated code
+/// wrote immediately before this call (its residual buffer); `count >= 0`.
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_gc_push_many(ptr: *const i64, count: i64) {
+    for i in 0..count {
+        // SAFETY: the generated code wrote `count` tagged words at `ptr`.
+        let v = Value::from_bits(unsafe { *ptr.add(i as usize) } as usize);
+        if v.is_heap_object() {
+            push_scratch_gc_root(v);
+        }
     }
 }
 
@@ -659,7 +682,7 @@ struct ShimAddr(*const ());
 unsafe impl Sync for ShimAddr {}
 
 #[used]
-static JIT_SHIM_ANCHOR: [ShimAddr; 40] = [
+static JIT_SHIM_ANCHOR: [ShimAddr; 41] = [
     ShimAddr(neovm_jit_apply as *const ()),
     ShimAddr(neovm_jit_backedge as *const ()),
     ShimAddr(neovm_jit_builtin1 as *const ()),
@@ -680,6 +703,7 @@ static JIT_SHIM_ANCHOR: [ShimAddr; 40] = [
     ShimAddr(neovm_jit_eq_incl_props_spec as *const ()),
     ShimAddr(neovm_jit_eq_slow as *const ()),
     ShimAddr(neovm_jit_gc_push as *const ()),
+    ShimAddr(neovm_jit_gc_push_many as *const ()),
     ShimAddr(neovm_jit_gc_restore as *const ()),
     ShimAddr(neovm_jit_gc_save as *const ()),
     ShimAddr(neovm_jit_integerp_slow as *const ()),
@@ -4239,58 +4263,59 @@ fn jit_lever1_on() -> bool {
     *ON.get_or_init(|| std::env::var("NEOVM_JIT_LEVER1").as_deref() != Ok("off"))
 }
 
-fn emit_conditional_gc_push(fb: &mut FunctionBuilder, gc_push: FuncRef, v: ClifValue) {
-    if !jit_lever1_on() {
-        // A/B baseline: the pre-lever-1 unconditional shim call.
-        fb.ins().call(gc_push, &[v]);
+/// Root a set of already-tagged residual `Value`s across a GC safepoint. Lever 2:
+/// with the optimization ON (default), gather `vals` into `rt.residual_buf_slot`
+/// at static offsets and issue ONE `neovm_jit_gc_push_many` call — the shim
+/// tight-loops re-testing `is_heap_object` and pushing the heap ones, so heap-
+/// dense residual sets pay one call instead of N (byte-compile profile: the
+/// per-residual `neovm_jit_gc_push` was the #1 hot symbol at 7.35%). With the opt
+/// OFF (`NEOVM_JIT_LEVER1=off`), fall back to the pre-batch unconditional per-value
+/// `neovm_jit_gc_push`. The caller applies the compile-time immediate skip (MIR
+/// `never_needs_gc_root` / baseline `is_nonheap_const`) when the opt is on, so
+/// `vals` is exactly the to-root set; the shim's re-test makes an over-included
+/// value harmless.
+///
+/// Every `vals` slot MUST be a tagged `Value` (callers run `mir_force_tagged` /
+/// `retag_all_raw` first) — a raw fixnum reaching the shim would be a UAF. The
+/// buffer holds up to the body's max operand-stack depth (see `residual_buf_slot`
+/// sizing), an upper bound on any single site's residual count, and is reused per
+/// site (the shim reads it synchronously before returning).
+fn emit_gc_push_many(fb: &mut FunctionBuilder, rt: &RtCtx, vals: &[ClifValue]) {
+    if vals.is_empty() {
         return;
     }
-    // is_fixnum: (v & FIXNUM_CHECK_MASK) == FIXNUM_CHECK_VALUE
-    let fx_bits = fb.ins().band_imm(v, FIXNUM_CHECK_MASK as i64);
-    let is_fixnum = fb
-        .ins()
-        .icmp_imm(IntCC::Equal, fx_bits, FIXNUM_CHECK_VALUE as i64);
-    // is_symbol: (v & TAG_MASK) == TAG_SYMBOL
-    let tag = fb.ins().band_imm(v, TAG_MASK as i64);
-    let is_symbol = fb.ins().icmp_imm(IntCC::Equal, tag, TAG_SYMBOL as i64);
-    // non_heap = is_fixnum | is_symbol  ->  push only when NOT non_heap.
-    let non_heap = fb.ins().bor(is_fixnum, is_symbol);
-    let push_bb = fb.create_block();
-    let cont_bb = fb.create_block();
-    // non_heap true -> skip to cont; false (heap) -> push_bb.
-    fb.ins().brif(non_heap, cont_bb, &[], push_bb, &[]);
-    fb.switch_to_block(push_bb);
-    fb.seal_block(push_bb);
-    fb.ins().call(gc_push, &[v]);
-    fb.ins().jump(cont_bb, &[]);
-    fb.switch_to_block(cont_bb);
-    fb.seal_block(cont_bb);
+    if !jit_lever1_on() {
+        // A/B baseline: unconditional per-value shim call (pre-batch behavior).
+        for &v in vals {
+            fb.ins().call(rt.refs.gc_push, &[v]);
+        }
+        return;
+    }
+    // Lever 2 batch: N static stores into the gather buffer + one shim call.
+    for (i, &v) in vals.iter().enumerate() {
+        fb.ins()
+            .stack_store(v, rt.residual_buf_slot, (i * 8) as i32);
+    }
+    let addr = fb.ins().stack_addr(rt.ptr_ty, rt.residual_buf_slot, 0);
+    let count = fb.ins().iconst(types::I64, vals.len() as i64);
+    fb.ins().call(rt.refs.gc_push_many, &[addr, count]);
 }
 
-/// Root a BASELINE residual operand-stack slice across a GC safepoint, applying
-/// lever 1 (the inlined `is_heap_object` tag test) so a non-heap operand skips
-/// the `neovm_jit_gc_push` shim CALL at run time. Two buckets (the baseline has
-/// no MIR type lattice, only per-value constant knowledge):
-///   * a compile-time non-heap constant ([`is_nonheap_const`]) — skip the push
-///     entirely, no runtime test emitted;
-///   * everything else — [`emit_conditional_gc_push`] inlines the tag test.
-///
-/// Every `values` slot MUST already be a tagged `Value` (the caller runs
-/// `retag_all_raw` before any gc_push-bearing op — see [`op_preserves_raw`]),
-/// EXACTLY the precondition the previous unconditional `gc_push` loop relied on
-/// (a raw fixnum reaching `neovm_jit_gc_push` would already be a UAF). This is
-/// the baseline counterpart of the MIR tier's three-bucket residual lowering.
-fn emit_residual_roots(fb: &mut FunctionBuilder, gc_push: FuncRef, values: &[ClifValue]) {
+/// Baseline residual-rooting (all ~16 `lower_op` sites): collect the to-root
+/// operand-stack slice — skipping compile-time non-heap constants
+/// ([`is_nonheap_const`]) when the opt is on — and batch-root it via
+/// [`emit_gc_push_many`]. Every `values` slot MUST already be tagged (the caller
+/// runs `retag_all_raw` before any gc_push-bearing op — see [`op_preserves_raw`]).
+fn emit_residual_roots(fb: &mut FunctionBuilder, rt: &RtCtx, values: &[ClifValue]) {
+    let on = jit_lever1_on();
+    let mut to_root: Vec<ClifValue> = Vec::with_capacity(values.len());
     for &v in values {
-        // The compile-time skip is part of lever 1 (baseline had no skip before
-        // 684e6caab), so gate it too: with lever 1 off, `emit_conditional_gc_push`
-        // itself falls back to an unconditional push, reproducing the pre-lever-1
-        // "root every live stack value" loop for a clean A/B.
-        if jit_lever1_on() && is_nonheap_const(fb, v) {
+        if on && is_nonheap_const(fb, v) {
             continue; // provably non-heap immediate: nothing to root.
         }
-        emit_conditional_gc_push(fb, gc_push, v);
+        to_root.push(v);
     }
+    emit_gc_push_many(fb, rt, &to_root);
 }
 
 /// The deopt landing block for a guard-emitting MIR inst. In a CALL-BEARING body
@@ -4516,6 +4541,10 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         // declares the full import set but Cranelift resolves only referenced ones.
         builder.symbol("neovm_jit_gc_save", neovm_jit_gc_save as *const u8);
         builder.symbol("neovm_jit_gc_push", neovm_jit_gc_push as *const u8);
+        builder.symbol(
+            "neovm_jit_gc_push_many",
+            neovm_jit_gc_push_many as *const u8,
+        );
         builder.symbol("neovm_jit_gc_restore", neovm_jit_gc_restore as *const u8);
         builder.symbol("neovm_jit_call", neovm_jit_call as *const u8);
         builder.symbol("neovm_jit_apply", neovm_jit_apply as *const u8);
@@ -4747,12 +4776,27 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
             ));
             let call_result_slot =
                 fb.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
+            // Lever 2: residual gather buffer, sized to the max pre-op operand-stack
+            // depth (an upper bound on any site's residual count).
+            let max_residual = m
+                .blocks
+                .iter()
+                .flat_map(|b| b.insts.iter())
+                .map(|i| i.pre_stack.len())
+                .max()
+                .unwrap_or(0);
+            let residual_buf_slot = fb.create_sized_stack_slot(StackSlotData::new(
+                StackSlotKind::ExplicitSlot,
+                (max_residual.max(1) * 8) as u32,
+                3,
+            ));
             Some(RtCtx {
                 refs,
                 vmctx_var,
                 ptr_ty,
                 call_args_slot,
                 call_result_slot,
+                residual_buf_slot,
             })
         } else {
             None
@@ -5035,32 +5079,21 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                         } else {
                             let c = fb.ins().call(rt.refs.gc_save, &[]);
                             let s = fb.inst_results(c)[0];
+                            // Lever 2: gather the to-root residuals (force-tag ALL
+                            // so downstream `cval` state never moves; skip provably-
+                            // immediate MIR types when the opt is on) and batch-root
+                            // via one `neovm_jit_gc_push_many` call.
+                            let on = jit_lever1_on();
+                            let mut to_root: Vec<ClifValue> = Vec::with_capacity(residual_len);
                             for k in 0..residual_len {
                                 let rv = inst.pre_stack[k];
-                                // Force-tagging happens unconditionally so no
-                                // downstream `cval` state moves; only the GC-root
-                                // push is elided/specialized, by the residual's
-                                // inferred MIR type:
-                                //   * provably non-heap (fixnum/nil/t/boolean/
-                                //     symbol) — `neovm_jit_gc_push` would
-                                //     reconstruct it, test `is_heap_object`, and
-                                //     drop it; skip the shim CALL at COMPILE time.
-                                //   * provably heap (cons/string/float/veclike) —
-                                //     an inlined tag test would always fall through
-                                //     to the push, so emit it UNCONDITIONALLY.
-                                //   * Unknown/Any — inline the `is_heap_object` tag
-                                //     test so a fixnum/symbol operand skips the
-                                //     shim CALL at RUN time (lever 1 follow-up).
                                 let v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, rv)?;
-                                let ty = m.value_type(rv);
-                                if ty.never_needs_gc_root() {
-                                    // provably immediate: nothing to root.
-                                } else if ty.provably_heap() {
-                                    fb.ins().call(rt.refs.gc_push, &[v]);
-                                } else {
-                                    emit_conditional_gc_push(&mut fb, rt.refs.gc_push, v);
+                                if on && m.value_type(rv).never_needs_gc_root() {
+                                    continue;
                                 }
+                                to_root.push(v);
                             }
+                            emit_gc_push_many(&mut fb, rt, &to_root);
                             Some(s)
                         };
                         let vmctx = fb.use_var(rt.vmctx_var);
@@ -5116,32 +5149,21 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                         } else {
                             let c = fb.ins().call(rt.refs.gc_save, &[]);
                             let s = fb.inst_results(c)[0];
+                            // Lever 2: gather the to-root residuals (force-tag ALL
+                            // so downstream `cval` state never moves; skip provably-
+                            // immediate MIR types when the opt is on) and batch-root
+                            // via one `neovm_jit_gc_push_many` call.
+                            let on = jit_lever1_on();
+                            let mut to_root: Vec<ClifValue> = Vec::with_capacity(residual_len);
                             for k in 0..residual_len {
                                 let rv = inst.pre_stack[k];
-                                // Force-tagging happens unconditionally so no
-                                // downstream `cval` state moves; only the GC-root
-                                // push is elided/specialized, by the residual's
-                                // inferred MIR type:
-                                //   * provably non-heap (fixnum/nil/t/boolean/
-                                //     symbol) — `neovm_jit_gc_push` would
-                                //     reconstruct it, test `is_heap_object`, and
-                                //     drop it; skip the shim CALL at COMPILE time.
-                                //   * provably heap (cons/string/float/veclike) —
-                                //     an inlined tag test would always fall through
-                                //     to the push, so emit it UNCONDITIONALLY.
-                                //   * Unknown/Any — inline the `is_heap_object` tag
-                                //     test so a fixnum/symbol operand skips the
-                                //     shim CALL at RUN time (lever 1 follow-up).
                                 let v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, rv)?;
-                                let ty = m.value_type(rv);
-                                if ty.never_needs_gc_root() {
-                                    // provably immediate: nothing to root.
-                                } else if ty.provably_heap() {
-                                    fb.ins().call(rt.refs.gc_push, &[v]);
-                                } else {
-                                    emit_conditional_gc_push(&mut fb, rt.refs.gc_push, v);
+                                if on && m.value_type(rv).never_needs_gc_root() {
+                                    continue;
                                 }
+                                to_root.push(v);
                             }
+                            emit_gc_push_many(&mut fb, rt, &to_root);
                             Some(s)
                         };
                         // The shim self-roots car+cdr; infallible + context-free (no
@@ -5270,12 +5292,18 @@ struct RtCtx {
     call_args_slot: StackSlot,
     /// 8-byte result slot the call shim writes through.
     call_result_slot: StackSlot,
+    /// Lever 2: gather buffer for BATCHED residual GC rooting. Sized to the body's
+    /// max operand-stack depth (an upper bound on any site's residual count).
+    /// Reused per residual-rooting site — `neovm_jit_gc_push_many` reads it
+    /// synchronously, so the next site's stores may overwrite it.
+    residual_buf_slot: StackSlot,
 }
 
 /// Callable references to every runtime shim, declared into one function.
 struct RtRefs {
     gc_save: FuncRef,
     gc_push: FuncRef,
+    gc_push_many: FuncRef,
     gc_restore: FuncRef,
     cons: FuncRef,
     call: FuncRef,
@@ -5363,6 +5391,9 @@ fn declare_rt_refs<M: Module>(
     sig_ret.returns.push(AbiParam::new(i64t));
     let mut sig_arg = Signature::new(call_conv); // (i64) -> ()
     sig_arg.params.push(AbiParam::new(i64t));
+    let mut sig_push_many = Signature::new(call_conv); // (ptr, i64) -> ()  (lever 2 batch)
+    sig_push_many.params.push(AbiParam::new(ptr_ty));
+    sig_push_many.params.push(AbiParam::new(i64t));
     let mut sig_cons = Signature::new(call_conv); // (i64, i64) -> i64
     sig_cons.params.push(AbiParam::new(i64t));
     sig_cons.params.push(AbiParam::new(i64t));
@@ -5395,6 +5426,7 @@ fn declare_rt_refs<M: Module>(
 
     let save_id = declare(module, "neovm_jit_gc_save", &sig_ret)?;
     let push_id = declare(module, "neovm_jit_gc_push", &sig_arg)?;
+    let push_many_id = declare(module, "neovm_jit_gc_push_many", &sig_push_many)?;
     let restore_id = declare(module, "neovm_jit_gc_restore", &sig_arg)?;
     let cons_id = declare(module, "neovm_jit_cons", &sig_cons)?;
     let call_id = declare(module, "neovm_jit_call", &sig_call)?;
@@ -5564,6 +5596,7 @@ fn declare_rt_refs<M: Module>(
     Ok(RtRefs {
         gc_save: module.declare_func_in_func(save_id, func),
         gc_push: module.declare_func_in_func(push_id, func),
+        gc_push_many: module.declare_func_in_func(push_many_id, func),
         gc_restore: module.declare_func_in_func(restore_id, func),
         cons: module.declare_func_in_func(cons_id, func),
         call: module.declare_func_in_func(call_id, func),
@@ -5852,7 +5885,7 @@ fn emit_pending_dispatches(
         } else {
             let c = fb.ins().call(rt.refs.gc_save, &[]);
             let s = fb.inst_results(c)[0];
-            emit_residual_roots(fb, rt.refs.gc_push, &pd.stack);
+            emit_residual_roots(fb, rt, &pd.stack);
             Some(s)
         };
         let vmctx = fb.use_var(rt.vmctx_var);
@@ -6343,7 +6376,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
+                emit_residual_roots(fb, rt, stack.as_slice());
                 Some(s)
             };
             let vmctx = fb.use_var(rt.vmctx_var);
@@ -6374,7 +6407,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
+                emit_residual_roots(fb, rt, stack.as_slice());
                 Some(s)
             };
             let vmctx = fb.use_var(rt.vmctx_var);
@@ -6456,7 +6489,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
+                emit_residual_roots(fb, rt, stack.as_slice());
                 Some(s)
             };
             let vmctx = fb.use_var(rt.vmctx_var);
@@ -6571,7 +6604,7 @@ fn lower_simple_op(
                 } else {
                     let c = fb.ins().call(rt.refs.gc_save, &[]);
                     let s = fb.inst_results(c)[0];
-                    emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
+                    emit_residual_roots(fb, rt, stack.as_slice());
                     Some(s)
                 };
                 let vmctx_gen = fb.use_var(rt.vmctx_var);
@@ -6609,7 +6642,7 @@ fn lower_simple_op(
                     let c = fb.ins().call(rt.refs.gc_save, &[]);
                     fb.inst_results(c)[0]
                 };
-                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
+                emit_residual_roots(fb, rt, stack.as_slice());
                 let call = fb.ins().call(rt.refs.cons, &[car, cdr]);
                 let r = fb.inst_results(call)[0];
                 fb.ins().call(rt.refs.gc_restore, &[saved]);
@@ -6636,7 +6669,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
+                emit_residual_roots(fb, rt, stack.as_slice());
                 Some(s)
             };
             fb.ins().call(rt.refs.varbind, &[vmctx, sym_v, val]);
@@ -6657,7 +6690,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
+                emit_residual_roots(fb, rt, stack.as_slice());
                 Some(s)
             };
             fb.ins().call(rt.refs.unbind, &[vmctx, n_v]);
@@ -6697,7 +6730,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
+                emit_residual_roots(fb, rt, stack.as_slice());
                 Some(s)
             };
             let vmctx = fb.use_var(rt.vmctx_var);
@@ -6771,7 +6804,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
+                emit_residual_roots(fb, rt, stack.as_slice());
                 Some(s)
             };
             let vmctx = fb.use_var(rt.vmctx_var);
@@ -6855,7 +6888,7 @@ fn lower_simple_op(
                 } else {
                     let c = fb.ins().call(rt.refs.gc_save, &[]);
                     let s = fb.inst_results(c)[0];
-                    emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
+                    emit_residual_roots(fb, rt, stack.as_slice());
                     Some(s)
                 };
                 let vmctx_gen = fb.use_var(rt.vmctx_var);
@@ -6899,7 +6932,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
+                emit_residual_roots(fb, rt, stack.as_slice());
                 Some(s)
             };
             let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
@@ -6931,7 +6964,7 @@ fn lower_simple_op(
                 } else {
                     let c = fb.ins().call(rt.refs.gc_save, &[]);
                     let s = fb.inst_results(c)[0];
-                    emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
+                    emit_residual_roots(fb, rt, stack.as_slice());
                     Some(s)
                 };
                 let idx_v = fb.ins().iconst(types::I64, idx as i64);
@@ -6977,7 +7010,7 @@ fn lower_simple_op(
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
                 let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt.refs.gc_push, stack.as_slice());
+                emit_residual_roots(fb, rt, stack.as_slice());
                 Some(s)
             };
             let vmctx = fb.use_var(rt.vmctx_var);
@@ -8486,7 +8519,7 @@ fn emit_backedge_jump(
     } else {
         let call = fb.ins().call(rt.refs.gc_save, &[]);
         let s = fb.inst_results(call)[0];
-        emit_residual_roots(fb, rt.refs.gc_push, &vals);
+        emit_residual_roots(fb, rt, &vals);
         Some(s)
     };
     let vmctx = fb.use_var(rt.vmctx_var);
@@ -8669,6 +8702,10 @@ pub fn lower_leaf_full(
         .map_err(|e| CompileError::Backend(BackendError::ModuleInit(e.to_string())))?;
     builder.symbol("neovm_jit_gc_save", neovm_jit_gc_save as *const u8);
     builder.symbol("neovm_jit_gc_push", neovm_jit_gc_push as *const u8);
+    builder.symbol(
+        "neovm_jit_gc_push_many",
+        neovm_jit_gc_push_many as *const u8,
+    );
     builder.symbol("neovm_jit_gc_restore", neovm_jit_gc_restore as *const u8);
     builder.symbol("neovm_jit_cons", neovm_jit_cons as *const u8);
     builder.symbol("neovm_jit_call", neovm_jit_call as *const u8);
@@ -9073,12 +9110,20 @@ fn build_leaf_fn<M: Module>(
             ));
             let call_result_slot =
                 fb.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
+            // Lever 2: residual gather buffer, sized to the operand-stack depth
+            // (an upper bound on any site's residual count).
+            let residual_buf_slot = fb.create_sized_stack_slot(StackSlotData::new(
+                StackSlotKind::ExplicitSlot,
+                (cfg.max_depth.max(1) * 8) as u32,
+                3,
+            ));
             Some(RtCtx {
                 refs,
                 vmctx_var,
                 ptr_ty,
                 call_args_slot,
                 call_result_slot,
+                residual_buf_slot,
             })
         } else {
             None

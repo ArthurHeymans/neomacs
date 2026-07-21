@@ -39,6 +39,7 @@ const NEOVM_JIT_SHIM_NAMES: &[&str] = &[
     "neovm_jit_eq_incl_props_spec",
     "neovm_jit_eq_slow",
     "neovm_jit_gc_push",
+    "neovm_jit_gc_push_many",
     "neovm_jit_gc_restore",
     "neovm_jit_gc_save",
     "neovm_jit_integerp_slow",
