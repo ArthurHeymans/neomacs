@@ -2773,12 +2773,22 @@ impl FaceResolver {
         }
         if let Some(overline) = face.overline {
             rf.overline = overline;
+            // GNU draws `:overline t` (no explicit color) in the face
+            // foreground, like `:underline t` and `:box t` above. An explicit
+            // `:overline COLOR` (handled just below) overrides.
+            if overline {
+                rf.overline_color = rf.fg;
+            }
         }
         if let Some(color) = &face.overline_color {
             rf.overline_color = color_to_pixel(color);
         }
         if let Some(strike) = face.strike_through {
             rf.strike_through = strike;
+            // Same rule for `:strike-through t` -> face foreground.
+            if strike {
+                rf.strike_through_color = rf.fg;
+            }
         }
         if let Some(color) = &face.strike_through_color {
             rf.strike_through_color = color_to_pixel(color);
@@ -3460,6 +3470,12 @@ impl FaceResolver {
         // Overline
         if let Some(over) = face.overline {
             rf.overline = over;
+            // GNU draws `:overline t` (no explicit color) in the face
+            // foreground, like `:underline t` and `:box t`. Explicit
+            // `:overline COLOR` (just below) overrides.
+            if over {
+                rf.overline_color = rf.fg;
+            }
         }
         if let Some(c) = &face.overline_color {
             rf.overline_color = color_to_pixel(c);
@@ -3467,6 +3483,10 @@ impl FaceResolver {
         // Strike-through
         if let Some(st) = face.strike_through {
             rf.strike_through = st;
+            // Same rule for `:strike-through t` -> face foreground.
+            if st {
+                rf.strike_through_color = rf.fg;
+            }
         }
         if let Some(c) = &face.strike_through_color {
             rf.strike_through_color = color_to_pixel(c);

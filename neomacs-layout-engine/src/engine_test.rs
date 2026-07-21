@@ -6819,6 +6819,90 @@ fn layout_frame_rust_nbsp_underline_follows_nobreak_space_foreground() {
     );
 }
 
+/// Sibling of the nbsp-underline guard for the OTHER defaulted decorations.
+/// GNU draws `:overline t` and `:strike-through t` (no explicit color) in the
+/// face FOREGROUND, exactly like `:underline t` and `:box t`. An anonymous
+/// `face` text property carrying blue fg + overline + strike must realize to a
+/// face whose overline/strike colors are that blue, never a defaulted black.
+#[test]
+fn layout_frame_rust_overline_strike_follow_face_foreground() {
+    use neomacs_display_protocol::types::Color;
+
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    // Bare Context has no font-lock, so the anonymous `face` text property
+    // survives to layout. `X` carries blue fg + `:overline t` + `:strike t`.
+    let results = eval.eval_str_each(
+        "(insert (propertize \"X\" 'face \
+           '(:foreground \"#0000FF\" :overline t :strike-through t)))",
+    );
+    assert!(
+        results.iter().all(Result::is_ok),
+        "insert of propertized text must succeed, got {results:?}"
+    );
+    let deco_fg = Color::from_pixel(0x0000FF);
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-overline-strike", 640, 160, buf_id);
+    if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
+        frame.set_window_system(Some(Value::symbol("neo")));
+    }
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("text row");
+    let x_glyph = text_row.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .find(|g| matches!(g.glyph_type, GlyphType::Char { ch: 'X' }))
+        .expect("the 'X' glyph");
+    let face = state
+        .faces
+        .get(&x_glyph.face_id)
+        .expect("resolved face for 'X'");
+
+    // fg applied, and BOTH defaulted decorations resolve to that fg (not black).
+    assert_eq!(
+        face.foreground, deco_fg,
+        "'X' must carry the blue foreground"
+    );
+    assert_eq!(
+        face.overline_color,
+        Some(deco_fg),
+        "defaulted `:overline t` color must resolve to the face foreground"
+    );
+    assert_eq!(
+        face.strike_through_color,
+        Some(deco_fg),
+        "defaulted `:strike-through t` color must resolve to the face foreground"
+    );
+}
+
 /// Sibling guard for the nobreak hyphens. GNU treats SOFT_HYPHEN (U+00AD),
 /// HYPHEN (U+2010) and NON_BREAKING_HYPHEN (U+2011) via
 /// `merge_faces (it->w, Qnobreak_hyphen, 0, it->face_id)` (xdisp.c:8608-8617).
