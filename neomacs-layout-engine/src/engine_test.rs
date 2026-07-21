@@ -17670,3 +17670,81 @@ fn edit_below_reuse_bails_on_pointer_range_crossing_the_edit() {
         "crossing ranges must not survive reuse with stale identities"
     );
 }
+
+/// GUI overlay arrow: on a window-system frame with a left fringe, GNU draws
+/// the arrow as a left-fringe bitmap (the default `overlay-arrow` →
+/// `right-triangle`), NOT by overwriting the text — the opposite of the TTY
+/// string branch. The marked row must carry that bitmap on its left fringe
+/// while its text glyphs stay intact.
+#[test]
+fn gui_overlay_arrow_draws_left_fringe_bitmap_not_text() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let right_triangle_index: u16 = eval
+        .eval_str("(get 'right-triangle 'fringe)")
+        .expect("right-triangle fringe prop")
+        .as_fixnum()
+        .expect("fringe index") as u16;
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("alpha\nbeta\ngamma\n");
+        buf.goto_emacs_byte_pos(EmacsBytePos::new(0));
+    }
+    // Mark the start of line 2 ("beta", 1-based char 7).
+    eval.eval_str("(setq overlay-arrow-position (copy-marker 7))")
+        .expect("set overlay-arrow-position");
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("gui-arrow", 400, 200, buf_id);
+    if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
+        frame.set_window_system(Some(Value::symbol("neo")));
+    }
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("window matrix entry");
+
+    // The "beta" row (start charpos 6, 0-based) carries the arrow bitmap.
+    let beta = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.start_charpos == 6)
+        .unwrap_or_else(|| panic!("no beta row: {:#?}", entry.matrix.rows));
+    assert_eq!(
+        beta.left_fringe_bitmap.map(|i| i.bitmap_index),
+        Some(right_triangle_index),
+        "the marked row must carry the overlay-arrow (right-triangle) left-fringe bitmap"
+    );
+    // The text is untouched — the GUI branch does not overwrite it.
+    let text: String = beta.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .filter_map(|g| match g.glyph_type {
+            GlyphType::Char { ch } => Some(ch),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        text.starts_with("beta"),
+        "GUI overlay arrow must not overwrite the text; got {text:?}"
+    );
+}

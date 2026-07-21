@@ -977,18 +977,25 @@ impl BufferSourceOutputSetup {
             render_services.face_ids(),
             &walk_setup.row_geometry,
         );
-        // GNU's `display_line` tail draws the overlay arrow over the leading
-        // glyphs of the marked row (xdisp.c `overlay_arrow_at_row`). Stamp it
-        // here for the same reason the fringe bitmaps below are: the rows are
-        // installed and their start/end charpos are final, which is exactly
-        // what GNU's row test needs.
-        crate::display_overlay_arrow::draw_text_area_overlay_arrows(
+        // GNU's `overlay_arrow_at_row` draws the overlay arrow — a left-fringe
+        // bitmap on a window-system frame with a left fringe, else the string
+        // over the marked row's leading glyphs. Stamp it here for the same
+        // reason the fringe bitmaps below are: the rows are installed and their
+        // start/end charpos are final, which is exactly what GNU's row test
+        // needs.
+        let overlay_arrow_style = crate::display_overlay_arrow::OverlayArrowStyle::for_window(
+            params.window_system,
+            params.left_fringe_width,
+            geometry.char_width,
+        );
+        crate::display_overlay_arrow::draw_overlay_arrows(
             output.reborrow(),
             evaluator,
+            buffer,
             neovm_core::buffer::BufferId(params.buffer_id),
             render_services.face_resolver(),
             render_services.face_ids(),
-            geometry.char_width,
+            overlay_arrow_style,
         );
         // GNU `draw_window_fringes` (src/fringe.c): every truncated/continued
         // buffer-text row gets a left/right arrow bitmap in its fringe. neomacs's
