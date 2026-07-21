@@ -770,7 +770,10 @@ fn lisp_string_source_cursor_emits_explicit_newline_row_breaks() {
 #[test]
 fn lisp_string_source_cursor_emits_control_and_glyphless_items() {
     let _eval = Context::new();
-    let value = Value::string("a\u{0001}\u{fff0}b");
+    // U+FFFC (OBJECT REPLACEMENT, So) is printable-but-glyphless so it stays a
+    // glyphless item; a non-printable char like U+FFF0 instead escapes to
+    // `\`+octal (see the escape-glyph-octal tests).
+    let value = Value::string("a\u{0001}\u{fffc}b");
     let mut source = LispStringSourceCursor::new(
         7,
         value,
@@ -789,10 +792,38 @@ fn lisp_string_source_cursor_emits_control_and_glyphless_items() {
     assert_eq!(
         items[2].kind,
         DisplayItemKind::Glyphless(DisplayGlyphless {
-            ch: '\u{fff0}',
-            method: GlyphlessMethod::HexCode,
+            ch: '\u{fffc}',
+            method: GlyphlessMethod::EmptyBox,
         })
     );
+}
+
+/// Non-printable chars -- the C1 controls (U+0080..U+009F), the unassigned
+/// specials (U+FFF0..U+FFF8), and the noncharacters (U+FFFE/U+FFFF, U+FDD0..) --
+/// classify as GNU's escape-glyph `\`+octal escape, NOT a glyphless hex-code
+/// box (checked BEFORE the glyphless methods, GNU `!CHAR_PRINTABLE_P`).
+#[test]
+fn classify_non_printable_c1_and_specials_as_escape_octal() {
+    for (ch, octal) in [
+        ('\u{0080}', "\\200"),
+        ('\u{009f}', "\\237"),
+        ('\u{fff0}', "\\177760"),
+        ('\u{ffff}', "\\177777"),
+        ('\u{fdd0}', "\\176720"),
+    ] {
+        assert_eq!(
+            classify_text_source_char(ch),
+            TextSourceCharClassification::EscapeOctal { ch },
+            "{ch:?} must classify as escape-octal"
+        );
+        assert_eq!(escape_glyph_octal_text(ch), octal, "octal text for {ch:?}");
+    }
+    // A printable-but-glyphless char (U+FFFC, So) is NOT escaped -- it stays a
+    // glyphless item so the two behaviors don't collide.
+    assert!(matches!(
+        classify_text_source_char('\u{fffc}'),
+        TextSourceCharClassification::Glyphless { .. }
+    ));
 }
 
 #[test]

@@ -2837,19 +2837,19 @@ pub(crate) fn classify_text_source_char(ch: char) -> TextSourceCharClassificatio
     if is_control_char(ch) {
         return TextSourceCharClassification::ControlChar { ch };
     }
+    // A non-printable char (general category Cc/Cs/Cn, `!CHAR_PRINTABLE_P`)
+    // displays as `\`+octal in the escape-glyph face (GNU xdisp.c:8552, checked
+    // BEFORE glyphless production) -- the noncharacters U+FFFE/U+FFFF and the
+    // U+FDD0..U+FDEF range, unassigned specials U+FFF0..U+FFF8, and the C1
+    // controls U+0080..U+009F. This precedes the glyphless methods so those all
+    // resolve to GNU's octal escape rather than a hex-code box.
+    if is_escape_glyph_octal(ch) {
+        return TextSourceCharClassification::EscapeOctal { ch };
+    }
     if let Some(method) =
         glyphless_method_for_char(ch, GlyphlessJoinerPolicy::PreserveForComposition)
     {
         return TextSourceCharClassification::Glyphless { ch, method };
-    }
-    // A non-printable char with no glyphless method displays as `\`+octal in the
-    // escape-glyph face (GNU `!CHAR_PRINTABLE_P`, xdisp.c:8552) -- e.g. the
-    // noncharacters U+FFFE/U+FFFF and the U+FDD0..U+FDEF range, which a font
-    // would otherwise draw as `.notdef`. (The C1 controls and U+FFF0..U+FFF8
-    // keep their existing glyphless hex-code box above; converging those to
-    // GNU's octal needs the two source pipelines unified first.)
-    if is_escape_glyph_octal(ch) {
-        return TextSourceCharClassification::EscapeOctal { ch };
     }
     TextSourceCharClassification::Text
 }

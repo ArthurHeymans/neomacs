@@ -2109,7 +2109,8 @@ fn display_row_buffer_and_lisp_sources_share_height_property_semantics() {
 #[test]
 fn display_row_buffer_and_lisp_sources_share_control_and_glyphless_semantics() {
     let _eval = Context::new();
-    let text = "a\u{0001}\u{fff0}b";
+    // U+FFFC stays glyphless; U+FFF0 would instead escape to `\`+octal.
+    let text = "a\u{0001}\u{fffc}b";
     let lisp_row = render_lisp_display_row(Value::string(text), GlyphRowRole::HeaderLine);
     let buffer_row = render_buffer_display_row(text, GlyphRowRole::HeaderLine);
 
@@ -2120,7 +2121,7 @@ fn display_row_buffer_and_lisp_sources_share_control_and_glyphless_semantics() {
     assert!(
         row_text_glyph_types(&buffer_row)
             .iter()
-            .any(|kind| matches!(kind, GlyphType::Glyphless { ch: '\u{fff0}' })),
+            .any(|kind| matches!(kind, GlyphType::Glyphless { ch: '\u{fffc}' })),
         "glyphless buffer source chars should reach the same row builder path as Lisp strings"
     );
 }

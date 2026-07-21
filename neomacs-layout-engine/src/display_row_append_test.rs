@@ -8882,11 +8882,11 @@ fn buffer_text_source_append_item_names_glyphless_display_policy() {
 
     assert_eq!(
         DisplaySourceAppendItem::glyphless_display(DisplaySourceClusterState::for_char(
-            '\u{0080}', None,
+            '\u{fffc}', None,
         )),
         Some(DisplaySourceAppendItem::Glyphless {
-            ch: '\u{0080}',
-            method: GlyphlessMethod::HexCode,
+            ch: '\u{fffc}',
+            method: GlyphlessMethod::EmptyBox,
         })
     );
     assert_eq!(
@@ -9172,7 +9172,7 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
         0.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
-    let source_char = DisplaySourceTextChar::new('\u{fff0}', CharPos0::new(0), 2);
+    let source_char = DisplaySourceTextChar::new('\u{fffc}', CharPos0::new(0), 2);
     let source_request = source_char
         .special_request(None)
         .expect("glyphless source char should map to a display item");
@@ -9233,15 +9233,16 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     assert!(!face_scan.should_resolve_at(1));
     assert_eq!(policy_face_ids.finish(), 30);
 
-    assert_eq!(end_x, 48.0);
-    assert_eq!(end_col, 6);
+    // U+FFFC uses the EmptyBox method: one column wide (was HexCode = 6 cols).
+    assert_eq!(end_x, 8.0);
+    assert_eq!(end_col, 1);
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 1);
             assert!(matches!(
                 text[0].glyph_type,
-                neomacs_display_protocol::glyph_matrix::GlyphType::Glyphless { ch: '\u{fff0}' }
+                neomacs_display_protocol::glyph_matrix::GlyphType::Glyphless { ch: '\u{fffc}' }
             ));
         })
         .expect("current row");

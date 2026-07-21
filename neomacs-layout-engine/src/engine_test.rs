@@ -5148,7 +5148,7 @@ fn selective_display_backend_layout_trace(kind: BufferTextBackendKind) -> Backen
 }
 
 fn glyphless_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
-    let text = "a\u{0080}b\u{FEFF}c\u{FFFC}d\n";
+    let text = "a\u{FFFC}b\u{FEFF}c\u{FFFC}d\n";
     backend_layout_trace_with_buffer_setup(
         kind,
         "layout-backend-glyphless",
@@ -5156,8 +5156,8 @@ fn glyphless_backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutT
         360,
         140,
         |buffer, _buf_id, text| {
-            let c1_byte = text.find('\u{0080}').expect("C1 control");
-            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(c1_byte));
+            let glyphless_byte = text.find('\u{FFFC}').expect("glyphless char");
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(glyphless_byte));
         },
     )
 }
@@ -6266,7 +6266,7 @@ fn layout_frame_rust_renders_buffer_glyphless_chars_as_glyphless() {
         .id();
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
-        buf.insert("a\u{fff0}b");
+        buf.insert("a\u{fffc}b");
     }
 
     let frame_id =
@@ -6300,7 +6300,7 @@ fn layout_frame_rust_renders_buffer_glyphless_chars_as_glyphless() {
     assert!(
         text_row.glyphs[1]
             .iter()
-            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Glyphless { ch: '\u{fff0}' })),
+            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Glyphless { ch: '\u{fffc}' })),
         "buffer glyphless source char should emit a glyphless glyph, row={:?}",
         text_row.glyphs[1]
     );
@@ -13973,7 +13973,7 @@ fn layout_frame_rust_renders_overlay_string_glyphless_chars_as_glyphless() {
         let _ = buf.overlays_mut().overlay_put(
             overlay,
             Value::symbol("after-string"),
-            Value::string("\u{fff0}"),
+            Value::string("\u{fffc}"),
         );
     }
 
@@ -14008,7 +14008,7 @@ fn layout_frame_rust_renders_overlay_string_glyphless_chars_as_glyphless() {
     assert!(
         text_row.glyphs[1]
             .iter()
-            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Glyphless { ch: '\u{fff0}' })),
+            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Glyphless { ch: '\u{fffc}' })),
         "overlay glyphless source char should emit a glyphless glyph, row={:?}",
         text_row.glyphs[1]
     );

@@ -718,7 +718,11 @@ pub(crate) fn glyphless_method_for_char(
 
     let cp = ch as u32;
     match cp {
-        0x80..=0x9f | 0xfff0..=0xfff8 => Some(GlyphlessMethod::HexCode),
+        // NB: the C1 controls (U+0080..U+009F) and unassigned specials
+        // (U+FFF0..U+FFF8) are NON-PRINTABLE, so GNU escapes them as `\`+octal in
+        // the escape-glyph face -- they are classified by `is_escape_glyph_octal`
+        // (see `classify_text_source_char`) BEFORE this table is consulted, so
+        // they are intentionally absent here (was `GlyphlessMethod::HexCode`).
         0xfffc => Some(GlyphlessMethod::EmptyBox),
         0xfeff
         | 0x200b..=0x200f
