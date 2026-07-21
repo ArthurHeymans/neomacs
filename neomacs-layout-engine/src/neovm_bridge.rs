@@ -1587,12 +1587,21 @@ pub fn window_params_from_neovm_with_font_sizing(
         fringes_outside_margins: window
             .display()
             .is_some_and(|display| display.fringes_outside_margins),
-        indicate_empty_lines: if buffer_local_bool(buffer, "indicate-empty-lines") {
+        // `indicate-empty-lines` and `show-trailing-whitespace` are per-buffer
+        // display variables in GNU (DEFVAR_PER_BUFFER): a `setq-default` enables
+        // them in every buffer that has no local override. Read the EFFECTIVE
+        // value (buffer-local, else global/default) — `buffer_local_bool` sees
+        // only an explicit local binding and so silently ignored `setq-default`.
+        indicate_empty_lines: if effective_buffer_bool(buffer, obarray, "indicate-empty-lines") {
             1
         } else {
             0
         },
-        show_trailing_whitespace: buffer_local_bool(buffer, "show-trailing-whitespace"),
+        show_trailing_whitespace: effective_buffer_bool(
+            buffer,
+            obarray,
+            "show-trailing-whitespace",
+        ),
         trailing_ws_bg: face_bg_pixel(face_table, "trailing-whitespace", 0),
         fill_column_indicator: fill_column_indicator
             .map(|(column, _)| column)
