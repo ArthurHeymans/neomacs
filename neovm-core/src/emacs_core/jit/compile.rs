@@ -4181,7 +4181,25 @@ fn mir_force_tagged(
 /// and can never drop a live heap root (which under GC would be a
 /// use-after-free). The shim additionally re-checks `is_heap_object`, so even
 /// the unused tag `0b001` (never produced) would be handled safely if pushed.
+/// Is lever 1 (the inlined `is_heap_object` residual-rooting tag test) enabled?
+/// Default yes; `NEOVM_JIT_LEVER1=off` reverts residual rooting to the pre-lever-1
+/// behavior — an UNCONDITIONAL `neovm_jit_gc_push` per residual, with no
+/// compile-time non-heap-constant skip — so lever 1's per-call effect can be
+/// A/B-measured against the old code in a SINGLE build (pair with a call-heavy
+/// bench like `jit_bench_fib`, whose recursive-call residual is a fixnum that
+/// lever 1 skips at run time). Cached once per process.
+fn jit_lever1_on() -> bool {
+    use std::sync::OnceLock;
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| std::env::var("NEOVM_JIT_LEVER1").as_deref() != Ok("off"))
+}
+
 fn emit_conditional_gc_push(fb: &mut FunctionBuilder, gc_push: FuncRef, v: ClifValue) {
+    if !jit_lever1_on() {
+        // A/B baseline: the pre-lever-1 unconditional shim call.
+        fb.ins().call(gc_push, &[v]);
+        return;
+    }
     // is_fixnum: (v & FIXNUM_CHECK_MASK) == FIXNUM_CHECK_VALUE
     let fx_bits = fb.ins().band_imm(v, FIXNUM_CHECK_MASK as i64);
     let is_fixnum = fb
@@ -4219,7 +4237,11 @@ fn emit_conditional_gc_push(fb: &mut FunctionBuilder, gc_push: FuncRef, v: ClifV
 /// the baseline counterpart of the MIR tier's three-bucket residual lowering.
 fn emit_residual_roots(fb: &mut FunctionBuilder, gc_push: FuncRef, values: &[ClifValue]) {
     for &v in values {
-        if is_nonheap_const(fb, v) {
+        // The compile-time skip is part of lever 1 (baseline had no skip before
+        // 684e6caab), so gate it too: with lever 1 off, `emit_conditional_gc_push`
+        // itself falls back to an unconditional push, reproducing the pre-lever-1
+        // "root every live stack value" loop for a clean A/B.
+        if jit_lever1_on() && is_nonheap_const(fb, v) {
             continue; // provably non-heap immediate: nothing to root.
         }
         emit_conditional_gc_push(fb, gc_push, v);
