@@ -3479,6 +3479,37 @@ fn jit_profit_gate_on() -> bool {
     *ON.get_or_init(|| std::env::var("NEOVM_JIT_PROFIT").as_deref() != Ok("off"))
 }
 
+#[cfg(test)]
+std::thread_local! {
+    static GATE_RELAX_TEST_OVERRIDE: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+}
+
+/// Force the call-heavy gate-relaxation on/off on the current thread (tests only).
+#[cfg(test)]
+pub(crate) fn force_gate_relax_for_test(on: bool) {
+    GATE_RELAX_TEST_OVERRIDE.with(|c| c.set(Some(on)));
+}
+
+/// Is the call-heavy gate relaxation enabled? Default NO (conservative
+/// `calls <= arith`). `NEOVM_JIT_GATE_RELAX=on` stops counting user-function
+/// `Op::Call`/`Op::Apply` against profitability, so call-heavy bodies dominated by
+/// USER calls tier up. Motivated by 2026-07-21 release measurements (pinned perf):
+/// user-fn-call-heavy bodies are 2.31x FASTER native than interp (V3
+/// native-to-native + lever-1 made the calls cheap), real font-lock is 1.013x
+/// (neutral), and a trivial-builtin loop 1.21x — i.e. tiering a call-heavy body
+/// never measured net-negative, so the gate's founding "native calls cost MORE"
+/// premise is stale. Kept OFF by default until validated against the full oracle
+/// suite (newly-compiled body shapes could expose latent JIT bugs).
+fn jit_gate_relax_on() -> bool {
+    #[cfg(test)]
+    if let Some(o) = GATE_RELAX_TEST_OVERRIDE.with(|c| c.get()) {
+        return o;
+    }
+    use std::sync::OnceLock;
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| std::env::var("NEOVM_JIT_GATE_RELAX").as_deref() == Ok("on"))
+}
+
 /// Decide whether a bytecode body is worth compiling.
 ///
 /// The baseline tier only removes per-op interpreter *dispatch*. A function call
@@ -3495,6 +3526,7 @@ fn body_is_jit_profitable(ops: &[Op]) -> bool {
     if !jit_profit_gate_on() {
         return true;
     }
+    let relax = jit_gate_relax_on();
     let mut arith = 0u32;
     let mut calls = 0u32;
     for op in ops {
@@ -3514,6 +3546,13 @@ fn body_is_jit_profitable(ops: &[Op]) -> bool {
             | Op::Gtr
             | Op::Leq
             | Op::Geq => arith += 1,
+            // Gate-relaxation: USER-function calls (`Op::Call`/`Op::Apply`) are
+            // net-POSITIVE tiered (measured 2.31x native vs interp — V3
+            // native-to-native + lever-1), so they must not veto compilation. A
+            // body dominated by them (font-lock's re-search-forward calls aside —
+            // those are subrs, but still Op::Call) tiers to a net win/neutral.
+            // Builtin calls stay counted (real builtin-heavy = neutral, not a win).
+            Op::Call(_) | Op::Apply(_) if relax => {}
             Op::Call(_) | Op::Apply(_) | Op::CallBuiltin(..) => calls += 1,
             // R2: a CallBuiltinSym that WILL be intrinsified (Tier-A GC-free read
             // or Tier-B dispatch-skip) costs ~an arith op, not a full
@@ -11631,6 +11670,7 @@ mod tests {
         use crate::emacs_core::intern::intern;
         let _ev = Context::new(); // populate the subr table for cbsym_spec_kind
         force_profit_gate_for_test(true);
+        force_gate_relax_for_test(false); // pin default (env-independent); Op::Call vetoes
         let point = Op::CallBuiltinSym(intern("point"), 0); // Tier-A eligible
         let goto = Op::CallBuiltinSym(intern("goto-char"), 1); // Tier-B eligible
         // Before the re-weight: calls=2 arith=0 -> NotProfitable. Now the two
@@ -11649,6 +11689,61 @@ mod tests {
             !body_is_jit_profitable(&[Op::CallBuiltinSym(intern("car"), 1), Op::Return]),
             "a non-intrinsifiable CBSym still counts as a call"
         );
+    }
+
+    #[test]
+    fn gate_relax_lets_user_call_heavy_bodies_tier() {
+        // NEOVM_JIT_GATE_RELAX: user-function Op::Call/Apply stop vetoing (measured
+        // 2.31x net-positive tiered), while builtin calls stay counted (real
+        // builtin-heavy = neutral, e.g. font-lock). Default OFF preserves
+        // `calls <= arith`.
+        use crate::emacs_core::eval::Context;
+        use crate::emacs_core::intern::intern;
+        let _ev = Context::new(); // subr table for cbsym_spec_kind
+        force_profit_gate_for_test(true);
+        // 4 user calls, 0 arith.
+        let user_call_heavy = [
+            Op::Constant(0),
+            Op::Call(0),
+            Op::Constant(0),
+            Op::Call(0),
+            Op::Constant(0),
+            Op::Call(0),
+            Op::Constant(0),
+            Op::Call(0),
+            Op::Return,
+        ];
+        // 4 non-intrinsified builtin calls (car), 0 arith — the font-lock shape.
+        let builtin_heavy = [
+            Op::CallBuiltinSym(intern("car"), 1),
+            Op::CallBuiltinSym(intern("car"), 1),
+            Op::CallBuiltinSym(intern("car"), 1),
+            Op::CallBuiltinSym(intern("car"), 1),
+            Op::Return,
+        ];
+
+        // Default (relax OFF): both decline (calls > arith), unchanged behavior.
+        force_gate_relax_for_test(false);
+        assert!(
+            !body_is_jit_profitable(&user_call_heavy),
+            "relax OFF: user-call-heavy still declines (unchanged)"
+        );
+        assert!(
+            !body_is_jit_profitable(&builtin_heavy),
+            "relax OFF: builtin-heavy declines"
+        );
+
+        // Relax ON: user calls no longer veto; builtin calls still do.
+        force_gate_relax_for_test(true);
+        assert!(
+            body_is_jit_profitable(&user_call_heavy),
+            "relax ON: user-call-heavy now tiers (measured 2.31x net-positive)"
+        );
+        assert!(
+            !body_is_jit_profitable(&builtin_heavy),
+            "relax ON: builtin-call-heavy still declines (font-lock ~1.0x, correctly declined)"
+        );
+        force_gate_relax_for_test(false);
     }
 
     #[test]
