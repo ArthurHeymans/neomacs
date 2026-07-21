@@ -2757,7 +2757,18 @@ impl FaceResolver {
             }
             FaceDecoration::Enabled(underline) => {
                 rf.underline_style = underline_style_to_u8(&underline.style);
-                rf.underline_color = underline.color.as_ref().map(color_to_pixel).unwrap_or(0);
+                // GNU draws `:underline t` (no explicit color) in the face's
+                // foreground -- e.g. `nobreak-space` inherits `escape-glyph`'s
+                // brown fg and underlines in that same brown. Default the
+                // unspecified color to `rf.fg` here (fg is applied earlier in
+                // this merge), mirroring the box-border resolution below so a
+                // downstream pixel-0 underline color means "explicit black"
+                // uniformly with box.
+                rf.underline_color = underline
+                    .color
+                    .as_ref()
+                    .map(color_to_pixel)
+                    .unwrap_or(rf.fg);
             }
         }
         if let Some(overline) = face.overline {
@@ -3432,7 +3443,18 @@ impl FaceResolver {
             }
             FaceDecoration::Enabled(underline) => {
                 rf.underline_style = underline_style_to_u8(&underline.style);
-                rf.underline_color = underline.color.as_ref().map(color_to_pixel).unwrap_or(0);
+                // GNU draws `:underline t` (no explicit color) in the face's
+                // foreground -- e.g. `nobreak-space` inherits `escape-glyph`'s
+                // brown fg and underlines in that same brown. Default the
+                // unspecified color to `rf.fg` here (fg is applied earlier in
+                // this merge), mirroring the box-border resolution below so a
+                // downstream pixel-0 underline color means "explicit black"
+                // uniformly with box.
+                rf.underline_color = underline
+                    .color
+                    .as_ref()
+                    .map(color_to_pixel)
+                    .unwrap_or(rf.fg);
             }
         }
         // Overline

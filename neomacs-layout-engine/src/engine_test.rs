@@ -6721,6 +6721,104 @@ fn layout_frame_rust_nbsp_uses_nobreak_space_foreground() {
     }
 }
 
+/// GNU's `nobreak-space` is `:inherit escape-glyph :underline t`. The `t`
+/// underline carries no explicit color, so GNU draws it in the face's
+/// (escape-glyph-inherited) FOREGROUND -- a brown/cyan underline, never a
+/// defaulted black one. This guards the face-realization rule that an
+/// unspecified `:underline` color resolves to the foreground, mirroring the
+/// box-border resolution; without it the nbsp underline regresses to black.
+#[test]
+fn layout_frame_rust_nbsp_underline_follows_nobreak_space_foreground() {
+    use neomacs_display_protocol::face::UnderlineStyle;
+    use neomacs_display_protocol::types::Color;
+
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("a \u{00A0}c\n");
+    }
+
+    // escape-glyph's cyan-on-dark foreground; `nobreak-space` inherits it.
+    let nbsp_fg = Color::from_pixel((0x46u32 << 16) | (0xD9u32 << 8) | 0xFFu32);
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-nbsp-underline", 640, 160, buf_id);
+    if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
+        frame.set_window_system(Some(Value::symbol("neo")));
+    }
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    // Wire the real GNU nobreak-space shape: inherit escape-glyph for the
+    // foreground AND enable `:underline t` (no explicit underline color).
+    let results = eval.eval_str_each(
+        "(internal-set-lisp-face-attribute 'escape-glyph :foreground \"#46D9FF\" (selected-frame))\
+         (internal-set-lisp-face-attribute 'nobreak-space :inherit 'escape-glyph (selected-frame))\
+         (internal-set-lisp-face-attribute 'nobreak-space :underline t (selected-frame))",
+    );
+    assert!(
+        results.iter().all(Result::is_ok),
+        "escape-glyph/nobreak-space faces must accept attributes, got {results:?}"
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("text row");
+    let text_glyphs = &text_row.glyphs[GlyphArea::Text.index()];
+
+    // The nbsp substitute is the space glyph whose realized face carries the
+    // nobreak-space (escape-glyph-inherited) foreground.
+    let nbsp_face = text_glyphs
+        .iter()
+        .filter(|g| matches!(g.glyph_type, GlyphType::Char { ch: ' ' }))
+        .filter_map(|g| state.faces.get(&g.face_id))
+        .find(|face| face.foreground == nbsp_fg)
+        .expect("nbsp substitute space carrying the nobreak-space foreground");
+
+    assert_ne!(
+        nbsp_face.underline_style,
+        UnderlineStyle::None,
+        "nbsp `:underline t` must be underlined"
+    );
+    // The heart of the guard: an unspecified `:underline` color resolves to the
+    // face foreground, not a defaulted black -- so the underline renders in the
+    // nobreak-space color exactly like GNU.
+    assert_eq!(
+        nbsp_face.underline_color,
+        Some(nbsp_fg),
+        "unspecified nbsp underline color must resolve to the nobreak-space foreground"
+    );
+    assert_eq!(
+        nbsp_face.get_underline_color(),
+        nbsp_fg,
+        "nbsp underline must draw in the nobreak-space foreground, not defaulted black"
+    );
+}
+
 /// Sibling guard for the nobreak hyphens. GNU treats SOFT_HYPHEN (U+00AD),
 /// HYPHEN (U+2010) and NON_BREAKING_HYPHEN (U+2011) via
 /// `merge_faces (it->w, Qnobreak_hyphen, 0, it->face_id)` (xdisp.c:8608-8617).
