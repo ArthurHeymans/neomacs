@@ -4286,6 +4286,20 @@ impl<'a> Vm<'a> {
         // falling back to call_for_jit on every call).
         #[cfg(debug_assertions)]
         crate::emacs_core::jit::compile::SPEC_FAST_CALL_COUNT.fetch_add(1, Ordering::Relaxed);
+        // BACKTRACE PARITY (cc-mode clean-build fix): the interpreter call path
+        // pushes a backtrace frame for the callee (call_function_from_stack_args);
+        // this native-to-native fast path must too, or `backtrace-frame` walks a
+        // stack missing this activation — cc-bytecomp-compiling-or-loading then
+        // fails to detect the compiling file and raises "c-lang-defconst can only
+        // be used in a file". Args are read from the caller's call-args slot
+        // (small-arity inline via SmallVec — no heap for the common ≤4-arg case).
+        let bt_count = self.ctx.specpdl.len();
+        let bt_args: smallvec::SmallVec<[Value; 4]> = (0..nargs)
+            // SAFETY: args_ptr addresses `nargs` valid tagged words (the caller's
+            // call-args slot), same contract the native run below relies on.
+            .map(|i| Value::from_bits(unsafe { *args_ptr.add(i) } as usize))
+            .collect();
+        self.ctx.push_backtrace_frame(callee, &bt_args);
         let res = self.with_bytecode_call_depth(|vm| {
             let ctx_ptr = core::ptr::from_mut(&mut *vm.ctx);
             let ran = if pure {
@@ -4320,7 +4334,12 @@ impl<'a> Vm<'a> {
                 }
             }
         });
-        Some(res)
+        // Pop the callee's backtrace frame (balanced single-entry pop; falls back
+        // to the general unwinder if a nested imbalance occurred).
+        Some(
+            self.ctx
+                .pop_bytecode_backtrace_frame_with_result(bt_count, res),
+        )
     }
 
     fn call_function_from_stack_args(
