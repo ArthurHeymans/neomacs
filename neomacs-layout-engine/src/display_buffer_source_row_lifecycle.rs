@@ -1560,6 +1560,12 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             row_position.x_px(),
             row_position.col(),
         );
+        // Re-face this line's trailing whitespace (show-trailing-whitespace)
+        // BEFORE the `:extend` fill: the fill appends a trailing stretch that the
+        // trailing-whitespace walk would otherwise sweep up and paint red past
+        // end-of-line. This is a real line end (a newline), so the run IS
+        // trailing.
+        source_render.highlight_trailing_whitespace(trailing_whitespace, face_ids);
         {
             let metrics = context.active_face_state.metrics();
             // R2L (reversed_p) is read from the GlyphRow inside the mutation,

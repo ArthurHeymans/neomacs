@@ -30,6 +30,7 @@ use crate::display_row_render_state::{
 use crate::display_row_replacement::DisplayPropertyReplacementRowRenderRequest;
 use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_row_text_output::TextRowOutput;
+use crate::display_row_walk_state::TrailingWhitespaceRenderState;
 use crate::display_source::DisplayItemSource;
 use crate::display_source_resolver::{
     ActiveDisplayStringBaseFace, DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace,
@@ -48,7 +49,7 @@ use crate::window_output::{
     transition_text_window_row_with_limit,
 };
 use neomacs_display_protocol::glyph_matrix::{
-    FringeBitmapInfo, Glyph, GlyphArea, GlyphRow, NO_BUFFER_POSITION_CHARPOS,
+    FringeBitmapInfo, Glyph, GlyphArea, GlyphRow, GlyphType, NO_BUFFER_POSITION_CHARPOS,
 };
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::FaceId;
@@ -210,6 +211,41 @@ impl DisplayCurrentRowMutation for RowExtendFillMutation {
             last.charpos = NO_BUFFER_POSITION_CHARPOS;
         }
         true
+    }
+}
+
+/// Re-face the current row's trailing whitespace glyphs with the
+/// `trailing-whitespace` face (GNU `highlight_trailing_whitespace`, xdisp.c).
+/// Walks the TEXT-area glyphs from the end backward over space/tab whitespace —
+/// space `Char` glyphs and `Stretch` glyphs (tabs) — stamping each with
+/// `face_id` until the first non-whitespace glyph. A `Glyph`'s background is
+/// resolved from its `face_id`, so this paints the trailing run through the same
+/// per-glyph background path the `region` face uses. Called only at true line
+/// ends (before a real newline / at ZV), never at a visual wrap.
+struct HighlightTrailingWhitespaceMutation {
+    face_id: FaceId,
+}
+
+impl DisplayCurrentRowMutation for HighlightTrailingWhitespaceMutation {
+    type Output = ();
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output {
+        let glyphs = &mut row.glyphs[GlyphArea::Text.index()];
+        let mut start = glyphs.len();
+        while start > 0 {
+            let is_whitespace = match glyphs[start - 1].glyph_type {
+                GlyphType::Char { ch } => ch == ' ' || ch == '\t',
+                GlyphType::Stretch { .. } => true,
+                _ => false,
+            };
+            if !is_whitespace {
+                break;
+            }
+            start -= 1;
+        }
+        for glyph in &mut glyphs[start..] {
+            glyph.face_id = self.face_id;
+        }
     }
 }
 
@@ -610,6 +646,14 @@ impl<'a> TextRowOutputRenderState<'a> {
             .unwrap_or(false)
     }
 
+    /// Re-face the current row's trailing whitespace run with `face_id`
+    /// (`show-trailing-whitespace`). See [`HighlightTrailingWhitespaceMutation`].
+    fn highlight_current_row_trailing_whitespace(&mut self, face_id: FaceId) {
+        self.output
+            .current_row_output()
+            .apply_current_row_mutation(HighlightTrailingWhitespaceMutation { face_id });
+    }
+
     fn finish_current_text_row_render(
         &mut self,
         output: TextRowOutput,
@@ -940,6 +984,27 @@ impl<'a> TextRowSourceRenderState<'a> {
             ))
     }
 
+    /// Highlight the current row's trailing whitespace with the
+    /// `trailing-whitespace` face when `show-trailing-whitespace` is enabled
+    /// (GNU `highlight_trailing_whitespace`, xdisp.c). No-op when disabled. Must
+    /// be called at a true line end (real newline / ZV), before the row extend
+    /// fill and the row transition — never at a visual wrap, where the
+    /// wrap-boundary whitespace is not "trailing".
+    pub(crate) fn highlight_trailing_whitespace(
+        &mut self,
+        trailing_whitespace: &TrailingWhitespaceRenderState,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) {
+        if !trailing_whitespace.is_enabled() {
+            return;
+        }
+        let face = self.resolve_named_face("trailing-whitespace");
+        let face_id = face_ids.allocate();
+        self.insert_resolved_face(face_id, &face);
+        self.output_render
+            .highlight_current_row_trailing_whitespace(face_id);
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn resolve_display_property_replacement_row_request(
         &mut self,
@@ -1177,3 +1242,7 @@ fn current_text_measure_state<'emit>(
 #[cfg(test)]
 #[path = "display_row_extend_fill_test.rs"]
 mod extend_fill_tests;
+
+#[cfg(test)]
+#[path = "display_row_trailing_whitespace_test.rs"]
+mod trailing_whitespace_tests;
