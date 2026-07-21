@@ -3514,22 +3514,27 @@ pub(crate) fn force_gate_relax_for_test(on: bool) {
     GATE_RELAX_TEST_OVERRIDE.with(|c| c.set(Some(on)));
 }
 
-/// Is the call-heavy gate relaxation enabled? **Default YES** since 2026-07-21;
-/// `NEOVM_JIT_GATE_RELAX=off` reverts to the conservative `calls <= arith`. The
-/// relaxation stops counting user-function `Op::Call`/`Op::Apply` against
-/// profitability, so call-heavy bodies dominated by USER calls tier up.
+/// Is the call-heavy gate relaxation enabled? **Default NO** — reverted to the
+/// conservative `calls <= arith` on 2026-07-21 after it regressed byte-compilation
+/// (see below). `NEOVM_JIT_GATE_RELAX=on` opts in (stops counting user-function
+/// `Op::Call`/`Op::Apply` against profitability, so user-call-heavy bodies tier).
 ///
-/// Motivated by release measurements (pinned perf): user-fn-call-heavy bodies are
-/// 2.31x FASTER native than interp (V3 native-to-native + lever-1 made the calls
-/// cheap), real font-lock is 1.013x (neutral), a trivial-builtin loop 1.21x — i.e.
-/// tiering a call-heavy body never measured net-negative, so the gate's founding
-/// "native calls cost MORE" premise is stale. VALIDATED before flipping the
-/// default: with the knob on, all 8401 neovm-core tests pass and the oracle-parity
-/// suite has the IDENTICAL failure set as the default gate (38615/38634; the 19
-/// org-mode failures are pre-existing, unrelated) — the relaxation introduces zero
-/// new failures. Compile latency is bounded by `HOT_THRESHOLD` (a body tiers only
-/// after 1000+ calls, so its one-time compile cost is amortized). The `off` switch
-/// remains for a fast revert if an interactive-perf regression surfaces.
+/// HISTORY: briefly default-ON (commit 20cb6190a). Motivating measurements looked
+/// good on SYNTHETICS — a hot user-fn call loop 2.31x, trivial-builtin 1.21x, real
+/// font-lock 1.013x (neutral) — and the oracle suite showed zero new failures. But
+/// those synthetics were unrepresentative: they run the SAME hot body enough to
+/// amortize the JIT compile cost. The reverted-to conservative gate exists
+/// precisely to protect BYTE-COMPILATION (call-heavy, builtin-heavy, ~one-shot),
+/// and a proper `perf stat instructions:u` A/B (byte-compile cl-macs.el x8,
+/// release) measured the flip **21% SLOWER** (22.56B on vs 18.58B off, ratio 1.214
+/// x3 runs): with the gate on, ~9% goes to runtime regalloc2+cranelift compilation
+/// that never amortizes because native ≈ interp for builtin-heavy code (the
+/// font-lock 1.013x), so the compile tax is pure loss. LESSON: measure the
+/// workload the gate was DESIGNED for (byte-compile), not a favorable synthetic.
+/// The right long-term path is AOT (compile the standard library at build time so
+/// it never runtime-compiles) + a gate that distinguishes amortizing from
+/// one-shot hot bodies — not this blanket relaxation. Knob kept for hot long-
+/// running user-call-heavy loops that genuinely amortize.
 fn jit_gate_relax_on() -> bool {
     #[cfg(test)]
     if let Some(o) = GATE_RELAX_TEST_OVERRIDE.with(|c| c.get()) {
@@ -3537,7 +3542,7 @@ fn jit_gate_relax_on() -> bool {
     }
     use std::sync::OnceLock;
     static ON: OnceLock<bool> = OnceLock::new();
-    *ON.get_or_init(|| std::env::var("NEOVM_JIT_GATE_RELAX").as_deref() != Ok("off"))
+    *ON.get_or_init(|| std::env::var("NEOVM_JIT_GATE_RELAX").as_deref() == Ok("on"))
 }
 
 /// Decide whether a bytecode body is worth compiling.
