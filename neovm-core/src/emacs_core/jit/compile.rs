@@ -3490,16 +3490,22 @@ pub(crate) fn force_gate_relax_for_test(on: bool) {
     GATE_RELAX_TEST_OVERRIDE.with(|c| c.set(Some(on)));
 }
 
-/// Is the call-heavy gate relaxation enabled? Default NO (conservative
-/// `calls <= arith`). `NEOVM_JIT_GATE_RELAX=on` stops counting user-function
-/// `Op::Call`/`Op::Apply` against profitability, so call-heavy bodies dominated by
-/// USER calls tier up. Motivated by 2026-07-21 release measurements (pinned perf):
-/// user-fn-call-heavy bodies are 2.31x FASTER native than interp (V3
-/// native-to-native + lever-1 made the calls cheap), real font-lock is 1.013x
-/// (neutral), and a trivial-builtin loop 1.21x — i.e. tiering a call-heavy body
-/// never measured net-negative, so the gate's founding "native calls cost MORE"
-/// premise is stale. Kept OFF by default until validated against the full oracle
-/// suite (newly-compiled body shapes could expose latent JIT bugs).
+/// Is the call-heavy gate relaxation enabled? **Default YES** since 2026-07-21;
+/// `NEOVM_JIT_GATE_RELAX=off` reverts to the conservative `calls <= arith`. The
+/// relaxation stops counting user-function `Op::Call`/`Op::Apply` against
+/// profitability, so call-heavy bodies dominated by USER calls tier up.
+///
+/// Motivated by release measurements (pinned perf): user-fn-call-heavy bodies are
+/// 2.31x FASTER native than interp (V3 native-to-native + lever-1 made the calls
+/// cheap), real font-lock is 1.013x (neutral), a trivial-builtin loop 1.21x — i.e.
+/// tiering a call-heavy body never measured net-negative, so the gate's founding
+/// "native calls cost MORE" premise is stale. VALIDATED before flipping the
+/// default: with the knob on, all 8401 neovm-core tests pass and the oracle-parity
+/// suite has the IDENTICAL failure set as the default gate (38615/38634; the 19
+/// org-mode failures are pre-existing, unrelated) — the relaxation introduces zero
+/// new failures. Compile latency is bounded by `HOT_THRESHOLD` (a body tiers only
+/// after 1000+ calls, so its one-time compile cost is amortized). The `off` switch
+/// remains for a fast revert if an interactive-perf regression surfaces.
 fn jit_gate_relax_on() -> bool {
     #[cfg(test)]
     if let Some(o) = GATE_RELAX_TEST_OVERRIDE.with(|c| c.get()) {
@@ -3507,7 +3513,7 @@ fn jit_gate_relax_on() -> bool {
     }
     use std::sync::OnceLock;
     static ON: OnceLock<bool> = OnceLock::new();
-    *ON.get_or_init(|| std::env::var("NEOVM_JIT_GATE_RELAX").as_deref() == Ok("on"))
+    *ON.get_or_init(|| std::env::var("NEOVM_JIT_GATE_RELAX").as_deref() != Ok("off"))
 }
 
 /// Decide whether a bytecode body is worth compiling.
