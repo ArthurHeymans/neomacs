@@ -6903,6 +6903,109 @@ fn layout_frame_rust_overline_strike_follow_face_foreground() {
     );
 }
 
+/// GNU renders a non-printable char that a font can't draw (noncharacters,
+/// unassigned codepoints, C1 controls) as `\`+octal codepoint in the
+/// escape-glyph face (xdisp.c:8645-8661), NOT as a `.notdef` box. U+FFFF must
+/// expand to the seven glyphs `\177777`, each painted in the escape-glyph
+/// foreground -- asserting the RENDERED GLYPH ROW, not just the source items.
+#[test]
+fn layout_frame_rust_nonprintable_char_shows_escape_glyph_octal() {
+    use neomacs_display_protocol::types::Color;
+
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        // `a`, the U+FFFF noncharacter, `b`. U+FFFF is category Cn (not
+        // printable) so it must display as the octal escape, not a box.
+        buf.insert("a\u{FFFF}b\n");
+    }
+    let escape_fg = Color::from_pixel((0x46u32 << 16) | (0xD9u32 << 8) | 0xFFu32);
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-nonprintable", 640, 160, buf_id);
+    if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
+        frame.set_window_system(Some(Value::symbol("neo")));
+    }
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    let results = eval.eval_str_each(
+        "(internal-set-lisp-face-attribute 'escape-glyph :foreground \"#46D9FF\" \
+          (selected-frame))",
+    );
+    assert!(
+        results.iter().all(Result::is_ok),
+        "escape-glyph must accept a foreground, got {results:?}"
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("text row");
+    let text_glyphs = &text_row.glyphs[GlyphArea::Text.index()];
+
+    // The rendered row reads `a\177777b`: the noncharacter expands in place.
+    let rendered = glyphs_logical_text(text_glyphs);
+    assert!(
+        rendered.contains("\\177777"),
+        "U+FFFF must render as the octal escape `\\177777`, got {rendered:?}"
+    );
+    assert!(
+        !rendered.contains('\u{FFFF}'),
+        "the raw noncharacter must never reach the glyph row, got {rendered:?}"
+    );
+
+    // Every octal-escape glyph paints in the escape-glyph foreground, not the
+    // default face. (`1`/`7` occur only inside the escape here.)
+    let default_face_id = FaceId::from(neomacs_display_protocol::face::BasicFaceId::Default);
+    let default_fg = state
+        .faces
+        .get(&default_face_id)
+        .expect("default face")
+        .foreground;
+    assert_ne!(
+        escape_fg, default_fg,
+        "escape-glyph fg must differ from default"
+    );
+    for want in ['\\', '1', '7'] {
+        let glyph = text_glyphs
+            .iter()
+            .find(|g| matches!(g.glyph_type, GlyphType::Char { ch } if ch == want))
+            .unwrap_or_else(|| panic!("octal-escape glyph {want:?}"));
+        let face = state
+            .faces
+            .get(&glyph.face_id)
+            .unwrap_or_else(|| panic!("resolved face for {want:?}"));
+        assert_eq!(
+            face.foreground, escape_fg,
+            "octal-escape glyph {want:?} must paint in the escape-glyph foreground"
+        );
+    }
+}
+
 /// Sibling guard for the nobreak hyphens. GNU treats SOFT_HYPHEN (U+00AD),
 /// HYPHEN (U+2010) and NON_BREAKING_HYPHEN (U+2011) via
 /// `merge_faces (it->w, Qnobreak_hyphen, 0, it->face_id)` (xdisp.c:8608-8617).

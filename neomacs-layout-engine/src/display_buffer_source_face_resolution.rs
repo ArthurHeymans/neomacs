@@ -13,7 +13,7 @@ use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowScopedValue
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::{BoxFaceRowState, FaceScanCheckpoint};
-use crate::display_source::{nonascii_hyphen_p, nonascii_space_p};
+use crate::display_source::{is_escape_glyph_octal, nonascii_hyphen_p, nonascii_space_p};
 use crate::display_source_resolver::{
     DisplaySourceFaceBasis, DisplaySourceResolveParams, PendingDisplaySourceFace,
 };
@@ -250,22 +250,25 @@ impl DisplaySourceNobreakHint {
         }
     }
 
-    /// The merge face name for highlight mode (`nobreak-char-display` == t == 1),
-    /// or `None` when this char does not get highlighted there. Escape mode
-    /// (policy 2) and off (policy 0) return `None`: in escape mode the
-    /// `\`-prefixed substitute is painted by the existing escape-glyph machinery
-    /// on the Special path, and off displays the char as-is.
+    /// The merge face name for a precluster substitute, or `None` when this char
+    /// is not highlighted. In highlight mode (`nobreak-char-display` == t == 1) a
+    /// non-ASCII space/hyphen paints in `nobreak-space`/`nobreak-hyphen`.
+    /// Independent of that policy, a non-printable char (its `\`+octal escape,
+    /// see [`is_escape_glyph_octal`]) paints in `escape-glyph` -- GNU always
+    /// merges the escape glyph for these (xdisp.c:8631-8633).
     fn highlight_face_name(self) -> Option<&'static str> {
-        if self.nobreak_char_display != 1 {
-            return None;
+        if self.nobreak_char_display == 1 {
+            if nonascii_space_p(self.source_char) {
+                return Some("nobreak-space");
+            }
+            if nonascii_hyphen_p(self.source_char) {
+                return Some("nobreak-hyphen");
+            }
         }
-        if nonascii_space_p(self.source_char) {
-            Some("nobreak-space")
-        } else if nonascii_hyphen_p(self.source_char) {
-            Some("nobreak-hyphen")
-        } else {
-            None
+        if is_escape_glyph_octal(self.source_char) {
+            return Some("escape-glyph");
         }
+        None
     }
 }
 

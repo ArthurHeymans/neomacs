@@ -1374,6 +1374,31 @@ pub(crate) fn nonascii_hyphen_p(ch: char) -> bool {
     matches!(ch, '\u{00AD}' | '\u{2010}' | '\u{2011}')
 }
 
+/// GNU displays a NON-PRINTABLE character -- one whose general category is
+/// `Cc`/`Cs`/`Cn` (`!CHAR_PRINTABLE_P`, xdisp.c:8552) -- as `\` followed by its
+/// codepoint in octal, painted in the `escape-glyph` face (xdisp.c:8645-8661,
+/// `\%03o`). This is the escape path that also renders raw bytes; it covers
+/// noncharacters (U+FFFE/U+FFFF, U+FDD0..U+FDEF), unassigned codepoints, and the
+/// C1 controls U+0080..U+009F -- everything a font would otherwise draw as
+/// `.notdef`. ASCII control chars (< 0x20, 0x7F) take the caret/`^X` path and
+/// nobreak space/hyphen their own; both are classified earlier, so this only
+/// needs the printable test. ASCII (< 0x80) is fast-pathed as always printable.
+pub(crate) fn is_escape_glyph_octal(ch: char) -> bool {
+    let cp = ch as u32;
+    if cp < 0x80 {
+        return false;
+    }
+    use neovm_core::emacs_core::emacs_char::{char_general_category, printablep};
+    char_general_category(cp).is_some_and(|cat| !printablep(cat))
+}
+
+/// The `\`+octal escape substitute string for a non-printable char (see
+/// [`is_escape_glyph_octal`]): GNU `sprintf(str, "%03o", c)` prefixed with the
+/// escape glyph (xdisp.c:8654). U+FFFF -> `\177777`, U+0080 -> `\200`.
+pub(crate) fn escape_glyph_octal_text(ch: char) -> String {
+    format!("\\{:03o}", ch as u32)
+}
+
 impl DisplaySourceAppendItem {
     pub(crate) fn nobreak_display(ch: char, display_policy: i32) -> Option<Self> {
         // GNU `get_next_display_element` (xdisp.c:8594-8643): in highlight mode
@@ -2790,8 +2815,19 @@ impl DisplayPropertySourceReplacement {
 pub(crate) enum TextSourceCharClassification {
     Text,
     RowBreak,
-    ControlChar { ch: char },
-    Glyphless { ch: char, method: GlyphlessMethod },
+    ControlChar {
+        ch: char,
+    },
+    /// A non-printable char shown as `\`+octal in the escape-glyph face
+    /// (see [`is_escape_glyph_octal`]); emitted as a single-char
+    /// `SourceMappedText` item so its escape-glyph face merges via the hook.
+    EscapeOctal {
+        ch: char,
+    },
+    Glyphless {
+        ch: char,
+        method: GlyphlessMethod,
+    },
 }
 
 pub(crate) fn classify_text_source_char(ch: char) -> TextSourceCharClassification {
@@ -2806,6 +2842,15 @@ pub(crate) fn classify_text_source_char(ch: char) -> TextSourceCharClassificatio
     {
         return TextSourceCharClassification::Glyphless { ch, method };
     }
+    // A non-printable char with no glyphless method displays as `\`+octal in the
+    // escape-glyph face (GNU `!CHAR_PRINTABLE_P`, xdisp.c:8552) -- e.g. the
+    // noncharacters U+FFFE/U+FFFF and the U+FDD0..U+FDEF range, which a font
+    // would otherwise draw as `.notdef`. (The C1 controls and U+FFF0..U+FFF8
+    // keep their existing glyphless hex-code box above; converging those to
+    // GNU's octal needs the two source pipelines unified first.)
+    if is_escape_glyph_octal(ch) {
+        return TextSourceCharClassification::EscapeOctal { ch };
+    }
     TextSourceCharClassification::Text
 }
 
@@ -2819,6 +2864,11 @@ pub(crate) fn display_item_kind_for_text_source_char(ch: char) -> Option<Display
         }
         TextSourceCharClassification::ControlChar { ch } => {
             Some(DisplayItemKind::ControlChar { ch })
+        }
+        TextSourceCharClassification::EscapeOctal { ch } => {
+            Some(DisplayItemKind::SourceMappedText(
+                DisplaySourceMappedText::new(escape_glyph_octal_text(ch)),
+            ))
         }
         TextSourceCharClassification::Glyphless { ch, method } => {
             Some(DisplayItemKind::Glyphless(DisplayGlyphless { ch, method }))
