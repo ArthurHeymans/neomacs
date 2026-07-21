@@ -1031,8 +1031,13 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
     }
 
     pub(crate) fn render_and_apply(self, mut state: FrameOutputTarget<'_>) {
-        let track_color = Color::new(0.7, 0.7, 0.7, 1.0);
-        let thumb_color = Color::new(0.5, 0.5, 0.5, 1.0);
+        // Subtle light track (drawn at scroll_bar.track_opacity) with a clearly
+        // darker thumb on top, so the thumb stands out and reads as a position
+        // indicator. GNU/GTK inverts this (light thumb in a dark trough); we keep
+        // the light track to match neomacs's subtle chrome but give the thumb
+        // enough contrast to be plainly visible.
+        let track_color = Color::new(0.72, 0.72, 0.72, 1.0);
+        let thumb_color = Color::new(0.32, 0.32, 0.32, 1.0);
         let ProtocolWindowGeometry::Complete { regions, .. } = &self.info.geometry else {
             return;
         };

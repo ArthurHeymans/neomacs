@@ -143,13 +143,12 @@ pub(super) struct BoxSpanSet {
     pub(super) spans: Vec<BoxSpan>,
 }
 
-/// Cursor, window border, and scroll bar vertex sets collected before the
-/// render pass. `cursor_bg` and `behind_text_cursor` draw before text
-/// (inverse-video filled box cursor); `cursors` draws after text.
+/// Cursor and window-border vertex sets collected before the render pass.
+/// `cursor_bg` and `behind_text_cursor` draw before text (inverse-video filled
+/// box cursor); `cursors` draws after text and also carries the scroll bar
+/// track + thumb rects, which all go through the rect pipeline.
 pub(super) struct ChromeLayerVertices {
     pub(super) cursor_bg: Vec<RectVertex>,
     pub(super) behind_text_cursor: Vec<RectVertex>,
     pub(super) cursors: Vec<RectVertex>,
-    /// Scroll bar thumbs as (x, y, w, h, corner_radius, color).
-    pub(super) scroll_bar_thumbs: Vec<(f32, f32, f32, f32, f32, Color)>,
 }

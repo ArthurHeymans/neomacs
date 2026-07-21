@@ -1441,9 +1441,8 @@ impl WgpuRenderer {
             self.draw_inline_webkit_views(&mut ctx);
             self.draw_inline_surfaces(&mut ctx);
 
-            // === Step 8: front cursors, borders, scroll bars ===
+            // === Step 8: front cursors, borders, scroll bar tracks + thumbs ===
             self.draw_cursor_layer(&mut ctx, &chrome);
-            self.draw_scroll_bar_thumbs(&mut ctx, &chrome);
 
             self.draw_post_content_effects(&mut ctx.pass, &ectx, faces);
         }

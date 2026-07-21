@@ -4,7 +4,7 @@
 use neomacs_display_protocol::frame_glyphs::FrameGlyph;
 use neomacs_display_protocol::types::Color;
 
-use super::super::vertex::{RectVertex, RoundedRectVertex};
+use super::super::vertex::RectVertex;
 use super::WgpuRenderer;
 use super::frame_pass::{ChromeLayerVertices, FrameParams, FramePassCtx};
 
@@ -30,10 +30,9 @@ impl WgpuRenderer {
         // === Collect front cursors and borders (drawn after text) ===
         // Bar (1), hbar (2), hollow (3), borders — all drawn on top of text.
         // Filled box (0) is EXCLUDED here — handled by bg rect + trail + fg swap.
+        // Scroll bar tracks AND thumbs are collected into cursor_vertices too,
+        // so both draw through the reliable rect pipeline in draw_cursor_layer.
         let mut cursor_vertices: Vec<RectVertex> = Vec::new();
-
-        // === Collect scroll bar thumbs (drawn as rounded rects) ===
-        let mut scroll_bar_thumb_vertices: Vec<(f32, f32, f32, f32, f32, Color)> = Vec::new();
 
         for glyph in &frame_glyphs.glyphs {
             match glyph {
@@ -119,9 +118,14 @@ impl WgpuRenderer {
                         *thumb_color
                     };
 
-                    // Rounded thumb with configurable pill radius
-                    let radius = tw.min(th) * self.effects.scroll_bar.thumb_radius;
-                    scroll_bar_thumb_vertices.push((tx, ty, tw, th, radius, effective_thumb));
+                    // Draw the thumb as a solid rect through the proven rect
+                    // pipeline (into cursor_vertices, after the track, so it lands
+                    // on top of it). The rounded_rect "filled" path (border_width
+                    // = 0) renders nothing — that pipeline paints no fragments
+                    // here — so this is the reliable way to make the thumb visible.
+                    // It still tracks GNU's scroll position and portion, just with
+                    // square corners instead of GTK's pill.
+                    self.add_rect(&mut cursor_vertices, tx, ty, tw, th, &effective_thumb);
                 }
                 _ => {}
             }
@@ -159,7 +163,6 @@ impl WgpuRenderer {
             cursor_bg: cursor_bg_vertices,
             behind_text_cursor: behind_text_cursor_vertices,
             cursors: cursor_vertices,
-            scroll_bar_thumbs: scroll_bar_thumb_vertices,
         }
     }
 
@@ -198,34 +201,6 @@ impl WgpuRenderer {
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.set_vertex_buffer(0, upload.buffer_slice());
             render_pass.draw(0..cursor_vertices.len() as u32, 0..1);
-        }
-    }
-
-    /// Draw scroll bar thumbs as filled rounded rects.
-    pub(super) fn draw_scroll_bar_thumbs(
-        &mut self,
-        ctx: &mut FramePassCtx<'_, '_>,
-        chrome: &ChromeLayerVertices,
-    ) {
-        let render_pass = &mut ctx.pass;
-        let scroll_bar_thumb_vertices = &chrome.scroll_bar_thumbs;
-        // === Draw scroll bar thumbs as filled rounded rects ===
-        if !scroll_bar_thumb_vertices.is_empty() {
-            let mut rounded_verts: Vec<RoundedRectVertex> = Vec::new();
-            for (tx, ty, tw, th, radius, color) in scroll_bar_thumb_vertices {
-                // border_width = 0 triggers filled mode in the shader
-                self.add_rounded_rect(&mut rounded_verts, *tx, *ty, *tw, *th, 0.0, *radius, color);
-            }
-            if let Some(upload) =
-                self.arenas
-                    .rounded
-                    .upload(&self.device, &self.queue, &rounded_verts)
-            {
-                render_pass.set_pipeline(&self.pipelines.rounded_rect);
-                render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                render_pass.set_vertex_buffer(0, upload.buffer_slice());
-                render_pass.draw(0..rounded_verts.len() as u32, 0..1);
-            }
         }
     }
 }
