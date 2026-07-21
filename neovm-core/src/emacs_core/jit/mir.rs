@@ -89,6 +89,23 @@ impl LispType {
         }
     }
 
+    /// True when a value of this type can never be a heap object, so it never
+    /// needs operand-stack GC rooting across a call or allocation. This mirrors
+    /// exactly what `neovm_jit_gc_push` skips at runtime: immediates (fixnum,
+    /// nil, t, predicate booleans) are never heap-allocated, and symbols are
+    /// kept live by the obarray (always a GC root), not the operand stack.
+    /// `Unknown`/`Any` and every heap type conservatively return false.
+    pub fn never_needs_gc_root(self) -> bool {
+        matches!(
+            self,
+            LispType::Fixnum
+                | LispType::Nil
+                | LispType::True
+                | LispType::Boolean
+                | LispType::Symbol
+        )
+    }
+
     /// The lattice join (least upper bound) used at block-parameter merges:
     /// identical types stay; `Unknown` is the identity; anything else widens to
     /// `Any`. (A richer lattice with unions — `fixnum|nil` etc. — is a later
@@ -1270,5 +1287,26 @@ mod tests {
             build_mir(&ops, &constants, 0),
             Err(CompileError::UnsupportedOp("mir-unreachable-block"))
         ));
+    }
+
+    /// The GC-root filter must skip exactly the immediates + symbols (what
+    /// `neovm_jit_gc_push` skips at runtime) and root everything heap or
+    /// unknown. A wrong `true` here would drop a live heap root under GC =
+    /// use-after-free, so this pins the whole table.
+    #[test]
+    fn never_needs_gc_root_matches_runtime_skip_set() {
+        use LispType::*;
+        for ty in [Fixnum, Nil, True, Boolean, Symbol] {
+            assert!(
+                ty.never_needs_gc_root(),
+                "{ty:?} is immediate/obarray-rooted"
+            );
+        }
+        for ty in [Cons, Str, Float, Veclike, Unknown, Any] {
+            assert!(
+                !ty.never_needs_gc_root(),
+                "{ty:?} can be heap (or unknown) and MUST be rooted"
+            );
+        }
     }
 }

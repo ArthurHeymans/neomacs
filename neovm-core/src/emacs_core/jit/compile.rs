@@ -4879,8 +4879,18 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                             let s = fb.inst_results(c)[0];
                             for k in 0..residual_len {
                                 let rv = inst.pre_stack[k];
+                                // A residual whose MIR type is provably non-heap
+                                // (fixnum/nil/t/boolean/symbol) never needs
+                                // rooting — `neovm_jit_gc_push` would reconstruct
+                                // it, test `is_heap_object`, and drop it. Skip the
+                                // shim CALL for it at compile time (the expensive
+                                // part; `gc_save`/`gc_restore` around a shorter
+                                // push range stays correct). Force-tagging is
+                                // left intact so no downstream `cval` state moves.
                                 let v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, rv)?;
-                                fb.ins().call(rt.refs.gc_push, &[v]);
+                                if !m.value_type(rv).never_needs_gc_root() {
+                                    fb.ins().call(rt.refs.gc_push, &[v]);
+                                }
                             }
                             Some(s)
                         };
@@ -4939,8 +4949,18 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                             let s = fb.inst_results(c)[0];
                             for k in 0..residual_len {
                                 let rv = inst.pre_stack[k];
+                                // A residual whose MIR type is provably non-heap
+                                // (fixnum/nil/t/boolean/symbol) never needs
+                                // rooting — `neovm_jit_gc_push` would reconstruct
+                                // it, test `is_heap_object`, and drop it. Skip the
+                                // shim CALL for it at compile time (the expensive
+                                // part; `gc_save`/`gc_restore` around a shorter
+                                // push range stays correct). Force-tagging is
+                                // left intact so no downstream `cval` state moves.
                                 let v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, rv)?;
-                                fb.ins().call(rt.refs.gc_push, &[v]);
+                                if !m.value_type(rv).never_needs_gc_root() {
+                                    fb.ins().call(rt.refs.gc_push, &[v]);
+                                }
                             }
                             Some(s)
                         };
