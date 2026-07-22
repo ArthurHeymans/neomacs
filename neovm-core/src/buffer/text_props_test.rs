@@ -1933,3 +1933,69 @@ fn next_single_property_change_bounded_matches_unbounded_within_limit_and_soft_s
         Some(32),
     );
 }
+
+#[test]
+fn find_id_memo_never_disagrees_with_fresh_descent() {
+    // Differential fuzz for the find_id positional memo (version/cache_* fields):
+    // apply a randomized sequence of splits (put), merges (remove), and position
+    // shifts (insert/delete adjust), interleaving cache-populating find_id calls
+    // with the uncached ground truth, and assert they never disagree. A missing
+    // invalidation would surface here as a stale hit.
+    let face = Value::symbol("face");
+    let bold = Value::symbol("bold");
+    let italic = Value::symbol("italic");
+    let fontified = Value::symbol("fontified");
+
+    let mut table = TextPropertyTable::new();
+    table.put_property_in_char_range(char_range(0, 200), face, bold);
+
+    // Deterministic LCG -- no rng dependency, reproducible failures.
+    let mut rng: u64 = 0x1234_5678_9abc_def0;
+    let mut next = |bound: usize| -> usize {
+        rng = rng
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        ((rng >> 33) as usize) % bound.max(1)
+    };
+
+    let mut hi = 200usize;
+    for _ in 0..4000 {
+        // Populate the memo before mutating, so a stale entry could survive.
+        let _ = table.intervals.find_id(char_pos(next(hi + 4)));
+
+        let a = next(hi + 1);
+        let b = next(hi + 1);
+        let (lo, up) = if a <= b { (a, b) } else { (b, a) };
+        match next(5) {
+            0 if up > lo => {
+                let v = if next(2) == 0 { bold } else { italic };
+                table.put_property_in_char_range(char_range(lo, up), face, v);
+            }
+            1 if up > lo => {
+                table.put_property_in_char_range(char_range(lo, up), fontified, Value::NIL);
+            }
+            2 if up > lo => {
+                table.remove_property_in_char_range(char_range(lo, up), face);
+            }
+            3 => {
+                let len = 1 + next(8);
+                table.adjust_for_insert_at_char_pos(char_pos(lo.min(hi)), char_len(len));
+                hi += len;
+            }
+            _ if up > lo => {
+                table.adjust_for_delete_char_range(char_range(lo, up));
+                hi -= up - lo;
+            }
+            _ => {}
+        }
+
+        for _ in 0..6 {
+            let pos = char_pos(next(hi + 4));
+            assert_eq!(
+                table.intervals.find_id(pos),
+                table.intervals.find_id_uncached(pos),
+                "find_id memo disagreed with fresh descent at {pos:?} (hi={hi})"
+            );
+        }
+    }
+}

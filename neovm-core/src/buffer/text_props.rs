@@ -8,6 +8,7 @@
 //! whether adjacent interval plists are semantically equal.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use super::{CharLen, CharPos0, CharRange};
 use crate::emacs_core::eval::{
@@ -528,10 +529,49 @@ impl IntervalRun {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 struct IntervalTree {
     root: Option<IntervalId>,
     nodes: Vec<IntervalNode>,
+    /// Positional last-descent memo for `find_id`: `(start, end, id)` of the most
+    /// recently located interval, tagged with the tree version it was valid for.
+    /// A lookup that lands inside `[start, end)` returns in O(1) instead of
+    /// re-descending the order-statistic tree O(log n). font-lock reads text
+    /// properties at adjacent positions, so consecutive lookups overwhelmingly hit
+    /// the same interval. GNU's `find_interval` re-descends from the root on every
+    /// call, so this beats it.
+    ///
+    /// Stored as plain atomics (not a `Cell`) because `TextPropertyTable` must be
+    /// `Sync` -- it backs a shared `OnceLock` sentinel. `version` is bumped by the
+    /// three in-place structural/positional mutators (`push_node`,
+    /// `add_length_to_ancestors`, `delete_node`); a lookup trusts the memo only
+    /// when `cache_gen == gen`, so any such mutation invalidates it. Plist-value
+    /// changes (`set_node_plist`) deliberately do NOT bump `version`: they move no
+    /// interval boundary, the `pos -> interval` mapping is unchanged, and the
+    /// caller reads the node's plist fresh via the returned id. Access is
+    /// cooperatively single-threaded, so `Relaxed` ordering suffices and the memo
+    /// cannot tear. `find_id_uncached` (test-only) plus a randomized differential
+    /// test prove the memo never disagrees with a fresh descent.
+    version: AtomicU64,
+    cache_gen: AtomicU64,
+    cache_start: AtomicUsize,
+    cache_end: AtomicUsize,
+    cache_id: AtomicUsize,
+}
+
+impl Clone for IntervalTree {
+    fn clone(&self) -> Self {
+        // A clone starts with a fresh (empty) memo; it will populate its own.
+        Self {
+            root: self.root,
+            nodes: self.nodes.clone(),
+            version: AtomicU64::new(0),
+            cache_gen: AtomicU64::new(u64::MAX),
+            cache_start: AtomicUsize::new(0),
+            cache_end: AtomicUsize::new(0),
+            cache_id: AtomicUsize::new(0),
+        }
+    }
 }
 
 /// Forward in-order iterator over a tree's intervals (see [`IntervalTree::cursor_at`]).
@@ -599,6 +639,7 @@ impl IntervalTree {
         let mut tree = Self {
             root: None,
             nodes: Vec::with_capacity(runs.len()),
+            ..Self::default()
         };
         tree.root = tree.build_balanced(&runs, 0, runs.len(), None);
         tree
@@ -702,6 +743,7 @@ impl IntervalTree {
     }
 
     fn push_node(&mut self, node: IntervalNode) -> IntervalId {
+        self.invalidate_find_cache();
         let id = IntervalId(self.nodes.len());
         self.nodes.push(node);
         id
@@ -803,6 +845,7 @@ impl IntervalTree {
     }
 
     fn add_length_to_ancestors(&mut self, mut id: Option<IntervalId>, delta: isize) {
+        self.invalidate_find_cache();
         while let Some(current) = id {
             let total = &mut self.nodes[current.0].total_length;
             if delta >= 0 {
@@ -1208,6 +1251,7 @@ impl IntervalTree {
     }
 
     fn delete_node(&mut self, id: IntervalId) -> Option<IntervalId> {
+        self.invalidate_find_cache();
         let left = self.nodes[id.0].left;
         let right = self.nodes[id.0].right;
 
@@ -1306,6 +1350,7 @@ impl IntervalTree {
     }
 
     fn delete_range(&mut self, range: CharRange) {
+        self.invalidate_find_cache();
         if range.is_empty() || self.root.is_none() {
             return;
         }
@@ -1340,6 +1385,7 @@ impl IntervalTree {
     }
 
     fn merge_interval_left(&mut self, id: IntervalId) -> Option<IntervalId> {
+        self.invalidate_find_cache();
         let absorb = self.node_len(id);
         if absorb.is_empty() {
             return None;
@@ -1450,6 +1496,51 @@ impl IntervalTree {
     }
 
     fn find_id(&self, pos: CharPos0) -> Option<(CharPos0, IntervalId)> {
+        // Positional last-descent memo (see the `version`/`cache_*` fields): a lookup
+        // that lands inside the previously located interval, at the same tree
+        // version, returns without re-descending.
+        let version = self.version.load(Ordering::Relaxed);
+        if self.cache_gen.load(Ordering::Relaxed) == version {
+            let start = CharPos0::new(self.cache_start.load(Ordering::Relaxed));
+            let end = CharPos0::new(self.cache_end.load(Ordering::Relaxed));
+            if start <= pos && pos < end {
+                return Some((start, IntervalId(self.cache_id.load(Ordering::Relaxed))));
+            }
+        }
+        let mut id = self.root?;
+        let mut base = CharPos0::ZERO;
+        loop {
+            let node = &self.nodes[id.0];
+            let left_len = self.subtree_len(node.left);
+            let node_start = base.add_len(left_len);
+            let node_len = self.node_len(id);
+            if pos < node_start {
+                id = node.left?;
+            } else if pos < node_start.add_len(node_len) {
+                let node_end = node_start.add_len(node_len);
+                self.cache_start.store(node_start.get(), Ordering::Relaxed);
+                self.cache_end.store(node_end.get(), Ordering::Relaxed);
+                self.cache_id.store(id.0, Ordering::Relaxed);
+                self.cache_gen.store(version, Ordering::Relaxed);
+                return Some((node_start, id));
+            } else {
+                base = node_start.add_len(node_len);
+                id = node.right?;
+            }
+        }
+    }
+
+    /// Invalidate the `find_id` memo by advancing the tree version. Called by the
+    /// three in-place structural/positional mutators.
+    #[inline]
+    fn invalidate_find_cache(&self) {
+        self.version.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// `find_id` without consulting or updating the memo -- the ground truth used
+    /// by the differential test to prove the cache never goes stale.
+    #[cfg(test)]
+    fn find_id_uncached(&self, pos: CharPos0) -> Option<(CharPos0, IntervalId)> {
         let mut id = self.root?;
         let mut base = CharPos0::ZERO;
         loop {
