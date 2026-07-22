@@ -188,7 +188,14 @@ fn direct_subr_interactive_spec(
     symbol: SymId,
 ) -> Option<InteractiveSpec> {
     interactive.get_spec(symbol).cloned().or_else(|| {
-        builtin_subr_interactive_form(resolve_sym(symbol))
+        // Look the subr up by name, but a symbol name need not be valid UTF-8
+        // (`(intern (unibyte-string #xff))` is a legal Emacs symbol). Built-in
+        // subrs are all ASCII, so a non-UTF-8-named symbol is simply not one —
+        // use the non-panicking name accessor rather than `resolve_sym`, which
+        // panics on non-UTF-8 (a real M-x `commandp`-over-the-obarray crash,
+        // issue #153).
+        symbol_utf8_name(symbol)
+            .and_then(builtin_subr_interactive_form)
             .and_then(interactive_spec_from_interactive_form)
     })
 }
