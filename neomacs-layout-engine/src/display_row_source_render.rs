@@ -10,6 +10,7 @@ use crate::display_current_row_output::{DisplayCurrentRowMutation, DisplayRowCur
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::DisplayPropertyReplacementDescriptor;
+use crate::display_mock_frame::protocol_color_to_pixel;
 use crate::display_origin::DisplayOrigin;
 use crate::display_property::DisplayReplacementProperty;
 use crate::display_row::{
@@ -249,16 +250,24 @@ impl DisplayCurrentRowMutation for HighlightTrailingWhitespaceMutation {
     }
 }
 
-/// Geometry + face for the `display-fill-column-indicator` glyph produced in a
+/// Geometry + faces for the `display-fill-column-indicator` glyph produced in a
 /// row's trailing region (GNU `extend_face_to_end_of_line`, xdisp.c:24752): a
-/// `gap` stretch pads from end-of-text to the indicator column, then the
-/// indicator character carries the `fill-column-indicator` face.
+/// `gap` stretch pads from end-of-text to the indicator column, the indicator
+/// character carries the `fill-column-indicator` face, and an optional `tail`
+/// stretch continues to the right edge. On a plain row the gap is transparent
+/// and there is no tail; on an `:extend`-highlighted row (region/hl-line) the
+/// gap and tail carry the extend face so the whole trailing region stays
+/// highlighted, and the indicator char face keeps the highlight background.
 #[derive(Clone, Copy)]
 struct FillColumnIndicatorFill {
     gap_px: f32,
     gap_cols: u16,
+    gap_face_id: FaceId,
     indicator_char: char,
-    face_id: FaceId,
+    indicator_face_id: FaceId,
+    tail_px: f32,
+    tail_cols: u16,
+    tail_face_id: FaceId,
     char_width: f32,
     height_px: f32,
     ascent_px: f32,
@@ -279,14 +288,13 @@ impl DisplayCurrentRowMutation for FillColumnIndicatorMutation {
         }
         let text_index = GlyphArea::Text.index();
         let f = self.fill;
-        // Pad the trailing region up to the indicator column with a face-less
-        // stretch (no background -> transparent, like GNU's default-face spaces).
+        // Pad the trailing region up to the indicator column.
         if f.gap_cols >= 1 && f.gap_px > 0.5 {
             push_stretch_to_area(
                 row,
                 text_index,
                 f.gap_cols,
-                f.face_id,
+                f.gap_face_id,
                 f.gap_px,
                 f.height_px,
                 f.ascent_px,
@@ -295,12 +303,31 @@ impl DisplayCurrentRowMutation for FillColumnIndicatorMutation {
                 last.charpos = NO_BUFFER_POSITION_CHARPOS;
             }
         }
-        // The indicator character itself (fill-column-indicator face). It maps to
-        // no buffer position, so the blank-line cursor never latches onto it.
+        // The indicator character itself. It maps to no buffer position, so the
+        // blank-line cursor never latches onto it.
         row.glyphs[text_index].push(
-            Glyph::char(f.indicator_char, f.face_id, NO_BUFFER_POSITION_CHARPOS)
-                .with_pixel_width(f.char_width.max(1.0)),
+            Glyph::char(
+                f.indicator_char,
+                f.indicator_face_id,
+                NO_BUFFER_POSITION_CHARPOS,
+            )
+            .with_pixel_width(f.char_width.max(1.0)),
         );
+        // Continue the `:extend` highlight past the indicator to the right edge.
+        if f.tail_cols >= 1 && f.tail_px > 0.5 {
+            push_stretch_to_area(
+                row,
+                text_index,
+                f.tail_cols,
+                f.tail_face_id,
+                f.tail_px,
+                f.height_px,
+                f.ascent_px,
+            );
+            if let Some(last) = row.glyphs[text_index].last_mut() {
+                last.charpos = NO_BUFFER_POSITION_CHARPOS;
+            }
+        }
         row.displays_text = true;
     }
 }
@@ -1073,8 +1100,12 @@ impl<'a> TextRowSourceRenderState<'a> {
     /// in the current row's trailing region, for every non-continuation text row
     /// (GNU `extend_face_to_end_of_line` / `fill_column_indicator_column`,
     /// xdisp.c). `indicator_col` is the buffer column (negative = disabled), so
-    /// the indicator pixel x is `content_x + line_number_width +
-    /// indicator_col * char_width` (GNU's `col*char_width + lnum_pixel_width`).
+    /// the indicator pixel x is `content_x + indicator_col * char_width`. Unlike
+    /// GNU (whose `fill_column_indicator_column` adds `lnum_pixel_width` because
+    /// its origin is the text-area left edge), neomacs's `content_x` is already
+    /// the buffer-text origin — it shifts right by the line-number gutter — so
+    /// the gutter width must NOT be added again (doing so double-counts it and
+    /// pushes the indicator past its column when line numbers are on).
     /// No-op when disabled or when the row text already reached/passed the column
     /// (GNU begins the trailing fill at end-of-text, so a longer line covers it).
     #[allow(clippy::too_many_arguments)]
@@ -1083,36 +1114,84 @@ impl<'a> TextRowSourceRenderState<'a> {
         indicator_col: i32,
         indicator_char: char,
         content_x: f32,
-        line_number_width: f32,
         char_width: f32,
         pen_x: f32,
+        right_edge: f32,
+        row_extend: &DisplayRowScopedValue<(Color, FaceId)>,
+        row_geometry: &DisplayRowGeometryState,
+        frame_background: Color,
         height_px: f32,
         ascent_px: f32,
         face_ids: &mut FrameFaceIdAllocator,
-    ) {
+    ) -> bool {
         if indicator_col < 0 || char_width <= 0.0 {
-            return;
+            return false;
         }
-        let indicator_px = content_x + line_number_width + indicator_col as f32 * char_width;
+        let indicator_px = content_x + indicator_col as f32 * char_width;
         let gap_px = indicator_px - pen_x;
         if gap_px < -0.5 {
-            return;
+            // The row text reached/passed the indicator column; the indicator is
+            // covered (GNU begins the trailing fill at end-of-text). Let the
+            // caller run the normal `:extend` fill instead.
+            return false;
         }
         let gap_px = gap_px.max(0.0);
         let gap_cols = (gap_px / char_width).round().clamp(0.0, u16::MAX as f32) as u16;
-        let face = self.resolve_named_face("fill-column-indicator");
-        let face_id = face_ids.allocate();
-        self.insert_resolved_face(face_id, &face);
+        // An `:extend` face (region / hl-line) fills the trailing region with its
+        // background; produce the indicator INSIDE that fill so the highlight is
+        // continuous, mirroring GNU's `extend_face_to_end_of_line` which merges
+        // `fill-column-indicator` over the extend face at the indicator column.
+        let extend = row_extend
+            .value_on(row_geometry)
+            .copied()
+            .filter(|(bg, _)| *bg != frame_background);
+        let fill = match extend {
+            Some((extend_bg, extend_face_id)) => {
+                let mut char_face = self.resolve_named_face("fill-column-indicator");
+                char_face.bg = protocol_color_to_pixel(extend_bg);
+                char_face.use_default_background = false;
+                let indicator_face_id = face_ids.allocate();
+                self.insert_resolved_face(indicator_face_id, &char_face);
+                let tail_px = (right_edge - (indicator_px + char_width)).max(0.0);
+                let tail_cols = (tail_px / char_width).round().clamp(0.0, u16::MAX as f32) as u16;
+                FillColumnIndicatorFill {
+                    gap_px,
+                    gap_cols,
+                    gap_face_id: extend_face_id,
+                    indicator_char,
+                    indicator_face_id,
+                    tail_px,
+                    tail_cols,
+                    tail_face_id: extend_face_id,
+                    char_width,
+                    height_px,
+                    ascent_px,
+                }
+            }
+            None => {
+                // Plain row: the gap is transparent (fill-column-indicator has no
+                // background) and there is no tail past the indicator.
+                let fci = self.resolve_named_face("fill-column-indicator");
+                let face_id = face_ids.allocate();
+                self.insert_resolved_face(face_id, &fci);
+                FillColumnIndicatorFill {
+                    gap_px,
+                    gap_cols,
+                    gap_face_id: face_id,
+                    indicator_char,
+                    indicator_face_id: face_id,
+                    tail_px: 0.0,
+                    tail_cols: 0,
+                    tail_face_id: face_id,
+                    char_width,
+                    height_px,
+                    ascent_px,
+                }
+            }
+        };
         self.output_render
-            .produce_current_row_fill_column_indicator(FillColumnIndicatorFill {
-                gap_px,
-                gap_cols,
-                indicator_char,
-                face_id,
-                char_width,
-                height_px,
-                ascent_px,
-            });
+            .produce_current_row_fill_column_indicator(fill);
+        true
     }
 
     #[allow(clippy::too_many_arguments)]

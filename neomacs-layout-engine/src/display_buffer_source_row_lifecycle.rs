@@ -1577,32 +1577,38 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             // R2L (reversed_p) is read from the GlyphRow inside the mutation,
             // which is the authoritative source; pass `false` here. R2L rows are
             // a documented limitation (the fill is suppressed for them).
-            let extended = source_render.extend_face_to_end_of_line(
-                row_extend,
-                row_geometry,
+            // `display-fill-column-indicator`: produce the indicator glyph in the
+            // trailing region (GNU extend_face_to_end_of_line, xdisp.c:24752). It
+            // takes over the whole trailing fill when it applies — including
+            // splitting an `:extend` highlight (region / hl-line) around the
+            // indicator so the highlight stays continuous — so only run the plain
+            // extend fill when the indicator did NOT apply (disabled, or the row
+            // text already reached/passed the column).
+            let produced_indicator = source_render.produce_fill_column_indicator(
+                context.fill_column_indicator,
+                context.fill_column_indicator_char,
+                context.content_x,
+                metrics.char_width(),
                 progress.row_progress().x(),
                 context.append_surface.full_text_right_edge(),
+                row_extend,
+                row_geometry,
                 context.frame_background,
-                false,
                 metrics.row_height(),
                 metrics.ascent(),
-                metrics.char_width(),
+                face_ids,
             );
-            // `display-fill-column-indicator`: produce the indicator glyph in the
-            // trailing region (GNU extend_face_to_end_of_line, xdisp.c:24752). Skip
-            // when an `:extend` fill already ran — that stretch owns the trailing
-            // region and the indicator would land past it (a separate follow-up).
-            if !extended {
-                source_render.produce_fill_column_indicator(
-                    context.fill_column_indicator,
-                    context.fill_column_indicator_char,
-                    context.content_x,
-                    context.append_surface.line_number_width(),
-                    metrics.char_width(),
+            if !produced_indicator {
+                source_render.extend_face_to_end_of_line(
+                    row_extend,
+                    row_geometry,
                     progress.row_progress().x(),
+                    context.append_surface.full_text_right_edge(),
+                    context.frame_background,
+                    false,
                     metrics.row_height(),
                     metrics.ascent(),
-                    face_ids,
+                    metrics.char_width(),
                 );
             }
         }
