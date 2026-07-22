@@ -909,10 +909,107 @@ fn write_cursor_shape(buf: &mut Vec<u8>, shape: TerminalCursorShape) {
     let _ = write!(buf, "\x1b[{} q", ps);
 }
 
+// --- Terminal color depth (issue #154) ------------------------------------
+//
+// GNU downsamples realized face colors to the terminal's palette
+// (`tty_default_color_cells` / `tty-color-approximate`). Emitting 24-bit
+// `38;2;r;g;b` on every terminal means a terminal that doesn't support
+// truecolor (Linux console, tmux without `Tc`, strict 256-color emulators)
+// silently drops the color -> no syntax highlighting at all with `neomacs -nw`.
+// Pick the SGR form from the detected color-cell count instead.
+const TIER_NONE: u8 = 0;
+const TIER_BASIC: u8 = 1; // 8/16 ANSI colors
+const TIER_256: u8 = 2;
+const TIER_TRUECOLOR: u8 = 3;
+
+// Default truecolor so an uninitialised path keeps the previous behavior.
+static COLOR_TIER: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(TIER_TRUECOLOR);
+
+/// Set the terminal color tier from the detected color-cell count
+/// (GNU `tty_default_color_cells`): >=2^24 truecolor, >=256 indexed, >=8 basic
+/// ANSI, else monochrome. Called once at TTY init from the frontend.
+pub fn set_color_tier(color_cells: i64) {
+    let tier = if color_cells >= 16_777_216 {
+        TIER_TRUECOLOR
+    } else if color_cells >= 256 {
+        TIER_256
+    } else if color_cells >= 8 {
+        TIER_BASIC
+    } else {
+        TIER_NONE
+    };
+    COLOR_TIER.store(tier, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Nearest xterm-256 palette index for an RGB triple (16 system + 6x6x6 cube +
+/// 24-step grayscale).
+pub fn rgb_to_256(r: u8, g: u8, b: u8) -> u8 {
+    let (max, min) = (r.max(g).max(b), r.min(g).min(b));
+    if max - min < 8 {
+        if r < 8 {
+            return 16;
+        }
+        if r > 238 {
+            return 231;
+        }
+        return 232 + ((r as u16 - 8) / 10).min(23) as u8;
+    }
+    let level = |v: u8| -> u16 {
+        if v < 48 {
+            0
+        } else if v < 115 {
+            1
+        } else {
+            ((v as u16 - 35) / 40).min(5)
+        }
+    };
+    (16 + 36 * level(r) + 6 * level(g) + level(b)) as u8
+}
+
+/// Nearest basic-ANSI color as `(base 0..7, bright)` for an RGB triple.
+pub fn rgb_to_ansi_basic(r: u8, g: u8, b: u8) -> (u8, bool) {
+    let on = |v: u8| -> u8 { u8::from(v > 100) };
+    let base = on(r) | (on(g) << 1) | (on(b) << 2);
+    (base, r.max(g).max(b) > 170)
+}
+
+fn write_fg(buf: &mut Vec<u8>, r: u8, g: u8, b: u8) {
+    use std::io::Write;
+    match COLOR_TIER.load(std::sync::atomic::Ordering::Relaxed) {
+        TIER_TRUECOLOR => {
+            let _ = write!(buf, "\x1b[38;2;{r};{g};{b}m");
+        }
+        TIER_256 => {
+            let _ = write!(buf, "\x1b[38;5;{}m", rgb_to_256(r, g, b));
+        }
+        TIER_BASIC => {
+            let (base, bright) = rgb_to_ansi_basic(r, g, b);
+            let _ = write!(buf, "\x1b[{}m", if bright { 90 + base } else { 30 + base });
+        }
+        _ => {}
+    }
+}
+
+fn write_bg(buf: &mut Vec<u8>, r: u8, g: u8, b: u8) {
+    use std::io::Write;
+    match COLOR_TIER.load(std::sync::atomic::Ordering::Relaxed) {
+        TIER_TRUECOLOR => {
+            let _ = write!(buf, "\x1b[48;2;{r};{g};{b}m");
+        }
+        TIER_256 => {
+            let _ = write!(buf, "\x1b[48;5;{}m", rgb_to_256(r, g, b));
+        }
+        TIER_BASIC => {
+            let (base, bright) = rgb_to_ansi_basic(r, g, b);
+            let _ = write!(buf, "\x1b[{}m", if bright { 100 + base } else { 40 + base });
+        }
+        _ => {}
+    }
+}
+
 /// Write ANSI SGR (select graphic rendition) escape sequences for the given
 /// attributes. Always resets first, then enables the needed attributes.
 fn write_sgr(buf: &mut Vec<u8>, attrs: &CellAttrs) {
-    use std::io::Write;
     // Reset all attributes first.
     buf.extend_from_slice(b"\x1b[0m");
 
@@ -940,12 +1037,12 @@ fn write_sgr(buf: &mut Vec<u8>, attrs: &CellAttrs) {
     // GNU term.c only emits color SGR for specified TTY colors.
     // `None` mirrors FACE_TTY_DEFAULT_FG_COLOR/BG_COLOR.
     if let Some((r, g, b)) = attrs.fg {
-        let _ = write!(buf, "\x1b[38;2;{r};{g};{b}m");
+        write_fg(buf, r, g, b);
     } else {
         buf.extend_from_slice(b"\x1b[39m");
     }
     if let Some((r, g, b)) = attrs.bg {
-        let _ = write!(buf, "\x1b[48;2;{r};{g};{b}m");
+        write_bg(buf, r, g, b);
     } else {
         buf.extend_from_slice(b"\x1b[49m");
     }

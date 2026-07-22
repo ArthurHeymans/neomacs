@@ -110,6 +110,12 @@ pub fn query_terminal_size_cells() -> Option<(u32, u32)> {
 /// Set up the terminal for the TtyRif direct-rendering path:
 /// raw mode, alternate screen buffer, hidden cursor.
 pub fn tty_init_terminal() {
+    // Pick the SGR color depth from the terminal's detected color-cell count so
+    // face colors are downsampled to a palette the terminal can render, instead
+    // of always emitting 24-bit truecolor (issue #154). The `-nw` renderer is
+    // `TtyRif` in neomacs-display-protocol, so set the tier there.
+    neomacs_display_protocol::tty_rif::set_color_tier(detect_tty_color_cells());
+
     if let Err(e) = crossterm::terminal::enable_raw_mode() {
         tracing::error!("tty_init_terminal: enable_raw_mode failed: {}", e);
         return;

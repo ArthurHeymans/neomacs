@@ -1663,3 +1663,48 @@ fn plain_cluster_composite_stays_one_cell_and_skips_joiners() {
     // The ZWJ is dropped; extenders hold only the second emoji.
     assert_eq!(rif.desired.cells[0].extenders.as_deref(), Some("\u{1F469}"));
 }
+
+// --- Color downsampling for non-truecolor terminals (issue #154) -----------
+
+#[test]
+fn tty_color_rgb_to_256_corners() {
+    assert_eq!(rgb_to_256(255, 0, 0), 196);
+    assert_eq!(rgb_to_256(0, 255, 0), 46);
+    assert_eq!(rgb_to_256(0, 0, 255), 21);
+    assert_eq!(rgb_to_256(0, 0, 0), 16);
+    assert_eq!(rgb_to_256(255, 255, 255), 231);
+    assert!((232..=255).contains(&rgb_to_256(128, 128, 128)));
+}
+
+#[test]
+fn tty_color_rgb_to_ansi_basic() {
+    assert_eq!(rgb_to_ansi_basic(0, 0, 0), (0, false));
+    assert_eq!(rgb_to_ansi_basic(200, 0, 0), (1, true));
+    assert_eq!(rgb_to_ansi_basic(0, 200, 0), (2, true));
+    assert_eq!(rgb_to_ansi_basic(0, 0, 200), (4, true));
+    assert_eq!(rgb_to_ansi_basic(255, 255, 255), (7, true));
+}
+
+// nextest isolates each test in its own process, so the process-global
+// COLOR_TIER set here does not leak into the default-tier tests above.
+#[test]
+fn tty_write_sgr_downsamples_by_tier() {
+    let attrs = CellAttrs {
+        fg: Some((255, 0, 0)),
+        ..CellAttrs::default()
+    };
+    // 256-color terminal -> indexed escape, never 24-bit truecolor.
+    set_color_tier(256);
+    let mut buf = Vec::new();
+    write_sgr(&mut buf, &attrs);
+    let s = String::from_utf8(buf).unwrap();
+    assert!(s.contains("\x1b[38;5;196m"), "256 tier red: {s:?}");
+    assert!(!s.contains("38;2;"), "must not emit truecolor at 256 tier");
+
+    // Basic (8/16) terminal -> bright-red ANSI code.
+    set_color_tier(8);
+    let mut buf = Vec::new();
+    write_sgr(&mut buf, &attrs);
+    let s = String::from_utf8(buf).unwrap();
+    assert!(s.contains("\x1b[91m"), "basic tier bright red: {s:?}");
+}
