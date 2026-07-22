@@ -1790,14 +1790,28 @@ impl Obarray {
     pub fn read_localized(
         &self,
         id: SymId,
-        _target_buf: Value,
+        target_buf: Value,
         target_alist: Value,
     ) -> Option<Value> {
         let blv = self.blv(id)?;
-        // Neomacs keeps `local_var_alist` as the source of truth for
-        // LOCALIZED per-buffer bindings. The BLV cache is an acceleration
-        // structure and can be stale when an immutable read races with a
-        // later make-local-variable/set path, so prefer the alist here.
+        // Same-buffer fast path -- the SAME soundness guard as
+        // `find_symbol_value_in_buffer`'s GNU `swap_in_symval_forwarding`
+        // early-out: trust the cached `valcell` iff it was loaded for THIS
+        // buffer and no structural `local_var_alist` mutation has happened
+        // since (`alist_epoch` vs the global epoch, bumped by
+        // `note_blv_alist_structural_mutation` at every make-local /
+        // kill-local). `swap_in_blv` sets `valcell` to the very cons `assq`
+        // returns below (or `defcell` when unbound), and every value write
+        // updates that shared cons's cdr in place, so an epoch-valid cell
+        // carries the identical live value -- this just skips the
+        // whole-alist scan that dominates localized VarRef cost on buffers
+        // with many locals (org-mode font-lock). This path is immutable, so
+        // on a miss it scans rather than reloading `valcell`.
+        if blv.alist_epoch == blv_alist_epoch()
+            && crate::emacs_core::value::eq_value(&blv.where_buf, &target_buf)
+        {
+            return Some(blv.valcell.cons_cdr());
+        }
         let key = Value::from_sym_id(id);
         let cell = assq(key, target_alist);
         if !cell.is_nil() {
