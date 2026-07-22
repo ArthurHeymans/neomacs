@@ -213,7 +213,7 @@ struct ConcurrentMarkJob {
     /// Base addresses of every owned cons block at the snapshot (immutable,
     /// read-only on the GC thread). A cons whose block base is here is markable
     /// via block arithmetic; others (mapped/dump, or new blocks) are deferred.
-    owned_bases: std::sync::Arc<std::collections::HashSet<usize>>,
+    owned_bases: std::sync::Arc<FxHashSet<usize>>,
     /// CONCURRENT CLAIM DISPATCHER state (per-kind page-base snapshots,
     /// cycle parity, dump span, claim counters) for
     /// `concurrent_try_mark_owned`. Grouped in a sub-struct so the scan
@@ -272,7 +272,7 @@ struct ConcurrentClaimJob {
     /// interval children), and any residual `Box` string (none are allocated
     /// anymore, but a miss merely defers). A page base can never collide
     /// with non-page memory: a page owns its whole 64KB span exclusively.
-    string_page_bases: std::sync::Arc<std::collections::HashSet<usize>>,
+    string_page_bases: std::sync::Arc<FxHashSet<usize>>,
     /// CONCURRENT FLOAT CLAIMS (task 01): the base address of every FLOAT
     /// ARENA PAGE at the world-stopped start handshake (retired pages
     /// included — their tenured floats short-circuit to drop). Same
@@ -280,7 +280,7 @@ struct ConcurrentClaimJob {
     /// claim-eligible; MISS ⇒ DEFER (fail-safe for mid-cycle pages, mapped
     /// (pdump) floats — which mark via the heap's `mapped_float_ranges` side
     /// bitmaps only the mutator may touch — and any residual `Box` float).
-    float_page_bases: std::sync::Arc<std::collections::HashSet<usize>>,
+    float_page_bases: std::sync::Arc<FxHashSet<usize>>,
     /// CONCURRENT VECTOR-HEADER CLAIMS (task 01): the base address of every
     /// VECTOR ARENA PAGE at the world-stopped start handshake (retired pages
     /// included). A page is homogeneous (`VectorObj` slots only), so a HIT
@@ -291,7 +291,7 @@ struct ConcurrentClaimJob {
     /// Vector chokepoint — but a miss merely defers), and vectors in pages
     /// created mid-cycle. See the claim arm for why page-hit vectors may be
     /// claimed without deferring their CURRENT backing to the termination.
-    vector_page_bases: std::sync::Arc<std::collections::HashSet<usize>>,
+    vector_page_bases: std::sync::Arc<FxHashSet<usize>>,
     /// CONCURRENT BYTECODE CLAIMS (task 01, finishing arm): the base address
     /// of every BYTECODE ARENA PAGE at the world-stopped start handshake
     /// (retired pages included — their tenured bytecode short-circuits to
@@ -306,7 +306,7 @@ struct ConcurrentClaimJob {
     /// by the Tier-B backing scan), a claimed bytecode's children are
     /// GRAY-PUSHED by the claim arm itself — see the load-bearing
     /// immutability comment there.
-    bytecode_page_bases: std::sync::Arc<std::collections::HashSet<usize>>,
+    bytecode_page_bases: std::sync::Arc<FxHashSet<usize>>,
     /// Dump (pdump mmap) address span. The cons arm skips conses inside
     /// (permanent-black; young children come from the remembered set); the
     /// subr arm defers span-inside veclikes (every MAPPED veclike
@@ -457,7 +457,7 @@ unsafe fn atomic_mark_owned_cons_ptr(ptr: *const ConsCell) -> bool {
 #[inline]
 fn concurrent_try_mark_string(
     val: TaggedValue,
-    string_page_bases: &std::collections::HashSet<usize>,
+    string_page_bases: &FxHashSet<usize>,
     parity: bool,
     str_claimed: &AtomicUsize,
 ) -> bool {
@@ -6886,7 +6886,8 @@ impl TaggedHeap {
         // thread. New blocks allocated during marking are absent, which is fine:
         // their conses allocate-black and never enter the GC's gray queue.
         let conssnap_t0 = std::time::Instant::now();
-        let mut owned = std::collections::HashSet::with_capacity(self.cons_blocks.len());
+        let mut owned =
+            FxHashSet::with_capacity_and_hasher(self.cons_blocks.len(), Default::default());
         for block in &self.cons_blocks {
             owned.insert(block.base_addr());
         }
@@ -6898,7 +6899,7 @@ impl TaggedHeap {
         // and their strings DEFER (fail-safe). Timed within the conssnap
         // handshake slot (same ownership-snapshot phase).
         let mut string_bases =
-            std::collections::HashSet::with_capacity(self.string_arena.pages.len());
+            FxHashSet::with_capacity_and_hasher(self.string_arena.pages.len(), Default::default());
         for page in &self.string_arena.pages {
             string_bases.insert(page.base_addr());
         }
@@ -6912,7 +6913,7 @@ impl TaggedHeap {
         // their floats DEFER (fail-safe). O(pages); own handshake timer.
         let floatsnap_t0 = std::time::Instant::now();
         let mut float_bases =
-            std::collections::HashSet::with_capacity(self.float_arena.pages.len());
+            FxHashSet::with_capacity_and_hasher(self.float_arena.pages.len(), Default::default());
         for page in &self.float_arena.pages {
             float_bases.insert(page.base_addr());
         }
@@ -6925,7 +6926,7 @@ impl TaggedHeap {
         // `vecsnap` below.
         let vecbasesnap_t0 = std::time::Instant::now();
         let mut vector_bases =
-            std::collections::HashSet::with_capacity(self.vector_arena.pages.len());
+            FxHashSet::with_capacity_and_hasher(self.vector_arena.pages.len(), Default::default());
         for page in &self.vector_arena.pages {
             vector_bases.insert(page.base_addr());
         }
@@ -6936,8 +6937,10 @@ impl TaggedHeap {
         // the claim arm). Same discipline as the float/vector snapshots.
         // O(pages); own handshake timer.
         let bcsnap_t0 = std::time::Instant::now();
-        let mut bytecode_bases =
-            std::collections::HashSet::with_capacity(self.bytecode_arena.pages.len());
+        let mut bytecode_bases = FxHashSet::with_capacity_and_hasher(
+            self.bytecode_arena.pages.len(),
+            Default::default(),
+        );
         for page in &self.bytecode_arena.pages {
             bytecode_bases.insert(page.base_addr());
         }
@@ -12660,7 +12663,7 @@ mod float_arena_tests {
 
         // F_OLD lives in a page that exists at the "snapshot" instant.
         let f_old = heap.alloc_float(1.0);
-        let snap: std::collections::HashSet<usize> = heap
+        let snap: rustc_hash::FxHashSet<usize> = heap
             .float_arena
             .pages
             .iter()
@@ -12685,10 +12688,10 @@ mod float_arena_tests {
         // a launch would carry.
         let job = ConcurrentClaimJob {
             parity: !heap.mark_parity,
-            string_page_bases: std::sync::Arc::new(std::collections::HashSet::new()),
+            string_page_bases: std::sync::Arc::new(rustc_hash::FxHashSet::default()),
             float_page_bases: std::sync::Arc::new(snap),
-            vector_page_bases: std::sync::Arc::new(std::collections::HashSet::new()),
-            bytecode_page_bases: std::sync::Arc::new(std::collections::HashSet::new()),
+            vector_page_bases: std::sync::Arc::new(rustc_hash::FxHashSet::default()),
+            bytecode_page_bases: std::sync::Arc::new(rustc_hash::FxHashSet::default()),
             dump_lo: usize::MAX,
             dump_hi: 0,
             str_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
@@ -14029,7 +14032,7 @@ mod bytecode_arena_tests {
         // pushed).
         let child = heap.alloc_cons(TaggedValue::fixnum(51), TaggedValue::fixnum(52));
         let b_old = heap.alloc_bytecode(bytecode_fn(vec![TaggedValue::fixnum(7), child], 2, 0));
-        let snap: std::collections::HashSet<usize> = heap
+        let snap: rustc_hash::FxHashSet<usize> = heap
             .bytecode_arena
             .pages
             .iter()
@@ -14053,9 +14056,9 @@ mod bytecode_arena_tests {
         // before launching, so claim at the flipped value).
         let job = ConcurrentClaimJob {
             parity: !heap.mark_parity,
-            string_page_bases: std::sync::Arc::new(std::collections::HashSet::new()),
-            float_page_bases: std::sync::Arc::new(std::collections::HashSet::new()),
-            vector_page_bases: std::sync::Arc::new(std::collections::HashSet::new()),
+            string_page_bases: std::sync::Arc::new(rustc_hash::FxHashSet::default()),
+            float_page_bases: std::sync::Arc::new(rustc_hash::FxHashSet::default()),
+            vector_page_bases: std::sync::Arc::new(rustc_hash::FxHashSet::default()),
             bytecode_page_bases: std::sync::Arc::new(snap),
             dump_lo: usize::MAX,
             dump_hi: 0,
