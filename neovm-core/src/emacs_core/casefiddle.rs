@@ -628,7 +628,12 @@ fn casify_region_in_state(
         // edit through the casify-specific replace so the undo recording and
         // marker handling match GNU instead of the generic replace path.
         let replacement = transform(&text);
-        casify_replace_current_buffer_region(eval, byte_range, &replacement)?;
+        // GNU fires after-change-functions only when a character actually
+        // changed (e.g. `downcase-region` over already-lowercase text signals
+        // before- but not after-change); before-change and the undo record
+        // still happen for the no-op. Match that.
+        let changed = replacement.as_bytes() != text.as_bytes();
+        casify_replace_current_buffer_region(eval, byte_range, &replacement, changed)?;
     }
 
     Ok(Value::NIL)
@@ -641,13 +646,31 @@ fn casify_replace_current_buffer_region(
     eval: &mut super::eval::Context,
     byte_range: EmacsByteRange,
     replacement: &LispString,
+    changed: bool,
 ) -> EvalResult {
     let buffer_id = eval
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    // GNU's `casify_region` (casefiddle.c) runs `modify_text` before and
+    // `signal_after_change` after the edit; the earlier port kept only the
+    // read-only checks and dropped the change hooks, so `upcase-region` &c.
+    // mutated the buffer without firing before/after-change-functions -- which
+    // `track-changes.el` flags as "Missing/incorrect calls to
+    // before/after-change-functions" (issue #145). Bracket the casify-specific
+    // replace exactly like the generic replace + the *word* case variants.
+    let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
+        &eval.buffers,
+        buffer_id,
+        byte_range,
+        replacement,
+    )?;
+    super::editfns::signal_before_text_change(eval, change)?;
     eval.buffers
         .casify_replace_buffer_emacs_byte_range_lisp_string(buffer_id, byte_range, replacement);
+    if changed {
+        super::editfns::signal_after_text_change(eval, change)?;
+    }
     Ok(Value::NIL)
 }
 
