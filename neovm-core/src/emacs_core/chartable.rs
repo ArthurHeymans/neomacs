@@ -3318,6 +3318,14 @@ pub(crate) fn bool_vector_from_bits(bits: &[bool]) -> Value {
     Value::vector(vec)
 }
 
+/// GNU's `NILP (dest)`: for the bool-vector set ops the optional destination is
+/// a real target only when it is supplied AND non-nil. An omitted arg and an
+/// explicit `nil` are identical (optional args default to nil), so both must
+/// allocate a fresh bool-vector rather than type-check nil as the destination.
+fn optional_bv_dest(args: &[Value], index: usize) -> Option<Value> {
+    args.get(index).copied().filter(|v| !v.is_nil())
+}
+
 /// `(bool-vector-intersection A B &optional C)` -- bitwise AND.
 /// If C is provided, store result in C and return C; otherwise return a new
 /// bool-vector.
@@ -3338,10 +3346,9 @@ pub(crate) fn builtin_bool_vector_intersection(args: Vec<Value>) -> EvalResult {
         .map(|(&a, &b)| a && b)
         .collect();
 
-    if args.len() == 3 {
-        let changed =
-            store_bv_result_with_expected_lengths(&args[2], &result_bits, &[len_a, len_b])?;
-        Ok(if changed { args[2] } else { Value::NIL })
+    if let Some(dest) = optional_bv_dest(&args, 2) {
+        let changed = store_bv_result_with_expected_lengths(&dest, &result_bits, &[len_a, len_b])?;
+        Ok(if changed { dest } else { Value::NIL })
     } else {
         Ok(bool_vector_from_bits(&result_bits))
     }
@@ -3365,10 +3372,9 @@ pub(crate) fn builtin_bool_vector_union(args: Vec<Value>) -> EvalResult {
         .map(|(&a, &b)| a || b)
         .collect();
 
-    if args.len() == 3 {
-        let changed =
-            store_bv_result_with_expected_lengths(&args[2], &result_bits, &[len_a, len_b])?;
-        Ok(if changed { args[2] } else { Value::NIL })
+    if let Some(dest) = optional_bv_dest(&args, 2) {
+        let changed = store_bv_result_with_expected_lengths(&dest, &result_bits, &[len_a, len_b])?;
+        Ok(if changed { dest } else { Value::NIL })
     } else {
         Ok(bool_vector_from_bits(&result_bits))
     }
@@ -3392,10 +3398,9 @@ pub(crate) fn builtin_bool_vector_exclusive_or(args: Vec<Value>) -> EvalResult {
         .map(|(&a, &b)| a ^ b)
         .collect();
 
-    if args.len() == 3 {
-        let changed =
-            store_bv_result_with_expected_lengths(&args[2], &result_bits, &[len_a, len_b])?;
-        Ok(if changed { args[2] } else { Value::NIL })
+    if let Some(dest) = optional_bv_dest(&args, 2) {
+        let changed = store_bv_result_with_expected_lengths(&dest, &result_bits, &[len_a, len_b])?;
+        Ok(if changed { dest } else { Value::NIL })
     } else {
         Ok(bool_vector_from_bits(&result_bits))
     }
@@ -3410,9 +3415,9 @@ pub(crate) fn builtin_bool_vector_not(args: Vec<Value>) -> EvalResult {
     expect_max_args("bool-vector-not", &args, 2)?;
     let (bits, len_a) = extract_bv_bits(&args[0])?;
     let result_bits: Vec<bool> = bits.into_iter().map(|b| !b).collect();
-    if args.len() == 2 {
-        store_bv_result_with_expected_lengths(&args[1], &result_bits, &[len_a])?;
-        Ok(args[1])
+    if let Some(dest) = optional_bv_dest(&args, 1) {
+        store_bv_result_with_expected_lengths(&dest, &result_bits, &[len_a])?;
+        Ok(dest)
     } else {
         Ok(bool_vector_from_bits(&result_bits))
     }
@@ -3435,10 +3440,9 @@ pub(crate) fn builtin_bool_vector_set_difference(args: Vec<Value>) -> EvalResult
         .zip(bits_b.iter())
         .map(|(&a, &b)| a && !b)
         .collect();
-    if args.len() == 3 {
-        let changed =
-            store_bv_result_with_expected_lengths(&args[2], &result_bits, &[len_a, len_b])?;
-        Ok(if changed { args[2] } else { Value::NIL })
+    if let Some(dest) = optional_bv_dest(&args, 2) {
+        let changed = store_bv_result_with_expected_lengths(&dest, &result_bits, &[len_a, len_b])?;
+        Ok(if changed { dest } else { Value::NIL })
     } else {
         Ok(bool_vector_from_bits(&result_bits))
     }

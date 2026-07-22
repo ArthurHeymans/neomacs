@@ -1638,6 +1638,36 @@ fn bool_vector_union_into_dest() {
     assert_bv_bits(&dest, &[true, true, false]);
 }
 
+// GNU's `NILP (dest)`: an explicit nil destination is identical to an omitted
+// one — both allocate a fresh bool-vector rather than signalling
+// wrong-type-argument. `(bool-vector-union a b nil)` must not error.
+#[test]
+fn bool_vector_binops_treat_explicit_nil_dest_as_fresh() {
+    crate::test_utils::init_test_tracing();
+    let a = make_bv(&[true, true, false, false]);
+    let b = make_bv(&[true, false, true, false]);
+
+    let union = builtin_bool_vector_union(vec![a, b, Value::NIL]).unwrap();
+    assert_bv_bits(&union, &[true, true, true, false]);
+
+    let inter = builtin_bool_vector_intersection(vec![a, b, Value::NIL]).unwrap();
+    assert_bv_bits(&inter, &[true, false, false, false]);
+
+    let xor = builtin_bool_vector_exclusive_or(vec![a, b, Value::NIL]).unwrap();
+    assert_bv_bits(&xor, &[false, true, true, false]);
+
+    let diff = builtin_bool_vector_set_difference(vec![a, b, Value::NIL]).unwrap();
+    assert_bv_bits(&diff, &[false, true, false, false]);
+}
+
+#[test]
+fn bool_vector_not_treats_explicit_nil_dest_as_fresh() {
+    crate::test_utils::init_test_tracing();
+    let a = make_bv(&[true, false, true, false]);
+    let result = builtin_bool_vector_not(vec![a, Value::NIL]).unwrap();
+    assert_bv_bits(&result, &[false, true, false, true]);
+}
+
 #[test]
 fn bool_vector_union_into_unchanged_dest_returns_nil() {
     crate::test_utils::init_test_tracing();
