@@ -806,6 +806,9 @@ pub(crate) fn publish_text_window_decorative_cursor(
             y: cursor.y,
             width: cursor.width,
             height: cursor.height,
+            // Decorative cursors are positioned directly by `y` (no text
+            // baseline), so they keep ascent 0.
+            ascent: 0.0,
             style: cursor.style,
             color: cursor.color,
         },
@@ -823,6 +826,7 @@ fn install_text_window_cursor_artifact(
         cursor.y,
         cursor.width,
         cursor.height,
+        cursor.ascent,
         cursor.style,
         cursor.color,
     ));
@@ -861,6 +865,7 @@ struct TextWindowCursorArtifact {
     y: f32,
     width: f32,
     height: f32,
+    ascent: f32,
     style: CursorStyle,
     color: Color,
 }
@@ -883,6 +888,7 @@ impl TextWindowCursorPublication {
             y: cursor.y,
             width: cursor.width,
             height: cursor.height,
+            ascent: cursor.ascent,
             style: cursor.style,
             color: cursor.color,
         });

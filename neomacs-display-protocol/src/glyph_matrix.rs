@@ -929,6 +929,11 @@ pub struct CursorItem {
     pub height: f32,
     pub style: CursorStyle,
     pub color: Color,
+    /// Pixels above the baseline. Needed so `cursor_draw_rect` places the cursor
+    /// top at `glyph_baseline - ascent`; a non-selected window's cursor is drawn
+    /// one row too low when this is dropped to 0.
+    #[serde(default)]
+    pub ascent: f32,
 }
 
 /// A scroll bar.
@@ -1445,6 +1450,7 @@ impl FrameDisplayState {
                     height: cursor.height,
                     style: cursor.style,
                     color: cursor.color,
+                    ascent: cursor.ascent,
                 }),
         );
 
@@ -1594,7 +1600,10 @@ impl FrameDisplayState {
                 style: cursor.style,
                 color: cursor.color,
                 cursor_fg: Color::BLACK,
-                ascent: 0.0,
+                // Carry the real ascent so `cursor_draw_rect` places the cursor
+                // top at `baseline - ascent`; a hardcoded 0 dropped a
+                // non-selected window's cursor one text row too low.
+                ascent: cursor.ascent,
                 active: false,
             });
         }

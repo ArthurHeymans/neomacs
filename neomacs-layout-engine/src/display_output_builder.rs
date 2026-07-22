@@ -429,6 +429,7 @@ impl DisplayOutputBuilder {
     }
 
     #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn add_output_cursor(
         &mut self,
         window_id: i64,
@@ -447,6 +448,7 @@ impl DisplayOutputBuilder {
             y,
             width,
             height,
+            0.0,
             style,
             color,
         ));

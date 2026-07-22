@@ -1025,6 +1025,7 @@ fn materialize_includes_cursors() {
         height: 16.0,
         style: CursorStyle::FilledBox,
         color: Color::GREEN,
+        ascent: 12.0,
     });
     let buf = state.materialize();
     assert!(buf.glyphs.is_empty());
@@ -1035,6 +1036,10 @@ fn materialize_includes_cursors() {
     assert_eq!(cursor.x, 40.0);
     assert_eq!(cursor.style, CursorStyle::FilledBox);
     assert_eq!(cursor.color, Color::GREEN);
+    // The CursorItem's ascent must flow into the WindowCursor. A hardcoded 0
+    // here dropped a non-selected window's cursor one text row too low
+    // (`cursor_draw_rect` places the top at `glyph_baseline - ascent`).
+    assert_eq!(cursor.ascent, 12.0);
 }
 
 #[test]
@@ -2123,6 +2128,7 @@ fn materialize_mixed_grid_and_nongrid_items() {
         height: 16.0,
         style: CursorStyle::FilledBox,
         color: Color::WHITE,
+        ascent: 12.0,
     });
 
     let buf = state.materialize();

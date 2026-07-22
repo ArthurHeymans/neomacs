@@ -18,6 +18,7 @@ pub(crate) struct OutputCursorInstallRequest {
     y: f32,
     width: f32,
     height: f32,
+    ascent: f32,
     style: CursorStyle,
     color: Color,
 }
@@ -31,6 +32,7 @@ impl OutputCursorInstallRequest {
         y: f32,
         width: f32,
         height: f32,
+        ascent: f32,
         style: CursorStyle,
         color: Color,
     ) -> Self {
@@ -41,6 +43,7 @@ impl OutputCursorInstallRequest {
             y,
             width,
             height,
+            ascent,
             style,
             color,
         }
@@ -56,6 +59,7 @@ impl OutputCursorInstallRequest {
             height: self.height,
             style: self.style,
             color: self.color,
+            ascent: self.ascent,
         }
     }
 }
