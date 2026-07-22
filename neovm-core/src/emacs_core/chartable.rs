@@ -687,13 +687,22 @@ fn set_char_table_extra_slot(table: &Value, idx: usize, value: Value) {
     });
 }
 
+// GNU checks a char-table purpose with EQ(purpose, Qchar_code_property_table).
+// Comparing by cached SymId matches that and avoids resolving the purpose
+// symbol name + a strcmp on every `ct_lookup`.
+fn char_code_property_table_sym_id() -> SymId {
+    static ID: std::sync::OnceLock<SymId> = std::sync::OnceLock::new();
+    *ID.get_or_init(|| intern("char-code-property-table"))
+}
+
 fn is_char_code_property_table(table: &Value) -> bool {
     if !is_char_table(table) {
         return false;
     }
     if table.is_char_table() {
         let obj = table.as_char_table_obj().unwrap();
-        return obj.purpose.is_symbol_named("char-code-property-table") && obj.extras.len() == 5;
+        return obj.purpose.as_symbol_id() == Some(char_code_property_table_sym_id())
+            && obj.extras.len() == 5;
     }
     let vec = table.as_vector_data().unwrap();
     is_char_code_property_vec(vec)
@@ -701,7 +710,7 @@ fn is_char_code_property_table(table: &Value) -> bool {
 
 fn is_char_code_property_vec(vec: &[Value]) -> bool {
     vec.get(CT_SUBTYPE)
-        .is_some_and(|v| v.is_symbol_named("char-code-property-table"))
+        .is_some_and(|v| v.as_symbol_id() == Some(char_code_property_table_sym_id()))
         && char_table_extra_count(vec) == 5
 }
 
@@ -985,7 +994,7 @@ pub(crate) fn make_char_table_from_external_slots(items: &[Value]) -> Result<Val
             .ensure_owned()
             .clone_from(&items[GNU_CHAR_TABLE_STANDARD_SLOTS..].to_vec());
     });
-    if purpose.is_symbol_named("char-code-property-table") && extra_count == 5 {
+    if purpose.as_symbol_id() == Some(char_code_property_table_sym_id()) && extra_count == 5 {
         set_char_table_ascii(table, char_table_ascii(table));
     }
     Ok(table)

@@ -7,6 +7,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::intern::{SymId, intern};
 use crate::tagged::header::store_value_atomic;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -276,6 +277,11 @@ fn build_char_table(
 
 /// Create the standard case table: a char-table with `case-table` subtype,
 /// 3 extra slots (upcase, canonicalize, equivalences), and ASCII case mappings.
+fn case_table_sym_id() -> SymId {
+    static ID: std::sync::OnceLock<SymId> = std::sync::OnceLock::new();
+    *ID.get_or_init(|| intern("case-table"))
+}
+
 fn make_standard_case_table_value() -> Value {
     let mut downcase_pairs = Vec::with_capacity(128);
     let mut upcase_pairs = Vec::with_capacity(128);
@@ -863,7 +869,7 @@ pub fn is_case_table(v: &Value) -> bool {
         let Some(obj) = v.as_char_table_obj() else {
             return false;
         };
-        if !obj.purpose.is_symbol_named("case-table") || obj.extras.len() < 3 {
+        if obj.purpose.as_symbol_id() != Some(case_table_sym_id()) || obj.extras.len() < 3 {
             return false;
         }
 
@@ -879,7 +885,9 @@ pub fn is_case_table(v: &Value) -> bool {
     let Some(vec) = v.as_vector_data() else {
         return false;
     };
-    if vec.len() <= CT_EXTRA_START + 2 || !vec[CT_SUBTYPE].is_symbol_named("case-table") {
+    if vec.len() <= CT_EXTRA_START + 2
+        || vec[CT_SUBTYPE].as_symbol_id() != Some(case_table_sym_id())
+    {
         return false;
     }
     let ValueKind::Fixnum(extra_count) = vec[CT_EXTRA_COUNT].kind() else {
