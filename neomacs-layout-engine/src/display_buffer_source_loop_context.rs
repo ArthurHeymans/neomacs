@@ -36,6 +36,10 @@ pub(crate) struct BufferSourceLoopRequestContext {
     max_rows: usize,
     row_limit: DisplayRowLimit,
     frame_background: Color,
+    /// `display-fill-column-indicator` column (buffer columns), or negative when
+    /// the indicator is disabled. GNU `fill_column_indicator_column`.
+    fill_column_indicator: i32,
+    fill_column_indicator_char: char,
 }
 
 impl BufferSourceLoopRequestContext {
@@ -73,6 +77,8 @@ impl BufferSourceLoopRequestContext {
             max_rows,
             row_limit,
             frame_background,
+            fill_column_indicator: params.fill_column_indicator,
+            fill_column_indicator_char: params.fill_column_indicator_char,
         }
     }
 
@@ -175,6 +181,8 @@ impl BufferSourceLoopRequestContext {
                 append_surface,
                 self.frame_background,
                 overlay_context,
+                self.fill_column_indicator,
+                self.fill_column_indicator_char,
             ),
         )
     }

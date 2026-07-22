@@ -1443,6 +1443,8 @@ pub(crate) struct BufferSourceLineBreakRenderContext<'a> {
     append_surface: &'a DisplayRowAppendSurface,
     frame_background: Color,
     overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+    fill_column_indicator: i32,
+    fill_column_indicator_char: char,
 }
 
 impl<'a> BufferSourceLineBreakRenderContext<'a> {
@@ -1465,6 +1467,8 @@ impl<'a> BufferSourceLineBreakRenderContext<'a> {
         append_surface: &'a DisplayRowAppendSurface,
         frame_background: Color,
         overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
+        fill_column_indicator: i32,
+        fill_column_indicator_char: char,
     ) -> Self {
         Self {
             text,
@@ -1484,6 +1488,8 @@ impl<'a> BufferSourceLineBreakRenderContext<'a> {
             append_surface,
             frame_background,
             overlay_context,
+            fill_column_indicator,
+            fill_column_indicator_char,
         }
     }
 }
@@ -1571,7 +1577,7 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             // R2L (reversed_p) is read from the GlyphRow inside the mutation,
             // which is the authoritative source; pass `false` here. R2L rows are
             // a documented limitation (the fill is suppressed for them).
-            source_render.extend_face_to_end_of_line(
+            let extended = source_render.extend_face_to_end_of_line(
                 row_extend,
                 row_geometry,
                 progress.row_progress().x(),
@@ -1582,6 +1588,23 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
                 metrics.ascent(),
                 metrics.char_width(),
             );
+            // `display-fill-column-indicator`: produce the indicator glyph in the
+            // trailing region (GNU extend_face_to_end_of_line, xdisp.c:24752). Skip
+            // when an `:extend` fill already ran — that stretch owns the trailing
+            // region and the indicator would land past it (a separate follow-up).
+            if !extended {
+                source_render.produce_fill_column_indicator(
+                    context.fill_column_indicator,
+                    context.fill_column_indicator_char,
+                    context.content_x,
+                    context.append_surface.line_number_width(),
+                    metrics.char_width(),
+                    progress.row_progress().x(),
+                    metrics.row_height(),
+                    metrics.ascent(),
+                    face_ids,
+                );
+            }
         }
         line_break_action.apply_before_row_transition(
             row_geometry,

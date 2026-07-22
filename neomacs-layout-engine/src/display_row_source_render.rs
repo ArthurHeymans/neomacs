@@ -249,6 +249,62 @@ impl DisplayCurrentRowMutation for HighlightTrailingWhitespaceMutation {
     }
 }
 
+/// Geometry + face for the `display-fill-column-indicator` glyph produced in a
+/// row's trailing region (GNU `extend_face_to_end_of_line`, xdisp.c:24752): a
+/// `gap` stretch pads from end-of-text to the indicator column, then the
+/// indicator character carries the `fill-column-indicator` face.
+#[derive(Clone, Copy)]
+struct FillColumnIndicatorFill {
+    gap_px: f32,
+    gap_cols: u16,
+    indicator_char: char,
+    face_id: FaceId,
+    char_width: f32,
+    height_px: f32,
+    ascent_px: f32,
+}
+
+struct FillColumnIndicatorMutation {
+    fill: FillColumnIndicatorFill,
+}
+
+impl DisplayCurrentRowMutation for FillColumnIndicatorMutation {
+    type Output = ();
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output {
+        // R2L rows reorder to the visual left; leave them alone (documented
+        // limitation, mirroring RowExtendFillMutation).
+        if row.reversed_p {
+            return;
+        }
+        let text_index = GlyphArea::Text.index();
+        let f = self.fill;
+        // Pad the trailing region up to the indicator column with a face-less
+        // stretch (no background -> transparent, like GNU's default-face spaces).
+        if f.gap_cols >= 1 && f.gap_px > 0.5 {
+            push_stretch_to_area(
+                row,
+                text_index,
+                f.gap_cols,
+                f.face_id,
+                f.gap_px,
+                f.height_px,
+                f.ascent_px,
+            );
+            if let Some(last) = row.glyphs[text_index].last_mut() {
+                last.charpos = NO_BUFFER_POSITION_CHARPOS;
+            }
+        }
+        // The indicator character itself (fill-column-indicator face). It maps to
+        // no buffer position, so the blank-line cursor never latches onto it.
+        row.glyphs[text_index].push(
+            Glyph::char(f.indicator_char, f.face_id, NO_BUFFER_POSITION_CHARPOS)
+                .with_pixel_width(f.char_width.max(1.0)),
+        );
+        row.displays_text = true;
+    }
+}
+
 /// Mutation that rolls the current row's drawn glyphs back to a previously
 /// captured `DisplayRowGlyphCheckpoint`. Used by the word-wrap break to drop the
 /// partial-word glyphs that fit on the current row but belong on the next
@@ -654,6 +710,14 @@ impl<'a> TextRowOutputRenderState<'a> {
             .apply_current_row_mutation(HighlightTrailingWhitespaceMutation { face_id });
     }
 
+    /// Produce the `display-fill-column-indicator` glyph in the current row's
+    /// trailing region. See [`FillColumnIndicatorMutation`].
+    fn produce_current_row_fill_column_indicator(&mut self, fill: FillColumnIndicatorFill) {
+        self.output
+            .current_row_output()
+            .apply_current_row_mutation(FillColumnIndicatorMutation { fill });
+    }
+
     fn finish_current_text_row_render(
         &mut self,
         output: TextRowOutput,
@@ -1005,6 +1069,52 @@ impl<'a> TextRowSourceRenderState<'a> {
             .highlight_current_row_trailing_whitespace(face_id);
     }
 
+    /// Produce the `display-fill-column-indicator` glyph at the indicator column
+    /// in the current row's trailing region, for every non-continuation text row
+    /// (GNU `extend_face_to_end_of_line` / `fill_column_indicator_column`,
+    /// xdisp.c). `indicator_col` is the buffer column (negative = disabled), so
+    /// the indicator pixel x is `content_x + line_number_width +
+    /// indicator_col * char_width` (GNU's `col*char_width + lnum_pixel_width`).
+    /// No-op when disabled or when the row text already reached/passed the column
+    /// (GNU begins the trailing fill at end-of-text, so a longer line covers it).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn produce_fill_column_indicator(
+        &mut self,
+        indicator_col: i32,
+        indicator_char: char,
+        content_x: f32,
+        line_number_width: f32,
+        char_width: f32,
+        pen_x: f32,
+        height_px: f32,
+        ascent_px: f32,
+        face_ids: &mut FrameFaceIdAllocator,
+    ) {
+        if indicator_col < 0 || char_width <= 0.0 {
+            return;
+        }
+        let indicator_px = content_x + line_number_width + indicator_col as f32 * char_width;
+        let gap_px = indicator_px - pen_x;
+        if gap_px < -0.5 {
+            return;
+        }
+        let gap_px = gap_px.max(0.0);
+        let gap_cols = (gap_px / char_width).round().clamp(0.0, u16::MAX as f32) as u16;
+        let face = self.resolve_named_face("fill-column-indicator");
+        let face_id = face_ids.allocate();
+        self.insert_resolved_face(face_id, &face);
+        self.output_render
+            .produce_current_row_fill_column_indicator(FillColumnIndicatorFill {
+                gap_px,
+                gap_cols,
+                indicator_char,
+                face_id,
+                char_width,
+                height_px,
+                ascent_px,
+            });
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn resolve_display_property_replacement_row_request(
         &mut self,
@@ -1246,3 +1356,7 @@ mod extend_fill_tests;
 #[cfg(test)]
 #[path = "display_row_trailing_whitespace_test.rs"]
 mod trailing_whitespace_tests;
+
+#[cfg(test)]
+#[path = "display_row_fill_column_indicator_test.rs"]
+mod fill_column_indicator_tests;

@@ -113,6 +113,10 @@ impl DisplayRowAppendSurface {
         self.area.content_x()
     }
 
+    pub(crate) fn line_number_width(&self) -> f32 {
+        self.area.line_number_width()
+    }
+
     pub(crate) fn right_edge(&self) -> f32 {
         self.area.right_edge()
     }

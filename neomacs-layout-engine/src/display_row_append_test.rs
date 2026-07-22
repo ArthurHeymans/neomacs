@@ -2906,6 +2906,8 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
             &surface,
             Color::from_pixel(0x00FFFFFF),
             overlay_context,
+            -1,
+            '|',
         ),
     )
     .render_and_apply(

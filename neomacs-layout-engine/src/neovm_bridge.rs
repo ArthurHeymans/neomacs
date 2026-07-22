@@ -850,24 +850,32 @@ pub(crate) fn buffer_display_line_numbers_mode<B: LayoutBufferView>(
     DisplayLineNumbersMode::from_lisp_value(buffer_local_value(buffer, "display-line-numbers"))
 }
 
-fn buffer_fill_column_indicator<B: LayoutBufferView>(buffer: &B) -> Option<(i32, char)> {
+fn buffer_fill_column_indicator(buffer: &Buffer, obarray: &Obarray) -> Option<(i32, char)> {
     // GNU `fill_column_indicator_column` in xdisp.c enables the indicator only
     // when `display-fill-column-indicator` is non-nil, the indicator character
     // satisfies CHARACTERP, and the effective column is a nonnegative integer.
-    if !buffer_local_bool(buffer, "display-fill-column-indicator") {
+    // Read the EFFECTIVE value (buffer-local, else global/default) for all four:
+    // `display-fill-column-indicator-column` in particular defaults to `t` (use
+    // fill-column) and is rarely set locally, so a buffer-local-only read returns
+    // None and disables the indicator even when the mode is on.
+    if !effective_buffer_bool(buffer, obarray, "display-fill-column-indicator") {
         return None;
     }
 
-    let character_value = buffer_local_value(buffer, "display-fill-column-indicator-character")?;
+    let character_value =
+        effective_buffer_value(buffer, obarray, "display-fill-column-indicator-character")?;
     if !character_value.is_char() {
         return None;
     }
     let character = character_value.as_char()?;
 
-    let column_value = match buffer_local_value(buffer, "display-fill-column-indicator-column") {
-        Some(value) if value.bits() == Value::T.bits() => buffer_local_value(buffer, "fill-column"),
-        value => value,
-    }?;
+    let column_value =
+        match effective_buffer_value(buffer, obarray, "display-fill-column-indicator-column") {
+            Some(value) if value.bits() == Value::T.bits() => {
+                effective_buffer_value(buffer, obarray, "fill-column")
+            }
+            value => value,
+        }?;
     let column = column_value.as_fixnum()?;
     if column < 0 || column > i32::MAX as i64 {
         return None;
@@ -1461,7 +1469,7 @@ pub fn window_params_from_neovm_with_font_sizing(
     });
     let visual_cursors = parse_visual_cursors(buffer, cursor_color);
     let x_stretch_cursor = global_bool(obarray, "x-stretch-cursor");
-    let fill_column_indicator = buffer_fill_column_indicator(buffer);
+    let fill_column_indicator = buffer_fill_column_indicator(buffer, obarray);
 
     let header_line_height = if wants_header_line {
         chrome_face_pixel_height(
