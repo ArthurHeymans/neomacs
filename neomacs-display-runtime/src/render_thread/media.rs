@@ -863,6 +863,7 @@ fn terminal_cell_face(
         background_gradient: None,
         lisp_name: None,
         default_resolved_font_id: None,
+        stipple: None,
     }
 }
 
