@@ -2294,6 +2294,29 @@ impl ForwardMultibytePositionScan {
         }
 
         while offset < chunk.len() {
+            // ASCII fast path: a maximal run of ASCII bytes is one char per byte,
+            // so cross it in bulk (bounded by the chars still needed) instead of
+            // decoding each char. The `position` scan over `b >= 0x80`
+            // auto-vectorizes; GNU's marker charpos<->bytepos scan walks
+            // char-by-char, so this beats it on the dominant ASCII code path.
+            if chunk[offset] < 0x80 {
+                // Scan only as far as we could possibly advance (the chars still
+                // needed), NOT to the next non-ASCII byte in the whole chunk --
+                // otherwise a short conversion over all-ASCII text scans the
+                // entire remaining segment.
+                let window = (target.get() - self.char_pos.get()).min(chunk.len() - offset);
+                let ascii_run = chunk[offset..offset + window]
+                    .iter()
+                    .position(|&b| b >= 0x80)
+                    .unwrap_or(window);
+                offset += ascii_run;
+                self.byte_pos = self.byte_pos.add_len(EmacsByteLen::new(ascii_run));
+                self.char_pos = self.char_pos.add_len(CharLen::new(ascii_run));
+                if self.char_pos >= target {
+                    return Some(self.byte_pos);
+                }
+                continue;
+            }
             let expected = emacs_multibyte_candidate_len(chunk[offset]);
             let available = chunk.len() - offset;
             if available < expected {
@@ -2325,6 +2348,24 @@ impl ForwardMultibytePositionScan {
         }
 
         while offset < chunk.len() {
+            // ASCII fast path: cross a run of ASCII bytes (one char per byte) in
+            // bulk, bounded by the bytes still needed. See consume_chunk_until_char.
+            if chunk[offset] < 0x80 {
+                // Bound the scan by the bytes still needed (see
+                // consume_chunk_until_char); each ASCII byte is one char.
+                let window = (target.get() - self.byte_pos.get()).min(chunk.len() - offset);
+                let ascii_run = chunk[offset..offset + window]
+                    .iter()
+                    .position(|&b| b >= 0x80)
+                    .unwrap_or(window);
+                offset += ascii_run;
+                self.byte_pos = self.byte_pos.add_len(EmacsByteLen::new(ascii_run));
+                self.char_pos = self.char_pos.add_len(CharLen::new(ascii_run));
+                if self.byte_pos >= target {
+                    return Some(self.char_pos);
+                }
+                continue;
+            }
             let expected = emacs_multibyte_candidate_len(chunk[offset]);
             let available = chunk.len() - offset;
             if available < expected {
