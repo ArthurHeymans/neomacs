@@ -2691,12 +2691,28 @@ fn effective_syntax_entry_for_abs_char_cached(
     abs_char: usize,
     honor_properties: bool,
     prop_cache: &SyntaxPropRange,
+    ascii_syntax: Option<&[SyntaxEntry; 128]>,
 ) -> SyntaxEntry {
     if honor_properties
         && let Some(prop) = prop_cache.syntax_table_prop_at_char(buf, abs_char)
         && let Some(entry) = syntax_entry_from_syntax_property(prop, ch)
     {
         return entry;
+    }
+
+    // Beat GNU on the dominant path. Source text is overwhelmingly ASCII, and
+    // the buffer syntax table is immutable across a scan (the same invariant
+    // `SyntaxPropRange` already relies on). A caller that precomputes the 128
+    // ASCII entries once serves `ch < 128` from a single array index here --
+    // strictly less work than GNU's per-char `CHAR_TABLE_REF_ASCII` + `XCAR`
+    // decode, and than neomacs's own ~5 type-tag derefs + cons decode. This is
+    // a memo of the identical `syntax_entry_from_table` computation below, so
+    // it is behavior-preserving by construction.
+    if let Some(ascii) = ascii_syntax {
+        let cp = ch as u32;
+        if cp < 128 {
+            return ascii[cp as usize].clone();
+        }
     }
 
     syntax_entry_from_table(table, ch)
@@ -2717,6 +2733,7 @@ fn effective_syntax_entry_for_abs_char(
         abs_char,
         honor_properties,
         prop_cache,
+        None,
     )
 }
 
@@ -4737,6 +4754,7 @@ fn syntax_class_and_flags(
     abs_char: usize,
     honor_properties: bool,
     prop_cache: &SyntaxPropRange,
+    ascii_syntax: Option<&[SyntaxEntry; 128]>,
 ) -> (SyntaxClass, SyntaxFlags) {
     let entry = effective_syntax_entry_for_abs_char_cached(
         buf,
@@ -4745,6 +4763,7 @@ fn syntax_class_and_flags(
         abs_char,
         honor_properties,
         prop_cache,
+        ascii_syntax,
     );
     (entry.class, entry.flags)
 }
@@ -4788,6 +4807,12 @@ fn parse_state_from_range_with_options(
     let chars = BufferChars::new(buf, offset_char_pos(CharPos0::ZERO, from_char));
     let to_idx = to_char - from_char;
     let prop_cache = SyntaxPropRange::new();
+    // Precompute the 128 ASCII syntax entries once per scan (consumed in
+    // `effective_syntax_entry_for_abs_char_cached`). Source text is ~all ASCII,
+    // so this turns the per-char syntax lookup into a single array index on the
+    // dominant path; valid because `table` is immutable across the scan.
+    let ascii_syntax: [SyntaxEntry; 128] =
+        std::array::from_fn(|c| syntax_entry_from_table(table, c as u8 as char));
 
     let mut state = PartialParseState::from_oldstate(oldstate);
     let mut idx = 0;
@@ -4803,8 +4828,15 @@ fn parse_state_from_range_with_options(
         let abs_char = from_char + idx;
         let pos1 = (abs_char + 1) as i64;
         let ch = chars.char_at(idx);
-        let (class, flags) =
-            syntax_class_and_flags(buf, table, ch, abs_char, honor_properties, &prop_cache);
+        let (class, flags) = syntax_class_and_flags(
+            buf,
+            table,
+            ch,
+            abs_char,
+            honor_properties,
+            &prop_cache,
+            Some(&ascii_syntax),
+        );
 
         // GNU INC_FROM records `prev_from_syntax` for every position it steps
         // over; element 10 of the result reports it when the final position
@@ -4914,6 +4946,7 @@ fn parse_state_from_range_with_options(
                                 abs_char + 1,
                                 honor_properties,
                                 &prop_cache,
+                                Some(&ascii_syntax),
                             );
                             if next_flags.contains(SyntaxFlags::COMMENT_START_SECOND)
                                 && CommentStyle::from_start_flags(flags, next_flags) == style
@@ -4958,6 +4991,7 @@ fn parse_state_from_range_with_options(
                             abs_char + 1,
                             honor_properties,
                             &prop_cache,
+                            Some(&ascii_syntax),
                         );
                         if next_flags.contains(SyntaxFlags::COMMENT_END_SECOND)
                             && CommentStyle::from_end_flags(flags, next_flags) == style
@@ -5027,6 +5061,7 @@ fn parse_state_from_range_with_options(
                 abs_char + 1,
                 honor_properties,
                 &prop_cache,
+                Some(&ascii_syntax),
             );
             if next_flags.contains(SyntaxFlags::COMMENT_START_SECOND) {
                 state.in_comment = Some(ParseCommentState::Syntax {
