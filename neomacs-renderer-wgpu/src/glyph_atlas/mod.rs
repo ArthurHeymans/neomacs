@@ -338,6 +338,15 @@ pub struct WgpuGlyphAtlas {
     unresolved_face_warned: HashSet<FaceId>,
 }
 
+/// Whether the single-char cmap fast path in [`WgpuGlyphAtlas::rasterize_glyph`]
+/// is enabled. On by default; set `NEOMACS_GLYPH_FASTPATH=0` to force every
+/// glyph through full cosmic-text shaping (for A/B measurement or if a font
+/// ever needs isolated-codepoint GSUB substitution). Read once per process.
+fn glyph_fast_path_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var("NEOMACS_GLYPH_FASTPATH").as_deref() != Ok("0"))
+}
+
 impl WgpuGlyphAtlas {
     /// Create a new wgpu glyph atlas
     pub fn new(device: &wgpu::Device) -> Self {
@@ -817,6 +826,69 @@ impl WgpuGlyphAtlas {
         })
     }
 
+    /// FAST PATH for a single, non-composed character whose font the layout
+    /// already resolved: derive the glyph id straight from the font's cmap and
+    /// hand it to [`Self::rasterize_resolved_cluster`], skipping the per-glyph
+    /// cosmic-text `Buffer::new` + `shape_until_scroll` that `rasterize_text`
+    /// pays on every atlas miss (measured ~6% of scroll CPU: `Buffer::new`
+    /// 19% of `rasterize_text`, shaping 6%). This mirrors what Zed/GPUI and the
+    /// design's "Phase 3" glyph-level resolved fonts do — carry the glyph id to
+    /// rasterization instead of re-shaping — but entirely render-side, with no
+    /// change to the layout→render frame protocol.
+    ///
+    /// Correctness: the font is chosen from the SAME sources the shaping path
+    /// uses (`face_to_attrs_for_text`) — the layout's per-char resolved font
+    /// (`frame_char_fonts`, populated for CJK/emoji/symbol fallback) first,
+    /// then the face's primary resolved font — so the concrete font matches. A
+    /// cmap MISS (`glyph_id == 0`, i.e. the resolved font does not cover the
+    /// char) returns `None` so the caller falls through to full shaping, which
+    /// runs the real fontconfig fallback. Isolated single codepoints in the
+    /// resolved font take no GSUB context substitution, so the cmap glyph id
+    /// equals the shaped one. Composed clusters never reach here (they route
+    /// through `frame_shaped_clusters`/`rasterize_resolved_cluster` already).
+    fn try_fast_single_char_glyph(
+        &mut self,
+        c: char,
+        face: Option<&Face>,
+    ) -> Option<ResolvedGlyph> {
+        let face = face?;
+        let resolved_font_id = self
+            .frame_char_fonts
+            .get(&face.id)
+            .and_then(|by_char| by_char.get(&c).copied())
+            .or(face.default_resolved_font_id)?;
+        let weight = self.frame_fonts.get(&resolved_font_id)?.weight;
+        let font_id = self.local_fontdb_id_for(resolved_font_id)?;
+        // Use the exact font instance `render_cache_key_image` will rasterize
+        // (same id + weight), so the glyph id is guaranteed to belong to it.
+        let font = self.font_system.get_font(font_id, fontdb::Weight(weight))?;
+        let swash = font.as_swash();
+        let glyph_id = swash.charmap().map(c);
+        if glyph_id == 0 {
+            // .notdef: the resolved font does not cover this char — defer to
+            // shaping so its fontconfig fallback picks a covering font.
+            return None;
+        }
+        // Logical-pixel advance (pre scale_factor, matching the ResolvedGlyph
+        // contract). The main text path positions glyphs from the layout, but
+        // the atlas advance feeds the ui-overlay width path (ui_overlays.rs), so
+        // fill it from the font's own hmetrics rather than leaving it zero.
+        let font_size = effective_font_size(Some(face.font_size), self.default_font_size);
+        let x_advance = swash
+            .glyph_metrics(&[])
+            .scale(font_size)
+            .advance_width(glyph_id);
+        Some(ResolvedGlyph {
+            resolved_font_id,
+            glyph_id,
+            x: 0.0,
+            y: 0.0,
+            x_advance,
+            cluster_start: 0,
+            cluster_end: c.len_utf8() as u32,
+        })
+    }
+
     /// Rasterize a single glyph and return pixel data (convenience wrapper)
     fn rasterize_glyph(
         &mut self,
@@ -826,6 +898,18 @@ impl WgpuGlyphAtlas {
         y_bin: SubpixelBin,
         enable_subpixel: bool,
     ) -> Option<RasterizeResult> {
+        if glyph_fast_path_enabled()
+            && let Some(rg) = self.try_fast_single_char_glyph(c, face)
+        {
+            let font_size = effective_font_size(face.map(|f| f.font_size), self.default_font_size);
+            return self.rasterize_resolved_cluster(
+                &[rg],
+                font_size,
+                x_bin,
+                y_bin,
+                enable_subpixel,
+            );
+        }
         self.rasterize_text(&c.to_string(), face, x_bin, y_bin, enable_subpixel)
     }
 
