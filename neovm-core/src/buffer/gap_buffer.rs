@@ -274,20 +274,25 @@ impl GapBuffer {
         if pos >= self.len() {
             return None;
         }
-        assert!(
+        debug_assert!(
             self.is_char_boundary(pos),
             "char_code_at: byte position {pos} is not a character boundary"
         );
         if !self.multibyte {
             return Some(self.byte_at(pos) as u32);
         }
-
-        let mut tmp = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-        let available = (self.len() - pos).min(tmp.len());
-        for (i, slot) in tmp[..available].iter_mut().enumerate() {
-            *slot = self.byte_at(pos + i);
-        }
-        Some(crate::emacs_core::emacs_char::string_char(&tmp[..available]).0)
+        // The gap is always kept at a character boundary, so a character never
+        // straddles it: its bytes are contiguous in one physical segment. Decode
+        // directly from that slice -- like GNU `FETCH_MULTIBYTE_CHAR` reading from
+        // `BUF_BYTE_ADDRESS` -- instead of copying up to MAX_MULTIBYTE_LENGTH bytes
+        // one at a time through the gap-mapped `byte_at` (which, for the common
+        // ASCII-in-a-multibyte-buffer character, copied 5 bytes to decode 1).
+        let (phys_start, phys_end) = if pos < self.gap_start {
+            (pos, self.gap_start)
+        } else {
+            (pos + self.gap_size(), self.buf.len())
+        };
+        Some(crate::emacs_core::emacs_char::string_char(&self.buf[phys_start..phys_end]).0)
     }
 
     pub(crate) fn char_code_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<u32> {
