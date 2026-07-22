@@ -8,6 +8,10 @@ use crate::thread_comm::InputEvent;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
+// `key_without_modifiers` (the layout base key, before macOS Option composition
+// / shift): the winit equivalent of GNU's `charactersIgnoringModifiers`.
+// Available on macOS, X11, and Wayland — the platforms neomacs targets.
+use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
 use winit::window::WindowId;
 
 impl RenderApp {
@@ -239,17 +243,20 @@ impl RenderApp {
                 }
             }
 
-            WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        logical_key,
-                        state,
-                        text,
-                        physical_key,
-                        ..
-                    },
-                ..
-            } => {
+            WindowEvent::KeyboardInput { event, .. } => {
+                // macOS composes Option+key at the OS level (Option+x -> ≈), so
+                // winit's `logical_key` is the composed character. When a
+                // command modifier is active we want the layout base key
+                // (M-x, not M-≈), mirroring GNU's `charactersIgnoringModifiers`.
+                // Capture it before destructuring the event.
+                let key_without_mods = event.key_without_modifiers();
+                let KeyEvent {
+                    logical_key,
+                    state,
+                    text,
+                    physical_key,
+                    ..
+                } = event;
                 if state == ElementState::Pressed {
                     tracing::debug!(
                         "KeyboardInput: logical_key={:?} physical_key={:?} text={:?} mods={} ime={}",
@@ -357,7 +364,25 @@ impl RenderApp {
                         }
                     }
                     if !handled_via_text {
-                        let mut keysym = Self::translate_key(&logical_key);
+                        // With a command modifier (Ctrl/Meta/Super) and no
+                        // shift, translate the layout BASE key so a macOS
+                        // Option-composed character (Option+x -> ≈) resolves to
+                        // M-x, not M-≈ (issue: no M-x on macOS). GNU does the
+                        // same via `charactersIgnoringModifiers`. Off macOS and
+                        // for un-composed keys `key_without_modifiers` equals
+                        // `logical_key`, so this is a no-op there; the
+                        // shift+command case keeps the composed key (winit's
+                        // base strips shift too, which M-x itself never needs).
+                        let command_like = self.modifiers
+                            & (NEOMACS_CTRL_MASK | NEOMACS_META_MASK | NEOMACS_SUPER_MASK)
+                            != 0;
+                        let effective_key =
+                            if command_like && self.modifiers & NEOMACS_SHIFT_MASK == 0 {
+                                &key_without_mods
+                            } else {
+                                &logical_key
+                            };
+                        let mut keysym = Self::translate_key(effective_key);
                         if keysym == 0 && self.modifiers != 0 {
                             use winit::keyboard::KeyCode;
                             use winit::keyboard::PhysicalKey;
