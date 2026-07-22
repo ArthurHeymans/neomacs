@@ -676,6 +676,81 @@ pub struct StipplePattern {
     pub bits: Vec<u8>,
 }
 
+impl StipplePattern {
+    /// The standard built-in mono bitmaps `:stipple` accepts by name, matching
+    /// the X11 `bitmaps` GNU loads (and compiles in). Portable — no file lookup
+    /// — so `:stipple "gray3"` (also `face-default-stipple`'s default) works on
+    /// every platform. Bits are XBM: row-major, `(width+7)/8` bytes/row,
+    /// LSB-first.
+    pub fn builtin(name: &str) -> Option<Self> {
+        let (width, height, bits): (u32, u32, &[u8]) = match name {
+            "gray" | "gray1" => (2, 2, &[0x01, 0x02]),
+            "gray3" => (4, 4, &[0x01, 0x00, 0x04, 0x00]),
+            "light_gray" => (4, 2, &[0x08, 0x02]),
+            _ => return None,
+        };
+        Some(Self {
+            width,
+            height,
+            bits: bits.to_vec(),
+        })
+    }
+
+    /// Parse an X BitMap (XBM) source file into a stipple pattern, mirroring
+    /// GNU's `image_create_bitmap_from_file`. Handles the standard form:
+    ///
+    /// ```text
+    /// #define name_width  W
+    /// #define name_height H
+    /// static char name_bits[] = { 0x01, 0x00, ... };
+    /// ```
+    ///
+    /// Byte tokens may be hex (`0x01`), C char escapes (`'\x01'`, as GNU's own
+    /// sources emit), or decimal. Returns `None` on a malformed file or when
+    /// fewer than `(width+7)/8 * height` bytes are present.
+    pub fn from_xbm_source(text: &str) -> Option<Self> {
+        fn dimension(text: &str, suffix: &str) -> Option<u32> {
+            text.lines().find_map(|line| {
+                let rest = line[line.find(suffix)? + suffix.len()..].trim_start();
+                let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+                digits.parse().ok()
+            })
+        }
+        let width = dimension(text, "_width")?;
+        let height = dimension(text, "_height")?;
+        if width == 0 || height == 0 {
+            return None;
+        }
+        let open = text.find('{')?;
+        let close = text[open..].find('}')? + open;
+        let mut bits = Vec::new();
+        for tok in text[open + 1..close].split(',') {
+            let t = tok.trim().trim_matches('\'').trim();
+            if t.is_empty() {
+                continue;
+            }
+            let byte = if let Some(hex) = t.strip_prefix("0x").or_else(|| t.strip_prefix("0X")) {
+                u8::from_str_radix(hex, 16).ok()?
+            } else if let Some(hex) = t.strip_prefix("\\x") {
+                u8::from_str_radix(hex, 16).ok()?
+            } else {
+                t.parse::<u8>().ok()?
+            };
+            bits.push(byte);
+        }
+        let expected = width.div_ceil(8) as usize * height as usize;
+        if bits.len() < expected {
+            return None;
+        }
+        bits.truncate(expected);
+        Some(Self {
+            width,
+            height,
+            bits,
+        })
+    }
+}
+
 /// Per-window metadata for animation transition detection
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PresentedCellOrigin {

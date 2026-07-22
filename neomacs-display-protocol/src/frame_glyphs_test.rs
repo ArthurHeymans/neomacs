@@ -1791,3 +1791,56 @@ fn full_frame_simulation() {
     let overlay_count = buf.glyphs.iter().filter(|g| g.is_overlay()).count();
     assert_eq!(overlay_count, 1); // just the mode-line stretch
 }
+
+// --- StipplePattern: built-in bitmaps + XBM parsing --------------------
+
+#[test]
+fn stipple_builtin_named_bitmaps_match_x11() {
+    // Values verified against X11 /usr/include/X11/bitmaps and GNU src/bitmaps.
+    assert_eq!(
+        StipplePattern::builtin("gray3"),
+        Some(StipplePattern {
+            width: 4,
+            height: 4,
+            bits: vec![0x01, 0x00, 0x04, 0x00]
+        })
+    );
+    assert_eq!(
+        StipplePattern::builtin("gray1"),
+        Some(StipplePattern {
+            width: 2,
+            height: 2,
+            bits: vec![0x01, 0x02]
+        })
+    );
+    assert_eq!(
+        StipplePattern::builtin("light_gray").map(|p| (p.width, p.height)),
+        Some((4, 2))
+    );
+    assert_eq!(StipplePattern::builtin("not-a-bitmap"), None);
+}
+
+#[test]
+fn stipple_from_xbm_parses_hex_and_char_token_forms() {
+    // Standard X11 form (hex tokens).
+    let hex = "#define g_width 4\n#define g_height 4\n\
+               static char g_bits[] = {\n   0x01, 0x00, 0x04, 0x00};\n";
+    assert_eq!(
+        StipplePattern::from_xbm_source(hex),
+        Some(StipplePattern {
+            width: 4,
+            height: 4,
+            bits: vec![0x01, 0x00, 0x04, 0x00]
+        })
+    );
+    // GNU src form (C char escapes) must parse identically.
+    let chars = "#define g_width 4\n#define g_height 4\n\
+                 static char g_bits[] = {\n  '\\x01','\\x00','\\x04','\\x00'};\n";
+    assert_eq!(
+        StipplePattern::from_xbm_source(chars),
+        StipplePattern::from_xbm_source(hex)
+    );
+    // Too few bytes for the declared size => rejected.
+    let short = "#define g_width 8\n#define g_height 4\nstatic char g_bits[] = { 0x01 };\n";
+    assert_eq!(StipplePattern::from_xbm_source(short), None);
+}

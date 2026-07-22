@@ -2432,6 +2432,54 @@ fn colors_close(a: u32, b: u32) -> bool {
     (dr * dr * 3 + dg * dg * 4 + db * db * 2) < 3000
 }
 
+/// Resolve a `:stipple` string — a built-in bitmap name (`gray3`, …) or an XBM
+/// file — to a [`StipplePattern`](neomacs_display_protocol::StipplePattern),
+/// mirroring GNU's `image_create_bitmap_from_file`. Built-ins are portable and
+/// need no I/O; files are read and parsed once, then cached, because face
+/// realization runs during layout and must never touch disk per frame. The
+/// `x-bitmap-file-path` Lisp search list is not reachable from the layout
+/// bridge; explicit paths and the standard X11 bitmap directories are searched.
+fn stipple_from_name_or_file(name: &str) -> Option<neomacs_display_protocol::StipplePattern> {
+    use neomacs_display_protocol::StipplePattern;
+    if let Some(pattern) = StipplePattern::builtin(name) {
+        return Some(pattern);
+    }
+    static CACHE: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, Option<StipplePattern>>>,
+    > = std::sync::OnceLock::new();
+    let cache = CACHE.get_or_init(std::sync::Mutex::default);
+    if let Ok(guard) = cache.lock()
+        && let Some(hit) = guard.get(name)
+    {
+        return hit.clone();
+    }
+    let pattern = stipple_file_search_paths(name)
+        .into_iter()
+        .find_map(|path| std::fs::read_to_string(path).ok())
+        .and_then(|text| StipplePattern::from_xbm_source(&text));
+    if let Ok(mut guard) = cache.lock() {
+        guard.insert(name.to_string(), pattern.clone());
+    }
+    pattern
+}
+
+/// Candidate paths for a `:stipple` bitmap file name. An absolute or
+/// cwd-relative path is used directly; a bare name is also looked up in the
+/// standard X11 bitmap directories (GNU's `x-bitmap-file-path` default subset).
+fn stipple_file_search_paths(name: &str) -> Vec<std::path::PathBuf> {
+    let mut paths = vec![std::path::PathBuf::from(name)];
+    if !std::path::Path::new(name).is_absolute() {
+        for dir in [
+            "/usr/include/X11/bitmaps",
+            "/usr/share/X11/bitmaps",
+            "/usr/X11R6/include/X11/bitmaps",
+        ] {
+            paths.push(std::path::Path::new(dir).join(name));
+        }
+    }
+    paths
+}
+
 /// Resolved face attributes ready for the layout engine.
 ///
 /// This is the neovm-core equivalent of `FaceDataFFI`.  All attributes are
@@ -3563,21 +3611,29 @@ impl FaceResolver {
     /// non-inline file/symbol form, which is not yet loaded); callers keep the
     /// base face's stipple in that case, matching GNU merge semantics.
     fn realize_stipple(&self, face: &NeoFace) -> Option<neomacs_display_protocol::StipplePattern> {
-        let items = list_to_vec(face.stipple.as_ref()?)?;
-        if items.len() != 3 {
+        let spec = face.stipple.as_ref()?;
+        // Inline `(WIDTH HEIGHT DATA)` bitmap spec (what `indent-bars` emits).
+        if let Some(items) = list_to_vec(spec) {
+            if items.len() == 3
+                && let Some(w) = items[0].as_fixnum()
+                && let Some(h) = items[1].as_fixnum()
+                && let Some(data) = items[2].as_lisp_string()
+                && w > 0
+                && h > 0
+            {
+                return Some(neomacs_display_protocol::StipplePattern {
+                    width: w as u32,
+                    height: h as u32,
+                    bits: data.as_bytes().to_vec(),
+                });
+            }
             return None;
         }
-        let w = items[0].as_fixnum()?;
-        let h = items[1].as_fixnum()?;
-        let data = items[2].as_lisp_string()?;
-        if w <= 0 || h <= 0 {
-            return None;
+        // A named built-in bitmap (`gray`/`gray1`/`gray3`/...) or an XBM file.
+        if let Some(name) = spec.as_utf8_str() {
+            return stipple_from_name_or_file(name);
         }
-        Some(neomacs_display_protocol::StipplePattern {
-            width: w as u32,
-            height: h as u32,
-            bits: data.as_bytes().to_vec(),
-        })
+        None
     }
 
     /// Resolve a face from a Lisp Value (as found in overlay "face" property).
