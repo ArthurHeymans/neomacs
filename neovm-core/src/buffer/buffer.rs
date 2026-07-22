@@ -1246,6 +1246,12 @@ pub const DISPLAY_AFFECTING_GLOBAL_VARS: &[&str] = &[
     "line-prefix",
     "wrap-prefix",
     "default-text-properties",
+    // Buffer-local face remapping (`face-remap-add-relative`, e.g. per-buffer
+    // background). Changing it re-realizes every face for the buffer's
+    // windows; without invalidation here a retained window keeps its stale
+    // cached faces, so the remap never takes effect and split windows can
+    // disagree (issue #142).
+    "face-remapping-alist",
     "display-line-numbers",
     "display-line-numbers-width",
     "display-line-numbers-widen",
