@@ -376,6 +376,14 @@ pub struct Face {
     /// renderer must rasterize with exactly this font instead of re-running
     /// semantic selection from `font_family`/`font_weight`/attributes.
     pub default_resolved_font_id: Option<crate::font::ResolvedFontId>,
+
+    /// Stipple bitmap painted as the glyph background (GNU `face->stipple`).
+    /// When present the renderer tiles this XBM pattern over the glyph's
+    /// background rect, painting 1-bits in the face foreground over the solid
+    /// background (`highlight-indent-guides`/`indent-bars` rely on this).
+    /// Boxed to keep `Face` small, matching `background_gradient`.
+    #[serde(default)]
+    pub stipple: Option<Box<crate::frame_glyphs::StipplePattern>>,
 }
 
 impl Default for Face {
@@ -409,6 +417,7 @@ impl Default for Face {
             background_gradient: None,
             lisp_name: None,
             default_resolved_font_id: None,
+            stipple: None,
         }
     }
 }
@@ -630,6 +639,9 @@ impl FaceDataFFI {
             background_gradient: None,
             lisp_name: None,
             default_resolved_font_id: None,
+            // The legacy FFI face path does not carry a realized stipple; the
+            // typed layout-engine path (`render_face`) is the only producer.
+            stipple: None,
         }
     }
 }

@@ -1167,6 +1167,7 @@ impl FrameGlyphBuffer {
             background_gradient: None,
             lisp_name: None,
             default_resolved_font_id: None,
+            stipple: None,
         }
     }
 

@@ -315,6 +315,28 @@ fn face_from_plist() {
 }
 
 #[test]
+fn face_from_plist_stores_stipple_spec() {
+    crate::test_utils::init_test_tracing();
+    // `indent-bars` supplies an inline `(WIDTH HEIGHT DATA)` bitmap spec; it
+    // must be preserved on the face so the layout bridge can realize it.
+    let spec = Value::list(vec![
+        Value::fixnum(8),
+        Value::fixnum(2),
+        Value::string("AB"),
+    ]);
+    let face = Face::from_plist("test", &[Value::keyword("stipple"), spec]);
+    let stored = face.stipple.expect("stipple spec preserved on the face");
+    let items = crate::emacs_core::value::list_to_vec(&stored).expect("stipple is a list");
+    assert_eq!(items.len(), 3);
+    assert_eq!(items[0].as_fixnum(), Some(8));
+    assert_eq!(items[1].as_fixnum(), Some(2));
+
+    // Explicit nil resets it, matching GNU's `unspecified`/nil handling.
+    let nil_face = Face::from_plist("test", &[Value::keyword("stipple"), Value::NIL]);
+    assert!(nil_face.stipple.is_none());
+}
+
+#[test]
 fn face_from_plist_accepts_source_style_keywords() {
     crate::test_utils::init_test_tracing();
     let plist = vec![

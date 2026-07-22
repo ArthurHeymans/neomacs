@@ -49,6 +49,8 @@ pub(crate) struct DisplayRowFace {
     pub(crate) underline_position: i32,
     pub(crate) underline_thickness: i32,
     pub(crate) lisp_name: Option<String>,
+    /// Realized `:stipple` bitmap tiled behind the face's glyphs, if any.
+    pub(crate) stipple: Option<neomacs_display_protocol::StipplePattern>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -186,6 +188,7 @@ impl DisplayRowFace {
             metrics: DisplayRowFaceMetrics::from_resolved(face),
             underline_position: 1,
             underline_thickness: 1,
+            stipple: face.stipple.clone(),
         }
     }
 
@@ -266,6 +269,7 @@ impl DisplayRowFace {
                 neomacs_display_protocol::face::BasicFaceId::from_gnu_code(self.face_id.get())
                     .map(|basic| basic.name().to_string())
             }),
+            stipple: self.stipple.clone().map(Box::new),
         }
     }
 }

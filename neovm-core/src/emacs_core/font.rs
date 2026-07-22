@@ -5693,7 +5693,18 @@ fn lisp_value_to_face_attr(attr: LFaceAttr, value: Value) -> Option<crate::face:
             }
             Some(FaceAttrValue::Inherit(Some(value)))
         }
-        LFaceAttr::Stipple | LFaceAttr::Font | LFaceAttr::Fontset => None,
+        LFaceAttr::Stipple => {
+            // Store the raw stipple spec (a `(W H DATA)` cons, a bitmap file
+            // string, or a symbol). GNU keeps it in `LFACE_STIPPLE_INDEX` and
+            // realizes it to a pixmap at draw time; neomacs realizes it to a
+            // `StipplePattern` in the layout bridge (`realize_face`).
+            if value.is_nil() || value.is_symbol_named("nil") {
+                Some(FaceAttrValue::Stipple(None))
+            } else {
+                Some(FaceAttrValue::Stipple(Some(value)))
+            }
+        }
+        LFaceAttr::Font | LFaceAttr::Fontset => None,
     }
 }
 pub(crate) fn builtin_internal_get_lisp_face_attribute(

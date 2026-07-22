@@ -408,6 +408,26 @@ impl WgpuRenderer {
                             offset_x,
                             offset_y,
                         );
+                        // Stipple pattern behind the glyph. GNU sets
+                        // `s->stippled_p = face->stipple != 0` for text glyph
+                        // strings (xterm.c) and fills the background rect with
+                        // the tiled bitmap in the face foreground (0-bits leave
+                        // the solid bg painted above). Key it off the face so a
+                        // `:stipple` face (e.g. indent-bars) paints on ordinary
+                        // buffer-text glyphs.
+                        if let Some(pat) =
+                            frame.faces.get(&face_id).and_then(|f| f.stipple.as_deref())
+                        {
+                            let fg = frame.resolved_face(face_id).fg;
+                            self.add_stipple_paint(
+                                &mut bg_vertices,
+                                &fg,
+                                pat,
+                                paint,
+                                offset_x,
+                                offset_y,
+                            );
+                        }
                     }
                 }
                 _ => {}

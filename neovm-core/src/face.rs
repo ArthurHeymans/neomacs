@@ -680,6 +680,11 @@ pub enum FaceAttrValue {
     /// Raw `:inherit` face_ref (symbol/list/plist). `None` means nil /
     /// effectively unspecified. Matches GNU's `LFACE_INHERIT_INDEX` slot.
     Inherit(Option<Value>),
+    /// Raw `:stipple` spec (a `(WIDTH HEIGHT DATA)` cons, a bitmap file name
+    /// string, or a symbol). `None` means nil / unspecified. Matches GNU's
+    /// `LFACE_STIPPLE_INDEX` slot, which holds the spec until it is realized to
+    /// a pixmap at draw time.
+    Stipple(Option<Value>),
     Unspecified,
 }
 
@@ -894,7 +899,12 @@ impl Face {
                 FaceAttrValue::Unspecified => self.inherit = None,
                 _ => return false,
             },
-            LFaceAttr::Stipple | LFaceAttr::Font | LFaceAttr::Fontset => return false,
+            LFaceAttr::Stipple => match value {
+                FaceAttrValue::Stipple(v) => self.stipple = v,
+                FaceAttrValue::Unspecified => self.stipple = None,
+                _ => return false,
+            },
+            LFaceAttr::Font | LFaceAttr::Fontset => return false,
         }
         true
     }
@@ -1077,6 +1087,17 @@ impl Face {
                     if let Some(s) = val.as_symbol_name() {
                         face.width = FontWidth::from_symbol(s);
                     }
+                }
+                "stipple" => {
+                    // Store the raw stipple spec — a `(WIDTH HEIGHT DATA)`
+                    // cons, a bitmap file name, or a symbol. Realized to a
+                    // `StipplePattern` in the layout bridge, mirroring GNU's
+                    // `LFACE_STIPPLE_INDEX`.
+                    face.stipple = if val.is_nil() || val.is_symbol_named("nil") {
+                        None
+                    } else {
+                        Some(*val)
+                    };
                 }
                 _ => {}
             }

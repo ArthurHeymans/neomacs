@@ -34,6 +34,34 @@ fn base_face() -> crate::neovm_bridge::ResolvedFace {
     resolver.default_face().clone()
 }
 
+#[test]
+fn realize_face_realizes_inline_stipple_spec() {
+    // `(8 2 "AB")` — a GNU-style `(WIDTH HEIGHT DATA)` inline bitmap, exactly
+    // what `indent-bars` emits. `realize_face` must turn it into the XBM
+    // `StipplePattern` the renderer tiles, with the bytes preserved verbatim.
+    // A live `Context` sets up the thread-local value heap the `Value`s need.
+    let _ctx = Context::new();
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut face = neovm_core::face::Face::new("stip");
+    face.stipple = Some(Value::list(vec![
+        Value::fixnum(8),
+        Value::fixnum(2),
+        Value::string("AB"),
+    ]));
+    let pat = resolver
+        .realize_face(&face)
+        .stipple
+        .expect("stipple realized to a pattern");
+    assert_eq!(pat.width, 8);
+    assert_eq!(pat.height, 2);
+    assert_eq!(pat.bits, b"AB".to_vec());
+
+    // A face without `:stipple` realizes to no pattern.
+    let plain = neovm_core::face::Face::new("plain");
+    assert!(resolver.realize_face(&plain).stipple.is_none());
+}
+
 fn text_row_source_measure_state<'a>(
     builder: &'a mut crate::display_output_builder::DisplayOutputBuilder,
     evaluator: &'a mut Context,

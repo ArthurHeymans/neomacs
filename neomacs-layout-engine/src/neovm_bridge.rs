@@ -2491,6 +2491,10 @@ pub struct ResolvedFace {
     /// named face (GNU keeps the name reachable via `struct face::lface`).
     /// `None` for anonymous attribute-plist faces.
     pub lisp_name: Option<String>,
+    /// Realized `:stipple` bitmap, if the face specified one. GNU realizes the
+    /// `LFACE_STIPPLE_INDEX` spec to a pixmap id in `face->stipple`; neomacs
+    /// realizes it directly to the XBM `StipplePattern` the renderer tiles.
+    pub stipple: Option<neomacs_display_protocol::StipplePattern>,
 }
 
 impl Default for ResolvedFace {
@@ -2521,6 +2525,7 @@ impl Default for ResolvedFace {
             font_line_height: 0.0,
             face_id: 0, // DEFAULT_FACE_ID
             lisp_name: None,
+            stipple: None,
         }
     }
 }
@@ -2832,6 +2837,14 @@ impl FaceResolver {
         {
             rf.fg = color_to_pixel(dfg);
             rf.use_default_foreground = false;
+        }
+
+        // Stipple: a face that specifies `:stipple` overrides the inherited
+        // one; leaving it unspecified keeps the base face's stipple (GNU merge
+        // semantics). This is the path buffer-text (text-property / overlay /
+        // font-lock) faces take, e.g. `indent-bars`.
+        if let Some(pat) = self.realize_stipple(face) {
+            rf.stipple = Some(pat);
         }
 
         rf
@@ -3534,7 +3547,37 @@ impl FaceResolver {
             }
         }
 
+        // Stipple: realize the `:stipple` spec to the XBM pattern the renderer
+        // tiles behind glyphs. GNU realizes `LFACE_STIPPLE_INDEX` to a pixmap
+        // id in `face->stipple`; neomacs keeps the small bitmap on the face.
+        if let Some(pat) = self.realize_stipple(face) {
+            rf.stipple = Some(pat);
+        }
+
         rf
+    }
+
+    /// Realize a face's inline `:stipple (WIDTH HEIGHT DATA)` bitmap spec into
+    /// the XBM [`StipplePattern`](neomacs_display_protocol::StipplePattern) the
+    /// renderer tiles. Returns `None` when the face specifies no stipple (or a
+    /// non-inline file/symbol form, which is not yet loaded); callers keep the
+    /// base face's stipple in that case, matching GNU merge semantics.
+    fn realize_stipple(&self, face: &NeoFace) -> Option<neomacs_display_protocol::StipplePattern> {
+        let items = list_to_vec(face.stipple.as_ref()?)?;
+        if items.len() != 3 {
+            return None;
+        }
+        let w = items[0].as_fixnum()?;
+        let h = items[1].as_fixnum()?;
+        let data = items[2].as_lisp_string()?;
+        if w <= 0 || h <= 0 {
+            return None;
+        }
+        Some(neomacs_display_protocol::StipplePattern {
+            width: w as u32,
+            height: h as u32,
+            bits: data.as_bytes().to_vec(),
+        })
     }
 
     /// Resolve a face from a Lisp Value (as found in overlay "face" property).

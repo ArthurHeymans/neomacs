@@ -293,6 +293,20 @@ impl WgpuRenderer {
                             0.0,
                             paint_offset_y,
                         );
+                        // Stipple: tile the face's `:stipple` bitmap over the
+                        // glyph background, 1-bits in the face foreground (GNU
+                        // `stippled_p`). This is how `indent-bars` /
+                        // `highlight-indent-guides` draw their vertical bars.
+                        if let Some(pat) = face.and_then(|f| f.stipple.as_deref()) {
+                            self.add_stipple_paint(
+                                &mut non_overlay_rect_vertices,
+                                &rf.fg,
+                                pat,
+                                paint,
+                                0.0,
+                                paint_offset_y,
+                            );
+                        }
                     }
                 }
             }
