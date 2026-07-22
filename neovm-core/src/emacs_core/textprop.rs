@@ -186,24 +186,41 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     );
 }
 
+/// Interned id of `char-property-alias-alist`, resolved once. The
+/// get-char-property miss path consults this var on every miss during
+/// redisplay/fontification; caching the id avoids re-hashing the 25-char
+/// name on each call (GNU compares against the `Qchar_property_alias_alist`
+/// symbol by identity, never by name).
+fn char_property_alias_alist_sym_id() -> SymId {
+    static ID: std::sync::OnceLock<SymId> = std::sync::OnceLock::new();
+    *ID.get_or_init(|| super::intern::intern("char-property-alias-alist"))
+}
+
+/// Interned id of `default-text-properties`, resolved once. See
+/// [`char_property_alias_alist_sym_id`].
+fn default_text_properties_sym_id() -> SymId {
+    static ID: std::sync::OnceLock<SymId> = std::sync::OnceLock::new();
+    *ID.get_or_init(|| super::intern::intern("default-text-properties"))
+}
+
 fn current_textprop_variable_value(
     obarray: &Obarray,
     buffers: &BufferManager,
-    name: &str,
+    sym_id: SymId,
 ) -> Option<Value> {
     // Text-property control vars (char-property-alias-alist, default-text-
     // properties, inhibit-*, ...) are almost always plain globals. A global
     // (non-Localized) symbol can never be in a buffer's local_var_alist, so
     // skip the per-buffer scan for it -- this runs during redisplay and was
-    // ~3% of the layout profile. See `Obarray::is_localized`.
-    let sym_id = crate::emacs_core::intern::intern(name);
+    // ~3% of the layout profile. See `Obarray::is_localized`. The caller
+    // passes a cached SymId so the hot miss path never re-interns the name.
     let localized = obarray.is_localized(sym_id);
     if let Some(buf) = buffers.current_buffer()
         && let Some(binding) = buf.get_buffer_local_binding_by_sym_id_gated(sym_id, localized)
     {
         return binding.as_value();
     }
-    obarray.symbol_value(name).copied()
+    obarray.symbol_value_id_copied(sym_id)
 }
 
 fn plist_get_value(plist: Value, prop: Value) -> Option<Value> {
@@ -285,7 +302,7 @@ where
     }
 
     if let Some(aliases) =
-        current_textprop_variable_value(obarray, buffers, "char-property-alias-alist")
+        current_textprop_variable_value(obarray, buffers, char_property_alias_alist_sym_id())
             .and_then(|value| assq_rest(value, prop))
     {
         let mut cursor = aliases;
@@ -303,7 +320,7 @@ where
 
     if textprop
         && let Some(defaults) =
-            current_textprop_variable_value(obarray, buffers, "default-text-properties")
+            current_textprop_variable_value(obarray, buffers, default_text_properties_sym_id())
         && defaults.is_cons()
         && let Some(value) = plist_get_value(defaults, prop)
     {
