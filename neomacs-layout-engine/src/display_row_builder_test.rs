@@ -772,6 +772,7 @@ fn display_row_builder_emits_space_width_as_primary_face_stretch() {
         raise: Some(0.15),
         height: None,
         space_width: Some(0.4),
+        break_after_row: false,
     }));
 
     let row = builder.finish();

@@ -2377,6 +2377,7 @@ fn buffer_text_source_consumption_state_keeps_display_item_layout() {
         raise: Some(0.25),
         height: Some(1.5),
         space_width: None,
+        break_after_row: false,
     });
     let mut position = DisplaySourceTextPosition::new(0, 0);
 

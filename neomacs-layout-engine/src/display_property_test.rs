@@ -103,6 +103,7 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
             raise: Some(0.25),
             height: None,
             space_width: None,
+            break_after_row: false,
         }
     );
     assert_eq!(
@@ -117,6 +118,7 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
             raise: Some(0.2),
             height: Some(1.4),
             space_width: None,
+            break_after_row: false,
         }
     );
 }

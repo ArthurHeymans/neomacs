@@ -167,7 +167,13 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
     where
         'surface: 'request,
     {
-        BufferSourceItemRenderRequest::from_loop_context(
+        // A `SourceMappedText` standing in for a display-table entry that ends in
+        // a newline glyph (whitespace-mode `[$ \n]`) renders its leading glyphs
+        // and then ends the row — GNU treats the trailing `\n` element as its own
+        // end-of-line display element. The buffer newline is already consumed by
+        // this item's span, so break WITHOUT consuming another char.
+        let break_after_row = source_item.item().layout.break_after_row;
+        let keep_going = BufferSourceItemRenderRequest::from_loop_context(
             layout_resolution_context,
             self.loop_context,
             self.text,
@@ -176,6 +182,10 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             self.active_face_state,
             self.params,
         )
-        .render_and_apply(source_item, source_walk, buffer, self.state.reborrow())
+        .render_and_apply(source_item, source_walk, buffer, self.state.reborrow());
+        if keep_going && break_after_row {
+            return self.emit_display_string_row_break(source_walk, buffer);
+        }
+        keep_going
     }
 }

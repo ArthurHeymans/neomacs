@@ -481,6 +481,29 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         // through the ordinary tab path), keeping the row non-blank.
         if let Some(glyphs) = self.display_table_glyphs(ch) {
             self.char_pos = start.add_len(CharLen::new(1));
+            // GNU iterates a display-table entry element-by-element and decides
+            // end-of-line on the DISPLAYED char: `ITERATOR_AT_END_OF_LINE_P`
+            // (dispextern.h) tests `it->c == '\n'`, and `next_element_from_
+            // display_vector` (xdisp.c) sets `it->c` per glyph. So a newline whose
+            // entry ends in a `\n` glyph (whitespace-mode's `[$ \n]`) renders its
+            // leading glyphs and THEN ends the row — the trailing `\n` glyph is
+            // its own end-of-line element. Emit the leading glyphs and mark the
+            // item to break the row after; the buffer newline is consumed here, so
+            // the next row resumes on the following char. An entry WITHOUT a
+            // trailing `\n` (e.g. `[$]`) keeps the plain no-break replacement,
+            // matching GNU (the newline's break is fully replaced -> lines join).
+            if ch == '\n' && glyphs.ends_with('\n') {
+                let prefix = glyphs[..glyphs.len() - '\n'.len_utf8()].to_string();
+                return Some(
+                    DisplayItem::new(
+                        self.span(start, self.char_pos),
+                        face,
+                        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(prefix)),
+                    )
+                    .with_layout(layout)
+                    .with_break_after_row(),
+                );
+            }
             return Some(
                 DisplayItem::new(
                     self.span(start, self.char_pos),

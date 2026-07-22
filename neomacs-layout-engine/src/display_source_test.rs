@@ -492,6 +492,7 @@ fn display_property_source_action_builds_cursor_actions() {
         raise: Some(0.25),
         height: None,
         space_width: None,
+        break_after_row: false,
     };
 
     let emit = DisplayPropertySourceAction::Emit {

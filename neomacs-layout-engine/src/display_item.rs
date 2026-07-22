@@ -315,6 +315,7 @@ impl DisplayItem {
                 raise: None,
                 height: None,
                 space_width: None,
+                break_after_row: false,
             },
             pointer_appearance: None,
         }
@@ -322,6 +323,13 @@ impl DisplayItem {
 
     pub(crate) const fn with_layout(mut self, layout: DisplayItemLayout) -> Self {
         self.layout = layout;
+        self
+    }
+
+    /// Mark this item so the current display row ends immediately after it.
+    /// See [`DisplayItemLayout::break_after_row`].
+    pub(crate) const fn with_break_after_row(mut self) -> Self {
+        self.layout.break_after_row = true;
         self
     }
 
@@ -344,6 +352,14 @@ pub(crate) struct DisplayItemLayout {
     pub(crate) raise: Option<f32>,
     pub(crate) height: Option<f32>,
     pub(crate) space_width: Option<f32>,
+    /// End the current display row immediately after this item, without
+    /// consuming another buffer character. Set for a `SourceMappedText` that
+    /// stands in for a display-table entry whose glyph vector ends in a newline
+    /// (e.g. whitespace-mode's `[$ \n]` on `?\n`): GNU treats the trailing `\n`
+    /// glyph as its own end-of-line display element (`ITERATOR_AT_END_OF_LINE_P`
+    /// tests `it->c == '\n'` for display-vector elements too, xdisp.c), so the
+    /// leading glyphs render and then the row breaks.
+    pub(crate) break_after_row: bool,
 }
 
 impl DisplayItemLayout {

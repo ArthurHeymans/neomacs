@@ -230,6 +230,7 @@ fn classify_single_display_spec(value: Value) -> DisplayPropertyClassification {
             raise: parse_display_raise_factor(value),
             height: parse_display_height_factor(value),
             space_width: parse_display_space_width_factor(value),
+            break_after_row: false,
         }
     };
 
