@@ -72,4 +72,14 @@ impl FrameManager {
             .map(alist_from_parameters)
             .unwrap_or(Value::NIL)
     }
+
+    /// Return WINDOW-ID's `(KEY . VALUE)` window-parameter pairs as an owned
+    /// vec (empty when the window is unknown). The layout engine reads these to
+    /// evaluate GNU `(:window PARAMETER VALUE)` `:filtered` face predicates,
+    /// which it cannot express via the Lisp-alist accessor without re-parsing.
+    pub fn window_parameters_pairs(&self, window_id: WindowId) -> Vec<(Value, Value)> {
+        self.live_window_parameters(window_id)
+            .map(<[(Value, Value)]>::to_vec)
+            .unwrap_or_default()
+    }
 }

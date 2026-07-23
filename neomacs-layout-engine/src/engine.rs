@@ -1114,6 +1114,12 @@ impl LayoutEngine {
             );
         };
 
+        // Frame chrome (menu / tool / tab bar) is not a window, so no
+        // `(:window …)` `:filtered` predicate may match here. Clear the
+        // per-window parameters left over from the window loop above (GNU
+        // evaluates chrome faces with no window ⇒ such filters fail).
+        face_resolver.set_current_window_parameters(Vec::new());
+
         // Collect semantic GUI chrome before publishing the frame. FrameChrome
         // is the single owner of band ordering and absolute placement; each
         // content builder receives only band-local dimensions.
@@ -1690,6 +1696,17 @@ impl LayoutEngine {
             }
         };
         let buffer = &layout_buffer;
+
+        // Point the face resolver at this window's parameters so a
+        // `(:window PARAMETER VALUE)` `:filtered` face remap — e.g. indent-bars'
+        // per-window stipple-rotation remap keyed on the `indent-bars-whr`
+        // window parameter — can match. GNU threads the window into
+        // `evaluate_face_filter`; the frame-shared resolver reads it back via an
+        // interior-mutable slot set at each window boundary. Cleared for frame
+        // chrome below so a `:window` filter can never match there.
+        face_resolver.set_current_window_parameters(
+            evaluator.frame_manager().window_parameters_pairs(window_id),
+        );
 
         // Capture buffer name as owned String for use in mode-line fallback.
         // This avoids holding a borrow on `evaluator` through eval calls.

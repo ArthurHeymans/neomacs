@@ -2037,6 +2037,44 @@ fn test_face_resolver_with_text_property() {
 }
 
 #[test]
+fn face_resolver_window_filter_matches_window_parameter() {
+    // GNU `(:window PARAMETER VALUE)` :filtered face filter (src/xfaces.c
+    // `evaluate_face_filter`): applies the wrapped spec only when the current
+    // window has window-parameter PARAMETER `eq` VALUE. This is how indent-bars
+    // applies its per-window stipple-rotation remap keyed on `indent-bars-whr`.
+    let _evaluator = neovm_core::emacs_core::Context::new();
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, Some("x".to_string()));
+    let base = resolver.default_face().clone();
+
+    let whr = Value::symbol("indent-bars-whr");
+    // (:filtered (:window indent-bars-whr 123) (:foreground "#ff0000"))
+    let filtered = Value::list(vec![
+        Value::symbol(":filtered"),
+        Value::list(vec![Value::symbol(":window"), whr, Value::fixnum(123)]),
+        Value::list(vec![
+            Value::keyword(":foreground"),
+            Value::string("#ff0000"),
+        ]),
+    ]);
+
+    // No current window parameters -> filter fails -> spec dropped.
+    resolver.set_current_window_parameters(Vec::new());
+    assert!(resolver.resolve_face_value_over(&base, &filtered).is_none());
+
+    // The parameter present but a DIFFERENT value -> filter fails.
+    resolver.set_current_window_parameters(vec![(whr, Value::fixnum(999))]);
+    assert!(resolver.resolve_face_value_over(&base, &filtered).is_none());
+
+    // The exact (parameter . value) present -> filter matches -> fg applied.
+    resolver.set_current_window_parameters(vec![(whr, Value::fixnum(123))]);
+    let resolved = resolver
+        .resolve_face_value_over(&base, &filtered)
+        .expect("window filter should match and apply the wrapped spec");
+    assert_eq!(resolved.fg, 0x00FF0000);
+}
+
+#[test]
 fn face_resolver_underline_styles_use_gnu_codes() {
     let _evaluator = neovm_core::emacs_core::Context::new();
     let mut table = FaceTable::new();

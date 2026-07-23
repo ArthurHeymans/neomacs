@@ -2610,6 +2610,22 @@ impl ResolvedFace {
 // FaceResolver
 // ---------------------------------------------------------------------------
 
+/// Outcome of testing whether a face-spec list is a GNU
+/// `(:filtered FILTER SPEC)` form and, if so, whether FILTER matches.
+enum FilteredFaceSpec {
+    /// Not a `:filtered` form at all — the caller handles `items` as an inline
+    /// face plist or a list of face specs.
+    NotFiltered,
+    /// A `:filtered` form whose FILTER did NOT match (or is malformed). The
+    /// wrapped SPEC must be DROPPED — contribute no attributes — never
+    /// re-interpreted as an inline plist. GNU `evaluate_face_filter` returns
+    /// false here and the spec is skipped.
+    Rejected,
+    /// A `:filtered` form whose FILTER matched — the caller recurses into the
+    /// unwrapped SPEC.
+    Matched(Vec<Value>),
+}
+
 /// Resolves face attributes at buffer positions using the neovm-core
 /// `FaceTable`, text properties, and overlays.
 ///
@@ -2622,6 +2638,15 @@ pub struct FaceResolver {
     /// `Some("wayland")` for Wayland, etc.  Used to evaluate
     /// `:filtered` face spec predicates.
     window_system: Option<String>,
+    /// The window-parameters `(PARAM . VALUE)` alist of the window whose faces
+    /// are currently being resolved. Set per-window (see
+    /// `set_current_window_parameters`) so the GNU `(:window PARAM VALUE)`
+    /// `:filtered` face predicate can match — the `FaceResolver` is created
+    /// once per frame and shared `&` across windows, so this is interior
+    /// mutability updated at each window boundary rather than a constructor arg.
+    /// Empty for frame chrome / TTY / any non-window context, matching GNU's
+    /// "no window ⇒ filter fails".
+    current_window_parameters: std::cell::RefCell<Vec<(Value, Value)>>,
     font_sizing: FontSizing,
 }
 
@@ -2724,8 +2749,19 @@ impl FaceResolver {
             face_table: face_table.clone(),
             default_face: df,
             window_system,
+            current_window_parameters: std::cell::RefCell::new(Vec::new()),
             font_sizing,
         }
+    }
+
+    /// Point the resolver at the window whose faces are about to be resolved,
+    /// so a `(:window PARAM VALUE)` `:filtered` predicate can consult that
+    /// window's parameters. Call at each window boundary (and with an empty
+    /// alist for frame chrome / non-window contexts). GNU threads the window
+    /// `w` into `evaluate_face_filter`; the resolver being frame-shared and
+    /// used behind `&`, this is the equivalent interior-mutable hook.
+    pub fn set_current_window_parameters(&self, params: Vec<(Value, Value)>) {
+        self.current_window_parameters.replace(params);
     }
 
     /// Return a reference to the resolved default face.
@@ -2961,8 +2997,13 @@ impl FaceResolver {
             return NeoFace::default();
         }
 
-        if let Some(filtered_spec) = self.eval_filtered_face_spec(&items) {
-            return self.resolve_face_ref_overlay_spec(Value::list(filtered_spec), depth + 1);
+        match self.eval_filtered_face_spec(&items) {
+            FilteredFaceSpec::Matched(filtered_spec) => {
+                return self.resolve_face_ref_overlay_spec(Value::list(filtered_spec), depth + 1);
+            }
+            // Filter didn't match → the wrapped spec contributes nothing.
+            FilteredFaceSpec::Rejected => return NeoFace::default(),
+            FilteredFaceSpec::NotFiltered => {}
         }
         if Self::face_spec_is_plist(&items) {
             let face = NeoFace::from_plist("--inline--", &items);
@@ -2990,66 +3031,92 @@ impl FaceResolver {
         }
     }
 
-    /// If `items` is a `(:filtered FILTER . FACE-SPEC)` form, evaluate
-    /// FILTER against the current frame context.  Returns `Some(face_spec)`
-    /// when the filter matches, `None` when it doesn't, or `None` when
-    /// `items` is not a `:filtered` form at all (caller should treat it as
-    /// an inline face plist or face list).
+    /// Classify `items` as a GNU `(:filtered FILTER SPEC…)` form and evaluate
+    /// FILTER against the current context. Distinguishing the three outcomes
+    /// matters: a REJECTED filter must drop its wrapped SPEC entirely — the
+    /// earlier `Option` return conflated "rejected" with "not a filter", so the
+    /// caller fell through and mis-applied `(:filtered …)` as an inline plist,
+    /// ignoring the filter.
     ///
     /// Supported filter predicates:
+    ///   `:window PARAMETER VALUE` — GNU's only real face filter
+    ///                          (`evaluate_face_filter`, src/xfaces.c): matches
+    ///                          when the current window's window-parameter
+    ///                          PARAMETER is `eq` to VALUE. This is what
+    ///                          indent-bars' per-window stipple-rotation remap
+    ///                          uses (`(:window indent-bars-whr WHR)`).
     ///   `:window-system SYM`  — matches when `self.window_system == SYM`
-    ///                          (nil for TTY, "x" for X11, etc.)
-    fn eval_filtered_face_spec(&self, items: &[Value]) -> Option<Vec<Value>> {
-        let first = items.first()?;
-        let name = first.as_symbol_name()?;
+    ///                          (nil for TTY, "x" for X11, etc.). Non-GNU
+    ///                          neomacs extension, retained.
+    fn eval_filtered_face_spec(&self, items: &[Value]) -> FilteredFaceSpec {
+        let Some(name) = items.first().and_then(|first| first.as_symbol_name()) else {
+            return FilteredFaceSpec::NotFiltered;
+        };
         if name != "filtered" && name != ":filtered" {
-            return None; // not a :filtered form — caller handles
+            return FilteredFaceSpec::NotFiltered; // not a :filtered form
         }
+        // From here it IS a `:filtered` form: a malformed or unmatched filter
+        // DROPS the spec (GNU returns false); it is never re-read as a plist.
         if items.len() < 3 {
-            return None; // malformed: need (:filtered FILTER . SPEC)
+            return FilteredFaceSpec::Rejected; // malformed: need (:filtered FILTER SPEC)
         }
 
         let filter = &items[1];
         let spec = &items[2..];
 
-        // Evaluate filter predicates.  All predicates in the filter
-        // plist must pass; this mirrors GNU's `face_spec_match_p` in
-        // `src/xfaces.c`.
-        match filter.kind() {
-            ValueKind::Cons => {
-                let filter_items = list_to_vec(filter).unwrap_or_default();
-                let mut i = 0;
-                while i < filter_items.len() {
-                    let pred = filter_items.get(i)?;
-                    let pred_name = pred.as_symbol_name()?;
-                    match pred_name {
-                        ":window-system" | "window-system" => {
-                            i += 1;
-                            let val = filter_items.get(i)?;
-                            let ws_name = val.as_symbol_name().unwrap_or("");
-                            let current = self.window_system.as_deref().unwrap_or("nil");
-                            if current != ws_name && ws_name != "nil" {
-                                return None; // filter rejected
-                            }
-                            if ws_name == "nil" && self.window_system.is_some() {
-                                return None; // TTY filter, but we're on GUI
-                            }
-                        }
-                        _ => {
-                            // Unknown predicate — skip conservatively
-                            // (matches GNU: unknown predicates fail)
-                            return None;
-                        }
+        let ValueKind::Cons = filter.kind() else {
+            return FilteredFaceSpec::Rejected; // non-list filter — malformed
+        };
+        // Evaluate filter predicates. All predicates must pass; mirrors GNU's
+        // `face_spec_match_p` (`src/xfaces.c`).
+        let filter_items = list_to_vec(filter).unwrap_or_default();
+        let mut i = 0;
+        while i < filter_items.len() {
+            let Some(pred_name) = filter_items.get(i).and_then(|pred| pred.as_symbol_name()) else {
+                return FilteredFaceSpec::Rejected;
+            };
+            match pred_name {
+                ":window" | "window" => {
+                    // GNU `evaluate_face_filter` (src/xfaces.c): the filter is
+                    // `(:window PARAMETER VALUE)` and matches only when the
+                    // current window has window-parameter PARAMETER `eq` VALUE.
+                    // No current window (frame chrome / TTY) ⇒ no match.
+                    let (Some(parameter), Some(value)) =
+                        (filter_items.get(i + 1), filter_items.get(i + 2))
+                    else {
+                        return FilteredFaceSpec::Rejected; // malformed (:window …)
+                    };
+                    let params = self.current_window_parameters.borrow();
+                    let matches = params.iter().any(|(param, val)| {
+                        param.bits() == parameter.bits() && val.bits() == value.bits()
+                    });
+                    if !matches {
+                        return FilteredFaceSpec::Rejected;
                     }
-                    i += 1;
+                    i += 2; // consumed PARAMETER + VALUE (pred skipped below)
                 }
-                Some(spec.to_vec())
+                ":window-system" | "window-system" => {
+                    i += 1;
+                    let ws_name = filter_items
+                        .get(i)
+                        .and_then(|val| val.as_symbol_name())
+                        .unwrap_or("");
+                    let current = self.window_system.as_deref().unwrap_or("nil");
+                    if current != ws_name && ws_name != "nil" {
+                        return FilteredFaceSpec::Rejected;
+                    }
+                    if ws_name == "nil" && self.window_system.is_some() {
+                        return FilteredFaceSpec::Rejected; // TTY filter, but we're on GUI
+                    }
+                }
+                _ => {
+                    // Unknown predicate — fail (matches GNU).
+                    return FilteredFaceSpec::Rejected;
+                }
             }
-            _ => {
-                // Non-list filter — malformed, skip
-                None
-            }
+            i += 1;
         }
+        FilteredFaceSpec::Matched(spec.to_vec())
     }
 
     fn buffer_face_remapping_specs<B: LayoutBufferView>(
@@ -3112,17 +3179,19 @@ impl FaceResolver {
                 if items.is_empty() {
                     return None;
                 }
-                if let Some(filtered_spec) = self.eval_filtered_face_spec(&items) {
-                    if filtered_spec.is_empty() {
-                        return None;
+                match self.eval_filtered_face_spec(&items) {
+                    FilteredFaceSpec::Matched(filtered_spec) => {
+                        // Recurse into the filtered spec (unwrap the :filtered wrapper)
+                        return self.resolve_buffer_face_value_over_inner(
+                            buffer,
+                            base,
+                            &Value::list(filtered_spec),
+                            remap_stack,
+                        );
                     }
-                    // Recurse into the filtered spec (unwrap the :filtered wrapper)
-                    return self.resolve_buffer_face_value_over_inner(
-                        buffer,
-                        base,
-                        &Value::list(filtered_spec),
-                        remap_stack,
-                    );
+                    // Filter didn't match → the remap contributes nothing.
+                    FilteredFaceSpec::Rejected => return None,
+                    FilteredFaceSpec::NotFiltered => {}
                 }
                 if Self::face_spec_is_plist(&items) {
                     let inline = NeoFace::from_plist("--inline--", &items);
@@ -3188,11 +3257,12 @@ impl FaceResolver {
                 if items.is_empty() {
                     return None;
                 }
-                if let Some(filtered_spec) = self.eval_filtered_face_spec(&items) {
-                    if filtered_spec.is_empty() {
-                        return None;
+                match self.eval_filtered_face_spec(&items) {
+                    FilteredFaceSpec::Matched(filtered_spec) => {
+                        return self.resolve_face_value_over(base, &Value::list(filtered_spec));
                     }
-                    return self.resolve_face_value_over(base, &Value::list(filtered_spec));
+                    FilteredFaceSpec::Rejected => return None,
+                    FilteredFaceSpec::NotFiltered => {}
                 }
                 if Self::face_spec_is_plist(&items) {
                     let inline = NeoFace::from_plist("--inline--", &items);
