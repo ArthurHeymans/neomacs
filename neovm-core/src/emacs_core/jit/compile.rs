@@ -9102,10 +9102,34 @@ pub fn lower_leaf_full(
     offset_map: Option<&[GnuByteOffsetMapEntry]>,
     obarray: Option<&Obarray>,
 ) -> Result<CompiledLeaf, CompileError> {
+    lower_leaf_full_osr(ops, constants, arity, offset_map, obarray, None)
+}
+
+/// [`lower_leaf_full`] plus an optional OSR entry pc (on-stack replacement,
+/// JIT-only): when `Some(osr_pc)`, the compiled function's entry seeds the live
+/// operand stack (from the `args` pointer) and jumps to the loop-header block at
+/// `osr_pc`, letting the interpreter transfer a hot loop into native code
+/// mid-execution. Cross-block known-fixnum elision is DISABLED for OSR (the
+/// analysis assumes the normal block-0 entry as the sole root; the OSR entry adds
+/// a predecessor it never saw, so every fixnum op guards — a non-fixnum simply
+/// deopts, always sound).
+pub fn lower_leaf_full_osr(
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+    offset_map: Option<&[GnuByteOffsetMapEntry]>,
+    obarray: Option<&Obarray>,
+    osr_pc: Option<usize>,
+) -> Result<CompiledLeaf, CompileError> {
     let cfg = analyze_cfg(ops, constants, offset_map, arity)?;
     // Cross-block redundant-guard elimination: per-block-entry known-fixnum slots
     // (empty if the function has an op the analysis doesn't model -> no elision).
-    let known_fixnum_slots = compute_known_fixnum_slots(ops, constants, &cfg);
+    // Disabled under OSR (see the doc): the OSR entry is an unanalyzed predecessor.
+    let known_fixnum_slots = if osr_pc.is_some() {
+        HashMap::new()
+    } else {
+        compute_known_fixnum_slots(ops, constants, &cfg)
+    };
     let n = ops.len();
     // Direct-call speculation sites + their armed-epoch slots. The Box's heap
     // storage is address-stable: slot pointers are baked into the generated
@@ -9291,6 +9315,7 @@ pub fn lower_leaf_full(
         /*aot=*/ false,
         "__neovm_jit_leaf",
         Linkage::Local,
+        osr_pc,
     )?;
 
     // --- JIT-only module epilogue (the wrapper). ----------------------------
@@ -9443,6 +9468,7 @@ pub(crate) fn build_baseline_leaf_object<M: Module>(
         /*aot=*/ true,
         entry_name,
         Linkage::Export,
+        /*osr_pc=*/ None, // OSR is JIT-only
     )?;
     Ok(BaselineAotMeta {
         arity,
@@ -9510,6 +9536,13 @@ fn build_leaf_fn<M: Module>(
     // AOT: the content-hash entry name + `Export` so the loader can `dlsym` it.
     entry_name: &str,
     entry_linkage: Linkage,
+    // OSR (on-stack replacement, JIT-only): when `Some(osr_pc)`, the function
+    // entry does NOT seed args + jump to block 0; instead it seeds the operand
+    // stack (`entry_depth[osr_pc]` tagged Values read from the `args` pointer)
+    // and jumps STRAIGHT to the loop-header block at `osr_pc`, so the interpreter
+    // can transfer a hot loop into native code mid-execution. Blocks unreachable
+    // from `osr_pc` (the pre-loop prologue) are pruned so no dangling SSA survives.
+    osr_pc: Option<usize>,
 ) -> Result<cranelift_module::FuncId, CompileError> {
     let call_conv = module.target_config().default_call_conv;
     let ptr_ty = module.target_config().pointer_type();
@@ -9709,13 +9742,21 @@ fn build_leaf_fn<M: Module>(
             let one = fb.ins().iconst(types::I64, 1);
             fb.ins().stack_store(one, slot, 0);
         }
-        for i in 0..arity {
+        // Entry seeding + jump target. Normal: seed the `arity` args into the
+        // bottom slots and jump to bytecode block 0. OSR: the `args` pointer holds
+        // the live OPERAND STACK snapshot (`entry_depth[osr_pc]` tagged Values), so
+        // seed those slots and jump STRAIGHT to the loop-header block at `osr_pc`.
+        let (seed_count, jump_target) = match osr_pc {
+            Some(p) => (cfg.entry_depth[&p], block_for[&p]),
+            None => (arity, block_for[&0]),
+        };
+        for i in 0..seed_count {
             let v = fb
                 .ins()
                 .load(types::I64, MemFlags::trusted(), args_ptr, (i * 8) as i32);
             fb.def_var(vars[i], v);
         }
-        fb.ins().jump(block_for[&0], &[]);
+        fb.ins().jump(jump_target, &[]);
 
         let next_leader = |idx: usize| cfg.leaders.iter().copied().find(|&l| l > idx).unwrap_or(n);
 
@@ -11848,6 +11889,56 @@ mod tests {
             "(logand '(1) 5) must deopt, not compute inline"
         );
         force_inline_arith_for_test(false);
+    }
+
+    /// OSR compile path: a counting loop `(while (< i 5) (setq i (1+ i)))`
+    /// compiled with an ALTERNATE ENTRY at the loop-header pc. Called with a
+    /// synthetic operand stack (the live `i`), it must resume the loop mid-flight
+    /// and return the same result as running from the start — for i seeded at 0
+    /// (full loop), 3 (partial), 5 (exit immediately), and 10 (past the bound).
+    #[test]
+    fn osr_entry_resumes_loop_from_seeded_stack() {
+        use crate::emacs_core::eval::Context;
+        let mut ev = Context::new();
+        let ctx = &mut ev as *mut Context as *mut u8;
+        // pcs:  0 Constant0(=0)   -- i = 0  (prologue, UNREACHABLE under OSR)
+        //       1 StackRef0       -- loop header / OSR entry, entry_depth = 1
+        //       2 Constant1(=5)
+        //       3 Lss             -- i < 5
+        //       4 GotoIfNil(9)
+        //       5 StackRef0
+        //       6 Add1            -- i + 1
+        //       7 StackSet1       -- i = i+1
+        //       8 Goto(1)         -- backward branch (loop)
+        //       9 Return          -- return i
+        let ops = vec![
+            Op::Constant(0),
+            Op::StackRef(0),
+            Op::Constant(1),
+            Op::Lss,
+            Op::GotoIfNil(9),
+            Op::StackRef(0),
+            Op::Add1,
+            Op::StackSet(1),
+            Op::Goto(1),
+            Op::Return,
+        ];
+        let constants = vec![Value::make_int(0), Value::make_int(5)];
+        const OSR_PC: usize = 1;
+        let leaf = lower_leaf_full_osr(&ops, &constants, 0, None, Some(&ev.obarray), Some(OSR_PC))
+            .expect("OSR variant compiles (alternate loop-header entry)");
+        // Seed the operand stack = [i]; the OSR entry resumes the loop from `i`.
+        for (seed, want) in [(0i64, 5i64), (3, 5), (5, 5), (10, 10)] {
+            let args = [Value::make_int(seed).bits() as i64];
+            match leaf.call_premarshaled(ctx, args.as_ptr()) {
+                NativeRun::Ok(bits) => assert_eq!(
+                    Value::from_bits(bits),
+                    Value::make_int(want),
+                    "OSR resume from i={seed} must return {want}"
+                ),
+                other => panic!("OSR run from i={seed}: expected Ok({want}), got {other:?}"),
+            }
+        }
     }
 
     #[test]
