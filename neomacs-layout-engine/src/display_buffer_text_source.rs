@@ -37,6 +37,37 @@ pub(crate) enum BufferTextCursorItem {
     DisplayPropertyReplacement(BufferDisplayPropertyReplacementItem),
 }
 
+/// Resolve the alias names under which a `display` text property may be
+/// recorded, from `char-property-alias-alist`. GNU `lookup_char_property`
+/// (src/intervals.c), after the direct property misses, walks
+/// `(cdr (assq prop char-property-alias-alist))` and returns the first non-nil
+/// aliased value — so a property stored under an aliased key still applies.
+/// indent-bars' character mode stores its bar glyphs under `indent-bars-display`
+/// (aliased to `display`), so without this the bars never render. The list is
+/// resolved once per source run: the layout runs on an immutable buffer
+/// snapshot, so the alist cannot change mid-walk. Empty in the common case.
+fn compute_display_property_aliases<B: LayoutBufferView + ?Sized>(buffer: &B) -> Vec<Value> {
+    let Some(alist) = buffer.layout_buffer_local_value("char-property-alias-alist") else {
+        return Vec::new();
+    };
+    let display = Value::symbol("display");
+    let mut names = Vec::new();
+    let mut cursor = alist;
+    while cursor.is_cons() {
+        let entry = cursor.cons_car();
+        if entry.is_cons() && entry.cons_car().bits() == display.bits() {
+            let mut aliases = entry.cons_cdr();
+            while aliases.is_cons() {
+                names.push(aliases.cons_car());
+                aliases = aliases.cons_cdr();
+            }
+            break;
+        }
+        cursor = cursor.cons_cdr();
+    }
+    names
+}
+
 /// A `DisplayItemSource` that reads plain buffer text (with face and display
 /// property boundaries) and emits `DisplayItem` values for the shared row
 /// renderer. The main buffer walk consumes this cursor through the source-walk
@@ -51,6 +82,10 @@ pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
     base_face: RenderFaceRef,
     replacement_strings: LispStringSourceStack,
     mouse_face_extent: Option<CachedMouseFaceExtent>,
+    /// The alias names under which a `display` text property may be recorded,
+    /// resolved once from `char-property-alias-alist` (empty in the common
+    /// case). See `compute_display_property_aliases`.
+    display_aliases: Vec<Value>,
 }
 
 #[derive(Clone, Copy)]
@@ -79,6 +114,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             base_face,
             replacement_strings: LispStringSourceStack::empty(1),
             mouse_face_extent: None,
+            display_aliases: compute_display_property_aliases(buffer),
         }
     }
 
@@ -183,9 +219,28 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             })
             .max_by_key(|(priority, _)| *priority)
             .map(|(_, value)| value);
-        overlay_display.or_else(|| {
+        overlay_display.or_else(|| self.display_text_prop_at(bytepos))
+    }
+
+    /// The buffer `display` TEXT property at `bytepos`, resolving through
+    /// `char-property-alias-alist` exactly like GNU `lookup_char_property`
+    /// (src/intervals.c): the direct `display` value wins; otherwise the first
+    /// non-nil value found under an alias name. This is what lets indent-bars'
+    /// character mode render — it stores its bar glyphs under the aliased
+    /// `indent-bars-display` key (`-nw` and `indent-bars-prefer-character`).
+    /// Overlays are intentionally NOT alias-resolved (GNU
+    /// `get_char_property_and_overlay` reads overlays with the literal prop).
+    fn display_text_prop_at(&self, bytepos: EmacsBytePos) -> Option<Value> {
+        if let Some(value) = self
+            .buffer
+            .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("display"))
+        {
+            return Some(value);
+        }
+        self.display_aliases.iter().find_map(|alias| {
             self.buffer
-                .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("display"))
+                .layout_text_prop_at_emacs_byte_pos(bytepos, *alias)
+                .filter(|value| !value.is_nil())
         })
     }
 

@@ -1001,6 +1001,109 @@ fn buffer_text_source_cursor_emits_text_runs_with_buffer_spans() {
     );
 }
 
+/// Build a snapshot whose first buffer char carries an `indent-bars-display`
+/// property = `(space :width 2)`, optionally with `char-property-alias-alist`
+/// mapping `display` → `indent-bars-display`. Uses the obarray-capturing
+/// snapshot so the alias-alist default is visible to the walk. Every Lisp value
+/// is built inside the live `Context` so they share its heap.
+fn snapshot_with_aliased_indent_bars_display(
+    configure_alias: bool,
+) -> (BufferId, LayoutBufferSnapshot, CharPos0) {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    if configure_alias {
+        let alias_alist = Value::list(vec![Value::list(vec![
+            Value::symbol("display"),
+            Value::symbol("indent-bars-display"),
+        ])]);
+        eval.obarray_mut()
+            .set_symbol_value("char-property-alias-alist", alias_alist);
+    }
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert("ab");
+        let display_spec = Value::list(vec![
+            Value::symbol("space"),
+            Value::keyword(":width"),
+            Value::fixnum(2),
+        ]);
+        let start = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(0));
+        let end = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(1));
+        buffer.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::new(start, end),
+            Value::symbol("indent-bars-display"),
+            display_spec,
+        );
+    }
+    let buffer = eval.buffer_manager().get(buffer_id).expect("buffer");
+    let end = buffer.total_char_end_pos();
+    let snapshot = LayoutBufferSnapshot::from_buffer_with_obarray(buffer, eval.obarray());
+    (buffer_id, snapshot, end)
+}
+
+#[test]
+fn buffer_display_property_resolves_through_char_property_alias_alist() {
+    // indent-bars' character mode records its bar glyphs under an ALIAS name
+    // (`indent-bars-display`) declared in `char-property-alias-alist`. GNU's
+    // `lookup_char_property` resolves the alias, so the display replacement must
+    // apply exactly as if the property were the literal `display`.
+    let (buffer_id, snapshot, end) = snapshot_with_aliased_indent_bars_display(true);
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::FaceId(FaceId::new(3)),
+    );
+
+    let items = collect_items(&mut source);
+
+    assert!(
+        matches!(
+            items[0].kind,
+            DisplayItemKind::Stretch(DisplayStretch {
+                width: DisplayStretchWidth::Length(DisplayLength::Em(2.0)),
+                ..
+            })
+        ),
+        "aliased display property must produce the space stretch, got {:?}",
+        items[0].kind
+    );
+    assert_eq!(item_texts(&items), ["b"]);
+}
+
+#[test]
+fn buffer_display_property_ignores_aliased_key_without_alias_alist() {
+    // The SAME `indent-bars-display` property with NO alias configured must be
+    // inert: the covered char renders as plain buffer text, never a display
+    // replacement. (The property boundary may still split the plain run.)
+    let (buffer_id, snapshot, end) = snapshot_with_aliased_indent_bars_display(false);
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::FaceId(FaceId::new(3)),
+    );
+
+    let items = collect_items(&mut source);
+
+    assert_eq!(item_texts(&items).concat(), "ab");
+    assert!(
+        !items
+            .iter()
+            .any(|item| matches!(item.kind, DisplayItemKind::Stretch(_))),
+        "unaliased key must not produce a display replacement, got {items:?}"
+    );
+}
+
 #[test]
 fn buffer_mouse_face_is_resolved_over_the_effective_display_face() {
     let mut eval = Context::new();

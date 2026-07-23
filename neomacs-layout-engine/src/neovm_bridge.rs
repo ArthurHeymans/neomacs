@@ -186,6 +186,12 @@ impl LayoutBufferSnapshot {
 }
 
 const LAYOUT_DEFAULT_VALUE_SYMBOLS: &[&str] = &[
+    // `char-property-alias-alist` lets a text property (e.g. `display`) be
+    // recorded under an aliased key (GNU `lookup_char_property`). It is a plain
+    // global (indent-bars mutates the default, not a buffer-local), so the
+    // snapshot must capture the default value for the source walk to resolve
+    // aliased `display` properties. See `compute_display_property_aliases`.
+    "char-property-alias-alist",
     "display-fill-column-indicator",
     "display-fill-column-indicator-character",
     "display-fill-column-indicator-column",
