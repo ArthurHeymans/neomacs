@@ -79,7 +79,12 @@ impl WindowTransitionConfig {
 
     fn scroll_default() -> Self {
         Self {
-            enabled: true,
+            // Off by default: C-v/M-v (and other scrolls) update instantly,
+            // matching stock Emacs. Opt in at runtime with
+            //   (neomacs-effect-set 'scroll-transition :enabled t)
+            // or via the `neomacs-effects' profile. The effect/duration/easing
+            // below are the values used once it is enabled.
+            enabled: false,
             duration: Duration::from_millis(150),
             effect: ScrollEffect::Slide,
             easing: ScrollEasing::EaseOutQuad,
