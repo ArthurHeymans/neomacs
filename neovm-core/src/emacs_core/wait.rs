@@ -521,7 +521,22 @@ impl WaitRequest {
         special_input: SpecialInputServiceOutcome,
         outcome: WaitServiceOutcome,
     ) -> bool {
-        self.redisplay && (special_input.redisplay_needed() || outcome.has_timer_activity())
+        // GNU `wait_reading_process_output` runs `redisplay_preserve_echo_area`
+        // at the top of every loop iteration when `do_display` is set
+        // (process.c), so a process filter/sentinel that modifies a displayed
+        // buffer during the wait is reflected on screen without waiting for the
+        // next keystroke. Neomacs gates redisplay on activity (a battery-minded
+        // divergence from GNU's unconditional per-iteration redisplay), but that
+        // gate MUST include process activity: a filter running is exactly when a
+        // buffer may have changed. Omitting it left async output — eww "Loading…"
+        // never resolving, comint/async-shell output, LSP — stale on screen until
+        // the user pressed a key. `redisplay()` still no-ops via the unchanged
+        // `RedisplaySignature` when the filter changed nothing displayed, so this
+        // is strictly less aggressive than GNU.
+        self.redisplay
+            && (special_input.redisplay_needed()
+                || outcome.has_timer_activity()
+                || outcome.ran_process_callbacks())
     }
 
     fn needs_redisplay_after_command_input(
@@ -676,6 +691,14 @@ impl WaitSpecialInputActivity {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct WaitServiceOutcome {
     process_activity: WaitProcessActivity,
+    /// Non-output servicing ran during the wait: a connect completed, a
+    /// sentinel/status-notify fired, or an EOF was handled. Kept SEPARATE from
+    /// `process_activity` (which is output-bytes-only and gates wait
+    /// completion, matching GNU's `got_some_output`) because a sentinel must
+    /// not complete an `accept-process-output` — but it CAN change a displayed
+    /// buffer (eww's completion callback runs in url-http's EOF sentinel), so
+    /// the redisplay decision must see it.
+    process_serviced: bool,
     special_input_activity: WaitSpecialInputActivity,
     timers_fired: bool,
     command_input_pending: bool,
@@ -696,6 +719,15 @@ impl WaitServiceOutcome {
         } else if process_outcome.has_any_process_activity() {
             self.process_activity = self.process_activity.record(false);
         }
+        self.process_serviced |= process_outcome.has_serviced_activity();
+    }
+
+    /// Any process work ran that may have changed a displayed buffer — output
+    /// bytes read (filters) or non-output servicing (sentinels/connects/EOF).
+    /// Distinct from [`Self::has_any_process_activity`], which gates wait
+    /// completion and stays output-only to match GNU's `got_some_output`.
+    fn ran_process_callbacks(self) -> bool {
+        self.process_activity.any() || self.process_serviced
     }
 
     fn absorb_special_input_activity(&mut self, special_input: SpecialInputServiceOutcome) {
@@ -1670,5 +1702,35 @@ mod tests {
         special = SpecialInputServiceOutcome::default();
         service.record_timer_activity(true);
         assert!(redisplay.needs_redisplay_after_service(special, service));
+
+        // A process filter that read output bytes may have changed a displayed
+        // buffer (comint/async-shell output): redisplay after service.
+        let mut output = WaitServiceOutcome::default();
+        let mut output_process = ProcessOutputServiceOutcome::default();
+        output_process.record_activity(false);
+        output.absorb_process_activity(output_process);
+        assert!(
+            redisplay.needs_redisplay_after_service(SpecialInputServiceOutcome::default(), output)
+        );
+        // But output activity must NOT complete a command-input wait's redisplay
+        // path via a quiet request.
+        assert!(
+            !quiet.needs_redisplay_after_service(SpecialInputServiceOutcome::default(), output)
+        );
+
+        // A sentinel/EOF that ran no output read still repaints (eww's
+        // completion callback runs in url-http's EOF sentinel): the `serviced`
+        // bit alone drives redisplay, even though it must never complete an
+        // `accept-process-output` wait.
+        let mut serviced = WaitServiceOutcome::default();
+        let mut serviced_process = ProcessOutputServiceOutcome::default();
+        serviced_process.record_serviced();
+        serviced.absorb_process_activity(serviced_process);
+        assert!(!serviced.has_any_process_activity());
+        assert!(serviced.ran_process_callbacks());
+        assert!(
+            redisplay
+                .needs_redisplay_after_service(SpecialInputServiceOutcome::default(), serviced)
+        );
     }
 }
