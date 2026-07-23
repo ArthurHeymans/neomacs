@@ -13,8 +13,8 @@ use super::face::{Face, FaceAttributes, UnderlineStyle};
 use super::frame_chrome::{FrameChrome, FrameChromeContent, PresentationId};
 use super::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, FringeBitmapData, FringeSide,
-    GlyphRowRole, MaterializedFaceData, PhysCursor, StipplePattern, WindowCursor, WindowEffectHint,
-    WindowInfo, WindowTransitionHint,
+    GlyphRowRole, MaterializedFaceData, PhysCursor, WindowCursor, WindowEffectHint, WindowInfo,
+    WindowTransitionHint,
 };
 use super::types::{
     Color, DisplayWindowId, FaceId, ImageId, Px, Rect, SurfaceId, VideoId, XwidgetId,
@@ -1014,8 +1014,6 @@ pub struct FrameDisplayState {
     pub scroll_bars: Vec<ScrollBarItem>,
     /// Authoritative active cursor for the frame.
     pub phys_cursor: Option<PhysCursor>,
-    /// Stipple patterns for background fills.
-    pub stipple_patterns: HashMap<i32, StipplePattern>,
     /// Effect hints for the renderer.
     pub effect_hints: Vec<WindowEffectHint>,
     /// Resolved fringe bitmaps for this frame, keyed by registry index. Each
@@ -1380,7 +1378,6 @@ impl FrameDisplayState {
             cursor_effects_by_window: HashMap::new(),
             scroll_bars: Vec::new(),
             phys_cursor: None,
-            stipple_patterns: HashMap::new(),
             effect_hints: Vec::new(),
             fringe_bitmaps: HashMap::new(),
         }
@@ -1431,7 +1428,6 @@ impl FrameDisplayState {
             cursor_fg: c.cursor_fg,
         });
         state.cursor_effects_by_window = buf.cursor_effects_by_window.clone();
-        state.stipple_patterns = buf.stipple_patterns.clone();
         state.fringe_bitmaps = buf.fringe_bitmaps.clone();
         state.transition_hints = buf.transition_hints.clone();
         state.effect_hints = buf.effect_hints.clone();
@@ -1565,9 +1561,6 @@ impl FrameDisplayState {
         for info in &self.window_infos {
             buf.window_infos.push(info.clone());
         }
-
-        // Copy stipple patterns
-        buf.stipple_patterns = self.stipple_patterns.clone();
 
         // Copy fringe bitmaps (the bits referenced by each row's fringe info).
         buf.fringe_bitmaps = self.fringe_bitmaps.clone();
@@ -2057,8 +2050,6 @@ impl FrameDisplayState {
                             height: cell.height,
                             bg: face_data.bg,
                             face_id: glyph.face_id,
-                            stipple_id: 0,
-                            stipple_fg: None,
                         });
                     }
                     GlyphType::Image {
@@ -2262,8 +2253,6 @@ impl FrameDisplayState {
                 height: row_height,
                 bg: face_data.bg,
                 face_id: last_face_id,
-                stipple_id: 0,
-                stipple_fg: None,
             });
         }
     }

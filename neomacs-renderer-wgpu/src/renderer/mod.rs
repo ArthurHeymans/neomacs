@@ -1461,8 +1461,13 @@ impl WgpuRenderer {
             return;
         }
         let bytes_per_row = pattern.width.div_ceil(8) as usize;
-        let w_pixels = width as u32;
-        let h_pixels = height as u32;
+        // Round the fractional cell size UP so the tiled fill covers the whole
+        // domain: with a proportional font the per-glyph cell width is
+        // fractional (e.g. 16.25px), and truncating left a ~1px unfilled column
+        // at every glyph boundary. Any overdraw past the domain is clipped by
+        // the paint clip and overpainted by the next glyph's own fill.
+        let w_pixels = width.ceil() as u32;
+        let h_pixels = height.ceil() as u32;
 
         // Tile the pattern over the area, merging horizontal runs
         for py in 0..h_pixels {

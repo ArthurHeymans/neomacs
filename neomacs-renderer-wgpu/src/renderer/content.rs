@@ -315,8 +315,6 @@ impl WgpuRenderer {
                     bg: _,
                     face_id,
                     row_role,
-                    stipple_id,
-                    stipple_fg,
                     clip_rect,
                     ..
                 } => {
@@ -350,14 +348,18 @@ impl WgpuRenderer {
                             offset_x,
                             offset_y,
                         );
-                        // Stipple pattern overlay
-                        if *stipple_id > 0
-                            && let (Some(fg), Some(pat)) =
-                                (stipple_fg, frame.stipple_patterns.get(stipple_id))
+                        // Draw the face's own `:stipple` over the stretch
+                        // background (GNU `stippled_p`), mirroring the Char arm
+                        // below. A run of stipple-faced whitespace (indent-bars /
+                        // highlight-indent-guides) may be a Stretch. `face.stipple`
+                        // is the single source of truth for stipples.
+                        if let Some(pat) =
+                            frame.faces.get(&face_id).and_then(|f| f.stipple.as_deref())
                         {
+                            let fg = frame.resolved_face(face_id).fg;
                             self.add_stipple_paint(
                                 &mut bg_vertices,
-                                fg,
+                                &fg,
                                 pat,
                                 paint,
                                 offset_x,

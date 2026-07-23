@@ -70,8 +70,6 @@ impl RenderApp {
                 height: *height,
                 bg: content.default_bg,
                 face_id: FaceId::new(0),
-                stipple_id: 0,
-                stipple_fg: None,
             });
 
             Self::expand_terminal_cells(
@@ -565,8 +563,6 @@ impl RenderApp {
                         height,
                         bg: content.default_bg,
                         face_id: FaceId::new(0),
-                        stipple_id: 0,
-                        stipple_fg: None,
                     });
 
                     Self::expand_terminal_cells(
@@ -628,8 +624,6 @@ impl RenderApp {
                         height,
                         bg,
                         face_id: FaceId::new(0),
-                        stipple_id: 0,
-                        stipple_fg: None,
                     });
 
                     Self::expand_terminal_cells(
@@ -714,8 +708,6 @@ impl RenderApp {
                     height: cell_h,
                     bg,
                     face_id: FaceId::new(0),
-                    stipple_id: 0,
-                    stipple_fg: None,
                 });
             }
 

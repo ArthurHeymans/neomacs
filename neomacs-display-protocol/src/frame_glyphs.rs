@@ -189,10 +189,6 @@ pub enum FrameGlyph {
         height: f32,
         bg: Color,
         face_id: FaceId,
-        /// Stipple pattern ID (0 = none, references stipple_patterns in FrameGlyphBuffer)
-        stipple_id: i32,
-        /// Foreground color for stipple pattern (stipple bits use fg, gaps use bg)
-        stipple_fg: Option<Color>,
     },
 
     /// Image glyph
@@ -1009,9 +1005,6 @@ pub struct FrameGlyphBuffer {
     /// glyphs`); see [`crate::font::ShapedClusterTable`].
     pub shaped_clusters: crate::font::ShapedClusterTable,
 
-    /// Stipple patterns: bitmap_id -> StipplePattern
-    pub stipple_patterns: HashMap<i32, StipplePattern>,
-
     /// Resolved fringe bitmaps for this frame, keyed by registry index. Embedded
     /// once per frame from the evaluator's user-bitmap registry so the renderer
     /// can expand a [`FrameGlyph::FringeBitmap`]'s `bitmap_index` to its bits.
@@ -1283,7 +1276,6 @@ impl FrameGlyphBuffer {
             fonts: crate::font::ResolvedFontTable::new(),
             char_fonts: crate::font::CharFontTable::new(),
             shaped_clusters: crate::font::ShapedClusterTable::new(),
-            stipple_patterns: HashMap::new(),
             fringe_bitmaps: HashMap::new(),
         }
     }
@@ -1309,7 +1301,6 @@ impl FrameGlyphBuffer {
         self.transition_hints.clear();
         self.effect_hints.clear();
         self.window_cursors.clear();
-        self.stipple_patterns.clear();
         self.fringe_bitmaps.clear();
         self.faces.clear();
         self.fonts.clear();
@@ -1655,38 +1646,6 @@ impl FrameGlyphBuffer {
             height,
             bg,
             face_id,
-            stipple_id: 0,
-            stipple_fg: None,
-        });
-    }
-
-    /// Add a stretch glyph with a stipple pattern
-    pub fn add_stretch_stipple(
-        &mut self,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-        bg: Color,
-        fg: Color,
-        face_id: FaceId,
-        _overlay_hint: bool,
-        stipple_id: i32,
-    ) {
-        self.glyphs.push(FrameGlyph::Stretch {
-            window_id: self.current_window_id,
-            row_role: self.current_row_role,
-            clip_rect: self.current_clip_rect,
-            slot_id: self.current_slot_id(x, y),
-            bidi_level: 0,
-            x,
-            y,
-            width,
-            height,
-            bg,
-            face_id,
-            stipple_id,
-            stipple_fg: Some(fg),
         });
     }
 

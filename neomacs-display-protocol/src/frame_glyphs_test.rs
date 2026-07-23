@@ -46,7 +46,6 @@ fn new_creates_empty_buffer() {
     assert!(buf.glyphs.is_empty());
     assert!(buf.window_infos.is_empty());
     assert!(buf.faces.is_empty());
-    assert!(buf.stipple_patterns.is_empty());
     assert!(buf.active_cursor().is_none());
 }
 
@@ -147,14 +146,6 @@ fn clear_all_resets_glyphs_and_metadata() {
         color: Color::WHITE,
         cursor_fg: Color::BLACK,
     });
-    buf.stipple_patterns.insert(
-        1,
-        StipplePattern {
-            width: 8,
-            height: 8,
-            bits: vec![0xAA; 8],
-        },
-    );
     assert!(!buf.glyphs.is_empty());
     assert!(!buf.window_infos.is_empty());
 
@@ -166,7 +157,6 @@ fn clear_all_resets_glyphs_and_metadata() {
     assert!(buf.effect_hints.is_empty());
     assert!(buf.active_cursor().is_none());
     assert!(buf.window_cursors.is_empty());
-    assert!(buf.stipple_patterns.is_empty());
     assert!(buf.faces.is_empty());
 }
 
@@ -765,8 +755,6 @@ fn add_stretch_appends_stretch_glyph() {
             height,
             bg: stretch_bg,
             face_id,
-            stipple_id,
-            stipple_fg,
             ..
         } => {
             assert_eq!(*x, 0.0);
@@ -776,8 +764,6 @@ fn add_stretch_appends_stretch_glyph() {
             assert_color_eq(stretch_bg, &bg);
             assert_eq!(*face_id, FaceId::new(5));
             assert!(!buf.glyphs[0].is_overlay());
-            assert_eq!(*stipple_id, 0);
-            assert!(stipple_fg.is_none());
         }
         other => panic!("Expected Stretch glyph, got {:?}", other),
     }
@@ -789,27 +775,6 @@ fn add_stretch_overlay() {
     buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::ModeLine, None);
     buf.add_stretch(0.0, 0.0, 800.0, 20.0, Color::BLUE, FaceId::new(0), true);
     assert!(buf.glyphs[0].is_overlay());
-}
-
-#[test]
-fn add_stretch_stipple_stores_pattern_info() {
-    let mut buf = FrameGlyphBuffer::new();
-    let bg = Color::BLACK;
-    let fg = Color::WHITE;
-    buf.add_stretch_stipple(0.0, 0.0, 100.0, 100.0, bg, fg, FaceId::new(3), false, 7);
-
-    assert_eq!(buf.len(), 1);
-    match &buf.glyphs[0] {
-        FrameGlyph::Stretch {
-            stipple_id,
-            stipple_fg,
-            ..
-        } => {
-            assert_eq!(*stipple_id, 7);
-            assert_eq!(*stipple_fg, Some(fg));
-        }
-        other => panic!("Expected Stretch glyph, got {:?}", other),
-    }
 }
 
 #[test]

@@ -164,8 +164,6 @@ impl WgpuRenderer {
                 face_id,
                 row_role,
                 clip_rect,
-                stipple_id,
-                stipple_fg,
                 ..
             } = glyph
                 && !row_role.is_chrome()
@@ -205,28 +203,12 @@ impl WgpuRenderer {
                         0.0,
                         paint_offset_y,
                     );
-                    // Overlay stipple pattern if present
-                    if *stipple_id > 0
-                        && let (Some(fg), Some(pat)) =
-                            (stipple_fg, frame_glyphs.stipple_patterns.get(stipple_id))
-                    {
-                        self.add_stipple_paint(
-                            &mut non_overlay_rect_vertices,
-                            fg,
-                            pat,
-                            paint,
-                            0.0,
-                            paint_offset_y,
-                        );
-                    }
                     // Draw the face's own `:stipple` over the stretch background,
                     // 1-bits in the face foreground (GNU `stippled_p`). A run of
                     // indentation whitespace carrying a stipple face (indent-bars /
                     // highlight-indent-guides) may be emitted as a Stretch, so —
-                    // like the Char background path below — the stretch must honor
-                    // `face.stipple`. The `stipple_id` map above is only populated
-                    // by the unused `add_stretch_stipple`; `face.stipple` is the
-                    // live path text-property and overlay stipple faces take.
+                    // like the Char background path below — the stretch honors
+                    // `face.stipple` (the single source of truth for stipples).
                     if let Some(pat) = face.and_then(|f| f.stipple.as_deref()) {
                         let rf = frame_glyphs.resolved_face(face_id);
                         self.add_stipple_paint(
@@ -574,8 +556,6 @@ impl WgpuRenderer {
                 face_id,
                 row_role,
                 clip_rect,
-                stipple_id,
-                stipple_fg,
                 ..
             } = glyph
                 && row_role.is_chrome()
@@ -610,19 +590,6 @@ impl WgpuRenderer {
                         0.0,
                         0.0,
                     );
-                    if *stipple_id > 0
-                        && let (Some(fg), Some(pat)) =
-                            (stipple_fg, frame_glyphs.stipple_patterns.get(stipple_id))
-                    {
-                        self.add_stipple_paint(
-                            &mut overlay_rect_vertices,
-                            fg,
-                            pat,
-                            paint,
-                            0.0,
-                            0.0,
-                        );
-                    }
                 }
             }
         }
