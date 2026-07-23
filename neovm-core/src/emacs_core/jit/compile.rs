@@ -682,8 +682,11 @@ struct ShimAddr(*const ());
 unsafe impl Sync for ShimAddr {}
 
 #[used]
-static JIT_SHIM_ANCHOR: [ShimAddr; 41] = [
+static JIT_SHIM_ANCHOR: [ShimAddr; 42] = [
     ShimAddr(neovm_jit_apply as *const ()),
+    // logand/logior/logxor intrinsic — AOT-importable, so it must survive
+    // `--gc-sections` for `--export-dynamic-symbol` to promote it (see below).
+    ShimAddr(neovm_jit_arith_spec as *const ()),
     ShimAddr(neovm_jit_backedge as *const ()),
     ShimAddr(neovm_jit_builtin1 as *const ()),
     ShimAddr(neovm_jit_builtin2 as *const ()),
@@ -1372,6 +1375,33 @@ pub(crate) const PRED_KIND_RECORDP: i64 = 0;
 /// Predicate discriminator for [`neovm_jit_pred_spec`]: `symbol-with-pos-p`.
 pub(crate) const PRED_KIND_SYMBOL_WITH_POS_P: i64 = 1;
 
+/// Op discriminators for [`neovm_jit_arith_spec`] (baked as an iconst by the
+/// lowering, and — offset by 5 — the [`SpecCalleeKind::to_spec_disc`] value):
+/// `logand`.
+pub(crate) const ARITH_KIND_LOGAND: i64 = 0;
+/// Op discriminator for [`neovm_jit_arith_spec`]: `logior`.
+pub(crate) const ARITH_KIND_LOGIOR: i64 = 1;
+/// Op discriminator for [`neovm_jit_arith_spec`]: `logxor`.
+pub(crate) const ARITH_KIND_LOGXOR: i64 = 2;
+
+/// Classify a callee SYMBOL name + arity as a bitwise-arithmetic intrinsic op,
+/// or `None`. Shared by [`subr_spec_kind`] (which additionally proves the live
+/// binding is the real subr) and the profitability gate's arith-intrinsic scan
+/// (name-only). Only the 2-arg forms intrinsify: `logand`/`logior`/`logxor` of
+/// two fixnums is always a fixnum, so the shim is GC-free; other arities
+/// (0 → identity const, 1 → identity, ≥3 → reduction) stay on the generic path.
+fn arith_intrinsic_op_by_name(name: &str, nargs: usize) -> Option<u8> {
+    if nargs != 2 {
+        return None;
+    }
+    match name {
+        "logand" => Some(ARITH_KIND_LOGAND as u8),
+        "logior" => Some(ARITH_KIND_LOGIOR as u8),
+        "logxor" => Some(ARITH_KIND_LOGXOR as u8),
+        _ => None,
+    }
+}
+
 /// Shared arming check for the three subr spec shims: TRUE iff the site's
 /// direct fast path is still valid — the symbol's function cell (validated via
 /// the per-site epoch, re-validated on any epoch move exactly like
@@ -1614,6 +1644,73 @@ pub extern "C" fn neovm_jit_eq_incl_props_spec(
             // SAFETY: `out` is the generated code's result stack slot.
             unsafe { *out = Value::T.bits() as i64 };
             return STATUS_OK;
+        }
+        #[cfg(debug_assertions)]
+        SUBR_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
+        STATUS_NEED_GENERIC
+    })
+}
+
+/// Speculated bitwise-arithmetic call (`logand`/`logior`/`logxor`, 2 args):
+/// when armed AND both arguments are fixnums, computes the native `&`/`|`/`^`
+/// and returns the fixnum result with zero dispatch. This is EXACTLY the
+/// interpreter's own 2-arg fast path (`builtin_logand_slice` et al.:
+/// `Value::fixnum(lhs & rhs)`) — a bitwise op on two fixnums always fits a
+/// fixnum (its sign/magnitude bits stay within the operands'), so `Value::fixnum`
+/// never overflows and the shim never allocates.
+///
+/// Anything else — NOT armed (callee redefined), or either arg not a fixnum
+/// (marker / bignum / wrong-type) — returns [`STATUS_NEED_GENERIC`] and the
+/// generated fallback block runs the plain generic call, which reaches the
+/// SAME builtin body (marker→position, bignum via GMP, wrong-type signal). The
+/// deep/allocating cases therefore only ever run on the fully-rooted fallback
+/// path, so this keeps the GC-FREE INVARIANT of [`neovm_jit_eq_incl_props_spec`]
+/// (no allocation / no lisp on ANY path here; `maybe_quit` is Rust-heap only).
+/// `op` is baked as an iconst (`ARITH_KIND_*`); each op also has a distinct
+/// [`SpecCalleeKind::to_spec_disc`], so an AOT site whose baked op no longer
+/// matches the live callee is disarmed by the loader (never run with a wrong op).
+/// SAFETY + AOT-importable status: same as [`neovm_jit_call_subr_spec`].
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_arith_spec(
+    ctx: *mut u8,
+    kind: i64,
+    sym: i64,
+    expected: i64,
+    slot: i64,
+    a: i64,
+    b: i64,
+    out: *mut i64,
+) -> i64 {
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
+        #[cfg(debug_assertions)]
+        SUBR_SPEC_COUNT.fetch_add(1, Ordering::Relaxed);
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        if let Err(flow) = ctx.maybe_quit() {
+            stash_pending_flow(flow);
+            return STATUS_SIGNAL;
+        }
+        // SAFETY: slot points into the executing leaf's spec_slots.
+        let slot = unsafe { &*(slot as *const SpecSlot) };
+        if subr_spec_armed(ctx, sym, expected, slot) {
+            let av = Value::from_bits(a as usize);
+            let bv = Value::from_bits(b as usize);
+            if let (Some(l), Some(r)) = (av.as_fixnum(), bv.as_fixnum()) {
+                let res = match kind {
+                    ARITH_KIND_LOGAND => l & r,
+                    ARITH_KIND_LOGIOR => l | r,
+                    _ => {
+                        debug_assert_eq!(kind, ARITH_KIND_LOGXOR);
+                        l ^ r
+                    }
+                };
+                #[cfg(debug_assertions)]
+                SUBR_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
+                // SAFETY: `out` is the generated code's result stack slot.
+                unsafe { *out = Value::fixnum(res).bits() as i64 };
+                return STATUS_OK;
+            }
         }
         #[cfg(debug_assertions)]
         SUBR_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
@@ -3545,6 +3642,110 @@ fn jit_gate_relax_on() -> bool {
     *ON.get_or_init(|| std::env::var("NEOVM_JIT_GATE_RELAX").as_deref() == Ok("on"))
 }
 
+/// Op-indices of `Op::Call(2)` sites whose callee provably holds a `logand`/
+/// `logior`/`logxor` SYMBOL constant — the sites `subr_spec_kind` classifies as
+/// [`SpecCalleeKind::ArithIntrinsic`]. The profitability gate uses these to NOT
+/// count an intrinsifiable bit-op as a call: it lowers to a GC-free native
+/// `&`/`|`/`^` (≈ an arith op), not a call+dispatch, so a bit-op-heavy loop must
+/// not be vetoed as "call-dominated".
+///
+/// A name-only, obarray-free mirror of [`find_spec_sites`]' abstract-tag scan
+/// (the callee sits `nargs` below the top; only the stack-shuffling ops carry a
+/// tag). It omits `find_spec_sites`' block-leader clearing (which needs the
+/// CFG): the byte-compiler always emits a callee push and its `Op::Call` inside
+/// one basic block with no jump target between, so the two agree on real
+/// bytecode; on hand-crafted bytecode the gate may merely over-/under-count (a
+/// heuristic mis-estimate, never a miscompile — `find_spec_sites` independently
+/// decides, off the LIVE binding, what actually intrinsifies). Ascending order.
+fn intrinsic_arith_call_indices(ops: &[Op], constants: &[Value]) -> Vec<usize> {
+    let mut out = Vec::new();
+    let mut tags: Vec<Option<u16>> = Vec::new();
+    for (i, op) in ops.iter().enumerate() {
+        match op {
+            Op::Constant(cidx) => {
+                let tag = constants
+                    .get(*cidx as usize)
+                    .and_then(|v| v.as_symbol_id())
+                    .map(|_| *cidx);
+                tags.push(tag);
+            }
+            Op::Nil | Op::True => tags.push(None),
+            Op::Dup => {
+                let t = tags.last().copied().flatten();
+                tags.push(t);
+            }
+            Op::StackRef(n) => {
+                let n = *n as usize;
+                let t = if tags.len() > n {
+                    tags[tags.len() - 1 - n]
+                } else {
+                    None
+                };
+                tags.push(t);
+            }
+            Op::StackSet(n) => {
+                let n = *n as usize;
+                let t = tags.pop().flatten();
+                if n > 0 && tags.len() >= n {
+                    let d = tags.len() - n;
+                    tags[d] = t;
+                }
+            }
+            Op::DiscardN(raw) => {
+                let preserve_tos = (raw & 0x80) != 0;
+                let n = (raw & 0x7F) as usize;
+                if preserve_tos && n > 0 {
+                    let t = tags.pop().flatten();
+                    for _ in 0..n.min(tags.len()) {
+                        tags.pop();
+                    }
+                    tags.push(t);
+                } else {
+                    for _ in 0..n.min(tags.len()) {
+                        tags.pop();
+                    }
+                }
+            }
+            Op::Call(n) => {
+                let nargs = *n as usize;
+                if tags.len() > nargs
+                    && let Some(cidx) = tags[tags.len() - 1 - nargs]
+                    && let Some(sym_id) =
+                        constants.get(cidx as usize).and_then(|v| v.as_symbol_id())
+                    && arith_intrinsic_op_by_name(resolve_sym(sym_id), nargs).is_some()
+                {
+                    out.push(i);
+                }
+                for _ in 0..(nargs + 1).min(tags.len()) {
+                    tags.pop();
+                }
+                tags.push(None);
+            }
+            Op::Apply(n) => {
+                let nargs = *n as usize;
+                for _ in 0..(nargs + 1).min(tags.len()) {
+                    tags.pop();
+                }
+                tags.push(None);
+            }
+            other => match simple_effect(other) {
+                Ok((needs, delta)) => {
+                    let consumed = needs;
+                    let produced = (needs as i64 + delta).max(0) as usize;
+                    for _ in 0..consumed.min(tags.len()) {
+                        tags.pop();
+                    }
+                    for _ in 0..produced {
+                        tags.push(None);
+                    }
+                }
+                Err(_) => tags.clear(),
+            },
+        }
+    }
+    out
+}
+
 /// Decide whether a bytecode body is worth compiling.
 ///
 /// The baseline tier only removes per-op interpreter *dispatch*. A function call
@@ -3557,14 +3758,17 @@ fn jit_gate_relax_on() -> bool {
 /// up. Compile only when arithmetic is not outnumbered by calls; the genuine win
 /// shape (hot arithmetic/control loops — the 7x microbenchmark) clears this, and
 /// call-free bodies always pass (`0 <= 0`).
-fn body_is_jit_profitable(ops: &[Op]) -> bool {
+fn body_is_jit_profitable(ops: &[Op], constants: &[Value]) -> bool {
     if !jit_profit_gate_on() {
         return true;
     }
     let relax = jit_gate_relax_on();
+    // The intrinsifiable bit-op `Op::Call` sites (logand/logior/logxor of 2 args),
+    // which lower to GC-free native ops — counted as arith below, not calls.
+    let intrinsic = intrinsic_arith_call_indices(ops, constants);
     let mut arith = 0u32;
     let mut calls = 0u32;
-    for op in ops {
+    for (i, op) in ops.iter().enumerate() {
         match op {
             Op::Add
             | Op::Sub
@@ -3588,6 +3792,13 @@ fn body_is_jit_profitable(ops: &[Op]) -> bool {
             // those are subrs, but still Op::Call) tiers to a net win/neutral.
             // Builtin calls stay counted (real builtin-heavy = neutral, not a win).
             Op::Call(_) | Op::Apply(_) if relax => {}
+            // A `logand`/`logior`/`logxor` bit-op `Op::Call` that WILL intrinsify
+            // (`ArithIntrinsic` → `neovm_jit_arith_spec`) lowers to a GC-free
+            // native op, not a call+dispatch — so, exactly like the CBSym
+            // intrinsics below, it must NOT veto a bit-op-heavy loop (a pure
+            // `(logand (logxor ...))` loop is `calls > arith` → NotProfitable →
+            // the intrinsic could never engage). A generic call still vetoes.
+            Op::Call(_) if intrinsic.binary_search(&i).is_ok() => {}
             Op::Call(_) | Op::Apply(_) | Op::CallBuiltin(..) => calls += 1,
             // R2: a CallBuiltinSym that WILL be intrinsified (Tier-A GC-free read
             // or Tier-B dispatch-skip) costs ~an arith op, not a full
@@ -3702,7 +3913,7 @@ fn compile_bytecode_function_inner(
     // The MIR tier above already claimed any body its inlining/unboxing makes
     // worthwhile. What's left goes to the baseline, whose per-op call shims aren't
     // worth it for a call-dominated body — keep those on the interpreter.
-    if !body_is_jit_profitable(ops) {
+    if !body_is_jit_profitable(ops, &f.constants) {
         return Err(CompileError::NotProfitable);
     }
     let mut leaf = lower_leaf_full(
@@ -5352,6 +5563,9 @@ struct RtRefs {
     call_subr_spec: Option<FuncRef>,
     pred_spec: Option<FuncRef>,
     eq_incl_props_spec: Option<FuncRef>,
+    /// `neovm_jit_arith_spec` (logand/logior/logxor intrinsic). Declared under the
+    /// same `subr_spec` flag as the round-1 subr shims (see `is_round1_subr`).
+    arith_spec: Option<FuncRef>,
     /// The R2 CallBuiltinSym intrinsic shims — Tier-B dispatch-skip
     /// ([`neovm_jit_cbsym_spec`]) + Tier-A GC-free read
     /// ([`neovm_jit_cbsym_read`]), declared ONLY when the body has a CBSym-kind
@@ -5562,6 +5776,8 @@ fn declare_rt_refs<M: Module>(
     // (vmctx, k1, k2, k3, k4, k5, out_ptr) -> status
     //   pred: (vmctx, kind, sym, expected, slot_ptr, a, out_ptr)
     //   eq:   (vmctx, sym, expected, slot_ptr, a, b, out_ptr)
+    // arith adds one word for the second arg (kind + 2 args):
+    //   arith: (vmctx, kind, sym, expected, slot_ptr, a, b, out_ptr)
     let subr_spec_refs = if subr_spec {
         let mut sig_pred = Signature::new(call_conv);
         sig_pred.params.push(AbiParam::new(ptr_ty));
@@ -5570,10 +5786,19 @@ fn declare_rt_refs<M: Module>(
         }
         sig_pred.params.push(AbiParam::new(ptr_ty));
         sig_pred.returns.push(AbiParam::new(i64t));
+        let mut sig_arith = Signature::new(call_conv);
+        sig_arith.params.push(AbiParam::new(ptr_ty)); // vmctx
+        for _ in 0..6 {
+            // kind, sym, expected, slot_ptr, a, b
+            sig_arith.params.push(AbiParam::new(i64t));
+        }
+        sig_arith.params.push(AbiParam::new(ptr_ty)); // out
+        sig_arith.returns.push(AbiParam::new(i64t));
         let subr_id = declare(module, "neovm_jit_call_subr_spec", &sig_spec)?;
         let pred_id = declare(module, "neovm_jit_pred_spec", &sig_pred)?;
         let eq_id = declare(module, "neovm_jit_eq_incl_props_spec", &sig_pred)?;
-        Some((subr_id, pred_id, eq_id))
+        let arith_id = declare(module, "neovm_jit_arith_spec", &sig_arith)?;
+        Some((subr_id, pred_id, eq_id, arith_id))
     } else {
         None
     };
@@ -5635,9 +5860,11 @@ fn declare_rt_refs<M: Module>(
         named_builtin: module.declare_func_in_func(named_id, func),
         save_window_excursion: module.declare_func_in_func(swe_id, func),
         call_spec: module.declare_func_in_func(call_spec_id, func),
-        call_subr_spec: subr_spec_refs.map(|(id, _, _)| module.declare_func_in_func(id, func)),
-        pred_spec: subr_spec_refs.map(|(_, id, _)| module.declare_func_in_func(id, func)),
-        eq_incl_props_spec: subr_spec_refs.map(|(_, _, id)| module.declare_func_in_func(id, func)),
+        call_subr_spec: subr_spec_refs.map(|(id, _, _, _)| module.declare_func_in_func(id, func)),
+        pred_spec: subr_spec_refs.map(|(_, id, _, _)| module.declare_func_in_func(id, func)),
+        eq_incl_props_spec: subr_spec_refs
+            .map(|(_, _, id, _)| module.declare_func_in_func(id, func)),
+        arith_spec: subr_spec_refs.map(|(_, _, _, id)| module.declare_func_in_func(id, func)),
         cbsym_spec: cbsym_spec_id.map(|id| module.declare_func_in_func(id, func)),
         cbsym_read: cbsym_read_id.map(|id| module.declare_func_in_func(id, func)),
     })
@@ -6567,6 +6794,17 @@ fn lower_simple_op(
                                 &[vmctx, sym_v, exp_v, slot_v, args[0], args[1], out_addr],
                             )
                         }
+                        (SpecCalleeKind::ArithIntrinsic { op }, Some(args)) => {
+                            let f = rt
+                                .refs
+                                .arith_spec
+                                .ok_or(CompileError::UnsupportedOp("subr-spec-refs"))?;
+                            let kind_v = fb.ins().iconst(types::I64, op as i64);
+                            fb.ins().call(
+                                f,
+                                &[vmctx, kind_v, sym_v, exp_v, slot_v, args[0], args[1], out_addr],
+                            )
+                        }
                         // Reg-arg kinds always collected their args above.
                         _ => return Err(CompileError::UnsupportedOp("subr-spec-shape")),
                     }
@@ -7129,6 +7367,15 @@ pub(crate) enum SpecCalleeKind {
     /// `equal-including-properties` (2 args): `neovm_jit_eq_incl_props_spec`,
     /// bitwise-eq hit → `t`; anything else bounces to the generic block.
     EqInclProps,
+    /// A bitwise arithmetic intrinsic — `logand`/`logior`/`logxor` (2 args):
+    /// `neovm_jit_arith_spec`. When armed AND both args are fixnums, computes the
+    /// native `&`/`|`/`^` in-register (bitwise ops on two fixnums always yield a
+    /// fixnum — the interpreter's own 2-arg fast path, `builtin_logand_slice` et
+    /// al.); anything else (marker/bignum/wrong-type/not-armed) bounces to the
+    /// generic block. `op` is an `ARITH_KIND_*` discriminant, baked as an iconst
+    /// into the shim call. Each op gets a DISTINCT [`to_spec_disc`] value so the
+    /// AOT loader disarms a site whose baked op no longer matches the live callee.
+    ArithIntrinsic { op: u8 },
     /// R2 CallBuiltinSym intrinsic, Tier-A (`which` = a `CBSYM_A_*`
     /// discriminant): a provably-trivial buffer/match-state read whose builtin
     /// body allocates no lisp — `neovm_jit_cbsym_read` calls the body GC-free,
@@ -7176,6 +7423,7 @@ impl SpecCalleeKind {
             SpecCalleeKind::PredRecordp
                 | SpecCalleeKind::PredSymbolWithPos
                 | SpecCalleeKind::EqInclProps
+                | SpecCalleeKind::ArithIntrinsic { .. }
         )
     }
 
@@ -7191,6 +7439,7 @@ impl SpecCalleeKind {
                 | SpecCalleeKind::PredRecordp
                 | SpecCalleeKind::PredSymbolWithPos
                 | SpecCalleeKind::EqInclProps
+                | SpecCalleeKind::ArithIntrinsic { .. }
         )
     }
 
@@ -7220,6 +7469,16 @@ impl SpecCalleeKind {
             SpecCalleeKind::PredRecordp => Some(2),
             SpecCalleeKind::PredSymbolWithPos => Some(3),
             SpecCalleeKind::EqInclProps => Some(4),
+            // A DISTINCT disc per bit-op (5=and, 6=ior, 7=xor). The op is baked as
+            // an iconst into the shim call, so the AOT loader — which re-classifies
+            // the LIVE callee and arms only on an exact disc match — must disarm a
+            // site whose baked op differs from the live binding's op (e.g. a `logand`
+            // site whose callee was re-aliased to `logior`). A shared disc would arm
+            // it and run the wrong baked op; distinct discs make the mismatch disarm.
+            SpecCalleeKind::ArithIntrinsic { op } => {
+                debug_assert!(op <= 2, "ArithIntrinsic op discriminant out of range");
+                Some(5 + op)
+            }
             SpecCalleeKind::CbsymTierA { .. } | SpecCalleeKind::CbsymTierB => None,
         }
     }
@@ -7227,7 +7486,7 @@ impl SpecCalleeKind {
     /// Number of distinct `Op::Call` spec discriminants [`to_spec_disc`](Self::to_spec_disc)
     /// assigns (0..DISC_COUNT). Salted into `ABI_TAG` so a renumber/count change
     /// re-tags stale `.so`s.
-    pub(crate) const DISC_COUNT: u8 = 5;
+    pub(crate) const DISC_COUNT: u8 = 8;
 }
 
 /// A speculated direct-call site: an `Op::Call` whose callee slot provably
@@ -7336,6 +7595,16 @@ fn subr_spec_kind(binding: Value, site_sym: SymId, nargs: usize) -> Option<SpecC
         .any(|name| matches!(*name, "aset" | "fillarray" | "funcall" | "apply" | "eval"))
     {
         return None;
+    }
+    // Bitwise-arith intrinsic (`logand`/`logior`/`logxor`, 2 args) — a GC-free
+    // native `&`/`|`/`^` via `neovm_jit_arith_spec`. Classified HERE, before the
+    // fixed-arity/`SubrFn::Many` branches, because these builtins are `ManySlice`
+    // variadics that both branches reject (they otherwise get full generic
+    // dispatch — the biggest, easiest win). Match on `resolved_name` (the subr the
+    // cell points to) so an alias `(fset 'myand (symbol-function 'logand))` still
+    // intrinsifies; the per-site epoch/expected-bits guard deopts on redefinition.
+    if let Some(op) = arith_intrinsic_op_by_name(resolved_name, nargs) {
+        return Some(SpecCalleeKind::ArithIntrinsic { op });
     }
     if Context::subr_entry_uses_fixed_value_call(entry) {
         if nargs < entry.min_args as usize {
@@ -8792,6 +9061,7 @@ pub fn lower_leaf_full(
         "neovm_jit_eq_incl_props_spec",
         neovm_jit_eq_incl_props_spec as *const u8,
     );
+    builder.symbol("neovm_jit_arith_spec", neovm_jit_arith_spec as *const u8);
     // R2 CallBuiltinSym intrinsic shims (Tier-B dispatch-skip + Tier-A GC-free
     // read). Unconditional registration (declares are gated on a CBSym spec
     // site); JIT-only.
@@ -11189,6 +11459,78 @@ mod tests {
         );
     }
 
+    /// The bit-op intrinsic (`logand`/`logior`/`logxor`) JIT-compiled: the armed
+    /// fast shim computes the native op == the interpreter (including negative
+    /// two's-complement fixnums), and a non-fixnum arg deopts to the generic
+    /// fallback block (which signals the same wrong-type as the interpreter).
+    #[test]
+    fn arith_intrinsic_bitops_jit_match_interp_and_deopt() {
+        use crate::emacs_core::eval::Context;
+        let mut ev = Context::new(); // binds logand/logior/logxor
+        let ctx = &mut ev as *mut Context as *mut u8;
+        // A 2-arg body `(OP p0 p1)`: Constant(OP); StackRef(2); StackRef(2); Call(2).
+        let mk = |op_name: &str, ob: &crate::emacs_core::symbol::Obarray| {
+            let mut f = ByteCodeFunction::new(LambdaParams {
+                required: vec![SymId(1), SymId(2)],
+                optional: Vec::new(),
+                rest: None,
+            });
+            f.lexical = true;
+            f.ops = vec![
+                Op::Constant(0),
+                Op::StackRef(2),
+                Op::StackRef(2),
+                Op::Call(2),
+                Op::Return,
+            ];
+            f.constants = vec![Value::symbol(op_name)];
+            f.max_stack = 16;
+            compile_bytecode_function_with(&f, Some(ob)).expect("bit-op body compiles")
+        };
+        let int = |n: i64| Value::make_int(n);
+        for (name, a, b, want) in [
+            ("logand", 12, 10, 8),
+            ("logior", 12, 10, 14),
+            ("logxor", 12, 10, 6),
+            ("logand", -1, 5, 5),     // two's-complement: -1 is all-ones
+            ("logior", -8, 3, -5),    // sign bit survives
+            ("logxor", -1, -1, 0),
+        ] {
+            let leaf = mk(name, &ev.obarray);
+            #[cfg(debug_assertions)]
+            let fast0 = SUBR_SPEC_FAST_COUNT.load(Ordering::Relaxed);
+            let r = leaf.call(ctx, &[int(a), int(b)]);
+            assert_eq!(
+                r,
+                NativeRun::Ok(int(want).bits()),
+                "({name} {a} {b}) = {want}"
+            );
+            #[cfg(debug_assertions)]
+            assert!(
+                SUBR_SPEC_FAST_COUNT.load(Ordering::Relaxed) > fast0,
+                "({name} {a} {b}): armed fast shim must fire"
+            );
+        }
+        // Non-fixnum arg (a cons): as_fixnum → None → STATUS_NEED_GENERIC → the
+        // generic fallback runs the real logand, which signals wrong-type — the
+        // SAME as the interpreter. Proves the deopt path is wired, GC-safe.
+        let leaf = mk("logand", &ev.obarray);
+        let cons = Value::cons(int(1), Value::NIL);
+        #[cfg(debug_assertions)]
+        let gen0 = SUBR_SPEC_GENERIC_COUNT.load(Ordering::Relaxed);
+        assert_eq!(
+            leaf.call(ctx, &[cons, int(5)]),
+            NativeRun::Signal,
+            "(logand '(1) 5) signals wrong-type via the generic fallback"
+        );
+        assert!(take_pending_flow().is_some(), "the signal was stashed");
+        #[cfg(debug_assertions)]
+        assert!(
+            SUBR_SPEC_GENERIC_COUNT.load(Ordering::Relaxed) > gen0,
+            "the non-fixnum arg took the NEED_GENERIC bounce"
+        );
+    }
+
     #[test]
     fn compiles_unwind_protect_pop() {
         use crate::emacs_core::eval::Context;
@@ -11732,17 +12074,17 @@ mod tests {
         // Before the re-weight: calls=2 arith=0 -> NotProfitable. Now the two
         // intrinsifiable CBSym ops drop out of the call count -> profitable.
         assert!(
-            body_is_jit_profitable(&[point, Op::Pop, goto, Op::Return]),
+            body_is_jit_profitable(&[point, Op::Pop, goto, Op::Return], &[]),
             "an intrinsifiable buffer-op body now tiers"
         );
         // A genuine Op::Call (no arithmetic) still vetoes.
         assert!(
-            !body_is_jit_profitable(&[Op::Constant(0), Op::Call(0), Op::Return]),
+            !body_is_jit_profitable(&[Op::Constant(0), Op::Call(0), Op::Return], &[]),
             "a real call-dominated body still declines"
         );
         // A non-shipped CBSym (`car`) is NOT intrinsified, so it still counts.
         assert!(
-            !body_is_jit_profitable(&[Op::CallBuiltinSym(intern("car"), 1), Op::Return]),
+            !body_is_jit_profitable(&[Op::CallBuiltinSym(intern("car"), 1), Op::Return], &[]),
             "a non-intrinsifiable CBSym still counts as a call"
         );
     }
@@ -11781,22 +12123,22 @@ mod tests {
         // Default (relax OFF): both decline (calls > arith), unchanged behavior.
         force_gate_relax_for_test(false);
         assert!(
-            !body_is_jit_profitable(&user_call_heavy),
+            !body_is_jit_profitable(&user_call_heavy, &[]),
             "relax OFF: user-call-heavy still declines (unchanged)"
         );
         assert!(
-            !body_is_jit_profitable(&builtin_heavy),
+            !body_is_jit_profitable(&builtin_heavy, &[]),
             "relax OFF: builtin-heavy declines"
         );
 
         // Relax ON: user calls no longer veto; builtin calls still do.
         force_gate_relax_for_test(true);
         assert!(
-            body_is_jit_profitable(&user_call_heavy),
+            body_is_jit_profitable(&user_call_heavy, &[]),
             "relax ON: user-call-heavy now tiers (measured 2.31x net-positive)"
         );
         assert!(
-            !body_is_jit_profitable(&builtin_heavy),
+            !body_is_jit_profitable(&builtin_heavy, &[]),
             "relax ON: builtin-call-heavy still declines (font-lock ~1.0x, correctly declined)"
         );
         force_gate_relax_for_test(false);
@@ -13347,18 +13689,10 @@ mod tests {
                 "{name} (allowlisted Many) must classify as SubrGeneral"
             );
         }
-        // REJECT: every registered ManySlice variadic stays generic at any arity.
-        for name in [
-            "+",
-            "logand",
-            "logior",
-            "logxor",
-            "list",
-            "vector",
-            "append",
-            "nconc",
-            "string-match",
-        ] {
+        // REJECT: every registered ManySlice variadic (EXCEPT the bitwise-arith
+        // intrinsics logand/logior/logxor, checked separately below) stays generic
+        // at any arity.
+        for name in ["+", "list", "vector", "append", "nconc", "string-match"] {
             let id = sid(name);
             let binding = ev
                 .obarray
@@ -13372,6 +13706,60 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The bitwise-arith intrinsics (logand/logior/logxor) — `ManySlice` variadics
+    /// that would otherwise get full generic dispatch — classify as
+    /// `ArithIntrinsic` at EXACTLY 2 args (the GC-free fixnum fast path), and stay
+    /// generic (`None`) at every other arity (0=const, 1=identity, ≥3=reduction).
+    #[test]
+    fn subr_spec_kind_classifies_bitwise_arith_at_two_args() {
+        use crate::emacs_core::eval::Context;
+        let ev = Context::new();
+        let sid = |name: &str| match Value::symbol(name).kind() {
+            crate::emacs_core::value::ValueKind::Symbol(id) => id,
+            _ => panic!("symbol"),
+        };
+        for (name, op) in [
+            ("logand", ARITH_KIND_LOGAND as u8),
+            ("logior", ARITH_KIND_LOGIOR as u8),
+            ("logxor", ARITH_KIND_LOGXOR as u8),
+        ] {
+            let id = sid(name);
+            let binding = ev
+                .obarray
+                .symbol_function_id(id)
+                .unwrap_or_else(|| panic!("{name} fbound"));
+            assert_eq!(
+                subr_spec_kind(binding, id, 2),
+                Some(SpecCalleeKind::ArithIntrinsic { op }),
+                "{name} at 2 args must intrinsify with op {op}"
+            );
+            // Each op gets a distinct discriminant (AOT loader disarms on mismatch).
+            assert_eq!(
+                SpecCalleeKind::ArithIntrinsic { op }.to_spec_disc(),
+                Some(5 + op),
+                "{name} disc is 5+op"
+            );
+            for nargs in [0usize, 1, 3, 4] {
+                assert_eq!(
+                    subr_spec_kind(binding, id, nargs),
+                    None,
+                    "{name} stays generic at nargs={nargs}"
+                );
+            }
+        }
+        // The three discs are pairwise distinct and within DISC_COUNT.
+        let discs: Vec<u8> = [ARITH_KIND_LOGAND, ARITH_KIND_LOGIOR, ARITH_KIND_LOGXOR]
+            .iter()
+            .map(|&op| {
+                SpecCalleeKind::ArithIntrinsic { op: op as u8 }
+                    .to_spec_disc()
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(discs, vec![5, 6, 7]);
+        assert!(discs.iter().all(|&d| d < SpecCalleeKind::DISC_COUNT));
     }
 
     // ---- Panic containment at the shim boundary ----

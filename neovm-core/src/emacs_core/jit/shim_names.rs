@@ -17,6 +17,10 @@
 // const inside each build.rs `main` (no module/use context required).
 const NEOVM_JIT_SHIM_NAMES: &[&str] = &[
     "neovm_jit_apply",
+    // logand/logior/logxor bitwise intrinsic — emitted by AOT baseline leaves
+    // (its Op::Call classification runs under Some(obarray) at emit), so an AOT
+    // `.so` may import it: MUST be host-exported + salted into ABI_TAG.
+    "neovm_jit_arith_spec",
     "neovm_jit_backedge",
     "neovm_jit_builtin1",
     "neovm_jit_builtin2",

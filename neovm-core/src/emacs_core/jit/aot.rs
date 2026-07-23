@@ -2851,13 +2851,13 @@ pub fn testkit_spec_aot_selftest(dir: &std::path::Path) -> Result<(), String> {
         pushes: Vec<Op>,
         args: Vec<Value>,
     }
-    // Both callees are Rust builtins bound in a minimal `Context::new()` (so no
-    // loadup is needed). This exercises the two round-1 spec shims a builtin-only
-    // context can reach — `neovm_jit_pred_spec` (PredRecordp) and
-    // `neovm_jit_call_subr_spec` (SubrGeneral). The third shim
-    // (`neovm_jit_eq_incl_props_spec`, for `equal-including-properties`, which is
-    // lisp-defined so unbound here) is still exported + salted into `ABI_TAG` +
-    // covered by the emit-time `assert_aot_imports_exported` import audit.
+    // All callees are Rust builtins bound in a minimal `Context::new()` (so no
+    // loadup is needed). This exercises three spec shims a builtin-only context
+    // can reach — `neovm_jit_pred_spec` (PredRecordp), `neovm_jit_call_subr_spec`
+    // (SubrGeneral), and `neovm_jit_arith_spec` (ArithIntrinsic, logand). The
+    // fourth shim (`neovm_jit_eq_incl_props_spec`, for `equal-including-properties`,
+    // which is lisp-defined so unbound here) is still exported + salted into
+    // `ABI_TAG` + covered by the emit-time `assert_aot_imports_exported` import audit.
     let corpus = [
         // recordp (PredRecordp → neovm_jit_pred_spec): (p x), x=5 → nil.
         Armed {
@@ -2876,6 +2876,18 @@ pub fn testkit_spec_aot_selftest(dir: &std::path::Path) -> Result<(), String> {
             arity: 1,
             pushes: vec![Op::StackRef(1)],
             args: vec![Value::make_int(5)],
+        },
+        // logand (ArithIntrinsic → neovm_jit_arith_spec): (a x y), 12&10 → 8.
+        // Exercises an AOT-baked bit-op intrinsic: the loader re-classifies the
+        // live `logand` cell, matches the baked disc (5), arms, and the fast shim
+        // computes the native `&` from call 1 (AOT == interp == 8).
+        Armed {
+            label: "arith/logand",
+            alias: "aot-spec-arith",
+            builtin: "logand",
+            arity: 2,
+            pushes: vec![Op::StackRef(2), Op::StackRef(2)],
+            args: vec![Value::make_int(12), Value::make_int(10)],
         },
     ];
 
