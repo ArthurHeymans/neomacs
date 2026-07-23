@@ -2331,7 +2331,24 @@ fn live_vertical_motion_snapshot<'a>(
     if live_window.buffer_id()? != current_buffer {
         return None;
     }
-    frame.redisplay_snapshot(window_id)
+    let snapshot = frame.redisplay_snapshot(window_id)?;
+    // GNU's `vertical-motion` always recomputes from the current buffer via the
+    // display engine. Our snapshot is the last redisplay's layout — valid only
+    // while the buffer is unchanged since then. If the buffer was mutated
+    // without an intervening redisplay (e.g. `shr-fill-line` inserting text as
+    // it renders, or any edit before the next redisplay), the snapshot's
+    // positions are stale and can point BEHIND the current point, so a column
+    // move never advances and the caller's fill loop spins at 100% CPU. Reject
+    // a stale snapshot here; callers fall back to a fresh buffer scan.
+    if let Some(snap_modiff) = snapshot.buffer_modiff
+        && eval
+            .buffers
+            .get(current_buffer)
+            .is_none_or(|buffer| buffer.modified_tick() != snap_modiff)
+    {
+        return None;
+    }
+    Some(snapshot)
 }
 
 fn snapshot_text_rows(snapshot: &WindowDisplaySnapshot) -> Vec<&DisplayRowSnapshot> {

@@ -1552,6 +1552,22 @@ impl WindowOutputEmitter {
             .collect();
         body_rows.sort_by_key(|row| row.output_row);
         body_rows.dedup_by_key(|row| row.output_row);
+        // Record the displayed buffer's modification tick so display primitives
+        // that consult this snapshot (notably `vertical-motion` with a column
+        // target) can reject it once the buffer is mutated without a fresh
+        // redisplay — otherwise a stale snapshot returns positions that never
+        // advance (e.g. `shr-fill-line` inserting text while rendering hangs at
+        // 100% CPU).
+        let buffer_modiff = {
+            let buffer_id = evaluator
+                .frame_manager()
+                .get(frame_id)
+                .and_then(|frame| frame.find_window(window_id))
+                .and_then(|window| window.buffer_id());
+            buffer_id
+                .and_then(|buffer_id| evaluator.buffer_manager().get(buffer_id))
+                .map(|buffer| buffer.modified_tick())
+        };
         let snapshot = WindowDisplaySnapshot {
             window_id,
             cell_origin,
@@ -1566,6 +1582,7 @@ impl WindowOutputEmitter {
             phys_cursor: phys_cursor.clone(),
             points: self.points,
             rows: self.rows,
+            buffer_modiff,
         };
         if self.publish_live
             && let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id)

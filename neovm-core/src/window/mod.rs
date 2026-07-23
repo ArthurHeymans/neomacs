@@ -1417,6 +1417,13 @@ pub struct WindowDisplaySnapshot {
     pub points: Vec<DisplayPointSnapshot>,
     /// Visible row metrics, sorted by `row`.
     pub rows: Vec<DisplayRowSnapshot>,
+    /// The displayed buffer's `modified_tick` when this snapshot was produced.
+    /// The snapshot is a redisplay cache; a display primitive that reads it
+    /// (e.g. `vertical-motion` with a column target) must treat it as valid
+    /// only while the buffer is unchanged since that redisplay — GNU always
+    /// recomputes from current buffer state. `None` disables the staleness
+    /// gate (used by test fixtures that install a synthetic snapshot).
+    pub buffer_modiff: Option<i64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1637,6 +1644,7 @@ impl Default for WindowDisplaySnapshot {
             phys_cursor: None,
             points: Vec::new(),
             rows: Vec::new(),
+            buffer_modiff: None,
         }
     }
 }
