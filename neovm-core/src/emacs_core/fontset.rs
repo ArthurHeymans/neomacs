@@ -651,7 +651,23 @@ pub(crate) fn resolve_fontset_name_arg(value: &Value) -> Result<String, Flow> {
         ValueKind::String => {
             let requested =
                 normalize_fontset_name(&fontset_string_text(value).expect("checked string"));
-            Ok(query_fontset_registry(&requested, false).unwrap_or(requested))
+            if let Some(found) = query_fontset_registry(&requested, false) {
+                return Ok(found);
+            }
+            // A plain font name is not a fontset name. The classic idiom
+            // `(set-fontset-font (frame-parameter nil 'font) CHARSET FONT-SPEC)`
+            // passes the frame's font; GNU's `check_fontset_name` resolves it to
+            // the frame's fontset (the one used for display). neomacs renders
+            // from the single default fontset, so map any font name there --
+            // otherwise the spec lands on a fontset nothing consults and the
+            // CJK font is silently ignored (issue #177). A real
+            // `-...-fontset-NAME` XLFD (which contains "fontset") keeps its own
+            // name.
+            if requested.contains("fontset") {
+                Ok(requested)
+            } else {
+                Ok(DEFAULT_FONTSET_NAME.to_string())
+            }
         }
         ValueKind::Symbol(id) => {
             let requested = normalize_fontset_name(resolve_sym(id));

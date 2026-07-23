@@ -555,3 +555,31 @@ fn fontset_registry_pdump_uses_symbol_identity_for_charset_repertories() {
     assert!(spec.registry.is_none());
     assert!(spec.lang.is_none());
 }
+
+#[test]
+fn resolve_fontset_name_maps_a_font_name_to_the_default_fontset() {
+    crate::test_utils::init_test_tracing();
+    // t / nil resolve to the default fontset.
+    assert_eq!(
+        resolve_fontset_name_arg(&Value::T).unwrap(),
+        DEFAULT_FONTSET_NAME
+    );
+    assert_eq!(
+        resolve_fontset_name_arg(&Value::NIL).unwrap(),
+        DEFAULT_FONTSET_NAME
+    );
+    // A plain font name (the `(frame-parameter nil 'font)` idiom, issue #177)
+    // resolves to the default fontset -- the one neomacs renders from -- rather
+    // than a phantom fontset nothing consults.
+    let font_name = Value::string("-*-hack-regular-normal-*-*-27-*-*-*-*-*-*-*");
+    assert_eq!(
+        resolve_fontset_name_arg(&font_name).unwrap(),
+        DEFAULT_FONTSET_NAME
+    );
+    // A genuine `-...-fontset-NAME` XLFD keeps its own name.
+    let fontset_name = "-*-*-*-*-*-*-*-*-*-*-*-*-fontset-mine";
+    assert_eq!(
+        resolve_fontset_name_arg(&Value::string(fontset_name)).unwrap(),
+        fontset_name
+    );
+}
