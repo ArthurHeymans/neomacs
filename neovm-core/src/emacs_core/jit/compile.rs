@@ -3708,12 +3708,50 @@ fn jit_gate_relax_on() -> bool {
     *ON.get_or_init(|| std::env::var("NEOVM_JIT_GATE_RELAX").as_deref() == Ok("on"))
 }
 
-/// Op-indices of `Op::Call(2)` sites whose callee provably holds a `logand`/
-/// `logior`/`logxor` SYMBOL constant — the sites `subr_spec_kind` classifies as
-/// [`SpecCalleeKind::ArithIntrinsic`]. The profitability gate uses these to NOT
-/// count an intrinsifiable bit-op as a call: it lowers to a GC-free native
-/// `&`/`|`/`^` (≈ an arith op), not a call+dispatch, so a bit-op-heavy loop must
-/// not be vetoed as "call-dominated".
+#[cfg(test)]
+std::thread_local! {
+    static INLINE_ARITH_TEST_OVERRIDE: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+}
+
+/// Force Level-B inline-arith on/off on the current thread (tests only).
+#[cfg(test)]
+pub(crate) fn force_inline_arith_for_test(on: bool) {
+    INLINE_ARITH_TEST_OVERRIDE.with(|c| c.set(Some(on)));
+}
+
+/// LEVEL-B: inline `logand`/`logior`/`logxor`/`lognot` (JIT only) as native
+/// `band`/`bor`/`bxor`/`ineg` on the TAGGED fixnum bits (the tag `2` survives
+/// `&`/`|`, is restored after `^`, and `ineg` maps a tagged fixnum to its
+/// `lognot`), guarded by a fixnum check that deopts, instead of the armed
+/// `neovm_jit_arith_spec` shim (which marshals 8 args). Redefinition is caught by
+/// the leaf's `inline_epoch` eviction. `ash` never inlines (overflow/bignum).
+/// Env `NEOVM_JIT_INLINE_ARITH=on` opts in (default OFF pending the shim-vs-inline
+/// A/B); AOT always keeps the shim (its loader owns arm/disarm — an inline op has
+/// no per-site epoch).
+fn jit_inline_arith_on() -> bool {
+    #[cfg(test)]
+    if let Some(o) = INLINE_ARITH_TEST_OVERRIDE.with(|c| c.get()) {
+        return o;
+    }
+    use std::sync::OnceLock;
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| std::env::var("NEOVM_JIT_INLINE_ARITH").as_deref() == Ok("on"))
+}
+
+/// Which `ArithIntrinsic` ops Level-B lowers inline (everything but `ash`, whose
+/// overflow/bignum path must stay on the shim).
+fn arith_op_inlines(op: u8) -> bool {
+    op != ARITH_KIND_ASH as u8
+}
+
+/// Every `Op::Call` site whose callee provably holds an intrinsifiable bit-op
+/// SYMBOL constant (`logand`/`logior`/`logxor`/`ash`/`lognot` at its intrinsic
+/// arity) — the sites `subr_spec_kind` classifies as
+/// [`SpecCalleeKind::ArithIntrinsic`] — as `(op_index, callee_sym, arith_op)`.
+/// The profitability gate uses the indices to NOT count an intrinsifiable bit-op
+/// as a call (it lowers to a native op ≈ arith, not a call+dispatch, so a
+/// bit-op-heavy loop is not vetoed as "call-dominated"); Level-B uses the callee
+/// syms of the inlinable ops for the leaf's redefinition-eviction dep set.
 ///
 /// A name-only, obarray-free mirror of [`find_spec_sites`]' abstract-tag scan
 /// (the callee sits `nargs` below the top; only the stack-shuffling ops carry a
@@ -3723,7 +3761,10 @@ fn jit_gate_relax_on() -> bool {
 /// bytecode; on hand-crafted bytecode the gate may merely over-/under-count (a
 /// heuristic mis-estimate, never a miscompile — `find_spec_sites` independently
 /// decides, off the LIVE binding, what actually intrinsifies). Ascending order.
-fn intrinsic_arith_call_indices(ops: &[Op], constants: &[Value]) -> Vec<usize> {
+fn arith_intrinsic_call_sites(
+    ops: &[Op],
+    constants: &[Value],
+) -> Vec<(usize, crate::emacs_core::intern::SymId, u8)> {
     let mut out = Vec::new();
     let mut tags: Vec<Option<u16>> = Vec::new();
     for (i, op) in ops.iter().enumerate() {
@@ -3778,9 +3819,9 @@ fn intrinsic_arith_call_indices(ops: &[Op], constants: &[Value]) -> Vec<usize> {
                     && let Some(cidx) = tags[tags.len() - 1 - nargs]
                     && let Some(sym_id) =
                         constants.get(cidx as usize).and_then(|v| v.as_symbol_id())
-                    && arith_intrinsic_op_by_name(resolve_sym(sym_id), nargs).is_some()
+                    && let Some(arith_op) = arith_intrinsic_op_by_name(resolve_sym(sym_id), nargs)
                 {
-                    out.push(i);
+                    out.push((i, sym_id, arith_op));
                 }
                 for _ in 0..(nargs + 1).min(tags.len()) {
                     tags.pop();
@@ -3812,6 +3853,24 @@ fn intrinsic_arith_call_indices(ops: &[Op], constants: &[Value]) -> Vec<usize> {
     out
 }
 
+/// The distinct callee symbols of the body's INLINABLE (`arith_op_inlines`) bit-op
+/// sites — the redefinition-eviction dep set for a Level-B leaf (an inlined op
+/// bakes the native instruction with no per-call arming, so `fset`ing the callee
+/// must evict the leaf). `ash` is excluded (it stays on the self-arming shim).
+fn inline_arith_callee_syms(
+    ops: &[Op],
+    constants: &[Value],
+) -> Vec<crate::emacs_core::intern::SymId> {
+    let mut syms: Vec<crate::emacs_core::intern::SymId> = arith_intrinsic_call_sites(ops, constants)
+        .into_iter()
+        .filter(|&(_, _, op)| arith_op_inlines(op))
+        .map(|(_, sym, _)| sym)
+        .collect();
+    syms.sort_by_key(|s| s.0);
+    syms.dedup();
+    syms
+}
+
 /// Decide whether a bytecode body is worth compiling.
 ///
 /// The baseline tier only removes per-op interpreter *dispatch*. A function call
@@ -3829,9 +3888,13 @@ fn body_is_jit_profitable(ops: &[Op], constants: &[Value]) -> bool {
         return true;
     }
     let relax = jit_gate_relax_on();
-    // The intrinsifiable bit-op `Op::Call` sites (logand/logior/logxor of 2 args),
-    // which lower to GC-free native ops — counted as arith below, not calls.
-    let intrinsic = intrinsic_arith_call_indices(ops, constants);
+    // The intrinsifiable bit-op `Op::Call` sites (logand/logior/logxor/ash/lognot),
+    // which lower to native ops — counted as arith below, not calls. Ascending
+    // op-index order (linear scan), so `binary_search` is valid.
+    let intrinsic: Vec<usize> = arith_intrinsic_call_sites(ops, constants)
+        .into_iter()
+        .map(|(idx, _, _)| idx)
+        .collect();
     let mut arith = 0u32;
     let mut calls = 0u32;
     for (i, op) in ops.iter().enumerate() {
@@ -3991,6 +4054,22 @@ fn compile_bytecode_function_inner(
     )?;
     leaf.required = required;
     leaf.has_rest = has_rest;
+    // LEVEL-B redefinition guard: an inlined bit-op (logand/logior/logxor/lognot)
+    // bakes the native op with NO per-call arming, so the leaf must be evicted if
+    // its callee is ever redefined. Use PRECISE inline_deps only (NOT the coarse
+    // inline_epoch backstop): `set_symbol_function_id` → `note_function_redefined`
+    // → `evict_inline_dependents(sym)` fires on every fset/fmakunbound, so a leaf
+    // registered under `logand` is evicted exactly when `logand` changes. The
+    // coarse `inline_epoch` backstop is DELIBERATELY omitted — it evicts on ANY
+    // function redefinition, which thrash-recompiles bit-op leaves during
+    // byte-compile/loadup (measured +13.7%); a bare epoch bump without a cell write
+    // means the bit-op is unchanged, so precise eviction loses no correctness.
+    if jit_inline_arith_on() && obarray.is_some() {
+        let inline_syms = inline_arith_callee_syms(ops, &f.constants);
+        if !inline_syms.is_empty() {
+            leaf.inline_deps = inline_syms.into();
+        }
+    }
     Ok(leaf)
 }
 
@@ -6760,6 +6839,51 @@ fn lower_simple_op(
                 }
                 proven
             });
+            // LEVEL-B (JIT only): inline logand/logior/logxor/lognot as native ops
+            // on the TAGGED fixnum bits, guarded by a fixnum check that DEOPTS —
+            // instead of the armed shim's 8-arg call. The fixnum tag is 2
+            // (`retag_fixnum = (n<<2)|2`), so `a & b` / `a | b` keep it (2&2=2,
+            // 2|2=2), `a ^ b` clears it (2^2=0 → restore with `| 2`), and negating
+            // a tagged fixnum yields `lognot` exactly (-a == retag(~n)). A non-fixnum
+            // arg deopts to the precise-deopt block, where the interpreter re-runs
+            // the REAL call from `pc` (graceful for the odd bignum; a fully mixed
+            // loop stays interpreted). Redefinition is caught by the leaf's
+            // inline_epoch eviction (set in compile_bytecode_function_inner). AOT
+            // (`aot`) keeps the shim — its loader owns arm/disarm.
+            if jit_inline_arith_on()
+                && !aot
+                && let Some((_, _, _, _, SpecCalleeKind::ArithIntrinsic { op })) = spec
+                && arith_op_inlines(op)
+            {
+                let dsite = deopt_site(fb, pc, handlers.len(), stack, stack_raw, deopt_sites);
+                let sp = stack.len();
+                let is_lognot = op == ARITH_KIND_LOGNOT as u8;
+                let a = stack[sp - if is_lognot { 1 } else { 2 }];
+                guard_fixnum(fb, dsite, a, known);
+                let res = if is_lognot {
+                    // lognot(n) == ~n == -n-1; on the tagged bits: -a == retag(~n).
+                    fb.ins().ineg(a)
+                } else {
+                    let b = stack[sp - 1];
+                    guard_fixnum(fb, dsite, b, known);
+                    match op {
+                        x if x == ARITH_KIND_LOGAND as u8 => fb.ins().band(a, b),
+                        x if x == ARITH_KIND_LOGIOR as u8 => fb.ins().bor(a, b),
+                        _ => {
+                            debug_assert_eq!(op, ARITH_KIND_LOGXOR as u8);
+                            // XOR clears the tag bit (2^2=0); restore it.
+                            let x = fb.ins().bxor(a, b);
+                            fb.ins().bor_imm(x, FIXNUM_CHECK_VALUE as i64)
+                        }
+                    }
+                };
+                // Drop callee + args, push the tagged fixnum result.
+                stack.truncate(args_at - 1);
+                stack_raw.truncate(args_at - 1);
+                stack.push(res);
+                stack_raw.push(false);
+                return Ok(());
+            }
             // Pred/EqIncl sites pass their 1–2 args in REGISTERS on the direct
             // path (no spill; their fallback block spills for itself). Every
             // other shape spills the args into the call buffer for its shim.
@@ -11538,6 +11662,10 @@ mod tests {
     #[test]
     fn arith_intrinsic_bitops_jit_match_interp_and_deopt() {
         use crate::emacs_core::eval::Context;
+        // This test targets the armed SHIM path (asserts SUBR_SPEC_FAST_COUNT); pin
+        // Level-B inline OFF so and/or/xor/lognot go through the shim deterministically
+        // regardless of NEOVM_JIT_INLINE_ARITH (the inline path is covered separately).
+        force_inline_arith_for_test(false);
         let mut ev = Context::new(); // binds logand/logior/logxor/ash/lognot
         let ctx = &mut ev as *mut Context as *mut u8;
         // An N-arg body `(OP p0 [p1])`: Constant(OP); StackRef(nargs)*nargs; Call(nargs).
@@ -11645,6 +11773,81 @@ mod tests {
             SUBR_SPEC_GENERIC_COUNT.load(Ordering::Relaxed) > gen0,
             "the non-fixnum arg took the NEED_GENERIC bounce"
         );
+    }
+
+    /// LEVEL-B: with inline-arith forced on, logand/logior/logxor/lognot compile
+    /// to inline native ops (== interpreter, incl. negatives); the leaf records an
+    /// inline_epoch (redefinition eviction); `ash` stays on the shim (no
+    /// inline_epoch); and a non-fixnum arg DEOPTS (never wrongly computes inline).
+    #[test]
+    fn arith_intrinsic_inline_level_b_matches_interp() {
+        use crate::emacs_core::eval::Context;
+        force_inline_arith_for_test(true);
+        let mut ev = Context::new();
+        let ctx = &mut ev as *mut Context as *mut u8;
+        let mk = |op_name: &str, nargs: usize, ob: &crate::emacs_core::symbol::Obarray| {
+            let mut ops = vec![Op::Constant(0)];
+            for _ in 0..nargs {
+                ops.push(Op::StackRef(nargs as u16));
+            }
+            ops.push(Op::Call(nargs as u16));
+            ops.push(Op::Return);
+            let mut f = ByteCodeFunction::new(LambdaParams {
+                required: (0..nargs).map(|i| SymId(1 + i as u32)).collect(),
+                optional: Vec::new(),
+                rest: None,
+            });
+            f.lexical = true;
+            f.ops = ops;
+            f.constants = vec![Value::symbol(op_name)];
+            f.max_stack = 16;
+            compile_bytecode_function_with(&f, Some(ob)).expect("inline bit-op body compiles")
+        };
+        let int = |n: i64| Value::make_int(n);
+        for (name, nargs, args, want) in [
+            ("logand", 2usize, vec![12i64, 10], 8i64),
+            ("logior", 2, vec![12, 10], 14),
+            ("logxor", 2, vec![12, 10], 6),
+            ("logand", 2, vec![-1, 5], 5),
+            ("logior", 2, vec![-8, 3], -5),
+            ("logxor", 2, vec![-1, -1], 0),
+            ("logxor", 2, vec![-1, 0], -1), // tag-restore on a negative result
+            ("lognot", 1, vec![5], -6),
+            ("lognot", 1, vec![-1], 0),
+            ("lognot", 1, vec![0], -1),
+            ("lognot", 1, vec![Value::MOST_NEGATIVE_FIXNUM], Value::MOST_POSITIVE_FIXNUM),
+        ] {
+            let leaf = mk(name, nargs, &ev.obarray);
+            assert!(
+                !leaf.inline_deps().is_empty(),
+                "{name} inline leaf must register a redefinition-eviction dep"
+            );
+            let argv: Vec<Value> = args.iter().map(|&n| int(n)).collect();
+            assert_eq!(
+                leaf.call(ctx, &argv),
+                NativeRun::Ok(int(want).bits()),
+                "({name} {args:?}) inline = {want}"
+            );
+        }
+        // ash is NOT inlined: stays on the self-arming shim, so no inline dep.
+        let ash_leaf = mk("ash", 2, &ev.obarray);
+        assert!(
+            ash_leaf.inline_deps().is_empty(),
+            "ash stays on the shim — no inline redefinition dep"
+        );
+        assert_eq!(ash_leaf.call(ctx, &[int(3), int(4)]), NativeRun::Ok(int(48).bits()));
+        // A non-fixnum arg on an inline op DEOPTS (guard fails) — it never runs the
+        // inline `&` on a non-fixnum; the caller re-runs the real logand interpreted.
+        let leaf = mk("logand", 2, &ev.obarray);
+        let cons = Value::cons(int(1), Value::NIL);
+        assert!(
+            matches!(
+                leaf.call(ctx, &[cons, int(5)]),
+                NativeRun::Deopt | NativeRun::DeoptAt { .. }
+            ),
+            "(logand '(1) 5) must deopt, not compute inline"
+        );
+        force_inline_arith_for_test(false);
     }
 
     #[test]
