@@ -519,9 +519,22 @@ impl BufferSourceOutputSetup {
             let mut cursor_height = geometry.char_height;
             let mut cursor_ascent = window_metrics.ascent();
             let mut cursor_row_pixel_y = 0.0_f32;
+            // Body rows are in matrix (top-to-bottom) order; track the bottom
+            // edge of the row above the cursor row.
+            let mut prev_row_bottom = 0.0_f32;
             for (idx, row) in &replay.body_rows {
                 if *idx == replay.new_cursor_row_index {
-                    cursor_row_pixel_y = row.pixel_y;
+                    // The retained empty end-of-buffer placeholder row (point at
+                    // the empty last line / ZV) can carry a stale `pixel_y` of 0
+                    // because its geometry is not advanced from the running y
+                    // during the layout walk. Trusting it verbatim placed the
+                    // cursor at `window_top` — the whole "C-p then C-n at the last
+                    // line jumps the cursor to line 1" bug. Clamp to the bottom of
+                    // the row above so the cursor lands on its real line; a genuine
+                    // top row (no row above) keeps `pixel_y` via `prev_row_bottom`
+                    // starting at 0. The full-rebuild path is unaffected: it
+                    // captures the cursor y during emission from `row_geometry`.
+                    cursor_row_pixel_y = row.pixel_y.max(prev_row_bottom);
                     cursor_height = row.height_px;
                     cursor_ascent = row.ascent_px;
                     for glyph in &row.glyphs[GlyphArea::Text.index()] {
@@ -531,6 +544,7 @@ impl BufferSourceOutputSetup {
                         }
                     }
                 }
+                prev_row_bottom = row.pixel_y + row.height_px;
             }
 
             // Reconstruct the per-row hit-test map from the retained rows (row
