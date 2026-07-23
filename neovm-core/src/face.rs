@@ -133,24 +133,35 @@ impl Color {
         Self { r, g, b, a }
     }
 
-    /// Parse "#RRGGBB" or "#RGB" hex color.
+    /// Parse a GNU/X11 hex color: `#` followed by 3, 6, 9, or 12 hex digits —
+    /// i.e. 1..=4 hex digits PER CHANNEL (4/8/12/16 bits). Each channel is
+    /// downscaled to 8 bits using its most-significant bits, so the wide forms
+    /// parse correctly instead of being dropped. In particular `#RRRRGGGGBBBB`
+    /// (16-bit channels) is what Emacs' `color-values`/blend math emits — e.g.
+    /// indent-bars' computed bar colors like `#ffff33333333` — and dropping it
+    /// left those faces with no foreground (rendered as the default black).
     pub fn from_hex(s: &str) -> Option<Self> {
         let s = s.strip_prefix('#')?;
-        match s.len() {
-            6 => {
-                let r = u8::from_str_radix(&s[0..2], 16).ok()?;
-                let g = u8::from_str_radix(&s[2..4], 16).ok()?;
-                let b = u8::from_str_radix(&s[4..6], 16).ok()?;
-                Some(Color::rgb(r, g, b))
-            }
-            3 => {
-                let r = u8::from_str_radix(&s[0..1], 16).ok()? * 17;
-                let g = u8::from_str_radix(&s[1..2], 16).ok()? * 17;
-                let b = u8::from_str_radix(&s[2..3], 16).ok()? * 17;
-                Some(Color::rgb(r, g, b))
-            }
-            _ => None,
+        if s.is_empty() || s.len() % 3 != 0 {
+            return None;
         }
+        let per = s.len() / 3;
+        if per > 4 {
+            return None;
+        }
+        let bits = 4 * per as u32;
+        let channel = |index: usize| -> Option<u8> {
+            let start = index * per;
+            let raw = u16::from_str_radix(&s[start..start + per], 16).ok()?;
+            Some(if bits >= 8 {
+                // Take the most-significant 8 bits (8/12/16-bit channels).
+                (raw >> (bits - 8)) as u8
+            } else {
+                // 4-bit `#RGB`: replicate the nibble so 0xf -> 0xff (== v*17).
+                ((raw << 4) | raw) as u8
+            })
+        };
+        Some(Color::rgb(channel(0)?, channel(1)?, channel(2)?))
     }
 
     /// Convert to "#RRGGBB" hex string.

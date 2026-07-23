@@ -7,6 +7,26 @@ fn color_from_hex() {
     assert_eq!(Color::from_hex("#00ff00"), Some(Color::rgb(0, 255, 0)));
     assert_eq!(Color::from_hex("#abc"), Some(Color::rgb(170, 187, 204)));
     assert_eq!(Color::from_hex("invalid"), None);
+    // Wide GNU/X11 forms: 12 hex digits (16-bit channels, what `color-values`
+    // and blend math emit — e.g. indent-bars' computed bar colors). Each
+    // channel downscales to its most-significant 8 bits.
+    assert_eq!(
+        Color::from_hex("#ffff33333333"),
+        Some(Color::rgb(0xff, 0x33, 0x33))
+    );
+    assert_eq!(
+        Color::from_hex("#ffffffffffff"),
+        Some(Color::rgb(255, 255, 255))
+    );
+    assert_eq!(Color::from_hex("#000000000000"), Some(Color::rgb(0, 0, 0)));
+    // 9 hex digits (12-bit channels).
+    assert_eq!(
+        Color::from_hex("#fff333000"),
+        Some(Color::rgb(0xff, 0x33, 0x00))
+    );
+    // Bad lengths still reject.
+    assert_eq!(Color::from_hex("#abcd"), None);
+    assert_eq!(Color::from_hex("#fffffffffffff"), None);
 }
 
 #[test]
