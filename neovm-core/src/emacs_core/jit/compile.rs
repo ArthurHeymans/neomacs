@@ -1383,23 +1383,39 @@ pub(crate) const ARITH_KIND_LOGAND: i64 = 0;
 pub(crate) const ARITH_KIND_LOGIOR: i64 = 1;
 /// Op discriminator for [`neovm_jit_arith_spec`]: `logxor`.
 pub(crate) const ARITH_KIND_LOGXOR: i64 = 2;
+/// Op discriminator for [`neovm_jit_arith_spec`]: `ash` (2-arg arithmetic shift).
+/// LEFT shifts can overflow fixnum range → the shim bounces to generic (bignum).
+pub(crate) const ARITH_KIND_ASH: i64 = 3;
+/// Op discriminator for [`neovm_jit_arith_spec`]: `lognot` (1-arg bitwise NOT).
+pub(crate) const ARITH_KIND_LOGNOT: i64 = 4;
 
 /// Classify a callee SYMBOL name + arity as a bitwise-arithmetic intrinsic op,
 /// or `None`. Shared by [`subr_spec_kind`] (which additionally proves the live
 /// binding is the real subr) and the profitability gate's arith-intrinsic scan
-/// (name-only). Only the 2-arg forms intrinsify: `logand`/`logior`/`logxor` of
-/// two fixnums is always a fixnum, so the shim is GC-free; other arities
-/// (0 → identity const, 1 → identity, ≥3 → reduction) stay on the generic path.
+/// (name-only). The intrinsifiable forms are the ones whose fixnum fast path is
+/// GC-free (or bounces to generic when it would allocate):
+///
+/// * `logand`/`logior`/`logxor` (2 args) — bitwise of two fixnums is always a
+///   fixnum, never overflows (these are `ManySlice` → full generic dispatch
+///   today, the biggest win).
+/// * `ash` (2 args) — the interpreter has NO fixnum fast path (it always
+///   materializes a bignum), so a fixnum shift is a real win; LEFT-shift overflow
+///   bounces to generic.
+/// * `lognot` (1 arg) — `!n` of a fixnum is always a fixnum.
+///
+/// Other arities stay on the generic path (0 → identity const, ≥3 → reduction).
+/// `lsh` is deliberately absent: it is an elisp `defun` (subr.el), not a subr,
+/// so it takes the Bytecode spec path and its `ash` call intrinsifies transitively.
 fn arith_intrinsic_op_by_name(name: &str, nargs: usize) -> Option<u8> {
-    if nargs != 2 {
-        return None;
-    }
-    match name {
-        "logand" => Some(ARITH_KIND_LOGAND as u8),
-        "logior" => Some(ARITH_KIND_LOGIOR as u8),
-        "logxor" => Some(ARITH_KIND_LOGXOR as u8),
-        _ => None,
-    }
+    let op = match (name, nargs) {
+        ("logand", 2) => ARITH_KIND_LOGAND,
+        ("logior", 2) => ARITH_KIND_LOGIOR,
+        ("logxor", 2) => ARITH_KIND_LOGXOR,
+        ("ash", 2) => ARITH_KIND_ASH,
+        ("lognot", 1) => ARITH_KIND_LOGNOT,
+        _ => return None,
+    };
+    Some(op as u8)
 }
 
 /// Shared arming check for the three subr spec shims: TRUE iff the site's
@@ -1651,24 +1667,61 @@ pub extern "C" fn neovm_jit_eq_incl_props_spec(
     })
 }
 
-/// Speculated bitwise-arithmetic call (`logand`/`logior`/`logxor`, 2 args):
-/// when armed AND both arguments are fixnums, computes the native `&`/`|`/`^`
-/// and returns the fixnum result with zero dispatch. This is EXACTLY the
-/// interpreter's own 2-arg fast path (`builtin_logand_slice` et al.:
-/// `Value::fixnum(lhs & rhs)`) — a bitwise op on two fixnums always fits a
-/// fixnum (its sign/magnitude bits stay within the operands'), so `Value::fixnum`
-/// never overflows and the shim never allocates.
+/// Fixnum fast path for `(ash value count)` — mirrors GNU `Fash` /
+/// `builtin_ash_slice` for the both-fixnum case, or `None` when the result would
+/// leave fixnum range (so the shim bounces to the allocating generic path):
 ///
-/// Anything else — NOT armed (callee redefined), or either arg not a fixnum
-/// (marker / bignum / wrong-type) — returns [`STATUS_NEED_GENERIC`] and the
-/// generated fallback block runs the plain generic call, which reaches the
-/// SAME builtin body (marker→position, bignum via GMP, wrong-type signal). The
-/// deep/allocating cases therefore only ever run on the fully-rooted fallback
-/// path, so this keeps the GC-FREE INVARIANT of [`neovm_jit_eq_incl_props_spec`]
-/// (no allocation / no lisp on ANY path here; `maybe_quit` is Rust-heap only).
+/// * `count == 0` → `value` unchanged.
+/// * `count > 0` (left shift) → `value << count`, but ONLY when it is exactly
+///   reversible (`(sh >> count) == value` rejects any bit lost to i64 overflow)
+///   AND lands in fixnum range; otherwise `None` (the real result is a bignum).
+///   `count >= 64` is rejected up front (an i64 shift by ≥64 is undefined).
+/// * `count < 0` (arithmetic right shift, floor toward −∞ = `mpz_fdiv_q_2exp`) →
+///   always a fixnum (magnitude only shrinks); huge shifts clamp to a 63-bit
+///   sign fill (−1 for negative `value`, 0 otherwise), matching GNU.
+fn ash_fixnum_fast(value: i64, count: i64) -> Option<i64> {
+    if count == 0 {
+        Some(value)
+    } else if count > 0 {
+        if count >= 64 {
+            return None;
+        }
+        let sh = value.checked_shl(count as u32)?;
+        if (sh >> count) == value
+            && (Value::MOST_NEGATIVE_FIXNUM..=Value::MOST_POSITIVE_FIXNUM).contains(&sh)
+        {
+            Some(sh)
+        } else {
+            None
+        }
+    } else {
+        // count < 0. `-count` is safe (count ≥ MOST_NEGATIVE_FIXNUM > i64::MIN).
+        let bits = if count <= -63 { 63 } else { (-count) as u32 };
+        Some(value >> bits)
+    }
+}
+
+/// Speculated bitwise-arithmetic call: `logand`/`logior`/`logxor`/`ash` (2 args)
+/// and `lognot` (1 arg). When armed AND the argument(s) are fixnums, computes the
+/// native op with zero dispatch — EXACTLY the interpreter's fixnum semantics:
+/// `&`/`|`/`^` (`builtin_logand_slice` et al., always a fixnum, never overflows),
+/// `!n` (`builtin_lognot`, always a fixnum), and the fixnum `ash` fast path
+/// ([`ash_fixnum_fast`], which the interpreter LACKS — it always materializes a
+/// bignum). `Value::fixnum` never overflows on these results and the shim never
+/// allocates.
+///
+/// Anything else — NOT armed (callee redefined), an arg not a fixnum (marker /
+/// bignum / wrong-type), or an `ash` LEFT-shift whose result leaves fixnum range
+/// — returns [`STATUS_NEED_GENERIC`], and the generated fallback runs the plain
+/// generic call reaching the SAME builtin body (bignum via GMP, marker→position,
+/// wrong-type signal, `ash` overflow→bignum/overflow-error). The
+/// deep/allocating cases therefore only run on the fully-rooted fallback path,
+/// keeping the GC-FREE INVARIANT of [`neovm_jit_eq_incl_props_spec`] (no
+/// allocation / no lisp on ANY path here; `maybe_quit` is Rust-heap only).
 /// `op` is baked as an iconst (`ARITH_KIND_*`); each op also has a distinct
 /// [`SpecCalleeKind::to_spec_disc`], so an AOT site whose baked op no longer
 /// matches the live callee is disarmed by the loader (never run with a wrong op).
+/// For `lognot` (1 arg) the generated code passes a dummy `b`; the shim ignores it.
 /// SAFETY + AOT-importable status: same as [`neovm_jit_call_subr_spec`].
 #[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
 #[unsafe(no_mangle)]
@@ -1694,17 +1747,30 @@ pub extern "C" fn neovm_jit_arith_spec(
         // SAFETY: slot points into the executing leaf's spec_slots.
         let slot = unsafe { &*(slot as *const SpecSlot) };
         if subr_spec_armed(ctx, sym, expected, slot) {
-            let av = Value::from_bits(a as usize);
-            let bv = Value::from_bits(b as usize);
-            if let (Some(l), Some(r)) = (av.as_fixnum(), bv.as_fixnum()) {
-                let res = match kind {
-                    ARITH_KIND_LOGAND => l & r,
-                    ARITH_KIND_LOGIOR => l | r,
-                    _ => {
-                        debug_assert_eq!(kind, ARITH_KIND_LOGXOR);
-                        l ^ r
-                    }
-                };
+            // Single `match kind` (jump table) so the hot and/or/xor path has no
+            // extra dispatch. `None` on any non-fixnum arg or an `ash` overflow ->
+            // the generic bounce below. lognot is 1-arg (dummy `b`, ignored); the
+            // 2-arg ops read both operands only inside their own arm.
+            let fix2 = || {
+                match (
+                    Value::from_bits(a as usize).as_fixnum(),
+                    Value::from_bits(b as usize).as_fixnum(),
+                ) {
+                    (Some(l), Some(r)) => Some((l, r)),
+                    _ => None,
+                }
+            };
+            let res: Option<i64> = match kind {
+                ARITH_KIND_LOGAND => fix2().map(|(l, r)| l & r),
+                ARITH_KIND_LOGIOR => fix2().map(|(l, r)| l | r),
+                ARITH_KIND_LOGXOR => fix2().map(|(l, r)| l ^ r),
+                ARITH_KIND_ASH => fix2().and_then(|(l, r)| ash_fixnum_fast(l, r)),
+                _ => {
+                    debug_assert_eq!(kind, ARITH_KIND_LOGNOT);
+                    Value::from_bits(a as usize).as_fixnum().map(|n| !n)
+                }
+            };
+            if let Some(res) = res {
                 #[cfg(debug_assertions)]
                 SUBR_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
                 // SAFETY: `out` is the generated code's result stack slot.
@@ -6800,9 +6866,14 @@ fn lower_simple_op(
                                 .arith_spec
                                 .ok_or(CompileError::UnsupportedOp("subr-spec-refs"))?;
                             let kind_v = fb.ins().iconst(types::I64, op as i64);
+                            // lognot is 1-arg: pass a dummy `b` (the shim ignores it
+                            // for LOGNOT). The 2-arg ops collected both.
+                            let b_v = args.get(1).copied().unwrap_or_else(|| {
+                                fb.ins().iconst(types::I64, Value::NIL.bits() as i64)
+                            });
                             fb.ins().call(
                                 f,
-                                &[vmctx, kind_v, sym_v, exp_v, slot_v, args[0], args[1], out_addr],
+                                &[vmctx, kind_v, sym_v, exp_v, slot_v, args[0], b_v, out_addr],
                             )
                         }
                         // Reg-arg kinds always collected their args above.
@@ -7476,7 +7547,7 @@ impl SpecCalleeKind {
             // site whose callee was re-aliased to `logior`). A shared disc would arm
             // it and run the wrong baked op; distinct discs make the mismatch disarm.
             SpecCalleeKind::ArithIntrinsic { op } => {
-                debug_assert!(op <= 2, "ArithIntrinsic op discriminant out of range");
+                debug_assert!(op <= 4, "ArithIntrinsic op discriminant out of range");
                 Some(5 + op)
             }
             SpecCalleeKind::CbsymTierA { .. } | SpecCalleeKind::CbsymTierB => None,
@@ -7486,7 +7557,7 @@ impl SpecCalleeKind {
     /// Number of distinct `Op::Call` spec discriminants [`to_spec_disc`](Self::to_spec_disc)
     /// assigns (0..DISC_COUNT). Salted into `ABI_TAG` so a renumber/count change
     /// re-tags stale `.so`s.
-    pub(crate) const DISC_COUNT: u8 = 8;
+    pub(crate) const DISC_COUNT: u8 = 10;
 }
 
 /// A speculated direct-call site: an `Op::Call` whose callee slot provably
@@ -11459,35 +11530,37 @@ mod tests {
         );
     }
 
-    /// The bit-op intrinsic (`logand`/`logior`/`logxor`) JIT-compiled: the armed
-    /// fast shim computes the native op == the interpreter (including negative
-    /// two's-complement fixnums), and a non-fixnum arg deopts to the generic
-    /// fallback block (which signals the same wrong-type as the interpreter).
+    /// The bit-op intrinsics (`logand`/`logior`/`logxor`/`ash`/`lognot`)
+    /// JIT-compiled: the armed fast shim computes the native op == the interpreter
+    /// (including negative two's-complement fixnums and `ash` shifts), a non-fixnum
+    /// arg deopts to the generic fallback (same wrong-type signal), and an `ash`
+    /// LEFT-shift that overflows fixnum range deopts to the generic bignum.
     #[test]
     fn arith_intrinsic_bitops_jit_match_interp_and_deopt() {
         use crate::emacs_core::eval::Context;
-        let mut ev = Context::new(); // binds logand/logior/logxor
+        let mut ev = Context::new(); // binds logand/logior/logxor/ash/lognot
         let ctx = &mut ev as *mut Context as *mut u8;
-        // A 2-arg body `(OP p0 p1)`: Constant(OP); StackRef(2); StackRef(2); Call(2).
-        let mk = |op_name: &str, ob: &crate::emacs_core::symbol::Obarray| {
+        // An N-arg body `(OP p0 [p1])`: Constant(OP); StackRef(nargs)*nargs; Call(nargs).
+        let mk = |op_name: &str, nargs: usize, ob: &crate::emacs_core::symbol::Obarray| {
+            let mut ops = vec![Op::Constant(0)];
+            for _ in 0..nargs {
+                ops.push(Op::StackRef(nargs as u16));
+            }
+            ops.push(Op::Call(nargs as u16));
+            ops.push(Op::Return);
             let mut f = ByteCodeFunction::new(LambdaParams {
-                required: vec![SymId(1), SymId(2)],
+                required: (0..nargs).map(|i| SymId(1 + i as u32)).collect(),
                 optional: Vec::new(),
                 rest: None,
             });
             f.lexical = true;
-            f.ops = vec![
-                Op::Constant(0),
-                Op::StackRef(2),
-                Op::StackRef(2),
-                Op::Call(2),
-                Op::Return,
-            ];
+            f.ops = ops;
             f.constants = vec![Value::symbol(op_name)];
             f.max_stack = 16;
             compile_bytecode_function_with(&f, Some(ob)).expect("bit-op body compiles")
         };
         let int = |n: i64| Value::make_int(n);
+        // 2-arg ops with a fixnum result.
         for (name, a, b, want) in [
             ("logand", 12, 10, 8),
             ("logior", 12, 10, 14),
@@ -11495,8 +11568,12 @@ mod tests {
             ("logand", -1, 5, 5),     // two's-complement: -1 is all-ones
             ("logior", -8, 3, -5),    // sign bit survives
             ("logxor", -1, -1, 0),
+            ("ash", 3, 4, 48),        // left shift: 3 << 4
+            ("ash", 5, 0, 5),         // no shift
+            ("ash", 256, -3, 32),     // right shift: 256 >> 3
+            ("ash", -7, -1, -4),      // arithmetic right shift: floor(-3.5) = -4
         ] {
-            let leaf = mk(name, &ev.obarray);
+            let leaf = mk(name, 2, &ev.obarray);
             #[cfg(debug_assertions)]
             let fast0 = SUBR_SPEC_FAST_COUNT.load(Ordering::Relaxed);
             let r = leaf.call(ctx, &[int(a), int(b)]);
@@ -11511,10 +11588,49 @@ mod tests {
                 "({name} {a} {b}): armed fast shim must fire"
             );
         }
+        // lognot (1-arg): !n of a fixnum is always a fixnum.
+        for (a, want) in [(5i64, -6i64), (-1, 0), (0, -1)] {
+            let leaf = mk("lognot", 1, &ev.obarray);
+            #[cfg(debug_assertions)]
+            let fast0 = SUBR_SPEC_FAST_COUNT.load(Ordering::Relaxed);
+            assert_eq!(
+                leaf.call(ctx, &[int(a)]),
+                NativeRun::Ok(int(want).bits()),
+                "(lognot {a}) = {want}"
+            );
+            #[cfg(debug_assertions)]
+            assert!(
+                SUBR_SPEC_FAST_COUNT.load(Ordering::Relaxed) > fast0,
+                "(lognot {a}): armed fast shim must fire"
+            );
+        }
+        // ash LEFT-shift overflowing fixnum range -> NEED_GENERIC -> generic makes
+        // the bignum 2^100; result must equal the interpreter's (a bignum, != any
+        // fixnum), taking the generic bounce not the fast path.
+        {
+            let leaf = mk("ash", 2, &ev.obarray);
+            #[cfg(debug_assertions)]
+            let gen0 = SUBR_SPEC_GENERIC_COUNT.load(Ordering::Relaxed);
+            let NativeRun::Ok(bits) = leaf.call(ctx, &[int(1), int(100)]) else {
+                panic!("(ash 1 100) must return Ok (a bignum via generic)");
+            };
+            let got = Value::from_bits(bits);
+            let interp = ev.eval_str("(ash 1 100)").expect("interp ash");
+            assert!(
+                crate::emacs_core::value::equal_value(&got, &interp, 0),
+                "(ash 1 100): JIT {got:?} != interp {interp:?} (both should be 2^100)"
+            );
+            assert!(got.as_bignum().is_some(), "(ash 1 100) is a bignum");
+            #[cfg(debug_assertions)]
+            assert!(
+                SUBR_SPEC_GENERIC_COUNT.load(Ordering::Relaxed) > gen0,
+                "(ash 1 100): overflow took the NEED_GENERIC bounce"
+            );
+        }
         // Non-fixnum arg (a cons): as_fixnum → None → STATUS_NEED_GENERIC → the
         // generic fallback runs the real logand, which signals wrong-type — the
         // SAME as the interpreter. Proves the deopt path is wired, GC-safe.
-        let leaf = mk("logand", &ev.obarray);
+        let leaf = mk("logand", 2, &ev.obarray);
         let cons = Value::cons(int(1), Value::NIL);
         #[cfg(debug_assertions)]
         let gen0 = SUBR_SPEC_GENERIC_COUNT.load(Ordering::Relaxed);
@@ -13720,10 +13836,13 @@ mod tests {
             crate::emacs_core::value::ValueKind::Symbol(id) => id,
             _ => panic!("symbol"),
         };
-        for (name, op) in [
-            ("logand", ARITH_KIND_LOGAND as u8),
-            ("logior", ARITH_KIND_LOGIOR as u8),
-            ("logxor", ARITH_KIND_LOGXOR as u8),
+        // (name, op, the ONE arity that intrinsifies) — every other arity stays generic.
+        for (name, op, good_arity) in [
+            ("logand", ARITH_KIND_LOGAND as u8, 2usize),
+            ("logior", ARITH_KIND_LOGIOR as u8, 2),
+            ("logxor", ARITH_KIND_LOGXOR as u8, 2),
+            ("ash", ARITH_KIND_ASH as u8, 2),
+            ("lognot", ARITH_KIND_LOGNOT as u8, 1),
         ] {
             let id = sid(name);
             let binding = ev
@@ -13731,9 +13850,9 @@ mod tests {
                 .symbol_function_id(id)
                 .unwrap_or_else(|| panic!("{name} fbound"));
             assert_eq!(
-                subr_spec_kind(binding, id, 2),
+                subr_spec_kind(binding, id, good_arity),
                 Some(SpecCalleeKind::ArithIntrinsic { op }),
-                "{name} at 2 args must intrinsify with op {op}"
+                "{name} at {good_arity} args must intrinsify with op {op}"
             );
             // Each op gets a distinct discriminant (AOT loader disarms on mismatch).
             assert_eq!(
@@ -13741,25 +13860,62 @@ mod tests {
                 Some(5 + op),
                 "{name} disc is 5+op"
             );
-            for nargs in [0usize, 1, 3, 4] {
-                assert_eq!(
-                    subr_spec_kind(binding, id, nargs),
-                    None,
-                    "{name} stays generic at nargs={nargs}"
+            // At any OTHER arity the site must not classify as ArithIntrinsic
+            // (fixed-arity ash/lognot become None on arity mismatch; the ManySlice
+            // and/or/xor become None too — never a bit-op intrinsic).
+            for nargs in [0usize, 1, 2, 3, 4] {
+                if nargs == good_arity {
+                    continue;
+                }
+                assert!(
+                    !matches!(
+                        subr_spec_kind(binding, id, nargs),
+                        Some(SpecCalleeKind::ArithIntrinsic { .. })
+                    ),
+                    "{name} must not arith-intrinsify at nargs={nargs}"
                 );
             }
         }
-        // The three discs are pairwise distinct and within DISC_COUNT.
-        let discs: Vec<u8> = [ARITH_KIND_LOGAND, ARITH_KIND_LOGIOR, ARITH_KIND_LOGXOR]
-            .iter()
-            .map(|&op| {
-                SpecCalleeKind::ArithIntrinsic { op: op as u8 }
-                    .to_spec_disc()
-                    .unwrap()
-            })
-            .collect();
-        assert_eq!(discs, vec![5, 6, 7]);
+        // The five discs are pairwise distinct and within DISC_COUNT.
+        let discs: Vec<u8> = [
+            ARITH_KIND_LOGAND,
+            ARITH_KIND_LOGIOR,
+            ARITH_KIND_LOGXOR,
+            ARITH_KIND_ASH,
+            ARITH_KIND_LOGNOT,
+        ]
+        .iter()
+        .map(|&op| {
+            SpecCalleeKind::ArithIntrinsic { op: op as u8 }
+                .to_spec_disc()
+                .unwrap()
+        })
+        .collect();
+        assert_eq!(discs, vec![5, 6, 7, 8, 9]);
         assert!(discs.iter().all(|&d| d < SpecCalleeKind::DISC_COUNT));
+    }
+
+    /// The `ash_fixnum_fast` helper matches GNU `Fash` for the fixnum cases and
+    /// returns `None` exactly when the result would leave fixnum range (→ generic
+    /// bignum path).
+    #[test]
+    fn ash_fixnum_fast_matches_gnu_and_defers_overflow() {
+        // Left shifts that stay in range.
+        assert_eq!(ash_fixnum_fast(1, 4), Some(16));
+        assert_eq!(ash_fixnum_fast(-1, 1), Some(-2));
+        assert_eq!(ash_fixnum_fast(3, 0), Some(3));
+        // Right shifts (arithmetic, floor toward -inf) — always a fixnum.
+        assert_eq!(ash_fixnum_fast(16, -2), Some(4));
+        assert_eq!(ash_fixnum_fast(-3, -1), Some(-2)); // floor(-1.5) = -2
+        assert_eq!(ash_fixnum_fast(1, -100), Some(0)); // shifted away -> 0
+        assert_eq!(ash_fixnum_fast(-1, -100), Some(-1)); // negative -> -1
+        // Left shift that overflows fixnum range -> None (generic makes a bignum).
+        assert_eq!(ash_fixnum_fast(1, 61), None); // 2^61 > MOST_POSITIVE_FIXNUM
+        assert_eq!(ash_fixnum_fast(Value::MOST_POSITIVE_FIXNUM, 1), None);
+        assert_eq!(ash_fixnum_fast(1, 64), None); // >= 64: undefined shift, defer
+        assert_eq!(ash_fixnum_fast(1, 1000), None);
+        // Largest in-range left shift boundary.
+        assert_eq!(ash_fixnum_fast(1, 60), Some(1i64 << 60));
     }
 
     // ---- Panic containment at the shim boundary ----

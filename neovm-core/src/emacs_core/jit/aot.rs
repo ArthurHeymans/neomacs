@@ -2889,6 +2889,17 @@ pub fn testkit_spec_aot_selftest(dir: &std::path::Path) -> Result<(), String> {
             pushes: vec![Op::StackRef(2), Op::StackRef(2)],
             args: vec![Value::make_int(12), Value::make_int(10)],
         },
+        // ash (ArithIntrinsic, distinct disc 8): (a x y), 3<<4 → 48. Covers a
+        // second bit-op disc through the loader re-classify+arm path and the
+        // fixnum-shift fast path (which the interpreter lacks) end-to-end.
+        Armed {
+            label: "arith/ash",
+            alias: "aot-spec-ash",
+            builtin: "ash",
+            arity: 2,
+            pushes: vec![Op::StackRef(2), Op::StackRef(2)],
+            args: vec![Value::make_int(3), Value::make_int(4)],
+        },
     ];
 
     // PASS 1 — EMIT every `.so` BEFORE any load (the unit index is a OnceLock frozen
