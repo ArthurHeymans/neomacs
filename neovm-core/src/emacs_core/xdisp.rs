@@ -1033,6 +1033,33 @@ pub fn format_mode_line_for_display(
         .as_window_id()
         .map(|wid| eval.frames.select_window_for_mode_line(WindowId(wid)));
 
+    // GNU `display_mode_line` also runs with the buffer point set to the
+    // window's `w->pointm`, so point-dependent specs (`%l`, `%c`, `(point)` in
+    // `:eval`) reflect THIS window. Do it only for a window that is NOT the
+    // originally-selected one: that window's live buffer point is already
+    // correct and must not be clobbered. Without this, every window's mode line
+    // showed the selected window's line/column (the layout temp-selects each
+    // window here, which otherwise fools the "is selected" check).
+    let saved_point = window.as_window_id().and_then(|wid| {
+        let prev_selected = saved_window_selection
+            .and_then(|(_, prev_frame_window)| prev_frame_window)
+            .map(|(_, prev_window)| prev_window);
+        if prev_selected == Some(WindowId(wid)) {
+            return None;
+        }
+        let frame_id = eval.frames.find_window_frame_id(WindowId(wid))?;
+        let window_point = match eval.frames.get(frame_id)?.find_window(WindowId(wid))? {
+            crate::window::Window::Leaf { point, .. } => *point,
+            _ => return None,
+        };
+        let buffer_id = eval.buffers.current_buffer_id()?;
+        let buffer = eval.buffers.get_mut(buffer_id)?;
+        let saved = buffer.point_emacs_byte_pos();
+        let target = buffer.char_pos_to_emacs_byte_pos_clamped(window_point.to_char_pos());
+        buffer.goto_emacs_byte_pos(target);
+        Some((buffer_id, saved))
+    });
+
     let result_value = if format_val.is_nil() {
         Value::string("")
     } else {
@@ -1062,6 +1089,11 @@ pub fn format_mode_line_for_display(
         rendered.into_value(face_spec)
     };
 
+    if let Some((buffer_id, saved)) = saved_point
+        && let Some(buffer) = eval.buffers.get_mut(buffer_id)
+    {
+        buffer.goto_emacs_byte_pos(saved);
+    }
     if let Some(saved) = saved_window_selection {
         eval.frames.restore_selected_window_for_mode_line(saved);
     }
@@ -1319,6 +1351,12 @@ struct ModeLinePercentContext {
     /// `display_mode_line` uses `MODE_LINE_DISPLAY`. The same walker
     /// serves both; the only difference is the dispatch for `%-`.
     target_width: Option<usize>,
+    /// Byte position of THIS window's point, for point-dependent specs (`%l`,
+    /// `%c`). GNU sets the buffer's point to `w->pointm` while displaying a
+    /// window's mode line, so these reflect that window — not the selected
+    /// window's point (which is the live buffer point). `None` falls back to the
+    /// buffer point. Set per-window in `build_mode_line_percent_context`.
+    window_point: Option<EmacsBytePos>,
 }
 
 impl Default for ModeLinePercentContext {
@@ -1333,6 +1371,7 @@ impl Default for ModeLinePercentContext {
             is_tty_frame: false,
             eol_indicator: None,
             target_width: None,
+            window_point: None,
         }
     }
 }
@@ -1371,8 +1410,10 @@ fn build_mode_line_percent_context(
         .or_else(|| buffers.current_buffer());
     if let Some(window) = resolved_window {
         if let crate::window::Window::Leaf {
+            id,
             window_start,
             window_end_pos,
+            point,
             ..
         } = window
         {
@@ -1385,6 +1426,18 @@ fn build_mode_line_percent_context(
                     .get()
                     .saturating_add(1)
                     .saturating_sub(*window_end_pos);
+                // GNU displays a window's mode line with the buffer point set to
+                // that window's `w->pointm`, so `%l`/`%c` reflect THIS window.
+                // The selected window's point is the live buffer point; a
+                // non-selected window keeps its own stored point.
+                let is_selected = frames
+                    .selected_frame()
+                    .is_some_and(|frame| frame.selected_window == *id);
+                ctx.window_point = Some(if is_selected {
+                    buf.point_emacs_byte_pos()
+                } else {
+                    buf.char_pos_to_emacs_byte_pos_clamped(point.to_char_pos())
+                });
             } else {
                 ctx.window_end = ctx.window_start;
             }
@@ -2522,7 +2575,12 @@ fn expand_mode_line_percent_in_state(
     let narrowed = buf.is_some_and(|b| b.is_narrowed());
 
     let point_line_column = if let Some(b) = buf {
-        prefix_line_and_column(b, b.point_emacs_byte_pos())
+        // Use THIS window's point (GNU sets point to `w->pointm` per window),
+        // falling back to the live buffer point when no window context.
+        let point_byte = pctx
+            .window_point
+            .unwrap_or_else(|| b.point_emacs_byte_pos());
+        prefix_line_and_column(b, point_byte)
     } else {
         LineColumn { line: 1, column: 0 }
     };

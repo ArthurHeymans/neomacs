@@ -945,6 +945,58 @@ fn test_format_mode_line_line_and_column_at_deep_position() {
     assert_eq!(rendered, Value::string("4|3"));
 }
 
+#[test]
+fn format_mode_line_line_uses_the_target_windows_point_not_the_buffer_point() {
+    // A buffer shown in two windows: `%l` for a NON-selected window must reflect
+    // THAT window's own point (GNU displays each window's mode line with the
+    // buffer point set to `w->pointm`), not the selected window's live buffer
+    // point. Before the fix, `%l` always used the buffer point, so a second
+    // window showing the same buffer reported the selected window's line.
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buffer_id = eval.buffers.current_buffer().expect("current buffer").id;
+    {
+        let buffer = eval.buffers.get_mut(buffer_id).expect("buffer");
+        buffer.insert("line1\nline2\nline3\nline4\n");
+        // Selected window / live buffer point -> line 1.
+        buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+    }
+    let frame_id = eval
+        .frames
+        .create_frame("mode-line-window-point", 800, 600, buffer_id);
+    let selected = eval.frames.get(frame_id).expect("frame").selected_window;
+    let other = eval
+        .frames
+        .split_window(
+            frame_id,
+            selected,
+            crate::window::SplitDirection::Horizontal,
+            buffer_id,
+            None,
+            crate::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split produced a second window");
+    // Put the second (non-selected) window's point on line 3 (char 13).
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        match frame.find_window_mut(other).expect("second window") {
+            crate::window::Window::Leaf { point, .. } => {
+                *point = LispCharPos1::from_one_based_usize(13)
+            }
+            leaf => panic!("expected leaf window, got {leaf:?}"),
+        }
+    }
+
+    // The non-selected window's `%l` must be ITS point's line (3), not the
+    // selected window's line (1).
+    let other_l = builtin_format_mode_line_ctx(
+        &mut eval,
+        vec![Value::string("%l"), Value::NIL, Value::make_window(other.0)],
+    )
+    .expect("other window %l");
+    assert_eq!(other_l, Value::string("3"));
+}
+
 fn format_mode_line_position_backend_trace(kind: BufferTextBackendKind) -> String {
     let mut eval = interactive_context();
     convert_current_buffer_text_backend(&mut eval, kind);
