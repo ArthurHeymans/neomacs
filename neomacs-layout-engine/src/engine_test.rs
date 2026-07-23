@@ -4915,7 +4915,11 @@ fn line_break_extend_fill_reaches_tty_reserved_right_column() {
     {
         insert_fragmented_current_buffer_text(&mut eval, "x\n");
         let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
-        assert!(buffer.put_text_property(0, 1, Value::symbol("face"), extend_face_value()));
+        // The `:extend` face must cover the NEWLINE (positions [0,2) = 'x' and
+        // '\n') for GNU to fill the trailing region to the window edge — a face
+        // on the char alone (`[0,1)`) does NOT fill (verified against GNU 31:
+        // `extend_face_to_end_of_line` keys off `face_at_pos` at the newline).
+        assert!(buffer.put_text_property(0, 2, Value::symbol("face"), extend_face_value()));
     }
 
     let frame_id =
@@ -4965,6 +4969,81 @@ fn line_break_extend_fill_reaches_tty_reserved_right_column() {
         u16::try_from(entry.matrix.ncols - 1).expect("matrix width fits u16"),
         "the :extend fill must cover through the full text area, including the \
          TTY-reserved right column"
+    );
+}
+
+#[test]
+fn extend_fill_does_not_bleed_onto_the_following_blank_line() {
+    // Issue #185: an `:extend` line (hl-line / region) immediately followed by a
+    // BLANK line must not paint the blank line with the previous line's fill.
+    // The `:extend` face here covers line 1's newline (`[0,2)` = 'x' + '\n'), so
+    // line 1 fills to the edge; the blank line 2's own newline is NOT covered,
+    // so it resolves to the non-extending default face and must stay unfilled.
+    let mut eval = Context::new();
+    convert_current_buffer_text_backend(&mut eval, BufferTextBackendKind::GapBuffer);
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        insert_fragmented_current_buffer_text(&mut eval, "x\n\n");
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        assert!(buffer.put_text_property(0, 2, Value::symbol("face"), extend_face_value()));
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("extend-fill-blank-line", 360, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let text_rows: Vec<_> = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .collect();
+    let row1 = text_rows.first().expect("line 1 text row");
+    let row2 = text_rows.get(1).expect("blank line 2 text row");
+
+    // Line 1 covers its newline -> a wide `:extend` fill stretch reaches the edge.
+    let fill = row1.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .rev()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
+        .expect("line 1 :extend fill stretch");
+    let extend_face = fill.face_id;
+    match &fill.glyph_type {
+        GlyphType::Stretch { width_cols } => assert!(
+            *width_cols >= u16::try_from(entry.matrix.ncols - 1).expect("fits u16"),
+            "line 1 must fill to the window edge, got {width_cols} cols"
+        ),
+        other => panic!("expected a stretch fill, got {other:?}"),
+    }
+
+    // The blank line 2 must NOT inherit that fill face.
+    assert!(
+        row2.glyphs[GlyphArea::Text.index()]
+            .iter()
+            .all(|glyph| glyph.face_id != extend_face),
+        "the blank line after an :extend line must not inherit its fill face (#185); \
+         row2 = {:?}",
+        row2.glyphs[GlyphArea::Text.index()]
     );
 }
 

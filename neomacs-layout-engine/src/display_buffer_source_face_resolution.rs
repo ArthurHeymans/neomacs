@@ -129,14 +129,23 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
             .row_geometry
             .include_row_extents(face_metrics.row_height(), face_metrics.ascent());
 
+        // The `:extend` line-fill face must track the face resolved AT this
+        // position, exactly like GNU `extend_face_to_end_of_line`'s
+        // `face_at_pos(it, LFACE_EXTEND_INDEX)` — activate when the resolved
+        // face extends, clear otherwise. Clearing here (rather than only when a
+        // later non-extend source item renders) is what fixes a blank line that
+        // immediately follows an `:extend` line (e.g. hl-line / region): the
+        // blank line resolves to the non-extending default face at its own bol,
+        // so it must NOT inherit the previous line's fill (issue #185). A face
+        // that covers the newline (hl-line's `[bol, next-bol)` overlay) stays
+        // extending across the checkpoint and still fills its own row.
         if let Some(fill) = state.active_face_state.row_extend_fill() {
             state
                 .row_extend
                 .activate(state.row_geometry.current_row_marker(), fill);
+        } else {
+            state.row_extend.clear();
         }
-        // Do not clear row_extend on a bare face checkpoint: an extending face
-        // that ends exactly before a newline still supplies the line-fill face.
-        // Rendering the next non-extend source item clears it instead.
 
         if state.box_face.is_active() && resolved_box_type == 0 {
             state.box_face.clear();
