@@ -5,7 +5,9 @@ use std::time::Duration;
 fn default_transition_state_has_expected_policy_defaults() {
     let ts = TransitionState::default();
     assert!(ts.policy.crossfade.enabled);
-    assert!(ts.policy.scroll.enabled);
+    // Scroll transition is off by default (stock-Emacs-like instant scroll);
+    // opt in via `(neomacs-effect-set 'scroll-transition :enabled t)`.
+    assert!(!ts.policy.scroll.enabled);
     assert_eq!(ts.policy.crossfade.duration, Duration::from_millis(200));
     assert_eq!(ts.policy.scroll.duration, Duration::from_millis(150));
     assert_eq!(ts.policy.crossfade.effect, ScrollEffect::Crossfade);
