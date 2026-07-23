@@ -270,8 +270,14 @@ impl RenderApp {
                     neomacs_renderer_wgpu::FrameRowDamage::from_display_state(&display_state);
 
                 // ── Observation point: inspect what will be rendered ──
-                // Set NEOMACS_DUMP_FRAME_GLYPHS=1 to dump every glyph.
-                if std::env::var("NEOMACS_DUMP_FRAME_GLYPHS").as_deref() == Ok("1") {
+                // `NEOMACS_DUMP_FRAME_GLYPHS=1`   → counts + role/text + raw glyph Debug.
+                // `NEOMACS_DUMP_FRAME_GLYPHS=full` → the above PLUS a diff-stable,
+                //   face-RESOLVED per-glyph view (fg/bg as hex + stipple size) sorted
+                //   by (window, y, x), plus cursors. This is the reusable frontend
+                //   debugging view: any color/face/stipple/position bug is a text diff
+                //   (neomacs-before vs -after, or vs GNU) with no rebuild or screenshot.
+                let dump_frame_glyphs_mode = std::env::var("NEOMACS_DUMP_FRAME_GLYPHS").ok();
+                if matches!(dump_frame_glyphs_mode.as_deref(), Some("1") | Some("full")) {
                     let mut char_count = 0usize;
                     let mut bg_count = 0usize;
                     let mut border_count = 0usize;
@@ -445,6 +451,13 @@ impl RenderApp {
                                 )
                             });
                     tracing::info!("all_glyphs:\n{}", all_glyphs);
+                    if dump_frame_glyphs_mode.as_deref() == Some("full") {
+                        tracing::info!(
+                            "GLYPH_DUMP_FULL frame={}:\n{}",
+                            frame_id,
+                            dump_frame_glyphs_resolved(&frame)
+                        );
+                    }
                 }
 
                 if parent_id == DisplayFrameId::new(0) {
@@ -707,4 +720,139 @@ impl RenderApp {
             }
         }
     }
+}
+
+/// Diff-stable, face-RESOLVED dump of every visible glyph + cursors, sorted by
+/// (window, y, x). Powers `NEOMACS_DUMP_FRAME_GLYPHS=full`: the reusable
+/// frontend-debugging view where any color/face/stipple/position bug becomes a
+/// text diff (neomacs before-vs-after, or vs GNU) with no rebuild or screenshot.
+/// The face is resolved to final fg/bg (hex) + stipple size, so e.g. a text
+/// glyph and a stipple on the same cell reveal a face-id/color mismatch inline.
+fn dump_frame_glyphs_resolved(frame: &crate::core::frame_glyphs::FrameGlyphBuffer) -> String {
+    use crate::core::frame_glyphs::FrameGlyph;
+    use crate::core::types::Color;
+    let hx = |c: Color| -> String {
+        let ch = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+        format!("#{:02x}{:02x}{:02x}", ch(c.r), ch(c.g), ch(c.b))
+    };
+    // Param type is inferred as `FaceId` from `resolved_face`.
+    let face_desc = |face_id| {
+        let rf = frame.resolved_face(face_id);
+        let stipple = frame
+            .faces
+            .get(&face_id)
+            .and_then(|f| f.stipple.as_deref())
+            .map(|s| format!("{}x{}", s.width, s.height))
+            .unwrap_or_else(|| "-".to_string());
+        format!(
+            "face={:?} fg={} bg={} stipple={}",
+            face_id,
+            hx(rf.fg),
+            hx(rf.bg),
+            stipple
+        )
+    };
+    let mut rows: Vec<(i64, i64, String)> = Vec::new();
+    for g in &frame.glyphs {
+        rows.push(match g {
+            FrameGlyph::Char {
+                window_id,
+                row_role,
+                char,
+                x,
+                y,
+                face_id,
+                ..
+            } => (
+                *y as i64,
+                *x as i64,
+                format!(
+                    "[win{} {:?} y={:.0} x={:.0}] {:?}  {}",
+                    window_id.get(),
+                    row_role,
+                    y,
+                    x,
+                    char,
+                    face_desc(*face_id)
+                ),
+            ),
+            FrameGlyph::Stretch {
+                window_id,
+                row_role,
+                x,
+                y,
+                width,
+                face_id,
+                ..
+            } => (
+                *y as i64,
+                *x as i64,
+                format!(
+                    "[win{} {:?} y={:.0} x={:.0}] <stretch w={:.0}>  {}",
+                    window_id.get(),
+                    row_role,
+                    y,
+                    x,
+                    width,
+                    face_desc(*face_id)
+                ),
+            ),
+            FrameGlyph::FringeBitmap {
+                window_id,
+                x,
+                y,
+                bitmap_index,
+                face_id,
+                ..
+            } => (
+                *y as i64,
+                *x as i64,
+                format!(
+                    "[win{} fringe y={:.0} x={:.0} bmp={}]  {}",
+                    window_id.get(),
+                    y,
+                    x,
+                    bitmap_index,
+                    face_desc(*face_id)
+                ),
+            ),
+            FrameGlyph::Image { x, y, width, .. } => (
+                *y as i64,
+                *x as i64,
+                format!("[y={:.0} x={:.0}] <image w={:.0}>", y, x, width),
+            ),
+            FrameGlyph::Background { bounds, color } => (
+                bounds.y as i64,
+                bounds.x as i64,
+                format!(
+                    "[y={:.0} x={:.0}] <bg {:.0}x{:.0}> color={}",
+                    bounds.y,
+                    bounds.x,
+                    bounds.width,
+                    bounds.height,
+                    hx(*color)
+                ),
+            ),
+            other => (i64::MAX, 0, format!("<other> {other:?}")),
+        });
+    }
+    rows.sort();
+    let mut out = String::new();
+    for (_, _, line) in &rows {
+        out.push_str("  ");
+        out.push_str(line);
+        out.push('\n');
+    }
+    for c in &frame.window_cursors {
+        out.push_str(&format!(
+            "  [cursor win{} y={:.0} x={:.0}] style={:?} color={} fg={}\n",
+            c.window_id.get(),
+            c.y,
+            c.x,
+            c.style,
+            hx(c.color),
+            hx(c.cursor_fg),
+        ));
+    }
+    out
 }
