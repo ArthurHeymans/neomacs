@@ -219,6 +219,25 @@ impl WgpuRenderer {
                             paint_offset_y,
                         );
                     }
+                    // Draw the face's own `:stipple` over the stretch background,
+                    // 1-bits in the face foreground (GNU `stippled_p`). A run of
+                    // indentation whitespace carrying a stipple face (indent-bars /
+                    // highlight-indent-guides) may be emitted as a Stretch, so —
+                    // like the Char background path below — the stretch must honor
+                    // `face.stipple`. The `stipple_id` map above is only populated
+                    // by the unused `add_stretch_stipple`; `face.stipple` is the
+                    // live path text-property and overlay stipple faces take.
+                    if let Some(pat) = face.and_then(|f| f.stipple.as_deref()) {
+                        let rf = frame_glyphs.resolved_face(face_id);
+                        self.add_stipple_paint(
+                            &mut non_overlay_rect_vertices,
+                            &rf.fg,
+                            pat,
+                            paint,
+                            0.0,
+                            paint_offset_y,
+                        );
+                    }
                 }
             }
         }

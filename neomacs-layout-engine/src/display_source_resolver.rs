@@ -966,6 +966,12 @@ pub(crate) fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool
         && lhs.box_line_width == rhs.box_line_width
         && lhs.extend == rhs.extend
         && lhs.terminal_inverse_video == rhs.terminal_inverse_video
+        // A face that differs from the base ONLY in its realized `:stipple`
+        // bitmap (e.g. `indent-bars` faces, which inherit the default colors and
+        // add just a stipple) must NOT be collapsed onto the base id — doing so
+        // dropped the stipple, so indentation whitespace resolved to the plain
+        // default face and no bars were drawn (issue #174).
+        && lhs.stipple == rhs.stipple
 }
 
 #[cfg(test)]
