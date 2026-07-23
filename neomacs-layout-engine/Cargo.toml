@@ -12,6 +12,7 @@ default = []
 neo-term = ["neomacs-display-protocol/neo-term"]
 
 [dependencies]
+rustc-hash.workspace = true
 neomacs-display-protocol = { workspace = true }
 neovm-core.workspace = true
 cosmic-text.workspace = true

@@ -11,6 +11,7 @@ pub use types::{
 };
 
 use neomacs_display_protocol::types::FaceId;
+use rustc_hash::FxHashMap;
 use std::collections::{HashMap, HashSet, hash_map::DefaultHasher};
 use std::hash::{Hash, Hasher};
 
@@ -281,8 +282,11 @@ use types::*;
 
 /// Wgpu-based glyph atlas for text rendering
 pub struct WgpuGlyphAtlas {
-    atlas_cache: HashMap<CachedGlyphKey, CachedAtlasGlyph>,
-    atlas_composed_cache: HashMap<CachedComposedGlyphKey, CachedAtlasGlyph>,
+    // FxHashMap, not std SipHash: these are looked up once per glyph every
+    // frame (95%+ hit rate) with an internal, non-adversarial key -- the
+    // per-glyph hash was ~a fifth of the SipHash cost in a Doom scroll profile.
+    atlas_cache: FxHashMap<CachedGlyphKey, CachedAtlasGlyph>,
+    atlas_composed_cache: FxHashMap<CachedComposedGlyphKey, CachedAtlasGlyph>,
     atlas_pages: GlyphAtlasPages,
     atlas_config: GlyphAtlasConfig,
     font_system: FontSystem,
@@ -387,8 +391,8 @@ impl WgpuGlyphAtlas {
         let atlas_config = GlyphAtlasConfig::default_for_device(device);
 
         Self {
-            atlas_cache: HashMap::new(),
-            atlas_composed_cache: HashMap::new(),
+            atlas_cache: FxHashMap::default(),
+            atlas_composed_cache: FxHashMap::default(),
             atlas_pages: GlyphAtlasPages::new(atlas_config),
             atlas_config,
             font_system: FontSystem::new(),

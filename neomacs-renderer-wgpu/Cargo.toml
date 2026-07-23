@@ -14,6 +14,7 @@ video-dmabuf = ["video", "gstreamer-allocators"]
 wpe-webkit = []
 
 [dependencies]
+rustc-hash.workspace = true
 cosmic-text.workspace = true
 swash.workspace = true
 fontdb.workspace = true

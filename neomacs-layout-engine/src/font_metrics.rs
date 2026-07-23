@@ -23,7 +23,11 @@ use neomacs_display_protocol::font::{
     ResolvedFontIdentity, ResolvedGlyph,
 };
 use neovm_core::face::{FontSlant, FontWeight, FontWidth};
-use std::collections::HashMap;
+// Every map in this module is an internal cache keyed by non-adversarial data
+// (font-metrics keys, chars, family names) and looked up per char / per glyph
+// during layout. Use FxHash, not std SipHash: the per-char resolved-font and
+// char-width hashing was a chunk of the SipHash cost in a Doom scroll profile.
+use rustc_hash::FxHashMap as HashMap;
 use ttf_parser::Face as TtfFace;
 
 /// Font metrics returned for a given face configuration.
@@ -418,23 +422,23 @@ impl FontMetricsService {
         tracing::info!("FontMetricsService: FontSystem ready");
         Self {
             font_system,
-            ascii_cache: HashMap::new(),
-            char_cache: HashMap::new(),
-            metrics_cache: HashMap::new(),
-            interned_families: HashMap::new(),
+            ascii_cache: HashMap::default(),
+            char_cache: HashMap::default(),
+            metrics_cache: HashMap::default(),
+            interned_families: HashMap::default(),
             font_file_cache: FontFileCache::new(),
-            shaped_run_cache: HashMap::new(),
+            shaped_run_cache: HashMap::default(),
             shaped_run_cache_cap: SHAPED_RUN_CACHE_CAP,
             n_shape_calls: 0,
             backend: crate::font_backend::default_font_backend(),
             shaper: crate::text_shaper::default_text_shaper(),
-            resolved_face_font_cache: HashMap::new(),
-            resolved_font_ids: HashMap::new(),
-            resolved_char_font_cache: HashMap::new(),
-            resolved_cluster_cache: HashMap::new(),
-            pinned_families: HashMap::new(),
-            primary_pin_cache: HashMap::new(),
-            primary_match_cache: HashMap::new(),
+            resolved_face_font_cache: HashMap::default(),
+            resolved_font_ids: HashMap::default(),
+            resolved_char_font_cache: HashMap::default(),
+            resolved_cluster_cache: HashMap::default(),
+            pinned_families: HashMap::default(),
+            primary_pin_cache: HashMap::default(),
+            primary_match_cache: HashMap::default(),
         }
     }
 
@@ -1350,7 +1354,7 @@ impl FontMetricsService {
             return None;
         }
         let mut fonts: Vec<ResolvedFont> = Vec::new();
-        let mut by_fontdb: HashMap<fontdb::ID, ResolvedFontId> = HashMap::new();
+        let mut by_fontdb: HashMap<fontdb::ID, ResolvedFontId> = HashMap::default();
         let mut glyphs = Vec::with_capacity(shaped.len());
         for shaped_glyph in &shaped {
             let resolved_font_id = match by_fontdb.get(&shaped_glyph.font_id) {
