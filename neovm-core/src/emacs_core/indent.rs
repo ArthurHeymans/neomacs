@@ -690,9 +690,13 @@ fn display_image_or_slice_spec_p(spec: Value) -> bool {
 /// total display width of that glyph sequence (each glyph's character at its
 /// own width). Returns None when there is no glyph-vector entry for `code`.
 fn display_table_glyph_width(dt: &Value, code: u32) -> Option<usize> {
-    let entry = super::chartable::char_table_ref_and_range(dt, i64::from(code))
-        .ok()?
-        .0;
+    // POINT lookup, not `char_table_ref_and_range`: this only needs the glyph
+    // vector at `code`, never the surrounding range. The range variant
+    // (`ct_effective_value_span_at`, extended cell-by-cell) was ~15% of Doom
+    // scroll CPU here -- pure waste, since the span it computes is discarded.
+    // `ct_ref` resolves the identical effective value (same local/default/
+    // parent descent) and adds an ASCII fast-cache the range variant lacks.
+    let entry = super::chartable::ct_ref(dt, i64::from(code));
     let glyphs = entry.as_vector_data()?;
     let mut total = 0usize;
     for glyph in glyphs.iter() {
