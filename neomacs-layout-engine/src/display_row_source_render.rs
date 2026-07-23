@@ -1113,6 +1113,7 @@ impl<'a> TextRowSourceRenderState<'a> {
         &mut self,
         indicator_col: i32,
         indicator_char: char,
+        text_end_col: i64,
         content_x: f32,
         char_width: f32,
         pen_x: f32,
@@ -1127,14 +1128,25 @@ impl<'a> TextRowSourceRenderState<'a> {
         if indicator_col < 0 || char_width <= 0.0 {
             return false;
         }
-        let indicator_px = content_x + indicator_col as f32 * char_width;
-        let gap_px = indicator_px - pen_x;
-        if gap_px < -0.5 {
-            // The row text reached/passed the indicator column; the indicator is
-            // covered (GNU begins the trailing fill at end-of-text). Let the
-            // caller run the normal `:extend` fill instead.
+        // Decide whether the indicator is visible by COLUMN, not pixels: GNU
+        // draws it at grid column `indicator_col`, so it shows whenever the
+        // text ends at or before that column (`text_end_col <= indicator_col`).
+        // A pixel comparison is wrong here because neomacs's nominal
+        // `char_width` differs from the measured per-glyph advance, so a line
+        // whose length is EXACTLY the fill column overshoots the nominal grid
+        // (e.g. 10 chars × 16.255 vs 10 × 16.0 ⇒ pen_x 2.5px past indicator_px)
+        // and the indicator was dropped — the divergence grows with the column.
+        if text_end_col > i64::from(indicator_col) {
+            // The row text passed the indicator column; the indicator is covered
+            // (GNU begins the trailing fill at end-of-text). Let the caller run
+            // the normal `:extend` fill instead.
             return false;
         }
+        let indicator_px = content_x + indicator_col as f32 * char_width;
+        // Positioning stays pixel-based: when the text ends exactly at the
+        // indicator column, `pen_x` may be a hair past `indicator_px`, so clamp
+        // the gap to 0 and place the indicator right after the text (as GNU does).
+        let gap_px = indicator_px - pen_x;
         let gap_px = gap_px.max(0.0);
         let gap_cols = (gap_px / char_width).round().clamp(0.0, u16::MAX as f32) as u16;
         // An `:extend` face (region / hl-line) fills the trailing region with its

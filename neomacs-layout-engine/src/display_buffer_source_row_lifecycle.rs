@@ -1587,6 +1587,7 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             let produced_indicator = source_render.produce_fill_column_indicator(
                 context.fill_column_indicator,
                 context.fill_column_indicator_char,
+                progress.row_progress().col() as i64,
                 context.content_x,
                 metrics.char_width(),
                 progress.row_progress().x(),

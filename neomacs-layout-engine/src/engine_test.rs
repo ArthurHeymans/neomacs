@@ -5048,6 +5048,74 @@ fn extend_fill_does_not_bleed_onto_the_following_blank_line() {
 }
 
 #[test]
+fn fill_column_indicator_shows_when_text_length_equals_the_column() {
+    // GNU draws the fill-column indicator at grid column `fill-column` whenever
+    // the text ends at or before it — INCLUDING a line whose length is exactly
+    // the column. neomacs dropped it there: it compared the indicator's nominal
+    // pixel x (char_width) against a pen advanced by the MEASURED glyph width,
+    // which drifts past the nominal grid for a full-length line (10 chars ×
+    // 16.255 vs 10 × 16.0). The decision is now column-based.
+    let mut eval = Context::new();
+    convert_current_buffer_text_backend(&mut eval, BufferTextBackendKind::GapBuffer);
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        insert_fragmented_current_buffer_text(&mut eval, "abc\nabcd\n");
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.set_buffer_local("display-fill-column-indicator", Value::T);
+        buffer.set_buffer_local("display-fill-column-indicator-character", Value::char('|'));
+        buffer.set_buffer_local("display-fill-column-indicator-column", Value::fixnum(3));
+    }
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("fci-exact-column", 360, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let text_rows: Vec<_> = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .collect();
+
+    // Line 1 "abc" is exactly `display-fill-column-indicator-column` (3) long:
+    // the indicator cell (col 3) is still empty, so it must render.
+    assert!(
+        text_rows[0].glyphs[GlyphArea::Text.index()]
+            .iter()
+            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '|' })),
+        "indicator must show when the text length equals the fill column; row = {:?}",
+        text_rows[0].glyphs[GlyphArea::Text.index()]
+    );
+    // Line 2 "abcd" passes column 3: the indicator cell is occupied -> hidden.
+    assert!(
+        !text_rows[1].glyphs[GlyphArea::Text.index()]
+            .iter()
+            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '|' })),
+        "indicator must be hidden when the text passes the fill column"
+    );
+}
+
+#[test]
 fn layout_frame_rust_line_number_width_matches_gnu_visible_row_width() {
     let trace = backend_layout_trace_with_buffer_and_window_setup(
         BufferTextBackendKind::GapBuffer,
