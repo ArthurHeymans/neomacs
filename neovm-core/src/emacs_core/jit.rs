@@ -250,6 +250,24 @@ pub fn hot_threshold() -> u32 {
     })
 }
 
+/// Heat credited per backward-branch *wrap* — one wrap is
+/// [`LOOP_BACKEDGES_PER_WRAP`] (256) loop iterations, so this weights 256 loop
+/// iterations as ≈ one function invocation (`dispatch` credits +1 per call).
+/// This is the tier-up signal for a body dominated by a long INNER LOOP but
+/// called only a handful of times: `dispatch` alone would never make it hot
+/// (heat counts calls), so a hot loop in a rarely-called function stayed in the
+/// interpreter forever. `NEOVM_JIT_LOOP_HEAT` overrides it; **`=0` disables
+/// loop heat** — the pre-loop-heat behavior and the A/B baseline.
+pub fn loop_heat_per_wrap() -> u32 {
+    static V: OnceLock<u32> = OnceLock::new();
+    *V.get_or_init(|| {
+        std::env::var("NEOVM_JIT_LOOP_HEAT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1)
+    })
+}
+
 /// Whether the JIT is active at runtime. The `jit` cargo feature compiles the
 /// JIT *in*; this switch turns tier-up on/off WITHOUT a recompile, so a single
 /// binary can run pure-interpreter or JIT-backed. Default on; `NEOVM_JIT=0`
@@ -365,6 +383,37 @@ impl Runtime {
         self.heat.load(Ordering::Relaxed)
     }
 
+    /// Backward branches per loop-heat wrap — the interpreter's `branch_to!`
+    /// quit counter is a `u8`, so it wraps (and calls [`note_loop_work`]) once
+    /// per 256 backward branches. Documented here so the loop-heat weighting
+    /// (256 iterations ≈ one call) is discoverable from the `Runtime` API.
+    ///
+    /// [`note_loop_work`]: Self::note_loop_work
+    pub const LOOP_BACKEDGES_PER_WRAP: u32 = 256;
+
+    /// Credit loop work toward tier-up: called from the interpreter's
+    /// backward-branch quit-counter wrap (`bytecode/vm.rs`), i.e. once per
+    /// [`LOOP_BACKEDGES_PER_WRAP`](Self::LOOP_BACKEDGES_PER_WRAP) iterations, so
+    /// the per-iteration cost is amortized to ~nothing. A function whose body is
+    /// a long INNER LOOP but which is CALLED only a few times never crosses
+    /// [`hot_threshold`] on `dispatch`'s per-call bump alone; this accumulates
+    /// heat from the loop itself so the NEXT entry tiers it up. The CURRENT
+    /// interpreted call still runs to completion in Tier 0 — there is no
+    /// on-stack replacement, so a body called exactly once sees no benefit
+    /// (that is the OSR follow-up). Saturating: a long-lived loop must never
+    /// wrap heat back to cold. Respects the [`jit_runtime_enabled`] kill switch
+    /// and the `NEOVM_JIT_LOOP_HEAT=0` off knob.
+    #[inline]
+    pub fn note_loop_work(&self) {
+        let credit = loop_heat_per_wrap();
+        if credit == 0 || !jit_runtime_enabled() {
+            return;
+        }
+        let prev = self.heat.load(Ordering::Relaxed);
+        self.heat
+            .store(prev.saturating_add(credit), Ordering::Relaxed);
+    }
+
     /// Test-only: force this function "hot" so the next [`dispatch`](Self::dispatch)
     /// tiers it up, without driving `HOT_THRESHOLD` real invocations.
     #[cfg(test)]
@@ -458,6 +507,46 @@ mod tests {
             let _ = rt.dispatch();
             assert_eq!(rt.heat(), u32::MAX);
         }
+    }
+
+    #[test]
+    fn loop_work_tiers_up_a_rarely_called_body() {
+        // A body CALLED only a few times (dispatch < threshold) but running a
+        // hot INNER LOOP must still tier up: note_loop_work credits the loop.
+        let credit = loop_heat_per_wrap();
+        if credit == 0 || !jit_runtime_enabled() {
+            return; // loop heat disabled in this env — nothing to assert
+        }
+        let threshold = hot_threshold();
+        let rt = Runtime::new();
+        // Called a handful of times: nowhere near hot on call count alone.
+        for _ in 0..5 {
+            assert!(matches!(rt.dispatch(), Plan::Interpret));
+        }
+        let after_calls = rt.heat();
+        assert!(!rt.is_hot(), "5 calls must be cold (threshold {threshold})");
+        // Now credit loop work (each wrap = 256 iterations); cross the threshold.
+        let wraps_needed = threshold.div_ceil(credit) + 1;
+        for _ in 0..wraps_needed {
+            rt.note_loop_work();
+        }
+        assert!(rt.is_hot(), "hot after {wraps_needed} loop wraps");
+        assert!(matches!(rt.dispatch(), Plan::Compiled));
+        assert!(rt.heat() > after_calls);
+    }
+
+    #[test]
+    fn loop_work_saturates_without_wrapping() {
+        if loop_heat_per_wrap() == 0 || !jit_runtime_enabled() {
+            return;
+        }
+        let rt = Runtime::new();
+        rt.heat
+            .store(u32::MAX - 1, std::sync::atomic::Ordering::Relaxed);
+        rt.note_loop_work();
+        assert_eq!(rt.heat(), u32::MAX);
+        rt.note_loop_work();
+        assert_eq!(rt.heat(), u32::MAX);
     }
 
     #[test]

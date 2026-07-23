@@ -1580,6 +1580,11 @@ impl<'a> Vm<'a> {
                     quitcounter = quitcounter.wrapping_add(1);
                     if quitcounter == 0 {
                         quitcounter = 1;
+                        // Loop-work heat (jit): 256 backward branches ≈ one call
+                        // toward tier-up, so a hot INNER LOOP in a rarely-called
+                        // body still goes native on its next entry. Piggybacks on
+                        // the existing per-wrap cold path; no per-iteration cost.
+                        func.runtime.note_loop_work();
                         vm_try!(self.ctx.bytecode_branch_maybe_gc_and_quit());
                     }
                 }
