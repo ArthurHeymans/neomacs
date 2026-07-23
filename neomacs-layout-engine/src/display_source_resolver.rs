@@ -34,7 +34,11 @@ use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::{DisplayHost, SurfaceChannelKind};
 use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
 use neovm_core::emacs_core::value::list_to_vec;
-use std::collections::HashMap;
+// Internal per-glyph face-resolution caches keyed by FaceId / cache keys
+// (non-adversarial); FxHash, not std SipHash -- resolve_face_ref + remember_face
+// were the largest residual SipHash callers in a Doom scroll profile after the
+// atlas/font caches were swapped.
+use rustc_hash::FxHashMap as HashMap;
 
 #[derive(Clone, Copy)]
 pub(crate) struct DisplaySourceFaceBasis<'a> {
