@@ -213,6 +213,26 @@ fn tty_runtime_can_name_the_live_tty_terminal() {
 }
 
 #[test]
+fn graphical_terminal_adopts_its_display_name() {
+    // GNU names a window-system terminal after its display connection, so
+    // `(terminal-name)` distinguishes a real GUI display from the display-less
+    // bootstrap "initial_terminal". indent-bars' theme-reset guard relies on it.
+    crate::test_utils::init_test_tracing();
+    reset_terminal_thread_locals();
+    reset_terminal_runtime();
+    let mut eval = Context::new();
+    assert_eq!(
+        builtin_terminal_name(&mut eval, vec![]).unwrap(),
+        Value::string("initial_terminal")
+    );
+    set_graphical_terminal_display_name(":0");
+    assert_eq!(
+        builtin_terminal_name(&mut eval, vec![]).unwrap(),
+        Value::string(":0")
+    );
+}
+
+#[test]
 fn tty_display_color_cells_returns_zero() {
     crate::test_utils::init_test_tracing();
     reset_terminal_thread_locals();

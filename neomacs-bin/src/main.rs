@@ -143,7 +143,8 @@ use neovm_core::emacs_core::load::{
 use neovm_core::emacs_core::print_value_with_eval;
 use neovm_core::emacs_core::terminal::pure::{
     TerminalRuntimeConfig, configure_terminal_runtime, ensure_terminal_runtime_owner,
-    reset_terminal_host, reset_terminal_runtime, set_terminal_host,
+    reset_terminal_host, reset_terminal_runtime, set_graphical_terminal_display_name,
+    set_terminal_host,
 };
 use neovm_core::emacs_core::{Context, DisplayHost, GuiFrameHostRequest, PopupMenuRequest};
 use neovm_core::face::{FaceHeight, FontWeight, LFaceAttr};
@@ -2858,6 +2859,14 @@ fn run_gui_evaluator_worker(
     evaluator.set_max_depth(1600);
     reset_terminal_host();
     reset_terminal_runtime();
+    // GNU names a window-system terminal after its display connection (":0",
+    // "wayland-0", …), not "initial_terminal". Elisp that keys off
+    // `(terminal-name)` to detect a real display — e.g. indent-bars' theme-reset
+    // guard — otherwise misbehaves on the GUI. Read the display the same way the
+    // frame's `display` parameter does.
+    if let Some(display_name) = host_gui_display_identity().native_display() {
+        set_graphical_terminal_display_name(display_name);
+    }
     evaluator.set_variable("dump-mode", Value::NIL);
     load_neomacs_gui_term_layer(&mut evaluator);
     tracing::info!("GUI evaluator context initialized");

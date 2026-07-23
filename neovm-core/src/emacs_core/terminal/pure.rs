@@ -290,6 +290,20 @@ pub fn reset_terminal_runtime() {
     });
 }
 
+/// Name the primary terminal after its graphical display connection (e.g.
+/// `":0"` or `"wayland-0"`), matching GNU where a window-system terminal's name
+/// is its display string, not the bootstrap `"initial_terminal"`. Elisp uses
+/// `(terminal-name)` to tell a real display from the display-less initial
+/// terminal — e.g. indent-bars' `indent-bars-reset-styles` skips recomputing
+/// bar colors on a theme change while the terminal is still `"initial_terminal"`
+/// — so a GUI terminal must adopt its display name.
+pub fn set_graphical_terminal_display_name(name: impl Into<String>) {
+    TERMINAL_MANAGER.with(|slot| {
+        let mut manager = slot.borrow_mut();
+        manager.ensure_initial_terminal().name = name.into();
+    });
+}
+
 pub fn set_terminal_host(host: Box<dyn TerminalHost>) {
     TERMINAL_MANAGER.with(|slot| {
         let mut manager = slot.borrow_mut();
