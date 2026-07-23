@@ -11941,6 +11941,74 @@ mod tests {
         }
     }
 
+    /// OSR end-to-end: a once-called summation loop `(let ((acc 0)(i 0)) (while
+    /// (< i n) (setq acc (+ acc i)) (setq i (1+ i))) acc)` run through the
+    /// INTERPRETER with OSR forced on + the function pinned hot — the hot back-edge
+    /// transfers into native code mid-loop and finishes there. The result must
+    /// equal the pure interpreter (OSR off), for n large enough to wrap the
+    /// back-edge counter (256) and trigger the transfer.
+    #[test]
+    fn osr_transfers_hot_loop_and_matches_interpreter() {
+        use crate::emacs_core::bytecode::vm::Vm;
+        use crate::emacs_core::eval::Context;
+        // sum(0..n-1) loop; see osr_entry_resumes_loop_from_seeded_stack for the shape.
+        let mk = || {
+            let mut f = ByteCodeFunction::new(LambdaParams {
+                required: vec![SymId(1)], // n
+                optional: Vec::new(),
+                rest: None,
+            });
+            f.lexical = true;
+            f.ops = vec![
+                Op::Constant(0), // acc = 0
+                Op::Constant(0), // i = 0
+                Op::StackRef(0), // 2: L_header (OSR entry) — i
+                Op::StackRef(3), // n
+                Op::Lss,         // i < n
+                Op::GotoIfNil(14),
+                Op::StackRef(1), // acc
+                Op::StackRef(1), // i
+                Op::Add,         // acc + i
+                Op::StackSet(2), // acc = acc + i
+                Op::StackRef(0), // i
+                Op::Add1,        // i + 1
+                Op::StackSet(1), // i = i + 1
+                Op::Goto(2),     // back to L_header
+                Op::StackRef(1), // 14: L_end — acc
+                Op::Return,
+            ];
+            f.constants = vec![Value::make_int(0)];
+            f.max_stack = 16;
+            f
+        };
+        let n = 2000i64;
+        let want = Value::make_int(n * (n - 1) / 2); // sum 0..n-1
+
+        // OSR OFF: pure interpreter baseline.
+        let mut ev = Context::new();
+        crate::emacs_core::jit::force_osr_for_test(false);
+        let f_off = mk();
+        let off = Vm::from_context(&mut ev)
+            .execute(&f_off, vec![Value::make_int(n)])
+            .expect("interp run");
+        assert_eq!(off, want, "interpreter sum(0..{}) baseline", n - 1);
+
+        // OSR ON + pinned hot: the hot back-edge transfers into native mid-loop.
+        crate::emacs_core::jit::force_osr_for_test(true);
+        let f_on = mk();
+        f_on.runtime.set_hot_for_test();
+        let before = crate::emacs_core::jit::cache::OSR_TRANSFER_COUNT.load(Ordering::Relaxed);
+        let on = Vm::from_context(&mut ev)
+            .execute(&f_on, vec![Value::make_int(n)])
+            .expect("OSR run");
+        assert_eq!(on, want, "OSR sum(0..{}) must match the interpreter", n - 1);
+        assert!(
+            crate::emacs_core::jit::cache::OSR_TRANSFER_COUNT.load(Ordering::Relaxed) > before,
+            "the OSR transfer must actually fire (not the interpreter finishing the loop)"
+        );
+        crate::emacs_core::jit::force_osr_for_test(false);
+    }
+
     #[test]
     fn compiles_unwind_protect_pop() {
         use crate::emacs_core::eval::Context;

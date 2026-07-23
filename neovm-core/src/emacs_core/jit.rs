@@ -283,6 +283,33 @@ pub fn jit_runtime_enabled() -> bool {
     })
 }
 
+/// OSR (on-stack replacement): transfer a hot loop in a rarely-/once-called
+/// function into native code MID-execution (the case loop-heat's next-entry
+/// tier-up cannot reach). Opt-in via `NEOVM_JIT_OSR=on` (default OFF): a new
+/// correctness-critical path — the interpreter marshals its live operand stack
+/// into a native OSR entry, restricted to functions with no dynamic
+/// bind/handler/save ops (nothing to transfer). Off ⇒ the back-edge stays a
+/// pure interpreter loop, zero added cost.
+pub fn jit_osr_on() -> bool {
+    #[cfg(test)]
+    if let Some(o) = OSR_TEST_OVERRIDE.with(|c| c.get()) {
+        return o;
+    }
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| std::env::var("NEOVM_JIT_OSR").as_deref() == Ok("on"))
+}
+
+#[cfg(test)]
+thread_local! {
+    static OSR_TEST_OVERRIDE: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+}
+
+/// Force OSR on/off on the current thread (tests only), overriding the env gate.
+#[cfg(test)]
+pub fn force_osr_for_test(on: bool) {
+    OSR_TEST_OVERRIDE.with(|c| c.set(Some(on)));
+}
+
 impl Runtime {
     /// Invocations before a function is "hot" enough to tier up.
     ///

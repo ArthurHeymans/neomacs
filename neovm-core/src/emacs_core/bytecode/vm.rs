@@ -1470,6 +1470,13 @@ impl<'a> Vm<'a> {
         let ops_ptr = ops.as_ptr();
         let mut pc_local = *pc;
         let mut quitcounter: u8 = 1;
+        // OSR (on-stack replacement): once a hot loop is detected at a backward
+        // branch, transfer the rest of this interpreted call into native code at
+        // the loop header. Gated once here (opt-in, kill-switch aware); `osr_tried`
+        // latches so a loop that can't/didn't OSR is probed only once per frame.
+        let osr_enabled = crate::emacs_core::jit::jit_osr_on()
+            && crate::emacs_core::jit::jit_runtime_enabled();
+        let mut osr_tried = false;
 
         // A6: base+len of the operand stack live in registers for the whole
         // dispatch loop (GNU keeps top/pc in locals, bytecode.c). Every
@@ -1586,6 +1593,39 @@ impl<'a> Vm<'a> {
                         // the existing per-wrap cold path; no per-iteration cost.
                         func.runtime.note_loop_work();
                         vm_try!(self.ctx.bytecode_branch_maybe_gc_and_quit());
+                        // OSR: the loop is hot and this is a backward branch (its
+                        // target is the loop header). If the function is OSR-eligible
+                        // and the live operand stack matches the header's entry depth,
+                        // transfer into native code and finish there. `Ok` = the
+                        // function completed (its result); `Signal` propagates; a
+                        // deopt / non-transfer just falls back to interpreting (the
+                        // OSR ran in its own frame, so our state is untouched).
+                        if osr_enabled && !osr_tried && func.runtime.is_hot() {
+                            let depth = cursor.len - frame_base;
+                            cursor.publish(&mut self.ctx);
+                            let snapshot: Vec<Value> =
+                                self.ctx.bc_buf[frame_base..frame_base + depth].to_vec();
+                            let ctx_ptr: *mut crate::emacs_core::eval::Context = &mut *self.ctx;
+                            match crate::emacs_core::jit::cache::try_run_osr(
+                                ctx_ptr, func, target, &snapshot,
+                            ) {
+                                Some(crate::emacs_core::jit::compile::NativeRun::Ok(bits)) => {
+                                    return Ok(Value::from_bits(bits));
+                                }
+                                Some(crate::emacs_core::jit::compile::NativeRun::Signal) => {
+                                    cursor = StackCursor::acquire(&mut self.ctx);
+                                    let flow = crate::emacs_core::jit::compile::take_pending_flow()
+                                        .expect("OSR Signal must stash a pending flow");
+                                    resume_flow!(flow)
+                                }
+                                _ => {
+                                    // Deopt / DeoptAt / not-transferred: fall back to
+                                    // the interpreter (state unchanged); don't retry.
+                                    osr_tried = true;
+                                    cursor = StackCursor::acquire(&mut self.ctx);
+                                }
+                            }
+                        }
                     }
                 }
                 pc_local = target;

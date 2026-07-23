@@ -125,7 +125,127 @@ thread_local! {
     /// cache is stale — detected lazily by identity in `sync_cache_to_current_heap`
     /// and cleared before any stale reloc value is traced or run.
     static COMPILED_HEAP: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+
+    /// OSR (on-stack replacement) leaves, keyed by `(compiled_id, osr_pc)`. The
+    /// value is `Some((leaf, entry_depth))` when the function is OSR-eligible +
+    /// compiled at that loop header, `None` when it is ineligible/uncompilable (a
+    /// negative cache, so a hot loop that can't OSR is probed only once). Same
+    /// thread/scope as COMPILED; cleared alongside it (heap-identity + `clear`).
+    static OSR_CACHE: RefCell<HashMap<(u64, usize), Option<(Rc<CompiledLeaf>, usize)>>> =
+        RefCell::new(HashMap::new());
 }
+
+/// Whether `func`'s body carries any op that establishes dynamic state the OSR
+/// entry cannot reconstruct (it skips the prologue): dynamic bindings, save
+/// records, unwind-protect, and condition/catch handler frames. OSR is restricted
+/// to bodies WITHOUT these — pure lexical compute loops — so the transfer needs
+/// only the operand stack, no specpdl/handler state.
+fn osr_body_has_dynamic_state(func: &ByteCodeFunction) -> bool {
+    use crate::emacs_core::bytecode::Op;
+    func.executable_ops().iter().any(|op| {
+        matches!(
+            op,
+            Op::VarBind(_)
+                | Op::Unbind(_)
+                | Op::SaveExcursion
+                | Op::SaveRestriction
+                | Op::SaveCurrentBuffer
+                | Op::SaveWindowExcursion
+                | Op::UnwindProtectPop
+                | Op::PushCatch(_)
+                | Op::PushConditionCase(_)
+                | Op::PushConditionCaseRaw(_)
+        )
+    })
+}
+
+/// Compile (once) the OSR variant of `func` entered at `osr_pc`, or `None` when
+/// `func` is not OSR-eligible or the body doesn't compile. Eligibility: lexical
+/// (params on the operand stack, so the seeded snapshot carries them), no dynamic
+/// bind/handler/save ops, and the loop header has a well-defined entry depth with
+/// no active handlers. Returns `(leaf, entry_depth)` — `entry_depth` is the exact
+/// operand-stack size the native entry seeds, checked against the live snapshot.
+fn compile_osr_leaf(
+    obarray: &Obarray,
+    func: &ByteCodeFunction,
+    osr_pc: usize,
+) -> Option<(Rc<CompiledLeaf>, usize)> {
+    if !func.lexical || osr_body_has_dynamic_state(func) {
+        return None;
+    }
+    let ops = func.executable_ops();
+    let native_arity =
+        func.params.required.len() + func.params.optional.len() + usize::from(func.params.rest.is_some());
+    let offset_map = func.executable_gnu_byte_offset_map();
+    let cfg = super::compile::analyze_cfg(ops, &func.constants, offset_map, native_arity).ok()?;
+    // The loop header must be a real block boundary with a known entry depth and
+    // no active handler frames (belt-and-suspenders with the op scan).
+    let entry_depth = *cfg.entry_depth.get(&osr_pc)?;
+    if !cfg
+        .entry_handlers
+        .get(&osr_pc)
+        .is_none_or(|h| h.is_empty())
+    {
+        return None;
+    }
+    let leaf = super::compile::lower_leaf_full_osr(
+        ops,
+        &func.constants,
+        native_arity,
+        offset_map,
+        Some(obarray),
+        Some(osr_pc),
+    )
+    .ok()?;
+    Some((Rc::new(leaf), entry_depth))
+}
+
+/// OSR (on-stack replacement) dispatch: transfer a hot loop in `func` into native
+/// code at loop-header `osr_pc`, given the live operand-stack snapshot `stack`
+/// (bottom = the frame base). Returns `None` when OSR does not apply — ineligible
+/// function, uncompilable body, or a snapshot whose depth ≠ the compiled entry
+/// depth (a non-balanced back-edge; never transfer then). Otherwise the
+/// [`NativeRun`] from the native OSR entry: `Ok(bits)` = the function completed
+/// (its result); `Signal`/`Deopt*` = the interpreter handles the outcome. The OSR
+/// variant is compiled once and cached (positively or negatively) per
+/// `(func, osr_pc)`.
+///
+/// # Safety
+/// `ctx` follows the same dormant-Context contract as [`try_run_compiled`].
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub(crate) fn try_run_osr(
+    ctx: *mut Context,
+    func: &ByteCodeFunction,
+    osr_pc: usize,
+    stack: &[Value],
+) -> Option<NativeRun> {
+    if ctx.is_null() {
+        return None;
+    }
+    sync_cache_to_current_heap();
+    let id = func.runtime.compiled_id_or_assign();
+    // SAFETY: dormant seam-provided Context (as try_run_compiled); shared obarray read.
+    let obarray = unsafe { &(*ctx).obarray };
+    let cached = OSR_CACHE.with(|c| {
+        c.borrow_mut()
+            .entry((id, osr_pc))
+            .or_insert_with(|| compile_osr_leaf(obarray, func, osr_pc))
+            .clone()
+    });
+    let (leaf, entry_depth) = cached?;
+    // Only transfer when the live snapshot is exactly the header's entry stack.
+    if stack.len() != entry_depth {
+        return None;
+    }
+    let arg_bits: Vec<i64> = stack.iter().map(|v| v.bits() as i64).collect();
+    OSR_TRANSFER_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    Some(leaf.call_premarshaled(ctx as *mut u8, arg_bits.as_ptr()))
+}
+
+/// Count of OSR transfers actually taken (a native OSR entry was invoked). Lets
+/// tests prove the transfer fired rather than the interpreter finishing the loop.
+pub(crate) static OSR_TRANSFER_COUNT: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
 
 /// Register a freshly-compiled leaf's inlined-callee deps into the reverse map.
 /// Called ONLY from the cache compile-miss path ([`compile_cache_entry`]), so
@@ -292,6 +412,15 @@ pub(crate) fn collect_jit_reloc_gc_roots(roots: &mut Vec<Value>) {
             }
         }
     });
+    // OSR leaves also bake heap-constant reloc vectors — root them too, else a GC
+    // between an OSR compile and its next run could free the leaf's constants.
+    OSR_CACHE.with(|c| {
+        for slot in c.borrow().values() {
+            if let Some((leaf, _)) = slot {
+                roots.extend_from_slice(leaf.reloc_values());
+            }
+        }
+    });
 }
 
 /// GC handshake size probe: `(total COMPILED cache entries, total reloc slots
@@ -385,6 +514,7 @@ pub(crate) fn prepopulate_aot_leaves(leaves: Vec<(u64, CompiledLeaf)>) -> usize 
 pub(crate) fn clear() {
     COMPILED.with(|c| c.borrow_mut().clear());
     INLINE_DEPS.with(|m| m.borrow_mut().clear());
+    OSR_CACHE.with(|c| c.borrow_mut().clear());
 }
 
 /// Tier-up entry point: run `func`'s body as native code if possible.
