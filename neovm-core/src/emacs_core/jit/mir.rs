@@ -746,17 +746,29 @@ fn lower_value_op(
                 return Err(CompileError::StackUnderflow);
             }
             let eff = opaque_effect(other);
-            // An opaque op produces `produces` results (0 or 1 in practice).
-            for _ in 0..produces {
-                let r = emit(
-                    b,
-                    MirOp::Opaque {
-                        op: other.clone(),
-                        args: args.clone(),
-                    },
-                    LispType::Any,
-                    eff,
-                );
+            // Emit the opaque instruction EXACTLY ONCE — even a 0-result op has a
+            // side effect that must survive into the MIR. `produces` is 0 or 1 in
+            // practice: a 1-result op (e.g. `Aset`) pushes its value; a 0-result op
+            // (`VarSet`/`VarBind`/`Save*`/`UnwindProtectPop`, which pop their args
+            // and push nothing) is evaluated for effect only. Emitting inside a
+            // `for _ in 0..produces` loop DROPPED 0-result ops entirely — a compiled
+            // `(setq special val)` returned `val` (via the bytecode's `dup`) but
+            // never performed the assignment, because `lower_mir_pure` never saw the
+            // Opaque it bails on and the MIR tier silently claimed the body.
+            debug_assert!(
+                produces <= 1,
+                "opaque op modelled with >1 results: {other:?}"
+            );
+            let r = emit(
+                b,
+                MirOp::Opaque {
+                    op: other.clone(),
+                    args,
+                },
+                LispType::Any,
+                eff,
+            );
+            if produces >= 1 {
                 stack.push(r);
             }
         }
@@ -1169,6 +1181,28 @@ mod tests {
             "length is modelled opaque"
         );
         assert!(matches!(blk.term, MirTerm::Return(_)));
+    }
+
+    /// Regression: a 0-result side-effecting opaque op (here `VarSet`, which pops
+    /// its value and pushes nothing) must still be EMITTED into the MIR. It was
+    /// once emitted inside `for _ in 0..produces`, so `produces == 0` dropped it
+    /// entirely — `lower_mir_pure` then never saw the Opaque it bails on and the
+    /// MIR tier silently claimed the body, making a compiled `(setq special val)`
+    /// a no-op (it returned `val` via the bytecode `dup` but never assigned).
+    /// The same class covers `VarBind`/`Save*`/`UnwindProtectPop`.
+    #[test]
+    fn zero_result_opaque_op_is_not_dropped() {
+        // (setq v 7): Constant 7, Dup (the setq return value), VarSet v, Return.
+        let ops = vec![Op::Constant(1), Op::Dup, Op::VarSet(0), Op::Return];
+        let constants = vec![Value::symbol("v"), Value::make_int(7)];
+        let mir = build_mir(&ops, &constants, 0).expect("builds");
+        assert!(
+            mir.blocks
+                .iter()
+                .flat_map(|b| b.insts.iter())
+                .any(|i| matches!(&i.op, MirOp::Opaque { op: Op::VarSet(0), .. })),
+            "a 0-result VarSet must survive into the MIR (else the side effect is dropped)"
+        );
     }
 
     /// `build_mir`'s own unmodelled-control bail: a `Throw` body passes
