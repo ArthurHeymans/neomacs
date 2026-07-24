@@ -1709,14 +1709,51 @@ impl FrameDisplayState {
 
         // --- Materialize left/right fringe bitmaps ---
         //
-        // Only buffer-text rows carry fringe bitmaps (magit section headings).
-        // The left fringe column spans from the window's left edge
-        // (`pixel_bounds.x`) up to the text area (`text_pixel_bounds.x`); for the
-        // magit-first scope (no left margin) this is exactly the fringe. The
-        // right fringe path is parsed but not emitted yet.
+        // Buffer-text rows carry the fringe bitmaps: truncation / continuation
+        // arrows (GNU draw_window_fringes), the empty-line `~`, and magit
+        // section-heading fold arrows. Both fringes are emitted; each column is
+        // clamped to the scroll-bar edge below so a right-side bar can't hide
+        // the right-fringe arrows.
         for entry in &self.window_matrices {
             let window_id = entry.window_id;
             let text_area_clip = entry.text_area_clip_rect();
+
+            // Horizontal fringe geometry is constant per window, so resolve it
+            // once. GNU (`fringe.c` draw_fringe_bitmap_1) positions fringe
+            // bitmaps against `window_box_left/right(TEXT_AREA)` and keeps the
+            // vertical scroll bar OUTSIDE the fringe — the fringe is exactly the
+            // gap between the text area and the bar (WINDOW_*_FRINGE_WIDTH).
+            // If the column instead ran to the window edge it swallowed the
+            // scroll-bar column, and centering the arrow inside that wide span
+            // dropped it behind the (opaque, later-drawn) bar — so a right-side
+            // scroll bar hid EVERY truncation / continuation arrow (the left
+            // fringe rendered only because it had no bar over it). Clamp each
+            // fringe column to the scroll-bar edge so the arrow stays in the
+            // real fringe, adjacent to the text.
+            let window_left = entry.pixel_bounds.x;
+            let window_right = entry.pixel_bounds.x + entry.pixel_bounds.width;
+            let text_left = entry.text_pixel_bounds.x;
+            let text_right = entry.text_pixel_bounds.x + entry.text_pixel_bounds.width;
+            let mut left_fringe_start = window_left;
+            let mut right_fringe_end = window_right;
+            for sb in &self.scroll_bars {
+                if sb.window_id != window_id || sb.horizontal {
+                    continue;
+                }
+                // A bar left of the text bounds the left fringe on its left; a
+                // bar right of the text bounds the right fringe on its right.
+                if sb.x + sb.width <= text_left {
+                    left_fringe_start = left_fringe_start.max(sb.x + sb.width);
+                }
+                if sb.x >= text_right {
+                    right_fringe_end = right_fringe_end.min(sb.x);
+                }
+            }
+            let left_fringe_x = left_fringe_start;
+            let left_fringe_width = (text_left - left_fringe_start).max(0.0);
+            let right_fringe_x = text_right;
+            let right_fringe_width = (right_fringe_end - text_right).max(0.0);
+
             for (row_idx, glyph_row) in entry.matrix.rows.iter().enumerate() {
                 if !glyph_row.enabled {
                     continue;
@@ -1738,9 +1775,9 @@ impl FrameDisplayState {
                 };
                 // Empty-line / truncation fringe bitmaps ride buffer-text rows,
                 // so a vscroll clips them to the same VERTICAL band as the body
-                // glyphs — but the fringe lives in the fringe column (left of the
-                // text area), so keep the full window HORIZONTAL extent. With no
-                // chrome rows this reproduces the historical `Some(pixel_bounds)`.
+                // glyphs — but the fringe lives in the fringe column, so keep the
+                // full window HORIZONTAL extent. With no chrome rows this
+                // reproduces the historical `Some(pixel_bounds)`.
                 let clip_rect = if glyph_row.role == GlyphRowRole::Text {
                     Some(Rect::new(
                         entry.pixel_bounds.x,
@@ -1753,15 +1790,13 @@ impl FrameDisplayState {
                 };
 
                 if let Some(info) = glyph_row.left_fringe_bitmap {
-                    let x = entry.pixel_bounds.x;
-                    let width = (entry.text_pixel_bounds.x - entry.pixel_bounds.x).max(0.0);
                     push(FrameGlyph::FringeBitmap {
                         window_id,
                         row_role: glyph_row.role,
                         clip_rect,
-                        x,
+                        x: left_fringe_x,
                         y,
-                        width,
+                        width: left_fringe_width,
                         height,
                         bitmap_index: info.bitmap_index,
                         face_id: info.face_id,
@@ -1769,17 +1804,13 @@ impl FrameDisplayState {
                     });
                 }
                 if let Some(info) = glyph_row.right_fringe_bitmap {
-                    let text_right = entry.text_pixel_bounds.x + entry.text_pixel_bounds.width;
-                    let window_right = entry.pixel_bounds.x + entry.pixel_bounds.width;
-                    let x = text_right;
-                    let width = (window_right - text_right).max(0.0);
                     push(FrameGlyph::FringeBitmap {
                         window_id,
                         row_role: glyph_row.role,
                         clip_rect,
-                        x,
+                        x: right_fringe_x,
                         y,
-                        width,
+                        width: right_fringe_width,
                         height,
                         bitmap_index: info.bitmap_index,
                         face_id: info.face_id,

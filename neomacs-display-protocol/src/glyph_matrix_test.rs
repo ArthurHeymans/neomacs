@@ -1100,6 +1100,91 @@ fn materialize_includes_scroll_bars() {
 }
 
 #[test]
+fn right_fringe_bitmap_column_stops_at_the_scroll_bar_not_the_window_edge() {
+    // Regression: the right-fringe column used to span text_right..window_right,
+    // swallowing the vertical scroll-bar column. Centering the arrow inside that
+    // wide span dropped it behind the (opaque, later-drawn) bar, hiding every
+    // truncation / continuation arrow whenever the window had a right scroll bar.
+    // GNU keeps the scroll bar OUTSIDE the fringe (fringe.c draw_fringe_bitmap_1
+    // positions bitmaps against window_box_right(TEXT_AREA)), so the column must
+    // stop at the bar's left edge.
+    let build = |with_bar: bool| -> FrameGlyph {
+        let mut state = FrameDisplayState::new(4, 1, 8.0, 16.0);
+        let window = DisplayWindowId::new(1);
+        let mut matrix = GlyphMatrix::new(1, 4);
+        matrix.rows[0].enabled = true;
+        matrix.rows[0].height_px = 16.0;
+        matrix.rows[0].right_fringe_bitmap = Some(FringeBitmapInfo {
+            bitmap_index: 4, // right-arrow (truncation)
+            face_id: FaceId::new(0),
+        });
+        state.window_matrices.push(WindowMatrixEntry {
+            window_id: window,
+            matrix,
+            // window [0,640]; text area [16,624] -> right fringe+bar span = 16px.
+            pixel_bounds: Rect::new(0.0, 0.0, 640.0, 16.0),
+            text_pixel_bounds: Rect::new(16.0, 0.0, 608.0, 16.0),
+            text_clip_bounds: None,
+            selected: true,
+        });
+        if with_bar {
+            // Vertical bar occupying the outer 8px: [632,640].
+            state.scroll_bars.push(ScrollBarItem {
+                window_id: window,
+                row_role: GlyphRowRole::Text,
+                clip_rect: None,
+                horizontal: false,
+                x: 632.0,
+                y: 0.0,
+                width: 8.0,
+                height: 16.0,
+                position: 0,
+                portion: 1,
+                whole: 1,
+                thumb_start: 0.0,
+                thumb_size: 16.0,
+                track_color: Color::BLACK,
+                thumb_color: Color::WHITE,
+            });
+        }
+        let mut fringes = Vec::new();
+        state.for_each_glyph(|g| {
+            if matches!(
+                &g,
+                FrameGlyph::FringeBitmap {
+                    side: FringeSide::Right,
+                    ..
+                }
+            ) {
+                fringes.push(g);
+            }
+        });
+        assert_eq!(fringes.len(), 1, "exactly one right-fringe glyph");
+        fringes.pop().unwrap()
+    };
+
+    // With a right scroll bar: column starts at text_right (624) and stops at the
+    // bar's left edge (632) — width 8, NOT 16 (which would run to the window edge
+    // and hide the arrow under the bar).
+    match build(true) {
+        FrameGlyph::FringeBitmap { x, width, .. } => {
+            assert_eq!(x, 624.0);
+            assert_eq!(width, 8.0);
+        }
+        other => panic!("expected right FringeBitmap, got {other:?}"),
+    }
+
+    // Without a scroll bar: the column runs to the window edge (width 16).
+    match build(false) {
+        FrameGlyph::FringeBitmap { x, width, .. } => {
+            assert_eq!(x, 624.0);
+            assert_eq!(width, 16.0);
+        }
+        other => panic!("expected right FringeBitmap, got {other:?}"),
+    }
+}
+
+#[test]
 fn for_each_glyph_matches_materialize_glyphs() {
     // Build a state exercising several glyph kinds at once: a background, a
     // window row with both a Char and a Stretch slot, and a scroll bar. This
