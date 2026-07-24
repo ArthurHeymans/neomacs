@@ -6939,10 +6939,19 @@ fn interactive_form_eval_signals_listp_for_improper_lambda_shapes() {
 #[test]
 fn pure_dispatch_internal_placeholder_cluster_matches_compat_contracts() {
     crate::test_utils::init_test_tracing();
-    let char_font = dispatch_builtin_pure("internal-char-font", vec![Value::fixnum(65)])
+    // `internal-char-font` is no longer an always-nil stub: with a non-nil
+    // POSITION it range-checks against the current buffer and signals
+    // `args-out-of-range` for an out-of-range position, exactly like GNU
+    // (fontset.c `Finternal_char_font`: CHECK_FIXNUM_COERCE_MARKER + the
+    // BEGV/ZV bound). The pure-dispatch buffer is empty, so position 65 is out
+    // of range.
+    let char_font_oob = dispatch_builtin_pure("internal-char-font", vec![Value::fixnum(65)])
         .expect("builtin internal-char-font should resolve")
-        .expect("builtin internal-char-font should evaluate");
-    assert!(char_font.is_nil());
+        .expect_err("out-of-range POSITION should signal args-out-of-range");
+    match char_font_oob {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "args-out-of-range"),
+        other => panic!("unexpected flow: {other:?}"),
+    }
 
     let char_font_with_nil_position =
         dispatch_builtin_pure("internal-char-font", vec![Value::NIL, Value::fixnum(65)])
