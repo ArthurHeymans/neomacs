@@ -3447,6 +3447,22 @@ impl crate::emacs_core::eval::Context {
             self.clear_read_command_keys();
         }
 
+        // GNU `read_key_sequence` stashes the PROMPT in
+        // `current_kboard->echo_prompt` (keyboard.c:10990) and the echo
+        // machinery shows it while reading, so an explicit prompt such as
+        // `describe-key`'s "Describe the following key…" is visible before and
+        // while the user types the key to describe (neomacs#187). Show it now
+        // and prepend it to the typed-key echo below.
+        let key_sequence_prompt: Option<String> = options
+            .prompt
+            .as_lisp_string()
+            .and_then(|s| s.as_utf8_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        if let Some(prompt) = key_sequence_prompt.as_deref() {
+            self.set_current_message(Some(LispString::from_utf8(prompt)));
+        }
+
         self.assign("this-command-keys-shift-translated", Value::NIL);
         let mut shift_translation: Option<KeySequenceShiftTranslation> = None;
         let mut delayed_selection_event: Option<Value> = None;
@@ -3850,7 +3866,11 @@ impl crate::emacs_core::eval::Context {
                 // scheduler for a later pass.
                 if self.lisp_echo_keystrokes_seconds().is_some_and(|s| s > 0.0) {
                     if let Some(echo_msg) = self.prefix_echo_message(&translated_events) {
-                        self.set_current_message(Some(LispString::from_utf8(&echo_msg)));
+                        let full = match key_sequence_prompt.as_deref() {
+                            Some(prompt) => format!("{prompt}{echo_msg}"),
+                            None => echo_msg,
+                        };
+                        self.set_current_message(Some(LispString::from_utf8(&full)));
                     }
                 }
                 continue;
