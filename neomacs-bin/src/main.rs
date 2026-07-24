@@ -1554,6 +1554,21 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             selected = ?selected,
             "display host resolved font-at request"
         );
+        // Glyph code (font-driver glyph index) of the character in the resolved
+        // font, for `internal-char-font`'s cdr / `describe-char`'s display line.
+        // Shape the single character through the same resolver the renderer uses
+        // and take its glyph id.
+        let glyph_code = self
+            .font_metrics
+            .get_or_insert_with(FontMetricsService::new)
+            .resolved_glyphs_for_cluster(
+                &request.character.to_string(),
+                requested_family,
+                requested_weight,
+                requested_italic,
+                font_size,
+            )
+            .and_then(|(glyphs, _fonts)| glyphs.first().map(|glyph| u32::from(glyph.glyph_id)));
         Ok(selected.map(|font| ResolvedFontMatch {
             family: LispString::from_utf8(&font.family),
             foundry: font.foundry.as_deref().map(LispString::from_utf8),
@@ -1563,6 +1578,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             slant: font.slant,
             width: font.width,
             postscript_name: font.postscript_name.map(|s| LispString::from_utf8(&s)),
+            glyph_code,
         }))
     }
 

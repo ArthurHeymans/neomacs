@@ -3103,6 +3103,85 @@ pub(crate) fn builtin_font_at(eval: &mut super::eval::Context, args: Vec<Value>)
     Ok(build_font_object(&face))
 }
 
+/// `(internal-char-font POSITION &optional CH)` -- the `(FONT-OBJECT . GLYPH-CODE)`
+/// that `describe-char` uses for its "display:" line and character-code-property
+/// section. A non-nil POSITION resolves the character and face at that buffer
+/// position (like `font-at`); a nil POSITION resolves CH in the default face.
+/// Returns nil on a non-window frame or when no font can be found.
+pub(crate) fn builtin_internal_char_font(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_min_args("internal-char-font", &args, 1)?;
+    expect_max_args("internal-char-font", &args, 2)?;
+    let position = args[0];
+    let ch_arg = args.get(1).copied().unwrap_or(Value::NIL);
+
+    let frame_id = super::window_cmds::ensure_selected_frame_id(eval);
+    let has_window_system = eval
+        .frames
+        .get(frame_id)
+        .is_some_and(|frame| frame.effective_window_system().is_some());
+
+    let (character, face) = if position.is_nil() {
+        let code = crate::emacs_core::builtins::expect_character_code(&ch_arg)?;
+        let Some(character) = char::from_u32(code as u32) else {
+            return Ok(Value::NIL);
+        };
+        if !has_window_system {
+            return Ok(Value::NIL);
+        }
+        let face_table = runtime_face_table_from_frame_lisp_faces(eval, frame_id, true);
+        (character, face_table.resolve("default"))
+    } else {
+        if !ch_arg.is_nil() {
+            let _ = crate::emacs_core::builtins::expect_character_code(&ch_arg)?;
+        }
+        let current_buffer_id = eval
+            .buffers
+            .current_buffer_id()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        let pos = crate::emacs_core::builtins::expect_integer_or_marker_in_buffers(
+            &eval.buffers,
+            &args[0],
+        )?;
+        let buffer = eval
+            .buffers
+            .get(current_buffer_id)
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        let beg = buffer.point_min_lisp_char_pos().as_i64();
+        let end = buffer.point_max_lisp_char_pos().as_i64();
+        if !(beg <= pos && pos < end) {
+            return Err(signal(
+                LispCondition::ArgsOutOfRange,
+                vec![args[0], Value::fixnum(beg), Value::fixnum(end)],
+            ));
+        }
+        if !has_window_system {
+            return Ok(Value::NIL);
+        }
+        let face_table = runtime_face_table_from_frame_lisp_faces(eval, frame_id, true);
+        let bytepos = buffer.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(pos));
+        let face = resolved_face_at_buffer_byte(eval, &face_table, buffer, bytepos);
+        let character = buffer.char_at_emacs_byte_pos(bytepos).ok_or_else(|| {
+            signal(
+                LispCondition::ArgsOutOfRange,
+                vec![args[0], Value::fixnum(beg), Value::fixnum(end)],
+            )
+        })?;
+        (character, face)
+    };
+
+    let Some(matched) = resolve_font_match(eval, frame_id, character, &face) else {
+        return Ok(Value::NIL);
+    };
+    let font_object = build_font_object_for_match(&face, &matched);
+    // GNU's cdr is the font-driver glyph code; `describe-char` formats it as a
+    // hex number, so fall back to 0 (the `.notdef` slot) rather than nil.
+    let glyph_code = i64::from(matched.glyph_code.unwrap_or(0));
+    Ok(Value::cons(font_object, Value::fixnum(glyph_code)))
+}
+
 // ===========================================================================
 // Face builtins (pure)
 // ===========================================================================

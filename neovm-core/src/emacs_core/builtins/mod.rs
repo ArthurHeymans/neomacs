@@ -5182,7 +5182,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "internal-char-font",
-        |_ctx, args| builtin_internal_char_font(args),
+        |ctx, args| super::font::builtin_internal_char_font(ctx, args),
         1,
         Some(2),
     );

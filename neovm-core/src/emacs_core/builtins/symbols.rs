@@ -5095,23 +5095,6 @@ pub(crate) fn builtin_internal_track_mouse(
     result
 }
 
-pub(crate) fn builtin_internal_char_font(args: Vec<Value>) -> EvalResult {
-    expect_range_args("internal-char-font", &args, 1, 2)?;
-    let position = &args[0];
-    let ch = args.get(1).copied().unwrap_or(Value::NIL);
-
-    if position.is_nil() {
-        let _ = expect_character_code(&ch)?;
-        return Ok(Value::NIL);
-    }
-
-    let _ = expect_integer_or_marker(position)?;
-    if !ch.is_nil() {
-        let _ = expect_character_code(&ch)?;
-    }
-    Ok(Value::NIL)
-}
-
 fn internal_complete_buffer_alist(ctx: &super::eval::Context) -> Value {
     let entries: Vec<Value> = ctx
         .buffers

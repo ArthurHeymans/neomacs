@@ -1419,6 +1419,10 @@ pub struct ResolvedFontMatch {
     pub slant: FontSlant,
     pub width: FontWidth,
     pub postscript_name: Option<crate::heap_types::LispString>,
+    /// Glyph code (font-driver glyph index) of the resolved character in this
+    /// font — GNU `font->driver->encode_char`, the `cdr` of `internal-char-font`.
+    /// `None` when the host couldn't shape the character.
+    pub glyph_code: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

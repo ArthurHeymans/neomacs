@@ -1226,6 +1226,7 @@ fn font_at_eval_prefers_backend_selected_font_match_when_available() {
             slant: FontSlant::Normal,
             width: FontWidth::Normal,
             postscript_name: Some(LispString::from_utf8("NotoSansMonoCJKsc-Regular")),
+            glyph_code: Some(0x2A),
         }),
     }));
 
@@ -1267,6 +1268,43 @@ fn font_at_eval_prefers_backend_selected_font_match_when_available() {
         values[12].as_utf8_str(),
         Some("/tmp/NotoSansMonoCJKsc-Regular.otf")
     );
+}
+
+#[test]
+fn internal_char_font_returns_font_object_and_glyph_code() {
+    // GNU `internal-char-font` returns (FONT-OBJECT . GLYPH-CODE); `describe-char`
+    // uses it for the "display: by this font (glyph code)" line. The glyph code
+    // is the font-driver glyph index the host reports for the character.
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    ensure_selected_gui_frame(&mut eval);
+    eval.set_display_host(Box::new(FontAtDisplayHost {
+        matched: Some(ResolvedFontMatch {
+            pixel_size_px: 15,
+            family: LispString::from_utf8("Noto Sans Mono CJK SC"),
+            foundry: None,
+            file: Some(LispString::from_utf8("/tmp/NotoSansMonoCJKsc-Regular.otf")),
+            weight: FontWeight::NORMAL,
+            slant: FontSlant::Normal,
+            width: FontWidth::Normal,
+            postscript_name: Some(LispString::from_utf8("NotoSansMonoCJKsc-Regular")),
+            glyph_code: Some(0x2A),
+        }),
+    }));
+    let buffer = eval
+        .buffers
+        .current_buffer_mut()
+        .expect("current buffer for internal-char-font test");
+    buffer.insert("a好b");
+
+    let result = builtin_internal_char_font(&mut eval, vec![Value::fixnum(2)]).unwrap();
+    assert_eq!(
+        builtin_font_get(vec![result.cons_car(), Value::keyword("family")])
+            .unwrap()
+            .as_symbol_name(),
+        Some("Noto Sans Mono CJK SC")
+    );
+    assert_eq!(result.cons_cdr(), Value::fixnum(0x2A));
 }
 
 // -----------------------------------------------------------------------
