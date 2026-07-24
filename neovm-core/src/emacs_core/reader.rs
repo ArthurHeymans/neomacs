@@ -659,6 +659,50 @@ fn end_of_file_during_parsing_error() -> Flow {
     )
 }
 
+/// Read the next top-level form from the active load-read cursor — the stream
+/// `standard-input` is bound to during a `load`/`eval-buffer` readevalloop
+/// (see [`crate::emacs_core::eval::LOAD_READ_STREAM_SYMBOL`]).  Advancing the
+/// shared byte cursor makes the enclosing loop resume *after* this form,
+/// exactly like GNU's shared `readcharfun` (lread.c `readevalloop`): a file
+/// that calls `(read)` mid-load consumes its next top-level form.
+fn read_from_active_load_cursor(
+    ctx: &mut crate::emacs_core::eval::Context,
+    locate_syms: bool,
+) -> EvalResult {
+    let Some(cursor) = ctx.load_read_cursors.last() else {
+        // `standard-input` names the load stream but no load is active: treat
+        // as a spent stream (EOF) rather than crashing.
+        return Err(end_of_file_during_parsing_error());
+    };
+    let source = cursor.source;
+    let pos = cursor.pos;
+    let shorthands = cursor.shorthands.clone();
+
+    let lisp_str = source.as_lisp_string().ok_or_else(|| {
+        signal(
+            "error",
+            vec![Value::string("load-read stream source is not a string")],
+        )
+    })?;
+    let read_source = super::value_reader::LispReadSource::new(lisp_str);
+    let end = read_source.logical_len();
+    if pos >= end {
+        return Err(end_of_file_during_parsing_error());
+    }
+    let read_result = read_source
+        .read_one_range_with_locate_syms(pos, end, locate_syms, &ctx.obarray, shorthands.as_ref())
+        .map_err(signal_reader_error_from_string)?;
+    let Some((value, next_pos)) = read_result else {
+        return Err(end_of_file_during_parsing_error());
+    };
+    // Advance the shared cursor so the readevalloop resumes after this form.
+    if let Some(cursor) = ctx.load_read_cursors.last_mut() {
+        cursor.pos = next_pos;
+    }
+    ctx.obarray_mut().materialize_read_symbols(value);
+    Ok(value)
+}
+
 fn signal_reader_error_from_string(e: super::value_reader::ReadError) -> Flow {
     match e.kind {
         super::value_reader::ReadErrorKind::EndOfFile => signal(LispCondition::EndOfFile, vec![]),
@@ -945,6 +989,11 @@ pub fn builtin_read_impl(
             let value = maybe_value.ok_or_else(end_of_file_during_parsing_error)?;
             ctx.obarray_mut().materialize_read_symbols(value);
             Ok(value)
+        }
+        ValueKind::Symbol(id)
+            if resolve_sym(id) == crate::emacs_core::eval::LOAD_READ_STREAM_SYMBOL =>
+        {
+            read_from_active_load_cursor(ctx, locate_syms)
         }
         ValueKind::Symbol(id) => Err(signal(
             LispCondition::VoidFunction,

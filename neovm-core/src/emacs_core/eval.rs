@@ -1954,6 +1954,33 @@ pub(crate) struct BcFrame {
 /// the eval thread" seam — no diagnostics-specific type enters `neovm-core`.
 pub type EvalThreadTask = Box<dyn FnOnce(&mut Context) + Send + 'static>;
 
+/// Symbol `standard-input` is bound to during a `load`/`eval-buffer`
+/// readevalloop so `(read)` reads from the *same* stream the loader is
+/// consuming.  This mirrors GNU's `specbind (Qstandard_input, readcharfun)`
+/// (lread.c `readevalloop`), where `readcharfun` for a file load is the
+/// `get-file-char` reader over the currently-loading file.  When
+/// [`builtin_read`](super::reader::builtin_read) sees this symbol as its
+/// stream it reads the next top-level form from the active
+/// [`Context::load_read_cursors`] entry, advancing the shared cursor so the
+/// loader resumes *after* the consumed form (chemacs2's profile probe relies
+/// on this).
+pub(crate) const LOAD_READ_STREAM_SYMBOL: &str = "internal--load-read-stream";
+
+/// One active load-read cursor: the heap `LispString` being read plus a byte
+/// offset into it that BOTH the readevalloop and `(read)` advance.  See
+/// [`LOAD_READ_STREAM_SYMBOL`] and [`Context::load_read_cursors`].
+pub(crate) struct LoadReadCursor {
+    /// Heap `LispString` Value being read.  Rooted for the cursor's lifetime
+    /// via `push_specpdl_root` when the cursor is pushed.
+    pub(crate) source: Value,
+    /// Shared byte offset into `source`, advanced by both the readevalloop and
+    /// `(read STREAM=standard-input)`.
+    pub(crate) pos: usize,
+    /// `read-symbol-shorthands` active for this source, if any — so `(read)`
+    /// applies the same shorthand rewrites the loader does.
+    pub(crate) shorthands: Option<super::value_reader::ReadSymbolShorthands>,
+}
+
 pub struct Context {
     /// Tagged pointer heap — sole GC and allocator.
     pub(crate) tagged_heap: Box<crate::tagged::gc::TaggedHeap>,
@@ -2020,6 +2047,15 @@ pub struct Context {
     pub(crate) require_stack: Vec<SymId>,
     /// Files currently being loaded (mirrors `Vloads_in_progress` in lread.c).
     pub(crate) loads_in_progress: Vec<crate::heap_types::LispString>,
+    /// Stack of active load-read cursors (nested loads).  Each entry pairs the
+    /// heap `LispString` being read with a byte offset that BOTH the
+    /// readevalloop AND `(read STREAM=standard-input)` advance — mirroring GNU's
+    /// `readcharfun`/`instream` shared cursor (lread.c `readevalloop`).  A file
+    /// that calls `(read)` mid-load thus consumes the *next* top-level form and
+    /// the loop resumes after it.  Transient process state: never serialized.
+    /// The `source` Values are kept alive by a `push_specpdl_root` at push time,
+    /// not by this Vec (which GC does not trace).
+    pub(crate) load_read_cursors: Vec<LoadReadCursor>,
     /// Buffer manager — owns all live buffers and tracks current buffer.
     pub buffers: BufferManager,
     /// GNU xwidget runtime state: internal model/view lists and id counter.
@@ -3215,6 +3251,7 @@ impl Context {
         ev.features.clear();
         ev.require_stack.clear();
         ev.loads_in_progress.clear();
+        ev.load_read_cursors.clear();
         ev.buffers = BufferManager::new();
         ev.xwidgets = super::xwidget::XwidgetState::new();
         ev.last_overlay_modification_hooks.clear();
@@ -5593,6 +5630,7 @@ impl Context {
             features: initial_feature_ids(),
             require_stack: Vec::new(),
             loads_in_progress: Vec::new(),
+            load_read_cursors: Vec::new(),
             buffers: BufferManager::new(),
             xwidgets: super::xwidget::XwidgetState::new(),
             last_overlay_modification_hooks: Vec::new(),
@@ -5782,6 +5820,7 @@ impl Context {
             features,
             require_stack,
             loads_in_progress,
+            load_read_cursors: Vec::new(),
             buffers,
             xwidgets: super::xwidget::XwidgetState::new(),
             last_overlay_modification_hooks: Vec::new(),

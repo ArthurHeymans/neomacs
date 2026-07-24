@@ -282,6 +282,54 @@ fn active_catch_throw_is_not_logged_as_load_form_failure() {
     );
 }
 
+/// GNU `readevalloop` binds `standard-input` to the load stream
+/// (`specbind (Qstandard_input, readcharfun)`, lread.c), so `(read)` inside a
+/// loaded form reads the *next* top-level form from the same source and the
+/// loop resumes after it.  Issue #179: chemacs2's `(read nil)` probe crashed
+/// with `end-of-file` in neomacs because `standard-input` stayed `t` during
+/// load.  This pins the shared-cursor behavior: `(read)` returns the next form
+/// AND that form is skipped by the loop.
+#[test]
+fn load_binds_standard_input_so_read_consumes_the_next_top_level_form() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempdir().expect("tempdir");
+    let path = dir.path().join("i179-read-next-form.el");
+    // Form 1 reads the *next* form (the bare symbol) via `(read)`.  If `(read)`
+    // did not consume it, the loop would evaluate the bare symbol and signal
+    // `void-variable`; if it consumed but the loop failed to resume past it,
+    // `i179-after` would never be defined.
+    fs::write(
+        &path,
+        "(defvar i179-consumed (read))\n\
+         the-next-symbol-form\n\
+         (defvar i179-after 'after-marker)\n",
+    )
+    .expect("write load file");
+
+    let mut eval = Context::new();
+    load_file(&mut eval, &path).expect("load must not signal end-of-file (issue #179)");
+
+    let consumed = eval
+        .obarray()
+        .symbol_value("i179-consumed")
+        .copied()
+        .expect("i179-consumed bound");
+    assert!(
+        equal_value(&consumed, &Value::symbol("the-next-symbol-form"), 0),
+        "(read) should return the NEXT top-level form, got {consumed:?}"
+    );
+
+    let after = eval
+        .obarray()
+        .symbol_value("i179-after")
+        .copied()
+        .expect("i179-after bound: loop must resume after the consumed form");
+    assert!(
+        equal_value(&after, &Value::symbol("after-marker"), 0),
+        "loop should resume after the (read)-consumed form, got {after:?}"
+    );
+}
+
 #[test]
 fn load_interns_read_symbols_in_global_obarray() {
     crate::test_utils::init_test_tracing();

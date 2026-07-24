@@ -135,43 +135,81 @@ fn eval_forms_from_lisp_source_streaming(
     }
 
     let read_source = super::value_reader::LispReadSource::new(source);
-    let mut pos = start_pos;
-    loop {
-        let read_result = read_source
-            .read_one(pos, &eval.obarray)
-            .map_err(signal_reader_error_for_eval_source)?;
-        let Some((form, next_pos)) = read_result else {
-            break;
-        };
-        pos = next_pos;
 
-        let eval_roots = eval.save_specpdl_roots();
-        eval.push_specpdl_root(form);
-        let eval_result = if let Some(mexp_fn) = macroexpand_fn {
-            eval.push_specpdl_root(mexp_fn);
-            super::load::eager_expand_eval(eval, form, mexp_fn).map_err(|e| match e {
-                super::error::EvalError::Signal {
-                    symbol,
-                    data,
-                    raw_data,
-                } => super::error::Flow::Signal(Box::new(super::error::SignalData {
-                    symbol,
-                    data,
-                    raw_data,
-                    suppress_signal_hook: false,
-                    selected_resume: None,
-                    search_complete: false,
-                })),
-                super::error::EvalError::UncaughtThrow { tag, value } => {
-                    super::error::Flow::Throw { tag, value }
-                }
-            })
-        } else {
-            eval.eval_sub(form)
-        };
-        eval.restore_specpdl_roots(eval_roots);
-        eval_result?;
-    }
+    // Bind `standard-input` to the shared load-read cursor so `(read)` inside an
+    // evaluated form reads the *next* top-level form from this same source, and
+    // the loop resumes after it — GNU `readevalloop`'s `specbind
+    // (Qstandard_input, readcharfun)` (lread.c), which fires for eval-buffer and
+    // eval-region too.  The cursor reads a heap copy of `source`; its bytes are
+    // identical, so the loop and `(read)` advance one shared byte offset.
+    let setup_specpdl_base = eval.specpdl.len();
+    let source_value = Value::heap_string(source.clone());
+    eval.push_specpdl_root(source_value);
+    eval.specbind(
+        intern("standard-input"),
+        Value::symbol(super::eval::LOAD_READ_STREAM_SYMBOL),
+    );
+    eval.load_read_cursors.push(super::eval::LoadReadCursor {
+        source: source_value,
+        pos: start_pos,
+        shorthands: None,
+    });
+
+    let loop_result: Result<(), super::error::Flow> = (|| {
+        loop {
+            // Read at the shared cursor: a `(read)` in the previous form may have
+            // advanced it past forms the loop must now skip.
+            let pos = eval
+                .load_read_cursors
+                .last()
+                .expect("load-read cursor present during readevalloop")
+                .pos;
+            let read_result = read_source
+                .read_one(pos, &eval.obarray)
+                .map_err(signal_reader_error_for_eval_source)?;
+            let Some((form, next_pos)) = read_result else {
+                break;
+            };
+            if let Some(cursor) = eval.load_read_cursors.last_mut() {
+                cursor.pos = next_pos;
+            }
+
+            let eval_roots = eval.save_specpdl_roots();
+            eval.push_specpdl_root(form);
+            let eval_result = if let Some(mexp_fn) = macroexpand_fn {
+                eval.push_specpdl_root(mexp_fn);
+                super::load::eager_expand_eval(eval, form, mexp_fn).map_err(|e| match e {
+                    super::error::EvalError::Signal {
+                        symbol,
+                        data,
+                        raw_data,
+                    } => super::error::Flow::Signal(Box::new(super::error::SignalData {
+                        symbol,
+                        data,
+                        raw_data,
+                        suppress_signal_hook: false,
+                        selected_resume: None,
+                        search_complete: false,
+                    })),
+                    super::error::EvalError::UncaughtThrow { tag, value } => {
+                        super::error::Flow::Throw { tag, value }
+                    }
+                })
+            } else {
+                eval.eval_sub(form)
+            };
+            eval.restore_specpdl_roots(eval_roots);
+            eval_result?;
+        }
+        Ok(())
+    })();
+
+    // Unwind the load-read cursor and the `standard-input` binding + source root
+    // regardless of how the loop exited.
+    eval.load_read_cursors.pop();
+    eval.unbind_to(setup_specpdl_base);
+
+    loop_result?;
 
     Ok(Value::NIL)
 }

@@ -1765,76 +1765,113 @@ fn streaming_readevalloop_lisp_source(
         .to_string_lossy()
         .to_string();
     let read_source = super::value_reader::LispReadSource::new(content);
+
+    // Bind `standard-input` to the shared load-read cursor so `(read)` inside a
+    // loaded form reads the *next* top-level form from this same source and the
+    // loop resumes after it — GNU `readevalloop`'s `specbind (Qstandard_input,
+    // readcharfun)` (lread.c).  The cursor reads a heap copy of `content`; its
+    // bytes are identical, so the loop's reads of `content` and `(read)`'s
+    // reads of the copy advance one shared byte offset (`cursor.pos`).
+    let setup_specpdl_base = eval.specpdl.len();
+    let content_value = Value::heap_string(content.clone());
+    eval.push_specpdl_root(content_value);
+    eval.specbind(
+        intern("standard-input"),
+        Value::symbol(super::eval::LOAD_READ_STREAM_SYMBOL),
+    );
+    eval.load_read_cursors.push(super::eval::LoadReadCursor {
+        source: content_value,
+        pos: 0,
+        shorthands: shorthands.cloned(),
+    });
+
     let load_specpdl_base = eval.specpdl.len();
 
-    let mut pos = 0;
-    let mut form_idx = 0;
-
-    loop {
-        debug_assert_eq!(
-            eval.specpdl.len(),
-            load_specpdl_base,
-            "streaming_readevalloop_lisp_source leaked specpdl entries before {file_name} form {form_idx}",
-        );
-        let read_result = read_source
-            .read_one_with_shorthands(pos, &eval.obarray, shorthands)
-            .map_err(|e| read_error_for_load(path, e))?;
-
-        let Some((form, next_pos)) = read_result else {
-            break;
-        };
-        eval.obarray_mut().materialize_read_symbols(form);
-
-        let form_start = pos;
-        pos = next_pos;
-
-        if tracing::enabled!(tracing::Level::DEBUG) {
-            let preview = load_form_log_preview(path, || {
-                read_source
-                    .storage_slice_range(form_start, next_pos)
-                    .chars()
-                    .take(160)
-                    .collect()
-            });
-            tracing::debug!(
-                "{} FORM[{}]: {}",
-                file_name,
-                form_idx,
-                preview.replace('\n', " ")
+    let loop_result: Result<(), EvalError> = (|| {
+        let mut form_idx = 0;
+        loop {
+            debug_assert_eq!(
+                eval.specpdl.len(),
+                load_specpdl_base,
+                "streaming_readevalloop_lisp_source leaked specpdl entries before {file_name} form {form_idx}",
             );
+            // Read at the shared cursor: a `(read)` in the previous form may have
+            // advanced it past forms the loop must now skip.
+            let pos = eval
+                .load_read_cursors
+                .last()
+                .expect("load-read cursor present during readevalloop")
+                .pos;
+            let read_result = read_source
+                .read_one_with_shorthands(pos, &eval.obarray, shorthands)
+                .map_err(|e| read_error_for_load(path, e))?;
+
+            let Some((form, next_pos)) = read_result else {
+                break;
+            };
+            eval.obarray_mut().materialize_read_symbols(form);
+
+            let form_start = pos;
+            if let Some(cursor) = eval.load_read_cursors.last_mut() {
+                cursor.pos = next_pos;
+            }
+
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                let preview = load_form_log_preview(path, || {
+                    read_source
+                        .storage_slice_range(form_start, next_pos)
+                        .chars()
+                        .take(160)
+                        .collect()
+                });
+                tracing::debug!(
+                    "{} FORM[{}]: {}",
+                    file_name,
+                    form_idx,
+                    preview.replace('\n', " ")
+                );
+            }
+
+            let eval_roots = eval.save_specpdl_roots();
+            eval.push_specpdl_root(form);
+            let eval_result = if let Some(mexp) = macroexpand_fn {
+                eval.push_specpdl_root(mexp);
+                streaming_readevalloop_eager_expand_eval(eval, form, mexp)
+            } else {
+                eval.eval_sub(form).map_err(map_flow)
+            };
+            eval.restore_specpdl_roots(eval_roots);
+
+            if let Err(ref e) = eval_result
+                && should_log_load_form_error(eval, e)
+            {
+                let preview = load_form_log_preview(path, || {
+                    read_source
+                        .storage_slice_range(form_start, next_pos)
+                        .chars()
+                        .take(120)
+                        .collect()
+                });
+                log_streaming_load_form_error(eval, &file_name, form_idx, preview, e);
+            }
+            eval_result?;
+
+            debug_assert_eq!(
+                eval.specpdl.len(),
+                load_specpdl_base,
+                "streaming_readevalloop_lisp_source leaked specpdl entries after {file_name} form {form_idx}",
+            );
+            form_idx += 1;
         }
+        Ok(())
+    })();
 
-        let eval_roots = eval.save_specpdl_roots();
-        eval.push_specpdl_root(form);
-        let eval_result = if let Some(mexp) = macroexpand_fn {
-            eval.push_specpdl_root(mexp);
-            streaming_readevalloop_eager_expand_eval(eval, form, mexp)
-        } else {
-            eval.eval_sub(form).map_err(map_flow)
-        };
-        eval.restore_specpdl_roots(eval_roots);
+    // Unwind the load-read cursor and the `standard-input` binding + source
+    // root regardless of how the loop exited (break, form error, read error).
+    eval.load_read_cursors.pop();
+    eval.unbind_to(setup_specpdl_base);
 
-        if let Err(ref e) = eval_result
-            && should_log_load_form_error(eval, e)
-        {
-            let preview = load_form_log_preview(path, || {
-                read_source
-                    .storage_slice_range(form_start, next_pos)
-                    .chars()
-                    .take(120)
-                    .collect()
-            });
-            log_streaming_load_form_error(eval, &file_name, form_idx, preview, e);
-        }
-        eval_result?;
-
-        debug_assert_eq!(
-            eval.specpdl.len(),
-            load_specpdl_base,
-            "streaming_readevalloop_lisp_source leaked specpdl entries after {file_name} form {form_idx}",
-        );
-        form_idx += 1;
-    }
+    loop_result?;
 
     build_load_history(eval, hist_file_name, true);
     Ok(Value::T)
