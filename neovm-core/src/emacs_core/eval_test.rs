@@ -21649,3 +21649,30 @@ fn eval_task_drain_runs_queued_closures_in_order() {
     ctx.drain_eval_tasks();
     assert_eq!(counter.load(Ordering::Relaxed), 3);
 }
+
+#[test]
+fn render_uncaught_signal_backtrace_lists_live_frames_innermost_first() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.specpdl.push(SpecBinding::Backtrace {
+        function: Value::symbol("outer-fn"),
+        args: BacktraceArgs::Evaluated0,
+        debug_on_exit: false,
+    });
+    ev.specpdl.push(SpecBinding::Backtrace {
+        function: Value::symbol("inner-fn"),
+        args: BacktraceArgs::Evaluated1(Value::fixnum(42)),
+        debug_on_exit: false,
+    });
+    let bt = ev.render_uncaught_signal_backtrace(64);
+    assert!(bt.contains("(inner-fn 42)"), "inner frame with arg: {bt}");
+    assert!(bt.contains("(outer-fn)"), "outer frame, no args: {bt}");
+    // The most recently pushed (innermost) frame must come first.
+    assert!(
+        bt.find("inner-fn").unwrap() < bt.find("outer-fn").unwrap(),
+        "innermost-first order: {bt}"
+    );
+    // `max_frames` truncates with an ellipsis marker.
+    let truncated = ev.render_uncaught_signal_backtrace(1);
+    assert!(truncated.contains("..."), "truncation marker: {truncated}");
+}

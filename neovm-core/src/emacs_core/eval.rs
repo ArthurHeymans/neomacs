@@ -2056,6 +2056,12 @@ pub struct Context {
     /// The `source` Values are kept alive by a `push_specpdl_root` at push time,
     /// not by this Vec (which GC does not trace).
     pub(crate) load_read_cursors: Vec<LoadReadCursor>,
+    /// Compact render of the live Lisp backtrace captured when the most recent
+    /// *uncaught* signal was dispatched (specpdl still intact), for the command
+    /// loop's error log.  Only populated when debug-level tracing is active, so
+    /// it costs nothing in production.  Taken (cleared) when logged.  See
+    /// `dispatch_signal` and `command_loop_2`.
+    pub(crate) last_uncaught_signal_backtrace: Option<String>,
     /// Buffer manager — owns all live buffers and tracks current buffer.
     pub buffers: BufferManager,
     /// GNU xwidget runtime state: internal model/view lists and id counter.
@@ -3252,6 +3258,7 @@ impl Context {
         ev.require_stack.clear();
         ev.loads_in_progress.clear();
         ev.load_read_cursors.clear();
+        ev.last_uncaught_signal_backtrace = None;
         ev.buffers = BufferManager::new();
         ev.xwidgets = super::xwidget::XwidgetState::new();
         ev.last_overlay_modification_hooks.clear();
@@ -3524,9 +3531,51 @@ impl Context {
         }
 
         self.maybe_call_debugger_for_signal(&sig, None)?;
+        // No handler matched: this signal will propagate to the command loop.
+        // Capture the live Lisp backtrace NOW, while the specpdl is still intact
+        // (unwinding happens as `Ok(sig)` propagates up), so the command loop's
+        // error log can show WHERE it was signaled without the reporter needing
+        // `debug-on-error`. Gated on debug-level tracing — the default filter is
+        // `warn`, so production only pays a cheap `enabled!` check, and only
+        // truly-uncaught signals are ever rendered.
+        let captured_backtrace = if tracing::enabled!(tracing::Level::DEBUG) {
+            Some(self.render_uncaught_signal_backtrace(64))
+        } else {
+            None
+        };
+        self.last_uncaught_signal_backtrace = captured_backtrace;
         sig.search_complete = true;
         sig.selected_resume = None;
         Ok(sig)
+    }
+
+    /// Render a compact snapshot of the live Lisp backtrace (innermost frame
+    /// first), like GNU `backtrace`, for the command-loop error log. Bounded to
+    /// `max_frames`. Only invoked under a debug-tracing gate — it prints every
+    /// live frame's function and arguments.
+    fn render_uncaught_signal_backtrace(&self, max_frames: usize) -> String {
+        let mut lines: Vec<String> = Vec::new();
+        for entry in self.specpdl.iter().rev() {
+            let SpecBinding::Backtrace { function, args, .. } = entry else {
+                continue;
+            };
+            if lines.len() >= max_frames {
+                lines.push("    ...".to_string());
+                break;
+            }
+            let fn_str = crate::emacs_core::print_value_with_eval(self, function);
+            let arg_strs: Vec<String> = self
+                .backtrace_args_values(args)
+                .iter()
+                .map(|v| crate::emacs_core::print_value_with_eval(self, v))
+                .collect();
+            lines.push(if arg_strs.is_empty() {
+                format!("    ({fn_str})")
+            } else {
+                format!("    ({fn_str} {})", arg_strs.join(" "))
+            });
+        }
+        lines.join("\n")
     }
 
     fn run_signal_hook(&mut self, sig: &SignalData) -> Result<(), Flow> {
@@ -5631,6 +5680,7 @@ impl Context {
             require_stack: Vec::new(),
             loads_in_progress: Vec::new(),
             load_read_cursors: Vec::new(),
+            last_uncaught_signal_backtrace: None,
             buffers: BufferManager::new(),
             xwidgets: super::xwidget::XwidgetState::new(),
             last_overlay_modification_hooks: Vec::new(),
@@ -5821,6 +5871,7 @@ impl Context {
             require_stack,
             loads_in_progress,
             load_read_cursors: Vec::new(),
+            last_uncaught_signal_backtrace: None,
             buffers,
             xwidgets: super::xwidget::XwidgetState::new(),
             last_overlay_modification_hooks: Vec::new(),
@@ -6739,9 +6790,16 @@ impl Context {
                     // undiagnosable in a bug report. `condition=` names the
                     // symbol; `signal=` is the Lisp-readable `(SYMBOL . DATA)`.
                     let rendered_signal = super::error::format_signal_data_with_eval(self, &sig);
+                    // Backtrace captured at signal-dispatch time (debug tracing
+                    // only); shows where it was raised without `debug-on-error`.
+                    let backtrace_suffix = self
+                        .last_uncaught_signal_backtrace
+                        .take()
+                        .map(|bt| format!("\nLisp backtrace (innermost first):\n{bt}"))
+                        .unwrap_or_default();
                     tracing::error!(
                         condition = %sym_name,
-                        "Command loop error: {error_msg} [signal={rendered_signal}]"
+                        "Command loop error: {error_msg} [signal={rendered_signal}]{backtrace_suffix}"
                     );
 
                     // Clear prefix arg on error (like GNU Emacs)
@@ -7082,8 +7140,21 @@ impl Context {
                         return exec_result;
                     }
                     Flow::Signal(sig) => {
+                        let sym_name = sig.symbol_name().to_string();
                         let error_msg = self.display_command_error(sig);
-                        tracing::warn!("Command error: ({}): {}", sig.symbol_name(), error_msg);
+                        // Signal-dispatch-time backtrace (debug tracing only) — see
+                        // `dispatch_signal`. This is the primary command-error path
+                        // (GNU `cmd_error`); the outer `command_loop_2` net logs the
+                        // same way.
+                        let backtrace_suffix = self
+                            .last_uncaught_signal_backtrace
+                            .take()
+                            .map(|bt| format!("\nLisp backtrace (innermost first):\n{bt}"))
+                            .unwrap_or_default();
+                        tracing::warn!(
+                            condition = %sym_name,
+                            "Command error: ({sym_name}): {error_msg}{backtrace_suffix}"
+                        );
                     }
                 }
             }
