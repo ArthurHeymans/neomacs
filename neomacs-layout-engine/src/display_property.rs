@@ -5,8 +5,8 @@ use crate::display_item::{
 };
 use crate::display_spec::{
     DisplayFringeLayout, DisplaySpaceKey, DisplaySpecHead, is_display_fringe_spec,
-    is_display_space_spec, is_display_spec_list, parse_display_fringe_layout,
-    parse_display_surface_layout, parse_display_xwidget_layout,
+    is_display_margin_spec, is_display_space_spec, is_display_spec_list,
+    parse_display_fringe_layout, parse_display_surface_layout, parse_display_xwidget_layout,
 };
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::value::list_to_vec;
@@ -50,6 +50,13 @@ pub(crate) enum DisplayReplacementProperty {
     /// record a fringe descriptor on the row; the inline text stays suppressed
     /// (zero inline width), matching GNU's text-area output.
     Fringe(DisplayFringeLayout),
+    /// `((margin left-margin|right-margin) CONTENT)`: GNU displays CONTENT in the
+    /// named marginal area, NOT in the text flow — the covered text (a
+    /// placeholder such as magit's `"o"` visibility indicator) shows NOTHING
+    /// inline. neomacs does not render marginal areas, so like GNU with a
+    /// zero-width margin we simply suppress the placeholder (zero inline width)
+    /// rather than leaking it into the text (neomacs#188).
+    Margin,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -219,6 +226,8 @@ fn classify_single_display_spec(value: Value) -> DisplayPropertyClassification {
             )))
     } else if is_display_fringe_spec(&value) {
         parse_display_fringe_layout(&value).map(DisplayReplacementProperty::Fringe)
+    } else if is_display_margin_spec(&value) {
+        Some(DisplayReplacementProperty::Margin)
     } else {
         None
     };

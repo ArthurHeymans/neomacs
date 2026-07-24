@@ -711,6 +711,17 @@ pub(crate) fn is_display_fringe_spec(value: &Value) -> bool {
             || value.cons_car().is_symbol_named("right-fringe"))
 }
 
+/// True for GNU's marginal-area display form `((margin left-margin|right-margin)
+/// CONTENT)`: a cons whose car is itself `(margin . _)`. `is_display_spec_list`
+/// already routes this to the single-spec path; the classifier suppresses the
+/// covered placeholder rather than rendering it inline (neomacs#188).
+pub(crate) fn is_display_margin_spec(value: &Value) -> bool {
+    value.is_cons() && {
+        let car = value.cons_car();
+        car.is_cons() && car.cons_car().is_symbol_named("margin")
+    }
+}
+
 /// Recognized heads of a SINGLE `display` spec — the symbols GNU's
 /// `handle_display_spec` (src/xdisp.c) tests before deciding a list is a
 /// *list of display specs* rather than one spec. A `display` value that is a

@@ -502,6 +502,9 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
             DisplayReplacementProperty::Fringe(_) => {
                 DisplayPropertyReplacementSourceInputs::empty()
             }
+            // `((margin …) …)`: marginal-area content, no inline output — the
+            // covered placeholder is suppressed (#188).
+            DisplayReplacementProperty::Margin => DisplayPropertyReplacementSourceInputs::empty(),
         };
         DisplayPropertyReplacementSourceItem::from_display_property_parts(
             display_property,

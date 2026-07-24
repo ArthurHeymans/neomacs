@@ -2098,6 +2098,8 @@ impl DisplayPropertyReplacementSourceItem {
             )),
             DisplayReplacementProperty::Media(_) => inputs.media.map(Self::Media),
             DisplayReplacementProperty::Fringe(_) => Some(Self::Empty),
+            // Marginal-area content is not shown in the text flow (#188).
+            DisplayReplacementProperty::Margin => Some(Self::Empty),
         }
     }
 }
@@ -2791,6 +2793,9 @@ impl DisplayPropertySourceReplacement {
                 context.collect_fringe(*layout);
                 Self::Empty
             }
+            // Marginal-area content is not rendered in the text flow; suppress
+            // the covered placeholder (#188).
+            Some(DisplayReplacementProperty::Margin) => Self::Empty,
             Some(DisplayReplacementProperty::Media(replacement)) => replacement
                 .direct_replacement()
                 .map(DisplayItemKind::MediaReplacement)

@@ -405,3 +405,34 @@ fn display_replacement_property_describes_media_replacement_behavior() {
         None
     );
 }
+
+#[test]
+fn margin_display_spec_is_a_suppressing_replacement_not_inline_text() {
+    // magit's section visibility indicator is
+    //   #("o" 0 1 (display ((margin right-margin) " ")))
+    // The `((margin …) …)` spec must classify as a replacement so the covered
+    // placeholder "o" is suppressed inline, not fall through to `None` (which
+    // renders the "o" in the text flow). neomacs#188.
+    let _eval = Context::new(); // initialize the tagged heap for Value allocation
+    for side in ["left-margin", "right-margin"] {
+        let spec = Value::list(vec![
+            Value::list(vec![Value::symbol("margin"), Value::symbol(side)]),
+            Value::string(" "),
+        ]);
+        let classified = classify_display_property(spec);
+        assert_eq!(
+            classified.replacement,
+            Some(DisplayReplacementProperty::Margin),
+            "({side} …) should be a Margin replacement"
+        );
+    }
+    // A non-margin cons-headed list is unaffected (still not a margin spec).
+    assert_ne!(
+        classify_display_property(Value::list(vec![
+            Value::list(vec![Value::symbol("not-margin")]),
+            Value::string("x"),
+        ]))
+        .replacement,
+        Some(DisplayReplacementProperty::Margin)
+    );
+}
