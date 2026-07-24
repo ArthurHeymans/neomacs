@@ -106,16 +106,30 @@ impl BufferSourceWalkConsumption {
 }
 
 impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
+    /// Walk with no window context (tests / non-window callers). The redisplay
+    /// path uses [`new_for_window`](Self::new_for_window) so overlay `window`
+    /// properties are honored.
     pub(crate) fn new(
         buffer_id: BufferId,
         buffer: &'request B,
         start_charpos: i64,
         text_start_byte: usize,
     ) -> Self {
+        Self::new_for_window(buffer_id, buffer, None, start_charpos, text_start_byte)
+    }
+
+    pub(crate) fn new_for_window(
+        buffer_id: BufferId,
+        buffer: &'request B,
+        window_id: Option<u64>,
+        start_charpos: i64,
+        text_start_byte: usize,
+    ) -> Self {
         Self {
-            source_cursor: BufferTextSourceCursor::new(
+            source_cursor: BufferTextSourceCursor::new_for_window(
                 buffer_id,
                 buffer,
+                window_id,
                 CharPos0::new(start_charpos.max(0) as usize),
                 CharPos0::new(usize::MAX),
                 RenderFaceRef::Inherit,

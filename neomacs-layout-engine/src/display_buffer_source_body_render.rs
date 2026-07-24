@@ -284,9 +284,10 @@ impl BufferSourceWalkSetup {
         overlay_text_row_context: BufferOverlayStringTextRowRenderContext<'request>,
         buffer: &B,
     ) {
-        let mut source_walk = BufferSourceWalk::new(
+        let mut source_walk = BufferSourceWalk::new_for_window(
             loop_context.buffer_id(),
             buffer,
+            Some(params.window_id as u64),
             self.charpos,
             loop_context.text_start_byte(),
         );

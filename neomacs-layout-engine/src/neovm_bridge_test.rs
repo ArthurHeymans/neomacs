@@ -2960,3 +2960,71 @@ fn default_fringe_indicator_alist_seeded_resolves_standard_indicators() {
         Some(idx("right-curly-arrow")),
     );
 }
+
+#[test]
+fn face_resolver_honors_overlay_window_property() {
+    // hl-line with a non-sticky flag sets the overlay `window` property to the
+    // selected window, so GNU applies that overlay's face ONLY in that window --
+    // the same buffer in two windows highlights only the selected one. The
+    // overlay-face path must skip a windowed overlay whose window isn't the one
+    // being resolved, matching the overlay-string path.
+    let _ctx = neovm_core::emacs_core::Context::new();
+    let mut table = FaceTable::new();
+    let mut hl = NeoFace::new("hl-line-test");
+    hl.background = Some(neovm_core::face::Color {
+        r: 0xff,
+        g: 0xff,
+        b: 0x00,
+        a: 0xff,
+    });
+    table.define("hl-line-test", hl);
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, Some("x".to_string()));
+
+    let mut buf = test_buffer(1, "*hl*");
+    set_buffer_text(&mut buf, "line");
+    buf.widen();
+    let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        serial: 0,
+        plist: Value::NIL,
+        buffer: None,
+        start: buf.point_min_emacs_byte_pos().get() as usize,
+        end: buf.point_max_emacs_byte_pos().get() as usize,
+        front_advance: false,
+        rear_advance: false,
+    });
+    buf.overlays_mut().insert_overlay(overlay);
+    buf.overlays_mut()
+        .overlay_put(
+            overlay,
+            Value::symbol("face"),
+            Value::symbol("hl-line-test"),
+        )
+        .unwrap();
+    buf.overlays_mut()
+        .overlay_put(overlay, Value::symbol("window"), Value::make_window(7))
+        .unwrap();
+
+    const HL_BG: u32 = 0x00FF_FF00;
+    let bg_at = |resolver: &FaceResolver| {
+        let mut nc = buf.point_max_char_pos().get();
+        resolver.face_at_pos(&buf, 0, &mut nc).bg
+    };
+
+    // Matching window -> overlay face applies.
+    resolver.set_current_window_id(Some(7));
+    assert_eq!(
+        bg_at(&resolver),
+        HL_BG,
+        "overlay face should apply in its own window"
+    );
+    // Different window -> overlay face must NOT leak in.
+    resolver.set_current_window_id(Some(8));
+    assert_ne!(
+        bg_at(&resolver),
+        HL_BG,
+        "windowed overlay must not leak into other windows"
+    );
+    // No window (frame chrome / TTY) -> unrestricted, applies.
+    resolver.set_current_window_id(None);
+    assert_eq!(bg_at(&resolver), HL_BG, "None window id is unrestricted");
+}

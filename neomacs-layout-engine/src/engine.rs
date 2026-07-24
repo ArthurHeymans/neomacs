@@ -1119,6 +1119,7 @@ impl LayoutEngine {
         // per-window parameters left over from the window loop above (GNU
         // evaluates chrome faces with no window ⇒ such filters fail).
         face_resolver.set_current_window_parameters(Vec::new());
+        face_resolver.set_current_window_id(None);
 
         // Collect semantic GUI chrome before publishing the frame. FrameChrome
         // is the single owner of band ordering and absolute placement; each
@@ -1707,6 +1708,8 @@ impl LayoutEngine {
         face_resolver.set_current_window_parameters(
             evaluator.frame_manager().window_parameters_pairs(window_id),
         );
+        // Honor overlay `window` properties (hl-line non-sticky) for this window.
+        face_resolver.set_current_window_id(Some(params.window_id as u64));
 
         // Capture buffer name as owned String for use in mode-line fallback.
         // This avoids holding a borrow on `evaluator` through eval calls.

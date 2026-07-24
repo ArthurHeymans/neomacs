@@ -77,6 +77,11 @@ fn compute_display_property_aliases<B: LayoutBufferView + ?Sized>(buffer: &B) ->
 pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
     buffer_id: BufferId,
     buffer: &'a B,
+    /// The window this cursor lays out for, so overlay `window` properties are
+    /// honored (`overlay_applies_to_window`): faces, `display`, and `mouse-face`
+    /// contributed by a windowed overlay (e.g. hl-line non-sticky) apply only in
+    /// that window. `None` for non-window contexts (unrestricted, matching GNU).
+    window_id: Option<u64>,
     char_pos: CharPos0,
     end: CharPos0,
     base_face: RenderFaceRef,
@@ -96,9 +101,25 @@ struct CachedMouseFaceExtent {
 }
 
 impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
+    /// Cursor with no window context (overlay `window` properties unrestricted).
+    /// Used by tests and any non-window caller; the redisplay path uses
+    /// [`new_for_window`](Self::new_for_window).
     pub(crate) fn new(
         buffer_id: BufferId,
         buffer: &'a B,
+        start: CharPos0,
+        end: CharPos0,
+        base_face: RenderFaceRef,
+    ) -> Self {
+        Self::new_for_window(buffer_id, buffer, None, start, end, base_face)
+    }
+
+    /// Cursor scoped to `window_id`, so overlay `window` properties are honored
+    /// (a windowed overlay's face / `display` / `mouse-face` applies only there).
+    pub(crate) fn new_for_window(
+        buffer_id: BufferId,
+        buffer: &'a B,
+        window_id: Option<u64>,
         start: CharPos0,
         end: CharPos0,
         base_face: RenderFaceRef,
@@ -109,6 +130,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         Self {
             buffer_id,
             buffer,
+            window_id,
             char_pos: start,
             end,
             base_face,
@@ -209,6 +231,11 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         let overlay_display = overlays
             .overlays_at_emacs_byte_pos(bytepos)
             .iter()
+            .filter(|oid| {
+                // A windowed overlay's `display` replacement applies only in its
+                // own window (shared `window`-property rule).
+                crate::neovm_bridge::overlay_applies_to_window(self.buffer, **oid, self.window_id)
+            })
             .filter_map(|oid| {
                 let value = overlays.overlay_get_named(*oid, Value::symbol("display"))?;
                 let priority = overlays
@@ -326,24 +353,15 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             .map(|value| context.resolve_face_ref(self.base_face, value))
             .unwrap_or(self.base_face);
 
-        let overlays = self.buffer.layout_overlays();
-        let overlay_ids = overlays.overlays_at_emacs_byte_pos(bytepos);
-        if !overlay_ids.is_empty() {
-            let mut overlay_faces: Vec<(i64, Value)> = overlay_ids
-                .iter()
-                .filter_map(|oid| {
-                    let face_value = overlays.overlay_get_named(*oid, Value::symbol("face"))?;
-                    let priority = overlays
-                        .overlay_get_named(*oid, Value::symbol("priority"))
-                        .and_then(|value| value.as_int())
-                        .unwrap_or(0);
-                    Some((priority, face_value))
-                })
-                .collect();
-            overlay_faces.sort_by_key(|(priority, _)| *priority);
-            for (_priority, face_value) in overlay_faces {
-                face = context.resolve_face_ref(face, face_value);
-            }
+        // Overlay faces via the shared resolver — same ascending-priority order
+        // and `window`-property filter as every other face path. A windowed
+        // overlay (hl-line with a non-sticky flag) contributes its face only in
+        // its own window, so the same buffer in two windows highlights only the
+        // selected one.
+        for face_value in
+            crate::neovm_bridge::overlay_faces_at(self.buffer, bytepos, self.window_id).faces
+        {
+            face = context.resolve_face_ref(face, face_value);
         }
         face
     }

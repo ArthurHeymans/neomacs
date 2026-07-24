@@ -1885,6 +1885,92 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
 /// once. Mirrors GNU's `TEXT_PROP_DISTANCE_LIMIT` in `compute_stop_pos`.
 const INVISIBLE_SCAN_BYTE_LIMIT: usize = 2048;
 
+/// Whether an overlay's contributions (face, before/after strings) apply in the
+/// window currently being laid out. GNU restricts an overlay carrying a `window`
+/// property to that window only — e.g. hl-line with a non-sticky flag sets it to
+/// the selected window, so the same buffer in two windows highlights only the
+/// selected one. A missing or non-window (`nil`) `window` property is
+/// unrestricted, and `current_window_id == None` (frame chrome / TTY) applies
+/// every overlay, matching GNU's "no window ⇒ unrestricted".
+///
+/// This is the single source of truth for the check; every overlay-scanning path
+/// (buffer glyph faces, the row/extend fill, and overlay strings) calls it so the
+/// window rule can't drift between them again.
+pub(crate) fn overlay_applies_to_window<B: LayoutBufferView + ?Sized>(
+    buffer: &B,
+    overlay_id: Value,
+    current_window_id: Option<u64>,
+) -> bool {
+    let Some(window_prop) = buffer
+        .layout_overlays()
+        .overlay_get_named(overlay_id, Value::symbol("window"))
+    else {
+        return true;
+    };
+    let Some(target_window_id) = window_prop.as_window_id() else {
+        return true;
+    };
+    current_window_id.is_none_or(|current| current == target_window_id)
+}
+
+/// The overlay-`face` portion of GNU `face_at_buffer_position`: overlay `face`
+/// values at `bytepos`, ascending priority (merge in order — higher priority
+/// wins by being applied last), with windowed overlays filtered to `window_id`
+/// via [`overlay_applies_to_window`].
+///
+/// This is the single implementation of that scan. Every face-resolution path
+/// — the per-glyph buffer face (`BufferTextSourceCursor::face_at`) and the
+/// resolved-face/row-fill path (`FaceResolver::face_at_pos`) — calls it, so the
+/// priority ordering, `font-lock-face` fallback boundary, and the `window` rule
+/// can't drift apart the way they did before (which is exactly how hl-line's
+/// per-window highlight leaked into every window).
+pub(crate) struct OverlayFacesAtPosition {
+    /// Overlay `face` values to merge, in ascending priority.
+    pub(crate) faces: Vec<Value>,
+    /// Nearest overlay end strictly after `bytepos` (across ALL overlays, so a
+    /// resolved-face cache invalidates at every overlay boundary). `None` if
+    /// there is no overlay ending ahead.
+    pub(crate) next_boundary: Option<EmacsBytePos>,
+}
+
+pub(crate) fn overlay_faces_at<B: LayoutBufferView + ?Sized>(
+    buffer: &B,
+    bytepos: EmacsBytePos,
+    current_window_id: Option<u64>,
+) -> OverlayFacesAtPosition {
+    let overlays = buffer.layout_overlays();
+    let overlay_ids = overlays.overlays_at_emacs_byte_pos(bytepos);
+    let mut next_boundary: Option<EmacsBytePos> = None;
+    let mut faces: Vec<(i64, Value)> = Vec::new();
+    for oid in &overlay_ids {
+        let oid = *oid;
+        if let Some(end) = overlays.overlay_end_emacs_byte_pos(oid)
+            && end.get() > bytepos.get()
+        {
+            next_boundary = Some(match next_boundary {
+                Some(prev) if prev.get() <= end.get() => prev,
+                _ => end,
+            });
+        }
+        // A windowed overlay contributes its face only in its own window.
+        if !overlay_applies_to_window(buffer, oid, current_window_id) {
+            continue;
+        }
+        if let Some(face) = overlays.overlay_get_named(oid, Value::symbol("face")) {
+            let priority = overlays
+                .overlay_get_named(oid, Value::symbol("priority"))
+                .and_then(|value| value.as_int())
+                .unwrap_or(0);
+            faces.push((priority, face));
+        }
+    }
+    faces.sort_by_key(|(priority, _)| *priority);
+    OverlayFacesAtPosition {
+        faces: faces.into_iter().map(|(_, face)| face).collect(),
+        next_boundary,
+    }
+}
+
 /// Text property and overlay accessor for the layout engine.
 ///
 /// Wraps a reference to a neovm-core `Buffer` and provides query methods
@@ -2119,6 +2205,11 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
                 .layout_overlays()
                 .sort_overlay_ids_by_priority_desc(&mut overlay_ids);
             for oid in overlay_ids {
+                // A windowed overlay's `invisible` only hides text in its window
+                // (same GNU rule as its face/strings — shared helper).
+                if !self.overlay_applies_to_window(oid) {
+                    continue;
+                }
                 let overlay_invis = self
                     .buffer
                     .layout_overlays()
@@ -2323,18 +2414,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     }
 
     fn overlay_applies_to_window(&self, overlay_id: Value) -> bool {
-        let Some(window_prop) = self
-            .buffer
-            .layout_overlays()
-            .overlay_get_named(overlay_id, Value::symbol("window"))
-        else {
-            return true;
-        };
-        let Some(target_window_id) = window_prop.as_window_id() else {
-            return true;
-        };
-        self.window_id
-            .is_none_or(|current_window_id| target_window_id == current_window_id)
+        overlay_applies_to_window(self.buffer, overlay_id, self.window_id)
     }
 
     /// Get the next position where any text property changes.
@@ -2647,6 +2727,14 @@ pub struct FaceResolver {
     /// Empty for frame chrome / TTY / any non-window context, matching GNU's
     /// "no window ⇒ filter fails".
     current_window_parameters: std::cell::RefCell<Vec<(Value, Value)>>,
+    /// Numeric id of the window whose faces are currently being resolved, or
+    /// `None` for frame chrome / TTY / any non-window context. Set per-window
+    /// alongside [`set_current_window_parameters`]. Used to honor an overlay's
+    /// `window` property: GNU restricts such an overlay (e.g. hl-line with a
+    /// non-sticky flag, which sets `window` to the selected window) to that one
+    /// window, so the same buffer shown in two windows highlights only the
+    /// selected one — see the overlay-face loop in `face_at_pos`.
+    current_window_id: std::cell::Cell<Option<u64>>,
     font_sizing: FontSizing,
 }
 
@@ -2750,6 +2838,7 @@ impl FaceResolver {
             default_face: df,
             window_system,
             current_window_parameters: std::cell::RefCell::new(Vec::new()),
+            current_window_id: std::cell::Cell::new(None),
             font_sizing,
         }
     }
@@ -2762,6 +2851,15 @@ impl FaceResolver {
     /// used behind `&`, this is the equivalent interior-mutable hook.
     pub fn set_current_window_parameters(&self, params: Vec<(Value, Value)>) {
         self.current_window_parameters.replace(params);
+    }
+
+    /// Point the resolver at the window whose faces are about to be resolved so
+    /// an overlay's `window` property can be honored (a windowed overlay applies
+    /// only in its window). `None` for frame chrome / non-window contexts, which
+    /// then applies every overlay (matching GNU's "no window ⇒ unrestricted").
+    /// Call at each window boundary alongside `set_current_window_parameters`.
+    pub fn set_current_window_id(&self, window_id: Option<u64>) {
+        self.current_window_id.set(window_id);
     }
 
     /// Return a reference to the resolved default face.
@@ -3323,44 +3421,21 @@ impl FaceResolver {
             min_next = min_next.min(buffer_emacs_byte_pos_to_charpos(buffer, nc));
         }
 
-        // 2. Overlay faces (sorted by priority, lowest first)
-        let overlay_ids = buffer.layout_overlays().overlays_at_emacs_byte_pos(bytepos);
-        if !overlay_ids.is_empty() {
-            let mut overlay_faces: Vec<(i64, Value)> = Vec::new();
-            for oid in &overlay_ids {
-                let oid = *oid;
-                // Update next_check from overlay boundaries
-                if let Some(end) = buffer.layout_overlays().overlay_end_emacs_byte_pos(oid)
-                    && end > bytepos
-                {
-                    min_next = min_next.min(buffer_emacs_byte_pos_to_charpos(buffer, end));
-                }
-                // Get priority (default 0)
-                let priority = buffer
-                    .layout_overlays()
-                    .overlay_get_named(oid, Value::symbol("priority"))
-                    .and_then(|v| v.as_int())
-                    .unwrap_or(0);
-                // Get face
-                if let Some(val) = buffer
-                    .layout_overlays()
-                    .overlay_get_named(oid, Value::symbol("face"))
-                {
-                    overlay_faces.push((priority, val));
-                }
-            }
-            // Sort by priority (ascending), so higher priority overlays
-            // are merged later and override earlier ones.
-            overlay_faces.sort_by_key(|(pri, _)| *pri);
-            for (_pri, face_value) in overlay_faces {
-                if let Some(next) = self.resolve_buffer_face_value_over_inner(
-                    buffer,
-                    &resolved,
-                    &face_value,
-                    &mut remap_stack,
-                ) {
-                    resolved = next;
-                }
+        // 2. Overlay faces — collected once by the shared resolver (ascending
+        //    priority, windowed overlays filtered to this window). Merge each in
+        //    order; higher priority wins by being applied last.
+        let overlays = overlay_faces_at(buffer, bytepos, self.current_window_id.get());
+        if let Some(boundary) = overlays.next_boundary {
+            min_next = min_next.min(buffer_emacs_byte_pos_to_charpos(buffer, boundary));
+        }
+        for face_value in overlays.faces {
+            if let Some(next) = self.resolve_buffer_face_value_over_inner(
+                buffer,
+                &resolved,
+                &face_value,
+                &mut remap_stack,
+            ) {
+                resolved = next;
             }
         }
 
