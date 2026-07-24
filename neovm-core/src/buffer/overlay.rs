@@ -351,14 +351,19 @@ impl Ord for OverlayByPrecedence {
 #[derive(Clone)]
 struct ActivePropertyOverlays {
     property: Value,
+    /// Window currently being laid out, so a windowed overlay (one carrying a
+    /// `window` property, e.g. hl-line non-sticky) is considered only in its own
+    /// window. `None` = no window context ⇒ unrestricted (matches GNU).
+    window_id: Option<u64>,
     active: BTreeSet<Value>,
     by_precedence: BinaryHeap<OverlayByPrecedence>,
 }
 
 impl ActivePropertyOverlays {
-    fn new(property: Value) -> Self {
+    fn new(property: Value, window_id: Option<u64>) -> Self {
         Self {
             property,
+            window_id,
             active: BTreeSet::new(),
             by_precedence: BinaryHeap::new(),
         }
@@ -367,7 +372,8 @@ impl ActivePropertyOverlays {
     fn inspect_and_insert(&mut self, overlay: Value) {
         #[cfg(test)]
         OVERLAY_PROPERTY_EXTENT_INSPECTIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        if overlay_property_named(overlay, self.property).is_some_and(|value| !value.is_nil())
+        if overlay_applies_to_window(overlay, self.window_id)
+            && overlay_property_named(overlay, self.property).is_some_and(|value| !value.is_nil())
             && self.active.insert(overlay)
         {
             self.by_precedence.push(OverlayByPrecedence(overlay));
@@ -577,12 +583,13 @@ impl OverlayList {
         pos: EmacsBytePos,
         property: Value,
         bounds: EmacsByteRange,
+        window_id: Option<u64>,
     ) -> Option<OverlayPropertyExtent> {
         if bounds.is_empty() || pos < bounds.start() || pos >= bounds.end() {
             return None;
         }
 
-        let mut active = ActivePropertyOverlays::new(property);
+        let mut active = ActivePropertyOverlays::new(property, window_id);
         for overlay in self.overlays_at_emacs_byte_pos(pos) {
             active.inspect_and_insert(overlay);
         }
@@ -1032,6 +1039,22 @@ fn overlay_overlaps_region(
 fn overlay_property_named(overlay: Value, prop_name: Value) -> Option<Value> {
     let plist = overlay.as_overlay_data()?.plist;
     plist::plist_get(plist, &prop_name)
+}
+
+/// Whether `overlay`'s contributions apply in the window being laid out. GNU
+/// restricts an overlay carrying a `window` property to that window only (e.g.
+/// hl-line with a non-sticky flag). A missing or non-window `window` property is
+/// unrestricted, and `window_id == None` (no window context) applies every
+/// overlay. Mirrors the layout engine's same-named check, one abstraction level
+/// down (raw overlay `Value` rather than a buffer view).
+fn overlay_applies_to_window(overlay: Value, window_id: Option<u64>) -> bool {
+    let Some(window_prop) = overlay_property_named(overlay, Value::symbol("window")) else {
+        return true;
+    };
+    let Some(target) = window_prop.as_window_id() else {
+        return true;
+    };
+    window_id.is_none_or(|current| current == target)
 }
 
 fn compare_overlay_precedence(left: Value, right: Value) -> Ordering {

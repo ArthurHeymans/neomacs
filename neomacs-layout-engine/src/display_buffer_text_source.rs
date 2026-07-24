@@ -395,8 +395,13 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             self.buffer.layout_point_min_emacs_byte_pos(),
             self.buffer.layout_point_max_emacs_byte_pos(),
         );
+        // A windowed overlay's `mouse-face` applies only in its own window
+        // (same `window`-property rule as its face / display / invisible).
         let overlay_extent = overlays.highest_priority_overlay_property_extent_at_emacs_byte_pos(
-            bytepos, property, bounds,
+            bytepos,
+            property,
+            bounds,
+            self.window_id,
         )?;
         if let Some(overlay) = overlay_extent.overlay() {
             let cached = CachedMouseFaceExtent {

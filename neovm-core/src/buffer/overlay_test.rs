@@ -371,6 +371,7 @@ fn property_extent_uses_gnu_winner_across_irrelevant_boundaries() {
             emacs_byte_pos(7),
             property,
             bounds,
+            None,
         )
         .unwrap();
     assert_eq!(outer_extent.overlay(), Some(outer));
@@ -382,6 +383,7 @@ fn property_extent_uses_gnu_winner_across_irrelevant_boundaries() {
             emacs_byte_pos(11),
             property,
             bounds,
+            None,
         )
         .unwrap();
     assert_eq!(high_extent.overlay(), Some(nested_high));
@@ -407,11 +409,43 @@ fn absent_property_extent_stops_at_first_non_nil_overlay() {
             emacs_byte_pos(4),
             property,
             emacs_byte_range(0, 20),
+            None,
         )
         .unwrap();
     assert_eq!(extent.overlay(), None);
     assert_eq!(extent.value(), Value::NIL);
     assert_eq!(extent.range(), emacs_byte_range(0, 8));
+}
+
+#[test]
+fn windowed_overlay_property_extent_is_restricted_to_its_window() {
+    // GNU restricts an overlay carrying a `window` property (e.g. hl-line with a
+    // non-sticky flag) to that window: its `mouse-face` must not win in another
+    // window. Same rule as the overlay's face / display / invisible.
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let mouse_face = Value::symbol("mouse-face");
+    let ov = alloc_overlay(0, 10);
+    list.insert_overlay(ov);
+    list.overlay_put(ov, mouse_face, Value::symbol("highlight"))
+        .unwrap();
+    list.overlay_put(ov, Value::symbol("window"), Value::make_window(7))
+        .unwrap();
+
+    let bounds = emacs_byte_range(0, 20);
+    let at = emacs_byte_pos(5);
+    let winner = |window_id| {
+        list.highest_priority_overlay_property_extent_at_emacs_byte_pos(
+            at, mouse_face, bounds, window_id,
+        )
+        .unwrap()
+        .overlay()
+    };
+    // The overlay's own window (or no window context) -> it wins.
+    assert_eq!(winner(Some(7)), Some(ov));
+    assert_eq!(winner(None), Some(ov));
+    // A different window -> filtered out, so there is no winning overlay.
+    assert_eq!(winner(Some(8)), None);
 }
 
 #[test]
@@ -440,6 +474,7 @@ fn property_extent_inspects_each_unrelated_overlay_only_once_per_sweep() {
             emacs_byte_pos(2_001),
             mouse_face,
             emacs_byte_range(0, 4_100),
+            None,
         )
         .unwrap();
     assert_eq!(extent.overlay(), Some(winner));
