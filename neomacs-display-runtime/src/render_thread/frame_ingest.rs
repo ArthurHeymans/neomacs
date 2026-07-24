@@ -738,18 +738,22 @@ fn dump_frame_glyphs_resolved(frame: &crate::core::frame_glyphs::FrameGlyphBuffe
     // Param type is inferred as `FaceId` from `resolved_face`.
     let face_desc = |face_id| {
         let rf = frame.resolved_face(face_id);
-        let stipple = frame
-            .faces
-            .get(&face_id)
+        let f = frame.faces.get(&face_id);
+        let stipple = f
             .and_then(|f| f.stipple.as_deref())
             .map(|s| format!("{}x{}", s.width, s.height))
             .unwrap_or_else(|| "-".to_string());
+        let (family, size) = f
+            .map(|f| (f.font_family.as_str(), f.font_size))
+            .unwrap_or(("-", 0.0));
         format!(
-            "face={:?} fg={} bg={} stipple={}",
+            "face={:?} fg={} bg={} stipple={} font='{}'@{:.1}",
             face_id,
             hx(rf.fg),
             hx(rf.bg),
-            stipple
+            stipple,
+            family,
+            size
         )
     };
     let mut rows: Vec<(i64, i64, String)> = Vec::new();
