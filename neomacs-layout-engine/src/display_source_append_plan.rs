@@ -101,7 +101,18 @@ pub(crate) enum DisplaySourceAppendMeasurementKind {
 
 impl DisplaySourceAppendMeasurementKind {
     pub(crate) fn for_char(ch: char) -> Self {
-        if crate::composition::needs_complex_shaping(ch) {
+        // A char shown via an ASCII escape substitute (`\NNN` octal, see
+        // `is_escape_glyph_octal`) is NOT complex-shaped: the glyphs actually
+        // drawn are the ASCII escape chars, which must be measured naturally.
+        // GNU resolves an escape glyph's font/advance from `char_to_display`
+        // (the substitute char) via FACE_FOR_CHAR (xdisp.c:8729), never from the
+        // source char. Without this guard, a non-printable char that happens to
+        // sit in a complex-script block -- e.g. the noncharacter U+FDD0, which
+        // lives in Arabic Presentation Forms -- would take the ResolvedComplexRun
+        // path and stamp its wide Arabic-shaped advance onto every `\NNN` digit.
+        if crate::composition::needs_complex_shaping(ch)
+            && !crate::display_source::is_escape_glyph_octal(ch)
+        {
             Self::ResolvedComplexRun
         } else {
             Self::NaturalRenderedSource
@@ -136,5 +147,34 @@ impl DisplaySourceAppendRenderPlan {
 
     pub(crate) fn render_policy(self) -> DisplaySourceAppendRenderPolicy {
         self.policy
+    }
+}
+
+#[cfg(test)]
+mod measurement_kind_tests {
+    use super::*;
+
+    #[test]
+    fn escape_octal_char_in_complex_block_measures_naturally_not_complex() {
+        // U+FDD0 is a noncharacter shown as the ASCII octal escape `\176720`,
+        // but it sits in the Arabic Presentation Forms block so it needs complex
+        // shaping. The substitute is ASCII and must be measured naturally, else
+        // every escape digit inherits FDD0's wide Arabic-shaped advance.
+        assert!(crate::composition::needs_complex_shaping('\u{fdd0}'));
+        assert!(crate::display_source::is_escape_glyph_octal('\u{fdd0}'));
+        assert_eq!(
+            DisplaySourceAppendMeasurementKind::for_char('\u{fdd0}'),
+            DisplaySourceAppendMeasurementKind::NaturalRenderedSource
+        );
+        // A real Arabic letter (printable, drawn as itself) keeps complex shaping.
+        assert_eq!(
+            DisplaySourceAppendMeasurementKind::for_char('\u{0645}'), // MEEM
+            DisplaySourceAppendMeasurementKind::ResolvedComplexRun
+        );
+        // Plain ASCII stays natural.
+        assert_eq!(
+            DisplaySourceAppendMeasurementKind::for_char('a'),
+            DisplaySourceAppendMeasurementKind::NaturalRenderedSource
+        );
     }
 }
