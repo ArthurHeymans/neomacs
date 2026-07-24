@@ -751,16 +751,29 @@ pub(crate) fn glyphless_method_for_char(
         | 0xe0100..=0xe01ef
         | 0xfe00..=0xfe0f => Some(GlyphlessMethod::ZeroWidth),
         // GNU's `format-control` group (glyphless-char-display-control default
-        // `thin-space`): every general-category `Cf` char EXCEPT U+00AD (SHY,
-        // which has a visible glyph). `update-glyphless-char-display`
-        // (characters.el) maps all of `Cf` to thin-space; we render them
-        // invisible (ZeroWidth), like the ZWSP/ZWJ/LRM fast paths above. Without
-        // this, `Cf` chars a font can't draw -- e.g. U+FFF9..U+FFFB interlinear
-        // annotations, the Arabic `Cf` number signs -- fall through to a
-        // `.notdef` box. Guarded on `cp >= 0x80` so ASCII (never `Cf`, the hot
-        // path) skips the category lookup that `is_escape_glyph_octal` already
-        // fast-paths past.
-        _ if cp >= 0x80 && cp != 0xad && is_format_control(cp) => Some(GlyphlessMethod::ZeroWidth),
+        // `thin-space`): general-category `Cf` chars, rendered invisible
+        // (ZeroWidth) like the ZWSP/ZWJ/LRM fast paths above -- otherwise a `Cf`
+        // char a font can't draw (e.g. U+FFF9..U+FFFB interlinear annotations)
+        // falls through to a `.notdef` box.
+        //
+        // BUT only the `Cf` chars that are also `Default_Ignorable_Code_Point`:
+        // Unicode/GNU RENDER the non-ignorable format controls (they carry
+        // visible or shaping meaning), so they must NOT be hidden -- see
+        // `is_non_ignorable_format_control`. The one in etc/HELLO is U+180E
+        // MONGOLIAN VOWEL SEPARATOR (removed from Default_Ignorable in Unicode
+        // 6.3): GNU emits it as part of the Mongolian text (composed clusters
+        // bypass the glyphless path, xdisp.c `get_next_display_element`), so a
+        // blanket "all `Cf` -> ZeroWidth" wrongly dropped it and diverged from
+        // GNU on the TTY. Also excludes U+00AD (SHY, has a visible glyph).
+        // Guarded on `cp >= 0x80` so ASCII (never `Cf`, the hot path) skips the
+        // category lookup that `is_escape_glyph_octal` already fast-paths past.
+        _ if cp >= 0x80
+            && cp != 0xad
+            && is_format_control(cp)
+            && !is_non_ignorable_format_control(cp) =>
+        {
+            Some(GlyphlessMethod::ZeroWidth)
+        }
         _ => None,
     }
 }
@@ -770,6 +783,28 @@ pub(crate) fn glyphless_method_for_char(
 fn is_format_control(cp: u32) -> bool {
     use neovm_core::emacs_core::emacs_char::{UnicodeCategory, char_general_category};
     char_general_category(cp) == Some(UnicodeCategory::Format as i64)
+}
+
+/// The general-category `Cf` characters that are NOT
+/// `Default_Ignorable_Code_Point`, i.e. the format controls Unicode/GNU still
+/// *render* rather than hide. Within `Cf` this is exactly the
+/// `Prepended_Concatenation_Mark` set (Arabic/Syriac/Kaithi number & ayah
+/// signs, which prepend to following digits), the Egyptian Hieroglyph format
+/// controls (which drive hieroglyph quadrat layout), and U+180E MONGOLIAN
+/// VOWEL SEPARATOR (removed from `Default_Ignorable` in Unicode 6.3). Keeping
+/// these out of the glyphless ZeroWidth rule matches GNU, which emits them
+/// (via a font glyph or as part of a composed cluster) instead of hiding them.
+fn is_non_ignorable_format_control(cp: u32) -> bool {
+    matches!(cp,
+        0x0600..=0x0605   // Arabic number/year/footnote/etc. signs
+        | 0x06DD          // Arabic end of ayah
+        | 0x070F          // Syriac abbreviation mark
+        | 0x0890..=0x0891 // Arabic pound / piastre marks
+        | 0x08E2          // Arabic disputed end of ayah
+        | 0x110BD | 0x110CD // Kaithi number sign / number sign above
+        | 0x180E          // Mongolian vowel separator
+        | 0x13430..=0x1343F // Egyptian Hieroglyph format controls
+    )
 }
 
 #[derive(Clone, Debug, PartialEq)]

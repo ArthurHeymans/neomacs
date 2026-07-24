@@ -195,3 +195,22 @@ fn glyphless_method_routes_cf_format_control_to_zero_width() {
     // fn, so they are intentionally not routed here.
     assert_eq!(m('\u{fffc}'), Some(GlyphlessMethod::EmptyBox));
 }
+
+#[test]
+fn glyphless_method_keeps_non_ignorable_format_controls_visible() {
+    let m = |c: char| glyphless_method_for_char(c, GlyphlessJoinerPolicy::ClassifyAsGlyphless);
+    // `Cf` chars that are NOT `Default_Ignorable_Code_Point` must render, not
+    // hide -- GNU emits them (font glyph or composed cluster). Regression: a
+    // blanket "all `Cf` -> ZeroWidth" dropped U+180E from etc/HELLO's Mongolian
+    // line, diverging from GNU on the TTY.
+    assert_eq!(m('\u{180e}'), None); // MONGOLIAN VOWEL SEPARATOR (removed from DI in 6.3)
+    assert_eq!(m('\u{0600}'), None); // ARABIC NUMBER SIGN (prepended concatenation mark)
+    assert_eq!(m('\u{06dd}'), None); // ARABIC END OF AYAH
+    assert_eq!(m('\u{070f}'), None); // SYRIAC ABBREVIATION MARK
+    assert_eq!(m('\u{08e2}'), None); // ARABIC DISPUTED END OF AYAH
+    assert_eq!(m('\u{110bd}'), None); // KAITHI NUMBER SIGN
+    assert_eq!(m('\u{13430}'), None); // EGYPTIAN HIEROGLYPH VERTICAL JOINER
+    // Other `Cf` chars that ARE Default_Ignorable still hide: e.g. U+061C
+    // ARABIC LETTER MARK (a bidi control), so the narrowing is exact.
+    assert_eq!(m('\u{061c}'), Some(GlyphlessMethod::ZeroWidth));
+}
