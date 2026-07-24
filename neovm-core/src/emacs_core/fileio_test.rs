@@ -5334,3 +5334,36 @@ fn file_local_name_bootstrap_error_shapes_match_gnu_files_el() {
     );
     assert_eq!(results[0], "OK wrong-type-argument");
 }
+
+// #189: cross-device `rename-file` fallback must handle directories and
+// symlinks, not just regular files (GNU `Frename_file` EXDEV path).
+#[test]
+fn rename_by_copy_delete_moves_a_directory_tree() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let src = tmp.path().join("src");
+    std::fs::create_dir_all(src.join("sub")).unwrap();
+    std::fs::write(src.join("a.txt"), "hello").unwrap();
+    std::fs::write(src.join("sub/b.txt"), "nested").unwrap();
+    let dst = tmp.path().join("dst");
+    rename_regular_file_by_copy_delete(&src, &dst, false).expect("dir move");
+    assert!(!src.exists(), "source directory removed");
+    assert_eq!(std::fs::read_to_string(dst.join("a.txt")).unwrap(), "hello");
+    assert_eq!(
+        std::fs::read_to_string(dst.join("sub/b.txt")).unwrap(),
+        "nested"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn rename_by_copy_delete_recreates_a_symlink() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path().join("target.txt");
+    std::fs::write(&target, "data").unwrap();
+    let src = tmp.path().join("link");
+    std::os::unix::fs::symlink(&target, &src).unwrap();
+    let dst = tmp.path().join("moved-link");
+    rename_regular_file_by_copy_delete(&src, &dst, false).expect("symlink move");
+    assert!(!src.exists(), "source symlink removed");
+    assert_eq!(std::fs::read_link(&dst).unwrap(), target);
+}

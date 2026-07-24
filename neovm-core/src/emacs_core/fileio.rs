@@ -1572,27 +1572,78 @@ fn rename_regular_file_by_copy_delete(
     ok_if_exists: bool,
 ) -> std::io::Result<()> {
     let from_meta = fs::symlink_metadata(from_path)?;
-    if !from_meta.is_file() {
-        let errno = {
-            #[cfg(unix)]
-            {
-                libc::EXDEV
-            }
-            #[cfg(not(unix))]
-            {
-                18
-            }
-        };
-        return Err(std::io::Error::from_raw_os_error(errno));
-    }
 
     if fs::symlink_metadata(to_path).is_ok() && !ok_if_exists {
         return Err(std::io::Error::from(ErrorKind::AlreadyExists));
     }
 
-    fs::copy(from_path, to_path)?;
-    fs::set_permissions(to_path, from_meta.permissions())?;
-    fs::remove_file(from_path)
+    // GNU `Frename_file`'s EXDEV fallback (fileio.c) honors the source type:
+    // a directory is `copy-directory`'d then `delete-directory`'d, a symlink is
+    // recreated, a regular file is `copy-file`'d. Mirror that so a
+    // cross-filesystem move — e.g. magit trashing an untracked directory to
+    // ~/.local/share/Trash (#189) — succeeds instead of re-raising EXDEV.
+    let from_type = from_meta.file_type();
+    if from_type.is_symlink() {
+        copy_symlink(from_path, to_path)?;
+        fs::remove_file(from_path)
+    } else if from_type.is_dir() {
+        copy_dir_recursive(from_path, to_path)?;
+        fs::remove_dir_all(from_path)
+    } else {
+        fs::copy(from_path, to_path)?;
+        fs::set_permissions(to_path, from_meta.permissions())?;
+        fs::remove_file(from_path)
+    }
+}
+
+/// Recreate the symlink at `to_path` pointing at the same target as the symlink
+/// at `from_path` (for the cross-device rename fallback).
+fn copy_symlink(from_path: &Path, to_path: &Path) -> std::io::Result<()> {
+    let target = fs::read_link(from_path)?;
+    if fs::symlink_metadata(to_path).is_ok() {
+        let _ = fs::remove_file(to_path).or_else(|_| fs::remove_dir_all(to_path));
+    }
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(&target, to_path)
+    }
+    #[cfg(windows)]
+    {
+        if fs::metadata(from_path).map(|m| m.is_dir()).unwrap_or(false) {
+            std::os::windows::fs::symlink_dir(&target, to_path)
+        } else {
+            std::os::windows::fs::symlink_file(&target, to_path)
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = target;
+        Err(std::io::Error::from(ErrorKind::Unsupported))
+    }
+}
+
+/// Recursively copy directory `from` to `to`, preserving directory permissions,
+/// recreating symlinks, and copying regular files — the cross-device rename
+/// fallback's stand-in for GNU's `copy-directory`.
+fn copy_dir_recursive(from: &Path, to: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(to)?;
+    if let Ok(meta) = fs::metadata(from) {
+        let _ = fs::set_permissions(to, meta.permissions());
+    }
+    for entry in fs::read_dir(from)? {
+        let entry = entry?;
+        let src = entry.path();
+        let dst = to.join(entry.file_name());
+        let file_type = entry.file_type()?;
+        if file_type.is_symlink() {
+            copy_symlink(&src, &dst)?;
+        } else if file_type.is_dir() {
+            copy_dir_recursive(&src, &dst)?;
+        } else {
+            fs::copy(&src, &dst)?;
+        }
+    }
+    Ok(())
 }
 
 /// Copy file FROM to TO.
