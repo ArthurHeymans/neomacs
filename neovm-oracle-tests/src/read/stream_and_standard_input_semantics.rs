@@ -88,13 +88,14 @@ fn oracle_prop_read_standard_input_bound_to_string() {
     assert_oracle_parity(form);
 }
 
-// NOTE: a `standard-input` = t probe is deliberately omitted. GNU's `(read)`
-// with `standard-input` = t routes through `read-minibuffer "Lisp expression:
-// "` (printing the prompt and reading stdin even in `--batch`), whereas
-// neomacs signals `end-of-file` immediately. That is a real divergence in the
-// interactive/stdin read path — tracked separately, not the load-stream
-// contract this module covers — and it makes for a stdout-capture-sensitive
-// parity test, so it is left out here.
+// NOTE: `standard-input` = t (and the batch `(read)` default that resolves to
+// it) routes through `(read-minibuffer "Lisp expression: ")` in BOTH engines
+// now — GNU always did; neomacs was fixed to match (previously it signaled
+// `end-of-file` outright). This reads a line from the minibuffer interactively
+// or from stdin in `--batch`, printing the prompt, and parses it as one Lisp
+// expression. It is not probed here because the oracle harness can't inject
+// stdin and the prompt goes to the same stdout the harness parses; the parity
+// is covered by a direct A/B check against GNU 31 instead.
 
 // ---------------------------------------------------------------------------
 // end-of-file boundary

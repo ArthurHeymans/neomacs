@@ -999,10 +999,31 @@ pub fn builtin_read_impl(
             LispCondition::VoidFunction,
             vec![Value::symbol(resolve_sym(id))],
         )),
-        ValueKind::T => Err(signal(
-            LispCondition::EndOfFile,
-            vec![Value::string("End of file during parsing")],
-        )),
+        ValueKind::T => {
+            // GNU `Fread` (lread.c): a `t` stream -- including the batch default
+            // `standard-input` = t reached by `(read)` with no argument -- maps
+            // to `(read-minibuffer "Lisp expression: ")`: read one line (from the
+            // minibuffer interactively, or from stdin in `--batch`, prompt and
+            // all) and parse it as a single Lisp expression. neomacs previously
+            // signaled `end-of-file` outright, so a piped `echo '(+ 1 2)' |
+            // neomacs --batch --eval '(print (read))'` couldn't read its input.
+            let prompt = Value::string("Lisp expression: ");
+            let input = builtin_read_from_minibuffer(ctx, vec![prompt])?;
+            let result = read_from_string_impl_inner(
+                &ctx.obarray,
+                vec![input],
+                locate_syms,
+                shorthands.as_ref(),
+            )?;
+            match result.kind() {
+                ValueKind::Cons => {
+                    let pair_car = result.cons_car();
+                    ctx.obarray_mut().materialize_read_symbols(pair_car);
+                    Ok(pair_car)
+                }
+                _ => Ok(result),
+            }
+        }
         _ => {
             // Unsupported stream source type for read-char function protocol.
             Err(signal(LispCondition::InvalidFunction, vec![stream]))
