@@ -14,6 +14,50 @@
 //! a tier fails to compile until every site handles it. That is the same
 //! compiler-enforced completeness that caught the GC `trace_veclike`
 //! use-after-free (an incomplete duplicate with a `_ => {}` arm).
+//!
+//! # Environment-knob inventory (the authoritative list)
+//!
+//! Every runtime toggle this subsystem reads, with default and status. Grep
+//! anchor: `env::var("NEOVM_`. Keep this table in sync when adding a knob, and
+//! give every OPT-IN knob a graduation plan — soak → default-on, or delete —
+//! so the surface doesn't accumulate permanently-dead branches.
+//!
+//! ## Runtime switches (shipping, default-on)
+//! | Knob | Default | Meaning |
+//! |---|---|---|
+//! | `NEOVM_JIT` | on | Kill switch: `0`/`off`/`false`/`no` forces the pure interpreter (the A/B baseline). |
+//! | `NEOVM_JIT_THRESHOLD` | 256 | Tier-up heat threshold; `=1` compiles every compilable function — the differential soak and the strictest oracle configuration. |
+//! | `NEOVM_JIT_LOOP_HEAT` | 1 | Heat credited per 256-iteration back-edge wrap (loop-aware tier-up); `=0` disables loop heat — the pre-loop-heat baseline. |
+//! | `NEOVM_JIT_LEVER1` | on | Residual-rooting non-heap skip; `=off` reverts to an unconditional gc_push per residual (single-build A/B). |
+//! | `NEOVM_JIT_PROFIT` | on | Profitability gate (calls ≤ arith); `=off` also compiles call-heavy bodies. |
+//!
+//! ## Opt-in features (default-OFF, pending a graduation decision)
+//! | Knob | Enable | Meaning / graduation blocker |
+//! |---|---|---|
+//! | `NEOVM_JIT_OSR` | `=on` | Mid-loop interpreter→native transfer (on-stack replacement). Blocker: soak the live-stack marshalling path under real workloads before default-on. |
+//! | `NEOVM_JIT_INLINE_ARITH` | `=on` | Level-B native bit-ops (logand/logior/logxor/lognot) with fixnum-guard deopt. Blocker: skips the compiler-macro bounce; a mixed-type loop falls back to the interpreter ungracefully. |
+//! | `NEOVM_JIT_GATE_RELAX` | `=on` | Relax the calls ≤ arith profit gate. Default-on was tried and REVERTED (regressed byte-compile 21%) — measure byte-compile before ever re-flipping. |
+//!
+//! ## Measurement / bisection
+//! | Knob | Meaning |
+//! |---|---|
+//! | `NEOVM_JIT_MAX_ID` | Compile only functions with id ≤ N (ids assigned in first-hot order) — clean prefix bisection of a misbehaving workload. |
+//! | `NEOVM_JIT_DEBUG_ID` | Dump the bytecode body of the one compiled function with this id. |
+//! | `NEOVM_JIT_PROFILE` | Append per-function workload-characterization records to this file path. |
+//! | `NEOVM_JIT_COMPILE_STATS` | `=1`: print a running compile-stall summary line every 64 compiles. |
+//!
+//! ## Verification harnesses (force the cold path everywhere; run the suite with each ON)
+//! | Knob | Forces |
+//! |---|---|
+//! | `NEOVM_JIT_FORCE_DEOPT=1` | Every speculation guard fails → every deopt path executes. |
+//! | `NEOVM_JIT_FORCE_SLOW_SPEC=1` | Every spec-call shim takes its stale-epoch re-validate branch on every call. |
+//! | `NEOVM_JIT_FORCE_CBSYM_GENERIC=1` | Every CallBuiltinSym intrinsic bounces to its generic fallback. |
+//!
+//! ## AOT (`jit/aot.rs`)
+//! | Knob | Meaning |
+//! |---|---|
+//! | `NEOVM_AOT` | `1`/`on`/`force` enables the AOT preload; `force` additionally warns when no usable preload loaded. |
+//! | `NEOVM_AOT_PGO` | `1`/`on`/`force` enables PGO collection for the AOT function set. |
 
 #![cfg_attr(not(feature = "jit"), allow(dead_code))]
 
