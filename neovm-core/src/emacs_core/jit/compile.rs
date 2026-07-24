@@ -14031,6 +14031,277 @@ mod tests {
         }
     }
 
+    /// Differential fuzzing for SIDE EFFECTS — the gap the return-value fuzzer
+    /// above leaves open. Bodies mix arithmetic with `VarSet`/`VarRef` on seeded
+    /// special variables and run through the REAL tier dispatch
+    /// (`compile_bytecode_function`: MIR if it claims the body, else baseline),
+    /// comparing the return value AND the FINAL VALUE OF EVERY SEEDED VARIABLE
+    /// against the interpreter. Return-value comparison alone missed the
+    /// 0-result-opaque-drop bug for a month — a compiled `setq` returned the
+    /// right value (via the bytecode `Dup`) while silently skipping the
+    /// assignment — so this pins the state contract: a dropped or mis-lowered
+    /// side-effecting op in ANY tier fails here, whichever tier serves the body.
+    ///
+    /// Extra invariant held: a plain `Deopt` (rerun-from-start) may only come
+    /// from a guard BEFORE any side effect (the poisoning analysis), so on
+    /// `Deopt` every seeded variable must still hold its initial value.
+    #[test]
+    fn fuzz_varset_bodies_match_interpreter_state() {
+        use crate::emacs_core::bytecode::Vm;
+        use crate::emacs_core::eval::Context;
+        use crate::emacs_core::intern::SymId;
+
+        fn next(state: &mut u64) -> u64 {
+            let mut x = *state;
+            x ^= x >> 12;
+            x ^= x << 25;
+            x ^= x >> 27;
+            *state = x;
+            x.wrapping_mul(0x2545_F491_4F6C_DD1D)
+        }
+
+        let mut ev = Context::new_minimal_vm_harness();
+        let ctx_ptr = &mut ev as *mut Context as *mut u8;
+
+        // Seeded special variables at constant indices 0..VARS; every stored
+        // value in the op soup is an immediate, so state compares exactly by bits.
+        const VARS: usize = 3;
+        let var_vals: Vec<Value> = ["fuzz-jit-var-a", "fuzz-jit-var-b", "fuzz-jit-var-c"]
+            .iter()
+            .map(|n| Value::symbol(n))
+            .collect();
+        let var_ids: Vec<SymId> = var_vals
+            .iter()
+            .map(|v| match v.kind() {
+                crate::emacs_core::value::ValueKind::Symbol(id) => id,
+                _ => panic!("symbol expected"),
+            })
+            .collect();
+        let init = [Value::make_int(10), Value::make_int(-7), Value::NIL];
+
+        let mut constants: Vec<Value> = var_vals.clone();
+        constants.extend([
+            Value::make_int(0),
+            Value::make_int(1),
+            Value::make_int(-1),
+            Value::make_int(3),
+            Value::make_int(Value::MOST_POSITIVE_FIXNUM),
+            Value::NIL,
+            Value::T,
+        ]);
+
+        fn reset(ev: &mut Context, ids: &[SymId], init: &[Value]) {
+            for (id, v) in ids.iter().zip(init.iter()) {
+                ev.obarray.set_symbol_value_id(*id, *v);
+            }
+        }
+        fn snap(ev: &Context, ids: &[SymId]) -> Vec<Option<usize>> {
+            ids.iter()
+                .map(|id| ev.obarray.symbol_value_id(*id).copied().map(|v| v.bits()))
+                .collect()
+        }
+
+        for seed in 1u64..=300 {
+            let mut rng = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+            let len = 2 + (next(&mut rng) % 16) as usize;
+            let mut ops: Vec<Op> = Vec::with_capacity(len + 3);
+            let mut depth: usize = 0;
+            let mut emitted_varset = false;
+            for _ in 0..len {
+                let r = (next(&mut rng) % 100) as usize;
+                let op = if depth == 0 || r < 25 {
+                    match next(&mut rng) % 4 {
+                        0 => Op::Nil,
+                        1 => Op::True,
+                        2 => Op::VarRef((next(&mut rng) % VARS as u64) as u16),
+                        _ => Op::Constant(
+                            (VARS as u64 + next(&mut rng) % (constants.len() - VARS) as u64) as u16,
+                        ),
+                    }
+                } else if r < 45 {
+                    // The point of this fuzzer: a side-effecting VarSet.
+                    emitted_varset = true;
+                    Op::VarSet((next(&mut rng) % VARS as u64) as u16)
+                } else if depth >= 2 && r < 70 {
+                    match next(&mut rng) % 8 {
+                        0 => Op::Add,
+                        1 => Op::Sub,
+                        2 => Op::Mul,
+                        3 => Op::Div,
+                        4 => Op::Eqlsign,
+                        5 => Op::Lss,
+                        6 => Op::Gtr,
+                        _ => Op::Eq,
+                    }
+                } else if r < 90 {
+                    match next(&mut rng) % 6 {
+                        0 => Op::Add1,
+                        1 => Op::Sub1,
+                        2 => Op::Negate,
+                        3 => Op::Null,
+                        4 => Op::Not,
+                        _ => Op::Dup,
+                    }
+                } else {
+                    match next(&mut rng) % 2 {
+                        0 => Op::Dup,
+                        _ => Op::StackRef((next(&mut rng) % depth as u64) as u16),
+                    }
+                };
+                let (needs, delta) = simple_effect(&op).expect("generator emits supported ops");
+                if depth < needs {
+                    continue;
+                }
+                depth = (depth as i64 + delta) as usize;
+                ops.push(op);
+            }
+            // Guarantee at least one VarSet per body so no seed degenerates into
+            // the pure fuzzer above.
+            if !emitted_varset {
+                ops.push(Op::Constant(VARS as u16)); // a fixnum
+                ops.push(Op::VarSet((seed % VARS as u64) as u16));
+            }
+            if depth == 0 {
+                ops.push(Op::Constant(VARS as u16));
+            }
+            ops.push(Op::Return);
+
+            let mut f = ByteCodeFunction::new(LambdaParams {
+                required: Vec::new(),
+                optional: Vec::new(),
+                rest: None,
+            });
+            f.lexical = true;
+            f.ops = ops.clone();
+            f.constants = constants.clone();
+            f.max_stack = 64;
+
+            // Tier 0 (oracle): result + final variable state.
+            reset(&mut ev, &var_ids, &init);
+            let interp = {
+                let mut vm = Vm::from_context(&mut ev);
+                vm.execute(&f, vec![])
+            };
+            let want_state = snap(&ev, &var_ids);
+
+            // The REAL tier dispatch (MIR if it claims the body, else baseline);
+            // fall back to a direct baseline lowering if the dispatch declines
+            // (e.g. profitability) so every seed still gets state coverage.
+            let leaf = compile_bytecode_function(&f)
+                .or_else(|_| lower_leaf(&ops, &constants, 0))
+                .unwrap_or_else(|e| panic!("seed {seed}: body must compile, got {e}: {ops:?}"));
+            reset(&mut ev, &var_ids, &init);
+            let init_state = snap(&ev, &var_ids);
+            match leaf.call(ctx_ptr, &[]) {
+                NativeRun::Ok(bits) => {
+                    let want = interp.as_ref().unwrap_or_else(|e| {
+                        panic!("seed {seed}: JIT Ok but interpreter erred ({e:?}): {ops:?}")
+                    });
+                    assert_eq!(bits, want.bits(), "seed {seed}: result mismatch on {ops:?}");
+                    assert_eq!(
+                        snap(&ev, &var_ids),
+                        want_state,
+                        "seed {seed}: SIDE-EFFECT STATE mismatch (a VarSet was dropped or mis-lowered) on {ops:?}"
+                    );
+                }
+                NativeRun::Deopt => {
+                    // Rerun-from-start is only sound if no side effect ran yet
+                    // (VarSet poisons later guards) — the vars must be untouched.
+                    assert_eq!(
+                        snap(&ev, &var_ids),
+                        init_state,
+                        "seed {seed}: rerun-from-start deopt AFTER a side effect on {ops:?}"
+                    );
+                    let rerun = {
+                        let mut vm = Vm::from_context(&mut ev);
+                        vm.execute(&f, vec![])
+                    };
+                    match (&rerun, &interp) {
+                        (Ok(got), Ok(want)) => {
+                            assert_eq!(got.bits(), want.bits(), "seed {seed}: {ops:?}");
+                            assert_eq!(snap(&ev, &var_ids), want_state, "seed {seed}: {ops:?}");
+                        }
+                        (Err(_), Err(_)) => {}
+                        other => panic!("seed {seed}: deopt-rerun mismatch {other:?}: {ops:?}"),
+                    }
+                }
+                NativeRun::DeoptAt {
+                    pc,
+                    stack,
+                    handlers,
+                    binds,
+                    spec_base,
+                    cond_base,
+                } => {
+                    // Precise deopt: resume mid-function on the MUTATED state.
+                    let resumed = {
+                        let mut vm = Vm::from_context(&mut ev);
+                        vm.run_resumed_frame(
+                            &f, Value::NIL, pc, &stack, handlers, &binds, spec_base, cond_base,
+                        )
+                    };
+                    match (&resumed, &interp) {
+                        (Ok(got), Ok(want)) => {
+                            assert_eq!(got.bits(), want.bits(), "seed {seed}: {ops:?}");
+                            assert_eq!(snap(&ev, &var_ids), want_state, "seed {seed}: {ops:?}");
+                        }
+                        (Err(_), Err(_)) => {}
+                        other => panic!("seed {seed}: resume mismatch {other:?}: {ops:?}"),
+                    }
+                }
+                NativeRun::Signal => {
+                    let _ = take_pending_flow();
+                    assert!(
+                        interp.is_err(),
+                        "seed {seed}: JIT signaled but interpreter succeeded: {ops:?}"
+                    );
+                    // Same deterministic prefix ran on both engines before the
+                    // signal, so the partial writes must agree too.
+                    assert_eq!(
+                        snap(&ev, &var_ids),
+                        want_state,
+                        "seed {seed}: state mismatch after signal on {ops:?}"
+                    );
+                }
+            }
+
+            // Also pin the MIR tier explicitly on the same body — the exact
+            // historical bug shape: build_mir once DROPPED the 0-result VarSet, so
+            // lower_mir_pure succeeded (nothing to bail on) and returned a leaf
+            // whose return value was right and whose side effect was gone. Today
+            // lower_mir_pure bails on the Opaque (Err, skipped below); if a future
+            // MIR VarSet port lands, this holds it to the same state contract.
+            if let Ok(mir) = mir::build_mir(&ops, &constants, 0) {
+                if let Ok(mleaf) = lower_mir_pure(&mir) {
+                    reset(&mut ev, &var_ids, &init);
+                    match mleaf.call(ctx_ptr, &[]) {
+                        NativeRun::Ok(bits) => {
+                            if let Ok(want) = &interp {
+                                assert_eq!(bits, want.bits(), "seed {seed}: MIR result: {ops:?}");
+                            }
+                            assert_eq!(
+                                snap(&ev, &var_ids),
+                                want_state,
+                                "seed {seed}: MIR SIDE-EFFECT STATE mismatch on {ops:?}"
+                            );
+                        }
+                        NativeRun::Deopt => {
+                            assert_eq!(
+                                snap(&ev, &var_ids),
+                                init_state,
+                                "seed {seed}: MIR rerun-deopt after a side effect on {ops:?}"
+                            );
+                        }
+                        NativeRun::DeoptAt { .. } => {}
+                        NativeRun::Signal => {
+                            let _ = take_pending_flow();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// B1 (C1): a slot the AOT loader DISARMED (`epoch == SPEC_EPOCH_DISARMED`)
     /// reports NOT-armed and NEVER re-arms — even when the live binding would
     /// otherwise re-validate. Proves the shared subr/pred/eq arming helper
