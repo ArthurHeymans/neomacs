@@ -173,3 +173,25 @@ fn display_item_source_trait_exposes_items() {
     assert_eq!(source.next_item(&mut context), Some(expected));
     assert_eq!(source.next_item(&mut context), None);
 }
+
+#[test]
+fn glyphless_method_routes_cf_format_control_to_zero_width() {
+    let m = |c: char| glyphless_method_for_char(c, GlyphlessJoinerPolicy::ClassifyAsGlyphless);
+    // GNU `format-control` group (Cf, except SHY): the interlinear annotation
+    // marks U+FFF9..U+FFFB were drawn as a `.notdef` box; they must render
+    // invisible like ZWSP/ZWJ (glyphless-char-display-control default).
+    assert_eq!(m('\u{fff9}'), Some(GlyphlessMethod::ZeroWidth)); // IAA
+    assert_eq!(m('\u{fffa}'), Some(GlyphlessMethod::ZeroWidth)); // IAS
+    assert_eq!(m('\u{fffb}'), Some(GlyphlessMethod::ZeroWidth)); // IAT
+    assert_eq!(m('\u{2060}'), Some(GlyphlessMethod::ZeroWidth)); // WORD JOINER (Cf)
+    assert_eq!(m('\u{200d}'), Some(GlyphlessMethod::ZeroWidth)); // ZWJ (fast-path)
+    // SHY (U+00AD) is Cf but GNU excludes it (it has a visible glyph).
+    assert_eq!(m('\u{00ad}'), None);
+    // Hot-path printables stay non-glyphless.
+    assert_eq!(m('a'), None);
+    assert_eq!(m('中'), None);
+    // Object Replacement keeps its EmptyBox handling; the non-printable
+    // noncharacters (U+FDD0.., U+FFFE/U+FFFF) are octal-escaped upstream of this
+    // fn, so they are intentionally not routed here.
+    assert_eq!(m('\u{fffc}'), Some(GlyphlessMethod::EmptyBox));
+}

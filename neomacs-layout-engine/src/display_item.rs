@@ -740,14 +740,36 @@ pub(crate) fn glyphless_method_for_char(
         // (see `classify_text_source_char`) BEFORE this table is consulted, so
         // they are intentionally absent here (was `GlyphlessMethod::HexCode`).
         0xfffc => Some(GlyphlessMethod::EmptyBox),
+        // Fast paths for the common invisible chars: the format-control chars in
+        // the arm below (ZWSP/ZWJ/LRM/tags -- all `Cf`, so also caught by the
+        // category check) plus the variation selectors (`Mn`) and line/paragraph
+        // separators (`Zl`/`Zp`), which are NOT `Cf` and so need listing here.
         0xfeff
         | 0x200b..=0x200f
         | 0x2028..=0x2029
         | 0xe0001..=0xe007f
         | 0xe0100..=0xe01ef
         | 0xfe00..=0xfe0f => Some(GlyphlessMethod::ZeroWidth),
+        // GNU's `format-control` group (glyphless-char-display-control default
+        // `thin-space`): every general-category `Cf` char EXCEPT U+00AD (SHY,
+        // which has a visible glyph). `update-glyphless-char-display`
+        // (characters.el) maps all of `Cf` to thin-space; we render them
+        // invisible (ZeroWidth), like the ZWSP/ZWJ/LRM fast paths above. Without
+        // this, `Cf` chars a font can't draw -- e.g. U+FFF9..U+FFFB interlinear
+        // annotations, the Arabic `Cf` number signs -- fall through to a
+        // `.notdef` box. Guarded on `cp >= 0x80` so ASCII (never `Cf`, the hot
+        // path) skips the category lookup that `is_escape_glyph_octal` already
+        // fast-paths past.
+        _ if cp >= 0x80 && cp != 0xad && is_format_control(cp) => Some(GlyphlessMethod::ZeroWidth),
         _ => None,
     }
+}
+
+/// True if `cp` is a general-category `Cf` (format-control) character -- GNU's
+/// `format-control` glyphless group. ASCII is never `Cf`; callers fast-path it.
+fn is_format_control(cp: u32) -> bool {
+    use neovm_core::emacs_core::emacs_char::{UnicodeCategory, char_general_category};
+    char_general_category(cp) == Some(UnicodeCategory::Format as i64)
 }
 
 #[derive(Clone, Debug, PartialEq)]
