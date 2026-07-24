@@ -25,9 +25,26 @@ use crate::heap_types::LispString;
 use crate::tagged::value::TaggedValue;
 
 /// A compact handle to a Lisp symbol object. Copy, 4 bytes.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[repr(transparent)]
 pub struct SymId(pub(crate) u32);
+
+impl std::fmt::Debug for SymId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Resolve the symbol name so logs read `SymId(696 peculiar-error)`
+        // instead of a bare id — otherwise a signal in a bug report is
+        // undiagnosable. NEVER block: `Debug` can fire while this or another
+        // thread holds the registry *write* lock (mid-intern), so a blocking
+        // read could deadlock. `try_read` degrades to the id on contention.
+        match global_symbol_registry().try_read() {
+            Some(registry) => match registry.slot(*self) {
+                Some(slot) => write!(f, "SymId({} {})", self.0, registry.names.resolve(slot.name)),
+                None => write!(f, "SymId({})", self.0),
+            },
+            None => write!(f, "SymId({})", self.0),
+        }
+    }
+}
 
 /// A compact handle to a deduplicated symbol-name atom. Runtime-local only.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]

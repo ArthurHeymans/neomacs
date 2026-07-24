@@ -468,3 +468,21 @@ fn uninterned_symbol_name_value_roots_are_heap_owned() {
         Some("owned-symbol-name")
     );
 }
+
+#[test]
+fn sym_id_debug_resolves_the_symbol_name() {
+    crate::test_utils::init_test_tracing();
+    // `Debug` must name the symbol (readable bug reports), not print a bare id.
+    let id = intern("peculiar-debug-probe-symbol");
+    let rendered = format!("{id:?}");
+    assert!(
+        rendered.starts_with("SymId(") && rendered.contains("peculiar-debug-probe-symbol"),
+        "SymId Debug should include the resolved name, got {rendered}"
+    );
+    // A struct embedding SymId (e.g. a signal) inherits the readable form.
+    let embedded = format!("{:?}", (id, 7u8));
+    assert!(
+        embedded.contains("peculiar-debug-probe-symbol"),
+        "got {embedded}"
+    );
+}

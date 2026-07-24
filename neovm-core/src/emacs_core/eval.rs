@@ -6733,7 +6733,16 @@ impl Context {
                     // Mirrors cmd_error() in keyboard.c.
                     let sym_name = sig.symbol_name().to_string();
                     let error_msg = self.display_command_error(&sig);
-                    tracing::error!("Command loop error: {}", error_msg);
+                    // Render the *condition symbol* and full signal payload, not
+                    // just the human message: a bare "peculiar error" (an error
+                    // whose condition has no `error-message`) is otherwise
+                    // undiagnosable in a bug report. `condition=` names the
+                    // symbol; `signal=` is the Lisp-readable `(SYMBOL . DATA)`.
+                    let rendered_signal = super::error::format_signal_data_with_eval(self, &sig);
+                    tracing::error!(
+                        condition = %sym_name,
+                        "Command loop error: {error_msg} [signal={rendered_signal}]"
+                    );
 
                     // Clear prefix arg on error (like GNU Emacs)
                     self.assign("prefix-arg", Value::NIL);
