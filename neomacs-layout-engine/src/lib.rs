@@ -102,6 +102,7 @@ pub mod font_loader;
 pub mod font_match;
 pub mod font_metrics;
 pub mod font_probe;
+pub mod font_resolver;
 pub mod fontconfig;
 pub(crate) mod frame_layout_transaction;
 pub(crate) mod frame_presentation;

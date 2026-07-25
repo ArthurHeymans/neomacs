@@ -62,7 +62,7 @@ impl FontVariationCoord {
 ///
 /// Not "file path only": macOS/Windows may need native descriptors, so
 /// `stable_key` is the durable cross-snapshot cache key and `file_path`
-/// is populated only where reliably available (Linux fontconfig).
+/// is populated whenever a backend exposes a durable local file.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ResolvedFontIdentity {
     pub backend: FontBackendKind,
@@ -121,24 +121,53 @@ impl ResolvedFontIdentity {
         variation_coords.sort_unstable_by_key(|coord| (coord.tag, coord.value_bits));
 
         let mut stable_key = format!("{file_path}#{face_index}");
-        if !variation_coords.is_empty() {
-            stable_key.push('@');
-            for (index, coord) in variation_coords.iter().enumerate() {
-                if index != 0 {
-                    stable_key.push(',');
-                }
-                let tag = coord.tag.to_be_bytes();
-                stable_key.extend(tag.into_iter().map(char::from));
-                stable_key.push('=');
-                stable_key.push_str(&format!("{:08x}", coord.value_bits));
-            }
-        }
+        append_variation_key(&mut stable_key, &variation_coords);
 
         Self {
             backend: FontBackendKind::Fontconfig,
             stable_key,
             file_path: Some(file_path.to_string()),
             face_selector: BackendFontSelector::from_raw(face_index),
+            postscript_name,
+            variation_coords,
+        }
+    }
+
+    /// Exact file-backed identity selected by a native platform backend.
+    ///
+    /// CoreText and DirectWrite selection remains distinguishable from a
+    /// Fontconfig selection of the same file. The native adapters preserve
+    /// their backend kind while exposing the collection face index required
+    /// by the shared fontdb/Swash materialization path.
+    pub fn from_platform_file_with_variations(
+        backend: FontBackendKind,
+        file_path: &str,
+        face_selector: u32,
+        postscript_name: Option<String>,
+        mut variation_coords: Vec<FontVariationCoord>,
+    ) -> Self {
+        if backend == FontBackendKind::Fontconfig {
+            return Self::from_file_with_variations(
+                file_path,
+                face_selector,
+                postscript_name,
+                variation_coords,
+            );
+        }
+        variation_coords.sort_unstable_by_key(|coord| (coord.tag, coord.value_bits));
+        let prefix = match backend {
+            FontBackendKind::Fontconfig => unreachable!("handled above"),
+            FontBackendKind::CoreText => "coretext",
+            FontBackendKind::DirectWrite => "directwrite",
+        };
+        let mut stable_key = format!("{prefix}:{file_path}#{face_selector}");
+        append_variation_key(&mut stable_key, &variation_coords);
+
+        Self {
+            backend,
+            stable_key,
+            file_path: Some(file_path.to_string()),
+            face_selector: BackendFontSelector::from_raw(face_selector),
             postscript_name,
             variation_coords,
         }
@@ -194,6 +223,22 @@ impl ResolvedFontIdentity {
             }
             FontBackendKind::CoreText | FontBackendKind::DirectWrite => None,
         }
+    }
+}
+
+fn append_variation_key(stable_key: &mut String, variation_coords: &[FontVariationCoord]) {
+    if variation_coords.is_empty() {
+        return;
+    }
+    stable_key.push('@');
+    for (index, coord) in variation_coords.iter().enumerate() {
+        if index != 0 {
+            stable_key.push(',');
+        }
+        let tag = coord.tag.to_be_bytes();
+        stable_key.extend(tag.into_iter().map(char::from));
+        stable_key.push('=');
+        stable_key.push_str(&format!("{:08x}", coord.value_bits));
     }
 }
 

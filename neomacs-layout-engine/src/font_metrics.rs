@@ -159,9 +159,9 @@ struct FrameColumnWidth {
 }
 
 impl FrameColumnWidth {
-    fn from_advances(family: &str, font_size: f32, advances: FontAdvanceMetrics) -> Self {
+    fn from_advances(prefer_monospace: bool, font_size: f32, advances: FontAdvanceMetrics) -> Self {
         let fallback = Self::degraded((font_size * 0.6).max(1.0));
-        let selected = if crate::fontconfig::family_prefers_monospace(family) {
+        let selected = if prefer_monospace {
             advances.monospace_column_width(font_size * 0.5)
         } else {
             advances.proportional_column_width()
@@ -198,12 +198,12 @@ struct FrameCellMetrics {
 
 impl FrameCellMetrics {
     fn derive(
-        family: &str,
+        prefer_monospace: bool,
         font_size: f32,
         vertical: FontVerticalMetrics,
         advances: FontAdvanceMetrics,
     ) -> Self {
-        let column = FrameColumnWidth::from_advances(family, font_size, advances);
+        let column = FrameColumnWidth::from_advances(prefer_monospace, font_size, advances);
 
         Self {
             column_width: column.pixels,
@@ -329,9 +329,10 @@ const SHAPED_RUN_CACHE_CAP: usize = 8192;
 
 /// Cosmic-text based font metrics service.
 ///
-/// Runs on the Emacs/layout thread. Creates its own `FontSystem` which scans
-/// the same fontconfig database as the render thread's `FontSystem`, ensuring
-/// identical font resolution.
+/// Runs on the Emacs/layout thread. Shared selection is owned by
+/// [`crate::font_resolver::FontResolver`], which asks a
+/// [`crate::font_backend::FontBackend`] only for native candidates.
+/// `FontSystem` materializes the selected exact file/index for shaping.
 pub struct FontMetricsService {
     font_system: FontSystem,
     /// Cache: face attrs → ASCII advance widths (chars 0-127)
@@ -371,9 +372,9 @@ pub struct FontMetricsService {
     /// Number of actual cosmic-text shaping invocations (`shaped_run_cache`
     /// misses). Lets tests prove the measure/render double-shape is deduped.
     n_shape_calls: usize,
-    /// Platform font backend: family alias resolution + per-char coverage
-    /// matching (design §7). Linux: fontconfig.
-    backend: Box<dyn crate::font_backend::FontBackend>,
+    /// Shared GNU-compatible fontset policy and scoring over the active
+    /// platform candidate backend (design §7).
+    font_resolver: crate::font_resolver::FontResolver,
     /// Shaping engine behind the TextShaper seam (design §8).
     shaper: Box<dyn crate::text_shaper::TextShaper>,
     /// Cache: face attrs → the face's resolved primary font. Same generation
@@ -430,8 +431,8 @@ impl Default for FontMetricsService {
 impl FontMetricsService {
     /// Create a new FontMetricsService.
     ///
-    /// This scans the system font database via fontconfig, which takes ~50ms.
-    /// Should be lazily initialized on first use.
+    /// This scans the system font database, which can take tens of
+    /// milliseconds. Should be lazily initialized on first use.
     pub fn new() -> Self {
         tracing::info!("FontMetricsService: initializing cosmic-text FontSystem");
         let font_system = FontSystem::new();
@@ -446,7 +447,7 @@ impl FontMetricsService {
             shaped_run_cache: HashMap::default(),
             shaped_run_cache_cap: SHAPED_RUN_CACHE_CAP,
             n_shape_calls: 0,
-            backend: crate::font_backend::default_font_backend(),
+            font_resolver: crate::font_resolver::FontResolver::platform_default(),
             shaper: crate::text_shaper::default_text_shaper(),
             resolved_face_font_cache: HashMap::default(),
             resolved_font_ids: HashMap::default(),
@@ -455,6 +456,41 @@ impl FontMetricsService {
             pinned_families: HashMap::default(),
             primary_pin_cache: HashMap::default(),
             primary_match_cache: HashMap::default(),
+        }
+    }
+
+    /// Turn a fontdb face into the same durable identity vocabulary used by
+    /// the active platform backend. This matters when shaping itself chooses
+    /// a fallback: the renderer must not receive a misleading Fontconfig
+    /// identity on CoreText or DirectWrite builds.
+    fn fontdb_face_identity(
+        &self,
+        file: Option<&str>,
+        face_index: u32,
+        postscript_name: Option<String>,
+        fallback_name: &str,
+    ) -> ResolvedFontIdentity {
+        let backend = self.font_resolver.backend_kind();
+        match file {
+            Some(path) if backend == FontBackendKind::Fontconfig => {
+                ResolvedFontIdentity::from_file(path, face_index, postscript_name)
+            }
+            Some(path) => ResolvedFontIdentity::from_platform_file_with_variations(
+                backend,
+                path,
+                face_index,
+                postscript_name,
+                Vec::new(),
+            ),
+            None => ResolvedFontIdentity::from_memory(
+                backend,
+                format!(
+                    "mem:{}#{face_index}",
+                    postscript_name.as_deref().unwrap_or(fallback_name)
+                ),
+                face_index,
+                postscript_name,
+            ),
         }
     }
 
@@ -631,8 +667,12 @@ impl FontMetricsService {
 
     fn probe_resolved_font_metrics(
         identity: &ResolvedFontIdentity,
+        platform: Option<&crate::font_backend::PlatformFontMatch>,
         font_size: f32,
     ) -> Option<crate::font_probe::FontPxMetrics> {
+        if let Some(metrics) = platform.and_then(|matched| matched.pixel_metrics(font_size)) {
+            return Some(metrics);
+        }
         let file = identity.file_path.as_deref()?;
         let explicit_weight = identity
             .variation_coords
@@ -687,9 +727,14 @@ impl FontMetricsService {
         if let Some(cached) = self.primary_match_cache.get(&key) {
             return cached.clone();
         }
+        let requested_slant = if italic {
+            FontSlant::Italic
+        } else {
+            FontSlant::Normal
+        };
         let matched = self
-            .backend
-            .match_primary_font(family, weight, italic)
+            .font_resolver
+            .resolve_primary(family, weight, requested_slant, FontWidth::Normal)
             .and_then(|matched| self.materialize_platform_match(matched));
         self.primary_match_cache.insert(key, matched.clone());
         matched
@@ -1071,8 +1116,11 @@ impl FontMetricsService {
     ) -> Option<LayoutFontHandle> {
         // The platform-selected file/index is the primary face identity.
         // Only the semantic fallback path needs a representative-glyph probe.
-        let resolved_family = self.resolve_family(&self.backend.resolve_family(family), None);
+        let resolved_family = self.resolve_family(&self.font_resolver.resolve_family(family), None);
         let platform = self.platform_primary_match(&resolved_family, weight, italic);
+        let platform_px_metrics = platform
+            .as_ref()
+            .and_then(|matched| matched.pixel_metrics(font_size));
         let font_id = match platform.as_ref() {
             Some(matched) => self.fontdb_id_for_platform_match(matched)?,
             None => {
@@ -1096,22 +1144,14 @@ impl FontMetricsService {
                 face.stretch,
             )
         };
-        let selected_identity = match file.as_deref() {
-            Some(path) => {
-                ResolvedFontIdentity::from_file(path, face_index, postscript_name.clone())
-            }
-            // fontdb Source::Binary faces have no path; key on the
-            // postscript name (or family) so the identity is still durable.
-            None => ResolvedFontIdentity::from_memory(
-                FontBackendKind::Fontconfig,
-                format!(
-                    "mem:{}#{face_index}",
-                    postscript_name.as_deref().unwrap_or(&resolved_family)
-                ),
-                face_index,
-                postscript_name.clone(),
-            ),
-        };
+        // fontdb Source::Binary faces have no path; key on the postscript
+        // name (or family) so the identity is still durable.
+        let selected_identity = self.fontdb_face_identity(
+            file.as_deref(),
+            face_index,
+            postscript_name.clone(),
+            &resolved_family,
+        );
         let (identity, postscript_name, resolved_weight, selector_slant, render_slant) =
             match platform {
                 Some(platform) => {
@@ -1135,8 +1175,8 @@ impl FontMetricsService {
                         .postscript_name
                         .clone()
                         .or(postscript_name);
-                    let resolved_weight = platform.weight.unwrap_or(effective_weight);
-                    let selector_slant = platform.slant;
+                    let resolved_weight = platform.weight().unwrap_or(effective_weight);
+                    let selector_slant = platform.slant();
                     (
                         platform.identity,
                         postscript_name,
@@ -1156,7 +1196,8 @@ impl FontMetricsService {
                     )
                 }
             };
-        let px_metrics = Self::probe_resolved_font_metrics(&identity, font_size);
+        let px_metrics = platform_px_metrics
+            .or_else(|| Self::probe_resolved_font_metrics(&identity, None, font_size));
         let vertical = px_metrics
             .map(|metrics| FontVerticalMetrics {
                 ascent: metrics.ascent.max(0) as f32,
@@ -1275,20 +1316,12 @@ impl FontMetricsService {
                 face.stretch,
             )
         };
-        let selected_identity = match file.as_deref() {
-            Some(path) => {
-                ResolvedFontIdentity::from_file(path, face_index, postscript_name.clone())
-            }
-            None => ResolvedFontIdentity::from_memory(
-                FontBackendKind::Fontconfig,
-                format!(
-                    "mem:{}#{face_index}",
-                    postscript_name.as_deref().unwrap_or(&resolved.family)
-                ),
-                face_index,
-                postscript_name.clone(),
-            ),
-        };
+        let selected_identity = self.fontdb_face_identity(
+            file.as_deref(),
+            face_index,
+            postscript_name.clone(),
+            &resolved.family,
+        );
         let (identity, postscript_name, selector_slant, render_slant) =
             match resolved.platform.as_ref() {
                 Some(platform) => {
@@ -1313,8 +1346,8 @@ impl FontMetricsService {
                             .postscript_name
                             .clone()
                             .or(postscript_name),
-                        platform.slant,
-                        font_slant_kind_from_platform(platform.slant),
+                        platform.slant(),
+                        font_slant_kind_from_platform(platform.slant()),
                     )
                 }
                 None => {
@@ -1327,7 +1360,8 @@ impl FontMetricsService {
                     )
                 }
             };
-        let px_metrics = Self::probe_resolved_font_metrics(&identity, font_size);
+        let px_metrics =
+            Self::probe_resolved_font_metrics(&identity, resolved.platform.as_ref(), font_size);
         let vertical = px_metrics
             .map(|metrics| FontVerticalMetrics {
                 ascent: metrics.ascent.max(0) as f32,
@@ -1485,21 +1519,13 @@ impl FontMetricsService {
                 face.weight.0,
             )
         };
-        let identity = match file.as_deref() {
-            Some(path) => {
-                ResolvedFontIdentity::from_file(path, face_index, postscript_name.clone())
-            }
-            None => ResolvedFontIdentity::from_memory(
-                FontBackendKind::Fontconfig,
-                format!(
-                    "mem:{}#{face_index}",
-                    postscript_name.as_deref().unwrap_or(&family)
-                ),
-                face_index,
-                postscript_name.clone(),
-            ),
-        };
-        let px_metrics = Self::probe_resolved_font_metrics(&identity, font_size);
+        let identity = self.fontdb_face_identity(
+            file.as_deref(),
+            face_index,
+            postscript_name.clone(),
+            &family,
+        );
+        let px_metrics = Self::probe_resolved_font_metrics(&identity, None, font_size);
         let vertical = px_metrics
             .map(|metrics| FontVerticalMetrics {
                 ascent: metrics.ascent.max(0) as f32,
@@ -1598,7 +1624,8 @@ impl FontMetricsService {
             FontSlant::Normal
         };
         if ch.is_ascii() {
-            let resolved_family = self.resolve_family(&self.backend.resolve_family(family), None);
+            let resolved_family =
+                self.resolve_family(&self.font_resolver.resolve_family(family), None);
             let platform = self.platform_primary_match(&resolved_family, weight, italic);
             // Snap to the family's available/instance weight, matching the
             // font actually opened (and what `build_attrs` renders with), so
@@ -1606,7 +1633,7 @@ impl FontMetricsService {
             // a semi-light request on variable Noto Sans reports light.
             let resolved_weight = platform
                 .as_ref()
-                .and_then(|matched| matched.weight)
+                .and_then(|matched| matched.weight())
                 .unwrap_or_else(|| {
                     crate::font_match::resolve_weight_in_family(
                         &self.font_system,
@@ -1617,7 +1644,7 @@ impl FontMetricsService {
                 });
             let resolved_slant = platform
                 .as_ref()
-                .map(|matched| matched.slant)
+                .map(|matched| matched.slant())
                 .unwrap_or(requested_slant);
             return ResolvedCharFont {
                 family: resolved_family,
@@ -1627,13 +1654,15 @@ impl FontMetricsService {
             };
         }
 
-        let prefer_monospace = self.backend.family_prefers_monospace(family);
-        if let Some(matched) =
-            self.backend
-                .match_font_for_char(family, ch, prefer_monospace, weight, italic)
-        {
-            let resolved_family = self.resolve_family(&matched.family, matched.file_path());
-            let resolved_weight = matched.weight.unwrap_or_else(|| {
+        if let Some(matched) = self.font_resolver.resolve_for_char(
+            family,
+            ch,
+            weight,
+            requested_slant,
+            FontWidth::Normal,
+        ) {
+            let resolved_family = self.resolve_family(matched.family(), matched.file_path());
+            let resolved_weight = matched.weight().unwrap_or_else(|| {
                 crate::font_match::resolve_weight_in_family(
                     &self.font_system,
                     &resolved_family,
@@ -1641,7 +1670,7 @@ impl FontMetricsService {
                     italic,
                 )
             });
-            let resolved_slant = matched.slant;
+            let resolved_slant = matched.slant();
             let platform = self.materialize_platform_match(matched);
             return ResolvedCharFont {
                 weight: resolved_weight,
@@ -1869,7 +1898,12 @@ impl FontMetricsService {
             };
             (vertical, advances)
         };
-        let frame_cell = FrameCellMetrics::derive(family, font_size, vertical, advances);
+        let frame_cell = FrameCellMetrics::derive(
+            self.font_resolver.family_prefers_monospace(family),
+            font_size,
+            vertical,
+            advances,
+        );
         if frame_cell.confidence == MetricConfidence::Degraded {
             tracing::debug!(
                 "font_metrics: degraded frame cell width fallback for family={family:?} size={font_size}"

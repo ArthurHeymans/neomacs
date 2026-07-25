@@ -31,9 +31,18 @@ yeslogic-fontconfig-sys.workspace = true
 x11-dl.workspace = true
 # FreeType px-metric/named-instance probe reproduces GNU's cairo-freetype
 # driver. Gated to `cfg(unix)`, so it is compiled and used on BOTH Linux and
-# macOS (alongside fontconfig above). Only Windows (`cfg(not(unix))`) gets the
+# macOS. Only Windows (`cfg(not(unix))`) gets the
 # `None`/empty stubs in `font_probe` and falls back to fontdb selection.
 freetype-rs = { version = "0.38.0", features = ["bundled"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation.workspace = true
+core-text.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+dwrote.workspace = true
+sys-locale.workspace = true
+winapi.workspace = true
 
 [dev-dependencies]
 tracing-test.workspace = true

@@ -106,6 +106,60 @@ fn fontconfig_identity_distinguishes_backend_and_file_face_indices() {
 }
 
 #[test]
+fn native_file_identity_preserves_platform_and_exact_instance() {
+    let weight = FontVariationCoord::new(u32::from_be_bytes(*b"wght"), 650.0);
+    let width = FontVariationCoord::new(u32::from_be_bytes(*b"wdth"), 90.0);
+    let core_text = ResolvedFontIdentity::from_platform_file_with_variations(
+        FontBackendKind::CoreText,
+        "/System/Library/Fonts/SFNSMono.ttf",
+        2,
+        Some("SFMono-Semibold".to_string()),
+        vec![weight, width],
+    );
+    let direct_write = ResolvedFontIdentity::from_platform_file_with_variations(
+        FontBackendKind::DirectWrite,
+        "C:\\Windows\\Fonts\\CascadiaCode.ttf",
+        3,
+        Some("CascadiaCode-SemiBold".to_string()),
+        vec![width, weight],
+    );
+
+    assert_eq!(core_text.backend, FontBackendKind::CoreText);
+    assert_eq!(core_text.file_face_index(), 2);
+    assert_eq!(core_text.backend_selector(), 2);
+    assert_eq!(core_text.freetype_selector(), None);
+    assert_eq!(core_text.named_instance_index(), None);
+    assert!(core_text.stable_key.starts_with("coretext:"));
+    assert!(core_text.stable_key.contains("wght=44228000"));
+    assert!(core_text.stable_key.contains("wdth=42b40000"));
+
+    assert_eq!(direct_write.backend, FontBackendKind::DirectWrite);
+    assert_eq!(direct_write.file_face_index(), 3);
+    assert!(direct_write.stable_key.starts_with("directwrite:"));
+    assert_ne!(core_text, direct_write);
+}
+
+#[test]
+fn generic_platform_constructor_keeps_one_canonical_fontconfig_identity() {
+    let coords = vec![FontVariationCoord::new(u32::from_be_bytes(*b"wght"), 650.0)];
+    let canonical = ResolvedFontIdentity::from_file_with_variations(
+        "/fonts/variable.ttf",
+        0x0007_0000,
+        Some("Fixture-Semibold".to_string()),
+        coords.clone(),
+    );
+    let through_platform = ResolvedFontIdentity::from_platform_file_with_variations(
+        FontBackendKind::Fontconfig,
+        "/fonts/variable.ttf",
+        0x0007_0000,
+        Some("Fixture-Semibold".to_string()),
+        coords,
+    );
+
+    assert_eq!(through_platform, canonical);
+}
+
+#[test]
 fn resolved_font_serde_round_trip() {
     let font = sample_font(7);
     let json = serde_json::to_string(&font).unwrap();

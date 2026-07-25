@@ -252,7 +252,7 @@ fn frame_cell_metrics_for_monospace_use_ascii_max_not_space() {
 
     let advances = FontAdvanceMetrics::from_ascii_widths(3.56, &widths);
     let cell = FrameCellMetrics::derive(
-        "monospace",
+        true,
         13.0,
         FontVerticalMetrics {
             ascent: 12.0,
@@ -275,7 +275,7 @@ fn frame_cell_metrics_for_proportional_use_ascii_average_not_space() {
 
     let advances = FontAdvanceMetrics::from_ascii_widths(3.0, &widths);
     let cell = FrameCellMetrics::derive(
-        "DejaVu Sans",
+        false,
         13.0,
         FontVerticalMetrics {
             ascent: 12.0,
@@ -296,7 +296,7 @@ fn frame_cell_metrics_falls_back_when_backend_reports_no_valid_advances() {
 
     let advances = FontAdvanceMetrics::from_ascii_widths(0.0, &widths);
     let cell = FrameCellMetrics::derive(
-        "monospace",
+        true,
         13.0,
         FontVerticalMetrics {
             ascent: 12.0,
@@ -501,6 +501,10 @@ struct FixedCharFontBackend {
 
 #[cfg(unix)]
 impl crate::font_backend::FontBackend for FixedCharFontBackend {
+    fn kind(&self) -> FontBackendKind {
+        FontBackendKind::Fontconfig
+    }
+
     fn resolve_family(&self, family: &str) -> String {
         family.to_string()
     }
@@ -509,29 +513,24 @@ impl crate::font_backend::FontBackend for FixedCharFontBackend {
         true
     }
 
-    fn match_font_for_char(
+    fn list_candidates(
         &self,
-        _family: &str,
-        _ch: char,
-        _prefer_monospace: bool,
-        _requested_weight: u16,
-        _italic: bool,
-    ) -> Option<crate::font_backend::PlatformFontMatch> {
-        Some(self.matched.clone())
-    }
-
-    fn match_primary_font(
-        &self,
-        _family: &str,
-        _weight: u16,
-        _italic: bool,
-    ) -> Option<crate::font_backend::PlatformFontMatch> {
-        None
+        _query: &crate::font_backend::FontCandidateQuery,
+    ) -> Vec<crate::font_backend::FontCandidate> {
+        vec![crate::font_backend::FontCandidate {
+            matched: self.matched.clone(),
+            width: Some(FontWidth::Normal),
+            spacing: Some(100),
+        }]
     }
 }
 
 #[cfg(unix)]
 impl crate::font_backend::FontBackend for FixedPrimaryFontBackend {
+    fn kind(&self) -> FontBackendKind {
+        FontBackendKind::Fontconfig
+    }
+
     fn resolve_family(&self, family: &str) -> String {
         family.to_string()
     }
@@ -540,33 +539,30 @@ impl crate::font_backend::FontBackend for FixedPrimaryFontBackend {
         false
     }
 
-    fn match_font_for_char(
+    fn list_candidates(
         &self,
-        _family: &str,
-        _ch: char,
-        _prefer_monospace: bool,
-        _requested_weight: u16,
-        _italic: bool,
-    ) -> Option<crate::font_backend::PlatformFontMatch> {
-        None
-    }
-
-    fn match_primary_font(
-        &self,
-        family: &str,
-        weight: u16,
-        italic: bool,
-    ) -> Option<crate::font_backend::PlatformFontMatch> {
-        Some(crate::font_backend::PlatformFontMatch {
-            identity: ResolvedFontIdentity::from_file(&self.file, self.face_index, None),
-            family: family.to_string(),
-            weight: Some(weight),
-            slant: if italic {
-                FontSlant::Italic
-            } else {
-                self.slant
+        query: &crate::font_backend::FontCandidateQuery,
+    ) -> Vec<crate::font_backend::FontCandidate> {
+        vec![crate::font_backend::FontCandidate {
+            matched: crate::font_backend::PlatformFontMatch {
+                identity: ResolvedFontIdentity::from_file(&self.file, self.face_index, None),
+                metadata: crate::font_backend::PlatformFontMetadata {
+                    family: query
+                        .family
+                        .clone()
+                        .unwrap_or_else(|| query.fallback_family.clone()),
+                    weight: Some(query.requested_weight),
+                    slant: if query.requested_slant.is_italic() {
+                        FontSlant::Italic
+                    } else {
+                        self.slant
+                    },
+                    design_metrics: None,
+                },
             },
-        })
+            width: Some(query.requested_width),
+            spacing: Some(100),
+        }]
     }
 }
 
@@ -588,11 +584,12 @@ fn explicit_primary_font_uses_fontconfig_static_file_when_cosmic_would_fallback(
                 && crate::font_probe::named_instance_wght_values(file, 0).is_empty()
         })
         .expect("different static font file");
-    svc.backend = Box::new(FixedPrimaryFontBackend {
-        file: target.clone(),
-        face_index: 0,
-        slant: FontSlant::Normal,
-    });
+    svc.font_resolver
+        .replace_backend(Box::new(FixedPrimaryFontBackend {
+            file: target.clone(),
+            face_index: 0,
+            slant: FontSlant::Normal,
+        }));
 
     let resolved = svc
         .resolved_font_for_char(' ', requested_family, 400, false, 10.0)
@@ -625,11 +622,12 @@ fn ascii_character_resolution_keeps_primary_face_that_lacks_the_glyph() {
         return;
     };
     let requested_family = "neomacs-primary-without-ascii-space-fixture";
-    svc.backend = Box::new(FixedPrimaryFontBackend {
-        file: file.clone(),
-        face_index,
-        slant: FontSlant::Normal,
-    });
+    svc.font_resolver
+        .replace_backend(Box::new(FixedPrimaryFontBackend {
+            file: file.clone(),
+            face_index,
+            slant: FontSlant::Normal,
+        }));
 
     let expected_metrics = crate::font_probe::probe_font_px_metrics(&file, face_index, 10, None)
         .expect("primary font metrics");
@@ -664,11 +662,12 @@ fn font_at_preserves_reverse_slant_from_platform_selection() {
     else {
         return;
     };
-    svc.backend = Box::new(FixedPrimaryFontBackend {
-        file,
-        face_index,
-        slant: FontSlant::ReverseOblique,
-    });
+    svc.font_resolver
+        .replace_backend(Box::new(FixedPrimaryFontBackend {
+            file,
+            face_index,
+            slant: FontSlant::ReverseOblique,
+        }));
 
     let selected = svc
         .select_font_for_char(
@@ -733,17 +732,19 @@ fn char_width_bold_vs_normal() {
 #[cfg(unix)]
 #[test]
 fn installed_iosevka_digit_advance_is_fixed_across_weights() {
-    use crate::font_backend::FontBackend;
-
-    let backend = crate::font_backend::FontconfigBackend;
-    let Some(normal) = backend.match_primary_font("Iosevka", 400, false) else {
+    let resolver =
+        crate::font_resolver::FontResolver::new(Box::new(crate::font_backend::FontconfigBackend));
+    let Some(normal) =
+        resolver.resolve_primary("Iosevka", 400, FontSlant::Normal, FontWidth::Normal)
+    else {
         return;
     };
-    let Some(bold) = backend.match_primary_font("Iosevka", 700, false) else {
+    let Some(bold) = resolver.resolve_primary("Iosevka", 700, FontSlant::Normal, FontWidth::Normal)
+    else {
         return;
     };
-    assert_eq!(normal.family, "Iosevka");
-    assert_eq!(bold.family, "Iosevka");
+    assert_eq!(normal.family(), "Iosevka");
+    assert_eq!(bold.family(), "Iosevka");
 
     let mut svc = make_svc();
     let normal_width = svc.char_width('2', "Iosevka", 400, false, 10.0);
@@ -1057,9 +1058,12 @@ fn measure_with_resolved_fontsystem(
         slant,
         platform: Some(crate::font_backend::PlatformFontMatch {
             identity: font.identity,
-            family: font.family,
-            weight: Some(font.weight),
-            slant,
+            metadata: crate::font_backend::PlatformFontMetadata {
+                family: font.family,
+                weight: Some(font.weight),
+                slant,
+                design_metrics: None,
+            },
         }),
     };
     renderer.measure_resolved_char(ch, &resolved, font_size)
@@ -2208,16 +2212,20 @@ fn resolved_font_for_char_treats_platform_identity_as_authoritative() {
     let expected_identity = identity.clone();
 
     let mut svc = make_svc();
-    svc.backend = Box::new(FixedCharFontBackend {
-        matched: crate::font_backend::PlatformFontMatch {
-            identity,
-            // Native backends are allowed to publish a selector/display name
-            // that fontdb does not know. The exact identity must still win.
-            family: "neomacs-platform-display-alias".to_string(),
-            weight: platform.weight,
-            slant: platform.slant,
-        },
-    });
+    svc.font_resolver
+        .replace_backend(Box::new(FixedCharFontBackend {
+            matched: crate::font_backend::PlatformFontMatch {
+                identity,
+                metadata: crate::font_backend::PlatformFontMetadata {
+                    // Native backends may publish a selector/display name
+                    // unknown to fontdb. The exact identity must still win.
+                    family: "neomacs-platform-display-alias".to_string(),
+                    weight: platform.weight,
+                    slant: platform.slant,
+                    design_metrics: None,
+                },
+            },
+        }));
 
     let resolved = svc
         .resolved_font_for_char('好', "Monospace", 400, false, 14.0)

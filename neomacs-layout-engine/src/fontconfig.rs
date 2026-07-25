@@ -116,12 +116,12 @@ struct CharMatchCacheKey {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct ListedFont {
-    matched: FontMatch,
+pub(crate) struct ListedFont {
+    pub(crate) matched: FontMatch,
     style: String,
     weight_css: Option<u16>,
-    width: Option<FontWidth>,
-    spacing: Option<i32>,
+    pub(crate) width: Option<FontWidth>,
+    pub(crate) spacing: Option<i32>,
     /// FC_FOUNDRY (e.g. "GOOG"); GNU carries it on font entities
     /// (src/ftfont.c ftfont_pattern_entity reads FC_FOUNDRY).
     foundry: Option<String>,
@@ -721,7 +721,7 @@ fn candidate_matches_find_font_spec(candidate: &ListedFont, spec: &StoredFontSpe
     true
 }
 
-fn query_charset_ranges(spec: &StoredFontSpec, ch: char) -> Vec<(u32, u32)> {
+pub(crate) fn query_charset_ranges(spec: &StoredFontSpec, ch: char) -> Vec<(u32, u32)> {
     if let Some(registry) = spec.registry.map(resolve_sym) {
         if ftfont_registry_uses_unconstrained_charset(registry) {
             return Vec::new();
@@ -1355,7 +1355,7 @@ fn foundry_for_file_uncached(_file: &str) -> Option<String> {
 }
 
 #[cfg(unix)]
-fn fc_list_candidates(
+pub(crate) fn fc_list_candidates(
     family: Option<&str>,
     query_charset_ranges: &[(u32, u32)],
     required_char: Option<u32>,
@@ -1520,7 +1520,7 @@ fn fc_list_candidates(
 }
 
 #[cfg(not(unix))]
-fn fc_list_candidates(
+pub(crate) fn fc_list_candidates(
     family: Option<&str>,
     query_charset_ranges: &[(u32, u32)],
     required_char: Option<u32>,
@@ -1658,7 +1658,10 @@ fn parse_fontconfig_weight(raw: &str) -> Option<u16> {
     })
 }
 
-fn combined_query_langs(registry_lang: Option<&str>, spec_lang: Option<&str>) -> Vec<String> {
+pub(crate) fn combined_query_langs(
+    registry_lang: Option<&str>,
+    spec_lang: Option<&str>,
+) -> Vec<String> {
     let mut langs = Vec::new();
     for lang in [registry_lang, spec_lang] {
         let Some(lang) = lang.map(str::trim).filter(|lang| !lang.is_empty()) else {
@@ -1692,6 +1695,10 @@ fn registry_hint(registry: &str) -> Option<&'static RegistryHint> {
     REGISTRY_HINTS
         .iter()
         .find(|hint| wildcard_casefold_match(&registry, hint.name))
+}
+
+pub(crate) fn registry_language(registry: &str) -> Option<&'static str> {
+    registry_hint(registry).and_then(|hint| hint.lang)
 }
 
 fn wildcard_casefold_match(pattern: &str, text: &str) -> bool {

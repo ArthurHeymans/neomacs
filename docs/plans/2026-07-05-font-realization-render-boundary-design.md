@@ -1,12 +1,12 @@
 # Font Realization and Render Boundary Design
 
 Date: 2026-07-05
-Status: Phases 0–4 shipped for composed clusters (face-primary, per-char
-fallback, and shaped-cluster exact-glyph rasterization all layout-resolved);
-Phase 5/6 seams in place (`FontBackend` + `TextShaper` traits, Linux/cosmic
-impls; dead second cosmic path deleted). Remaining: whole-run shaped output
-where GNU composes beyond `Composite` clusters, macOS/Windows backends, and
-a rustybuzz `TextShaper`.
+Status: Phases 0–5 shipped for composed clusters (face-primary, per-char
+fallback, shaped-cluster exact-glyph rasterization, shared `FontResolver`, and
+Fontconfig/CoreText/DirectWrite candidate backends); Phase 6 seam in place
+(`TextShaper`, dead second cosmic path deleted). Remaining: whole-run shaped
+output where GNU composes beyond `Composite` clusters and a rustybuzz
+`TextShaper`.
 
 ## 0. Amendments from implementation (2026-07-05)
 
@@ -53,9 +53,10 @@ Decisions made while shipping Phases 0–2 and 3a:
 
 ### Exact platform matches (2026-07-15)
 
-- `FontBackend` returns a complete `PlatformFontMatch`, never a file path.
-  On Linux that identity includes Fontconfig's full `FC_INDEX` (including
-  named-instance bits) and `FC_FONT_VARIATIONS` coordinates.
+- `FontBackend` returns complete `FontCandidate` values to the shared
+  `FontResolver`, never a preselected path. The winning
+  `PlatformFontMatch` includes Fontconfig's full `FC_INDEX` (including
+  named-instance bits) and `FC_FONT_VARIATIONS` coordinates on Linux.
 - File path, an opaque backend-native face selector, and canonicalized
   non-default variation coordinates form one `ResolvedFontIdentity` and one
   renderer-cache identity. Fontconfig's selector is deliberately kept intact:
@@ -180,11 +181,11 @@ Evaluator/layout owns:
 
 - face inheritance, remapping, and face IDs
 - fontset lookup and fallback order
-- generic family alias handling
+- the point at which generic-family aliases and alternative families are tried
 - alternative font family and registry alists
 - fontconfig/CoreText/DirectWrite candidate enumeration through backend traits
 - GNU-compatible candidate scoring
-- character coverage decisions
+- character-coverage requirements and fallback decisions
 - weight/slant/width normalization
 - exact font identity creation
 - shaping into glyph IDs, cluster ranges, offsets, and advances
@@ -370,13 +371,23 @@ platform-specific.
 
 ```rust
 pub trait FontBackend {
-    fn list_candidates(&mut self, request: &FontRequest) -> Vec<FontCandidate>;
-    fn open_font(&mut self, identity: &ResolvedFontIdentity) -> Result<FontHandle, FontError>;
-    fn metrics(&mut self, handle: &FontHandle, size: f32) -> Result<FontMetrics, FontError>;
-    fn supports_char(&mut self, handle: &FontHandle, ch: char) -> bool;
-    fn font_bytes(&mut self, handle: &FontHandle) -> Result<FontDataRef<'_>, FontError>;
+    fn kind(&self) -> FontBackendKind;
+    fn resolve_family(&self, generic_or_concrete: &str) -> String;
+    fn family_prefers_monospace(&self, family: &str) -> bool;
+    fn list_candidates(&self, query: &FontCandidateQuery) -> Vec<FontCandidate>;
+    fn design_metrics(&self, selected: &PlatformFontMatch)
+        -> Option<PlatformFontDesignMetrics>;
 }
 ```
+
+`FontCandidate` carries exact identity and style/width/spacing metadata. After
+shared scoring, the backend attaches native design-unit metrics to the single
+winning match; metrics are never computed for every enumerated candidate.
+CoreText and DirectWrite therefore do not reopen a native selection through
+FreeType merely to populate layout metrics. Opening
+the selected identity and supplying exact font bytes remain capabilities of the
+shared file/index materialization layer until native renderer handles are
+needed for formats that do not expose a durable local file.
 
 Backend implementations:
 
@@ -554,11 +565,12 @@ must agree on resolved font identity for normal text.
 
 ### Phase 5: Cross-Platform Font Backends
 
-- Extract current Linux fontconfig code into `LinuxFontBackend`.
-- Add backend trait and shared `FontResolver`.
-- Add `MacFontBackend` using CoreText descriptors.
-- Add `WindowsFontBackend` using DirectWrite identities.
-- Keep scoring/policy shared and platform-neutral.
+- [x] Extract Linux candidate discovery behind `FontconfigBackend`.
+- [x] Add backend trait and shared `FontResolver`.
+- [x] Add `CoreTextBackend` using CoreText descriptors/cascade lists.
+- [x] Add `DirectWriteBackend` using DirectWrite families/fallback identities.
+- [x] Keep fontset ordering and candidate scoring shared and platform-neutral.
+- [x] Carry native design-unit metrics and locale/direction fallback context.
 
 ### Phase 6: Replace High-Level Cosmic Contract
 
