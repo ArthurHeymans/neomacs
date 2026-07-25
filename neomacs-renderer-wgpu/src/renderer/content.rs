@@ -283,9 +283,9 @@ impl WgpuRenderer {
         //
         // Rendering order:
         //   1. Backgrounds (window bg, stretches, char bg)
-        //   2. Text (mask glyphs, color glyphs, composed)
-        //   3. Decorations (underline, overline, strikethrough)
-        //   4. Box borders (sharp and rounded)
+        //   2. Box borders (sharp and rounded)
+        //   3. Text (mask glyphs, color glyphs, composed)
+        //   4. Decorations (underline, overline, strikethrough)
         //   5. Inline media (images, videos, webkit)
         //   6. Cursors, borders, scroll bars (on top)
         let mut bg_vertices: Vec<RectVertex> = Vec::new();
@@ -1449,6 +1449,29 @@ impl WgpuRenderer {
                 pass.draw(0..rounded_fill_vertices.len() as u32, 0..1);
             }
 
+            // GNU draws character/composition box relief before the glyph so
+            // thick inset borders cannot cover a narrow character cell.
+            if let Some(upload) =
+                self.arenas
+                    .rect
+                    .upload(&self.device, &self.queue, &sharp_border_vertices)
+            {
+                pass.set_pipeline(rect_pl);
+                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                pass.set_vertex_buffer(0, upload.buffer_slice());
+                pass.draw(0..sharp_border_vertices.len() as u32, 0..1);
+            }
+            if let Some(upload) =
+                self.arenas
+                    .rounded
+                    .upload(&self.device, &self.queue, &rounded_border_vertices)
+            {
+                pass.set_pipeline(rounded_rect_pl);
+                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                pass.set_vertex_buffer(0, upload.buffer_slice());
+                pass.draw(0..rounded_border_vertices.len() as u32, 0..1);
+            }
+
             // --- Draw mask text glyphs ---
             if !mask_data.is_empty() {
                 let all_vertices: Vec<GlyphVertex> = mask_data
@@ -1591,30 +1614,6 @@ impl WgpuRenderer {
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 pass.set_vertex_buffer(0, upload.buffer_slice());
                 pass.draw(0..decoration_vertices.len() as u32, 0..1);
-            }
-
-            // --- Draw sharp box borders ---
-            if let Some(upload) =
-                self.arenas
-                    .rect
-                    .upload(&self.device, &self.queue, &sharp_border_vertices)
-            {
-                pass.set_pipeline(rect_pl);
-                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, upload.buffer_slice());
-                pass.draw(0..sharp_border_vertices.len() as u32, 0..1);
-            }
-
-            // --- Draw rounded box borders ---
-            if let Some(upload) =
-                self.arenas
-                    .rounded
-                    .upload(&self.device, &self.queue, &rounded_border_vertices)
-            {
-                pass.set_pipeline(rounded_rect_pl);
-                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, upload.buffer_slice());
-                pass.draw(0..rounded_border_vertices.len() as u32, 0..1);
             }
 
             // --- Draw inline images ---

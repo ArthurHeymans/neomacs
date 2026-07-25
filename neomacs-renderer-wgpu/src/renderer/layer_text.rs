@@ -1,6 +1,6 @@
-//! Text phases of `render_frame_glyphs` (z-order steps 4-6): glyph batch
-//! building, batched text draws, text decorations, and box borders, run once
-//! for buffer text and once for overlay (mode-line/echo) text.
+//! Text phases of `render_frame_glyphs` (z-order steps 4-6): box borders,
+//! glyph batches, and text decorations, run once for buffer text and once for
+//! overlay (mode-line/echo) text.
 
 use neomacs_display_protocol::types::{FaceId, Rect};
 use std::collections::HashSet;
@@ -78,9 +78,9 @@ impl WgpuRenderer {
                 &batches.rendered_char_bounds,
             );
 
+            self.draw_box_borders(ctx, want_overlay, spans);
             self.draw_text_glyph_batches(ctx, want_overlay, glyph_atlas, &batches, stats);
             self.draw_text_decorations(ctx, want_overlay);
-            self.draw_box_borders(ctx, want_overlay, spans);
         }
 
         // Both passes ran: promote this frame's captured rows to the cache.

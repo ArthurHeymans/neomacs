@@ -319,6 +319,95 @@ fn negative_box_line_width_paints_an_inset_border() {
     );
 }
 
+fn boxed_one_cell_frame() -> FrameGlyphBuffer {
+    let mut frame = FrameGlyphBuffer::with_size(W as f32, H as f32);
+    frame.background = Color::BLACK;
+    let face_id = FaceId::new(21);
+    frame.set_face(
+        face_id,
+        Color::WHITE,
+        Some(Color::rgb(0.2, 0.2, 0.2)),
+        400,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
+    let face = frame.faces.get_mut(&face_id).unwrap();
+    face.attributes |= FaceAttributes::BOX;
+    face.box_type = BoxType::Line;
+    face.box_color = Some(Color::BLACK);
+    face.box_line_width = (-4).into();
+    frame.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);
+    frame.add_char('p', 20.0, 20.0, 8.0, 18.0, 14.0, false);
+    frame
+}
+
+fn boxed_p_is_visible(buf: &[u8]) -> bool {
+    (20..28).any(|x| {
+        (20..38).any(|y| {
+            let pixel = px(buf, x, y);
+            pixel[0] > 120 && pixel[1] > 120 && pixel[2] > 120
+        })
+    })
+}
+
+#[test]
+fn negative_box_border_does_not_cover_a_one_cell_glyph() {
+    let Some(mut h) = try_harness() else {
+        return;
+    };
+    let frame = boxed_one_cell_frame();
+    h.renderer.render_frame_glyphs(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        W,
+        H,
+        false,
+        None,
+        (0.0, 0.0),
+        None,
+        None,
+        None,
+    );
+    let buf = read_back(&h);
+    assert!(
+        boxed_p_is_visible(&buf),
+        "GNU draws character glyphs over their box; the boxed `p` must remain visible"
+    );
+}
+
+#[test]
+fn child_frame_negative_box_border_does_not_cover_a_one_cell_glyph() {
+    let Some(mut h) = try_harness() else {
+        return;
+    };
+    let frame = boxed_one_cell_frame();
+    h.renderer.render_frame_content(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        W,
+        H,
+        0.0,
+        0.0,
+        false,
+        None,
+        0.0,
+        None,
+        None,
+    );
+    let buf = read_back(&h);
+    assert!(
+        boxed_p_is_visible(&buf),
+        "child-frame glyphs must be drawn over their boxes like GNU Emacs"
+    );
+}
+
 #[test]
 fn cursor_visible_false_suppresses_cursor() {
     let Some(mut h) = try_harness() else {
