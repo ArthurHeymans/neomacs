@@ -1099,16 +1099,15 @@ pub(crate) fn builtin_run_window_configuration_change_hook(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_max_args("run-window-configuration-change-hook", &args, 1)?;
-    // GNU: window--sides-inhibit-check suppresses this hook during side-window ops.
-    // Dynamic let-bindings write to the symbol slot, so obarray.symbol_value
-    // returns the current binding (including let-bindings).
-    if eval
-        .obarray
-        .symbol_value("window--sides-inhibit-check")
-        .is_some_and(|v| v.is_truthy())
-    {
-        return Ok(Value::NIL);
-    }
+    // NOTE: GNU's `run_window_configuration_change_hook` (window.c) does NOT
+    // gate on `window--sides-inhibit-check`. That variable is let-bound to t
+    // only to suppress `window--check` (the side-window consistency validator,
+    // window.el), never the hook. It routinely sits at t in real configs (e.g.
+    // Doom), so gating the hook on it wrongly silenced
+    // `window-configuration-change-hook' entirely -- winum never renumbered a
+    // freshly-opened popup/compile window until an unrelated command forced it
+    // (#191). The redisplay driver (run_window_change_functions) is the sole
+    // caller and only fires post-op, so there is no re-entrancy to guard.
     if let Some(frame) = args.first() {
         expect_optional_live_frame_designator(frame, eval)?;
     }

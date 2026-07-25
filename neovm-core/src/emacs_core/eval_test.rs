@@ -10288,6 +10288,35 @@ fn run_window_configuration_change_hook_uses_window_buffer_context() {
 }
 
 #[test]
+fn run_window_configuration_change_hook_ignores_sides_inhibit_check() {
+    // Regression for #191: `window--sides-inhibit-check' is let-bound to t only
+    // to suppress `window--check' (the side-window consistency validator) and
+    // routinely sits at t in real configs (Doom). GNU's
+    // run_window_configuration_change_hook never consults it, so
+    // `window-configuration-change-hook' must still fire. A wrong guard here
+    // silenced the hook whenever that var was t -- winum never renumbered a
+    // freshly-opened popup/compile window until an unrelated command forced it.
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.eval_str(
+        r#"(progn
+             (setq wcch-fired 0)
+             (setq window--sides-inhibit-check t)
+             (defalias 'wcch-count #'(lambda () (setq wcch-fired (1+ wcch-fired))))
+             (set-default 'window-configuration-change-hook '(wcch-count)))"#,
+    )
+    .expect("setup");
+    super::builtins::builtin_run_window_configuration_change_hook(&mut ev, vec![])
+        .expect("run window-configuration-change-hook");
+    let fired = ev.eval_symbol("wcch-fired").expect("wcch-fired");
+    assert_eq!(
+        fired.as_fixnum(),
+        Some(1),
+        "window-configuration-change-hook must fire even when window--sides-inhibit-check is t"
+    );
+}
+
+#[test]
 fn redisplay_runs_window_change_functions_with_selected_frame_context() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(
