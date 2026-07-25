@@ -935,6 +935,152 @@ pub(crate) fn builtin_display_images_p(
     Ok(Value::bool_val(eval.display_host.is_some()))
 }
 
+/// GNU `tty_supports_face_attributes_p` (src/xfaces.c): can THIS terminal render
+/// the requested attributes, as a visible difference from the default face?
+///
+/// GNU's structure, kept arm for arm:
+///
+/// * attributes a terminal has no notion of (`:family`, `:foundry`, `:stipple`,
+///   `:height`, `:width`, `:overline`, `:box`) make the answer false outright;
+/// * an attribute equal to the default face's is not a difference, so false;
+/// * everything else turns into a capability to test, and the terminal's
+///   terminfo record answers it (`tty_capable_p`).
+///
+/// GNU deliberately reports `:slant` unsupported when the terminal has no
+/// `sitm` even though `turn_on_face` fakes it with `dim`, "because the faked
+/// result is too different from what the face specifies" — so the renderer's
+/// fallback does NOT make the attribute supported. Both read the same record.
+fn tty_supports_face_attributes_p(
+    default_face: &crate::face::Face,
+    requested: &crate::face::Face,
+) -> bool {
+    use neomacs_display_protocol::tty_capabilities::TtyCapability;
+
+    // Attributes a tty cannot express at all.
+    if requested.family.is_some()
+        || requested.foundry.is_some()
+        || requested.stipple.is_some()
+        || requested.height.is_some()
+        || requested.width.is_some()
+        || requested.overline.is_some()
+        || requested.box_border.is_some()
+    {
+        return false;
+    }
+
+    let capabilities = super::terminal::pure::terminal_runtime_attribute_capabilities();
+    let mut tested = Vec::new();
+
+    // Weight: heavier than normal needs bold, lighter needs dim, and a weight
+    // matching the default is no difference. GNU compares against 100 in its own
+    // 0..210 scale, whose `normal' is `FontWeight::NORMAL`.
+    if let Some(weight) = requested.weight {
+        let normal = crate::face::FontWeight::NORMAL.gnu_numeric();
+        let default_weight = default_face
+            .weight
+            .unwrap_or(crate::face::FontWeight::NORMAL)
+            .gnu_numeric();
+        let weight = weight.gnu_numeric();
+        if weight > normal {
+            if default_weight > normal {
+                return false;
+            }
+            tested.push(TtyCapability::Bold);
+        } else if weight < normal {
+            if default_weight < normal {
+                return false;
+            }
+            tested.push(TtyCapability::Dim);
+        } else if default_weight == normal {
+            return false;
+        }
+    }
+
+    // Slant: anything other than roman, and different from the default.
+    if let Some(slant) = requested.slant {
+        let default_slant = default_face
+            .slant
+            .unwrap_or(crate::face::FontSlant::Normal)
+            .gnu_numeric();
+        if slant.gnu_numeric() == crate::face::FontSlant::Normal.gnu_numeric()
+            || slant.gnu_numeric() == default_slant
+        {
+            return false;
+        }
+        tested.push(TtyCapability::Italic);
+    }
+
+    // Underline: a style other than a plain line needs the parameterized
+    // `Smulx`; a plain underline needs `us`. Either way it must differ from the
+    // default face.
+    match &requested.underline {
+        crate::face::FaceDecoration::Unspecified => {}
+        crate::face::FaceDecoration::Disabled => {
+            if matches!(
+                default_face.underline,
+                crate::face::FaceDecoration::Disabled | crate::face::FaceDecoration::Unspecified
+            ) {
+                return false;
+            }
+            tested.push(TtyCapability::Underline);
+        }
+        crate::face::FaceDecoration::Enabled(underline) => {
+            if let Some(default_underline) = default_face.underline.enabled()
+                && default_underline.style == underline.style
+            {
+                return false;
+            }
+            if underline.style == crate::face::UnderlineStyle::Line {
+                tested.push(TtyCapability::Underline);
+            } else {
+                tested.push(TtyCapability::UnderlineStyled);
+            }
+        }
+    }
+
+    if let Some(inverse) = requested.inverse_video {
+        if Some(inverse) == default_face.inverse_video {
+            return false;
+        }
+        tested.push(TtyCapability::Inverse);
+    }
+
+    if let Some(strike_through) = requested.strike_through {
+        if Some(strike_through) == default_face.strike_through {
+            return false;
+        }
+        tested.push(TtyCapability::StrikeThrough);
+    }
+
+    // Colors: GNU checks that a requested color both differs from the default
+    // face's and survives the terminal's palette closely enough
+    // (`TTY_SAME_COLOR_THRESHOLD`). A color equal to the default is no
+    // difference.
+    if let Some(foreground) = requested.foreground
+        && Some(foreground) == default_face.foreground
+    {
+        return false;
+    }
+    if let Some(background) = requested.background
+        && Some(background) == default_face.background
+    {
+        return false;
+    }
+    let requests_color = requested.foreground.is_some() || requested.background.is_some();
+    if requests_color && !capabilities.supports_color() {
+        return false;
+    }
+
+    if tested.is_empty() {
+        // Nothing testable was requested: a color-only request is supported when
+        // the terminal has colors, and an empty request is not a difference.
+        return requests_color;
+    }
+    tested
+        .into_iter()
+        .all(|capability| capabilities.supports(capability))
+}
+
 /// Context-aware variant of `display-supports-face-attributes-p`.
 ///
 /// Emacs accepts broad argument shapes here in batch mode and still returns
@@ -976,7 +1122,12 @@ pub(crate) fn builtin_display_supports_face_attributes_p(
         return Ok(Value::bool_val(eval.display_host.is_some()));
     }
     let Some(host) = eval.display_host.as_mut() else {
-        return Ok(Value::NIL);
+        // A terminal frame: GNU answers from the terminal's own capabilities
+        // (`tty_supports_face_attributes_p`, xfaces.c), NOT from font selection.
+        return Ok(Value::bool_val(tty_supports_face_attributes_p(
+            &default_face,
+            &requested_attributes,
+        )));
     };
     let default_font = host
         .resolve_frame_font(frame_id, default_face)
@@ -1207,7 +1358,11 @@ fn submenu_label(label: String, submenu: bool, is_tty: bool) -> String {
     }
 }
 
-fn popup_menu_from_keymap(menu: Value, is_tty: bool) -> Option<(Vec<PopupMenuEntry>, Vec<Value>)> {
+fn popup_menu_from_keymap(
+    menu: Value,
+    is_tty: bool,
+    obarray: &crate::emacs_core::symbol::Obarray,
+) -> Option<(Vec<PopupMenuEntry>, Vec<Value>)> {
     if !super::keymap::is_list_keymap(&menu) {
         return None;
     }
@@ -1218,6 +1373,7 @@ fn popup_menu_from_keymap(menu: Value, is_tty: bool) -> Option<(Vec<PopupMenuEnt
         menu: Value,
         depth: u32,
         is_tty: bool,
+        obarray: &crate::emacs_core::symbol::Obarray,
         path: &mut Vec<Value>,
         entries: &mut Vec<PopupMenuEntry>,
         events: &mut Vec<Value>,
@@ -1226,7 +1382,7 @@ fn popup_menu_from_keymap(menu: Value, is_tty: bool) -> Option<(Vec<PopupMenuEnt
             return;
         }
 
-        super::keymap::list_keymap_for_each_binding(&menu, |key, def| {
+        super::keymap::list_keymap_for_each_binding(&menu, Some(obarray), |key, def| {
             let Some((entry, submenu)) = popup_menu_item_from_binding(key, def, depth, is_tty)
             else {
                 return;
@@ -1247,14 +1403,30 @@ fn popup_menu_from_keymap(menu: Value, is_tty: bool) -> Option<(Vec<PopupMenuEnt
             // recursing flattens, e.g., all of Help -> Describe's items into
             // the parent pane and pushes later items off-screen.
             if !is_tty && let Some(child_menu) = submenu {
-                append_keymap(child_menu, depth + 1, is_tty, path, entries, events);
+                append_keymap(
+                    child_menu,
+                    depth + 1,
+                    is_tty,
+                    obarray,
+                    path,
+                    entries,
+                    events,
+                );
             }
 
             path.pop();
         });
     }
 
-    append_keymap(menu, 0, is_tty, &mut Vec::new(), &mut entries, &mut events);
+    append_keymap(
+        menu,
+        0,
+        is_tty,
+        obarray,
+        &mut Vec::new(),
+        &mut entries,
+        &mut events,
+    );
     Some((entries, events))
 }
 
@@ -1625,7 +1797,7 @@ fn x_popup_menu_interactive(ctx: &mut Context, position: Value, menu: Value) -> 
     // None). On TTY each submenu collapses to one `" >"` line instead of being
     // inlined; on a window-system frame the toolkit owns nested panes.
     let is_tty = selected_frame_window_system_symbol(ctx).is_none();
-    let Some((entries, events)) = popup_menu_from_keymap(menu, is_tty) else {
+    let Some((entries, events)) = popup_menu_from_keymap(menu, is_tty, ctx.obarray()) else {
         tracing::info!("x-popup-menu interactive: menu is not a keymap");
         return Ok(Value::NIL);
     };

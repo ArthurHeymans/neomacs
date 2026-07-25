@@ -579,7 +579,7 @@ fn list_keymap_for_each_binding_stops_before_direct_sparse_parent() {
     list_keymap_set_parent(child, parent);
 
     let mut seen = Vec::new();
-    list_keymap_for_each_binding(&child, |event, def| seen.push((event, def)));
+    list_keymap_for_each_binding(&child, None, |event, def| seen.push((event, def)));
 
     assert_eq!(seen.len(), 1);
     assert_eq!(seen[0].0, Value::fixnum('x' as i64));
@@ -599,7 +599,7 @@ fn list_keymap_for_each_binding_reports_inline_vector_slots() {
     let keymap = Value::list(vec![Value::symbol("keymap"), Value::vector(slots)]);
 
     let mut seen = Vec::new();
-    list_keymap_for_each_binding(&keymap, |event, def| {
+    list_keymap_for_each_binding(&keymap, None, |event, def| {
         if !def.is_nil() {
             seen.push((event, def));
         }
@@ -620,7 +620,7 @@ fn list_keymap_for_each_binding_normalizes_a_t_binding_to_nil() {
     list_keymap_define(keymap, Value::fixnum('u' as i64), Value::T);
 
     let mut seen = Vec::new();
-    list_keymap_for_each_binding(&keymap, |event, def| seen.push((event, def)));
+    list_keymap_for_each_binding(&keymap, None, |event, def| seen.push((event, def)));
 
     assert_eq!(seen.len(), 1, "seen={seen:?}");
     assert_eq!(seen[0].0, Value::fixnum('u' as i64));
@@ -647,7 +647,7 @@ fn for_each_keymap_element_classifies_every_gnu_element_kind() {
     let mut prompts = Vec::new();
     let mut bindings = Vec::new();
     let mut submaps = 0usize;
-    for_each_keymap_element(&keymap, |element| match element {
+    for_each_keymap_element(&keymap, None, |element| match element {
         KeymapElement::Prompt(prompt) => prompts.push(prompt),
         KeymapElement::Binding { key, value } => {
             if !value.is_nil() {
@@ -728,7 +728,7 @@ fn list_keymap_copy_preserves_direct_sparse_parent_without_inlining_parent_bindi
     );
 
     let mut seen = Vec::new();
-    list_keymap_for_each_binding(&copy, |event, def| seen.push((event, def)));
+    list_keymap_for_each_binding(&copy, None, |event, def| seen.push((event, def)));
     assert_eq!(seen.len(), 1);
     assert_eq!(seen[0].0, Value::fixnum('x' as i64));
 }

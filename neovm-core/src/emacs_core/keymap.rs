@@ -805,6 +805,7 @@ fn lookup_in_keymap_level_impl(
     event: &Value,
     t_ok: bool,
     resolve_keyelt: bool,
+    obarray: Option<&Obarray>,
 ) -> Option<Value> {
     let mut cursor = keymap_binding_spine(keymap)?;
     let mut entries = 0;
@@ -892,7 +893,7 @@ fn lookup_in_keymap_level_impl(
         // looks up the event in that sub-keymap before continuing.
         if entry_car.is_cons() && is_list_keymap(&entry_car) {
             if let Some(found) =
-                lookup_in_keymap_level_impl(&entry_car, event, t_ok, resolve_keyelt)
+                lookup_in_keymap_level_impl(&entry_car, event, t_ok, resolve_keyelt, obarray)
             {
                 if found.is_nil() {
                     nil_binding_found = true;
@@ -933,6 +934,17 @@ fn lookup_in_keymap_level_impl(
         }
 
         cursor = entry_cdr;
+
+        // GNU `access_keymap_1`'s loop condition retries `get_keymap` as soon as
+        // the tail stops being a cons, so a tail that NAMES a keymap continues
+        // this same scan -- its bindings belong to this keymap, not to a parent.
+        if !cursor.is_cons()
+            && !cursor.is_nil()
+            && let Some(resolved) = resolve_keymap(cursor, obarray)
+            && let Some(spine) = keymap_binding_spine(&resolved)
+        {
+            cursor = spine;
+        }
     }
 
     // If no specific binding found but we have a t default binding, use it.
@@ -973,7 +985,19 @@ fn get_keymap_tail_parent(keymap: &Value) -> Value {
 /// An explicit nil binding (e.g. from `define-key m [?b] nil`) shadows
 /// parent bindings, matching GNU Emacs behavior where nil != unbound.
 fn list_keymap_access(keymap: &Value, event: &Value, noinherit: bool, t_ok: bool) -> Value {
-    list_keymap_access_impl(keymap, event, noinherit, t_ok, true)
+    list_keymap_access_impl(keymap, event, noinherit, t_ok, true, None)
+}
+
+/// [`list_keymap_access`] with the obarray GNU's `access_keymap_1` resolves a
+/// symbol spine tail through (`get_keymap`), for the lookup paths that have one.
+fn list_keymap_access_in_obarray(
+    keymap: &Value,
+    event: &Value,
+    noinherit: bool,
+    t_ok: bool,
+    obarray: &Obarray,
+) -> Value {
+    list_keymap_access_impl(keymap, event, noinherit, t_ok, true, Some(obarray))
 }
 
 fn list_keymap_access_unresolved(
@@ -982,7 +1006,53 @@ fn list_keymap_access_unresolved(
     noinherit: bool,
     t_ok: bool,
 ) -> Value {
-    list_keymap_access_impl(keymap, event, noinherit, t_ok, false)
+    list_keymap_access_impl(keymap, event, noinherit, t_ok, false, None)
+}
+
+/// [`list_keymap_access_unresolved`] with a symbol-tail-resolving obarray.
+fn list_keymap_access_unresolved_in_obarray(
+    keymap: &Value,
+    event: &Value,
+    noinherit: bool,
+    t_ok: bool,
+    obarray: &Obarray,
+) -> Value {
+    list_keymap_access_impl(keymap, event, noinherit, t_ok, false, Some(obarray))
+}
+
+/// Look up ONE event, following a spine tail that names a keymap -- the lookup
+/// GNU's `access_keymap` performs. Used by the `lookup-key` paths, which have the
+/// obarray in hand; the obarray-less variants above stay structural.
+pub(crate) fn list_keymap_lookup_one_in_obarray(
+    keymap: &Value,
+    event: &Value,
+    obarray: &Obarray,
+) -> Value {
+    list_keymap_access_in_obarray(keymap, event, false, false, obarray)
+}
+
+pub(crate) fn list_keymap_lookup_one_t_ok_in_obarray(
+    keymap: &Value,
+    event: &Value,
+    obarray: &Obarray,
+) -> Value {
+    list_keymap_access_in_obarray(keymap, event, false, true, obarray)
+}
+
+pub(crate) fn list_keymap_lookup_one_unresolved_in_obarray(
+    keymap: &Value,
+    event: &Value,
+    obarray: &Obarray,
+) -> Value {
+    list_keymap_access_unresolved_in_obarray(keymap, event, false, false, obarray)
+}
+
+pub(crate) fn list_keymap_lookup_one_unresolved_t_ok_in_obarray(
+    keymap: &Value,
+    event: &Value,
+    obarray: &Obarray,
+) -> Value {
+    list_keymap_access_unresolved_in_obarray(keymap, event, false, true, obarray)
 }
 
 fn list_keymap_access_impl(
@@ -991,6 +1061,7 @@ fn list_keymap_access_impl(
     noinherit: bool,
     t_ok: bool,
     resolve_keyelt: bool,
+    obarray: Option<&Obarray>,
 ) -> Value {
     let mut current = *keymap;
     let mut depth = 0;
@@ -1006,7 +1077,7 @@ fn list_keymap_access_impl(
         // Look up the event in the current keymap level only.
         // Some(val) means "found" (val may be nil for explicit nil binding).
         // None means "not found at this level".
-        match lookup_in_keymap_level_impl(&current, event, t_ok, resolve_keyelt) {
+        match lookup_in_keymap_level_impl(&current, event, t_ok, resolve_keyelt, obarray) {
             Some(binding) => {
                 if !noinherit && is_list_keymap(&binding) {
                     // Found a prefix keymap at this level. Check if parent
@@ -1014,8 +1085,14 @@ fn list_keymap_access_impl(
                     // create a composed keymap: (keymap child-sub . parent-sub)
                     let parent = get_keymap_tail_parent(&current);
                     if !parent.is_nil() {
-                        let parent_binding =
-                            list_keymap_access_impl(&parent, event, false, t_ok, resolve_keyelt);
+                        let parent_binding = list_keymap_access_impl(
+                            &parent,
+                            event,
+                            false,
+                            t_ok,
+                            resolve_keyelt,
+                            obarray,
+                        );
                         if is_list_keymap(&parent_binding) {
                             return compose_prefix_with_parent_keymap(&binding, &parent_binding);
                         }
@@ -1133,9 +1210,9 @@ pub(crate) fn lookup_key_in_obarray(
     let mut current_map = *keymap;
     for (i, event) in events.iter().enumerate() {
         let binding = if t_ok {
-            list_keymap_lookup_one_t_ok(&current_map, event)
+            list_keymap_lookup_one_t_ok_in_obarray(&current_map, event, obarray)
         } else {
-            list_keymap_lookup_one(&current_map, event)
+            list_keymap_lookup_one_in_obarray(&current_map, event, obarray)
         };
         let is_last = i == events.len() - 1;
 
@@ -1203,9 +1280,9 @@ pub(crate) fn lookup_key_in_obarray_runtime(
     let mut current_map = keymap;
     for (i, event) in events.iter().enumerate() {
         let raw_binding = if t_ok {
-            list_keymap_lookup_one_unresolved_t_ok(&current_map, event)
+            list_keymap_lookup_one_unresolved_t_ok_in_obarray(&current_map, event, ctx.obarray())
         } else {
-            list_keymap_lookup_one_unresolved(&current_map, event)
+            list_keymap_lookup_one_unresolved_in_obarray(&current_map, event, ctx.obarray())
         };
         let is_last = i == events.len() - 1;
         let binding = get_keyelt_runtime(ctx, raw_binding, true)?;
@@ -3470,22 +3547,45 @@ pub(crate) enum KeymapElement {
     /// identically -- recurse into it, then continue with the rest of the spine
     /// -- and both share the enclosing keymap's prefix.
     Submap(Value),
-    /// A spine tail that is not a cons: typically a symbol whose function cell is
-    /// a keymap (GNU `map_keymap`: `if (!CONSP (map)) map = get_keymap (map,
-    /// ...)`). Resolving it needs an obarray, which this structural walk does not
-    /// take.
+    /// A spine tail that is not a cons and does NOT name a keymap.
     ///
-    /// KNOWN GAP, deliberately typed rather than silently skipped: neomacs
-    /// resolves this nowhere yet, so both `lookup-key` and `where-is-internal`
-    /// return nil where GNU finds the binding (reproduce by `setcdr`-ing a
-    /// keymap's tail to a symbol whose function cell is a keymap --
-    /// `set-keymap-parent` itself rejects non-keymaps, so this only arises from
-    /// hand-built spines). Fixing it means plumbing an `&Obarray` through the
-    /// whole forward lookup chain; doing it on only one side would make forward
-    /// and reverse lookup disagree, which is worse than today's consistent miss.
-    IndirectTail(#[expect(dead_code, reason = "known gap; see variant docs")] Value),
+    /// GNU's spine loops retry `get_keymap` on a non-cons tail
+    /// (`access_keymap_1`: `(CONSP (tail) || (tail = get_keymap (tail, 0,
+    /// autoload), CONSP (tail)))`; `map_keymap`: `if (!CONSP (map)) map =
+    /// get_keymap (map, ...)`), so a symbol whose function cell is a keymap
+    /// CONTINUES the spine. [`resolve_keymap`] performs exactly that, and the walk
+    /// keeps going; this variant reports only what could not be resolved -- a
+    /// symbol naming no keymap, or a walk with no obarray to resolve through.
+    IndirectTail(#[expect(dead_code, reason = "reported for completeness")] Value),
     /// The keymap's prompt string (`make-sparse-keymap` PROMPT).
     Prompt(Value),
+}
+
+/// GNU `get_keymap (OBJECT, 0, autoload)` (src/keymap.c): OBJECT as a keymap, or
+/// `None` if it is not one.
+///
+/// A `(keymap . ...)` cons is a keymap outright; anything else is passed through
+/// function indirection first, so a SYMBOL whose function cell holds a keymap
+/// (`(fset 'my-map (make-sparse-keymap))`, a `defalias` chain, a
+/// `define-prefix-command` symbol) resolves to that keymap. This is the one place
+/// that question is answered, because GNU asks it from every spine walk --
+/// forward lookup, reverse `where-is` scan, `map_keymap` -- and answering it in
+/// only some of them makes lookup directions disagree.
+///
+/// `obarray` is `None` for a purely structural walk; a symbol then stays
+/// unresolved rather than being resolved through some other binding of the name.
+/// Autoloading (GNU's third argument) is deliberately not performed here: it
+/// evaluates Lisp, so it belongs to a context-taking caller.
+pub(crate) fn resolve_keymap(value: Value, obarray: Option<&Obarray>) -> Option<Value> {
+    if value.is_nil() {
+        return None;
+    }
+    if is_list_keymap(&value) {
+        return Some(value);
+    }
+    let name = value.as_symbol_name()?;
+    let function = obarray?.indirect_function(name)?;
+    is_list_keymap(&function).then_some(function)
 }
 
 /// GNU `map_keymap_item`: a `t` binding shadows lower-precedence keymaps exactly
@@ -3506,7 +3606,7 @@ fn normalized_binding_value(value: Value) -> Value {
 /// single-level scan ignores them; a `map_keymap`-style walk recurses into them
 /// at the same prefix (they share this keymap's prefix). Elements that match none
 /// of GNU's cases are skipped, as GNU skips them.
-pub(crate) fn for_each_keymap_element<F>(keymap: &Value, mut f: F)
+pub(crate) fn for_each_keymap_element<F>(keymap: &Value, obarray: Option<&Obarray>, mut f: F)
 where
     F: FnMut(KeymapElement),
 {
@@ -3561,9 +3661,20 @@ where
         }
 
         cursor = rest;
+
+        // GNU's spine loops retry `get_keymap` whenever the tail stops being a
+        // cons, so a tail that NAMES a keymap continues this same walk -- its
+        // bindings belong to this keymap, at this prefix.
+        if !cursor.is_cons()
+            && !cursor.is_nil()
+            && let Some(resolved) = resolve_keymap(cursor, obarray)
+            && let Some(spine) = keymap_binding_spine(&resolved)
+        {
+            cursor = spine;
+        }
     }
 
-    // A non-nil, non-cons tail: a symbol that may name a keymap.
+    // A non-nil, non-cons tail that names no keymap.
     if !cursor.is_nil() {
         f(KeymapElement::IndirectTail(cursor));
     }
@@ -3571,11 +3682,14 @@ where
 
 /// Iterate over all bindings in a keymap (not following parent or submaps).
 /// Calls `f(event, def)` for each binding.
-pub fn list_keymap_for_each_binding<F>(keymap: &Value, mut f: F)
+///
+/// `obarray` resolves a spine tail that names a keymap (GNU `get_keymap`); pass
+/// `None` for a purely structural walk, which then stops at such a tail.
+pub fn list_keymap_for_each_binding<F>(keymap: &Value, obarray: Option<&Obarray>, mut f: F)
 where
     F: FnMut(Value, Value),
 {
-    for_each_keymap_element(keymap, |element| match element {
+    for_each_keymap_element(keymap, obarray, |element| match element {
         KeymapElement::Binding { key, value } => f(key, value),
         // Single-level by contract: descent, and the prefix bookkeeping it
         // needs, belong to the caller.
@@ -3590,29 +3704,31 @@ where
 /// the shape used by `map_keymap_canonical` after `keymap-canonicalize` when
 /// building menu bars, where major modes such as Org store their menu-bar
 /// prefix as `(keymap (keymap ...) (keymap ...))`.
-pub fn list_keymap_for_each_binding_recursive<F>(keymap: &Value, mut f: F)
-where
+pub fn list_keymap_for_each_binding_recursive<F>(
+    keymap: &Value,
+    obarray: Option<&Obarray>,
+    mut f: F,
+) where
     F: FnMut(Value, Value),
 {
-    fn walk<F>(keymap: &Value, f: &mut F, depth: usize)
+    fn walk<F>(keymap: &Value, obarray: Option<&Obarray>, f: &mut F, depth: usize)
     where
         F: FnMut(Value, Value),
     {
         if depth > MAX_KEYMAP_WALK_DEPTH {
             return;
         }
-        for_each_keymap_element(keymap, |element| match element {
+        for_each_keymap_element(keymap, obarray, |element| match element {
             KeymapElement::Binding { key, value } => f(key, value),
             // Composed submaps and the parent share this keymap's prefix, so
             // their bindings belong to this traversal (GNU `map_keymap`).
-            KeymapElement::Submap(submap) => walk(&submap, f, depth + 1),
-            // Resolving a symbol tail to its keymap needs an obarray, which this
-            // signature does not take; callers that have one resolve it instead.
+            KeymapElement::Submap(submap) => walk(&submap, obarray, f, depth + 1),
+            // A tail naming no keymap ends this spine, as it does for GNU.
             KeymapElement::IndirectTail(_) | KeymapElement::Prompt(_) => {}
         });
     }
 
-    walk(keymap, &mut f, 0);
+    walk(keymap, obarray, &mut f, 0);
 }
 
 // ---------------------------------------------------------------------------

@@ -4287,7 +4287,9 @@ fn collect_where_is_accessible_maps(
     out.push((prefix.clone(), *keymap));
 
     let mut bindings = Vec::new();
-    list_keymap_for_each_binding(keymap, |event, binding| bindings.push((event, binding)));
+    list_keymap_for_each_binding(keymap, Some(obarray), |event, binding| {
+        bindings.push((event, binding))
+    });
     for (event, binding) in &bindings {
         let Some(prefix_keymap) = where_is_binding_prefix_keymap(obarray, binding) else {
             continue;
@@ -4330,7 +4332,9 @@ fn collect_where_is_sequences_value(
         }
 
         let mut bindings: Vec<(Value, Value)> = Vec::new();
-        list_keymap_for_each_binding(&map, |event, binding| bindings.push((event, binding)));
+        list_keymap_for_each_binding(&map, Some(obarray), |event, binding| {
+            bindings.push((event, binding))
+        });
         for (event, binding) in bindings {
             // GNU `where_is_internal_1`: reduce the stored binding through
             // `get_keyelt` (unless NOINDIRECT), so an old-style `(STRING . DEFN)`

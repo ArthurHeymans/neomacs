@@ -4,6 +4,7 @@ use crate::frame_glyphs::{CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor};
 use crate::glyph_matrix::{
     FaceFillItem, FrameDisplayState, Glyph, GlyphArea, GlyphMatrix, GlyphRow, WindowMatrixEntry,
 };
+use crate::tty_capabilities::TtyNoColorVideo;
 use crate::types::{Color, DisplayFrameId, DisplayWindowId, Rect};
 use std::collections::HashMap;
 
@@ -1835,4 +1836,172 @@ fn tty_write_sgr_downsamples_by_tier() {
     write_sgr(&mut buf, &attrs);
     let s = String::from_utf8(buf).unwrap();
     assert!(s.contains("\x1b[91m"), "basic tier bright red: {s:?}");
+}
+
+// ---------------------------------------------------------------------------
+// Terminal attribute capabilities (GNU term.c `turn_on_face` / `tty_capable_p`)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn italic_falls_back_to_dim_when_the_terminal_has_no_sitm() {
+    // GNU term.c turn_on_face:
+    //     if (tty->TS_enter_italic_mode) OUTPUT1 (tty, TS_enter_italic_mode);
+    //     else  /* Italics not supported, use dim instead. */
+    //           OUTPUT1 (tty, tty->TS_enter_dim_mode);
+    // TERM=screen has no `sitm', so GNU renders `:slant italic' as SGR 2 there --
+    // which is exactly what a GNU-vs-neomacs tty diff showed (GNU `^[[2m' vs
+    // neomacs `^[[3m').
+    let attrs = CellAttrs {
+        italic: true,
+        ..CellAttrs::default()
+    };
+
+    let with_italics = TtyAttributeCapabilities {
+        italic: true,
+        dim: true,
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &with_italics);
+    let s = String::from_utf8(buf).unwrap();
+    assert!(s.contains("\x1b[3m"), "sitm present -> italic: {s:?}");
+    assert!(
+        !s.contains("\x1b[2m"),
+        "must not dim when italic works: {s:?}"
+    );
+
+    let no_italics = TtyAttributeCapabilities {
+        italic: false,
+        dim: true,
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &no_italics);
+    let s = String::from_utf8(buf).unwrap();
+    assert!(s.contains("\x1b[2m"), "no sitm -> dim fallback: {s:?}");
+    assert!(!s.contains("\x1b[3m"), "no sitm -> no italic escape: {s:?}");
+
+    // Neither capability: GNU emits nothing for the slant.
+    let neither = TtyAttributeCapabilities {
+        italic: false,
+        dim: false,
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &neither);
+    let s = String::from_utf8(buf).unwrap();
+    assert!(!s.contains("\x1b[3m") && !s.contains("\x1b[2m"), "{s:?}");
+}
+
+#[test]
+fn attributes_the_terminal_lacks_are_not_emitted() {
+    // Every arm of GNU turn_on_face is gated on its capability string.
+    let attrs = CellAttrs {
+        bold: true,
+        underline: UnderlineStyle::Line.gnu_code(),
+        strikethrough: true,
+        inverse: true,
+        ..CellAttrs::default()
+    };
+    let none = TtyAttributeCapabilities::none();
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &none);
+    let s = String::from_utf8(buf).unwrap();
+    for escape in ["\x1b[1m", "\x1b[4m", "\x1b[9m", "\x1b[7m"] {
+        assert!(
+            !s.contains(escape),
+            "{escape:?} emitted without support: {s:?}"
+        );
+    }
+
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &TtyAttributeCapabilities::full());
+    let s = String::from_utf8(buf).unwrap();
+    for escape in ["\x1b[1m", "\x1b[4m", "\x1b[9m", "\x1b[7m"] {
+        assert!(
+            s.contains(escape),
+            "{escape:?} missing when supported: {s:?}"
+        );
+    }
+}
+
+#[test]
+fn a_styled_underline_degrades_to_a_plain_one_without_smulx() {
+    // GNU turn_on_face: the styled form is used only `if (tty->TF_set_underline_style)',
+    // otherwise the plain `smul' sequence stands in.
+    let attrs = CellAttrs {
+        underline: UnderlineStyle::Wave.gnu_code(),
+        ..CellAttrs::default()
+    };
+    let no_smulx = TtyAttributeCapabilities {
+        underline_styled: false,
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &no_smulx);
+    let s = String::from_utf8(buf).unwrap();
+    assert!(s.contains("\x1b[4m"), "plain underline fallback: {s:?}");
+    assert!(
+        !s.contains("4:3"),
+        "no styled underline without Smulx: {s:?}"
+    );
+}
+
+#[test]
+fn color_capable_terminals_honor_the_no_color_video_mask() {
+    // GNU MAY_USE_WITH_COLORS_P (term.c): when the terminal has colors, an
+    // attribute listed in terminfo `ncv' cannot be combined with them, so
+    // turn_on_face skips it entirely.
+    let attrs = CellAttrs {
+        bold: true,
+        underline: UnderlineStyle::Line.gnu_code(),
+        ..CellAttrs::default()
+    };
+    let ncv_bold = TtyAttributeCapabilities {
+        color_cells: 256,
+        no_color_video: TtyNoColorVideo::BOLD,
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &ncv_bold);
+    let s = String::from_utf8(buf).unwrap();
+    assert!(!s.contains("\x1b[1m"), "ncv bold must suppress bold: {s:?}");
+    assert!(s.contains("\x1b[4m"), "underline is unaffected: {s:?}");
+
+    // A monochrome terminal ignores ncv (GNU: `TN_max_colors > 0 ? … : 1').
+    let mono = TtyAttributeCapabilities {
+        color_cells: 0,
+        no_color_video: TtyNoColorVideo::BOLD,
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &mono);
+    let s = String::from_utf8(buf).unwrap();
+    assert!(s.contains("\x1b[1m"), "monochrome ignores ncv: {s:?}");
+}
+
+#[test]
+fn tty_capable_p_matches_gnu_capability_and_ncv_logic() {
+    // GNU tty_capable_p: every requested capability needs its terminfo string
+    // AND (when the terminal has colors) an `ncv' bit that is clear.
+    let full = TtyAttributeCapabilities::full();
+    assert!(full.supports(TtyCapability::Bold));
+    assert!(full.supports(TtyCapability::Italic));
+    assert!(full.supports(TtyCapability::UnderlineStyled));
+
+    let screen_like = TtyAttributeCapabilities {
+        italic: false,
+        ..TtyAttributeCapabilities::full()
+    };
+    assert!(!screen_like.supports(TtyCapability::Italic));
+    assert!(screen_like.supports(TtyCapability::Underline));
+    assert!(screen_like.supports(TtyCapability::Bold));
+
+    let ncv_underline = TtyAttributeCapabilities {
+        color_cells: 8,
+        no_color_video: TtyNoColorVideo::UNDERLINE,
+        ..TtyAttributeCapabilities::full()
+    };
+    assert!(!ncv_underline.supports(TtyCapability::Underline));
+    assert!(ncv_underline.supports(TtyCapability::Bold));
 }

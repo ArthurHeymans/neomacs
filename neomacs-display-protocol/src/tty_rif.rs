@@ -11,6 +11,7 @@ use crate::face::{Face, FaceAttributes};
 use crate::frame_chrome::FrameChromeContent;
 use crate::frame_glyphs::CursorStyle;
 use crate::glyph_matrix::*;
+use crate::tty_capabilities::{TtyAttributeCapabilities, TtyCapability, TtyItalicRendition};
 use crate::types::{Color, FaceId};
 use std::collections::HashMap;
 
@@ -974,23 +975,53 @@ const TIER_BASIC: u8 = 1; // 8/16 ANSI colors
 const TIER_256: u8 = 2;
 const TIER_TRUECOLOR: u8 = 3;
 
-// Default truecolor so an uninitialised path keeps the previous behavior.
-static COLOR_TIER: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(TIER_TRUECOLOR);
+/// This terminal's capabilities, as GNU keeps them on `struct tty_display_info`.
+///
+/// One record, read by every emission path, so the color depth and the attribute
+/// capabilities cannot be answered from two different places. Defaults to
+/// [`TtyAttributeCapabilities::full`] so an uninitialised path (a test, a
+/// terminfo entry that cannot be read) keeps the previous behavior instead of
+/// silently dropping highlighting.
+static CAPABILITIES: std::sync::RwLock<TtyAttributeCapabilities> =
+    std::sync::RwLock::new(TtyAttributeCapabilities::full());
 
-/// Set the terminal color tier from the detected color-cell count
+/// The capabilities registered for this terminal.
+pub fn capabilities() -> TtyAttributeCapabilities {
+    CAPABILITIES
+        .read()
+        .map(|caps| *caps)
+        .unwrap_or_else(|_| TtyAttributeCapabilities::full())
+}
+
+/// Register what this terminal can render — the terminfo answers GNU reads in
+/// `init_tty`. Called once at TTY init from the frontend.
+pub fn set_capabilities(caps: TtyAttributeCapabilities) {
+    if let Ok(mut slot) = CAPABILITIES.write() {
+        *slot = caps;
+    }
+}
+
+/// Set the color half of the capabilities from the detected color-cell count
 /// (GNU `tty_default_color_cells`): >=2^24 truecolor, >=256 indexed, >=8 basic
-/// ANSI, else monochrome. Called once at TTY init from the frontend.
+/// ANSI, else monochrome. Color depth is detected separately from the terminfo
+/// attribute strings, so it has its own setter over the same record.
 pub fn set_color_tier(color_cells: i64) {
-    let tier = if color_cells >= 16_777_216 {
+    if let Ok(mut slot) = CAPABILITIES.write() {
+        slot.color_cells = color_cells;
+    }
+}
+
+/// GNU's color-depth buckets, from the capability record's cell count.
+fn color_tier(caps: &TtyAttributeCapabilities) -> u8 {
+    if caps.color_cells >= 16_777_216 {
         TIER_TRUECOLOR
-    } else if color_cells >= 256 {
+    } else if caps.color_cells >= 256 {
         TIER_256
-    } else if color_cells >= 8 {
+    } else if caps.color_cells >= 8 {
         TIER_BASIC
     } else {
         TIER_NONE
-    };
-    COLOR_TIER.store(tier, std::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 /// Nearest xterm-256 palette index for an RGB triple (16 system + 6x6x6 cube +
@@ -1025,9 +1056,9 @@ pub fn rgb_to_ansi_basic(r: u8, g: u8, b: u8) -> (u8, bool) {
     (base, r.max(g).max(b) > 170)
 }
 
-fn write_fg(buf: &mut Vec<u8>, r: u8, g: u8, b: u8) {
+fn write_fg(buf: &mut Vec<u8>, r: u8, g: u8, b: u8, caps: &TtyAttributeCapabilities) {
     use std::io::Write;
-    match COLOR_TIER.load(std::sync::atomic::Ordering::Relaxed) {
+    match color_tier(caps) {
         TIER_TRUECOLOR => {
             let _ = write!(buf, "\x1b[38;2;{r};{g};{b}m");
         }
@@ -1042,9 +1073,9 @@ fn write_fg(buf: &mut Vec<u8>, r: u8, g: u8, b: u8) {
     }
 }
 
-fn write_bg(buf: &mut Vec<u8>, r: u8, g: u8, b: u8) {
+fn write_bg(buf: &mut Vec<u8>, r: u8, g: u8, b: u8, caps: &TtyAttributeCapabilities) {
     use std::io::Write;
-    match COLOR_TIER.load(std::sync::atomic::Ordering::Relaxed) {
+    match color_tier(caps) {
         TIER_TRUECOLOR => {
             let _ = write!(buf, "\x1b[48;2;{r};{g};{b}m");
         }
@@ -1060,41 +1091,64 @@ fn write_bg(buf: &mut Vec<u8>, r: u8, g: u8, b: u8) {
 }
 
 /// Write ANSI SGR (select graphic rendition) escape sequences for the given
-/// attributes. Always resets first, then enables the needed attributes.
+/// attributes, using the capabilities registered for this terminal.
 fn write_sgr(buf: &mut Vec<u8>, attrs: &CellAttrs) {
+    write_sgr_with_capabilities(buf, attrs, &capabilities());
+}
+
+/// GNU `turn_on_face` (src/term.c): emit each attribute only when the terminal
+/// has the capability for it, with GNU's fallbacks — a slant becomes `dim` where
+/// there is no `sitm`, and a styled underline becomes a plain one where there is
+/// no `Smulx`.
+///
+/// Always resets first, then enables the needed attributes.
+pub fn write_sgr_with_capabilities(
+    buf: &mut Vec<u8>,
+    attrs: &CellAttrs,
+    caps: &TtyAttributeCapabilities,
+) {
     // Reset all attributes first.
     buf.extend_from_slice(b"\x1b[0m");
 
-    if attrs.bold {
+    if attrs.bold && caps.supports(TtyCapability::Bold) {
         buf.extend_from_slice(b"\x1b[1m");
     }
     if attrs.italic {
-        buf.extend_from_slice(b"\x1b[3m");
+        match caps.italic_rendition() {
+            TtyItalicRendition::Italic => buf.extend_from_slice(b"\x1b[3m"),
+            // GNU: "Italics not supported, use dim instead."
+            TtyItalicRendition::Dim => buf.extend_from_slice(b"\x1b[2m"),
+            TtyItalicRendition::None => {}
+        }
     }
-    match attrs.underline {
-        1 => buf.extend_from_slice(b"\x1b[4m"),   // single underline
-        2 => buf.extend_from_slice(b"\x1b[4:2m"), // double underline
-        3 => buf.extend_from_slice(b"\x1b[4:3m"), // curly/wave underline
-        4 => buf.extend_from_slice(b"\x1b[4:4m"), // dotted underline
-        5 => buf.extend_from_slice(b"\x1b[4:5m"), // dashed underline
-        _ => {}
+    if attrs.underline != 0 && caps.supports(TtyCapability::Underline) {
+        let styled = caps.supports(TtyCapability::UnderlineStyled);
+        match attrs.underline {
+            // A styled underline needs `Smulx`; without it GNU emits the plain
+            // `smul` sequence rather than a parameter the terminal cannot read.
+            2 if styled => buf.extend_from_slice(b"\x1b[4:2m"), // double underline
+            3 if styled => buf.extend_from_slice(b"\x1b[4:3m"), // curly/wave underline
+            4 if styled => buf.extend_from_slice(b"\x1b[4:4m"), // dotted underline
+            5 if styled => buf.extend_from_slice(b"\x1b[4:5m"), // dashed underline
+            _ => buf.extend_from_slice(b"\x1b[4m"),             // single underline
+        }
     }
-    if attrs.strikethrough {
+    if attrs.strikethrough && caps.supports(TtyCapability::StrikeThrough) {
         buf.extend_from_slice(b"\x1b[9m");
     }
-    if attrs.inverse {
+    if attrs.inverse && caps.supports(TtyCapability::Inverse) {
         buf.extend_from_slice(b"\x1b[7m");
     }
 
     // GNU term.c only emits color SGR for specified TTY colors.
     // `None` mirrors FACE_TTY_DEFAULT_FG_COLOR/BG_COLOR.
     if let Some((r, g, b)) = attrs.fg {
-        write_fg(buf, r, g, b);
+        write_fg(buf, r, g, b, caps);
     } else {
         buf.extend_from_slice(b"\x1b[39m");
     }
     if let Some((r, g, b)) = attrs.bg {
-        write_bg(buf, r, g, b);
+        write_bg(buf, r, g, b, caps);
     } else {
         buf.extend_from_slice(b"\x1b[49m");
     }

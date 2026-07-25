@@ -7,6 +7,7 @@ use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{EvalResult, Flow, signal};
 use crate::emacs_core::value::*;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
+use neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities;
 use std::cell::RefCell;
 
 // ---------------------------------------------------------------------------
@@ -27,6 +28,12 @@ struct TerminalRuntime {
     color_cells: i64,
     controlling_tty: bool,
     suspended: bool,
+    /// What this terminal can render, from its terminfo entry -- GNU's `TS_*`
+    /// capability strings on `struct tty_display_info`. Answers
+    /// `display-supports-face-attributes-p` (GNU `tty_capable_p`) with the same
+    /// record the renderer emits from, so the predicate and the output cannot
+    /// disagree about, say, whether this terminal has `sitm`.
+    attribute_capabilities: TtyAttributeCapabilities,
 }
 
 impl TerminalRuntime {
@@ -37,6 +44,11 @@ impl TerminalRuntime {
             color_cells: 0,
             controlling_tty: false,
             suspended: false,
+            // GNU's initial terminal has no capability strings until a real
+            // terminal is initialized from terminfo, which is why
+            // `display-supports-face-attributes-p' answers nil for everything in
+            // `--batch'.
+            attribute_capabilities: TtyAttributeCapabilities::none(),
         }
     }
 
@@ -51,6 +63,12 @@ pub struct TerminalRuntimeConfig {
     pub tty_type: Option<String>,
     pub color_cells: i64,
     pub controlling_tty: bool,
+    /// See [`TerminalRuntime::attribute_capabilities`]. Defaults to
+    /// [`TtyAttributeCapabilities::none`] -- GNU learns these from terminfo when
+    /// a terminal is initialized, and knows none before that -- so a caller that
+    /// has read terminfo must pass them with
+    /// [`TerminalRuntimeConfig::with_attribute_capabilities`].
+    pub attribute_capabilities: TtyAttributeCapabilities,
 }
 
 pub trait TerminalHost {
@@ -228,6 +246,7 @@ impl TerminalRuntimeConfig {
             tty_type: None,
             color_cells: 0,
             controlling_tty: false,
+            attribute_capabilities: TtyAttributeCapabilities::none(),
         }
     }
 
@@ -237,11 +256,18 @@ impl TerminalRuntimeConfig {
             tty_type,
             color_cells: color_cells.max(0),
             controlling_tty: true,
+            attribute_capabilities: TtyAttributeCapabilities::none(),
         }
     }
 
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
+        self
+    }
+
+    /// Record what this terminal can render (its terminfo capabilities).
+    pub fn with_attribute_capabilities(mut self, caps: TtyAttributeCapabilities) -> Self {
+        self.attribute_capabilities = caps;
         self
     }
 }
@@ -259,6 +285,7 @@ pub fn configure_terminal_runtime(config: TerminalRuntimeConfig) {
             color_cells: config.color_cells.max(0),
             controlling_tty: config.controlling_tty,
             suspended: false,
+            attribute_capabilities: config.attribute_capabilities,
         };
     });
 }
@@ -276,6 +303,7 @@ pub fn ensure_terminal_runtime_owner(
             color_cells: config.color_cells.max(0),
             controlling_tty: config.controlling_tty,
             suspended: false,
+            attribute_capabilities: config.attribute_capabilities,
         };
         manager.ensure_terminal(id, name.into(), runtime).handle
     })
@@ -333,6 +361,12 @@ pub(crate) fn terminal_runtime_color_cells() -> i64 {
 
 pub(crate) fn terminal_runtime_supports_color() -> bool {
     terminal_runtime().supports_color()
+}
+
+/// What the current terminal can render -- GNU's `struct tty_display_info`
+/// capability strings, the input to `tty_capable_p`.
+pub(crate) fn terminal_runtime_attribute_capabilities() -> TtyAttributeCapabilities {
+    terminal_runtime().attribute_capabilities
 }
 
 /// Clear cached terminal thread-locals (called from `reset_display_thread_locals`).

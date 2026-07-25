@@ -4041,3 +4041,93 @@ fn x_popup_menu_interactive_menu_bar_right_returns_next_menu_position() {
     assert_eq!(result.cons_car(), Value::fixnum(5));
     assert_eq!(result.cons_cdr(), Value::fixnum(0));
 }
+
+// ---------------------------------------------------------------------------
+// display-supports-face-attributes-p on a TTY frame
+// ---------------------------------------------------------------------------
+
+/// GNU `tty_supports_face_attributes_p` (src/xfaces.c) answers this predicate on
+/// a terminal frame from the terminal's own capabilities (`tty_capable_p`), so a
+/// package asking whether it may use bold or underline in `-nw` gets the same
+/// answer GNU gives. neomacs implemented only the GUI branch and returned nil for
+/// everything on a tty -- verified against GNU 31 under TERM=screen-256color,
+/// where GNU reports bold and underline supported and italic not.
+#[test]
+fn tty_frame_supports_the_attributes_the_terminal_can_render() {
+    use neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities;
+
+    let mut eval = crate::emacs_core::Context::new();
+    // A terminal frame must exist, as it always does in a real session.
+    let buffer = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame = eval.frames.create_frame("F1", 80, 25, buffer);
+    eval.frames.select_frame(frame);
+    // screen-256color: bold, dim, underline and standout, but no `sitm' and no
+    // `smxx'.
+    crate::emacs_core::terminal::pure::configure_terminal_runtime(
+        crate::emacs_core::terminal::pure::TerminalRuntimeConfig::interactive(
+            Some("screen-256color".to_string()),
+            256,
+        )
+        .with_attribute_capabilities(TtyAttributeCapabilities {
+            italic: false,
+            strike_through: false,
+            underline_styled: false,
+            ..TtyAttributeCapabilities::full()
+        }),
+    );
+
+    let supported = |eval: &mut crate::emacs_core::Context, attrs: Vec<Value>| -> bool {
+        builtin_display_supports_face_attributes_p(eval, vec![Value::list(attrs)])
+            .expect("predicate should not signal")
+            .is_truthy()
+    };
+
+    assert!(
+        supported(
+            &mut eval,
+            vec![Value::keyword("weight"), Value::symbol("bold")]
+        ),
+        "bold is supported: the terminal has `md'"
+    );
+    assert!(
+        supported(&mut eval, vec![Value::keyword("underline"), Value::T]),
+        "underline is supported: the terminal has `us'"
+    );
+    assert!(
+        !supported(
+            &mut eval,
+            vec![Value::keyword("slant"), Value::symbol("italic")]
+        ),
+        "italic is NOT supported: the terminal has no `sitm'"
+    );
+    assert!(
+        !supported(&mut eval, vec![Value::keyword("strike-through"), Value::T]),
+        "strike-through is NOT supported: the terminal has no `smxx'"
+    );
+    // GNU rejects these outright on a tty, whatever the capabilities say.
+    assert!(
+        !supported(&mut eval, vec![Value::keyword("height"), Value::fixnum(2)]),
+        ":height is meaningless on a tty"
+    );
+    assert!(
+        !supported(
+            &mut eval,
+            vec![Value::keyword("family"), Value::string("Monospace")]
+        ),
+        ":family is meaningless on a tty"
+    );
+    // "Same as the default face" is not support, per GNU's early returns.
+    assert!(
+        !supported(
+            &mut eval,
+            vec![Value::keyword("weight"), Value::symbol("normal")]
+        ),
+        "the default weight is not a supported difference"
+    );
+
+    crate::emacs_core::terminal::pure::reset_terminal_runtime();
+}

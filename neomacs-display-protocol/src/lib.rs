@@ -29,6 +29,7 @@ pub mod types;
 pub mod ui_types;
 pub mod visual_config;
 pub use glyph_matrix::*;
+pub mod tty_capabilities;
 pub mod tty_rif;
 
 pub use effect_command::*;

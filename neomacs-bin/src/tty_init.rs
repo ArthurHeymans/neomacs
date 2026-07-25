@@ -6,6 +6,7 @@
 //!
 //! All terminal I/O is cross-platform via crossterm.
 
+use neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities;
 use neovm_core::emacs_core::terminal::pure::TerminalRuntimeConfig;
 use std::io::Write;
 
@@ -15,6 +16,28 @@ use super::{FrontendKind, StartupOptions};
 pub fn detect_tty_runtime(startup: &StartupOptions) -> TerminalRuntimeConfig {
     TerminalRuntimeConfig::interactive(detect_tty_type(), detect_tty_color_cells())
         .with_name(detect_tty_name(startup))
+        .with_attribute_capabilities(detect_tty_attribute_capabilities())
+}
+
+/// What this terminal can render, from its terminfo entry -- the capabilities GNU
+/// reads in `init_tty`.
+///
+/// ONE resolution point: the answer goes both to the terminal runtime, where
+/// `display-supports-face-attributes-p` reads it (GNU `tty_capable_p`), and to the
+/// renderer, which emits from it (GNU `turn_on_face`). A terminfo entry that
+/// cannot be read is assumed fully capable rather than incapable -- neomacs'
+/// choice, so a missing terminfo database does not silently strip every
+/// highlight -- and the color-cell count is detected separately (COLORTERM, which
+/// terminfo does not describe).
+pub fn detect_tty_attribute_capabilities() -> TtyAttributeCapabilities {
+    let mut caps = detect_tty_type()
+        .and_then(|term| super::terminal_capabilities::tty_attribute_capabilities_for_term(&term))
+        .unwrap_or_else(|| {
+            tracing::debug!("no terminfo entry for TERM; assuming full capabilities");
+            TtyAttributeCapabilities::full()
+        });
+    caps.color_cells = detect_tty_color_cells();
+    caps
 }
 
 pub fn detect_tty_type() -> Option<String> {
@@ -110,11 +133,17 @@ pub fn query_terminal_size_cells() -> Option<(u32, u32)> {
 /// Set up the terminal for the TtyRif direct-rendering path:
 /// raw mode, alternate screen buffer, hidden cursor.
 pub fn tty_init_terminal() {
-    // Pick the SGR color depth from the terminal's detected color-cell count so
-    // face colors are downsampled to a palette the terminal can render, instead
-    // of always emitting 24-bit truecolor (issue #154). The `-nw` renderer is
-    // `TtyRif` in neomacs-display-protocol, so set the tier there.
-    neomacs_display_protocol::tty_rif::set_color_tier(detect_tty_color_cells());
+    // Register what this terminal can render, as GNU does in `init_tty`: the
+    // terminfo attribute strings (`sitm`, `smul`, `Smulx`, `bold`, `dim`, `smxx`,
+    // `ncv`) plus the color depth. The renderer then emits an attribute only when
+    // the terminal has it, with GNU's fallbacks -- and the `-nw` face colors are
+    // downsampled to a palette the terminal can render instead of always emitting
+    // 24-bit truecolor (issue #154).
+    //
+    // Same record the terminal runtime carries (see
+    // `detect_tty_attribute_capabilities`), so the predicate and the renderer
+    // cannot disagree about what this terminal can do.
+    neomacs_display_protocol::tty_rif::set_capabilities(detect_tty_attribute_capabilities());
 
     if let Err(e) = crossterm::terminal::enable_raw_mode() {
         tracing::error!("tty_init_terminal: enable_raw_mode failed: {}", e);

@@ -5632,3 +5632,45 @@ fn command_remapping_resolves_remap_bindings_across_composed_keymap_members() {
         "OK (act y-or-n-p-insert-y)"
     );
 }
+
+#[test]
+fn a_symbol_keymap_tail_is_followed_by_both_lookup_and_where_is() {
+    // GNU's spine loops retry `get_keymap` whenever the tail stops being a cons
+    // -- `access_keymap_1`: `(CONSP (tail) || (tail = get_keymap (tail, 0,
+    // autoload), CONSP (tail)))`, and the same in `map_keymap` -- so a tail that
+    // NAMES a keymap continues the spine. neomacs resolved it nowhere, so both
+    // directions missed such a binding.
+    //
+    // `set-keymap-parent` rejects a non-keymap, so the shape is built with
+    // `setcdr`, which is how it arises in hand-built spines.
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap))
+                 (tail-map (make-sparse-keymap)))
+             (define-key m "a" 'own-cmd)
+             (define-key tail-map "t" 'tail-cmd)
+             (fset 'tail-map-symbol tail-map)
+             ;; `m' is `(keymap (?a . own-cmd))'; its last cons is `(cdr m)'.
+             (setcdr (cdr m) 'tail-map-symbol)
+             (list (eq (lookup-key m "t") 'tail-cmd)
+                   (eq (lookup-key m "a") 'own-cmd)
+                   (equal (where-is-internal 'tail-cmd (list m) t) [?t])))"#,
+    );
+    assert_eq!(result, "OK (t t t)");
+}
+
+#[test]
+fn a_spine_tail_naming_no_keymap_ends_the_spine() {
+    // GNU's loop condition fails when `get_keymap' returns nil, so the walk just
+    // ends -- no binding, no error.
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m "a" 'own-cmd)
+             (setcdr (cdr m) 'not-a-keymap-symbol)
+             (list (eq (lookup-key m "a") 'own-cmd)
+                   (null (lookup-key m "z"))
+                   (null (where-is-internal 'nowhere-cmd (list m) t))))"#,
+    );
+    assert_eq!(result, "OK (t t t)");
+}

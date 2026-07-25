@@ -91,6 +91,7 @@ mod args;
 mod image_catalog;
 mod input_bridge;
 mod termcap_input;
+pub(crate) mod terminal_capabilities;
 pub(crate) mod tty_frontend;
 pub(crate) mod tty_init;
 pub(crate) mod tty_layout;

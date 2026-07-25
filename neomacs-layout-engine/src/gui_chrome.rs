@@ -81,7 +81,10 @@ pub fn collect_gui_tool_bar_items(eval: &mut Context) -> Vec<ToolBarItem> {
     };
 
     let mut items = Vec::new();
-    list_keymap_for_each_binding(&keymap, |key, def| {
+    // `eval` is borrowed mutably inside the closure, so the obarray cannot also
+    // be borrowed across it; a tool-bar keymap is built by `define-key` and never
+    // has a symbol spine tail for `get_keymap` to resolve.
+    list_keymap_for_each_binding(&keymap, None, |key, def| {
         let key_name = key_symbol_name(&key);
         let def = normalize_binding_def(&def);
         let Some(item) = parse_tool_bar_item(eval, &key_name, &def, items.len() as u32) else {

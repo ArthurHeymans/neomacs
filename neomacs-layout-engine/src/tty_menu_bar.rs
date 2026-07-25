@@ -106,7 +106,10 @@ fn collect_menu_bar_keymap_bindings(
     items: &mut Vec<TtyMenuBarItem>,
     seen_keys: &mut HashSet<String>,
 ) {
-    list_keymap_for_each_binding_recursive(menu_bar_keymap, |key, def| {
+    // No obarray in the layout engine: a spine tail that merely NAMES a keymap
+    // stays unresolved here (GNU would follow it). Menu-bar keymaps are built by
+    // `define-key` and do not use that shape.
+    list_keymap_for_each_binding_recursive(menu_bar_keymap, None, |key, def| {
         let key_str = key_symbol_name(&key);
         if seen_keys.insert(key_str.clone())
             && let Some(label) = extract_menu_label(&def)

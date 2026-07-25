@@ -3014,14 +3014,18 @@ fn collect_menu_bar_items_from_map(
     else {
         return;
     };
-    crate::emacs_core::keymap::list_keymap_for_each_binding_recursive(&menu_map, |key, def| {
-        if items.iter().any(|(seen, _)| seen.bits() == key.bits()) {
-            return;
-        }
-        if let Some(label) = menu_bar_label(def) {
-            items.push((key, label));
-        }
-    });
+    crate::emacs_core::keymap::list_keymap_for_each_binding_recursive(
+        &menu_map,
+        Some(eval.obarray()),
+        |key, def| {
+            if items.iter().any(|(seen, _)| seen.bits() == key.bits()) {
+                return;
+            }
+            if let Some(label) = menu_bar_label(def) {
+                items.push((key, label));
+            }
+        },
+    );
 }
 
 fn menu_bar_label(def: Value) -> Option<String> {
@@ -6362,7 +6366,7 @@ fn keymap_prompt_scan_at_depth(map: Value, depth: usize) -> Value {
         return Value::NIL;
     }
     let mut found = Value::NIL;
-    crate::emacs_core::keymap::for_each_keymap_element(&map, |element| {
+    crate::emacs_core::keymap::for_each_keymap_element(&map, None, |element| {
         if !found.is_nil() {
             return; // the first prompt in spine order wins
         }

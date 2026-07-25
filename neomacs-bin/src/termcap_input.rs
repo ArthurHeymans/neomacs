@@ -7,24 +7,13 @@
 //! wrap the terminfo-derived ESC prefix map.  Doom/Evil relies on exactly that
 //! ordering when it installs its ESC `menu-item :filter`.
 
-#[cfg(not(windows))]
-use std::ffi::{CStr, CString};
-#[cfg(not(windows))]
-use std::os::raw::c_char;
-#[cfg(not(windows))]
-use std::os::raw::c_int;
+//! The terminfo database handle itself lives in
+//! [`super::terminal_capabilities`], shared with the output-attribute half.
 
+use super::terminal_capabilities::{TerminalCapabilityDatabase, open_terminal_capability_database};
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::keymap::list_keymap_define_seq_in_obarray;
 use neovm_core::emacs_core::{Context, Value};
-
-#[cfg(not(windows))]
-#[cfg_attr(target_os = "linux", link(name = "ncursesw"))]
-#[cfg_attr(target_os = "macos", link(name = "ncurses"))]
-unsafe extern "C" {
-    fn tgetent(buffer: *mut c_char, term: *const c_char) -> c_int;
-    fn tgetstr(capability: *const c_char, area: *mut *mut c_char) -> *mut c_char;
-}
 
 const FKEY_TABLE: &[(&str, &str)] = &[
     ("kh", "home"),
@@ -105,71 +94,6 @@ const XTERM_FALLBACK_KEYS: &[(&[u8], &str)] = &[
     (b"\x1b[20~", "f9"),
     (b"\x1b[21~", "f10"),
 ];
-
-trait TerminalCapabilityDatabase {
-    fn get_string(&mut self, cap: &str) -> Option<Vec<u8>>;
-}
-
-fn open_terminal_capability_database(term: &str) -> Option<Box<dyn TerminalCapabilityDatabase>> {
-    open_platform_terminal_capability_database(term)
-}
-
-#[cfg(not(windows))]
-struct UnixTermcapDatabase {
-    _termcap_buffer: Vec<c_char>,
-    _string_area: Vec<c_char>,
-    string_area_ptr: *mut c_char,
-}
-
-#[cfg(not(windows))]
-impl UnixTermcapDatabase {
-    fn open(term: &str) -> Option<Self> {
-        let term = CString::new(term).ok()?;
-        let mut termcap_buffer = vec![0 as c_char; 16384];
-        let ok = unsafe { tgetent(termcap_buffer.as_mut_ptr(), term.as_ptr()) };
-        if ok <= 0 {
-            return None;
-        }
-        let mut string_area = vec![0 as c_char; 32768];
-        let string_area_ptr = string_area.as_mut_ptr();
-        Some(Self {
-            _termcap_buffer: termcap_buffer,
-            _string_area: string_area,
-            string_area_ptr,
-        })
-    }
-}
-
-#[cfg(not(windows))]
-impl TerminalCapabilityDatabase for UnixTermcapDatabase {
-    fn get_string(&mut self, cap: &str) -> Option<Vec<u8>> {
-        let cap = CString::new(cap).ok()?;
-        let raw = unsafe { tgetstr(cap.as_ptr(), &mut self.string_area_ptr) };
-        if raw.is_null() {
-            return None;
-        }
-        let bytes = unsafe { CStr::from_ptr(raw) }.to_bytes().to_vec();
-        (!bytes.is_empty()).then_some(bytes)
-    }
-}
-
-#[cfg(not(windows))]
-fn open_platform_terminal_capability_database(
-    term: &str,
-) -> Option<Box<dyn TerminalCapabilityDatabase>> {
-    UnixTermcapDatabase::open(term)
-        .map(|database| Box::new(database) as Box<dyn TerminalCapabilityDatabase>)
-}
-
-#[cfg(windows)]
-fn open_platform_terminal_capability_database(
-    _term: &str,
-) -> Option<Box<dyn TerminalCapabilityDatabase>> {
-    // GNU Emacs' native Windows console backend does not link termcap.
-    // nt/inc/ms-w32.h redirects tgetstr to sys_tgetstr, and
-    // src/w32console.c implements that hook as a NULL capability lookup.
-    None
-}
 
 pub(crate) fn seed_input_decode_map_from_terminal(eval: &mut Context) {
     let Some(term) = std::env::var("TERM")

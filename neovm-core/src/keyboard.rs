@@ -5371,19 +5371,23 @@ impl crate::emacs_core::eval::Context {
         let keymap = crate::emacs_core::keymap::maybe_keymap_in_obarray(self.obarray(), &raw_map)?;
         let mut remaining = index as usize;
         let mut found = None;
-        crate::emacs_core::keymap::list_keymap_for_each_binding(&keymap, |key, def| {
-            if found.is_some() {
-                return;
-            }
-            if !Self::is_rendered_tool_bar_item(&key, &def) {
-                return;
-            }
-            if remaining == 0 {
-                found = Some(key);
-            } else {
-                remaining -= 1;
-            }
-        });
+        crate::emacs_core::keymap::list_keymap_for_each_binding(
+            &keymap,
+            Some(self.obarray()),
+            |key, def| {
+                if found.is_some() {
+                    return;
+                }
+                if !Self::is_rendered_tool_bar_item(&key, &def) {
+                    return;
+                }
+                if remaining == 0 {
+                    found = Some(key);
+                } else {
+                    remaining -= 1;
+                }
+            },
+        );
         found
     }
 
