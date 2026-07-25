@@ -3112,3 +3112,49 @@ fn forward_word_with_boundary_table_reaches_buffer_end() {
     let rendered = crate::emacs_core::error::format_eval_result(&Ok(result));
     assert_eq!(rendered, "OK (6 6)");
 }
+
+/// The per-scan ASCII syntax memo must decode each distinct ASCII character at
+/// most once, no matter how long the scan is.
+///
+/// Guards the shape that motivated it: font-lock drives `parse-partial-sexp`
+/// over many SHORT ranges, so the memo is filled ON MISS rather than
+/// precomputed. A regression to eager precompute (or to no memo at all) shows
+/// up here as a fill count tied to the scan length instead of to the alphabet.
+#[test]
+fn ascii_syntax_memo_decodes_each_char_at_most_once_per_scan() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    // ~1.6k chars drawn from a small alphabet: many characters stepped over,
+    // few DISTINCT ones to decode.
+    let unit = "(defun f (x) (+ x 1)) ; c\n";
+    let text = unit.repeat(64);
+    let chars = text.chars().count();
+    let distinct = {
+        let mut seen = text.chars().collect::<Vec<_>>();
+        seen.sort_unstable();
+        seen.dedup();
+        seen.len()
+    };
+    replace_current_buffer_text(&mut eval, &text);
+
+    reset_syntax_table_decodes_for_test();
+    let _ = builtin_parse_partial_sexp(
+        &mut eval,
+        vec![Value::fixnum(1), Value::fixnum(chars as i64 + 1)],
+    )
+    .unwrap();
+    let decodes = syntax_table_decodes_for_test();
+
+    // The memo decodes at most one entry per distinct character; anything
+    // approaching the scan length means it is not engaging at all.
+    assert!(
+        decodes <= distinct,
+        "decoded {decodes} entries over a {chars}-char scan of only {distinct} \
+         distinct chars -- cost is tracking scan length, not alphabet size"
+    );
+    assert!(
+        decodes * 4 < chars,
+        "decoded {decodes} entries over a {chars}-char scan -- the memo is not holding"
+    );
+}
