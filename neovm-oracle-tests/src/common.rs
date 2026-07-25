@@ -6,6 +6,7 @@
 //! via `NEOVM_FORCE_ORACLE_PATH`).
 
 use colored::Colorize;
+use neomacs_test_oracle::EvalOutcome;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -733,7 +734,11 @@ pub(crate) fn run_neovm_eval_with_load_raw(
 // ---------------------------------------------------------------------------
 
 fn assert_neovm_oracle_parity(neovm: &str, oracle: &str, form: &str) {
-    if neovm == oracle {
+    let neovm_outcome = EvalOutcome::parse(neovm)
+        .unwrap_or_else(|error| panic!("Neomacs emitted an invalid oracle outcome: {error}"));
+    let oracle_outcome = EvalOutcome::parse(oracle)
+        .unwrap_or_else(|error| panic!("GNU Emacs emitted an invalid oracle outcome: {error}"));
+    if neovm_outcome == oracle_outcome {
         return;
     }
     let neo_label = "NEO Emacs:".red().bold().to_string();

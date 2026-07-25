@@ -1,8 +1,9 @@
 use std::time::Duration;
 
 use neomacs_melpa_tests::{
-    EmacsRuntime, PackageScenario, PackageSource, run_scenario, workspace_root,
+    EmacsRuntime, PackageScenario, PackageSource, run_oracle_scenario, run_scenario, workspace_root,
 };
+use neomacs_test_oracle::EvalOutcome;
 
 fn frozen_source() -> PackageSource {
     PackageSource::frozen(workspace_root().join("test/lisp/emacs-lisp/package-resources"))
@@ -27,8 +28,10 @@ fn frozen_package_contract_survives_a_neomacs_restart() {
         .expect("Neomacs must install and restart with frozen packages");
 
     assert_eq!(
-        report.result,
-        "(:dependency-chain t :multi-file t :autoloads t :restart t)"
+        report.outcome,
+        EvalOutcome::Value(
+            "(:dependency-chain t :multi-file t :autoloads t :restart t)".to_string()
+        )
     );
     eprintln!("{report}");
 }
@@ -37,23 +40,76 @@ fn frozen_package_contract_survives_a_neomacs_restart() {
 fn frozen_package_contract_matches_gnu_emacs() {
     let scenario = frozen_scenario();
     let source = frozen_source();
-    let neomacs = run_scenario(&neomacs_runtime(), &source, &scenario)
-        .expect("run frozen scenario with Neomacs");
-    let gnu = run_scenario(
+    let report = run_oracle_scenario(
+        &neomacs_runtime(),
         &EmacsRuntime::gnu_emacs().with_timeout(Duration::from_secs(120)),
         &source,
         &scenario,
     )
-    .expect("run frozen scenario with GNU Emacs");
+    .expect("frozen scenario must match GNU Emacs");
 
-    assert_eq!(
-        neomacs.result, gnu.result,
-        "Neomacs and GNU Emacs produced different normalized scenario results"
+    eprintln!("{}", report.neomacs);
+    eprintln!("{}", report.gnu_emacs);
+}
+
+#[test]
+fn oracle_normalizes_each_editors_sandbox_paths_in_signals() {
+    let scenario = PackageScenario::new(
+        "sandbox-path-signal",
+        ["simple-single"],
+        r##"(error "sandbox paths: %s | %s | %s"
+                   (getenv "HOME")
+                   (getenv "TMPDIR")
+                   (getenv "NEOMACS_TEST_SANDBOX_ROOT"))"##,
     );
-    assert_eq!(
-        neomacs.installed_packages, gnu.installed_packages,
-        "Neomacs and GNU Emacs installed different package/version graphs"
+    let report = run_oracle_scenario(
+        &neomacs_runtime(),
+        &EmacsRuntime::gnu_emacs().with_timeout(Duration::from_secs(120)),
+        &frozen_source(),
+        &scenario,
+    )
+    .expect("equivalent path-bearing signals must have oracle parity");
+
+    let EvalOutcome::Signal(signal) = &report.neomacs.outcome else {
+        panic!(
+            "expected a normalized signal, got {}",
+            report.neomacs.outcome
+        );
+    };
+    assert!(signal.contains("[ORACLE-HOME]"));
+    assert!(signal.contains("[ORACLE-TMPDIR]"));
+    assert!(signal.contains("[ORACLE-SANDBOX]"));
+    assert!(!signal.contains("tmp/melpa"));
+}
+
+#[test]
+fn generic_surface_includes_package_custom_variables() {
+    let surface = PackageScenario::autoload_surface("simple-single-surface", ["simple-single"]);
+    let scenario = PackageScenario::new(
+        "simple-single-custom-surface",
+        ["simple-single"],
+        format!(
+            r##"(progn
+                   (custom-autoload
+                    'simple-single-super-sunday
+                    "simple-single")
+                   {})"##,
+            surface.probe
+        ),
     );
-    eprintln!("{neomacs}");
-    eprintln!("{gnu}");
+    let report = run_oracle_scenario(
+        &neomacs_runtime(),
+        &EmacsRuntime::gnu_emacs().with_timeout(Duration::from_secs(120)),
+        &frozen_source(),
+        &scenario,
+    )
+    .expect("generic package surface must match GNU Emacs");
+
+    let EvalOutcome::Value(value) = &report.neomacs.outcome else {
+        panic!("expected a surface value, got {}", report.neomacs.outcome);
+    };
+    assert!(
+        value.contains("simple-single-super-sunday"),
+        "custom variable missing from surface: {value}"
+    );
 }

@@ -9,4 +9,4 @@
 (unless (package-installed-p 'multi-file)
   (error "tar package was absent after quickstart"))
 
-(princ "NEOMACS-MELPA-RESULT:(:quickstart t :autoloads t :dependencies t :restart t)")
+'(:quickstart t :autoloads t :dependencies t :restart t)

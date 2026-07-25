@@ -20,8 +20,9 @@ phase-specific failures.
 - `frozen_packages.rs` exercises GNU Emacs's small checked-in package archive.
   It is a fast contract for dependency resolution, tar extraction, generated
   autoloads, byte compilation, and restart persistence.
-- `frozen_real_packages.rs` installs checksum-pinned, unmodified MELPA
-  tarballs and compares the normalized result from Neomacs with GNU Emacs.
+- `live_melpa.rs` hard-codes package names and versions, downloads one complete
+  dependency transaction below `./tmp`, then gives that same local transaction
+  to GNU Emacs and Neomacs. No third-party package payload is tracked by Git.
 - `upstream_package_ert.rs` runs grouped contracts from GNU Emacs's
   `test/lisp/emacs-lisp/package-tests.el` through a structured ERT adapter.
   The EOL and asynchronous-refresh groups remain explicit ignored tests until
@@ -37,8 +38,8 @@ phase-specific failures.
 - `live_melpa.rs` installs the current GNU ELPA/MELPA package matrix. It is
   ignored by default because availability and package contents are external.
 
-The frozen layers are required CI checks. The live canary runs on scheduled
-and explicitly dispatched CI workflows.
+The GNU package-resource contracts are required CI checks. The current MELPA
+oracle runs on scheduled and explicitly dispatched CI workflows.
 
 ## Local commands
 
@@ -69,18 +70,9 @@ cargo nextest run -p neomacs-melpa-tests \
   --no-fail-fast
 ```
 
-Refresh the pinned real-package fixture set:
-
-```sh
-TMPDIR="$PWD/tmp" cargo xtask refresh-melpa-fixtures
-```
-
-The selected packages live in `fixtures/frozen-melpa/packages.txt`. The
-refresh command downloads through `curl`, stages everything below `./tmp`,
-rejects packages already built into Neomacs, and validates each package's
-name, version, upstream commit, GPL-3.0-or-later declaration, and SHA-256
-checksum before publishing the snapshot. `--source DIR` can point at a local
-MELPA mirror for a completely offline refresh.
+When MELPA publishes a new version, update only the hard-coded version next to
+the package name in `tests/live_melpa.rs`. Catalogs, dependency metadata,
+tarballs, extracted files, and generated local archives stay under `./tmp`.
 
 GNU Emacs selection checks `NEOMACS_MELPA_ORACLE_EMACS`, then
 `NEOVM_ORACLE_EMACS`, then `ORACLE_EMACS`, then the adjacent local GNU Emacs

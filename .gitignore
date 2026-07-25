@@ -169,6 +169,7 @@ lisp/mh-e/mh-autoloads.el
 deps/
 
 # Logs and temporaries.
+/tmp/
 *.data
 *.log
 *.tmp

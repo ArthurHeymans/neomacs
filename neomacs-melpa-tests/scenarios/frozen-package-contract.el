@@ -31,4 +31,4 @@
   (unless (eq major-mode 'multi-file-mode)
     (error "multi-file-mode autoload did not select the installed mode")))
 
-(princ "NEOMACS-MELPA-RESULT:(:dependency-chain t :multi-file t :autoloads t :restart t)")
+'(:dependency-chain t :multi-file t :autoloads t :restart t)

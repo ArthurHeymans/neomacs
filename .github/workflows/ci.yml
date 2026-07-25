@@ -442,10 +442,13 @@ jobs:
       TMPDIR: ${{ github.workspace }}/tmp
       NEOMACS_BIN: ${{ github.workspace }}/target/release/neomacs
       NEOMACS_RUNTIME_ROOT: ${{ github.workspace }}
+      NEOMACS_MELPA_ORACLE_EMACS: /usr/bin/emacs
     steps:
       - *checkout
       - *prepare_workspace_tmp
       - *install_linux_deps
+      - name: Install GNU Emacs oracle
+        run: sudo apt-get install -y --no-install-recommends emacs-nox
       - *install_rust
       - *install_nextest
       - *download_test_runtime

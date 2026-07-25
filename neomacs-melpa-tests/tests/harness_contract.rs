@@ -5,8 +5,10 @@ use std::time::Duration;
 
 use neomacs_melpa_tests::{
     EmacsRuntime, ErtScenario, MelpaSandbox, PackageScenario, PackageSource, ScenarioPhase,
-    run_ert_scenario, run_scenario, workspace_root,
+    prepare_shared_package_source, run_ert_scenario, run_oracle_scenario, run_scenario,
+    workspace_root,
 };
+use neomacs_test_oracle::EvalOutcome;
 
 #[test]
 fn sandbox_keeps_process_state_under_workspace_tmp() {
@@ -76,7 +78,7 @@ fn scenario_installs_then_probes_in_a_fresh_process() {
             r##"#!/bin/sh
 printf '%s\n' invoke >> '{}'
 printf 'NEOMACS-MELPA-INSTALLED:simple-single\t1.3\n'
-printf '%s\n' 'NEOMACS-MELPA-RESULT:(:package simple-single :value 42)'
+printf '%s\n' 'NEOMACS-MELPA-OUTCOME:OK (:package simple-single :value 42)'
 "##,
             invocation_log.display()
         ),
@@ -91,7 +93,7 @@ printf '%s\n' 'NEOMACS-MELPA-RESULT:(:package simple-single :value 42)'
     let scenario = PackageScenario::new(
         "two-process-contract",
         ["simple-single"],
-        r##"(princ "NEOMACS-MELPA-RESULT:(:package simple-single :value 42)")"##,
+        r##"'(:package simple-single :value 42)"##,
     );
 
     let report = run_scenario(&runtime, &source, &scenario).expect("run fake scenario");
@@ -102,12 +104,101 @@ printf '%s\n' 'NEOMACS-MELPA-RESULT:(:package simple-single :value 42)'
     assert_eq!(report.phases[0].phase, ScenarioPhase::Install);
     assert_eq!(report.phases[1].phase, ScenarioPhase::RestartProbe);
     assert_eq!(
-        report.result,
-        "(:package simple-single :value 42)".to_string()
+        report.outcome,
+        EvalOutcome::Value("(:package simple-single :value 42)".to_string())
     );
     assert_eq!(report.installed_packages.len(), 1);
     assert_eq!(report.installed_packages[0].name, "simple-single");
     assert_eq!(report.installed_packages[0].version, "1.3");
+}
+
+#[cfg(unix)]
+#[test]
+fn oracle_scenario_compares_matching_lisp_signals() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = MelpaSandbox::new("oracle-signal-contract").expect("create fixture sandbox");
+    let runtime_script = fixture.root().join("signal-emacs");
+    fs::write(
+        &runtime_script,
+        r##"#!/bin/sh
+printf 'NEOMACS-MELPA-INSTALLED:simple-single\t1.3\n'
+case "$*" in
+  *NEOMACS-MELPA-OUTCOME*)
+    printf '%s\n' 'NEOMACS-MELPA-OUTCOME:ERR (wrong-type-argument numberp "x")'
+    ;;
+esac
+"##,
+    )
+    .expect("write signal runtime");
+    fs::set_permissions(&runtime_script, fs::Permissions::from_mode(0o755))
+        .expect("make signal runtime executable");
+
+    let runtime = EmacsRuntime::new("fake", runtime_script);
+    let source =
+        PackageSource::frozen(workspace_root().join("test/lisp/emacs-lisp/package-resources"));
+    let scenario = PackageScenario::new("signal-parity", ["simple-single"], "(+ 1 \"x\")");
+
+    let report = run_oracle_scenario(&runtime, &runtime, &source, &scenario)
+        .expect("matching signals have oracle parity");
+
+    assert_eq!(
+        report.neomacs.outcome,
+        EvalOutcome::Signal(r##"(wrong-type-argument numberp "x")"##.to_string())
+    );
+    assert_eq!(report.neomacs.outcome, report.gnu_emacs.outcome);
+}
+
+#[cfg(unix)]
+#[test]
+fn oracle_scenario_reports_a_value_divergence() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = MelpaSandbox::new("oracle-divergence-contract").expect("create fixture sandbox");
+    let neo_script = fixture.root().join("neo-emacs");
+    let gnu_script = fixture.root().join("gnu-emacs");
+    for (script, value) in [(&neo_script, "42"), (&gnu_script, "43")] {
+        fs::write(
+            script,
+            format!(
+                r##"#!/bin/sh
+printf 'NEOMACS-MELPA-INSTALLED:simple-single\t1.3\n'
+printf '%s\n' 'NEOMACS-MELPA-OUTCOME:OK {value}'
+"##
+            ),
+        )
+        .expect("write divergent runtime");
+        fs::set_permissions(script, fs::Permissions::from_mode(0o755))
+            .expect("make divergent runtime executable");
+    }
+
+    let source =
+        PackageSource::frozen(workspace_root().join("test/lisp/emacs-lisp/package-resources"));
+    let scenario = PackageScenario::new("value-divergence", ["simple-single"], "42");
+    let error = run_oracle_scenario(
+        &EmacsRuntime::new("neomacs", neo_script),
+        &EmacsRuntime::new("gnu-emacs", gnu_script),
+        &source,
+        &scenario,
+    )
+    .expect_err("different values must fail oracle parity");
+
+    assert!(error.contains("value-divergence"));
+    assert!(error.contains("OK 42"));
+    assert!(error.contains("OK 43"));
+}
+
+#[test]
+fn shared_package_source_requires_a_hard_coded_version_per_package() {
+    let scenario = PackageScenario::new("unversioned-package", ["dash"], "t");
+    let error = prepare_shared_package_source(
+        &EmacsRuntime::new("must-not-run", "missing-emacs"),
+        &scenario,
+    )
+    .err()
+    .expect("an unversioned package must be rejected");
+
+    assert!(error.contains("hard-code exactly one version for `dash`"));
 }
 
 #[cfg(unix)]
@@ -130,11 +221,7 @@ exec sleep 5
     let runtime = EmacsRuntime::new("slow", runtime_script).with_timeout(Duration::from_millis(50));
     let source =
         PackageSource::frozen(workspace_root().join("test/lisp/emacs-lisp/package-resources"));
-    let scenario = PackageScenario::new(
-        "timeout-contract",
-        ["simple-single"],
-        r##"(princ "NEOMACS-MELPA-RESULT:t")"##,
-    );
+    let scenario = PackageScenario::new("timeout-contract", ["simple-single"], "t");
 
     let error = run_scenario(&runtime, &source, &scenario).expect_err("scenario must time out");
     assert!(
@@ -168,11 +255,7 @@ printf 'NEOMACS-MELPA-INSTALLED:simple-single\t1.3\n'
     let runtime = EmacsRuntime::new("error-runtime", runtime_script);
     let source =
         PackageSource::frozen(workspace_root().join("test/lisp/emacs-lisp/package-resources"));
-    let scenario = PackageScenario::new(
-        "error-marker-contract",
-        ["simple-single"],
-        r##"(princ "NEOMACS-MELPA-RESULT:t")"##,
-    );
+    let scenario = PackageScenario::new("error-marker-contract", ["simple-single"], "t");
 
     let error = run_scenario(&runtime, &source, &scenario).expect_err("scenario must fail");
     for expected in [

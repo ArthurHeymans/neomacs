@@ -14,9 +14,11 @@ use std::process::{Command, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use neomacs_test_oracle::{EvalOutcome, extract_marked_outcome, wrap_elisp_outcome};
 use wait_timeout::ChildExt;
 
 const RESULT_MARKER: &str = "NEOMACS-MELPA-RESULT:";
+const OUTCOME_MARKER: &str = "NEOMACS-MELPA-OUTCOME:";
 const INSTALLED_MARKER: &str = "NEOMACS-MELPA-INSTALLED:";
 const DEFAULT_PROCESS_TIMEOUT: Duration = Duration::from_secs(300);
 
@@ -124,6 +126,8 @@ impl MelpaSandbox {
             .env("HOSTNAME", "melpa-host")
             .env("EMAIL", "melpa-test@melpa-host")
             .env("TERM", "dumb")
+            .env("NEOMACS_TEST_SANDBOX_ROOT", self.root())
+            .env("NEOMACS_TEST_WORKSPACE_ROOT", workspace_root())
             .env_remove("EMACSLOADPATH")
             .env("GIT_CEILING_DIRECTORIES", workspace_root());
     }
@@ -211,35 +215,45 @@ impl EmacsRuntime {
 
 /// Package archive used by a scenario.
 #[derive(Clone, Debug)]
-pub enum PackageSource {
-    Frozen { archive_dir: PathBuf },
-    LiveMelpa,
+pub struct PackageSource {
+    archives: Vec<(String, PathBuf)>,
 }
 
 impl PackageSource {
     pub fn frozen(archive_dir: impl Into<PathBuf>) -> Self {
-        Self::Frozen {
-            archive_dir: archive_dir.into(),
+        Self {
+            archives: vec![("frozen".to_string(), archive_dir.into())],
         }
     }
 
-    pub fn live_melpa() -> Self {
-        Self::LiveMelpa
+    pub fn local<I, N, P>(archives: I) -> Self
+    where
+        I: IntoIterator<Item = (N, P)>,
+        N: Into<String>,
+        P: Into<PathBuf>,
+    {
+        Self {
+            archives: archives
+                .into_iter()
+                .map(|(name, path)| (name.into(), path.into()))
+                .collect(),
+        }
     }
 
     fn archive_form(&self) -> String {
-        match self {
-            Self::Frozen { archive_dir } => {
-                let directory = archive_dir
+        let entries = self
+            .archives
+            .iter()
+            .map(|(name, directory)| {
+                let directory = directory
                     .canonicalize()
-                    .unwrap_or_else(|_| archive_dir.clone());
+                    .unwrap_or_else(|_| directory.clone());
                 let directory = format!("{}/", directory.display());
-                format!(r##"'(("frozen" . {}))"##, elisp_string(&directory))
-            }
-            Self::LiveMelpa => r##"'(("gnu" . "https://elpa.gnu.org/packages/")
-                      ("melpa" . "https://melpa.org/packages/"))"##
-                .to_string(),
-        }
+                format!("({} . {})", elisp_string(name), elisp_string(&directory))
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!("'({entries})")
     }
 }
 
@@ -248,8 +262,21 @@ impl PackageSource {
 #[derive(Clone, Debug)]
 pub struct PackageScenario {
     pub name: String,
-    pub packages: Vec<String>,
+    packages: PackageSelection,
     pub probe: String,
+}
+
+#[derive(Clone, Debug)]
+enum PackageSelection {
+    Unversioned(Vec<String>),
+    Versioned(Vec<PackagePin>),
+}
+
+/// An exact package name/version selected for a live archive scenario.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PackagePin {
+    pub name: String,
+    pub version: String,
 }
 
 impl PackageScenario {
@@ -260,7 +287,34 @@ impl PackageScenario {
     {
         Self {
             name: name.into(),
-            packages: packages.into_iter().map(Into::into).collect(),
+            packages: PackageSelection::Unversioned(packages.into_iter().map(Into::into).collect()),
+            probe: probe.into(),
+        }
+    }
+
+    /// Define a scenario whose selected third-party packages have exact
+    /// versions.
+    pub fn versioned<I, N, V>(
+        name: impl Into<String>,
+        packages: I,
+        probe: impl Into<String>,
+    ) -> Self
+    where
+        I: IntoIterator<Item = (N, V)>,
+        N: Into<String>,
+        V: Into<String>,
+    {
+        Self {
+            name: name.into(),
+            packages: PackageSelection::Versioned(
+                packages
+                    .into_iter()
+                    .map(|(name, version)| PackagePin {
+                        name: name.into(),
+                        version: version.into(),
+                    })
+                    .collect(),
+            ),
             probe: probe.into(),
         }
     }
@@ -282,6 +336,139 @@ impl PackageScenario {
             )
         })?;
         Ok(Self::new(name, packages, probe))
+    }
+
+    /// Build a package-agnostic probe of the post-restart autoload surface.
+    ///
+    /// This is the scalable baseline for a package corpus: it does not guess
+    /// arguments or invoke arbitrary package commands. It inventories
+    /// autoloaded functions/macros, custom variables, and emitted bytecode for
+    /// the complete dependency graph. Curated probes can be added separately
+    /// when meaningful behavior and inputs are known.
+    pub fn autoload_surface<I, P>(name: impl Into<String>, packages: I) -> Self
+    where
+        I: IntoIterator<Item = P>,
+        P: Into<String>,
+    {
+        let packages = packages.into_iter().map(Into::into).collect::<Vec<_>>();
+        let package_strings = packages
+            .iter()
+            .map(|package| elisp_string(package))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let probe = format!(
+            r##"(let* ((requested
+                         (mapcar #'intern '({package_strings})))
+                       (libraries (make-hash-table :test 'equal))
+                       (known-library-p
+                        (lambda (library)
+                          (and
+                           (stringp library)
+                           (or (gethash library libraries)
+                               (gethash
+                                (file-name-sans-extension library)
+                                libraries)
+                               (gethash
+                                (file-name-base library)
+                                libraries)))))
+                       (autoloads nil)
+                       (customs nil)
+                       (bytecode nil))
+                  (dolist (package requested)
+                    (unless (package-installed-p package)
+                      (error "requested package was not installed: %S" package)))
+                  (dolist (entry package-alist)
+                    (let* ((description (cadr entry))
+                           (directory (package-desc-dir description))
+                           (files
+                            (and directory
+                                 (file-directory-p directory)
+                                 (directory-files-recursively
+                                  directory "\\.elc?\\'")))
+                           (compiled nil))
+                      (dolist (file files)
+                        (let* ((relative
+                                (file-relative-name file directory))
+                               (library
+                                (file-name-sans-extension relative)))
+                          (puthash library t libraries)
+                          (puthash (file-name-base library) t libraries)
+                          (when (string-suffix-p ".elc" relative)
+                            (push relative compiled))))
+                      (push
+                       (list
+                        (car entry)
+                        (package-version-join
+                         (package-desc-version description))
+                        (sort compiled #'string<))
+                       bytecode)))
+                  (mapatoms
+                   (lambda (symbol)
+                     (let ((definition
+                            (and (fboundp symbol)
+                                 (symbol-function symbol))))
+                       (when (and (autoloadp definition)
+                                  (funcall known-library-p (nth 1 definition)))
+                         (push
+                          (list symbol
+                                (nth 1 definition)
+                                (if (eq (nth 4 definition) 'macro)
+                                    'macro
+                                  (if (nth 3 definition)
+                                      'command
+                                    'function)))
+                          autoloads)))
+                     (let ((custom-libraries nil))
+                       (dolist (library (get symbol 'custom-loads))
+                         (let ((library-name
+                                (cond
+                                 ((stringp library) library)
+                                 ((symbolp library) (symbol-name library)))))
+                           (when (and library-name
+                                      (funcall known-library-p library-name))
+                             (push library-name custom-libraries))))
+                       (when custom-libraries
+                         (push
+                          (list symbol
+                                (sort custom-libraries #'string<))
+                          customs)))))
+                  (list
+                   :autoloads
+                   (sort autoloads
+                         (lambda (left right)
+                           (string< (symbol-name (car left))
+                                    (symbol-name (car right)))))
+                   :customs
+                   (sort customs
+                         (lambda (left right)
+                           (string< (symbol-name (car left))
+                                    (symbol-name (car right)))))
+                   :bytecode
+                   (sort bytecode
+                         (lambda (left right)
+                           (string< (symbol-name (car left))
+                                    (symbol-name (car right)))))))"##
+        );
+        Self::new(name, packages, probe)
+    }
+
+    fn package_names(&self) -> Vec<&str> {
+        match &self.packages {
+            PackageSelection::Unversioned(packages) => {
+                packages.iter().map(String::as_str).collect()
+            }
+            PackageSelection::Versioned(packages) => packages
+                .iter()
+                .map(|package| package.name.as_str())
+                .collect(),
+        }
+    }
+
+    fn package_pins(&self) -> Option<&[PackagePin]> {
+        match &self.packages {
+            PackageSelection::Unversioned(_) => None,
+            PackageSelection::Versioned(packages) => Some(packages),
+        }
     }
 }
 
@@ -309,6 +496,7 @@ impl ErtScenario {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ScenarioPhase {
+    PrepareArchive,
     Install,
     RestartProbe,
     QuickstartProbe,
@@ -318,6 +506,21 @@ pub enum ScenarioPhase {
     VcDelete,
     VcRestartAfterDelete,
     Ert,
+}
+
+/// A current package transaction downloaded once for both editor adapters.
+///
+/// The owning sandbox keeps catalogs and package payloads alive below
+/// `<workspace>/tmp/melpa` for the duration of the oracle comparison.
+pub struct PreparedPackageSource {
+    _sandbox: MelpaSandbox,
+    source: PackageSource,
+}
+
+impl PreparedPackageSource {
+    pub fn source(&self) -> &PackageSource {
+        &self.source
+    }
 }
 
 #[derive(Debug)]
@@ -335,7 +538,14 @@ pub struct ScenarioReport {
     pub scenario: String,
     pub phases: Vec<PhaseReport>,
     pub installed_packages: Vec<InstalledPackage>,
-    pub result: String,
+    pub outcome: EvalOutcome,
+}
+
+/// GNU Emacs and Neomacs reports after package lifecycle parity is verified.
+#[derive(Debug)]
+pub struct OracleScenarioReport {
+    pub neomacs: ScenarioReport,
+    pub gnu_emacs: ScenarioReport,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -397,7 +607,7 @@ impl fmt::Display for ScenarioReport {
                 phase.phase, phase.status_code, phase.duration
             )?;
         }
-        write!(formatter, "result: {}", self.result)
+        write!(formatter, "outcome: {}", self.outcome)
     }
 }
 
@@ -508,10 +718,210 @@ pub fn run_scenario(
     run_install_and_probe(
         runtime,
         scenario,
-        install_form(source, &scenario.packages, ""),
+        install_form(source, &scenario.package_names(), ""),
         probe_form(&scenario.probe),
         ScenarioPhase::RestartProbe,
     )
+}
+
+/// Build one local package transaction under `./tmp` for both editors.
+///
+/// GNU Emacs reads the live GNU ELPA/MELPA catalogs, verifies every selected
+/// package's hard-coded version, computes the dependency closure, and
+/// downloads that closure into local archives. The later oracle runs cannot
+/// contact the remote archives because their `package-archives` contains only
+/// these local directories.
+pub fn prepare_shared_package_source(
+    gnu_emacs: &EmacsRuntime,
+    scenario: &PackageScenario,
+) -> Result<PreparedPackageSource, String> {
+    validate_versioned_scenario(scenario)?;
+    let sandbox = MelpaSandbox::new(&format!("{}-shared-archive", scenario.name))?;
+    let archive_root = sandbox.root().join("archive");
+    let gnu_archive = archive_root.join("gnu");
+    let melpa_archive = archive_root.join("melpa");
+    fs::create_dir_all(&gnu_archive)
+        .and_then(|()| fs::create_dir_all(&melpa_archive))
+        .map_err(|error| {
+            format!(
+                "failed to create shared package archives below {}: {error}",
+                archive_root.display()
+            )
+        })?;
+
+    let requested = scenario
+        .package_names()
+        .iter()
+        .map(|package| elisp_string(package))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let expected = scenario
+        .package_pins()
+        .expect("validated versioned scenario")
+        .iter()
+        .map(|package| {
+            format!(
+                "({} . {})",
+                elisp_string(&package.name),
+                elisp_string(&package.version)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let archive_root = format!("{}/", archive_root.display());
+    let form = format!(
+        r##"(progn
+           (require 'package)
+           (require 'url)
+           (setq package-user-dir
+                 (expand-file-name ".emacs.d/mirror-builder-elpa" (getenv "HOME"))
+                 package-check-signature nil)
+           (let* ((remote-archives
+                   '(("gnu" . "https://elpa.gnu.org/packages/")
+                     ("melpa" . "https://melpa.org/packages/")))
+                  (mirror-root {})
+                  (local-archives
+                   (mapcar
+                    (lambda (archive)
+                      (let ((directory
+                             (expand-file-name
+                              (concat (car archive) "/")
+                              mirror-root)))
+                        (make-directory directory t)
+                        (url-copy-file
+                         (concat (cdr archive) "archive-contents")
+                         (expand-file-name "archive-contents" directory)
+                         t)
+                        (cons (car archive) directory)))
+                    remote-archives))
+                  (expected '({expected}))
+                  (requested
+                   (mapcar #'intern '({requested}))))
+             (setq package-archives local-archives)
+             (package-initialize)
+             (package-refresh-contents)
+             (dolist (entry expected)
+               (let* ((name (intern (car entry)))
+                      (description
+                       (cadr (assq name package-archive-contents)))
+                      (actual
+                       (and description
+                            (package-version-join
+                             (package-desc-version description)))))
+                 (unless description
+                   (error "package absent from current archives: %s"
+                          (car entry)))
+                 (unless (equal actual (cdr entry))
+                   (error
+                    "package version changed: %s expected %s, current %s"
+                    (car entry) (cdr entry) actual))))
+             (let ((transaction
+                    (package-compute-transaction
+                     nil
+                     (mapcar (lambda (name) (list name)) requested))))
+               (dolist (description transaction)
+                 (let* ((archive
+                         (package-desc-archive description))
+                        (remote
+                         (cdr (assoc archive remote-archives)))
+                        (local
+                         (cdr (assoc archive local-archives)))
+                        (filename
+                         (concat
+                          (package-desc-full-name description)
+                          (package-desc-suffix description))))
+                   (unless (and remote local)
+                     (error "unknown package archive: %S" archive))
+                   (url-copy-file
+                    (concat remote filename)
+                    (expand-file-name filename local)
+                    t))))
+             (princ "NEOMACS-MELPA-ARCHIVE:ready")))"##,
+        elisp_string(&archive_root)
+    );
+    let report = run_phase(
+        gnu_emacs,
+        &sandbox,
+        &scenario.name,
+        ScenarioPhase::PrepareArchive,
+        &form,
+    )?;
+    if !report.stdout.contains("NEOMACS-MELPA-ARCHIVE:ready") {
+        return Err(format!(
+            "{} scenario `{}` did not finish shared archive preparation\nstdout:\n{}\nstderr:\n{}",
+            gnu_emacs.name, scenario.name, report.stdout, report.stderr
+        ));
+    }
+
+    Ok(PreparedPackageSource {
+        _sandbox: sandbox,
+        source: PackageSource::local([("gnu", gnu_archive), ("melpa", melpa_archive)]),
+    })
+}
+
+fn validate_versioned_scenario(scenario: &PackageScenario) -> Result<(), String> {
+    let Some(packages) = scenario.package_pins() else {
+        let package = scenario
+            .package_names()
+            .into_iter()
+            .next()
+            .unwrap_or("<missing package>");
+        return Err(format!(
+            "shared package scenario `{}` must hard-code exactly one version for `{package}`",
+            scenario.name
+        ));
+    };
+    for (index, package) in packages.iter().enumerate() {
+        if package.name.is_empty()
+            || package.version.is_empty()
+            || packages[..index]
+                .iter()
+                .any(|earlier| earlier.name == package.name)
+        {
+            return Err(format!(
+                "shared package scenario `{}` must hard-code exactly one version for `{}`",
+                scenario.name, package.name
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Run the same package lifecycle and probe against GNU Emacs and Neomacs.
+///
+/// The editors receive separate homes but the same package source and probe.
+/// Package/version graph differences and normalized value/signal differences
+/// are both oracle failures.
+pub fn run_oracle_scenario(
+    neomacs: &EmacsRuntime,
+    gnu_emacs: &EmacsRuntime,
+    source: &PackageSource,
+    scenario: &PackageScenario,
+) -> Result<OracleScenarioReport, String> {
+    let gnu_report = run_scenario(gnu_emacs, source, scenario)
+        .map_err(|error| format!("GNU Emacs baseline failed: {error}"))?;
+    let neomacs_report = run_scenario(neomacs, source, scenario)
+        .map_err(|error| format!("Neomacs comparison failed: {error}"))?;
+
+    if neomacs_report.installed_packages != gnu_report.installed_packages {
+        return Err(format!(
+            "package graph mismatch for scenario `{}`\n  Neomacs: {}\n  GNU Emacs: {}",
+            scenario.name,
+            format_installed_packages(&neomacs_report.installed_packages),
+            format_installed_packages(&gnu_report.installed_packages)
+        ));
+    }
+    if neomacs_report.outcome != gnu_report.outcome {
+        return Err(format!(
+            "oracle outcome mismatch for scenario `{}`\n  Neomacs: {}\n  GNU Emacs: {}",
+            scenario.name, neomacs_report.outcome, gnu_report.outcome
+        ));
+    }
+
+    Ok(OracleScenarioReport {
+        neomacs: neomacs_report,
+        gnu_emacs: gnu_report,
+    })
 }
 
 /// Install packages, generate `package-quickstart-file`, then load that file
@@ -544,8 +954,8 @@ pub fn run_quickstart_scenario(
     run_install_and_probe(
         runtime,
         scenario,
-        install_form(source, &scenario.packages, quickstart_setup),
-        quickstart_probe,
+        install_form(source, &scenario.package_names(), quickstart_setup),
+        wrap_elisp_outcome("", &quickstart_probe, OUTCOME_MARKER),
         ScenarioPhase::QuickstartProbe,
     )
 }
@@ -572,7 +982,7 @@ pub fn run_delete_and_probe_scenario(
     run_install_and_probe(
         runtime,
         scenario,
-        install_form(source, &scenario.packages, &delete_setup),
+        install_form(source, &scenario.package_names(), &delete_setup),
         probe_form(&scenario.probe),
         ScenarioPhase::RestartProbe,
     )
@@ -803,19 +1213,38 @@ fn run_install_and_probe(
             runtime.name, scenario.name, install.stdout, install.stderr
         )
     })?;
+    if let Some(expected_packages) = scenario.package_pins() {
+        for expected in expected_packages {
+            let actual = installed_packages
+                .iter()
+                .find(|installed| installed.name == expected.name);
+            if actual.map(|installed| installed.version.as_str()) != Some(expected.version.as_str())
+            {
+                return Err(format!(
+                    "{} scenario `{}` installed an unexpected version of `{}`: expected {}, got {}",
+                    runtime.name,
+                    scenario.name,
+                    expected.name,
+                    expected.version,
+                    actual
+                        .map(|installed| installed.version.as_str())
+                        .unwrap_or("<not installed>")
+                ));
+            }
+        }
+    }
     phases.push(install);
 
-    let probe = run_phase(runtime, &sandbox, &scenario.name, probe_phase, &probe_form).map_err(
-        |error| {
+    let probe = run_outcome_phase(runtime, &sandbox, &scenario.name, probe_phase, &probe_form)
+        .map_err(|error| {
             format!(
                 "{error}\ninstalled packages: {}",
                 format_installed_packages(&installed_packages)
             )
-        },
-    )?;
-    let result = extract_marker(&probe.stdout, RESULT_MARKER).ok_or_else(|| {
+        })?;
+    let outcome = extract_marked_outcome(&probe.stdout, OUTCOME_MARKER).map_err(|error| {
         format!(
-            "{} scenario `{}` did not emit `{RESULT_MARKER}` during {probe_phase:?}\ninstalled packages: {}\nstdout:\n{}\nstderr:\n{}",
+            "{} scenario `{}` emitted an invalid oracle outcome during {probe_phase:?}: {error}\ninstalled packages: {}\nstdout:\n{}\nstderr:\n{}",
             runtime.name,
             scenario.name,
             format_installed_packages(&installed_packages),
@@ -830,7 +1259,7 @@ fn run_install_and_probe(
         scenario: scenario.name.clone(),
         phases,
         installed_packages,
-        result,
+        outcome,
     })
 }
 
@@ -840,6 +1269,27 @@ fn run_phase(
     scenario_name: &str,
     phase: ScenarioPhase,
     form: &str,
+) -> Result<PhaseReport, String> {
+    run_phase_with_validation(runtime, sandbox, scenario_name, phase, form, true)
+}
+
+fn run_outcome_phase(
+    runtime: &EmacsRuntime,
+    sandbox: &MelpaSandbox,
+    scenario_name: &str,
+    phase: ScenarioPhase,
+    form: &str,
+) -> Result<PhaseReport, String> {
+    run_phase_with_validation(runtime, sandbox, scenario_name, phase, form, false)
+}
+
+fn run_phase_with_validation(
+    runtime: &EmacsRuntime,
+    sandbox: &MelpaSandbox,
+    scenario_name: &str,
+    phase: ScenarioPhase,
+    form: &str,
+    check_editor_error_output: bool,
 ) -> Result<PhaseReport, String> {
     let mut command = runtime.command();
     sandbox.configure(&mut command);
@@ -856,12 +1306,14 @@ fn run_phase(
             runtime.name, report.status_code, report.stdout, report.stderr
         ));
     }
-    check_error_markers(&report.stdout, &report.stderr).map_err(|error| {
-        format!(
-            "{} scenario `{scenario_name}` failed during {phase:?}: {error}",
-            runtime.name
-        )
-    })?;
+    if check_editor_error_output {
+        check_error_markers(&report.stdout, &report.stderr).map_err(|error| {
+            format!(
+                "{} scenario `{scenario_name}` failed during {phase:?}: {error}",
+                runtime.name
+            )
+        })?;
+    }
     Ok(report)
 }
 
@@ -985,7 +1437,7 @@ fn count_before(fields: &[&str], label: &str) -> Option<usize> {
     fields.get(index.checked_sub(1)?)?.parse().ok()
 }
 
-fn install_form(source: &PackageSource, packages: &[String], post_install: &str) -> String {
+fn install_form(source: &PackageSource, packages: &[&str], post_install: &str) -> String {
     let installs = packages
         .iter()
         .map(|package| format!("(package-install '{package})"))
@@ -1025,14 +1477,11 @@ fn install_form(source: &PackageSource, packages: &[String], post_install: &str)
 }
 
 fn probe_form(probe: &str) -> String {
-    format!(
-        r##"(progn
+    let setup = r##"
            (require 'package)
            (setq package-user-dir (expand-file-name ".emacs.d/elpa" (getenv "HOME")))
-           (package-initialize)
-           {})"##,
-        probe
-    )
+           (package-initialize)"##;
+    wrap_elisp_outcome(setup, probe, OUTCOME_MARKER)
 }
 
 fn extract_marker(stdout: &str, marker: &str) -> Option<String> {

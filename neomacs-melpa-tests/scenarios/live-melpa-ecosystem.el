@@ -35,4 +35,4 @@
     (error "flycheck-mode did not enable after restart"))
   (flycheck-mode -1))
 
-(princ "NEOMACS-MELPA-RESULT:(:live-packages t :dependencies t :autoloads t :macros t :minor-mode t :restart t)")
+'(:live-packages t :dependencies t :autoloads t :macros t :minor-mode t :restart t)

@@ -1,5 +1,5 @@
 [package]
-name = "xtask"
+name = "neomacs-test-oracle"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -7,7 +7,3 @@ license.workspace = true
 publish = false
 
 [dependencies]
-flate2.workspace = true
-rayon.workspace = true
-sha2.workspace = true
-tempfile.workspace = true

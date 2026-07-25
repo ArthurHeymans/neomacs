@@ -4,6 +4,7 @@ use neomacs_melpa_tests::{
     EmacsRuntime, ErtScenario, PackageScenario, PackageSource, run_delete_and_probe_scenario,
     run_ert_scenario, run_quickstart_scenario, workspace_root,
 };
+use neomacs_test_oracle::EvalOutcome;
 
 #[test]
 fn package_autoremove_and_incompatible_requirements_match_gnu_contracts() {
@@ -43,8 +44,8 @@ fn package_quickstart_survives_a_fresh_process() {
     .expect("generate and load package quickstart across a fresh process");
 
     assert_eq!(
-        report.result,
-        "(:quickstart t :autoloads t :dependencies t :restart t)"
+        report.outcome,
+        EvalOutcome::Value("(:quickstart t :autoloads t :dependencies t :restart t)".to_string())
     );
     eprintln!("{report}");
 }
@@ -59,7 +60,7 @@ fn archive_package_deletion_survives_a_fresh_process() {
           (error "deleted archive package reappeared after restart"))
         (unless (package-installed-p 'simple-single)
           (error "undeleted dependency disappeared after restart"))
-        (princ "NEOMACS-MELPA-RESULT:(:deleted t :dependency-retained t :restart t)")"##,
+        '(:deleted t :dependency-retained t :restart t)"##,
     );
     let source =
         PackageSource::frozen(workspace_root().join("test/lisp/emacs-lisp/package-resources"));
@@ -72,8 +73,8 @@ fn archive_package_deletion_survives_a_fresh_process() {
     .expect("delete an archive package and probe the next process");
 
     assert_eq!(
-        report.result,
-        "(:deleted t :dependency-retained t :restart t)"
+        report.outcome,
+        EvalOutcome::Value("(:deleted t :dependency-retained t :restart t)".to_string())
     );
     eprintln!("{report}");
 }

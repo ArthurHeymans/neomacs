@@ -10,6 +10,6 @@ publish = false
 # Both frozen and live packages are installed through the editor's own
 # `package-install`; Rust only orchestrates isolated processes and verifies
 # pinned fixture checksums.
+neomacs-test-oracle.workspace = true
 tempfile.workspace = true
 wait-timeout.workspace = true
-sha2.workspace = true
