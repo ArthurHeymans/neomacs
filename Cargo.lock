@@ -3388,6 +3388,7 @@ dependencies = [
  "portable-pty",
  "raw-window-handle",
  "resvg",
+ "serde_json",
  "smithay-clipboard",
  "thiserror 2.0.18",
  "tracing",

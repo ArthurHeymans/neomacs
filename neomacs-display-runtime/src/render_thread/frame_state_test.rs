@@ -48,6 +48,131 @@ fn face(id: FaceId) -> Face {
     }
 }
 
+fn named_face(id: FaceId, name: &str) -> Face {
+    Face {
+        id,
+        lisp_name: Some(name.to_owned()),
+        ..Face::default()
+    }
+}
+
+#[test]
+fn face_change_summary_distinguishes_added_modified_and_removed_faces() {
+    let unchanged_id = FaceId::new(1);
+    let modified_id = FaceId::new(2);
+    let removed_id = FaceId::new(3);
+    let added_id = FaceId::new(4);
+    let old = HashMap::from([
+        (unchanged_id, named_face(unchanged_id, "unchanged")),
+        (modified_id, named_face(modified_id, "modified")),
+        (removed_id, named_face(removed_id, "removed")),
+    ]);
+    let mut modified = named_face(modified_id, "modified");
+    modified.font_size = 18.0;
+    let new = HashMap::from([
+        (unchanged_id, named_face(unchanged_id, "unchanged")),
+        (modified_id, modified),
+        (added_id, named_face(added_id, "added")),
+    ]);
+
+    let summary = summarize_face_changes(&old, &new);
+
+    assert_eq!(
+        summary,
+        FaceChangeSummary {
+            added: 1,
+            modified: 1,
+            removed: 1,
+        }
+    );
+    assert!(summary.invalidates_glyph_atlas());
+}
+
+#[test]
+fn removing_faces_alone_does_not_invalidate_the_glyph_atlas() {
+    let retained_id = FaceId::new(1);
+    let removed_id = FaceId::new(2);
+    let old = HashMap::from([
+        (retained_id, face(retained_id)),
+        (removed_id, face(removed_id)),
+    ]);
+    let new = HashMap::from([(retained_id, face(retained_id))]);
+
+    let summary = summarize_face_changes(&old, &new);
+
+    assert_eq!(summary.removed, 1);
+    assert!(!summary.invalidates_glyph_atlas());
+}
+
+#[test]
+fn face_diff_details_are_sorted_bounded_and_name_changed_fields() {
+    let old = HashMap::from([
+        (FaceId::new(2), named_face(FaceId::new(2), "second")),
+        (FaceId::new(1), named_face(FaceId::new(1), "first")),
+    ]);
+    let mut first = named_face(FaceId::new(1), "first");
+    first.font_size = 12.0;
+    let mut second = named_face(FaceId::new(2), "second");
+    second.font_weight = 700;
+    let new = HashMap::from([(FaceId::new(2), second), (FaceId::new(1), first)]);
+
+    let details = build_face_diff_details(&old, &new, 1);
+
+    assert_eq!(details.modified.len(), 1);
+    assert_eq!(details.modified[0].id, FaceId::new(1));
+    assert!(
+        details.modified[0]
+            .fields
+            .iter()
+            .any(|field| field.starts_with("font_size="))
+    );
+    assert_eq!(details.modified_omitted, 1);
+}
+
+#[test]
+fn changed_face_sources_include_ingest_sequence_updates() {
+    let old = vec![(1, 10), (2, 20)];
+    let new = vec![(1, 11), (3, 30)];
+
+    let details = changed_face_sources(&old, &new, 2);
+
+    assert_eq!(details.changes.len(), 2);
+    assert_eq!(details.omitted, 1);
+    assert_eq!(details.changes[0].frame_id, 1);
+    assert_eq!(details.changes[0].old_ingest_sequences, vec![10]);
+    assert_eq!(details.changes[0].new_ingest_sequences, vec![11]);
+    assert_eq!(details.changes[1].frame_id, 2);
+    assert!(details.changes[1].new_ingest_sequences.is_empty());
+}
+
+#[test]
+fn face_id_conflicts_are_sorted_and_bounded() {
+    let face_id = FaceId::new(7);
+    let baseline = named_face(face_id, "baseline");
+    let mut conflicting = named_face(face_id, "conflicting");
+    conflicting.font_size = 18.0;
+    let occurrence = |frame_id, face: Face| FaceOccurrence {
+        face_id,
+        frame_id,
+        sort_key: serde_json::to_string(&face).expect("serialize face"),
+        face,
+    };
+
+    let details = build_face_conflict_details(
+        vec![
+            occurrence(30, conflicting.clone()),
+            occurrence(20, conflicting),
+            occurrence(10, baseline),
+        ],
+        1,
+    );
+
+    assert_eq!(details.conflicts.len(), 1);
+    assert_eq!(details.omitted, 1);
+    assert_eq!(details.conflicts[0].first_frame_id, 10);
+    assert_eq!(details.conflicts[0].conflicting_frame_id, 20);
+}
+
 #[test]
 fn apply_extra_spacing_remaps_cursor_by_slot_id() {
     let mut frame = FrameGlyphBuffer::with_size(80.0, 32.0);
@@ -135,6 +260,9 @@ fn refresh_faces_rebuilds_from_primary_fallback_frames() {
         1.0,
     );
     child.faces.insert(FaceId::new(8), face(FaceId::new(8)));
+    let mut conflicting_face = named_face(FaceId::new(7), "child-conflict");
+    conflicting_face.font_size = 18.0;
+    child.faces.insert(FaceId::new(7), conflicting_face);
     app.frame_windows
         .primary_window_mut()
         .expect("primary child frames mut")
@@ -148,4 +276,21 @@ fn refresh_faces_rebuilds_from_primary_fallback_frames() {
     assert!(app.faces.contains_key(&FaceId::new(7)));
     assert!(app.faces.contains_key(&FaceId::new(8)));
     assert!(!app.faces.contains_key(&FaceId::new(99)));
+    assert_eq!(app.face_cache_invalidation_seq, 1);
+
+    app.refresh_faces_from_frames();
+    assert_eq!(
+        app.face_cache_invalidation_seq, 1,
+        "an unchanged frame signature must not perform diagnostics or clear atlases"
+    );
+
+    let conflicts = app.collect_face_id_conflicts(10);
+    assert_eq!(conflicts.conflicts.len(), 1);
+    assert_eq!(conflicts.conflicts[0].face_id, FaceId::new(7));
+    assert_eq!(conflicts.conflicts[0].conflicting_frame_id, 0x2000);
+
+    let clear_stats = app.frame_windows.clear_top_level_glyph_atlases();
+    assert_eq!(clear_stats.windows_visited, 1);
+    assert_eq!(clear_stats.atlases_cleared, 1);
+    assert_eq!(clear_stats.glyphs_evicted, 0);
 }
