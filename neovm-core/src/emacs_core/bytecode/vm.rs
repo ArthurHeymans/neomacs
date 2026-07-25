@@ -1472,10 +1472,13 @@ impl<'a> Vm<'a> {
         let mut quitcounter: u8 = 1;
         // OSR (on-stack replacement): once a hot loop is detected at a backward
         // branch, transfer the rest of this interpreted call into native code at
-        // the loop header. Gated once here (opt-in, kill-switch aware); `osr_tried`
-        // latches so a loop that can't/didn't OSR is probed only once per frame.
-        let osr_enabled =
-            crate::emacs_core::jit::jit_osr_on() && crate::emacs_core::jit::jit_runtime_enabled();
+        // the loop header. `osr_tried` latches so a loop that can't/didn't OSR is
+        // probed only once per frame. The opt-in/kill-switch gates are evaluated
+        // at the USE site (inside the 1-in-256 back-edge wrap), NOT here: this
+        // runs on every interpreted call, and hoisting two `OnceLock` reads onto
+        // that path cost +1.8% on byte-compile even with the JIT disabled
+        // (measured; the tax persisted under `NEOVM_JIT=0`, which is what pinned
+        // it to the interpreter path rather than to compile-time analysis).
         let mut osr_tried = false;
 
         // A6: base+len of the operand stack live in registers for the whole
@@ -1600,7 +1603,15 @@ impl<'a> Vm<'a> {
                         // function completed (its result); `Signal` propagates; a
                         // deopt / non-transfer just falls back to interpreting (the
                         // OSR ran in its own frame, so our state is untouched).
-                        if osr_enabled && !osr_tried && func.runtime.is_hot() {
+                        // Gates ordered cheapest-first: a local bool, then the
+                        // opt-in knob (default OFF, so it short-circuits the rest
+                        // for every stock build), then the kill switch, then the
+                        // heat load.
+                        if !osr_tried
+                            && crate::emacs_core::jit::jit_osr_on()
+                            && crate::emacs_core::jit::jit_runtime_enabled()
+                            && func.runtime.is_hot()
+                        {
                             let depth = cursor.len - frame_base;
                             cursor.publish(&mut self.ctx);
                             let snapshot: Vec<Value> =
