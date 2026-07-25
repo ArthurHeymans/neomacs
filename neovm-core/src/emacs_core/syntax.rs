@@ -811,10 +811,18 @@ impl<'a> BufferChars<'a> {
         // A unibyte buffer stores one byte per char; a multibyte buffer stores
         // the char's internal multibyte length (raw bytes included -- see
         // `emacs_char::char_bytes`).
-        let width = if self.multibyte {
-            crate::emacs_core::emacs_char::char_bytes(code)
-        } else {
+        //
+        // The `code < 0x80` arm is not redundant with `char_bytes`, which
+        // returns 1 for it anyway: the compiler lowers that function's
+        // comparison chain BRANCHLESSLY (cmov), so every character paid all of
+        // its bounds checks. Annotating this function showed the 5-byte-char
+        // bound alone at 9.31% of its samples and the raw-byte check at 4.52%,
+        // on a scan whose characters are overwhelmingly ASCII. Testing the
+        // dominant case first turns that into one predictable compare.
+        let width = if !self.multibyte || code < 0x80 {
             1
+        } else {
+            crate::emacs_core::emacs_char::char_bytes(code)
         };
         self.cursor
             .set(Some((idx, byte_pos, EmacsByteLen::new(width))));
