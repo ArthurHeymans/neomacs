@@ -25,6 +25,18 @@ fn placement(
 }
 
 #[test]
+fn parent_frame_rect_exposes_shared_typed_origin_and_size() {
+    let rect = ParentFrameRect::new(-5.0, -7.0, 40.0, 30.0).unwrap();
+
+    let origin: &crate::GeometryPoint<crate::ParentFrameSpace, crate::LogicalPixels> =
+        rect.origin();
+    let size: &crate::GeometrySize<crate::LogicalPixels> = rect.size();
+
+    assert_eq!((origin.x(), origin.y()), (-5.0, -7.0));
+    assert_eq!((size.width(), size.height()), (40.0, 30.0));
+}
+
+#[test]
 fn place_child_preserves_immediate_parent_coordinates_and_composes_nested_ancestry_once() {
     let scene = PresentedFrameScene::from_placements([
         placement(1, 10, None, parent_rect(0.0, 0.0, 800.0, 600.0), 0),

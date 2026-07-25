@@ -1,11 +1,11 @@
 //! Immutable frame ancestry and parent-relative child placement.
 
-use std::{
-    collections::{HashMap, HashSet},
-    fmt,
-};
+use std::collections::{HashMap, HashSet};
 
-use crate::{DisplayFrameId, PresentationId, Rect};
+use crate::{
+    DisplayFrameId, GeometryError, GeometryRect, LogicalPixels, ParentFrameSpace, PresentationId,
+    RootSurfaceSpace, SpaceTranslation,
+};
 
 /// A frame rectangle in placement coordinates.
 ///
@@ -13,109 +13,12 @@ use crate::{DisplayFrameId, PresentationId, Rect};
 /// chrome coordinate space, a child frame's origin is relative to its parent
 /// and may be negative when the child is clipped at the parent's top or left
 /// edge.
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
-#[serde(transparent)]
-pub struct ParentFrameRect(Rect);
-
-impl ParentFrameRect {
-    pub fn new(x: f32, y: f32, width: f32, height: f32) -> Result<Self, FramePlacementError> {
-        if !x.is_finite() || !y.is_finite() || !valid_extent(width) || !valid_extent(height) {
-            return Err(FramePlacementError::InvalidRect);
-        }
-        Ok(Self(Rect::new(x, y, width, height)))
-    }
-
-    pub const fn x(self) -> f32 {
-        self.0.x
-    }
-
-    pub const fn y(self) -> f32 {
-        self.0.y
-    }
-
-    pub const fn width(self) -> f32 {
-        self.0.width
-    }
-
-    pub const fn height(self) -> f32 {
-        self.0.height
-    }
-
-    pub const fn raw(self) -> Rect {
-        self.0
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for ParentFrameRect {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let rect = <Rect as serde::Deserialize>::deserialize(deserializer)?;
-        Self::new(rect.x, rect.y, rect.width, rect.height).map_err(serde::de::Error::custom)
-    }
-}
+pub type ParentFrameRect = GeometryRect<ParentFrameSpace, LogicalPixels>;
 
 /// A derived frame rectangle in root-surface coordinates.
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
-#[serde(transparent)]
-pub struct RootSurfaceRect(Rect);
+pub type RootSurfaceRect = GeometryRect<RootSurfaceSpace, LogicalPixels>;
 
-impl RootSurfaceRect {
-    pub fn new(x: f32, y: f32, width: f32, height: f32) -> Result<Self, FramePlacementError> {
-        if !x.is_finite() || !y.is_finite() || !valid_extent(width) || !valid_extent(height) {
-            return Err(FramePlacementError::InvalidRect);
-        }
-        Ok(Self(Rect::new(x, y, width, height)))
-    }
-
-    pub const fn x(self) -> f32 {
-        self.0.x
-    }
-
-    pub const fn y(self) -> f32 {
-        self.0.y
-    }
-
-    pub const fn width(self) -> f32 {
-        self.0.width
-    }
-
-    pub const fn height(self) -> f32 {
-        self.0.height
-    }
-
-    pub const fn raw(self) -> Rect {
-        self.0
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for RootSurfaceRect {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let rect = <Rect as serde::Deserialize>::deserialize(deserializer)?;
-        Self::new(rect.x, rect.y, rect.width, rect.height).map_err(serde::de::Error::custom)
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum FramePlacementError {
-    InvalidRect,
-}
-
-impl fmt::Display for FramePlacementError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("invalid frame placement rectangle")
-    }
-}
-
-impl std::error::Error for FramePlacementError {}
-
-fn valid_extent(value: f32) -> bool {
-    value.is_finite() && value >= 0.0
-}
+pub type FramePlacementError = GeometryError;
 
 /// Explicit placement of one presented frame in its immediate parent's content
 /// coordinate space. Root placement is always `(0, 0)` and never includes
@@ -285,39 +188,44 @@ impl PresentedFrameScene {
             });
         }
         let ancestry = self.ancestry(placement)?;
-        let mut root_x = 0.0;
-        let mut root_y = 0.0;
+        let mut parent_root_x = 0.0;
+        let mut parent_root_y = 0.0;
+        let mut root_relative = None;
         let mut clip = None;
         let mut z_path = Vec::with_capacity(ancestry.len());
         for ancestor in ancestry.iter().rev() {
-            root_x += ancestor.outer_in_parent.x();
-            root_y += ancestor.outer_in_parent.y();
-            let outer = RootSurfaceRect::new(
-                root_x,
-                root_y,
-                ancestor.outer_in_parent.width(),
-                ancestor.outer_in_parent.height(),
-            )
+            let parent_to_root = SpaceTranslation::<
+                ParentFrameSpace,
+                RootSurfaceSpace,
+                LogicalPixels,
+            >::from_px(parent_root_x, parent_root_y)
             .map_err(|_| PlaceChildError::InvalidDerivedPlacement(ancestor.frame))?;
+            let outer = parent_to_root
+                .map_rect(ancestor.outer_in_parent)
+                .map_err(|_| PlaceChildError::InvalidDerivedPlacement(ancestor.frame))?;
+            parent_root_x = outer.x();
+            parent_root_y = outer.y();
             clip = Some(match clip {
                 None => PresentedClip::Rect(outer),
                 Some(PresentedClip::Empty) => PresentedClip::Empty,
-                Some(PresentedClip::Rect(current)) => intersect(current, outer),
+                Some(PresentedClip::Rect(current)) => {
+                    match current
+                        .try_intersection(outer)
+                        .map_err(|_| PlaceChildError::InvalidDerivedPlacement(ancestor.frame))?
+                    {
+                        Some(visible) => PresentedClip::Rect(visible),
+                        None => PresentedClip::Empty,
+                    }
+                }
             });
+            root_relative = Some(outer);
             z_path.push(ancestor.z_order);
         }
-        let root_relative = RootSurfaceRect::new(
-            root_x,
-            root_y,
-            placement.outer_in_parent.width(),
-            placement.outer_in_parent.height(),
-        )
-        .map_err(|_| PlaceChildError::InvalidDerivedPlacement(placement.frame))?;
         Ok(PlacedFrame {
             frame: placement.frame,
             root: ancestry.last().expect("ancestry is nonempty").frame,
             parent_relative: placement.outer_in_parent,
-            root_relative,
+            root_relative: root_relative.expect("ancestry is nonempty"),
             clip_in_root: clip.expect("ancestry is nonempty"),
             z_path,
         })
@@ -345,21 +253,6 @@ impl PresentedFrameScene {
                 })?;
         }
         Ok(result)
-    }
-}
-
-fn intersect(current: RootSurfaceRect, next: RootSurfaceRect) -> PresentedClip {
-    let left = current.x().max(next.x());
-    let top = current.y().max(next.y());
-    let right = (current.x() + current.width()).min(next.x() + next.width());
-    let bottom = (current.y() + current.height()).min(next.y() + next.height());
-    if right > left && bottom > top {
-        PresentedClip::Rect(
-            RootSurfaceRect::new(left, top, right - left, bottom - top)
-                .expect("intersection of valid root-surface rectangles is valid"),
-        )
-    } else {
-        PresentedClip::Empty
     }
 }
 
