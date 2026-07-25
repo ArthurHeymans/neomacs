@@ -94,6 +94,11 @@ pub fn wrap_elisp_outcome(setup: &str, probe: &str, marker: &str) -> String {
              (cond
               ((stringp value)
                (neomacs--test-oracle-normalize-string value))
+              ;; Some Neomacs runtime handles currently use integer IDs, so
+              ;; predicates such as `windowp' can also accept ordinary small
+              ;; integers. Preserve numeric values before probing opaque
+              ;; runtime object predicates.
+              ((numberp value) value)
               ((and (fboundp 'bufferp) (bufferp value))
                (list :buffer (buffer-name value)))
               ((and (fboundp 'markerp) (markerp value))

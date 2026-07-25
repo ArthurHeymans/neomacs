@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use neomacs_melpa_tests::{
-    EmacsRuntime, PackageScenario, prepare_shared_package_source, run_oracle_scenario,
-    workspace_root,
+    DASH_MELPA_PIN, EmacsRuntime, PackageScenario, prepare_shared_package_source,
+    run_oracle_scenario, workspace_root,
 };
 use neomacs_test_oracle::EvalOutcome;
 
@@ -10,7 +10,7 @@ use neomacs_test_oracle::EvalOutcome;
 #[ignore = "live network canary: installs current packages from GNU ELPA and MELPA"]
 fn live_melpa_ecosystem_installs_and_survives_restart() {
     let packages = [
-        ("dash", "20260221.1346"),
+        DASH_MELPA_PIN,
         ("s", "20220902.1511"),
         ("hydra", "20250316.1254"),
         ("ivy", "20260413.2102"),

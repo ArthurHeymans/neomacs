@@ -83,6 +83,20 @@ fn oracle_normalizes_each_editors_sandbox_paths_in_signals() {
 }
 
 #[test]
+fn oracle_preserves_small_integer_values() {
+    let report = neomacs_melpa_tests::run_elisp_oracle(
+        &neomacs_runtime(),
+        &EmacsRuntime::gnu_emacs().with_timeout(Duration::from_secs(120)),
+        "small-integer-outcome",
+        "",
+        "'(0 1 2 3)",
+    )
+    .expect("small integers must not be mistaken for opaque runtime handles");
+
+    assert_eq!(report.neomacs, EvalOutcome::Value("(0 1 2 3)".to_string()));
+}
+
+#[test]
 fn generic_surface_includes_package_custom_variables() {
     let surface = PackageScenario::autoload_surface("simple-single-surface", ["simple-single"]);
     let scenario = PackageScenario::new(

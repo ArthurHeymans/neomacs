@@ -23,6 +23,12 @@ phase-specific failures.
 - `live_melpa.rs` hard-codes package names and versions, downloads one complete
   dependency transaction below `./tmp`, then gives that same local transaction
   to GNU Emacs and Neomacs. No third-party package payload is tracked by Git.
+- `dash_parity.rs` uses ordinary Rust `#[test]` functions for 32 focused Dash
+  parity cases. Together they exercise the pinned package's public functions,
+  macros, compatibility aliases, edge values, and representative signals. The
+  package is installed once into a validated, locked cache below `./tmp`; each
+  test then evaluates the same form in isolated GNU Emacs and Neomacs
+  processes.
 - `upstream_package_ert.rs` runs grouped contracts from GNU Emacs's
   `test/lisp/emacs-lisp/package-tests.el` through a structured ERT adapter.
   The EOL and asynchronous-refresh groups remain explicit ignored tests until
@@ -35,9 +41,6 @@ phase-specific failures.
 - `package_vc.rs` installs from a workspace-local Git repository, restarts,
   upgrades to a new commit, restarts again, deletes the package, and verifies
   that deletion survives one more restart. It never contacts a remote host.
-- `live_melpa.rs` installs the current GNU ELPA/MELPA package matrix. It is
-  ignored by default because availability and package contents are external.
-
 The GNU package-resource contracts are required CI checks. The current MELPA
 oracle runs on scheduled and explicitly dispatched CI workflows.
 
@@ -59,7 +62,7 @@ NEOMACS_MELPA_ORACLE_EMACS="/home/exec/Projects/github.com/emacs-mirror/emacs/sr
 cargo nextest run -p neomacs-melpa-tests --no-fail-fast
 ```
 
-Run the live canary explicitly:
+Run the live lifecycle canary explicitly:
 
 ```sh
 TMPDIR="$PWD/tmp" \
@@ -70,8 +73,20 @@ cargo nextest run -p neomacs-melpa-tests \
   --no-fail-fast
 ```
 
+Run every comprehensive Dash parity test:
+
+```sh
+TMPDIR="$PWD/tmp" \
+NEOMACS_BIN="$PWD/target/release/neomacs" \
+cargo nextest run -p neomacs-melpa-tests \
+  --run-ignored only \
+  -E 'binary_id(neomacs-melpa-tests::dash_parity)' \
+  --no-fail-fast
+```
+
 When MELPA publishes a new version, update only the hard-coded version next to
-the package name in `tests/live_melpa.rs`. Catalogs, dependency metadata,
+the package name in `DASH_MELPA_PIN` or the relevant package matrix entry.
+Catalogs, dependency metadata,
 tarballs, extracted files, and generated local archives stay under `./tmp`.
 
 GNU Emacs selection checks `NEOMACS_MELPA_ORACLE_EMACS`, then

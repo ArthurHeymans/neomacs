@@ -22,6 +22,10 @@ const OUTCOME_MARKER: &str = "NEOMACS-MELPA-OUTCOME:";
 const INSTALLED_MARKER: &str = "NEOMACS-MELPA-INSTALLED:";
 const DEFAULT_PROCESS_TIMEOUT: Duration = Duration::from_secs(300);
 
+/// The exact Dash package selected by the live lifecycle and comprehensive
+/// API parity corpora.
+pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
+
 /// Resolve the checkout used by a normal Cargo run or an extracted Nextest
 /// archive.
 pub fn workspace_root() -> PathBuf {
@@ -548,6 +552,13 @@ pub struct OracleScenarioReport {
     pub gnu_emacs: ScenarioReport,
 }
 
+/// GNU Emacs and Neomacs outcomes for one direct Elisp form.
+#[derive(Debug)]
+pub struct ElispOracleReport {
+    pub neomacs: EvalOutcome,
+    pub gnu_emacs: EvalOutcome,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InstalledPackage {
     pub name: String,
@@ -921,6 +932,52 @@ pub fn run_oracle_scenario(
     Ok(OracleScenarioReport {
         neomacs: neomacs_report,
         gnu_emacs: gnu_report,
+    })
+}
+
+/// Run the same setup and Elisp form in isolated GNU Emacs and Neomacs
+/// processes without installing a package.
+///
+/// This is useful for dense behavioral corpora that load one previously
+/// prepared package source while the package lifecycle remains covered by a
+/// separate scenario.
+pub fn run_elisp_oracle(
+    neomacs: &EmacsRuntime,
+    gnu_emacs: &EmacsRuntime,
+    name: &str,
+    setup: &str,
+    probe: &str,
+) -> Result<ElispOracleReport, String> {
+    fn evaluate(
+        runtime: &EmacsRuntime,
+        name: &str,
+        setup: &str,
+        probe: &str,
+    ) -> Result<EvalOutcome, String> {
+        let sandbox = MelpaSandbox::new(name)?;
+        let form = wrap_elisp_outcome(setup, probe, OUTCOME_MARKER);
+        let phase = run_outcome_phase(runtime, &sandbox, name, ScenarioPhase::RestartProbe, &form)?;
+        extract_marked_outcome(&phase.stdout, OUTCOME_MARKER).map_err(|error| {
+            format!(
+                "{} direct oracle `{name}` emitted an invalid outcome: {error}\nstdout:\n{}\nstderr:\n{}",
+                runtime.name, phase.stdout, phase.stderr
+            )
+        })
+    }
+
+    let gnu_outcome = evaluate(gnu_emacs, name, setup, probe)
+        .map_err(|error| format!("GNU Emacs baseline failed: {error}"))?;
+    let neomacs_outcome = evaluate(neomacs, name, setup, probe)
+        .map_err(|error| format!("Neomacs comparison failed: {error}"))?;
+    if neomacs_outcome != gnu_outcome {
+        return Err(format!(
+            "oracle outcome mismatch for direct form `{name}`\n  Neomacs: {neomacs_outcome}\n  GNU Emacs: {gnu_outcome}"
+        ));
+    }
+
+    Ok(ElispOracleReport {
+        neomacs: neomacs_outcome,
+        gnu_emacs: gnu_outcome,
     })
 }
 

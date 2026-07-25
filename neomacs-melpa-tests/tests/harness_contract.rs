@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use neomacs_melpa_tests::{
     EmacsRuntime, ErtScenario, MelpaSandbox, PackageScenario, PackageSource, ScenarioPhase,
-    prepare_shared_package_source, run_ert_scenario, run_oracle_scenario, run_scenario,
-    workspace_root,
+    prepare_shared_package_source, run_elisp_oracle, run_ert_scenario, run_oracle_scenario,
+    run_scenario, workspace_root,
 };
 use neomacs_test_oracle::EvalOutcome;
 
@@ -186,6 +186,41 @@ printf '%s\n' 'NEOMACS-MELPA-OUTCOME:OK {value}'
     assert!(error.contains("value-divergence"));
     assert!(error.contains("OK 42"));
     assert!(error.contains("OK 43"));
+}
+
+#[cfg(unix)]
+#[test]
+fn direct_elisp_oracle_runs_one_form_without_a_package_install() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = MelpaSandbox::new("direct-oracle-contract").expect("create fixture sandbox");
+    let runtime_script = fixture.root().join("direct-emacs");
+    fs::write(
+        &runtime_script,
+        r##"#!/bin/sh
+case "$*" in
+  *dash-sentinel*)
+    printf '%s\n' 'NEOMACS-MELPA-OUTCOME:OK (:dash direct)'
+    ;;
+  *)
+    exit 9
+    ;;
+esac
+"##,
+    )
+    .expect("write direct runtime");
+    fs::set_permissions(&runtime_script, fs::Permissions::from_mode(0o755))
+        .expect("make direct runtime executable");
+
+    let runtime = EmacsRuntime::new("fake", runtime_script);
+    let report = run_elisp_oracle(&runtime, &runtime, "direct-dash-form", "", "'dash-sentinel")
+        .expect("run direct differential form");
+
+    assert_eq!(
+        report.neomacs,
+        EvalOutcome::Value("(:dash direct)".to_string())
+    );
+    assert_eq!(report.neomacs, report.gnu_emacs);
 }
 
 #[test]
