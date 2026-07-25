@@ -1,5 +1,4 @@
 use crate::display_output_builder::{DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID};
-use crate::display_output_install_request::OutputFrameStateInstallRequest;
 use crate::display_row_measured_state::{
     DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, WindowChromeKind,
 };
@@ -87,9 +86,6 @@ impl MeasuredFrameChromeAssetsInstallRequest<'_> {
 
 fn install_faces(builder: &mut DisplayOutputBuilder, faces: &[Face]) {
     for face in faces {
-        builder.install_output_frame_state(OutputFrameStateInstallRequest::face(
-            face.id,
-            face.clone(),
-        ));
+        builder.publish_output_face(face.id, face.clone());
     }
 }

@@ -1,4 +1,3 @@
-use crate::display_face_id::FrameFaceIdAllocator;
 #[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{DisplayItem, RenderFaceRef, SourceSpan};
@@ -28,6 +27,7 @@ use crate::display_source_resolver::PendingDisplaySourceFace;
 use crate::display_spec::is_display_space_spec;
 #[cfg(test)]
 use crate::display_text_output_install::install_output_resolved_face;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace, RustTextPropAccess};
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::CharPos0;
@@ -80,7 +80,7 @@ impl<'row> LispStringRowAppendContext<'row> {
     pub(crate) fn render_active_face_source_request_to_text_row_and_emit(
         self,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         request: LispStringSourceAppendSessionRequest<'row>,
     ) -> DisplayRowPosition {
         let position = request.position();
@@ -124,7 +124,7 @@ impl<'row> DisplayRowPrefixAppendContext<'row> {
     fn render_source_to_text_row_and_emit(
         self,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         base_face: &DisplayStringBaseFace,
         prefix_source: DisplayRowPrefixSource,
         position: DisplayRowPosition,
@@ -185,7 +185,7 @@ fn render_lisp_string_source_append_to_text_row_and_emit(
     source_state: &mut DisplayRowSourceState,
     base_face: &ResolvedFace,
     base_face_id: FaceId,
-    face_ids: &mut FrameFaceIdAllocator,
+    face_ids: &mut FrameFaceAttempt,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<CurrentTextRowRenderOutcome> {
@@ -208,7 +208,7 @@ fn render_single_display_item_source_append_to_text_row_and_emit(
     item: DisplayItem,
     base_face: &ResolvedFace,
     base_face_id: FaceId,
-    face_ids: &mut FrameFaceIdAllocator,
+    face_ids: &mut FrameFaceAttempt,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> Option<CurrentTextRowRenderOutcome> {
@@ -310,7 +310,7 @@ impl<'a> LispStringSourceAppendSession<'a> {
     fn render_to_text_row_and_emit(
         &mut self,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         frame: DisplayRowAppendFrame,
         position: DisplayRowPosition,
     ) -> Option<CurrentTextRowRenderOutcome> {
@@ -591,7 +591,7 @@ impl<'a> BufferLinePrefixRenderRequest<'a> {
         state: &mut TextRowSourceRenderState<'_>,
         buffer: &B,
         anchor_charpos: i64,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> DisplayRowPosition {
         let position = self.position;
         if !request.is_requested() {
@@ -636,7 +636,7 @@ impl<'a> BufferLinePrefixRenderRequest<'a> {
         source_render: &mut TextRowSourceRenderState<'_>,
         buffer: &B,
         anchor_charpos: i64,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         x: &mut f32,
         col: &mut usize,
     ) {
@@ -705,7 +705,7 @@ impl<'a> LispStringSourceRowAppendSession<'a> {
     pub(crate) fn render_to_text_row_and_emit(
         &mut self,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         geometry: &DisplayRowGeometryState,
         position: DisplayRowPosition,
     ) -> Option<CurrentTextRowRenderOutcome> {
@@ -739,7 +739,7 @@ pub(crate) fn append_lisp_string_to_text_row(
     source_id: u64,
     base_face: &ResolvedFace,
     base_face_id: FaceId,
-    face_ids: &mut FrameFaceIdAllocator,
+    face_ids: &mut FrameFaceAttempt,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
 ) -> DisplayRowPosition {

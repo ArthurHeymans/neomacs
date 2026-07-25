@@ -27,9 +27,9 @@ use crate::display_output_window_state::OutputWindowBuildState;
 use crate::display_row_face_state::resolved_display_row_face;
 #[cfg(test)]
 use crate::font_metrics::FontMetrics;
+use crate::frame_face_arena::{FrameFaceArena, FrameFaceAttempt};
 #[cfg(test)]
 use crate::neovm_bridge::ResolvedFace;
-#[cfg(test)]
 use neomacs_display_protocol::face::Face;
 #[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
@@ -41,17 +41,15 @@ use neomacs_display_protocol::frame_glyphs::{
     PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
 use neomacs_display_protocol::glyph_matrix::*;
-#[cfg(test)]
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayFrameId, DisplayWindowId, Rect};
-#[cfg(test)]
-use std::collections::HashMap;
 
 pub(crate) const FRAME_CHROME_WINDOW_ID: i64 = 0;
 
 pub(crate) struct DisplayOutputBuilder {
     window_state: OutputWindowBuildState,
     frame_state: OutputFrameBuildState,
+    face_attempt: FrameFaceAttempt,
 }
 
 impl DisplayOutputBuilder {
@@ -59,7 +57,12 @@ impl DisplayOutputBuilder {
         Self {
             window_state: OutputWindowBuildState::new(),
             frame_state: OutputFrameBuildState::new(),
+            face_attempt: FrameFaceArena::default().begin_attempt(),
         }
+    }
+
+    pub(crate) fn set_face_attempt(&mut self, face_attempt: FrameFaceAttempt) {
+        self.face_attempt = face_attempt;
     }
 
     pub(crate) fn reset(&mut self) {
@@ -365,7 +368,7 @@ impl DisplayOutputBuilder {
 
     #[cfg(test)]
     pub(crate) fn install_output_face(&mut self, id: FaceId, face: Face) {
-        self.install_output_frame_state(OutputFrameStateInstallRequest::face(id, face));
+        self.publish_output_face(id, face);
     }
 
     #[cfg(test)]
@@ -376,10 +379,7 @@ impl DisplayOutputBuilder {
         metrics: Option<FontMetrics>,
     ) {
         let render_face = resolved_display_row_face(face_id, face, metrics);
-        self.install_output_frame_state(OutputFrameStateInstallRequest::face(
-            render_face.face_id,
-            render_face.render_face(),
-        ));
+        self.publish_output_face(render_face.face_id, render_face.render_face());
     }
 
     pub(crate) fn add_output_background(&mut self, bounds: Rect, color: Color) {
@@ -506,6 +506,13 @@ impl DisplayOutputBuilder {
         self.frame_state.install_frame_state(request);
     }
 
+    pub(crate) fn publish_output_face(&mut self, id: FaceId, mut face: Face) {
+        face.id = id;
+        self.face_attempt
+            .publish(face)
+            .expect("one frame face id must have one immutable rendering");
+    }
+
     pub(crate) fn window_content_height_px(
         &self,
         window_id: i64,
@@ -542,8 +549,8 @@ impl DisplayOutputBuilder {
     }
 
     #[cfg(test)]
-    pub(crate) fn faces(&self) -> &HashMap<FaceId, Face> {
-        self.frame_state.faces()
+    pub(crate) fn output_face(&self, face_id: FaceId) -> Option<Face> {
+        self.face_attempt.face(face_id)
     }
 
     pub(crate) fn cursors(&self) -> &[CursorItem] {
@@ -564,10 +571,12 @@ impl DisplayOutputBuilder {
         let Self {
             window_state,
             frame_state,
+            face_attempt,
         } = self;
         let mut state = FrameDisplayState::new(frame_cols, frame_rows, char_width, char_height);
         state.window_matrices = window_state.into_window_matrix_entries();
         frame_state.install_into(&mut state);
+        state.faces = face_attempt.faces();
         state
     }
 

@@ -15,9 +15,9 @@
 //! the bottom of the text area, never overrunning the mode-line / echo-area
 //! boundary.
 
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_output_row_request::OutputRowLifecycleRequest;
 use crate::display_row_geometry::DisplayRowGeometryState;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, resolve_fringe_indicator_bitmap_index};
 use crate::types::LayoutCharPos0;
 use crate::types::WindowParams;
@@ -129,7 +129,7 @@ impl EmptyLineFringeFillRequest {
         mut output: TextWindowOutputTarget<'_>,
         evaluator: &Context,
         face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         row_geometry: &DisplayRowGeometryState,
     ) -> usize {
         let Some(side) = self.side() else {
@@ -159,7 +159,7 @@ impl EmptyLineFringeFillRequest {
         // Resolve the `fringe` face once and register it so the renderer can
         // resolve fg/bg for the bitmap quads.
         let resolved = face_resolver.resolve_named_face("fringe");
-        let face_id = face_ids.allocate();
+        let face_id = face_ids.reserve_dynamic_face();
         output.install_resolved_face(face_id, &resolved, None);
 
         let info = FringeBitmapInfo {

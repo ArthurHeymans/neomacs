@@ -36,7 +36,6 @@ use crate::display_cursor::resolve_cursor_vertical_metrics;
 use crate::display_cursor::{CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth};
 #[cfg(test)]
 use crate::display_cursor::{CursorSlotWidthRequest, VisualCursorGeometryContext};
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_frame_output::{
     FrameLineAnimationHintsRenderRequest, FrameOutputIdentity, FrameOutputOwner,
     FrameOutputStateRenderRequest, FrameThemeTransitionHintRenderRequest,
@@ -67,6 +66,9 @@ use crate::display_row_walk_state::{
     LineNumberRenderState, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::fontconfig::FontSizing;
+use crate::frame_face_arena::{
+    FrameFaceArena, FrameFaceAttempt, FrameFaceGeneration, FrameFaceReuseError,
+};
 use crate::frame_layout_transaction::{FrameLayoutCoordinator, FrameRelayoutRequest};
 use crate::incremental_layout::{
     CursorOnlyReplay, LayoutClass, LayoutStats, MatrixValidity, RetainedWindowKey,
@@ -75,7 +77,6 @@ use crate::incremental_layout::{
 use crate::window_layout::{
     WindowChromeMetrics, WindowDividerLayout, WindowLayoutBox, WindowLayoutOutcome,
 };
-use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_chrome::{
     ChromeBandRequest, FrameChromeContent, FrameChromeKind as ProtocolFrameChromeKind,
     TerminalMenuBarStyle,
@@ -262,29 +263,12 @@ pub struct LayoutEngine {
     /// The last completed `FrameDisplayState`, produced by `layout_frame_rust()`.
     /// Used by the TTY redisplay path to drive `TtyRif` on the evaluator thread.
     pub last_frame_display_state: Option<neomacs_display_protocol::SealedFramePresentation>,
-    /// Monotonic face-id allocator, frame-scoped.
+    /// Last sealed face namespace for each logical frame.
     ///
-    /// Mirrors GNU's frame-wide `face_cache->used` counter in
-    /// `src/xfaces.c::realize_face`, which grows within a frame and
-    /// never resets per window: windows on the same frame share a
-    /// single face cache so two windows referencing the same face
-    /// end up with the same `face_id`, and two windows referencing
-    /// DIFFERENT faces get different ids.
-    ///
-    /// Before this field existed, `layout_window_rust` used a
-    /// function-local `let mut current_face_id: FaceId = 1;` which
-    /// reset to 1 for every window. That collided with the
-    /// frame-wide output face map: the first window
-    /// inserted `mode-line` at face_id=2, the second window then
-    /// inserted `mode-line-inactive` ALSO at face_id=2 and
-    /// overwrote the first entry, causing both mode lines to
-    /// render with the inactive face after `C-x 2`.
-    /// Frame-scoped face-ID counter.  Starts at
-    /// [`BasicFaceId::SENTINEL`] so dynamic face IDs never collide
-    /// with the fixed basic-face slots (0–19).  Raw `u32` on purpose:
-    /// this is `FrameFaceIdAllocator` seed state, not an id value —
-    /// ids only leave the allocator as typed `FaceId`s.
-    pub(crate) frame_face_id_counter: u32,
+    /// A speculative layout gets a fresh [`FrameFaceAttempt`] from this arena;
+    /// retries discard that attempt, and only a sealed presentation replaces
+    /// the committed arena.
+    frame_face_arenas: std::collections::HashMap<neovm_core::window::FrameId, FrameFaceArena>,
     /// Per-window retained layout, owned across cycles (incremental-layout
     /// Phase 0a). Committed at the accepted `break` only; NOT read yet — the
     /// engine still rebuilds every window every cycle. The container a later
@@ -332,13 +316,19 @@ struct IncrementalWindowPlan {
 }
 
 impl IncrementalWindowPlan {
-    fn retained_faces(
-        &self,
-    ) -> Option<&std::collections::HashMap<FaceId, neomacs_display_protocol::face::Face>> {
+    fn retained_face_generation(&self) -> Option<FrameFaceGeneration> {
         self.cursor_only
             .as_ref()
-            .map(|replay| &replay.faces)
-            .or_else(|| self.scroll.as_ref().map(|replay| &replay.faces))
+            .map(|replay| replay.face_generation)
+            .or_else(|| self.scroll.as_ref().map(|replay| replay.face_generation))
+    }
+
+    fn retained_face_ids(&self) -> Vec<FaceId> {
+        self.cursor_only
+            .as_ref()
+            .map(CursorOnlyReplay::retained_face_ids)
+            .or_else(|| self.scroll.as_ref().map(ScrollReplay::retained_face_ids))
+            .unwrap_or_default()
     }
 
     fn disable_reuse(&mut self) {
@@ -348,48 +338,30 @@ impl IncrementalWindowPlan {
     }
 }
 
-/// Attempt-scoped admission batch for prior-frame faces referenced by rows that
-/// will be replayed verbatim.
-///
-/// GNU's realized face cache is frame-wide.  NeoMacs rebuilds its protocol face
-/// table per attempt, so retained IDs must enter that single namespace
-/// atomically, before tab-bar, window body, or window chrome can allocate a new
-/// dynamic ID.  Per-window admission is unsound: a later window can otherwise
-/// overwrite a fresh face already emitted by an earlier window.
-#[derive(Default)]
-struct FrameRetainedFaceNamespace {
-    faces: std::collections::HashMap<FaceId, neomacs_display_protocol::face::Face>,
-}
-
-impl FrameRetainedFaceNamespace {
-    fn gather(plans: &[IncrementalWindowPlan]) -> Result<Self, FaceId> {
-        let mut namespace = Self::default();
-        for (id, face) in plans
-            .iter()
-            .filter_map(IncrementalWindowPlan::retained_faces)
-            .flat_map(|faces| faces.iter())
-        {
-            match namespace.faces.entry(*id) {
-                std::collections::hash_map::Entry::Vacant(slot) => {
-                    slot.insert(face.clone());
-                }
-                std::collections::hash_map::Entry::Occupied(slot) if slot.get() != face => {
-                    return Err(*id);
-                }
-                std::collections::hash_map::Entry::Occupied(_) => {}
-            }
+fn admit_retained_frame_faces(
+    plans: &[IncrementalWindowPlan],
+    face_attempt: &mut FrameFaceAttempt,
+    committed_arena: &FrameFaceArena,
+) -> Result<(), FrameFaceReuseError> {
+    let current_generation = committed_arena.generation();
+    let mut face_ids = std::collections::BTreeSet::new();
+    for plan in plans {
+        let Some(retained_generation) = plan.retained_face_generation() else {
+            continue;
+        };
+        if retained_generation != current_generation {
+            return Err(FrameFaceReuseError::StaleGeneration {
+                retained: retained_generation,
+                current: current_generation,
+            });
         }
-        Ok(namespace)
+        face_ids.extend(
+            plan.retained_face_ids()
+                .into_iter()
+                .filter(|face_id| *face_id != FaceId::new(0)),
+        );
     }
-
-    fn admit(self, frame_output: &mut FrameOutputOwner, frame_face_id_counter: &mut u32) {
-        let mut face_ids = FrameFaceIdAllocator::new(*frame_face_id_counter);
-        if let Some(max_retained_id) = self.faces.keys().copied().max() {
-            face_ids.reserve_after(max_retained_id);
-        }
-        face_ids.finish_into(frame_face_id_counter);
-        frame_output.install_retained_faces(self.faces);
-    }
+    face_attempt.admit_retained(current_generation, face_ids, committed_arena)
 }
 
 impl Default for LayoutEngine {
@@ -407,7 +379,6 @@ impl LayoutEngine {
     fn reset_frame_attempt_state(&mut self) {
         self.frame_output.reset();
         self.pending_tab_bar_pointer = None;
-        self.frame_face_id_counter = BasicFaceId::SENTINEL;
         self.window_snapshots.clear();
         self.cursor_only_window_ids.clear();
         self.scroll_window_ids.clear();
@@ -469,14 +440,14 @@ impl LayoutEngine {
         window_geometry: crate::display_frame_output::WindowFrameGeometry,
         info: &WindowInfo,
         face_resolver: &super::neovm_bridge::FaceResolver,
+        face_attempt: &FrameFaceAttempt,
     ) {
-        let mut decoration_face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
+        let mut decoration_face_ids = face_attempt.clone();
         let font_metrics = &mut self.font_metrics;
         self.frame_output.render_window_decorations(
             WindowFrameDecorationsRenderRequest::new(params, frame_params, window_geometry, info),
             ChromeRowRenderServices::new(font_metrics, face_resolver, &mut decoration_face_ids),
         );
-        decoration_face_ids.finish_into(&mut self.frame_face_id_counter);
     }
 
     fn render_latest_window_output_info_effects(
@@ -541,7 +512,7 @@ impl LayoutEngine {
             frame_output: FrameOutputOwner::new(),
             pending_tab_bar_pointer: None,
             last_frame_display_state: None,
-            frame_face_id_counter: BasicFaceId::SENTINEL,
+            frame_face_arenas: std::collections::HashMap::new(),
             retained_window_matrices: std::collections::HashMap::new(),
             retained_window_chrome_metrics: std::collections::HashMap::new(),
             cursor_only_window_ids: std::collections::HashSet::new(),
@@ -570,7 +541,7 @@ impl LayoutEngine {
             frame_output: FrameOutputOwner::new(),
             pending_tab_bar_pointer: None,
             last_frame_display_state: None,
-            frame_face_id_counter: BasicFaceId::SENTINEL,
+            frame_face_arenas: std::collections::HashMap::new(),
             retained_window_matrices: std::collections::HashMap::new(),
             retained_window_chrome_metrics: std::collections::HashMap::new(),
             cursor_only_window_ids: std::collections::HashSet::new(),
@@ -722,8 +693,19 @@ impl LayoutEngine {
         // reach presentation sealing below.
         let mut layout_coordinator = FrameLayoutCoordinator::new(MAX_FRAME_LAYOUT_RETRIES);
         let mut window_chrome_metrics = self.retained_window_chrome_metrics.clone();
+        let committed_face_arena = self
+            .frame_face_arenas
+            .get(&frame_id)
+            .cloned()
+            .unwrap_or_default();
 
-        let (frame_params, curr_window_infos, retained_keys, accepted_window_chrome_metrics) = 'frame_layout: loop {
+        let (
+            frame_params,
+            curr_window_infos,
+            retained_keys,
+            accepted_window_chrome_metrics,
+            accepted_face_attempt,
+        ) = 'frame_layout: loop {
             // Collect window and frame params from neovm-core
             let (frame_params, mut window_params_list) =
                 match super::neovm_bridge::collect_layout_params_with_font_sizing(
@@ -779,6 +761,8 @@ impl LayoutEngine {
             }
 
             self.reset_frame_attempt_state();
+            let mut face_attempt = committed_face_arena.begin_attempt();
+            self.frame_output.set_face_attempt(face_attempt.clone());
             self.frame_output.set_presentation_id(presentation_id);
             let mut curr_window_infos: std::collections::HashMap<DisplayWindowId, WindowInfo> =
                 std::collections::HashMap::new();
@@ -902,22 +886,18 @@ impl LayoutEngine {
                 })
                 .collect();
 
-            // Admit all prior-frame faces as one batch before the tab bar or any
-            // window can mint fresh IDs. If retained snapshots ever disagree
-            // about an ID, the safe recovery is a full rebuild of every window,
-            // not an arbitrary last-writer-wins face.
-            match FrameRetainedFaceNamespace::gather(&window_plans) {
-                Ok(namespace) => {
-                    namespace.admit(&mut self.frame_output, &mut self.frame_face_id_counter)
-                }
-                Err(conflicting_face_id) => {
-                    tracing::warn!(
-                        face_id = conflicting_face_id.get(),
-                        "discarding incremental frame plans with conflicting retained faces"
-                    );
-                    for plan in &mut window_plans {
-                        plan.disable_reuse();
-                    }
+            // Admit all prior-frame face identities as one atomic batch before
+            // the tab bar or any window can mint fresh IDs. A stale retained
+            // generation invalidates every fast path for this attempt.
+            if let Err(error) =
+                admit_retained_frame_faces(&window_plans, &mut face_attempt, &committed_face_arena)
+            {
+                tracing::warn!(
+                    ?error,
+                    "discarding incremental frame plans with stale retained faces"
+                );
+                for plan in &mut window_plans {
+                    plan.disable_reuse();
                 }
             }
 
@@ -929,6 +909,7 @@ impl LayoutEngine {
                     tab_bar_height,
                     presentation_id,
                     tab_bar,
+                    &face_attempt,
                 )
                 && actual_tab_bar_height != tab_bar_height
             {
@@ -1007,6 +988,7 @@ impl LayoutEngine {
                     plan.cursor_only,
                     plan.scroll,
                     plan.is_edit,
+                    &face_attempt,
                 );
                 let accepted_layout_box = match window_layout {
                     WindowLayoutOutcome::Stable(layout_box) => {
@@ -1063,6 +1045,7 @@ impl LayoutEngine {
                         window_geometry,
                         &info,
                         &face_resolver,
+                        &face_attempt,
                     );
                 }
             }
@@ -1209,6 +1192,7 @@ impl LayoutEngine {
                 curr_window_infos,
                 retained_keys,
                 accepted_window_chrome_metrics,
+                face_attempt,
             );
         };
 
@@ -1324,6 +1308,15 @@ impl LayoutEngine {
                 return;
             }
         };
+        let sealed_face_arena = match accepted_face_attempt.seal(frame_display_state.faces.clone())
+        {
+            Ok(arena) => arena,
+            Err(error) => {
+                tracing::error!(?error, "rejecting incoherent frame face namespace");
+                evaluator.retire_interaction_presentation(presentation_id);
+                return;
+            }
+        };
 
         // Embed the user-defined fringe bitmaps once per frame so the renderer
         // can expand any `GlyphRow::left_fringe_bitmap` reference (magit section
@@ -1363,39 +1356,6 @@ impl LayoutEngine {
             let presented_cursor = frame_state.phys_cursor.clone();
             let mut retained: std::collections::HashMap<DisplayWindowId, RetainedWindowMatrix> =
                 std::collections::HashMap::new();
-            // Snapshot the resolved Face for every face_id referenced by an
-            // enabled BODY row. Incremental paths reuse only body rows; chrome is
-            // always re-walked. Retaining chrome faces needlessly raises the next
-            // attempt's high-water mark and makes fresh chrome IDs drift forever.
-            //
-            // Before any dynamic face is allocated on the next attempt, Phase A
-            // atomically admits the snapshots of ALL windows selected for replay.
-            // The frame-wide reservation prevents a later window's retained body
-            // face from overwriting an earlier window's freshly emitted chrome.
-            let mut window_face_snapshots: std::collections::HashMap<
-                DisplayWindowId,
-                std::collections::HashMap<FaceId, neomacs_display_protocol::face::Face>,
-            > = frame_state
-                .window_matrices
-                .iter()
-                .map(|entry| {
-                    let wid = entry.window_id;
-                    let mut faces = std::collections::HashMap::new();
-                    for row in entry.matrix.rows.iter().filter(|row| {
-                        row.enabled && !RetainedWindowMatrix::is_chrome_role(row.role)
-                    }) {
-                        for face_id in row.referenced_face_ids() {
-                            if let std::collections::hash_map::Entry::Vacant(slot) =
-                                faces.entry(face_id)
-                                && let Some(face) = frame_state.faces.get(&face_id)
-                            {
-                                slot.insert(face.clone());
-                            }
-                        }
-                    }
-                    (wid, faces)
-                })
-                .collect();
             for entry in &mut frame_state.window_matrices {
                 let window_id = entry.window_id;
                 let cursor_only = self.cursor_only_window_ids.contains(&window_id);
@@ -1520,7 +1480,7 @@ impl LayoutEngine {
                                 .as_ref()
                                 .filter(|cursor| cursor.window_id == window_id)
                                 .cloned(),
-                            faces: window_face_snapshots.remove(&window_id).unwrap_or_default(),
+                            face_generation: sealed_face_arena.generation(),
                         },
                     );
                 }
@@ -1564,6 +1524,7 @@ impl LayoutEngine {
         self.retained_window_chrome_metrics = accepted_window_chrome_metrics;
         self.layout_stats = next_layout_stats;
         self.retained_window_matrices = next_retained_window_matrices;
+        self.frame_face_arenas.insert(frame_id, sealed_face_arena);
         for buffer_id in acked_buffer_ids {
             if let Some(buffer) = evaluator
                 .buffer_manager()
@@ -1767,6 +1728,7 @@ impl LayoutEngine {
         cursor_only_replay: Option<CursorOnlyReplay>,
         scroll_replay: Option<ScrollReplay>,
         is_edit: bool,
+        face_attempt: &FrameFaceAttempt,
     ) -> WindowLayoutOutcome {
         let window_id = neovm_core::window::WindowId(params.window_id as u64);
         let scroll_dvpos = scroll_replay
@@ -1832,7 +1794,7 @@ impl LayoutEngine {
                 evaluator,
                 &mut self.font_metrics,
                 face_resolver,
-                &mut self.frame_face_id_counter,
+                face_attempt.clone(),
                 &mut self.window_snapshots,
             ),
             &mut self.text_buf,
@@ -1875,6 +1837,7 @@ impl LayoutEngine {
                     None,
                     None,
                     false,
+                    face_attempt,
                 );
             }
             BufferSourceRenderAttemptOutcome::RetryPointIntoWindow { point_charpos } => {
@@ -1917,6 +1880,7 @@ impl LayoutEngine {
                     None,
                     None,
                     false,
+                    face_attempt,
                 );
             }
             BufferSourceRenderAttemptOutcome::Finished {
@@ -2006,6 +1970,7 @@ impl LayoutEngine {
         tab_bar_height: f32,
         presentation_id: u64,
         tab_bar: BuiltTabBar,
+        face_attempt: &FrameFaceAttempt,
     ) -> Option<f32> {
         let width = frame_params.width;
         let tab_bar_face =
@@ -2015,7 +1980,7 @@ impl LayoutEngine {
             DisplayRowFallbackMetrics::from_frame_defaults(frame_params, tab_bar_ascent);
         let metrics = DisplayRowFaceRealizer::new(&mut self.font_metrics)
             .row_metrics_for_face(&tab_bar_face, fallback_metrics);
-        let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
+        let mut face_ids = face_attempt.clone();
         let rendered_tab_bar = self.frame_output.render_frame_tab_bar_row(
             FrameTabBarDisplayRowRequest {
                 row_index: 0,
@@ -2046,7 +2011,7 @@ impl LayoutEngine {
             else {
                 continue;
             };
-            let face_id = face_ids.allocate();
+            let face_id = face_ids.reserve_dynamic_face();
             resolved.face_id = face_id.get();
             resolved.lisp_name = value.as_symbol_name().map(str::to_owned);
             let realized = DisplayRowFaceRealizer::new(&mut self.font_metrics).realize_face(
@@ -2060,7 +2025,6 @@ impl LayoutEngine {
                 .install_pointer_face(face_id, realized.render_face());
             realized_mouse_faces.push((value, face_id));
         }
-        face_ids.finish_into(&mut self.frame_face_id_counter);
         let actual_tab_bar_height = measured.bounds().height;
         let (horizontal_margin, vertical_margin, thickness) =
             tab_bar_button_relief_geometry(evaluator);

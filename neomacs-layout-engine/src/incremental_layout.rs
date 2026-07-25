@@ -12,9 +12,9 @@
 //! Spec: docs/superpowers/specs/2026-06-26-neomacs-incremental-layout-design.md
 //! (§4.1 retained structure, §4.6 RowDamage, §5 Phase 0a, §7 go-criteria).
 
+use crate::frame_face_arena::FrameFaceGeneration;
 use crate::types::{LineWrapMode, WindowParams};
 use crate::window_layout::{WindowLayoutBox, WindowPartitionSignature};
-use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, PhysCursor};
 pub use neomacs_display_protocol::glyph_matrix::RowDamage;
 use neomacs_display_protocol::glyph_matrix::{
@@ -280,12 +280,8 @@ pub struct RetainedWindowMatrix {
     /// Kept separately from the integer window snapshot so unchanged cursor-only
     /// replay preserves subpixel geometry and explicit display-string placement.
     pub presented_cursor: Option<PhysCursor>,
-    /// Resolved `Face` for every `face_id` this window's retained BODY rows
-    /// reference. Face ids are allocated per-frame from a counter reset to
-    /// SENTINEL each frame, and the frame faces table is rebuilt from scratch;
-    /// before any fresh allocation, Phase A admits every replaying window's
-    /// retained faces into one frame-wide namespace.
-    pub faces: std::collections::HashMap<FaceId, Face>,
+    /// Sealed frame-face generation that owns every ID referenced by `matrix`.
+    pub(crate) face_generation: FrameFaceGeneration,
 }
 
 /// Everything the cursor-only fast path (Phase 1) needs to replay a window
@@ -319,10 +315,8 @@ pub struct CursorOnlyReplay {
     /// is unchanged. This preserves explicit display-string `cursor` placement;
     /// reconstructing from buffer point would lose that semantic override.
     pub retained_cursor: Option<PhysCursor>,
-    /// Resolved faces for the reused rows' prior-frame IDs. Phase A admits these
-    /// together with every other replaying window's faces before fresh frame
-    /// allocations begin. See [`RetainedWindowMatrix::faces`].
-    pub faces: std::collections::HashMap<FaceId, Face>,
+    /// Sealed frame-face generation that owns every ID in `body_rows`.
+    pub(crate) face_generation: FrameFaceGeneration,
 }
 
 /// Reuse plan for the pure-scroll fast path (Phase 2): the overlapping retained
@@ -367,10 +361,28 @@ pub struct ScrollReplay {
     /// `reused_rows`. When false (scroll, above-only edit) the walk runs to the
     /// window bottom as usual.
     pub bound_walk: bool,
-    /// Resolved faces for the reused rows' prior-frame IDs. Phase A admits these
-    /// together with every other replaying window's faces before fresh frame
-    /// allocations begin. See [`RetainedWindowMatrix::faces`].
-    pub faces: std::collections::HashMap<FaceId, Face>,
+    /// Sealed frame-face generation that owns every ID in `reused_rows`.
+    pub(crate) face_generation: FrameFaceGeneration,
+}
+
+fn referenced_face_ids<'a>(rows: impl IntoIterator<Item = &'a GlyphRow>) -> Vec<FaceId> {
+    rows.into_iter()
+        .flat_map(GlyphRow::referenced_face_ids)
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+impl CursorOnlyReplay {
+    pub(crate) fn retained_face_ids(&self) -> Vec<FaceId> {
+        referenced_face_ids(self.body_rows.iter().map(|(_, row)| row))
+    }
+}
+
+impl ScrollReplay {
+    pub(crate) fn retained_face_ids(&self) -> Vec<FaceId> {
+        referenced_face_ids(self.reused_rows.iter().map(|(_, row)| row))
+    }
 }
 
 impl RetainedWindowMatrix {
@@ -467,7 +479,7 @@ impl RetainedWindowMatrix {
             retained_cursor: (self.key.point == curr.point)
                 .then(|| self.presented_cursor.clone())
                 .flatten(),
-            faces: self.faces.clone(),
+            face_generation: self.face_generation,
         })
     }
 
@@ -584,7 +596,7 @@ impl RetainedWindowMatrix {
             new_point: curr.point,
             cursor_style,
             bound_walk: false,
-            faces: self.faces.clone(),
+            face_generation: self.face_generation,
         })
     }
 
@@ -829,7 +841,7 @@ impl RetainedWindowMatrix {
                     new_point: curr.point,
                     cursor_style,
                     bound_walk: true,
-                    faces: self.faces.clone(),
+                    face_generation: self.face_generation,
                 });
             }
         }
@@ -847,7 +859,7 @@ impl RetainedWindowMatrix {
             new_point: curr.point,
             cursor_style,
             bound_walk: false,
-            faces: self.faces.clone(),
+            face_generation: self.face_generation,
         })
     }
 }
@@ -992,7 +1004,7 @@ mod scroll_classifier_tests {
                 ..WindowDisplaySnapshot::default()
             },
             presented_cursor: None,
-            faces: std::collections::HashMap::new(),
+            face_generation: FrameFaceGeneration::default(),
         }
     }
 
@@ -1019,6 +1031,31 @@ mod scroll_classifier_tests {
         assert_eq!(r.exposed_start_charpos, 50); // after row 4 (chars 40..49)
         assert_eq!(r.exposed_text_y, 48.0); // 3rd visual row top
         assert_eq!(r.new_point, 25);
+    }
+
+    #[test]
+    fn replay_face_references_come_from_the_rows_being_reused() {
+        use neomacs_display_protocol::glyph_matrix::Glyph;
+
+        let mut retained = synthetic_matrix(0, 3);
+        retained.matrix.rows[0].glyphs[GlyphArea::Text.index()].push(Glyph::char(
+            'a',
+            FaceId::new(27),
+            0,
+        ));
+        retained.matrix.rows[1].glyphs[GlyphArea::Text.index()].push(Glyph::char(
+            'b',
+            FaceId::new(31),
+            10,
+        ));
+
+        let replay = retained
+            .cursor_only_replay(&synthetic_key(0, 15))
+            .expect("pure point movement reuses retained body rows");
+        assert_eq!(
+            replay.retained_face_ids(),
+            vec![FaceId::new(27), FaceId::new(31)]
+        );
     }
 
     #[test]

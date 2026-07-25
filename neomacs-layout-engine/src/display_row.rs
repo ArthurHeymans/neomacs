@@ -1,4 +1,3 @@
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::RenderFaceRef;
 use crate::display_origin::DisplayOrigin;
@@ -33,6 +32,7 @@ pub(crate) use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_source::{DisplayItemSource, LispStringSourceCursor, LispStringSourceOrigin};
 use crate::display_source_resolver::{DisplaySourceFaceBasis, DisplaySourceResolveParams};
 use crate::font_metrics::FontMetricsService;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -211,7 +211,7 @@ impl<'a> DisplayRowLispStringSourceRenderRequest<'a> {
         ascent: f32,
         tab_policy: DisplayTabPolicy,
         origin: DisplayOrigin,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         base_face: &'a ResolvedFace,
         value: Value,
         symbol_values: std::collections::HashMap<String, Value>,
@@ -355,7 +355,7 @@ impl DisplayRowSourceRequestPolicy {
 
     pub(crate) fn source_request_from_base_face<'face>(
         self,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         base_face: &'face ResolvedFace,
     ) -> DisplayRowSourceRenderRequest<'face> {
         let image_scale_environment = self.image_scale_environment;
@@ -427,7 +427,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
 
     fn from_base_face(
         geometry: DisplayRowGeometry,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         base_face: &'a ResolvedFace,
         role: GlyphRowRole,
         symbol_values: std::collections::HashMap<String, Value>,
@@ -436,7 +436,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         let base_face_id = if base_face.face_id != 0 {
             base_face.display_face_id()
         } else {
-            face_ids.allocate()
+            face_ids.reserve_dynamic_face()
         };
         let render_bounds = DisplayRowRenderBounds::whole_row(geometry.width());
         Self {
@@ -465,7 +465,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
     #[cfg(test)]
     pub(crate) fn from_display_row_geometry(
         geometry: DisplayRowGeometry,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         base_face: &'a ResolvedFace,
         role: GlyphRowRole,
         symbol_values: std::collections::HashMap<String, Value>,
@@ -485,7 +485,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         ascent: f32,
         tab_policy: DisplayTabPolicy,
         origin: DisplayOrigin,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         base_face: &'a ResolvedFace,
         symbol_values: std::collections::HashMap<String, Value>,
     ) -> Self {
@@ -592,7 +592,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         renderer: &mut DisplayRowRenderer<'_>,
         source: &mut S,
         face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> Option<RenderedDisplayRow> {
         let mut context = DisplayRowRenderContext::new(face_resolver, None, face_ids);
         self.render_with_context(renderer, source, &mut context)
@@ -633,7 +633,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         state: &mut DisplayRowSourceState,
         face_resolver: &FaceResolver,
         display_host: Option<&dyn DisplayHost>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> Option<RenderedDisplayRow> {
         let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
         renderer.render_display_item_source_row_fragment_step_with_context(
@@ -653,7 +653,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         state: &mut DisplayRowSourceState,
         face_resolver: &FaceResolver,
         display_host: Option<&dyn DisplayHost>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> Option<DisplayRowRenderIntoRowResult> {
         let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
         renderer.render_display_item_source_row_fragment_step_into_row_with_context(
@@ -688,14 +688,14 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
 pub(crate) struct DisplayRowRenderContext<'a, 'ids> {
     face_resolver: &'a FaceResolver,
     display_host: Option<&'a dyn DisplayHost>,
-    face_ids: &'ids mut FrameFaceIdAllocator,
+    face_ids: &'ids mut FrameFaceAttempt,
 }
 
 impl<'a, 'ids> DisplayRowRenderContext<'a, 'ids> {
     pub(crate) fn new(
         face_resolver: &'a FaceResolver,
         display_host: Option<&'a dyn DisplayHost>,
-        face_ids: &'ids mut FrameFaceIdAllocator,
+        face_ids: &'ids mut FrameFaceAttempt,
     ) -> Self {
         Self {
             face_resolver,
@@ -721,7 +721,7 @@ impl<'a, 'ids> DisplayRowRenderContext<'a, 'ids> {
         )
     }
 
-    fn face_ids(&mut self) -> &mut FrameFaceIdAllocator {
+    fn face_ids(&mut self) -> &mut FrameFaceAttempt {
         self.face_ids
     }
 }
@@ -741,7 +741,7 @@ impl<'metrics, 'context, 'ids> DisplayRowRenderExecutor<'metrics, 'context, 'ids
         font_metrics: &'metrics mut Option<FontMetricsService>,
         face_resolver: &'context FaceResolver,
         display_host: Option<&'context dyn DisplayHost>,
-        face_ids: &'ids mut FrameFaceIdAllocator,
+        face_ids: &'ids mut FrameFaceAttempt,
     ) -> Self {
         Self {
             renderer: DisplayRowRenderer::new(font_metrics),
@@ -754,7 +754,7 @@ impl<'metrics, 'context, 'ids> DisplayRowRenderExecutor<'metrics, 'context, 'ids
         window_system: bool,
         face_resolver: &'context FaceResolver,
         display_host: Option<&'context dyn DisplayHost>,
-        face_ids: &'ids mut FrameFaceIdAllocator,
+        face_ids: &'ids mut FrameFaceAttempt,
     ) -> Self {
         Self {
             renderer: DisplayRowRenderer::new_for_frame(font_metrics, window_system),

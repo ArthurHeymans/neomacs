@@ -18,7 +18,6 @@ use crate::display_buffer_window_render::*;
 use crate::display_current_row_output::DisplayRowCurrentRowOutput;
 use crate::display_current_row_output::append_rendered_display_row_fragment_to_text_row_and_emit;
 use crate::display_cursor::CursorCaptureState;
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{
@@ -98,6 +97,7 @@ use crate::display_text_window_row_lifecycle::{
     TextWindowTerminalRightBorderRequest, TextWindowVisibilityRetryRequest,
 };
 use crate::font_metrics::FontMetricsService;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::LayoutCharPos0;
 use crate::types::WindowKind;
@@ -310,7 +310,7 @@ fn buffer_line_number_margin_render_request_renders_and_consumes_pending_margin(
     let mut context = RowTransitionTestContext::new("line-number-margin-render-request");
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(7);
     let mut line_numbers = LineNumberRenderState::new(true, 12, 9);
     let mut face_scan = FaceScanCheckpoint::initial();
     let mut font_metrics = None;
@@ -363,7 +363,7 @@ fn buffer_line_number_margin_render_request_renders_blank_gutter_on_continuation
     let mut context = RowTransitionTestContext::new("line-number-margin-continuation-row");
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(7);
     let mut line_numbers = LineNumberRenderState::new(true, 12, 9);
     let mut face_scan = FaceScanCheckpoint::initial();
     let mut font_metrics = None;
@@ -563,7 +563,7 @@ fn buffer_current_face_resolution_context_skips_before_checkpoint() {
     let mut active_face = DisplayRowActiveFaceState::new(default_face.clone(), measured);
     let mut face_scan = FaceScanCheckpoint::initial();
     *face_scan.next_check_mut() = 99;
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let frame_id = eval
         .frame_manager_mut()
@@ -612,7 +612,7 @@ fn buffer_current_face_resolution_context_skips_before_checkpoint() {
 
     assert!(!resolved);
     assert_eq!(active_face.face_id(), FaceId::new(7));
-    assert_eq!(face_ids.allocate(), FaceId::new(20));
+    assert_eq!(face_ids.reserve_dynamic_face(), FaceId::new(20));
 }
 
 #[test]
@@ -639,7 +639,7 @@ fn buffer_current_face_resolution_context_resolves_due_face() {
     );
     let mut active_face = DisplayRowActiveFaceState::new(default_face.clone(), measured);
     let mut face_scan = FaceScanCheckpoint::initial();
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let frame_id = eval
         .frame_manager_mut()
@@ -1195,7 +1195,7 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
     let mut face_scan = FaceScanCheckpoint::initial();
     let mut hit_row_range = HitRowRangeTracker::new(0);
     let mut cursor_info = CursorCaptureState::new();
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let overlay_context = BufferOverlayStringTextRowRenderContext::new(
         false,
         1,
@@ -1839,7 +1839,7 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
     let mut col = 0;
     let mut cursor_info = CursorCaptureState::new();
     let mut hit_row_range = HitRowRangeTracker::new(0);
-    let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(7);
     let mut row_extend = DisplayRowScopedValue::inactive();
     let mut box_face = BoxFaceRowState::inactive();
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
@@ -2883,7 +2883,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
         0,
         4,
     );
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
 
     let continuation = BufferSourceLineBreakRenderRequest::new(
@@ -3038,7 +3038,7 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
     let mut invisible_text_checkpoint = InvisibleTextScanCheckpoint::new(charpos);
     let mut face_scan = FaceScanCheckpoint::initial();
     let mut cursor_info = CursorCaptureState::new();
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let overlay_context = BufferOverlayStringTextRowRenderContext::new(
         false,
         1,
@@ -3569,7 +3569,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut font_metrics = None;
     let mut cursor_info = CursorCaptureState::new();
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let surface = test_advance_resolution_surface();
     let overlay_context = BufferOverlayStringTextRowRenderContext::new(
         false,
@@ -3815,7 +3815,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut font_metrics = None;
     let mut cursor_info = CursorCaptureState::new();
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let surface = test_advance_resolution_surface();
     let overlay_context = BufferOverlayStringTextRowRenderContext::new(
         false,
@@ -4746,7 +4746,7 @@ fn buffer_line_prefix_render_context_renders_default_prefix_and_clears_request()
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -4827,7 +4827,7 @@ fn buffer_line_prefix_render_context_appends_gnu_space_align_to_prefix() {
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let active_face = test_active_face_state(FaceId::new(7), 1.0);
     let mut font_metrics = None;
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 248, Rect::new(0.0, 0.0, 248.0, 34.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -4924,7 +4924,7 @@ fn buffer_line_prefix_render_request_applies_rendered_position() {
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -5070,7 +5070,7 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut font_metrics = None;
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut x = 24.0;
     let mut col = 3;
     let mut cursor_info = CursorCaptureState::new();
@@ -5123,7 +5123,7 @@ fn overlay_string_row_break_context_finishes_current_row() {
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut font_metrics = None;
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut x = 24.0;
     let mut col = 3;
     let mut cursor_info = CursorCaptureState::new();
@@ -5196,7 +5196,7 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
     .expect("lisp string source");
     let mut source_state = DisplayRowSourceState::default();
     let mut font_metrics = None;
-    let mut face_ids = FrameFaceIdAllocator::new(8);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(8);
 
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
@@ -5278,7 +5278,7 @@ fn render_natural_display_item_source_into_current_text_row_stamps_slots_at_curr
     .expect("lisp string source");
     let mut source_state = DisplayRowSourceState::default();
     let mut font_metrics = None;
-    let mut face_ids = FrameFaceIdAllocator::new(8);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(8);
 
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
@@ -5397,7 +5397,7 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
     let mut base_face = face_resolver.default_face().clone();
     base_face.set_measured_char_width_px(8.0);
     base_face.font_ascent = 12.0;
-    let mut face_ids = FrameFaceIdAllocator::new(8);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(8);
     let mut font_metrics = None;
     let rendered = {
         let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
@@ -6073,7 +6073,7 @@ fn layout_display_source_face_resolver_records_pending_faces_without_builder() {
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
     let mut resolve_state = crate::display_source_resolver::DisplaySourceResolveState::default();
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut pending_faces = Vec::new();
     let params = crate::display_source_resolver::DisplaySourceResolveParams::new(
         crate::display_source_resolver::DisplaySourceFaceBasis::new(
@@ -6102,7 +6102,7 @@ fn layout_display_source_face_resolver_records_pending_faces_without_builder() {
     );
 
     assert_eq!(face, RenderFaceRef::FaceId(FaceId::new(20)));
-    assert_eq!(face_ids.finish(), 21);
+    assert_eq!(face_ids.next_face_id_for_test(), 21);
     assert_eq!(pending_faces.len(), 1);
     assert_eq!(pending_faces[0].face_id(), FaceId::new(20));
     assert_eq!(pending_faces[0].resolved().fg, 0x00ff0000);
@@ -6146,7 +6146,7 @@ fn resolve_next_display_source_item_returns_item_and_pending_faces() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut resolve_state = crate::display_source_resolver::DisplaySourceResolveState::default();
     let value = Value::string_with_text_properties(
         "a",
@@ -6200,7 +6200,7 @@ fn resolve_next_display_source_item_resolves_height_modifier_to_pending_face() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut resolve_state = crate::display_source_resolver::DisplaySourceResolveState::default();
     let value = Value::string_with_text_properties(
         "a",
@@ -6257,7 +6257,7 @@ fn display_row_source_walker_reuses_face_cache_across_items() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -6309,11 +6309,10 @@ fn display_row_source_walker_reuses_face_cache_across_items() {
     assert_eq!(first.face, RenderFaceRef::FaceId(FaceId::new(20)));
     assert_eq!(second.face, RenderFaceRef::FaceId(FaceId::new(0)));
     assert_eq!(third.face, RenderFaceRef::FaceId(FaceId::new(20)));
-    assert_eq!(face_ids.finish(), 21);
+    assert_eq!(face_ids.next_face_id_for_test(), 21);
     assert_eq!(
         builder
-            .faces()
-            .get(&FaceId::new(20))
+            .output_face(FaceId::new(20))
             .map(|face| face.foreground),
         Some(Color::from_pixel(0x00ff0000))
     );
@@ -6344,7 +6343,7 @@ fn append_lisp_string_to_text_row_appends_propertized_string_items() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -6382,11 +6381,10 @@ fn append_lisp_string_to_text_row_appends_propertized_string_items() {
     };
 
     assert_eq!(end, DisplayRowPosition::new(16.0, 2));
-    assert_eq!(face_ids.finish(), 21);
+    assert_eq!(face_ids.next_face_id_for_test(), 21);
     assert_eq!(
         builder
-            .faces()
-            .get(&FaceId::new(20))
+            .output_face(FaceId::new(20))
             .map(|face| face.foreground),
         Some(Color::from_pixel(0x00ff0000))
     );
@@ -6424,7 +6422,7 @@ fn lisp_string_append_context_appends_fragment_items() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut font_metrics = None;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
@@ -6738,7 +6736,7 @@ fn buffer_text_source_render_request_appends_plain_text_run_with_cursor_inside()
     let mut face_scan = FaceScanCheckpoint::initial();
     let mut font_metrics = None;
     let mut cursor_info = CursorCaptureState::new();
-    let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(7);
     let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
     let face_resolution_context = BufferSourceFaceResolutionContext::new(
         &snapshot,
@@ -6881,7 +6879,7 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_trailing_enabled
     let mut face_scan = FaceScanCheckpoint::initial();
     let mut font_metrics = None;
     let mut cursor_info = CursorCaptureState::new();
-    let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(7);
     let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
     let face_resolution_context = BufferSourceFaceResolutionContext::new(
         &snapshot,
@@ -7031,7 +7029,7 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_word_wrap_enable
     let mut face_scan = FaceScanCheckpoint::initial();
     let mut font_metrics = None;
     let mut cursor_info = CursorCaptureState::new();
-    let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(7);
     let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
     let face_resolution_context = BufferSourceFaceResolutionContext::new(
         &snapshot,
@@ -7183,7 +7181,7 @@ fn buffer_text_source_render_request_renders_fit_prefix_before_overflow() {
     let mut face_scan = FaceScanCheckpoint::initial();
     let mut font_metrics = None;
     let mut cursor_info = CursorCaptureState::new();
-    let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(7);
     let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
     let face_resolution_context = BufferSourceFaceResolutionContext::new(
         &snapshot,
@@ -7488,7 +7486,7 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
     let mut col = 3;
     let mut cursor_info = CursorCaptureState::new();
     let mut hit_row_range = HitRowRangeTracker::new(0);
-    let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(7);
     let mut font_metrics = None;
 
     let outcome =
@@ -7718,7 +7716,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
     row_flags.mark(0, DisplayRowFlagKind::Truncated);
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(10);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(10);
     let mut font_metrics = None;
     let positions = TextWindowBodyInstallRequest::new(TextWindowBodyInstallRenderContext::new(
         41,
@@ -7877,7 +7875,7 @@ fn buffer_text_window_terminal_right_border_request_installs_face_and_border() {
     builder.end_row();
     builder.end_window();
 
-    let mut face_ids = FrameFaceIdAllocator::new(10);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(10);
     let mut font_metrics = None;
     let face_id = TextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
         TextWindowOutputTarget::from_builder(&mut builder),
@@ -7919,10 +7917,10 @@ fn terminal_right_border_face_id_comes_from_the_shared_frame_allocator() {
     builder.end_row();
     builder.end_window();
 
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     // A dynamic (non-basic) content face takes the first id from the frame
     // allocator, exactly as a propertized buffer-text run would.
-    let content_face_id = face_ids.allocate();
+    let content_face_id = face_ids.reserve_dynamic_face();
     let mut font_metrics = None;
     let border_face_id = TextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
         TextWindowOutputTarget::from_builder(&mut builder),
@@ -7960,7 +7958,7 @@ fn buffer_text_window_terminal_right_border_request_pads_blank_rows_and_preserve
     builder.end_row();
     builder.end_window();
 
-    let mut face_ids = FrameFaceIdAllocator::new(10);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(10);
     let mut font_metrics = None;
     let face_id = TextWindowTerminalRightBorderRequest::new(8.0).install_and_apply(
         TextWindowOutputTarget::from_builder(&mut builder),
@@ -8460,8 +8458,7 @@ fn buffer_text_source_append_context_uses_resolved_item_face_for_fragment_base()
         })
         .expect("current row");
     let face = builder
-        .faces()
-        .get(&FaceId::new(32))
+        .output_face(FaceId::new(32))
         .expect("item face installed");
     assert_eq!(face.foreground, Color::from_pixel(0x0051afef));
     assert_eq!(face.background, Color::from_pixel(0x00282c34));
@@ -9008,7 +9005,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     // The escape-glyph / nobreak face merge is realized earlier, during active-
     // face resolution (`resolve_source_item_layout_for_active_face`), so this
     // append leaves the face-id allocator untouched.
-    let mut policy_face_ids = FrameFaceIdAllocator::new(30);
+    let mut policy_face_ids = FrameFaceAttempt::for_test_with_next_id(30);
     let mut face_scan = FaceScanCheckpoint::initial();
     *face_scan.next_check_mut() = 99;
     let mut word_wrap = WordWrapRenderState::new(true);
@@ -9037,7 +9034,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     );
     assert_eq!(continuation, DisplaySourceAppendContinuation::Rendered);
     assert!(face_scan.should_resolve_at(1));
-    assert_eq!(policy_face_ids.finish(), 30);
+    assert_eq!(policy_face_ids.next_face_id_for_test(), 30);
 
     assert_eq!(end_x, 16.0);
     assert_eq!(end_col, 2);
@@ -9211,7 +9208,7 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
         prepared_append.overflow_action(0.0, 80.0, LineWrapMode::Wrap),
         None
     );
-    let mut policy_face_ids = FrameFaceIdAllocator::new(30);
+    let mut policy_face_ids = FrameFaceAttempt::for_test_with_next_id(30);
     let params = test_display_space_window_params();
     let append_outcome = prepared_append
         .append_to_text_row(
@@ -9234,7 +9231,7 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     let mut end_col = 0;
     append_outcome.apply_to_text_row_state(&mut face_scan, &mut end_x, &mut end_col);
     assert!(!face_scan.should_resolve_at(1));
-    assert_eq!(policy_face_ids.finish(), 30);
+    assert_eq!(policy_face_ids.next_face_id_for_test(), 30);
 
     // U+FFFC uses the EmptyBox method: one column wide (was HexCode = 6 cols).
     assert_eq!(end_x, 8.0);
@@ -9276,7 +9273,7 @@ fn append_lisp_string_to_text_row_stops_at_row_break() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -9340,7 +9337,7 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut font_metrics = None;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
@@ -9457,7 +9454,7 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00112233, 0x00445566, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let text_bounds = Rect::new(10.0, 20.0, 160.0, 64.0);
     builder.begin_window_with_text_bounds(
@@ -9949,7 +9946,7 @@ fn display_property_replacement_row_render_request_builds_append_plan() {
     assert_eq!(request.start_position(), DisplayRowPosition::new(24.0, 4));
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let frame_id =
         eval.frame_manager_mut()
@@ -10056,7 +10053,7 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
     output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut font_metrics = None;
 
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
@@ -10165,7 +10162,7 @@ fn buffer_display_property_replacement_render_outcome_updates_progress() {
 
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut font_metrics = None;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 32.0), true);
@@ -10669,7 +10666,7 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
@@ -10711,11 +10708,10 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
     );
 
     assert_eq!(end, DisplayRowPosition::new(24.0, 2));
-    assert_eq!(face_ids.finish(), 21);
+    assert_eq!(face_ids.next_face_id_for_test(), 21);
     assert_eq!(
         builder
-            .faces()
-            .get(&FaceId::new(20))
+            .output_face(FaceId::new(20))
             .map(|face| face.foreground),
         Some(Color::from_pixel(0x00ff0000))
     );
@@ -10768,7 +10764,7 @@ fn display_replacement_append_context_uses_face_fallback() {
     );
     let append_context = DisplayReplacementAppendContext::new(FaceId::new(7), base_face, frame);
 
-    let mut face_ids = FrameFaceIdAllocator::new(8);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(8);
     let progress = append_context
         .append_replacement_item_kind_to_text_row_and_emit(
             &mut text_row_source_render_state(
@@ -10854,7 +10850,7 @@ fn display_replacement_append_context_advances_stretch_output() {
         0.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
-    let mut face_ids = FrameFaceIdAllocator::new(4);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(4);
     let progress = append_context
         .append_stretch_source_item_to_text_row_and_emit(
             &mut text_row_source_render_state(
@@ -10937,7 +10933,7 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
         0.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
-    let mut face_ids = FrameFaceIdAllocator::new(4);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(4);
     let progress = append_context
         .append_source_mapped_text_item_to_text_row_and_emit(
             &mut text_row_source_render_state(
@@ -11111,7 +11107,7 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
         2.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
-    let mut face_ids = FrameFaceIdAllocator::new(4);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(4);
     let progress = append_context
         .append_media_source_item_to_text_row_and_emit(
             &mut text_row_source_render_state(
@@ -11271,7 +11267,7 @@ fn display_replacement_append_context_installs_image_replacements() {
         false,
     );
     let append_context = DisplayReplacementAppendContext::new(FaceId::new(3), base_face, frame);
-    let mut face_ids = FrameFaceIdAllocator::new(4);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(4);
     let progress = append_context
         .append_replacement_item_kind_to_text_row_and_emit(
             &mut text_row_source_render_state(
@@ -11423,7 +11419,7 @@ fn display_replacement_append_context_installs_video_replacements() {
         false,
     );
     let append_context = DisplayReplacementAppendContext::new(FaceId::new(3), base_face, frame);
-    let mut face_ids = FrameFaceIdAllocator::new(4);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(4);
     let progress = append_context
         .append_replacement_item_kind_to_text_row_and_emit(
             &mut text_row_source_render_state(
@@ -11555,7 +11551,7 @@ impl<S: crate::display_source::DisplayItemSource> DisplayRowSourceWalker<S> {
         face_resolver: &FaceResolver,
         base_face: &crate::neovm_bridge::ResolvedFace,
         base_face_id: FaceId,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         display_host: Option<&dyn DisplayHost>,
         fallback_char_width: f32,
         fallback_ascent: f32,
@@ -11758,7 +11754,7 @@ fn display_property_live_render_outcome(
     let mut face_scan = FaceScanCheckpoint::initial();
     let mut font_metrics = None;
     let mut cursor_info = CursorCaptureState::new();
-    let mut face_ids = FrameFaceIdAllocator::new(7);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(7);
     let mut source_walk = BufferSourceWalk::new(buf_id, &snapshot, charpos, 0);
 
     let mut continued = Vec::new();

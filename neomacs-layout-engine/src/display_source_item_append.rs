@@ -2,7 +2,6 @@ use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info, update_cursor_info_for_main_char,
 };
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::DisplayItem;
 use crate::display_row_append_context::{DisplayRowAppendFrame, DisplayRowAppendKind};
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
@@ -29,6 +28,9 @@ use crate::display_source_overflow::{
 };
 use crate::display_source_progress::DisplaySourceProgressState;
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
+#[cfg(test)]
+use crate::frame_face_arena::FrameFaceArena;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::ResolvedFace;
 use crate::types::{LineWrapMode, WindowParams};
 use neomacs_display_protocol::types::FaceId;
@@ -481,7 +483,7 @@ impl DisplaySourceSpecialCharPreparedAppend {
         context: &C,
         geometry: &DisplayRowGeometryState,
         params: &WindowParams,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         state: &mut TextRowSourceRenderState<'_>,
     ) -> Option<DisplaySourceSpecialCharAppendOutcome> {
         // The escape-glyph / nobreak face merge is realized earlier, in
@@ -505,7 +507,7 @@ impl DisplaySourceSpecialCharPreparedAppend {
         context: &C,
         geometry: &DisplayRowGeometryState,
         params: &WindowParams,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         source_render: &mut TextRowSourceRenderState<'_>,
         face_scan: &mut FaceScanCheckpoint,
         word_wrap: &mut WordWrapRenderState,
@@ -731,17 +733,34 @@ impl DisplaySourceItemRequest {
 
 pub(crate) struct DisplaySourceItemAppendContext<'a> {
     single_item: SingleDisplayItemAppendContext<'a>,
+    face_attempt: FrameFaceAttempt,
 }
 
 impl<'a> DisplaySourceItemAppendContext<'a> {
+    pub(crate) fn with_face_attempt(
+        face_id: FaceId,
+        base_face: &'a ResolvedFace,
+        frame: DisplayRowAppendFrame,
+        face_attempt: FrameFaceAttempt,
+    ) -> Self {
+        Self {
+            single_item: SingleDisplayItemAppendContext::new(base_face, face_id, frame),
+            face_attempt,
+        }
+    }
+
+    #[cfg(test)]
     pub(crate) fn new(
         face_id: FaceId,
         base_face: &'a ResolvedFace,
         frame: DisplayRowAppendFrame,
     ) -> Self {
-        Self {
-            single_item: SingleDisplayItemAppendContext::new(base_face, face_id, frame),
-        }
+        Self::with_face_attempt(
+            face_id,
+            base_face,
+            frame,
+            FrameFaceArena::default().begin_attempt(),
+        )
     }
 
     #[cfg(test)]
@@ -761,8 +780,9 @@ impl<'a> DisplaySourceItemAppendContext<'a> {
         position: DisplayRowPosition,
         fallback_kind: DisplayRowAppendKind,
     ) -> Option<DisplayRowAppendProgress> {
+        let mut face_ids = self.face_attempt.clone();
         self.single_item
-            .render_naturally(state, item, position, fallback_kind)
+            .render_naturally(state, &mut face_ids, item, position, fallback_kind)
     }
 
     #[cfg(test)]

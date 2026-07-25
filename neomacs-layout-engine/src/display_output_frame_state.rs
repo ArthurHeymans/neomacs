@@ -5,14 +5,12 @@ use crate::display_output_install_request::{
     OutputWindowMetadataInstallRequest,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
-use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
     PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
 use neomacs_display_protocol::glyph_matrix::{
     BackgroundItem, BorderItem, CursorItem, FaceFillItem, FrameDisplayState, ScrollBarItem,
 };
-use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayFrameId, DisplayWindowId};
 use std::collections::{HashMap, HashSet};
 
@@ -24,7 +22,6 @@ pub(crate) struct OutputFrameBuildState {
     scroll_bars: Vec<ScrollBarItem>,
     phys_cursor: Option<PhysCursor>,
     cursor_effects_by_window: HashMap<DisplayWindowId, EffectsConfig>,
-    faces: HashMap<FaceId, Face>,
     window_infos: Vec<WindowInfo>,
     pending_window_geometry: HashSet<DisplayWindowId>,
     transition_hints: Vec<WindowTransitionHint>,
@@ -53,7 +50,6 @@ impl OutputFrameBuildState {
             scroll_bars: Vec::new(),
             phys_cursor: None,
             cursor_effects_by_window: HashMap::new(),
-            faces: HashMap::new(),
             window_infos: Vec::new(),
             pending_window_geometry: HashSet::new(),
             transition_hints: Vec::new(),
@@ -91,7 +87,6 @@ impl OutputFrameBuildState {
         self.scroll_bars.clear();
         self.phys_cursor = None;
         self.cursor_effects_by_window.clear();
-        self.faces.clear();
         self.window_infos.clear();
         self.pending_window_geometry.clear();
         self.transition_hints.clear();
@@ -232,9 +227,6 @@ impl OutputFrameBuildState {
             }
             OutputFrameStateInstallRequest::BackgroundColor(color) => self.background_color = color,
             OutputFrameStateInstallRequest::FontPixelSize(size) => self.font_pixel_size = size,
-            OutputFrameStateInstallRequest::Face { id, face } => {
-                self.faces.insert(id, face);
-            }
             OutputFrameStateInstallRequest::CursorEffects { window_id, effects } => {
                 self.cursor_effects_by_window.insert(window_id, effects);
             }
@@ -261,11 +253,6 @@ impl OutputFrameBuildState {
         &self.background_color
     }
 
-    #[cfg(test)]
-    pub(crate) fn faces(&self) -> &HashMap<FaceId, Face> {
-        &self.faces
-    }
-
     pub(crate) fn cursors(&self) -> &[CursorItem] {
         &self.cursors
     }
@@ -286,7 +273,6 @@ impl OutputFrameBuildState {
         state.scroll_bars = self.scroll_bars;
         state.phys_cursor = self.phys_cursor;
         state.cursor_effects_by_window = self.cursor_effects_by_window;
-        state.faces = self.faces;
         state.window_infos = self.window_infos;
         state.transition_hints = self.transition_hints;
         state.effect_hints = self.effect_hints;

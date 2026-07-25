@@ -1,5 +1,4 @@
 use crate::display_output_builder::DisplayOutputBuilder;
-use crate::display_output_install_request::OutputFrameStateInstallRequest;
 use crate::display_output_row_request::OutputRowLifecycleRequest;
 use crate::display_output_window_request::OutputWindowLifecycleRequest;
 use crate::display_row_face_state::resolved_display_row_face;
@@ -172,8 +171,5 @@ pub(crate) fn install_output_resolved_face(
     metrics: Option<FontMetrics>,
 ) {
     let render_face = resolved_display_row_face(face_id, face, metrics);
-    builder.install_output_frame_state(OutputFrameStateInstallRequest::face(
-        render_face.face_id,
-        render_face.render_face(),
-    ));
+    builder.publish_output_face(render_face.face_id, render_face.render_face());
 }

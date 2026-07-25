@@ -1,10 +1,10 @@
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::DisplayItem;
 use crate::display_source::DisplayItemSource;
 use crate::display_source_resolver::{
     DisplaySourceResolveParams, DisplaySourceResolveState, ResolvedDisplaySourceItem,
     resolve_next_display_source_item,
 };
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::types::FaceId;
 
@@ -23,7 +23,7 @@ impl DisplayRowSourceState {
         &mut self,
         source: &mut impl DisplayItemSource,
         params: DisplaySourceResolveParams<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> ResolvedDisplaySourceItem {
         if self.is_finished() {
             return ResolvedDisplaySourceItem::empty();

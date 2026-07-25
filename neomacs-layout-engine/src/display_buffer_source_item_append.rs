@@ -25,6 +25,9 @@ use crate::display_source_item_append::{
     DisplaySourceSpecialCharAppendPlan, DisplaySourceSpecialCharPreparedAppend,
     DisplaySourceTextCharAppendPlan, DisplaySourceTextCharPreparedAppend,
 };
+#[cfg(test)]
+use crate::frame_face_arena::FrameFaceArena;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::BufferId;
@@ -84,6 +87,7 @@ pub(crate) struct BufferSourceRowAppendContext<'source, 'surface, B: LayoutBuffe
     resolved_item_face: Option<BufferSourceResolvedItemFace>,
     glyph_y_offset: f32,
     fallback_metrics: DisplayRowFallbackMetrics,
+    face_attempt: FrameFaceAttempt,
 }
 
 #[derive(Clone, Debug)]
@@ -101,13 +105,14 @@ impl BufferSourceResolvedItemFace {
 impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     BufferSourceRowAppendContext<'source, 'surface, B>
 {
-    pub(crate) fn new(
+    fn new_with_face_attempt(
         buffer: &'source B,
         buffer_id: BufferId,
         append_surface: &'surface DisplayRowAppendSurface,
         active_face: &'source DisplayRowActiveFaceState,
         glyph_y_offset: f32,
         fallback_metrics: DisplayRowFallbackMetrics,
+        face_attempt: FrameFaceAttempt,
     ) -> Self {
         Self {
             buffer,
@@ -117,7 +122,28 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             resolved_item_face: None,
             glyph_y_offset,
             fallback_metrics,
+            face_attempt,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new(
+        buffer: &'source B,
+        buffer_id: BufferId,
+        append_surface: &'surface DisplayRowAppendSurface,
+        active_face: &'source DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
+    ) -> Self {
+        Self::new_with_face_attempt(
+            buffer,
+            buffer_id,
+            append_surface,
+            active_face,
+            glyph_y_offset,
+            fallback_metrics,
+            FrameFaceArena::default().begin_attempt(),
+        )
     }
 
     pub(crate) fn from_active_face_row(
@@ -127,8 +153,9 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         active_face: &'source DisplayRowActiveFaceState,
         glyph_y_offset: f32,
         row_height_px: f32,
+        face_attempt: FrameFaceAttempt,
     ) -> Self {
-        Self::new(
+        Self::new_with_face_attempt(
             buffer,
             buffer_id,
             append_surface,
@@ -136,6 +163,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             glyph_y_offset,
             BufferSourceActiveFaceRowMetrics::from_active_face_row(active_face, row_height_px)
                 .fallback_metrics(),
+            face_attempt,
         )
     }
 
@@ -165,10 +193,11 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         geometry: &DisplayRowGeometryState,
     ) -> DisplaySourceItemAppendContext<'source> {
         let frame = self.active_face_context(geometry).active_face_frame();
-        DisplaySourceItemAppendContext::new(
+        DisplaySourceItemAppendContext::with_face_attempt(
             self.active_face.face_id(),
             self.active_face.resolved_face(),
             frame,
+            self.face_attempt.clone(),
         )
     }
 
@@ -382,8 +411,16 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         let kind = append_item.append_kind();
         let item = append_item.into_item();
         let mut render_policy = source_text.append_render_policy();
+        let mut face_ids = self.face_attempt.clone();
         SingleDisplayItemAppendContext::new(self.active_face.resolved_face(), face_id, frame)
-            .render_with_policy(state, item, position, kind, &mut render_policy)
+            .render_with_policy(
+                state,
+                &mut face_ids,
+                item,
+                position,
+                kind,
+                &mut render_policy,
+            )
     }
 
     pub(crate) fn append_source_display_item_to_text_row(
@@ -397,8 +434,10 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     ) -> Option<DisplayRowAppendProgress> {
         let frame = self.active_face_context(geometry).active_face_frame();
         let (base_face, face_id) = self.source_item_face(&item);
+        let mut face_ids = self.face_attempt.clone();
         SingleDisplayItemAppendContext::new(base_face, face_id, frame).render_with_policy(
             state,
+            &mut face_ids,
             item,
             position,
             fallback_kind,

@@ -27,7 +27,7 @@ use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::{Context, Value};
 
-use crate::display_face_id::FrameFaceIdAllocator;
+use crate::frame_face_arena::FrameFaceAttempt;
 
 /// How GNU renders an overlay arrow on this frame: the fringe-bitmap branch on
 /// a window-system frame with a left fringe, else the text-area string branch.
@@ -57,7 +57,7 @@ pub(crate) fn draw_overlay_arrows<B: LayoutBufferView>(
     buffer: &B,
     buffer_id: BufferId,
     face_resolver: &FaceResolver,
-    face_ids: &mut FrameFaceIdAllocator,
+    face_ids: &mut FrameFaceAttempt,
     style: OverlayArrowStyle,
 ) {
     let vars = arrow_variables(evaluator);
@@ -74,7 +74,7 @@ pub(crate) fn draw_overlay_arrows<B: LayoutBufferView>(
         OverlayArrowStyle::TextString { .. } => "default",
     };
     let resolved = face_resolver.resolve_named_face(face_name);
-    let arrow_face_id = face_ids.allocate();
+    let arrow_face_id = face_ids.reserve_dynamic_face();
     output.install_resolved_face(arrow_face_id, &resolved, None);
 
     // GNU's `overlay_arrow_seen` is per redisplay pass: an arrow is drawn on a

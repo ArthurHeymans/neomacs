@@ -7,7 +7,6 @@
 //! need to own the render-state facade.
 
 use crate::display_current_row_output::{DisplayCurrentRowMutation, DisplayRowCurrentRowOutput};
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::DisplayPropertyReplacementDescriptor;
 use crate::display_mock_frame::protocol_color_to_pixel;
@@ -40,6 +39,7 @@ use crate::display_source_resolver::{
 use crate::display_spec::DisplayFringeSide;
 use crate::display_text_output_install::TextWindowRowDecorationRequest;
 use crate::font_metrics::FontMetricsService;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::glyph_row_writer::push_stretch_to_area;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::types::WindowParams;
@@ -89,7 +89,7 @@ struct DisplayRowCurrentTextSourceState<'face, 'emit> {
     font_metrics: &'emit mut Option<FontMetricsService>,
     window_system: bool,
     face_resolver: &'face FaceResolver,
-    face_ids: &'emit mut FrameFaceIdAllocator,
+    face_ids: &'emit mut FrameFaceAttempt,
 }
 
 struct DisplayRowCurrentSourceFragmentRenderState<'face, 'emit> {
@@ -98,7 +98,7 @@ struct DisplayRowCurrentSourceFragmentRenderState<'face, 'emit> {
     window_system: bool,
     face_resolver: &'face FaceResolver,
     display_host: Option<&'emit dyn DisplayHost>,
-    face_ids: &'emit mut FrameFaceIdAllocator,
+    face_ids: &'emit mut FrameFaceAttempt,
 }
 
 struct DisplayRowCurrentTextSourceStepResult {
@@ -399,7 +399,7 @@ impl<'face, 'emit> DisplayRowCurrentTextSourceState<'face, 'emit> {
         font_metrics: &'emit mut Option<FontMetricsService>,
         window_system: bool,
         face_resolver: &'face FaceResolver,
-        face_ids: &'emit mut FrameFaceIdAllocator,
+        face_ids: &'emit mut FrameFaceAttempt,
     ) -> Self {
         Self {
             row_output,
@@ -483,7 +483,7 @@ impl<'face, 'emit> DisplayRowCurrentSourceFragmentRenderState<'face, 'emit> {
         window_system: bool,
         face_resolver: &'face FaceResolver,
         display_host: Option<&'emit dyn DisplayHost>,
-        face_ids: &'emit mut FrameFaceIdAllocator,
+        face_ids: &'emit mut FrameFaceAttempt,
     ) -> Self {
         Self {
             row_output,
@@ -678,7 +678,7 @@ impl<'a> TextRowOutputRenderState<'a> {
         font_metrics: &'emit mut Option<FontMetricsService>,
         window_system: bool,
         face_resolver: &'emit FaceResolver,
-        face_ids: &'emit mut FrameFaceIdAllocator,
+        face_ids: &'emit mut FrameFaceAttempt,
     ) -> DisplayRowCurrentTextSourceState<'emit, 'emit> {
         DisplayRowCurrentTextSourceState::new(
             self.output.current_row_output(),
@@ -695,7 +695,7 @@ impl<'a> TextRowOutputRenderState<'a> {
         font_metrics: &'emit mut Option<FontMetricsService>,
         window_system: bool,
         face_resolver: &'emit FaceResolver,
-        face_ids: &'emit mut FrameFaceIdAllocator,
+        face_ids: &'emit mut FrameFaceAttempt,
     ) -> DisplayRowCurrentSourceFragmentRenderState<'emit, 'emit> {
         DisplayRowCurrentSourceFragmentRenderState::new(
             self.output.current_row_output(),
@@ -896,7 +896,7 @@ impl<'a> TextRowSourceRenderState<'a> {
         buffer: &B,
         origin: DisplayOrigin,
         policy: BaseFacePolicy,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> DisplayStringBaseFace {
         let base_face = resolve_display_string_base_face(
             buffer,
@@ -915,7 +915,7 @@ impl<'a> TextRowSourceRenderState<'a> {
         &mut self,
         buffer: &B,
         origin: DisplayOrigin,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> DisplayStringBaseFace {
         self.display_string_base_face(buffer, origin, origin.default_base_face_policy(), face_ids)
     }
@@ -926,7 +926,7 @@ impl<'a> TextRowSourceRenderState<'a> {
         origin: DisplayOrigin,
         policy: BaseFacePolicy,
         active_face_state: &DisplayRowActiveFaceState,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> DisplayStringBaseFace {
         let base_face = resolve_display_string_base_face(
             buffer,
@@ -949,7 +949,7 @@ impl<'a> TextRowSourceRenderState<'a> {
         buffer: &B,
         origin: DisplayOrigin,
         active_face_state: &DisplayRowActiveFaceState,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> DisplayStringBaseFace {
         self.display_string_base_face_for_active_row(
             buffer,
@@ -965,7 +965,7 @@ impl<'a> TextRowSourceRenderState<'a> {
         request: DisplayRowSourceRenderRequest<'_>,
         source: &mut S,
         source_state: &mut DisplayRowSourceState,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> Option<DisplayRowRenderIntoRowResult> {
         self.output_render
             .current_source_fragment_render_state(
@@ -991,7 +991,7 @@ impl<'a> TextRowSourceRenderState<'a> {
         start_col: usize,
         max_col: usize,
         area: neomacs_display_protocol::glyph_matrix::GlyphArea,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> Option<DisplayRowRenderIntoRowResult> {
         let request = DisplayRowSourceFragmentFrame::from_row_geometry_columns(
             row_geometry,
@@ -1010,7 +1010,7 @@ impl<'a> TextRowSourceRenderState<'a> {
         P: DisplayRowRenderPolicy,
     >(
         &mut self,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         source: &mut S,
         source_state: &mut DisplayRowSourceState,
         request: DisplayRowAppendSourceRenderRequest<'_>,
@@ -1084,13 +1084,13 @@ impl<'a> TextRowSourceRenderState<'a> {
     pub(crate) fn highlight_trailing_whitespace(
         &mut self,
         trailing_whitespace: &TrailingWhitespaceRenderState,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) {
         if !trailing_whitespace.is_enabled() {
             return;
         }
         let face = self.resolve_named_face("trailing-whitespace");
-        let face_id = face_ids.allocate();
+        let face_id = face_ids.reserve_dynamic_face();
         self.insert_resolved_face(face_id, &face);
         self.output_render
             .highlight_current_row_trailing_whitespace(face_id);
@@ -1123,7 +1123,7 @@ impl<'a> TextRowSourceRenderState<'a> {
         frame_background: Color,
         height_px: f32,
         ascent_px: f32,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> bool {
         if indicator_col < 0 || char_width <= 0.0 {
             return false;
@@ -1162,7 +1162,7 @@ impl<'a> TextRowSourceRenderState<'a> {
                 let mut char_face = self.resolve_named_face("fill-column-indicator");
                 char_face.bg = protocol_color_to_pixel(extend_bg);
                 char_face.use_default_background = false;
-                let indicator_face_id = face_ids.allocate();
+                let indicator_face_id = face_ids.reserve_dynamic_face();
                 self.insert_resolved_face(indicator_face_id, &char_face);
                 let tail_px = (right_edge - (indicator_px + char_width)).max(0.0);
                 let tail_cols = (tail_px / char_width).round().clamp(0.0, u16::MAX as f32) as u16;
@@ -1184,7 +1184,7 @@ impl<'a> TextRowSourceRenderState<'a> {
                 // Plain row: the gap is transparent (fill-column-indicator has no
                 // background) and there is no tail past the indicator.
                 let fci = self.resolve_named_face("fill-column-indicator");
-                let face_id = face_ids.allocate();
+                let face_id = face_ids.reserve_dynamic_face();
                 self.insert_resolved_face(face_id, &fci);
                 FillColumnIndicatorFill {
                     gap_px,
@@ -1241,7 +1241,7 @@ impl<'a> TextRowSourceRenderState<'a> {
     pub(crate) fn record_fringe_bitmap_for_descriptor(
         &mut self,
         descriptor: &DisplayPropertyReplacementDescriptor,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         active_face_state: &DisplayRowActiveFaceState,
     ) {
         if let Some(DisplayReplacementProperty::Fringe(layout)) =
@@ -1261,7 +1261,7 @@ impl<'a> TextRowSourceRenderState<'a> {
     pub(crate) fn record_fringe_bitmap_layout(
         &mut self,
         layout: &crate::display_spec::DisplayFringeLayout,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         fallback_face_id: FaceId,
     ) {
         let layout = *layout;
@@ -1308,12 +1308,12 @@ impl<'a> TextRowSourceRenderState<'a> {
         &mut self,
         override_name: Option<&str>,
         spec_face: Option<Value>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         fallback_face_id: FaceId,
     ) -> FaceId {
         if let Some(name) = override_name {
             let resolved = self.face_resolver.resolve_named_face(name);
-            let face_id = face_ids.allocate();
+            let face_id = face_ids.reserve_dynamic_face();
             self.insert_resolved_face(face_id, &resolved);
             return face_id;
         }
@@ -1322,7 +1322,7 @@ impl<'a> TextRowSourceRenderState<'a> {
                 .face_resolver
                 .resolve_face_value_over(self.face_resolver.default_face(), &face_value)
         {
-            let face_id = face_ids.allocate();
+            let face_id = face_ids.reserve_dynamic_face();
             self.insert_resolved_face(face_id, &resolved);
             return face_id;
         }
@@ -1361,7 +1361,7 @@ impl<'a> TextRowSourceRenderState<'a> {
 
 fn current_text_render_state<'emit>(
     state: &'emit mut TextRowSourceRenderState<'_>,
-    face_ids: &'emit mut FrameFaceIdAllocator,
+    face_ids: &'emit mut FrameFaceAttempt,
 ) -> DisplayRowCurrentTextSourceState<'emit, 'emit> {
     state.output_render.current_text_render_state(
         state.font_metrics,
@@ -1409,7 +1409,7 @@ impl<'a> TextRowSourceMeasureState<'a> {
         P: DisplayRowRenderPolicy,
     >(
         &mut self,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         source: &mut S,
         source_state: &mut DisplayRowSourceState,
         row_request: DisplayRowSourceRenderRequest<'_>,
@@ -1428,7 +1428,7 @@ impl<'a> TextRowSourceMeasureState<'a> {
 
 fn current_text_measure_state<'emit>(
     state: &'emit mut TextRowSourceMeasureState<'_>,
-    face_ids: &'emit mut FrameFaceIdAllocator,
+    face_ids: &'emit mut FrameFaceAttempt,
 ) -> DisplayRowCurrentTextSourceState<'emit, 'emit> {
     DisplayRowCurrentTextSourceState::new(
         state.row_output.reborrow(),

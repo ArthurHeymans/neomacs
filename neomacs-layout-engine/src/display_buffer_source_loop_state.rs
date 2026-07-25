@@ -1,7 +1,6 @@
 //! Shared mutable state for buffer text visible-loop rendering.
 
 use crate::display_cursor::CursorCaptureState;
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowScopedValue, DisplayRowYPositions,
@@ -15,6 +14,7 @@ use crate::display_row_walk_state::{
     WordWrapRenderState,
 };
 use crate::display_source_progress::DisplaySourceProgressState;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::hit_test::HitRow;
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::FaceId;
@@ -37,7 +37,7 @@ pub(crate) struct BufferSourceLoopMutableState<'rows, 'emit, 'surface> {
     pub(crate) face_scan: &'emit mut FaceScanCheckpoint,
     pub(crate) row_y_positions: &'rows mut DisplayRowYPositions,
     pub(crate) cursor_info: &'emit mut CursorCaptureState,
-    pub(crate) face_ids: &'emit mut FrameFaceIdAllocator,
+    pub(crate) face_ids: &'emit mut FrameFaceAttempt,
     pub(crate) append_surface: &'surface DisplayRowAppendSurface,
     pub(crate) overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
 }
@@ -62,7 +62,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
         face_scan: &'emit mut FaceScanCheckpoint,
         row_y_positions: &'rows mut DisplayRowYPositions,
         cursor_info: &'emit mut CursorCaptureState,
-        face_ids: &'emit mut FrameFaceIdAllocator,
+        face_ids: &'emit mut FrameFaceAttempt,
         append_surface: &'surface DisplayRowAppendSurface,
         overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
     ) -> Self {

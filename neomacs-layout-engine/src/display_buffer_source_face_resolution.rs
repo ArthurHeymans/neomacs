@@ -3,7 +3,6 @@
 //! This module resolves buffer source faces at scan checkpoints and prepares
 //! display source items whose layout changes require derived measured faces.
 
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
@@ -17,6 +16,7 @@ use crate::display_source::{is_escape_glyph_octal, nonascii_hyphen_p, nonascii_s
 use crate::display_source_resolver::{
     DisplaySourceFaceBasis, DisplaySourceResolveParams, PendingDisplaySourceFace,
 };
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
@@ -114,7 +114,7 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
             &origin,
             state.face_scan.next_check_mut(),
         );
-        let face_id = state.face_ids.allocate();
+        let face_id = state.face_ids.reserve_dynamic_face();
         let resolved_box_type = resolved.box_type;
         *state.active_face_state = state.source_render.resolve_and_install_measured_face(
             self.measurement_policy,
@@ -212,7 +212,7 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
         &self,
         source_render: &mut TextRowSourceRenderState<'_>,
         face_scan: &mut FaceScanCheckpoint,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         active_face_state: &mut DisplayRowActiveFaceState,
         row_geometry: &mut DisplayRowGeometryState,
         row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
@@ -285,7 +285,7 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
     pub(crate) fn resolve_source_item_layout_for_active_face(
         &self,
         source_render: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         row_geometry: &mut DisplayRowGeometryState,
         active_face_state: &DisplayRowActiveFaceState,
         item: &mut DisplayItem,
@@ -358,7 +358,7 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
             return active_face_state.clone();
         };
 
-        let face_id = face_ids.allocate();
+        let face_id = face_ids.reserve_dynamic_face();
         item.face = RenderFaceRef::FaceId(face_id);
         let resolved_active_face = source_render.resolve_and_install_measured_face(
             self.measurement_policy,
@@ -383,7 +383,7 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
     fn merge_named_active_face(
         &self,
         source_render: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         row_geometry: &mut DisplayRowGeometryState,
         active_face_state: &DisplayRowActiveFaceState,
         item: &mut DisplayItem,
@@ -394,7 +394,7 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
         if merged.fg == base.fg && merged.use_default_foreground == base.use_default_foreground {
             return None;
         }
-        let face_id = face_ids.allocate();
+        let face_id = face_ids.reserve_dynamic_face();
         item.face = RenderFaceRef::FaceId(face_id);
         let resolved_active_face = source_render.resolve_and_install_measured_face(
             self.measurement_policy,
@@ -413,7 +413,7 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
 pub(crate) struct BufferSourceFaceResolutionState<'a, 'source> {
     source_render: &'a mut TextRowSourceRenderState<'source>,
     face_scan: &'a mut FaceScanCheckpoint,
-    face_ids: &'a mut FrameFaceIdAllocator,
+    face_ids: &'a mut FrameFaceAttempt,
     active_face_state: &'a mut DisplayRowActiveFaceState,
     row_geometry: &'a mut DisplayRowGeometryState,
     row_extend: &'a mut DisplayRowScopedValue<(Color, FaceId)>,
@@ -426,7 +426,7 @@ impl<'a, 'source> BufferSourceFaceResolutionState<'a, 'source> {
     pub(crate) fn new(
         source_render: &'a mut TextRowSourceRenderState<'source>,
         face_scan: &'a mut FaceScanCheckpoint,
-        face_ids: &'a mut FrameFaceIdAllocator,
+        face_ids: &'a mut FrameFaceAttempt,
         active_face_state: &'a mut DisplayRowActiveFaceState,
         row_geometry: &'a mut DisplayRowGeometryState,
         row_extend: &'a mut DisplayRowScopedValue<(Color, FaceId)>,

@@ -16,7 +16,6 @@ use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_buffer_window_geometry::{BufferWindowGeometry, BufferWindowLocalDisplayPolicy};
 use crate::display_buffer_window_source::BufferWindowSource;
 use crate::display_cursor::CursorCaptureState;
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_geometry::{
@@ -38,6 +37,7 @@ use crate::display_text_window_row_lifecycle::{
     TextWindowAppendSurfaceRequest, TextWindowBeginRequest, TextWindowBodyInstallState,
 };
 use crate::font_metrics::FontMetricsService;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, RustBufferAccess};
 use crate::types::{LineWrapMode, WindowParams};
@@ -102,7 +102,7 @@ struct BufferSourceWalkRenderState<'emit> {
     line_numbers: &'emit mut LineNumberRenderState,
     face_scan: &'emit mut FaceScanCheckpoint,
     active_face_state: &'emit mut DisplayRowActiveFaceState,
-    face_ids: &'emit mut FrameFaceIdAllocator,
+    face_ids: &'emit mut FrameFaceAttempt,
 }
 
 impl<'emit> BufferSourceWalkRenderState<'emit> {
@@ -111,7 +111,7 @@ impl<'emit> BufferSourceWalkRenderState<'emit> {
         line_numbers: &'emit mut LineNumberRenderState,
         face_scan: &'emit mut FaceScanCheckpoint,
         active_face_state: &'emit mut DisplayRowActiveFaceState,
-        face_ids: &'emit mut FrameFaceIdAllocator,
+        face_ids: &'emit mut FrameFaceAttempt,
     ) -> Self {
         Self {
             source_render,
@@ -335,7 +335,7 @@ impl BufferSourceWalkSetup {
     fn render_tail_and_decide_retry<'request, 'buf, B: LayoutBufferView>(
         &mut self,
         source_render: TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         loop_context: BufferSourceLoopRequestContext,
         tail_context: &BufferSourceTailRequestContext<'_>,
         text: &'request [u8],
@@ -443,7 +443,7 @@ impl BufferSourceWalkSetup {
         output: &mut BufferSourceOutputState<'_>,
         font_metrics: &mut Option<FontMetricsService>,
         face_resolver: &FaceResolver,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         line_numbers: &mut LineNumberRenderState,
         face_scan: &mut FaceScanCheckpoint,
         active_face_state: &mut DisplayRowActiveFaceState,

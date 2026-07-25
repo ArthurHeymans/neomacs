@@ -6,6 +6,7 @@ use crate::display_status_line::{
 use crate::display_text_output_install::install_output_resolved_face;
 use crate::display_text_window_row_lifecycle::TextWindowTerminalRightBorderRequest;
 use crate::font_metrics::FontMetrics;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
 use crate::window_output::TextWindowOutputTarget;
@@ -100,6 +101,10 @@ impl FrameOutputOwner {
         self.session().reset();
     }
 
+    pub(crate) fn set_face_attempt(&mut self, face_attempt: FrameFaceAttempt) {
+        self.builder.set_face_attempt(face_attempt);
+    }
+
     pub(crate) fn finish(
         &mut self,
         frame_params: &FrameParams,
@@ -131,29 +136,7 @@ impl FrameOutputOwner {
         face_id: neomacs_display_protocol::types::FaceId,
         face: neomacs_display_protocol::face::Face,
     ) {
-        self.builder.install_output_frame_state(
-            crate::display_output_install_request::OutputFrameStateInstallRequest::face(
-                face_id, face,
-            ),
-        );
-    }
-
-    pub(crate) fn install_retained_faces(
-        &mut self,
-        faces: impl IntoIterator<
-            Item = (
-                neomacs_display_protocol::types::FaceId,
-                neomacs_display_protocol::face::Face,
-            ),
-        >,
-    ) {
-        for (face_id, face) in faces {
-            self.builder.install_output_frame_state(
-                crate::display_output_install_request::OutputFrameStateInstallRequest::face(
-                    face_id, face,
-                ),
-            );
-        }
+        self.builder.publish_output_face(face_id, face);
     }
 
     pub(crate) fn render_frame_tab_bar_row(

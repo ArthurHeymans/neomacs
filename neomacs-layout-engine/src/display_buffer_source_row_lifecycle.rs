@@ -10,7 +10,6 @@ use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info,
 };
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
 use crate::display_row_face_state::DisplayRowActiveFaceState;
@@ -35,6 +34,7 @@ use crate::display_row_walk_state::{
 use crate::display_source::DisplaySourceStepChar;
 use crate::display_source::DisplaySourceTextPosition;
 use crate::display_source_progress::{DisplaySourceProgressState, DisplaySourceRowProgressState};
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{LayoutBufferView, RustTextPropAccess};
 use crate::unicode::is_wide_char;
@@ -377,7 +377,7 @@ impl<'a> BufferSourceEndOfBufferTailRenderContext<'a> {
         hit_rows: &mut Vec<HitRow>,
         hit_row_range: &mut HitRowRangeTracker,
         row_y_positions: &mut DisplayRowYPositions,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> BufferSourceEndOfBufferTailRenderOutcome {
         let mut row_progress = row_progress;
         let mut source_render = source_render;
@@ -510,6 +510,7 @@ impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
             hit_row_range,
             cursor_info,
             row_y_positions,
+            face_ids,
             ..
         } = state;
         let mut progress = progress;
@@ -579,11 +580,12 @@ impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
         }
 
         hscroll_action.append_left_truncation_marker_to_text_row_and_apply(
-            BufferSyntheticTextRenderContext::new(
+            BufferSyntheticTextRenderContext::with_face_attempt(
                 context.append_surface,
                 context.active_face_state,
                 0.0,
                 context.metrics,
+                face_ids.clone(),
             ),
             row_geometry,
             &mut source_render.reborrow(),
@@ -803,17 +805,19 @@ impl<'a> BufferSourceSelectiveDisplayTailRenderRequest<'a> {
             word_wrap,
             trailing_whitespace,
             row_y_positions,
+            face_ids,
             ..
         } = state;
         let mut source_render = source_render;
         let ellipsis_text = crate::neovm_bridge::buffer_invisible_ellipsis_text(buffer);
 
         marker.append_to_text_row_and_apply(
-            BufferSyntheticTextRenderContext::new(
+            BufferSyntheticTextRenderContext::with_face_attempt(
                 context.append_surface,
                 context.active_face_state,
                 context.glyph_y_offset,
                 context.metrics,
+                face_ids.clone(),
             ),
             row_geometry,
             &mut source_render.reborrow(),
@@ -1091,11 +1095,12 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
         let ellipsis_text = crate::neovm_bridge::buffer_invisible_ellipsis_text(buffer);
         let mut row_progress = progress.row_progress_mut().reborrow();
         hidden_text.append_to_text_row_and_apply(
-            BufferSyntheticTextRenderContext::new(
+            BufferSyntheticTextRenderContext::with_face_attempt(
                 context.append_surface,
                 context.active_face_state,
                 context.glyph_y_offset,
                 context.metrics,
+                face_ids.clone(),
             ),
             row_geometry,
             cursor_info,

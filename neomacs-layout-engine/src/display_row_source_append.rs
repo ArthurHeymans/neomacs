@@ -1,4 +1,3 @@
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row_append_context::{
@@ -18,6 +17,7 @@ use crate::display_source_append_plan::{
     DisplaySourceAppendRenderPolicy, DisplaySourceFallbackWidth,
     NaturalDisplayRowAppendRenderPolicy,
 };
+use crate::frame_face_arena::{FrameFaceArena, FrameFaceAttempt};
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::FaceId;
@@ -54,6 +54,7 @@ struct SyntheticTextAppendContext<'a> {
     face_id: FaceId,
     base_face: &'a ResolvedFace,
     frame: DisplayRowAppendFrame,
+    face_attempt: FrameFaceAttempt,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -63,17 +64,19 @@ pub(crate) enum SyntheticTextMarker {
     SelectiveEllipsis,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct SyntheticTextRowAppendContext<'a> {
     active_face_context: DisplayRowActiveFaceAppendContext<'a, 'a>,
+    face_attempt: FrameFaceAttempt,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct BufferSyntheticTextRenderContext<'a> {
     append_surface: &'a DisplayRowAppendSurface,
     active_face: &'a DisplayRowActiveFaceState,
     glyph_y_offset: f32,
     metrics: DisplayRowFallbackMetrics,
+    face_attempt: FrameFaceAttempt,
 }
 
 struct PreparedSingleDisplayItemSourceAppend {
@@ -232,12 +235,28 @@ impl SyntheticTextAppendRequest {
 }
 
 impl<'a> SyntheticTextAppendContext<'a> {
-    fn new(face_id: FaceId, base_face: &'a ResolvedFace, frame: DisplayRowAppendFrame) -> Self {
+    fn with_face_attempt(
+        face_id: FaceId,
+        base_face: &'a ResolvedFace,
+        frame: DisplayRowAppendFrame,
+        face_attempt: FrameFaceAttempt,
+    ) -> Self {
         Self {
             face_id,
             base_face,
             frame,
+            face_attempt,
         }
+    }
+
+    #[cfg(test)]
+    fn new(face_id: FaceId, base_face: &'a ResolvedFace, frame: DisplayRowAppendFrame) -> Self {
+        Self::with_face_attempt(
+            face_id,
+            base_face,
+            frame,
+            crate::frame_face_arena::FrameFaceArena::default().begin_attempt(),
+        )
     }
 
     fn append_to_text_row_and_emit(
@@ -248,6 +267,7 @@ impl<'a> SyntheticTextAppendContext<'a> {
     ) -> Option<DisplayRowAppendProgress> {
         append_synthetic_text_to_display_row(
             state,
+            &mut self.face_attempt.clone(),
             self.base_face,
             self.frame.clone(),
             position,
@@ -275,12 +295,13 @@ impl SyntheticTextMarker {
 }
 
 impl<'a> SyntheticTextRowAppendContext<'a> {
-    fn new(
+    fn with_face_attempt(
         append_surface: &'a DisplayRowAppendSurface,
         geometry: &'a DisplayRowGeometryState,
         active_face: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
         fallback_metrics: DisplayRowFallbackMetrics,
+        face_attempt: FrameFaceAttempt,
     ) -> Self {
         Self {
             active_face_context: DisplayRowActiveFaceAppendContext::new(
@@ -290,7 +311,26 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
                 glyph_y_offset,
                 fallback_metrics,
             ),
+            face_attempt,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new(
+        append_surface: &'a DisplayRowAppendSurface,
+        geometry: &'a DisplayRowGeometryState,
+        active_face: &'a DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
+    ) -> Self {
+        Self::with_face_attempt(
+            append_surface,
+            geometry,
+            active_face,
+            glyph_y_offset,
+            fallback_metrics,
+            FrameFaceArena::default().begin_attempt(),
+        )
     }
 
     fn active_face(
@@ -298,10 +338,11 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
         face_id: FaceId,
         base_face: &'a ResolvedFace,
     ) -> SyntheticTextAppendContext<'a> {
-        SyntheticTextAppendContext::new(
+        SyntheticTextAppendContext::with_face_attempt(
             face_id,
             base_face,
             self.active_face_context.active_face_frame(),
+            self.face_attempt.clone(),
         )
     }
 
@@ -313,11 +354,12 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
         ascent_px: f32,
         char_width_px: f32,
     ) -> SyntheticTextAppendContext<'face> {
-        SyntheticTextAppendContext::new(
+        SyntheticTextAppendContext::with_face_attempt(
             face_id,
             base_face,
             self.active_face_context
                 .text_row_frame(height_px, ascent_px, char_width_px),
+            self.face_attempt.clone(),
         )
     }
 
@@ -351,21 +393,39 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
 }
 
 impl<'a> BufferSyntheticTextRenderContext<'a> {
-    pub(crate) fn new(
+    pub(crate) fn with_face_attempt(
         append_surface: &'a DisplayRowAppendSurface,
         active_face: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
         metrics: DisplayRowFallbackMetrics,
+        face_attempt: FrameFaceAttempt,
     ) -> Self {
         Self {
             append_surface,
             active_face,
             glyph_y_offset,
             metrics,
+            face_attempt,
         }
     }
 
-    pub(crate) fn active_face(self) -> &'a DisplayRowActiveFaceState {
+    #[cfg(test)]
+    pub(crate) fn new(
+        append_surface: &'a DisplayRowAppendSurface,
+        active_face: &'a DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        metrics: DisplayRowFallbackMetrics,
+    ) -> Self {
+        Self::with_face_attempt(
+            append_surface,
+            active_face,
+            glyph_y_offset,
+            metrics,
+            crate::frame_face_arena::FrameFaceArena::default().begin_attempt(),
+        )
+    }
+
+    pub(crate) fn active_face(&self) -> &'a DisplayRowActiveFaceState {
         self.active_face
     }
 
@@ -373,12 +433,13 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
         self,
         geometry: &'a DisplayRowGeometryState,
     ) -> SyntheticTextRowAppendContext<'a> {
-        SyntheticTextRowAppendContext::new(
+        SyntheticTextRowAppendContext::with_face_attempt(
             self.append_surface,
             geometry,
             self.active_face,
             self.glyph_y_offset,
             self.metrics,
+            self.face_attempt,
         )
     }
 
@@ -409,7 +470,7 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
     }
 
     pub(crate) fn hscroll_truncation_request(
-        self,
+        &self,
         base_face: ResolvedFace,
         content_x: f32,
     ) -> SyntheticTextAppendRequest {
@@ -461,7 +522,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
     pub(crate) fn render_source_with_policy<S, P>(
         &self,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         source: &mut S,
         source_state: &mut DisplayRowSourceState,
         position: DisplayRowPosition,
@@ -498,7 +559,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
     fn measure_source_with_policy<S, P>(
         &self,
         state: &mut TextRowSourceMeasureState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         source: &mut S,
         source_state: &mut DisplayRowSourceState,
         position: DisplayRowPosition,
@@ -534,6 +595,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
     pub(crate) fn render_with_policy<P: DisplayRowRenderPolicy>(
         &self,
         state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceAttempt,
         item: DisplayItem,
         position: DisplayRowPosition,
         kind: DisplayRowAppendKind,
@@ -541,12 +603,12 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
     ) -> Option<DisplayRowAppendProgress> {
         let prepared = self.prepare_item(item, position, kind);
         let (item, face_id, kind, position) = prepared.into_parts();
-        let mut face_ids = FrameFaceIdAllocator::new(face_id.get().saturating_add(1));
+        face_ids.reserve_after(face_id);
         let mut source = DisplayItemOnceSource::new(item);
         let mut source_state = DisplayRowSourceState::default();
         let outcome = self.render_source_with_policy(
             state,
-            &mut face_ids,
+            face_ids,
             &mut source,
             &mut source_state,
             position,
@@ -560,12 +622,13 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
     pub(crate) fn render_naturally(
         &self,
         state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceAttempt,
         item: DisplayItem,
         position: DisplayRowPosition,
         kind: DisplayRowAppendKind,
     ) -> Option<DisplayRowAppendProgress> {
         let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
-        self.render_with_policy(state, item, position, kind, &mut render_policy)
+        self.render_with_policy(state, face_ids, item, position, kind, &mut render_policy)
     }
 
     pub(crate) fn measure_width_with_policy<P: DisplayRowRenderPolicy>(
@@ -578,7 +641,10 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
     ) -> Option<f32> {
         let prepared = self.prepare_item(item, position, kind);
         let (item, face_id, kind, position) = prepared.into_parts();
-        let mut face_ids = FrameFaceIdAllocator::new(face_id.get().saturating_add(1));
+        // Measurement identities never escape into frame output. Keep them in
+        // an isolated arena so measuring cannot consume or publish frame IDs.
+        let mut face_ids = FrameFaceArena::default().begin_attempt();
+        face_ids.reserve_after(face_id);
         let mut source = DisplayItemOnceSource::new(item);
         let mut source_state = DisplayRowSourceState::default();
         let outcome = self.measure_source_with_policy(
@@ -621,6 +687,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
 
 fn append_synthetic_text_to_display_row(
     state: &mut TextRowSourceRenderState<'_>,
+    face_ids: &mut FrameFaceAttempt,
     base_face: &ResolvedFace,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
@@ -630,12 +697,12 @@ fn append_synthetic_text_to_display_row(
     let mut source = source.into_item_source(face_id);
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     let start = position;
-    let mut face_ids = FrameFaceIdAllocator::new(face_id.get().saturating_add(1));
+    face_ids.reserve_after(face_id);
     let context = SingleDisplayItemAppendContext::new(base_face, face_id, frame);
     let mut source_state = DisplayRowSourceState::default();
     let outcome = context.render_source_with_policy(
         state,
-        &mut face_ids,
+        face_ids,
         &mut source,
         &mut source_state,
         position,

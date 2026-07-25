@@ -1,6 +1,5 @@
 use crate::display_buffer_source_item_append::BufferSourceActiveFaceRowMetrics;
 use crate::display_cursor::{CapturedCursorInfo, CursorCaptureState, capture_cursor_info};
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{BufferDisplayPropertyReplacementItem, RenderFaceRef};
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_builder::DisplayRowPosition;
@@ -14,6 +13,7 @@ use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_source::DisplaySourceTextPosition;
 use crate::display_source::{DisplaySourceItem, DisplaySourceStepItem};
 use crate::display_source_progress::DisplaySourceProgressState;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 
@@ -70,7 +70,7 @@ pub(crate) struct BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face> {
 
 pub(crate) struct BufferDisplayPropertyTextReplacementRenderState<'emit> {
     source_render: TextRowSourceRenderState<'emit>,
-    face_ids: &'emit mut FrameFaceIdAllocator,
+    face_ids: &'emit mut FrameFaceAttempt,
     append_surface: &'emit DisplayRowAppendSurface,
     row_geometry: &'emit mut DisplayRowGeometryState,
     active_face_state: &'emit DisplayRowActiveFaceState,
@@ -79,7 +79,7 @@ pub(crate) struct BufferDisplayPropertyTextReplacementRenderState<'emit> {
 impl<'emit> BufferDisplayPropertyTextReplacementRenderState<'emit> {
     pub(crate) fn new(
         source_render: TextRowSourceRenderState<'emit>,
-        face_ids: &'emit mut FrameFaceIdAllocator,
+        face_ids: &'emit mut FrameFaceAttempt,
         append_surface: &'emit DisplayRowAppendSurface,
         row_geometry: &'emit mut DisplayRowGeometryState,
         active_face_state: &'emit DisplayRowActiveFaceState,

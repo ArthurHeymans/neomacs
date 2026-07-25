@@ -1,5 +1,4 @@
 use crate::display_cursor::{CapturedCursorInfo, display_property_replacement_cursor_info};
-use crate::display_face_id::FrameFaceIdAllocator;
 #[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
@@ -36,6 +35,7 @@ use crate::display_source_resolver::{
     DisplayPropertyReplacementSourceResolveRequest, DisplayStringBaseFace,
 };
 use crate::font_metrics::FontMetricsService;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
 use crate::types::WindowParams;
 use neomacs_display_protocol::types::FaceId;
@@ -122,7 +122,7 @@ impl DisplayReplacementStringSourceAppendRequest {
     fn render_to_text_row_and_emit(
         self,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         append_context: &DisplayReplacementAppendContext<'_>,
         item_policy: &mut impl DisplayRowRenderPolicy,
     ) -> DisplayReplacementAppendResult {
@@ -308,7 +308,7 @@ impl DisplayReplacementStringAppendRequest {
         self,
         replacement_append_context: DisplayReplacementRowAppendContext<'_>,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         position: DisplayRowPosition,
         pointer_appearance: Option<DisplayPointerAppearance>,
     ) -> DisplayReplacementAppendResult {
@@ -540,7 +540,7 @@ impl DisplayReplacementItemAppendTemplate {
         replacement_append_context: DisplayReplacementRowAppendContext<'_>,
         row_geometry: &mut DisplayRowGeometryState,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         position: DisplayRowPosition,
         pointer_appearance: Option<DisplayPointerAppearance>,
     ) -> DisplayRowPosition {
@@ -649,7 +649,7 @@ impl DisplayPropertyReplacementAppendRequest {
         buffer: &B,
         state: &mut TextRowSourceRenderState<'_>,
         active_face_state: &DisplayRowActiveFaceState,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> DisplayPropertyReplacementAppendPlan {
         let item = DisplayPropertyReplacementAppendPlanItemRequest::new(self.item).resolve(
             buffer,
@@ -671,7 +671,7 @@ impl DisplayPropertyReplacementAppendRequest {
         self,
         buffer: &B,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         append_surface: &DisplayRowAppendSurface,
         row_geometry: &mut DisplayRowGeometryState,
         active_face_state: &DisplayRowActiveFaceState,
@@ -772,7 +772,7 @@ impl DisplayPropertyReplacementRowRenderRequest {
         buffer: &B,
         state: &mut TextRowSourceRenderState<'_>,
         active_face_state: &DisplayRowActiveFaceState,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> Option<DisplayPropertyReplacementStringPlanSnapshot> {
         self.append_request
             .into_plan(buffer, state, active_face_state, face_ids)
@@ -783,7 +783,7 @@ impl DisplayPropertyReplacementRowRenderRequest {
         self,
         buffer: &B,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         append_surface: &DisplayRowAppendSurface,
         row_geometry: &mut DisplayRowGeometryState,
         active_face_state: &DisplayRowActiveFaceState,
@@ -875,7 +875,7 @@ impl DisplayPropertyReplacementAppendPlan {
     pub(crate) fn append_to_text_row(
         self,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         append_surface: &DisplayRowAppendSurface,
         row_geometry: &mut DisplayRowGeometryState,
         active_face_state: &DisplayRowActiveFaceState,
@@ -923,7 +923,7 @@ impl DisplayPropertyReplacementAppendPlanItemRequest {
         buffer: &B,
         state: &mut TextRowSourceRenderState<'_>,
         active_face_state: &DisplayRowActiveFaceState,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> DisplayPropertyReplacementAppendPlanItem {
         match self.item {
             DisplayPropertyReplacementSourceItem::Empty => {
@@ -966,7 +966,7 @@ impl DisplayPropertyReplacementAppendPlanItem {
         replacement_append_context: DisplayReplacementRowAppendContext<'_>,
         row_geometry: &mut DisplayRowGeometryState,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         position: DisplayRowPosition,
         pointer_appearance: Option<DisplayPointerAppearance>,
     ) -> DisplayReplacementAppendResult {
@@ -1125,7 +1125,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
     fn append_item_request_to_text_row_and_emit(
         self,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         request: DisplayReplacementItemAppendRequest,
     ) -> Option<DisplayRowAppendProgress> {
         let plan = request.into_plan(self.replacement_source, self.active_face.face_id());
@@ -1150,7 +1150,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
     pub(crate) fn append_stretch_source_item_to_text_row_and_emit(
         self,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         item: DisplayReplacementStretchSourceItem,
         position: DisplayRowPosition,
     ) -> Option<DisplayRowAppendProgress> {
@@ -1163,7 +1163,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
     pub(crate) fn append_media_source_item_to_text_row_and_emit(
         self,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         item: DisplayReplacementMediaSourceItem,
         position: DisplayRowPosition,
     ) -> Option<DisplayRowAppendProgress> {
@@ -1178,7 +1178,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
     pub(crate) fn append_source_mapped_text_item_to_text_row_and_emit(
         self,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         item: DisplayReplacementSourceMappedTextItem,
         position: DisplayRowPosition,
     ) -> Option<DisplayRowAppendProgress> {
@@ -1209,7 +1209,7 @@ impl<'a> DisplayReplacementAppendContext<'a> {
     fn append_replacement_item_plan_to_text_row_and_emit(
         &self,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         plan: DisplayReplacementItemAppendPlan,
     ) -> Option<DisplayRowAppendProgress> {
         let (item, position) = plan.into_parts();
@@ -1233,7 +1233,7 @@ impl<'a> DisplayReplacementAppendContext<'a> {
     pub(crate) fn append_replacement_item_kind_to_text_row_and_emit(
         &self,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         replacement_source: BufferDisplayReplacementSource,
         kind: DisplayItemKind,
         position: DisplayRowPosition,
@@ -1247,7 +1247,7 @@ impl<'a> DisplayReplacementAppendContext<'a> {
     pub(crate) fn append_replacement_string_source_to_text_row_and_emit(
         &self,
         state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         replacement_source: BufferDisplayReplacementSource,
         source_id: LispStringSourceId,
         value: Value,

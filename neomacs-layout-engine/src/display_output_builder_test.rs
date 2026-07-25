@@ -1204,11 +1204,10 @@ fn rtl_text_and_chrome_rows_reorder_identically() {
 /// mode-line), and both window matrices that reference the id
 /// then read the inactive colors.
 ///
-/// Fix: `LayoutEngine::frame_face_id_counter` is frame-scoped
-/// and NEVER resets per window, so sibling windows always get
-/// distinct face ids and their entries never overwrite each
-/// other. Mirrors GNU's single `face_cache->used` counter per
-/// frame at `src/xfaces.c::init_frame_faces` / `realize_face`.
+/// Fix: `FrameFaceArena` owns one attempt-wide namespace, so sibling
+/// windows allocate distinct IDs and an ID cannot be rebound to a
+/// different rendering. This mirrors GNU's single realized-face cache
+/// per frame at `src/xfaces.c::init_frame_faces` / `realize_face`.
 ///
 /// This test verifies the invariant at the builder level: when
 /// the caller inserts two DIFFERENT faces at DIFFERENT ids, both
@@ -1226,8 +1225,8 @@ fn builder_preserves_distinct_mode_line_faces_across_sibling_windows() {
     // Emulate the post-C-x-2 redisplay order: active mode-line
     // for the TOP (selected) window, then inactive mode-line for
     // the BOTTOM (non-selected) window. The `LayoutEngine`'s
-    // `frame_face_id_counter` guarantees these receive DIFFERENT
-    // ids; the builder must keep both in the `faces` HashMap.
+    // The frame face attempt guarantees these receive DIFFERENT ids;
+    // the builder must preserve both in the sealed face table.
     let mut active = Face::new(FaceId::new(10));
     active.foreground = Color::rgb(0.0, 0.0, 0.0);
     active.background = Color::rgb(0.75, 0.75, 0.75);

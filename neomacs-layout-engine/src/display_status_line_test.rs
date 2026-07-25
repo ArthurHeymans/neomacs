@@ -112,7 +112,7 @@ fn window_chrome_display_row_request_renders_measured_lifecycle_row() {
     let base_face = face_resolver
         .default_base_face_for_origin_without_buffer(&DisplayOrigin::ModeLine { selected: true });
     let mut font_metrics = None;
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let mut render_services =
         ChromeRowRenderServices::new(&mut font_metrics, &face_resolver, &mut face_ids);
     let mut symbol_values = std::collections::HashMap::new();
@@ -203,7 +203,7 @@ fn window_chrome_gui_tab_and_mode_lines_use_font_backed_glyph_advances() {
     ] {
         let base_face = proportional_chrome_test_face(&face_resolver, &origin);
         let mut font_metrics = Some(FontMetricsService::new());
-        let mut face_ids = FrameFaceIdAllocator::new(1);
+        let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
         let mut render_services =
             ChromeRowRenderServices::new(&mut font_metrics, &face_resolver, &mut face_ids);
 
@@ -241,7 +241,7 @@ fn frame_tab_bar_gui_uses_font_backed_glyph_advances() {
         FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, Some("neo".to_string()));
     let base_face = proportional_chrome_test_face(&face_resolver, &DisplayOrigin::TabBar);
     let mut font_metrics = Some(FontMetricsService::new());
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let mut render_services =
         ChromeRowRenderServices::new(&mut font_metrics, &face_resolver, &mut face_ids);
 
@@ -772,7 +772,7 @@ fn window_chrome_mode_line_row_grows_for_tall_display_element() {
     let base_face = face_resolver
         .default_base_face_for_origin_without_buffer(&DisplayOrigin::ModeLine { selected: true });
     let mut font_metrics = None;
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let mut render_services =
         ChromeRowRenderServices::new(&mut font_metrics, &face_resolver, &mut face_ids);
 

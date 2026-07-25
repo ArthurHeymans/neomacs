@@ -1,4 +1,3 @@
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_face_ref::render_face_ref_id;
@@ -24,6 +23,7 @@ use crate::display_spec::{
     parse_display_video_layout, parse_display_webkit_layout,
 };
 use crate::font_metrics::FontMetricsService;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::types::WindowParams;
 use crate::unicode::decode_utf8;
@@ -263,7 +263,7 @@ pub(crate) fn resolve_display_string_base_face<B: LayoutBufferView>(
     policy: BaseFacePolicy,
     active_base_face: Option<ActiveDisplayStringBaseFace<'_>>,
     default_install_policy: DisplayDefaultFaceInstallPolicy,
-    face_ids: &mut FrameFaceIdAllocator,
+    face_ids: &mut FrameFaceAttempt,
 ) -> DisplayStringBaseFace {
     let mut next_check = buffer.layout_point_max_char_pos().get();
     let face = face_resolver.base_face_for_origin(Some(buffer), &origin, policy, &mut next_check);
@@ -282,7 +282,7 @@ pub(crate) fn resolve_display_string_base_face<B: LayoutBufferView>(
         };
         (face_id, pending_face)
     } else {
-        let face_id = face_ids.allocate();
+        let face_id = face_ids.reserve_dynamic_face();
         let pending_face = Some(PendingDisplaySourceFace::new(face_id, face.clone()));
         (face_id, pending_face)
     };
@@ -520,7 +520,7 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
 pub(crate) struct DisplaySourcePropertyResolver<'a> {
     params: DisplaySourceResolveParams<'a>,
     state: &'a mut DisplaySourceResolveState,
-    face_ids: &'a mut FrameFaceIdAllocator,
+    face_ids: &'a mut FrameFaceAttempt,
     pending_faces: &'a mut Vec<PendingDisplaySourceFace>,
 }
 
@@ -528,7 +528,7 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
     pub(crate) fn new(
         params: DisplaySourceResolveParams<'a>,
         state: &'a mut DisplaySourceResolveState,
-        face_ids: &'a mut FrameFaceIdAllocator,
+        face_ids: &'a mut FrameFaceAttempt,
         pending_faces: &'a mut Vec<PendingDisplaySourceFace>,
     ) -> Self {
         let face_basis = params.face_basis();
@@ -577,7 +577,7 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
             return face;
         }
 
-        let face_id = self.face_ids.allocate();
+        let face_id = self.face_ids.reserve_dynamic_face();
         self.state.height_face_cache.insert(key, face_id);
         self.state.remember_face(face_id, &resolved);
         self.pending_faces
@@ -590,7 +590,7 @@ pub(crate) struct BufferDisplaySourcePropertyResolver<'a, B: LayoutBufferView> {
     buffer: &'a B,
     params: DisplaySourceResolveParams<'a>,
     state: &'a mut DisplaySourceResolveState,
-    face_ids: &'a mut FrameFaceIdAllocator,
+    face_ids: &'a mut FrameFaceAttempt,
     pending_faces: &'a mut Vec<PendingDisplaySourceFace>,
 }
 
@@ -599,7 +599,7 @@ impl<'a, B: LayoutBufferView> BufferDisplaySourcePropertyResolver<'a, B> {
         buffer: &'a B,
         params: DisplaySourceResolveParams<'a>,
         state: &'a mut DisplaySourceResolveState,
-        face_ids: &'a mut FrameFaceIdAllocator,
+        face_ids: &'a mut FrameFaceAttempt,
         pending_faces: &'a mut Vec<PendingDisplaySourceFace>,
     ) -> Self {
         let face_basis = params.face_basis();
@@ -616,7 +616,7 @@ impl<'a, B: LayoutBufferView> BufferDisplaySourcePropertyResolver<'a, B> {
 
 fn resolve_source_face_ref(
     state: &mut DisplaySourceResolveState,
-    face_ids: &mut FrameFaceIdAllocator,
+    face_ids: &mut FrameFaceAttempt,
     pending_faces: &mut Vec<PendingDisplaySourceFace>,
     face_basis: DisplaySourceFaceBasis<'_>,
     base: RenderFaceRef,
@@ -638,7 +638,7 @@ fn resolve_source_face_ref(
         return RenderFaceRef::FaceId(base_face_id);
     }
 
-    let face_id = face_ids.allocate();
+    let face_id = face_ids.reserve_dynamic_face();
     state.cache_face(base_face_id, face_value, face_id, &resolved);
     pending_faces.push(PendingDisplaySourceFace::new(face_id, resolved));
     RenderFaceRef::FaceId(face_id)
@@ -722,7 +722,7 @@ pub(crate) fn resolve_next_display_source_item(
     source: &mut impl DisplayItemSource,
     params: DisplaySourceResolveParams<'_>,
     state: &mut DisplaySourceResolveState,
-    face_ids: &mut FrameFaceIdAllocator,
+    face_ids: &mut FrameFaceAttempt,
 ) -> ResolvedDisplaySourceItem {
     let mut pending_faces = Vec::new();
     let mut pending_fringes = Vec::new();
@@ -1045,7 +1045,7 @@ mod tests {
         let face_resolver = test_face_resolver(&table);
         let base_face = face_resolver.default_face();
         let mut resolve_state = DisplaySourceResolveState::default();
-        let mut face_ids = FrameFaceIdAllocator::new(20);
+        let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
         let mut pending_faces = Vec::new();
         let params = DisplaySourceResolveParams::new(
             DisplaySourceFaceBasis::new(
@@ -1092,7 +1092,7 @@ mod tests {
         let face_resolver = test_face_resolver(&table);
         let base_face = face_resolver.default_face();
         let mut resolve_state = DisplaySourceResolveState::default();
-        let mut face_ids = FrameFaceIdAllocator::new(20);
+        let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
         let mut pending_faces = Vec::new();
         let params = DisplaySourceResolveParams::new(
             DisplaySourceFaceBasis::new(
@@ -1187,7 +1187,7 @@ mod tests {
             .expect("current buffer");
         let base_face = face_resolver.default_face();
         let mut resolve_state = DisplaySourceResolveState::default();
-        let mut face_ids = FrameFaceIdAllocator::new(20);
+        let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
         let mut pending_faces = Vec::new();
         let params = DisplaySourceResolveParams::new(
             DisplaySourceFaceBasis::new(
@@ -1286,7 +1286,7 @@ mod tests {
         let buffer = test_buffer_snapshot();
         let table = FaceTable::new();
         let resolver = test_face_resolver(&table);
-        let mut face_ids = FrameFaceIdAllocator::new(BasicFaceId::SENTINEL);
+        let mut face_ids = FrameFaceAttempt::for_test_with_next_id(BasicFaceId::SENTINEL);
 
         let base_face = resolve_display_string_base_face(
             &buffer,
@@ -1316,8 +1316,8 @@ mod tests {
         let buffer = test_buffer_snapshot();
         let table = FaceTable::new();
         let resolver = test_face_resolver(&table);
-        let mut install_face_ids = FrameFaceIdAllocator::new(BasicFaceId::SENTINEL);
-        let mut reuse_face_ids = FrameFaceIdAllocator::new(BasicFaceId::SENTINEL);
+        let mut install_face_ids = FrameFaceAttempt::for_test_with_next_id(BasicFaceId::SENTINEL);
+        let mut reuse_face_ids = FrameFaceAttempt::for_test_with_next_id(BasicFaceId::SENTINEL);
 
         let installed = resolve_display_string_base_face(
             &buffer,
@@ -1353,7 +1353,7 @@ mod tests {
         let buffer = test_buffer_snapshot();
         let table = FaceTable::new();
         let resolver = test_face_resolver(&table);
-        let mut face_ids = FrameFaceIdAllocator::new(500);
+        let mut face_ids = FrameFaceAttempt::for_test_with_next_id(500);
 
         let base_face = resolve_display_string_base_face(
             &buffer,
@@ -1372,7 +1372,7 @@ mod tests {
             pending_face.resolved(),
             base_face.face()
         ));
-        assert_eq!(face_ids.finish(), 501);
+        assert_eq!(face_ids.next_face_id_for_test(), 501);
     }
 
     #[test]

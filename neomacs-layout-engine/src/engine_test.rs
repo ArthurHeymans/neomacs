@@ -4,7 +4,6 @@ use crate::display_cursor::{
     CursorGeometryContext, CursorGeometrySource, VisualTextWindowCursorPublishContext,
     VisualTextWindowCursorPublishSummary, cursor_style_for_window,
 };
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::RenderFaceRef;
 use crate::display_origin::{DisplayOrigin, OverlayStringKind};
@@ -27,6 +26,7 @@ use crate::display_row_walk_state::{
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
 };
 use crate::display_source::DisplaySpaceGeometry;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::{VisualCursorSpec, WindowKind};
@@ -540,24 +540,6 @@ fn cursor_capture_state_captures_once_and_refines_matching_main_char_width() {
     assert_eq!(captured.x, 1.0);
     assert_eq!(captured.byte_idx, 5);
     assert_eq!(captured.slot_width, Some(12.5));
-}
-
-#[test]
-fn frame_face_id_allocator_clamps_to_sentinel_and_allocates_sequential_ids() {
-    let mut allocator = FrameFaceIdAllocator::new(100);
-
-    assert_eq!(allocator.allocate(), FaceId::new(100));
-    assert_eq!(allocator.allocate(), FaceId::new(101));
-    assert_eq!(allocator.finish(), 102);
-
-    let mut clamped = FrameFaceIdAllocator::new(0);
-
-    assert_eq!(clamped.allocate(), FaceId::new(BasicFaceId::SENTINEL));
-    assert_eq!(clamped.finish(), BasicFaceId::SENTINEL + 1);
-
-    let mut frame_counter = 0;
-    FrameFaceIdAllocator::new(200).finish_into(&mut frame_counter);
-    assert_eq!(frame_counter, 200);
 }
 
 #[test]
@@ -1624,7 +1606,7 @@ fn render_buffer_text_source_shadow_row(
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00ff_ffff, 0x0000_0000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     DisplayRowSourceFragmentFrame::new(
         DisplayRowGeometry::new(
             0.0,

@@ -1,7 +1,5 @@
 use crate::composition::last_text_cluster_tail_in_row;
 use crate::display_output_builder::DisplayOutputBuilder;
-#[cfg(test)]
-use crate::display_output_install_request::OutputFrameStateInstallRequest;
 pub(crate) use crate::display_output_row_request::DisplayCurrentRowMutation;
 #[cfg(test)]
 use crate::display_rendered_row_output_install::install_rendered_display_row_fragment_assets;
@@ -112,10 +110,7 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
     _display_row_index: usize,
 ) -> DisplayRowPosition {
     for face in rendered.faces() {
-        builder.install_output_frame_state(OutputFrameStateInstallRequest::face(
-            face.id,
-            face.clone(),
-        ));
+        builder.publish_output_face(face.id, face.clone());
     }
     let end = DisplayRowCurrentRowOutput::from_output_builder(builder)
         .append_rendered_fragment(rendered)

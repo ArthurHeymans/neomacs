@@ -16,7 +16,6 @@ use crate::display_buffer_source_row_lifecycle::{
     consume_hscroll_skip_from_position,
 };
 use crate::display_buffer_text_source::BufferTextSourceCursor;
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::RenderFaceRef;
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_source_render::TextRowSourceRenderState;
@@ -31,6 +30,7 @@ use crate::display_source_resolver::{
     BufferDisplaySourcePropertyResolver, DisplaySourceResolveState,
 };
 use crate::display_source_walk::DisplaySourcePositionConsumption;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{BufferId, CharPos0};
@@ -84,7 +84,7 @@ impl BufferSourceWalkConsumption {
         face_resolution_context: BufferSourceFaceResolutionContext<'_, B>,
         source_render: &mut TextRowSourceRenderState<'_>,
         row_geometry: &mut DisplayRowGeometryState,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> Option<BufferSourceConsumedItem> {
         let (source_item, pending_faces, pending_fringes) = self.apply_to_progress(progress);
         face_resolution_context.install_pending_source_faces(
@@ -187,7 +187,7 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         &mut self,
         mut source_position: DisplaySourceTextPosition,
         face_resolution_context: BufferSourceFaceResolutionContext<'_, B>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> BufferSourceWalkConsumption {
         let mut pending_faces = Vec::new();
         let mut pending_fringes = Vec::new();
@@ -222,7 +222,7 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         &mut self,
         progress: &mut DisplaySourceProgressState<'_>,
         face_resolution_context: BufferSourceFaceResolutionContext<'_, B>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         source_render: &mut TextRowSourceRenderState<'_>,
         row_geometry: &mut DisplayRowGeometryState,
     ) -> Option<BufferSourceConsumedItem> {

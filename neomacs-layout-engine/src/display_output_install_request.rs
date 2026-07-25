@@ -1,13 +1,11 @@
 //! Typed output install requests consumed by `DisplayOutputBuilder`.
 
 use neomacs_display_protocol::effect_config::EffectsConfig;
-use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, PhysCursor, PresentedWindowGeometry, WindowEffectHint, WindowInfo,
     WindowTransitionHint,
 };
 use neomacs_display_protocol::glyph_matrix::{CursorItem, FaceFillItem, ScrollBarItem};
-use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayFrameId, DisplayWindowId, Rect};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -116,10 +114,6 @@ pub(crate) enum OutputFrameStateInstallRequest {
     Identity(OutputFrameIdentityInstallRequest),
     BackgroundColor(Color),
     FontPixelSize(f32),
-    Face {
-        id: FaceId,
-        face: Face,
-    },
     CursorEffects {
         window_id: DisplayWindowId,
         effects: EffectsConfig,
@@ -127,10 +121,6 @@ pub(crate) enum OutputFrameStateInstallRequest {
 }
 
 impl OutputFrameStateInstallRequest {
-    pub(crate) fn face(id: FaceId, face: Face) -> Self {
-        Self::Face { id, face }
-    }
-
     pub(crate) fn cursor_effects(window_id: DisplayWindowId, effects: EffectsConfig) -> Self {
         Self::CursorEffects { window_id, effects }
     }

@@ -2,7 +2,6 @@
 
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_cursor::CursorCaptureState;
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
@@ -17,6 +16,7 @@ use crate::display_text_window_row_lifecycle::{
     TextWindowTailFinalizeState, TextWindowVisibilityRetryOutcome,
     TextWindowVisibilityRetryRequest,
 };
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
@@ -288,7 +288,7 @@ pub(crate) fn render_buffer_source_tail_and_decide_retry<
     hit_rows: &'emit mut Vec<HitRow>,
     hit_row_range: &'emit mut HitRowRangeTracker,
     row_y_positions: &'rows mut DisplayRowYPositions,
-    face_ids: &'emit mut FrameFaceIdAllocator,
+    face_ids: &'emit mut FrameFaceAttempt,
     overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
     tail_context: &BufferSourceTailRequestContext<'_>,
     text: &'request [u8],

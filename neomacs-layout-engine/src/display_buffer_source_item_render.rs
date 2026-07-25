@@ -324,6 +324,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             &active_face_state,
             self.glyph_y_offset,
             self.char_h,
+            face_ids.clone(),
         );
         if let Some((face_id, face)) = resolved_item_face {
             buffer_row_append_context =

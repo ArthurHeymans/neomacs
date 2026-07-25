@@ -1,10 +1,8 @@
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_frame_output::FrameOutputIdentity;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_output_builder::DisplayOutputBuilder;
-use crate::display_output_install_request::OutputFrameStateInstallRequest;
 use crate::display_row::{DisplayRowRenderExecutor, DisplayRowSourceFragmentFrame};
 use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, new_display_row};
 use crate::display_row_geometry::{DisplayRowGeometry, DisplayRowMaxX};
@@ -13,13 +11,14 @@ use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::display_text_output_install::install_display_row;
 use crate::font_metrics::FontMetricsService;
+use crate::frame_face_arena::{FrameFaceArena, FrameFaceAttempt};
 use crate::mock_frame::{MockDisplayProperty, MockFrameContent, MockStyledLine};
 use crate::neovm_bridge::{FaceResolver, ResolvedFace};
 use crate::window_output::{
     TextWindowOutputBegin, TextWindowOutputTarget, begin_text_window_output,
     close_text_window_output,
 };
-use neomacs_display_protocol::face::{BasicFaceId, Face, FaceAttributes};
+use neomacs_display_protocol::face::{Face, FaceAttributes};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{FrameDisplayState, GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::Color;
@@ -229,7 +228,7 @@ struct MockDisplayAreaRenderRequest<'a> {
     base_face: &'a ResolvedFace,
     face_resolver: &'a FaceResolver,
     font_metrics: &'a mut Option<FontMetricsService>,
-    face_ids: &'a mut FrameFaceIdAllocator,
+    face_ids: &'a mut FrameFaceAttempt,
 }
 
 fn render_mock_display_area(request: MockDisplayAreaRenderRequest<'_>) {
@@ -273,7 +272,7 @@ pub(crate) fn mock_display_row_from_line(
     base_face: &ResolvedFace,
     face_resolver: &FaceResolver,
     font_metrics: &mut Option<FontMetricsService>,
-    face_ids: &mut FrameFaceIdAllocator,
+    face_ids: &mut FrameFaceAttempt,
 ) -> GlyphRow {
     let geometry = mock_display_row_geometry(pixel_y, width_px, char_w, char_h, ascent);
     let mut row = new_empty_mock_display_row(role, &geometry, base_face);
@@ -358,7 +357,7 @@ pub(crate) fn layout_mock_frame_content(
         // Mock display faces enter in Emacs point units; frame output carries
         // physical pixels to match the measured row geometry.
         face.font_size = crate::fontconfig::points_to_pixels(face.font_size);
-        builder.install_output_frame_state(OutputFrameStateInstallRequest::face(face.id, face));
+        builder.publish_output_face(face.id, face);
     }
 
     let default_face = content.faces.first();
@@ -392,7 +391,7 @@ pub(crate) fn layout_mock_frame_content(
         None,
     );
     let mock_base_face = resolved_mock_face(default_face, char_w, char_h, ascent);
-    let mut mock_face_ids = FrameFaceIdAllocator::new(BasicFaceId::SENTINEL);
+    let mut mock_face_ids = FrameFaceArena::default().begin_attempt();
     tracing::info!(
         "layout_mock_frame: default_size={:.1} family={} weight={} italic={} char_w={:.1} char_h={:.1}",
         default_size,
@@ -549,10 +548,7 @@ pub(crate) fn layout_mock_frame_content(
         );
         cb.set_output_background_color(Color::new(0.0, 0.0, 0.0, 0.0));
         for face in &content.faces {
-            cb.install_output_frame_state(OutputFrameStateInstallRequest::face(
-                face.id,
-                face.clone(),
-            ));
+            cb.publish_output_face(face.id, face.clone());
         }
         let nrows = cf.window.lines.len();
         let ncols = mock_frame_pixel_width_to_columns(cf.window.pixel_bounds.width, char_w);

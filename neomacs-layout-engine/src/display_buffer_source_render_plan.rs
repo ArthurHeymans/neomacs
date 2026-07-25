@@ -15,7 +15,6 @@ use crate::display_buffer_source_tail_render::{
 use crate::display_buffer_window_geometry::{BufferWindowGeometry, BufferWindowLocalDisplayPolicy};
 use crate::display_buffer_window_source::BufferWindowSource;
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_face_state::{DisplayRowActiveFaceState, DisplayRowMeasurementPolicy};
 use crate::display_row_geometry::{DisplayRowLimit, DisplayRowVisibilityLimit};
@@ -419,10 +418,9 @@ impl BufferSourceOutputSetup {
     where
         B: LayoutBufferView,
     {
-        let (mut output, font_metrics, face_resolver, frame_face_id_counter, window_snapshots) =
+        let (mut output, font_metrics, face_resolver, mut face_ids, window_snapshots) =
             state.into_parts();
         let retry_checkpoint = output.capture_retry_checkpoint();
-        let mut face_ids = FrameFaceIdAllocator::new(*frame_face_id_counter);
 
         let has_overlays = !buffer.layout_overlays().is_empty();
         let face_resolution = BufferSourceFaceResolutionContext::new(
@@ -669,7 +667,6 @@ impl BufferSourceOutputSetup {
                 measured_chrome_heights,
                 window_snapshots,
             );
-            *frame_face_id_counter = face_ids.finish();
             return BufferSourceRenderAttemptOutcome::Finished {
                 redisplay_positions,
                 cursor_only: true,
@@ -842,7 +839,6 @@ impl BufferSourceOutputSetup {
                 measured_chrome_heights,
                 window_snapshots,
             );
-            *frame_face_id_counter = face_ids.finish();
             return BufferSourceRenderAttemptOutcome::Finished {
                 redisplay_positions,
                 cursor_only: false,
@@ -890,7 +886,6 @@ impl BufferSourceOutputSetup {
                     .filter(|target| *target != tail_context.params.point_charpos().get())
                 {
                     output.restore_retry_checkpoint(retry_checkpoint);
-                    *frame_face_id_counter = face_ids.finish();
                     return BufferSourceRenderAttemptOutcome::RetryPointIntoWindow {
                         point_charpos,
                     };
@@ -898,14 +893,13 @@ impl BufferSourceOutputSetup {
             } else {
                 retry_plan.log_retry(window_start, remaining_visibility_retries);
                 output.restore_retry_checkpoint(retry_checkpoint);
-                *frame_face_id_counter = face_ids.finish();
                 return BufferSourceRenderAttemptOutcome::Retry { window_start };
             }
         }
 
         let (mut output, evaluator) = output.into_parts();
         if !default_face.face().use_default_background && geometry.text_height > 0.0 {
-            let face_id = face_ids.allocate();
+            let face_id = face_ids.reserve_dynamic_face();
             output.install_resolved_face(face_id, default_face.face(), None);
             output.builder().add_output_face_fill(FaceFillItem {
                 window_id: DisplayWindowId::new(params.window_id),
@@ -990,7 +984,7 @@ impl BufferSourceOutputSetup {
             geometry.display_text_row_base,
             {
                 let resolved = render_services.face_resolver().resolve_named_face("fringe");
-                let face_id = render_services.face_ids().allocate();
+                let face_id = render_services.face_ids().reserve_dynamic_face();
                 output.install_resolved_face(face_id, &resolved, None);
                 face_id
             },
@@ -1019,7 +1013,6 @@ impl BufferSourceOutputSetup {
             measured_chrome_heights,
             window_snapshots,
         );
-        *frame_face_id_counter = face_ids.finish();
         BufferSourceRenderAttemptOutcome::Finished {
             redisplay_positions,
             cursor_only: false,

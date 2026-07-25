@@ -10,6 +10,7 @@ use crate::display_text_window_row_lifecycle::{
     TextWindowBeginRequest, TextWindowCursorEffectsRequest, TextWindowVisibilityRetryOutcome,
 };
 use crate::font_metrics::FontMetricsService;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::FaceResolver;
 use crate::types::WindowParams;
 use crate::window_output::{
@@ -30,7 +31,7 @@ pub(crate) struct BufferSourceRenderAttemptContext<'a, 'face> {
     output: BufferSourceOutputState<'a>,
     font_metrics: &'a mut Option<FontMetricsService>,
     face_resolver: &'face FaceResolver,
-    frame_face_id_counter: &'a mut u32,
+    face_attempt: FrameFaceAttempt,
     window_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
@@ -142,14 +143,14 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
         evaluator: &'a mut Context,
         font_metrics: &'a mut Option<FontMetricsService>,
         face_resolver: &'face FaceResolver,
-        frame_face_id_counter: &'a mut u32,
+        face_attempt: FrameFaceAttempt,
         window_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
     ) -> Self {
         Self {
             output: BufferSourceOutputState::from_parts(output, evaluator),
             font_metrics,
             face_resolver,
-            frame_face_id_counter,
+            face_attempt,
             window_snapshots,
         }
     }
@@ -160,7 +161,7 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
         evaluator: &'a mut Context,
         font_metrics: &'a mut Option<FontMetricsService>,
         face_resolver: &'face FaceResolver,
-        frame_face_id_counter: &'a mut u32,
+        face_attempt: FrameFaceAttempt,
         window_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
     ) -> Self {
         Self::new(
@@ -168,7 +169,7 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
             evaluator,
             font_metrics,
             face_resolver,
-            frame_face_id_counter,
+            face_attempt,
             window_snapshots,
         )
     }
@@ -190,14 +191,14 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
         BufferSourceOutputState<'a>,
         &'a mut Option<FontMetricsService>,
         &'face FaceResolver,
-        &'a mut u32,
+        FrameFaceAttempt,
         &'a mut Vec<WindowDisplaySnapshot>,
     ) {
         (
             self.output,
             self.font_metrics,
             self.face_resolver,
-            self.frame_face_id_counter,
+            self.face_attempt,
             self.window_snapshots,
         )
     }

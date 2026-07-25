@@ -17,7 +17,6 @@ use super::window_output::{
     ChromeRowOutput, ChromeRowProgress, DisplayProgressSink, TextWindowOutputTarget,
     WindowOutputEmitter,
 };
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_origin::DisplayOrigin;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_rendered_row_output_install::install_measured_frame_chrome_display_row;
@@ -37,6 +36,7 @@ use crate::display_row_render_state::{DisplayRowRenderIntoRowResult, RenderedDis
 use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_source::DisplayItemSource;
 use crate::font_metrics::FontMetricsService;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::presented_pointer_map::{PointerAppearanceRangeId, PresentedPointerMapBuildError};
 use crate::types::WindowParams;
 use crate::window_layout::{WindowChromeMetrics, WindowLayoutBox};
@@ -127,7 +127,7 @@ pub(crate) struct ChromeRowRenderServices<'emit, 'face> {
     font_metrics: &'emit mut Option<FontMetricsService>,
     window_system: bool,
     face_resolver: &'face FaceResolver,
-    face_ids: &'emit mut FrameFaceIdAllocator,
+    face_ids: &'emit mut FrameFaceAttempt,
 }
 
 #[cfg(test)]
@@ -146,7 +146,7 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
     pub(crate) fn new(
         font_metrics: &'emit mut Option<FontMetricsService>,
         face_resolver: &'face FaceResolver,
-        face_ids: &'emit mut FrameFaceIdAllocator,
+        face_ids: &'emit mut FrameFaceAttempt,
     ) -> Self {
         Self {
             font_metrics,
@@ -169,7 +169,7 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
         self.face_resolver
     }
 
-    pub(crate) fn face_ids(&mut self) -> &mut FrameFaceIdAllocator {
+    pub(crate) fn face_ids(&mut self) -> &mut FrameFaceAttempt {
         self.face_ids
     }
 
@@ -271,7 +271,7 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
 
     fn lisp_string_source_request(
         &self,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> DisplayRowLispStringSourceRenderRequest<'face> {
         self.lisp_string_row_request().render_request(face_ids)
     }
@@ -299,7 +299,7 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
 
     fn into_chrome_render_request(
         self,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> ChromeDisplayRowRenderRequest<'face> {
         ChromeDisplayRowRenderRequest {
             owner: DisplayRowOwner::FrameChrome {
@@ -416,7 +416,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
 
     fn render_request(
         self,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> DisplayRowLispStringSourceRenderRequest<'face> {
         let Self {
             y,
@@ -942,7 +942,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
 
     fn into_render_request(
         self,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) -> WindowChromeDisplayRowRenderRequest<'face> {
         let render_request = self
             .lisp_string_row_request()

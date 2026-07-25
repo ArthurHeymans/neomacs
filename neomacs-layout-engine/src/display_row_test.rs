@@ -78,7 +78,7 @@ fn text_row_source_measure_state<'a>(
 
 fn display_row_request_from_base_face<'a>(
     geometry: DisplayRowGeometry,
-    face_ids: &mut FrameFaceIdAllocator,
+    face_ids: &mut FrameFaceAttempt,
     base_face: &'a crate::neovm_bridge::ResolvedFace,
     role: GlyphRowRole,
     symbol_values: std::collections::HashMap<String, Value>,
@@ -122,7 +122,7 @@ fn render_lisp_string_row(
     request: DisplayRowSourceRenderRequest<'_>,
     value: Value,
     face_resolver: &FaceResolver,
-    face_ids: &mut FrameFaceIdAllocator,
+    face_ids: &mut FrameFaceAttempt,
 ) -> Option<RenderedDisplayRow> {
     let mut context = DisplayRowRenderContext::new(face_resolver, None, face_ids);
     render_lisp_string_row_with_context(renderer, request, value, &mut context)
@@ -134,7 +134,7 @@ fn render_lisp_string_row_with_display_host(
     value: Value,
     face_resolver: &FaceResolver,
     display_host: Option<&dyn DisplayHost>,
-    face_ids: &mut FrameFaceIdAllocator,
+    face_ids: &mut FrameFaceAttempt,
 ) -> Option<RenderedDisplayRow> {
     let mut context = DisplayRowRenderContext::new(face_resolver, display_host, face_ids);
     render_lisp_string_row_with_context(renderer, request, value, &mut context)
@@ -339,7 +339,7 @@ fn insert_resolved_display_row_face_applies_metric_overrides() {
         }),
     );
 
-    let rendered = builder.faces().get(&FaceId::new(9)).expect("inserted face");
+    let rendered = builder.output_face(FaceId::new(9)).expect("inserted face");
     assert_eq!(rendered.id, FaceId::new(9));
     assert_eq!(rendered.font_ascent, 10);
     assert_eq!(rendered.font_descent, 3);
@@ -349,7 +349,7 @@ fn insert_resolved_display_row_face_applies_metric_overrides() {
 fn display_row_source_geometry_allocates_dynamic_base_face_id_through_allocator() {
     let mut face = base_face();
     face.face_id = 0;
-    let mut face_ids = FrameFaceIdAllocator::new(42);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(42);
 
     let request = display_row_request_from_base_face(
         DisplayRowGeometry {
@@ -367,7 +367,7 @@ fn display_row_source_geometry_allocates_dynamic_base_face_id_through_allocator(
     );
 
     assert_eq!(request.base_face_id(), FaceId::new(42));
-    assert_eq!(face_ids.finish(), 43);
+    assert_eq!(face_ids.next_face_id_for_test(), 43);
 }
 
 #[test]
@@ -404,7 +404,7 @@ fn display_row_source_geometry_builds_whole_row_request() {
 fn display_row_source_geometry_allocates_base_face_id() {
     let mut face = base_face();
     face.face_id = 0;
-    let mut face_ids = FrameFaceIdAllocator::new(24);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(24);
     let geometry = DisplayRowGeometry {
         y: 5.0,
         width: 120.0,
@@ -430,7 +430,7 @@ fn display_row_source_geometry_allocates_base_face_id() {
         DisplayRowRenderBounds::whole_row(120.0)
     );
     assert_eq!(request.base_face_id(), FaceId::new(24));
-    assert_eq!(face_ids.finish(), 25);
+    assert_eq!(face_ids.next_face_id_for_test(), 25);
     assert_eq!(request.role(), GlyphRowRole::HeaderLine);
     assert_eq!(request.symbol_values(), &symbol_values);
 }
@@ -439,7 +439,7 @@ fn display_row_source_geometry_allocates_base_face_id() {
 fn display_row_source_request_policy_builds_chrome_request() {
     let mut face = base_face();
     face.face_id = 0;
-    let mut face_ids = FrameFaceIdAllocator::new(31);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(31);
     let mut symbol_values = std::collections::HashMap::new();
     symbol_values.insert("tab-bar-tab-hscroll".to_string(), Value::fixnum(2));
 
@@ -472,7 +472,7 @@ fn display_row_source_request_policy_builds_chrome_request() {
         DisplayRowRenderBounds::whole_row(144.0)
     );
     assert_eq!(request.base_face_id(), FaceId::new(31));
-    assert_eq!(face_ids.finish(), 32);
+    assert_eq!(face_ids.next_face_id_for_test(), 32);
     assert_eq!(request.role(), GlyphRowRole::TabBar);
     assert_eq!(request.symbol_values(), &symbol_values);
 }
@@ -581,7 +581,7 @@ fn display_row_render_context_builds_source_resolve_params() {
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let base_face = face_resolver.default_face();
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let context = DisplayRowRenderContext::new(&face_resolver, None, &mut face_ids);
     let fallback = crate::display_row_metrics::DisplayRowFallbackMetrics::from_default_face_extents(
         8.0, 16.0, 12.0,
@@ -636,8 +636,7 @@ fn display_row_resolved_measured_face_installs_render_and_measurement_identity()
     );
 
     let rendered = builder
-        .faces()
-        .get(&FaceId::new(12))
+        .output_face(FaceId::new(12))
         .expect("installed face");
     assert_eq!(realized.face_id(), FaceId::new(12));
     assert_eq!(rendered.id, FaceId::new(12));
@@ -773,7 +772,7 @@ fn display_row_renderer_renders_lisp_string_without_layout_engine() {
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let request = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -825,7 +824,7 @@ fn tty_complex_run_then_tab_lands_on_buffer_tab_stop() {
     let mut test_base_face = resolver.default_face().clone();
     test_base_face.set_measured_char_width_px(8.0);
     test_base_face.font_ascent = 12.0;
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let request = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -890,7 +889,7 @@ fn display_row_source_state_reuses_face_cache_across_items() {
     )
     .expect("string source");
     let mut state = DisplayRowSourceState::default();
-    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(20);
     let (first, second, third) = {
         let mut next_item = || {
             state.next_resolved_item(
@@ -931,7 +930,7 @@ fn display_row_source_state_reuses_face_cache_across_items() {
         RenderFaceRef::FaceId(FaceId::new(20))
     );
     assert!(third_pending_faces.is_empty());
-    assert_eq!(face_ids.finish(), 21);
+    assert_eq!(face_ids.next_face_id_for_test(), 21);
 }
 
 #[test]
@@ -944,7 +943,7 @@ fn display_row_renderer_clips_lisp_string_rows_to_geometry_width() {
     let mut test_base_face = resolver.default_face().clone();
     test_base_face.set_measured_char_width_px(8.0);
     test_base_face.font_ascent = 12.0;
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let spec = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -984,7 +983,7 @@ fn display_row_renderer_clips_from_render_bounds_start() {
     let mut test_base_face = resolver.default_face().clone();
     test_base_face.set_measured_char_width_px(8.0);
     test_base_face.font_ascent = 12.0;
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let request = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -1030,7 +1029,7 @@ fn display_row_renderer_uses_render_bounds_start_for_tab_advance() {
     let mut test_base_face = resolver.default_face().clone();
     test_base_face.set_measured_char_width_px(8.0);
     test_base_face.font_ascent = 12.0;
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let request = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -1091,7 +1090,7 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
     test_base_face.set_measured_char_width_px(8.0);
     test_base_face.font_ascent = 12.0;
     let base_face_id = FaceId::new(1);
-    let mut face_ids = FrameFaceIdAllocator::new(2);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(2);
     let mut source = OnceSource {
         item: Some(crate::display_item::DisplayItem::new(
             crate::display_item::SourceSpan::synthetic(9, 0, 1),
@@ -1177,7 +1176,7 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let base_face = resolver.default_face();
     let base_face_id = FaceId::new(1);
-    let mut face_ids = FrameFaceIdAllocator::new(2);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(2);
     let mut source = OnceSource {
         item: Some(crate::display_item::DisplayItem::new(
             crate::display_item::SourceSpan::synthetic(10, 0, 3),
@@ -1326,7 +1325,7 @@ fn render_lisp_display_row_output_with_symbols_and_chrome_text_area_left(
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let request = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -1396,7 +1395,7 @@ fn render_buffer_display_row_with_properties(
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let request = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -1442,7 +1441,7 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let mut source = crate::display_buffer_text_source::BufferTextSourceCursor::new(
         buf_id,
         buffer,
@@ -1544,7 +1543,7 @@ fn render_lisp_string_row_records_xwidget_media_fragments() {
     base_face.set_measured_char_width_px(8.0);
     base_face.font_ascent = 12.0;
     base_face.font_line_height = 16.0;
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let spec = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 4.0,
@@ -1628,7 +1627,7 @@ fn render_tab_line_with_sized_media_metadata_host(
     base_face.set_measured_char_width_px(8.0);
     base_face.font_ascent = row_ascent;
     base_face.font_line_height = row_height;
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let spec = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 4.0,
@@ -2171,7 +2170,7 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let mut source = crate::display_buffer_text_source::BufferTextSourceCursor::new(
         buf_id,
         buffer,
@@ -2216,7 +2215,7 @@ fn render_lisp_string_row_uses_explicit_tab_policy() {
     let mut renderer = DisplayRowRenderer::new(&mut engine.font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let spec = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -2394,7 +2393,7 @@ fn display_row_gui_renderer_preserves_narrow_proportional_glyph_advance() {
     let mut renderer = DisplayRowRenderer::new_for_frame(&mut font_metrics, true);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, Some("neo".into()));
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let request = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -3263,7 +3262,7 @@ fn render_lisp_string_row_uses_face_specific_glyph_widths() {
             ]),
         }],
     );
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let spec = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -3299,7 +3298,7 @@ fn display_row_lisp_string_source_request_uses_render_context() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let base_face = resolver.default_face().clone();
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let request = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -3335,7 +3334,7 @@ fn display_row_render_executor_renders_lisp_string_source_request() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let base_face = resolver.default_face().clone();
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let request = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -3461,7 +3460,7 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let request = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,
@@ -3517,7 +3516,7 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
-    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let request = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 0.0,

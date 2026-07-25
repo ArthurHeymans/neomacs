@@ -6,7 +6,6 @@ use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth,
     CapturedCursorVisualState, CursorCaptureState,
 };
-use crate::display_face_id::FrameFaceIdAllocator;
 #[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::{DisplayOrigin, OverlayStringKind};
@@ -26,6 +25,7 @@ use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_transition::DisplayRowLineBreakTransitionRequest;
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source::LispStringSourceOrigin;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{
     LayoutBufferView, OverlayDisplayString, ResolvedFace, RustTextPropAccess,
@@ -181,7 +181,7 @@ pub(crate) struct OverlayStringRenderState<'a> {
     pub(crate) hit_rows: &'a mut Vec<HitRow>,
     pub(crate) hit_row_range: &'a mut HitRowRangeTracker,
     pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
-    pub(crate) face_ids: &'a mut FrameFaceIdAllocator,
+    pub(crate) face_ids: &'a mut FrameFaceAttempt,
 }
 
 impl<'a> OverlayStringRenderState<'a> {
@@ -195,7 +195,7 @@ impl<'a> OverlayStringRenderState<'a> {
         hit_rows: &'a mut Vec<HitRow>,
         hit_row_range: &'a mut HitRowRangeTracker,
         row_y_positions: &'a mut DisplayRowYPositions,
-        face_ids: &'a mut FrameFaceIdAllocator,
+        face_ids: &'a mut FrameFaceAttempt,
     ) -> Self {
         Self {
             source_render,
@@ -329,7 +329,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         hit_rows: &mut Vec<HitRow>,
         hit_row_range: &mut HitRowRangeTracker,
         row_y_positions: &mut DisplayRowYPositions,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
     ) {
         let mut overlay_state = OverlayStringRenderState::from_source_render(
             source_render,

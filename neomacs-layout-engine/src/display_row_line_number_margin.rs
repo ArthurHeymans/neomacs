@@ -1,6 +1,5 @@
 //! Display-line-number left-margin rendering — GNU `maybe_produce_line_number` (xdisp.c:25447). Relocated out of display_row_append.rs (pure move, no behavior change).
 
-use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLength, DisplayStretch, DisplayStretchWidth,
     DisplayTextRun, RenderFaceRef, SourceSpan,
@@ -10,6 +9,7 @@ use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_row_walk_state::{FaceScanCheckpoint, LineNumberRenderState};
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
+use crate::frame_face_arena::FrameFaceAttempt;
 use neomacs_display_protocol::glyph_matrix::GlyphArea;
 use neomacs_display_protocol::types::FaceId;
 
@@ -56,7 +56,7 @@ impl BufferLineNumberMarginRenderRequest {
         self,
         line_numbers: &mut LineNumberRenderState,
         source_render: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceIdAllocator,
+        face_ids: &mut FrameFaceAttempt,
         row_geometry: &DisplayRowGeometryState,
         face_scan: &mut FaceScanCheckpoint,
         char_width: f32,
@@ -73,7 +73,7 @@ impl BufferLineNumberMarginRenderRequest {
 
         let line_number_face =
             source_render.resolve_named_face(line_number_request.face().face_name());
-        let line_number_face_id = face_ids.allocate();
+        let line_number_face_id = face_ids.reserve_dynamic_face();
         source_render.insert_resolved_face(line_number_face_id, &line_number_face);
 
         let text = line_number_request.text();
