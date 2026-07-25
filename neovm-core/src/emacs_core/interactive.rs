@@ -26,7 +26,7 @@ use super::keymap::{
     command_remapping_lookup_in_keymaps as keymap_command_remapping_lookup_in_keymaps,
     command_remapping_lookup_in_lisp_keymap as keymap_command_remapping_lookup_in_lisp_keymap,
     command_remapping_normalize_target as keymap_command_remapping_normalize_target,
-    current_active_maps_for_position, current_active_maps_for_position_read_only,
+    current_active_maps_for_position, current_active_maps_for_position_read_only, get_keyelt,
     get_keymap_in_obarray, is_list_keymap, key_event_to_emacs_event, list_keymap_for_each_binding,
     lookup_keymap_with_partial, minor_mode_key_binding_in_context, resolve_active_key_binding,
     where_is_keymaps_in_context,
@@ -3799,6 +3799,10 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
         .is_some_and(|name| name == "non-ascii");
     let prefer_single_binding = first_only && !first_only_non_ascii;
     let no_menu_bindings = prefer_single_binding;
+    // 4th arg NOINDIRECT: when non-nil, don't extract the command out of a
+    // menu-item / `(STRING . DEFN)` wrapper before matching (GNU
+    // `where_is_internal_1`: `if (!noindirect) binding = get_keyelt (binding, 0)`).
+    let noindirect = args.get(3).is_some_and(|v| v.is_truthy());
     let no_remap = args.get(4).is_some_and(|v| v.is_truthy());
 
     let keymaps = where_is_keymaps_in_context(eval, args.get(1))?;
@@ -3831,6 +3835,7 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
             &definition,
             &mut sequences,
             no_menu_bindings,
+            noindirect,
             0,
         );
     }
@@ -3870,6 +3875,7 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
                         &function,
                         &mut seqs,
                         no_menu_bindings,
+                        noindirect,
                         0,
                     );
                 }
@@ -4303,9 +4309,14 @@ fn collect_where_is_accessible_maps(
         prefix.pop();
     }
 
-    let parent = super::keymap::list_keymap_parent(keymap);
-    if is_list_keymap(&parent) {
-        collect_where_is_accessible_maps(obarray, &parent, prefix, out, seen, depth + 1);
+    // Composed keymaps `(keymap SUBMAP... . PARENT)` embed sibling keymaps that
+    // share this prefix, and plain keymaps carry their parent as the spine tail.
+    // GNU's `map_keymap` / `Faccessible_keymaps` descend into all of them, so a
+    // binding reachable only through a composed submap (e.g. evil/general active
+    // state maps, whose leader `SPC` lives in a `make-composed-keymap` submap)
+    // is still found by the reverse where-is scan. Scan each at the SAME prefix.
+    for sibling in super::keymap::list_keymap_sibling_keymaps(keymap) {
+        collect_where_is_accessible_maps(obarray, &sibling, prefix, out, seen, depth + 1);
     }
 
     seen.pop();
@@ -4317,6 +4328,7 @@ fn collect_where_is_sequences_value(
     definition: &Value,
     out: &mut Vec<Vec<Value>>,
     no_menu_bindings: bool,
+    noindirect: bool,
     depth: usize,
 ) -> bool {
     let mut maps = Vec::new();
@@ -4332,7 +4344,18 @@ fn collect_where_is_sequences_value(
         let mut bindings: Vec<(Value, Value)> = Vec::new();
         list_keymap_for_each_binding(&map, |event, binding| bindings.push((event, binding)));
         for (event, binding) in bindings {
-            if !binding_matches_definition(&binding, definition) {
+            // GNU `where_is_internal_1`: reduce the stored binding through
+            // `get_keyelt` (unless NOINDIRECT), so an old-style `(STRING . DEFN)`
+            // menu label or a `(menu-item NAME DEFN ...)` wrapper matches its
+            // underlying command. Forward `lookup-key` already does this; the
+            // reverse scan must too, or leader hints like Doom's `SPC f r`
+            // (bound as `("Recent files" . recentf-open-files)`) never resolve.
+            let candidate = if noindirect {
+                binding
+            } else {
+                get_keyelt(binding)
+            };
+            if !binding_matches_definition(&candidate, definition) {
                 continue;
             }
             let mut sequence = map_prefix.clone();
@@ -4351,32 +4374,22 @@ fn where_is_keymap_value_eq(a: &Value, b: &Value) -> bool {
 }
 
 fn where_is_binding_prefix_keymap(obarray: &Obarray, binding: &Value) -> Option<Value> {
-    if let Some(command) = menu_item_command(binding) {
-        return where_is_binding_prefix_keymap(obarray, &command);
+    // Mirror GNU `accessible_keymaps_1`: reduce the stored binding through
+    // `get_keyelt` (stripping a `(menu-item NAME DEFN ...)` wrapper or an
+    // old-style `(STRING . DEFN)` menu label), THEN resolve the result to a
+    // keymap. This is what lets a string-labelled symbol prefix such as Doom's
+    // evil-state leader entry `(?\s "<leader>" . doom/leader)` — whose value is
+    // `("<leader>" . doom/leader)` — descend into `doom/leader`'s keymap. A bare
+    // keymap, a symbol whose function cell is a keymap, and both wrapper forms
+    // all collapse to the same path here.
+    let reduced = get_keyelt(*binding);
+    if is_list_keymap(&reduced) {
+        return Some(reduced);
     }
-    if let Some(keymap) = menu_label_prefix_keymap(binding) {
-        return Some(keymap);
-    }
-    if is_list_keymap(binding) {
-        return Some(*binding);
-    }
-
-    let sym_name = binding.as_symbol_name()?;
+    let sym_name = reduced.as_symbol_name()?;
     let func = obarray.indirect_function(sym_name)?;
     if is_list_keymap(&func) {
         Some(func)
-    } else {
-        None
-    }
-}
-
-fn menu_label_prefix_keymap(binding: &Value) -> Option<Value> {
-    if !binding.is_cons() || !binding.cons_car().is_string() {
-        return None;
-    }
-    let keymap = binding.cons_cdr();
-    if is_list_keymap(&keymap) {
-        Some(keymap)
     } else {
         None
     }

@@ -183,6 +183,89 @@ fn div_km_where_is_internal() {
 }
 
 #[test]
+fn div_km_where_is_internal_reduces_menu_item_leaves() {
+    // A command bound as an old-style `(MENU-STRING . COMMAND)` leaf (what
+    // general.el `:desc` produces for Doom's leader) or a new-style
+    // `(menu-item NAME COMMAND)` must be discoverable by `where-is-internal`'s
+    // reverse scan, mirroring GNU `where_is_internal_1`'s `get_keyelt` call
+    // (issue #164 dashboard leader hints).
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ([114] [103])""#]];
+    crate::common::assert_oracle_parity_expect(
+        r##"
+(let ((m (make-sparse-keymap)))
+  (define-key m "r" '("Recent files" . my-recentf))
+  (define-key m "g" '(menu-item "Grep" my-grep))
+  (list (where-is-internal 'my-recentf (list m) t)
+        (where-is-internal 'my-grep (list m) t)))
+"##,
+        expect,
+    );
+}
+
+#[test]
+fn div_km_where_is_internal_descends_composed_keymaps() {
+    // `where-is-internal` must descend into a composed keymap's inline submaps
+    // (`make-composed-keymap`), not just its parent, mirroring GNU `map_keymap`.
+    // evil/general build active state keymaps this way, so a leader binding
+    // reachable only through a composed submap (Doom's `SPC f r`) must resolve
+    // (issue #164).
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK [32 102 114]""#]];
+    crate::common::assert_oracle_parity_expect(
+        r##"
+(let ((lead (make-sparse-keymap)) (sub (make-sparse-keymap))
+      (a (make-sparse-keymap)) (b (make-sparse-keymap)))
+  (define-key sub "r" '("Recent" . my-recentf))
+  (define-key lead "f" sub)
+  (fset 'my-lead lead)
+  (define-key a " " 'my-lead)
+  (where-is-internal 'my-recentf (list (make-composed-keymap (list a b))) t))
+"##,
+        expect,
+    );
+}
+
+#[test]
+fn div_km_where_is_internal_descends_string_labelled_symbol_prefix() {
+    // Real evil/Doom leader shape: SPC bound as `("<leader>" . doom/leader)` --
+    // a `(STRING . SYMBOL)` label wrapping a symbol prefix command -- inside a
+    // composed active-state keymap. Descent must reduce the label then resolve
+    // the symbol to its keymap (GNU `accessible_keymaps_1`: get_keyelt +
+    // get_keymap). This is the actual #164 dashboard blocker.
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK [32 102 114]""#]];
+    crate::common::assert_oracle_parity_expect(
+        r##"
+(let ((leader (make-sparse-keymap)) (sub (make-sparse-keymap)) (aux (make-sparse-keymap)))
+  (define-key sub "r" '("Recent" . my-recentf))
+  (define-key leader "f" sub)
+  (fset 'my-lead leader)
+  (define-key aux " " '("<leader>" . my-lead))
+  (where-is-internal 'my-recentf (list (make-composed-keymap aux)) t))
+"##,
+        expect,
+    );
+}
+
+#[test]
+fn div_km_where_is_internal_noindirect_keeps_menu_item_opaque() {
+    // GNU's 4th arg NOINDIRECT: when non-nil, the menu-item wrapper is NOT
+    // reduced, so searching for the underlying command finds nothing.
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ([114] nil)""#]];
+    crate::common::assert_oracle_parity_expect(
+        r##"
+(let ((m (make-sparse-keymap)))
+  (define-key m "r" '("Recent files" . my-recentf))
+  (list (where-is-internal 'my-recentf (list m) t)
+        (where-is-internal 'my-recentf (list m) t t)))
+"##,
+        expect,
+    );
+}
+
+#[test]
 fn div_km_command_remapping() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[r#""OK (my-forward nil)""#]];

@@ -631,7 +631,7 @@ pub(crate) fn maybe_keymap_in_runtime(
 /// - `(STRING . (STRING . DEFN))` → `DEFN`  (menu label + help string)
 /// - `(menu-item NAME DEFN ...)` → `DEFN`  (extended menu item)
 /// - anything else → returned as-is
-fn get_keyelt(binding: Value) -> Value {
+pub(crate) fn get_keyelt(binding: Value) -> Value {
     let mut obj = binding;
     loop {
         if !obj.is_cons() {
@@ -1528,6 +1528,36 @@ pub fn list_keymap_parent(keymap: &Value) -> Value {
         cursor = entry_cdr;
     }
     Value::NIL
+}
+
+/// Enumerate the keymaps embedded at a keymap's own level: the inline
+/// sub-keymaps of a composed keymap `(keymap SUBMAP... . PARENT)` (produced by
+/// `make-composed-keymap`, e.g. evil/general active state maps) plus the parent
+/// keymap in the spine tail. All of these share the containing keymap's prefix,
+/// mirroring GNU `map_keymap` / `Faccessible_keymaps`, which descend into
+/// composed submaps and parents alike. Bindings and `(key . binding)` conses at
+/// this level are NOT returned (those are the containing map's own bindings).
+pub(crate) fn list_keymap_sibling_keymaps(keymap: &Value) -> Vec<Value> {
+    let mut siblings = Vec::new();
+    let Some(mut cursor) = keymap_binding_spine(keymap) else {
+        return siblings;
+    };
+    while cursor.is_cons() {
+        // The spine tail is a parent keymap `(keymap ...)`.
+        if is_list_keymap(&cursor) {
+            siblings.push(cursor);
+            break;
+        }
+        let entry_car = cursor.cons_car();
+        // An inline element that is itself a keymap is a composed submap; a
+        // `(KEY . BINDING)` cons is an ordinary binding (its car is the key, not
+        // the `keymap` marker) and is left to the containing map's own scan.
+        if is_list_keymap(&entry_car) {
+            siblings.push(entry_car);
+        }
+        cursor = cursor.cons_cdr();
+    }
+    siblings
 }
 
 /// Set the parent keymap: walk to the last alist cons cell, set its CDR.

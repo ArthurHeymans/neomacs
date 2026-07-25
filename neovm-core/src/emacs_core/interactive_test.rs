@@ -4696,6 +4696,115 @@ fn where_is_internal_follows_menu_bar_label_prefix_keymaps() {
 }
 
 #[test]
+fn where_is_internal_reduces_old_style_string_menu_item_leaf() {
+    // Doom's leader binds commands as `(MENU-STRING . COMMAND)` leaves, e.g.
+    // `("Recent files" . recentf-open-files)` (produced by general.el `:desc`).
+    // Forward `lookup-key` strips the label via `get_keyelt`; the reverse
+    // `where-is-internal` scan must reduce it too, or the dashboard leader hint
+    // `SPC f r` never resolves (issue #164).
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m "r" '("Recent files" . find-file))
+             (list (eq (lookup-key m "r") 'find-file)
+                   (equal (where-is-internal 'find-file m t) [?r])))"#,
+    );
+    assert_eq!(result, "OK (t t)");
+}
+
+#[test]
+fn where_is_internal_reduces_string_menu_item_under_symbol_prefix_like_doom_leader() {
+    // Faithful reproduction of the #164 keymap shape: SPC -> a prefix-command
+    // SYMBOL (like `doom/leader`, whose function cell is a keymap) whose nested
+    // map holds an old-style `(STRING . COMMAND)` leaf. Both indirections must
+    // be followed. (`fset` stands in for `define-prefix-command`, which is a
+    // lisp-level function absent from the bare unit-test evaluator.)
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((host (make-sparse-keymap))
+                 (leader-map (make-sparse-keymap))
+                 (file-map (make-sparse-keymap)))
+             (define-key file-map "r" '("Recent files" . recentf-open-files))
+             (define-key leader-map "f" file-map)
+             (fset 'test-doom-leader leader-map)
+             (define-key host " " 'test-doom-leader)
+             (equal (where-is-internal 'recentf-open-files (list host) t)
+                    [?\s ?f ?r]))"#,
+    );
+    assert_eq!(result, "OK t");
+}
+
+#[test]
+fn where_is_internal_descends_into_composed_keymaps() {
+    // evil/general build active state keymaps with `make-composed-keymap`. The
+    // reverse where-is scan must descend into a composed keymap's inline submaps
+    // (not merely its parent), or a leader binding reachable only through a
+    // composed submap stays invisible -- the real cause of the missing Doom
+    // dashboard `SPC f r` hints (issue #164). Combines with the `(STRING . cmd)`
+    // leaf reduction and the symbol-prefix descent above.
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((leader (make-sparse-keymap))
+                 (file-map (make-sparse-keymap))
+                 (inner (make-sparse-keymap)))
+             (define-key file-map "r" '("Recent files" . recentf-open-files))
+             (define-key leader "f" file-map)
+             (fset 'test-doom-leader-2 leader)
+             (define-key inner " " 'test-doom-leader-2)
+             ;; `(keymap SUBMAP...)` is exactly what `make-composed-keymap`
+             ;; builds (that helper is a lisp-level function absent here).
+             (let ((host (list 'keymap inner)))
+               (equal (where-is-internal 'recentf-open-files (list host) t)
+                      [?\s ?f ?r])))"#,
+    );
+    assert_eq!(result, "OK t");
+}
+
+#[test]
+fn where_is_internal_descends_string_labelled_symbol_prefix_like_evil_leader() {
+    // The exact shape evil stores for Doom's leader in its state aux keymaps:
+    // `(?\s "<leader>" . doom/leader)`, i.e. SPC's binding is
+    // `("<leader>" . doom/leader)` -- a `(STRING . SYMBOL)` label wrapping a
+    // symbol prefix command. Descent must reduce the label (get_keyelt) THEN
+    // resolve the symbol to its keymap, mirroring GNU `accessible_keymaps_1`.
+    // This is the actual #164 dashboard blocker.
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((leader (make-sparse-keymap))
+                 (file-map (make-sparse-keymap))
+                 (aux (make-sparse-keymap)))
+             (define-key file-map "r" '("Recent files" . recentf-open-files))
+             (define-key leader "f" file-map)
+             (fset 'test-evil-leader leader)
+             (define-key aux " " '("<leader>" . test-evil-leader))
+             (list (equal (where-is-internal 'recentf-open-files (list aux) t)
+                          [?\s ?f ?r])
+                   ;; and through a composed wrapper, as the active maps arrive
+                   (equal (where-is-internal 'recentf-open-files (list (list 'keymap aux)) t)
+                          [?\s ?f ?r])))"#,
+    );
+    assert_eq!(result, "OK (t t)");
+}
+
+#[test]
+fn where_is_internal_noindirect_does_not_reduce_string_menu_item() {
+    // GNU 4th arg NOINDIRECT: with it non-nil, the `(STRING . DEFN)` wrapper is
+    // NOT stripped, so a search for the underlying command finds nothing.
+    // Search a `(list m)` (only these maps, no global fallback) with a command
+    // bound solely through the label wrapper, so the result isolates NOINDIRECT.
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(progn
+             (defun test-where-is-noindirect-cmd () (interactive))
+             (let ((m (make-sparse-keymap)))
+               (define-key m "x" '("Some label" . test-where-is-noindirect-cmd))
+               (list (equal (where-is-internal 'test-where-is-noindirect-cmd (list m) t) [?x])
+                     (where-is-internal 'test-where-is-noindirect-cmd (list m) t t))))"#,
+    );
+    assert_eq!(result, "OK (t nil)");
+}
+
+#[test]
 fn where_is_internal_firstonly_rejects_menu_bar_bindings_like_gnu() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(
