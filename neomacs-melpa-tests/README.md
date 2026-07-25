@@ -29,6 +29,10 @@ phase-specific failures.
   package is installed once into a validated, locked cache below `./tmp`; each
   test then evaluates the same form in isolated GNU Emacs and Neomacs
   processes.
+- `s_parity.rs` uses 18 ordinary Rust `#[test]` functions to exercise all 92
+  public `s` functions, macros, and compatibility aliases, plus its public
+  lexical-format variable, boundary values, and representative signals. It
+  reuses the same validated package cache and differential oracle as Dash.
 - `upstream_package_ert.rs` runs grouped contracts from GNU Emacs's
   `test/lisp/emacs-lisp/package-tests.el` through a structured ERT adapter.
   The EOL and asynchronous-refresh groups remain explicit ignored tests until
@@ -84,9 +88,20 @@ cargo nextest run -p neomacs-melpa-tests \
   --no-fail-fast
 ```
 
+Run every comprehensive `s` parity test:
+
+```sh
+TMPDIR="$PWD/tmp" \
+NEOMACS_BIN="$PWD/target/release/neomacs" \
+cargo nextest run -p neomacs-melpa-tests \
+  --run-ignored only \
+  -E 'binary_id(neomacs-melpa-tests::s_parity)' \
+  --no-fail-fast
+```
+
 When MELPA publishes a new version, update only the hard-coded version next to
-the package name in `DASH_MELPA_PIN` or the relevant package matrix entry.
-Catalogs, dependency metadata,
+the package name in `DASH_MELPA_PIN`, `S_MELPA_PIN`, or the relevant package
+matrix entry. Catalogs, dependency metadata,
 tarballs, extracted files, and generated local archives stay under `./tmp`.
 
 GNU Emacs selection checks `NEOMACS_MELPA_ORACLE_EMACS`, then

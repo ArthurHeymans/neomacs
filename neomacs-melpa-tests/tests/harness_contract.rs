@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use neomacs_melpa_tests::{
     EmacsRuntime, ErtScenario, MelpaSandbox, PackageScenario, PackageSource, ScenarioPhase,
-    prepare_shared_package_source, run_elisp_oracle, run_ert_scenario, run_oracle_scenario,
-    run_scenario, workspace_root,
+    prepare_cached_melpa_package, prepare_shared_package_source, run_elisp_oracle,
+    run_ert_scenario, run_oracle_scenario, run_scenario, workspace_root,
 };
 use neomacs_test_oracle::EvalOutcome;
 
@@ -221,6 +221,48 @@ esac
         EvalOutcome::Value("(:dash direct)".to_string())
     );
     assert_eq!(report.neomacs, report.gnu_emacs);
+}
+
+#[cfg(unix)]
+#[test]
+fn cached_melpa_package_is_validated_once_below_workspace_tmp() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = MelpaSandbox::new("cached-package-contract").expect("create fixture sandbox");
+    let invocation_log = fixture.root().join("cache-invocations");
+    let runtime_script = fixture.root().join("cache-emacs");
+    let version = format!("0.0.{}", std::process::id());
+    fs::write(
+        &runtime_script,
+        format!(
+            r##"#!/bin/sh
+printf '%s\n' invoke >> '{}'
+package_dir="$HOME/.emacs.d/elpa/neomacs-cache-contract-$CACHE_CONTRACT_VERSION"
+mkdir -p "$package_dir"
+: > "$package_dir/neomacs-cache-contract-pkg.el"
+printf '%s\n' 'NEOMACS-MELPA-PACKAGE-CACHE:ready'
+"##,
+            invocation_log.display()
+        ),
+    )
+    .expect("write cache runtime");
+    fs::set_permissions(&runtime_script, fs::Permissions::from_mode(0o755))
+        .expect("make cache runtime executable");
+    let runtime = EmacsRuntime::new("fake-cache", runtime_script)
+        .with_env("CACHE_CONTRACT_VERSION", &version);
+
+    let first =
+        prepare_cached_melpa_package(&runtime, ("neomacs-cache-contract", version.as_str()))
+            .expect("prepare cached package");
+    let second =
+        prepare_cached_melpa_package(&runtime, ("neomacs-cache-contract", version.as_str()))
+            .expect("reuse validated cached package");
+
+    assert_eq!(first, second);
+    assert!(first.starts_with(workspace_root().join("tmp/melpa/package-cache")));
+    assert!(!first.starts_with(Path::new("/tmp")));
+    let invocations = fs::read_to_string(invocation_log).expect("read cache invocations");
+    assert_eq!(invocations.lines().count(), 1);
 }
 
 #[test]

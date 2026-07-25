@@ -26,6 +26,10 @@ const DEFAULT_PROCESS_TIMEOUT: Duration = Duration::from_secs(300);
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
 
+/// The exact s package selected by the live lifecycle and comprehensive API
+/// parity corpora.
+pub const S_MELPA_PIN: (&str, &str) = ("s", "20220902.1511");
+
 /// Resolve the checkout used by a normal Cargo run or an extracted Nextest
 /// archive.
 pub fn workspace_root() -> PathBuf {
@@ -43,10 +47,6 @@ pub struct MelpaSandbox {
     case_root: tempfile::TempDir,
     home: PathBuf,
     tmp: PathBuf,
-    xdg_config: PathBuf,
-    xdg_cache: PathBuf,
-    xdg_data: PathBuf,
-    xdg_state: PathBuf,
 }
 
 impl MelpaSandbox {
@@ -90,10 +90,6 @@ impl MelpaSandbox {
             case_root,
             home,
             tmp,
-            xdg_config,
-            xdg_cache,
-            xdg_data,
-            xdg_state,
         })
     }
 
@@ -112,29 +108,33 @@ impl MelpaSandbox {
     /// Apply the deterministic process environment shared by install and
     /// restart/probe processes.
     pub fn configure(&self, command: &mut Command) {
-        command
-            .current_dir(self.root())
-            .env("HOME", &self.home)
-            .env("TMPDIR", &self.tmp)
-            .env("TMP", &self.tmp)
-            .env("TEMP", &self.tmp)
-            .env("XDG_CONFIG_HOME", &self.xdg_config)
-            .env("XDG_CACHE_HOME", &self.xdg_cache)
-            .env("XDG_DATA_HOME", &self.xdg_data)
-            .env("XDG_STATE_HOME", &self.xdg_state)
-            .env("LANG", "C.UTF-8")
-            .env("LC_ALL", "C.UTF-8")
-            .env("TZ", "UTC")
-            .env("USER", "melpa-test")
-            .env("LOGNAME", "melpa-test")
-            .env("HOSTNAME", "melpa-host")
-            .env("EMAIL", "melpa-test@melpa-host")
-            .env("TERM", "dumb")
-            .env("NEOMACS_TEST_SANDBOX_ROOT", self.root())
-            .env("NEOMACS_TEST_WORKSPACE_ROOT", workspace_root())
-            .env_remove("EMACSLOADPATH")
-            .env("GIT_CEILING_DIRECTORIES", workspace_root());
+        configure_process_environment(command, self.root(), &self.home, &self.tmp);
     }
+}
+
+fn configure_process_environment(command: &mut Command, root: &Path, home: &Path, tmp: &Path) {
+    command
+        .current_dir(root)
+        .env("HOME", home)
+        .env("TMPDIR", tmp)
+        .env("TMP", tmp)
+        .env("TEMP", tmp)
+        .env("XDG_CONFIG_HOME", root.join("xdg/config"))
+        .env("XDG_CACHE_HOME", root.join("xdg/cache"))
+        .env("XDG_DATA_HOME", root.join("xdg/data"))
+        .env("XDG_STATE_HOME", root.join("xdg/state"))
+        .env("LANG", "C.UTF-8")
+        .env("LC_ALL", "C.UTF-8")
+        .env("TZ", "UTC")
+        .env("USER", "melpa-test")
+        .env("LOGNAME", "melpa-test")
+        .env("HOSTNAME", "melpa-host")
+        .env("EMAIL", "melpa-test@melpa-host")
+        .env("TERM", "dumb")
+        .env("NEOMACS_TEST_SANDBOX_ROOT", root)
+        .env("NEOMACS_TEST_WORKSPACE_ROOT", workspace_root())
+        .env_remove("EMACSLOADPATH")
+        .env("GIT_CEILING_DIRECTORIES", workspace_root());
 }
 
 fn sanitize_label(label: &str) -> String {
@@ -559,6 +559,95 @@ pub struct ElispOracleReport {
     pub gnu_emacs: EvalOutcome,
 }
 
+/// Differential oracle for one exact MELPA package cached below `./tmp`.
+pub struct CachedMelpaOracle {
+    package_name: String,
+    source_file: PathBuf,
+    prelude: String,
+    timeout: Duration,
+}
+
+impl CachedMelpaOracle {
+    /// Prepare the pinned package and select the Elisp source file to load.
+    pub fn new(package: (&str, &str), source_file_name: &str) -> Result<Self, String> {
+        let mut components = Path::new(source_file_name).components();
+        if !matches!(components.next(), Some(std::path::Component::Normal(_)))
+            || components.next().is_some()
+        {
+            return Err(format!(
+                "cached MELPA source must be one file name, got `{source_file_name}`"
+            ));
+        }
+        let package_dir = prepare_cached_melpa_package(&EmacsRuntime::gnu_emacs(), package)?;
+        let source_file = package_dir.join(source_file_name);
+        if !source_file.is_file() {
+            return Err(format!(
+                "cached {} source `{source_file_name}` is missing below {}",
+                package.0,
+                package_dir.display()
+            ));
+        }
+        Ok(Self {
+            package_name: package.0.to_string(),
+            source_file,
+            prelude: String::new(),
+            timeout: DEFAULT_PROCESS_TIMEOUT,
+        })
+    }
+
+    /// Evaluate an additional setup form before loading the package source.
+    pub fn with_prelude(mut self, prelude: impl Into<String>) -> Self {
+        self.prelude = prelude.into();
+        self
+    }
+
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    /// Run a parity case that must complete with a value in both editors.
+    pub fn run_value(&self, name: &str, probe: &str) -> Result<ElispOracleReport, String> {
+        self.run_expected(name, probe, true)
+    }
+
+    /// Run a parity case that must signal in both editors.
+    pub fn run_signal(&self, name: &str, probe: &str) -> Result<ElispOracleReport, String> {
+        self.run_expected(name, probe, false)
+    }
+
+    fn run_expected(
+        &self,
+        name: &str,
+        probe: &str,
+        expect_value: bool,
+    ) -> Result<ElispOracleReport, String> {
+        let neomacs = EmacsRuntime::neomacs()
+            .with_env("NEOMACS_MELPA_PACKAGE_SOURCE", self.source_file.as_os_str())
+            .with_timeout(self.timeout);
+        let gnu_emacs = EmacsRuntime::gnu_emacs()
+            .with_env("NEOMACS_MELPA_PACKAGE_SOURCE", self.source_file.as_os_str())
+            .with_timeout(self.timeout);
+        let setup = format!(
+            r##"(progn
+                   {}
+                   (load
+                    (getenv "NEOMACS_MELPA_PACKAGE_SOURCE")
+                    nil t t))"##,
+            self.prelude
+        );
+        let report = run_elisp_oracle(&neomacs, &gnu_emacs, name, &setup, probe)?;
+        if report.neomacs.is_value() != expect_value {
+            let expected = if expect_value { "a value" } else { "a signal" };
+            return Err(format!(
+                "{} parity case `{name}` expected {expected}, got {}",
+                self.package_name, report.neomacs
+            ));
+        }
+        Ok(report)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InstalledPackage {
     pub name: String,
@@ -733,6 +822,202 @@ pub fn run_scenario(
         probe_form(&scenario.probe),
         ScenarioPhase::RestartProbe,
     )
+}
+
+/// Install one exact MELPA package into a validated, cross-process cache.
+///
+/// The returned package directory stays below
+/// `<workspace>/tmp/melpa/package-cache`. Package payloads remain runtime
+/// artifacts and are never copied into the source tree.
+pub fn prepare_cached_melpa_package(
+    gnu_emacs: &EmacsRuntime,
+    package: (&str, &str),
+) -> Result<PathBuf, String> {
+    let (name, version) = package;
+    if name.is_empty()
+        || version.is_empty()
+        || !name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+        || !version.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '+')
+        })
+    {
+        return Err(format!(
+            "cached MELPA package must have a safe hard-coded name and version, got `{name}` `{version}`"
+        ));
+    }
+
+    let root = workspace_root()
+        .join("tmp/melpa/package-cache")
+        .join(name)
+        .join(version);
+    fs::create_dir_all(&root).map_err(|error| {
+        format!(
+            "failed to create package cache root {}: {error}",
+            root.display()
+        )
+    })?;
+    let lock_path = root.join("prepare.lock");
+    let lock = fs::OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .truncate(false)
+        .open(&lock_path)
+        .map_err(|error| {
+            format!(
+                "failed to open package cache lock {}: {error}",
+                lock_path.display()
+            )
+        })?;
+    fs4::FileExt::lock(&lock)
+        .map_err(|error| format!("failed to lock package cache {}: {error}", root.display()))?;
+
+    let home = root.join("home");
+    let tmp = root.join("tmp");
+    let package_dir = home.join(".emacs.d/elpa").join(format!("{name}-{version}"));
+    let descriptor = package_dir.join(format!("{name}-pkg.el"));
+    let ready_marker = root.join("ready");
+    let expected_marker = format!("{name}\t{version}\n");
+    let cache_is_ready = descriptor.is_file()
+        && fs::read_to_string(&ready_marker).is_ok_and(|contents| contents == expected_marker);
+    if cache_is_ready {
+        return Ok(package_dir);
+    }
+
+    if home.exists() {
+        fs::remove_dir_all(&home).map_err(|error| {
+            format!(
+                "failed to remove incomplete package cache {}: {error}",
+                home.display()
+            )
+        })?;
+    }
+    if ready_marker.exists() {
+        fs::remove_file(&ready_marker).map_err(|error| {
+            format!(
+                "failed to remove invalid package cache marker {}: {error}",
+                ready_marker.display()
+            )
+        })?;
+    }
+    for directory in [
+        home.join(".emacs.d"),
+        tmp.clone(),
+        root.join("xdg/config"),
+        root.join("xdg/cache"),
+        root.join("xdg/data"),
+        root.join("xdg/state"),
+    ] {
+        fs::create_dir_all(&directory).map_err(|error| {
+            format!(
+                "failed to create package cache directory {}: {error}",
+                directory.display()
+            )
+        })?;
+    }
+
+    let name_string = elisp_string(name);
+    let version_string = elisp_string(version);
+    let form = format!(
+        r##"(progn
+               (require 'package)
+               (setq package-user-dir
+                     (expand-file-name ".emacs.d/elpa" (getenv "HOME"))
+                     package-check-signature nil
+                     package-archives
+                     '(("melpa" . "https://melpa.org/packages/")))
+               (package-refresh-contents)
+               (let* ((package-name {name_string})
+                      (expected-version {version_string})
+                      (package-symbol (intern package-name))
+                      (description
+                       (cadr
+                        (assq package-symbol package-archive-contents)))
+                      (archive-version
+                       (and description
+                            (package-version-join
+                             (package-desc-version description)))))
+                 (unless description
+                   (error "Package is absent from MELPA: %s" package-name))
+                 (unless (equal archive-version expected-version)
+                   (error
+                    "Package version changed: %s expected %s, current %s"
+                    package-name expected-version archive-version))
+                 (package-install description)
+                 (package-initialize)
+                 (let* ((installed
+                         (cadr (assq package-symbol package-alist)))
+                        (installed-version
+                         (and installed
+                              (package-version-join
+                               (package-desc-version installed))))
+                        (directory
+                         (and installed (package-desc-dir installed)))
+                        (descriptor
+                         (and directory
+                              (expand-file-name
+                               (concat package-name "-pkg.el")
+                               directory))))
+                   (unless (equal installed-version expected-version)
+                     (error
+                      "Installed package version mismatch: %s expected %s, got %s"
+                      package-name expected-version installed-version))
+                   (unless (and descriptor (file-readable-p descriptor))
+                     (error
+                      "Installed package descriptor is unreadable: %s"
+                      descriptor))))
+               (princ "NEOMACS-MELPA-PACKAGE-CACHE:ready"))"##
+    );
+    let mut command = gnu_emacs.command();
+    configure_process_environment(&mut command, &root, &home, &tmp);
+    command.args(["--batch", "--quick", "--eval", &form]);
+    let output =
+        output_with_timeout(&mut command, gnu_emacs.timeout).map_err(|error| match error {
+            CommandError::Launch(error) => format!(
+                "failed to launch {} for cached package `{name}` in {}: {error}",
+                gnu_emacs.name,
+                root.display()
+            ),
+            CommandError::TimedOut => format!(
+                "{} cached package `{name}` timed out after {:?} in {}",
+                gnu_emacs.name,
+                gnu_emacs.timeout,
+                root.display()
+            ),
+            CommandError::Capture(error) => format!(
+                "failed to capture {} cached package `{name}` output: {error}",
+                gnu_emacs.name
+            ),
+        })?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success()
+        || !stdout.contains("NEOMACS-MELPA-PACKAGE-CACHE:ready")
+        || !descriptor.is_file()
+    {
+        return Err(format!(
+            "failed to prepare cached MELPA package {name} {version} below {}\nstatus: {:?}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+            root.display(),
+            output.status.code()
+        ));
+    }
+
+    let marker_tmp = root.join(format!("ready.{}.tmp", std::process::id()));
+    fs::write(&marker_tmp, &expected_marker).map_err(|error| {
+        format!(
+            "failed to write package cache marker {}: {error}",
+            marker_tmp.display()
+        )
+    })?;
+    fs::rename(&marker_tmp, &ready_marker).map_err(|error| {
+        format!(
+            "failed to publish package cache marker {}: {error}",
+            ready_marker.display()
+        )
+    })?;
+    Ok(package_dir)
 }
 
 /// Build one local package transaction under `./tmp` for both editors.

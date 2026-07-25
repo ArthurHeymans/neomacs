@@ -1,206 +1,26 @@
-use std::fs::{self, OpenOptions};
-use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::Duration;
 
-use neomacs_melpa_tests::{DASH_MELPA_PIN, EmacsRuntime, run_elisp_oracle, workspace_root};
-use neomacs_test_oracle::EvalOutcome;
+use neomacs_melpa_tests::{CachedMelpaOracle, DASH_MELPA_PIN};
 
-const DASH_NAME: &str = DASH_MELPA_PIN.0;
-const DASH_VERSION: &str = DASH_MELPA_PIN.1;
 const DASH_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
-fn dash_cache_root() -> PathBuf {
-    workspace_root()
-        .join("tmp/melpa/dash-parity")
-        .join(DASH_VERSION)
-}
-
-fn dash_source_file() -> Result<PathBuf, String> {
-    let root = dash_cache_root();
-    fs::create_dir_all(&root).map_err(|error| {
-        format!(
-            "failed to create Dash cache root {}: {error}",
-            root.display()
-        )
-    })?;
-    let lock_path = root.join("prepare.lock");
-    let lock = OpenOptions::new()
-        .create(true)
-        .read(true)
-        .write(true)
-        .truncate(false)
-        .open(&lock_path)
-        .map_err(|error| {
-            format!(
-                "failed to open Dash cache lock {}: {error}",
-                lock_path.display()
-            )
-        })?;
-    fs4::FileExt::lock(&lock)
-        .map_err(|error| format!("failed to lock Dash cache {}: {error}", root.display()))?;
-
-    let package_dir = root
-        .join("home/.emacs.d/elpa")
-        .join(format!("{DASH_NAME}-{DASH_VERSION}"));
-    let source_file = package_dir.join(format!("{DASH_NAME}.el"));
-    let ready_marker = root.join("ready");
-    let cache_is_ready = source_file.is_file()
-        && fs::read_to_string(&ready_marker).is_ok_and(|contents| contents.trim() == DASH_VERSION);
-    if cache_is_ready {
-        return Ok(source_file);
-    }
-
-    let home = root.join("home");
-    let process_tmp = root.join("tmp");
-    if home.exists() {
-        fs::remove_dir_all(&home).map_err(|error| {
-            format!(
-                "failed to remove incomplete Dash cache {}: {error}",
-                home.display()
-            )
-        })?;
-    }
-    if ready_marker.exists() {
-        fs::remove_file(&ready_marker).map_err(|error| {
-            format!(
-                "failed to remove invalid Dash cache marker {}: {error}",
-                ready_marker.display()
-            )
-        })?;
-    }
-    for directory in [home.join(".emacs.d"), process_tmp.clone()] {
-        fs::create_dir_all(&directory).map_err(|error| {
-            format!(
-                "failed to create Dash cache directory {}: {error}",
-                directory.display()
-            )
-        })?;
-    }
-
-    let form = format!(
-        r##"(progn
-               (require 'package)
-               (setq package-user-dir
-                     (expand-file-name ".emacs.d/elpa" (getenv "HOME"))
-                     package-check-signature nil
-                     package-archives
-                     '(("melpa" . "https://melpa.org/packages/")))
-               (package-refresh-contents)
-               (let* ((description
-                      (cadr
-                       (assq
-                        (intern "{DASH_NAME}")
-                        package-archive-contents)))
-                      (actual
-                       (and description
-                            (package-version-join
-                             (package-desc-version description)))))
-                 (unless description
-                   (error "Dash is absent from MELPA"))
-                 (unless (equal actual "{DASH_VERSION}")
-                   (error
-                    "Dash version changed: expected {DASH_VERSION}, current %s"
-                    actual))
-                 (package-install description))
-               (package-initialize)
-               (let* ((installed (cadr (assq (intern "{DASH_NAME}")
-                                             package-alist)))
-                      (actual
-                       (and installed
-                            (package-version-join
-                             (package-desc-version installed))))
-                      (source
-                       (expand-file-name
-                        "{DASH_NAME}-{DASH_VERSION}/{DASH_NAME}.el"
-                        package-user-dir)))
-                 (unless (equal actual "{DASH_VERSION}")
-                   (error
-                    "Installed Dash version mismatch: expected {DASH_VERSION}, got %s"
-                    actual))
-                 (unless (file-readable-p source)
-                   (error "Installed Dash source is unreadable: %s" source)))
-               (princ "NEOMACS-DASH-CACHE:ready"))"##
-    );
-    let gnu = EmacsRuntime::gnu_emacs();
-    let output = Command::new(&gnu.executable)
-        .args(["--batch", "--quick", "--eval", &form])
-        .current_dir(&root)
-        .env("HOME", &home)
-        .env("TMPDIR", &process_tmp)
-        .env("TMP", &process_tmp)
-        .env("TEMP", &process_tmp)
-        .env("XDG_CACHE_HOME", root.join("xdg/cache"))
-        .env("XDG_CONFIG_HOME", root.join("xdg/config"))
-        .env("XDG_DATA_HOME", root.join("xdg/data"))
-        .env("XDG_STATE_HOME", root.join("xdg/state"))
-        .env("LANG", "C.UTF-8")
-        .env("LC_ALL", "C.UTF-8")
-        .env("TZ", "UTC")
-        .output()
-        .map_err(|error| format!("failed to launch GNU Emacs for Dash cache: {error}"))?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if !output.status.success()
-        || !stdout.contains("NEOMACS-DASH-CACHE:ready")
-        || !source_file.is_file()
-    {
-        return Err(format!(
-            "failed to prepare Dash {DASH_VERSION} below {}\nstatus: {:?}\nstdout:\n{stdout}\nstderr:\n{stderr}",
-            root.display(),
-            output.status.code()
-        ));
-    }
-    let marker_tmp = root.join(format!("ready.{}.tmp", std::process::id()));
-    fs::write(&marker_tmp, format!("{DASH_VERSION}\n")).map_err(|error| {
-        format!(
-            "failed to write Dash cache marker {}: {error}",
-            marker_tmp.display()
-        )
-    })?;
-    fs::rename(&marker_tmp, &ready_marker).map_err(|error| {
-        format!(
-            "failed to publish Dash cache marker {}: {error}",
-            ready_marker.display()
-        )
-    })?;
-    Ok(source_file)
+fn dash_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(DASH_MELPA_PIN, "dash.el")
+        .expect("prepare pinned Dash source below ./tmp")
+        .with_prelude(r##"(require 'cl-lib)"##)
+        .with_timeout(DASH_TEST_TIMEOUT)
 }
 
 fn assert_dash_parity(name: &str, form: &str) {
-    let source = dash_source_file().expect("prepare pinned Dash source below ./tmp");
-    let neomacs = EmacsRuntime::neomacs()
-        .with_env("NEOMACS_DASH_SOURCE", source.as_os_str())
-        .with_timeout(DASH_TEST_TIMEOUT);
-    let gnu_emacs = EmacsRuntime::gnu_emacs()
-        .with_env("NEOMACS_DASH_SOURCE", source.as_os_str())
-        .with_timeout(DASH_TEST_TIMEOUT);
-    let setup = r##"(progn (require 'cl-lib) (load (getenv "NEOMACS_DASH_SOURCE") nil t t))"##;
-    let report = run_elisp_oracle(&neomacs, &gnu_emacs, name, setup, form)
+    dash_oracle()
+        .run_value(name, form)
         .unwrap_or_else(|error| panic!("Dash parity case `{name}` failed:\n{error}"));
-    assert!(
-        matches!(&report.neomacs, EvalOutcome::Value(_)),
-        "Dash parity case `{name}` stopped at an unexpected signal: {}",
-        report.neomacs
-    );
 }
 
 fn assert_dash_signal_parity(name: &str, form: &str) {
-    let source = dash_source_file().expect("prepare pinned Dash source below ./tmp");
-    let neomacs = EmacsRuntime::neomacs()
-        .with_env("NEOMACS_DASH_SOURCE", source.as_os_str())
-        .with_timeout(DASH_TEST_TIMEOUT);
-    let gnu_emacs = EmacsRuntime::gnu_emacs()
-        .with_env("NEOMACS_DASH_SOURCE", source.as_os_str())
-        .with_timeout(DASH_TEST_TIMEOUT);
-    let setup = r##"(progn (require 'cl-lib) (load (getenv "NEOMACS_DASH_SOURCE") nil t t))"##;
-    let report = run_elisp_oracle(&neomacs, &gnu_emacs, name, setup, form)
+    dash_oracle()
+        .run_signal(name, form)
         .unwrap_or_else(|error| panic!("Dash signal parity case `{name}` failed:\n{error}"));
-    assert!(
-        matches!(&report.neomacs, EvalOutcome::Signal(_)),
-        "Dash signal parity case `{name}` unexpectedly returned a value: {}",
-        report.neomacs
-    );
 }
 
 #[test]
@@ -917,10 +737,4 @@ fn dash_destructuring_short_vector_signal() {
         "dash_destructuring_short_vector_signal",
         r##"(-let ([a b c] [1 2]) (list a b c))"##,
     );
-}
-
-#[test]
-fn dash_cache_is_workspace_local() {
-    assert!(dash_cache_root().starts_with(workspace_root().join("tmp")));
-    assert!(!dash_cache_root().starts_with(Path::new("/tmp")));
 }

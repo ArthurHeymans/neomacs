@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use neomacs_melpa_tests::{
-    DASH_MELPA_PIN, EmacsRuntime, PackageScenario, prepare_shared_package_source,
+    DASH_MELPA_PIN, EmacsRuntime, PackageScenario, S_MELPA_PIN, prepare_shared_package_source,
     run_oracle_scenario, workspace_root,
 };
 use neomacs_test_oracle::EvalOutcome;
@@ -11,7 +11,7 @@ use neomacs_test_oracle::EvalOutcome;
 fn live_melpa_ecosystem_installs_and_survives_restart() {
     let packages = [
         DASH_MELPA_PIN,
-        ("s", "20220902.1511"),
+        S_MELPA_PIN,
         ("hydra", "20250316.1254"),
         ("ivy", "20260413.2102"),
         ("flycheck", "20260725.1551"),
