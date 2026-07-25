@@ -28,11 +28,12 @@ phase-specific failures.
   macros, compatibility aliases, edge values, and representative signals. The
   package is installed once into a validated, locked cache below `./tmp`; each
   test then evaluates the same form in isolated GNU Emacs and Neomacs
-  processes.
+  processes. Every case pins the complete normalized GNU Emacs value or signal,
+  so matching-but-unexpected editor results are failures too.
 - `s_parity.rs` uses 18 ordinary Rust `#[test]` functions to exercise all 92
   public `s` functions, macros, and compatibility aliases, plus its public
   lexical-format variable, boundary values, and representative signals. It
-  reuses the same validated package cache and differential oracle as Dash.
+  reuses Dash's validated-cache mechanism and strict, pinned-outcome oracle.
 - `upstream_package_ert.rs` runs grouped contracts from GNU Emacs's
   `test/lisp/emacs-lisp/package-tests.el` through a structured ERT adapter.
   The EOL and asynchronous-refresh groups remain explicit ignored tests until

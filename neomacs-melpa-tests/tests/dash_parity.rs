@@ -11,15 +11,15 @@ fn dash_oracle() -> CachedMelpaOracle {
         .with_timeout(DASH_TEST_TIMEOUT)
 }
 
-fn assert_dash_parity(name: &str, form: &str) {
+fn assert_dash_parity(name: &str, form: &str, expected: &str) {
     dash_oracle()
-        .run_value(name, form)
+        .run_value_exact(name, form, expected)
         .unwrap_or_else(|error| panic!("Dash parity case `{name}` failed:\n{error}"));
 }
 
-fn assert_dash_signal_parity(name: &str, form: &str) {
+fn assert_dash_signal_parity(name: &str, form: &str, expected: &str) {
     dash_oracle()
-        .run_signal(name, form)
+        .run_signal_exact(name, form, expected)
         .unwrap_or_else(|error| panic!("Dash signal parity case `{name}` failed:\n{error}"));
 }
 
@@ -73,6 +73,7 @@ fn dash_destructive_and_iterative_traversal() {
               (let (out)
                 (--dotimes 4 (push (* it it) out))
                 (nreverse out)))"##,
+        r##"((a b c) (b c) (1 2 3) ((0 a) (1 b)) ((0 . x) (1 . y)) ((0 . x) (1 . y)) (1 2 0 3) (1 2) (3 2 1) ((2 . c) (1 . b) (0 . a)) (3 2 1) (3 2 1) (0 1 2 3) (0 1 4 9))"##,
     );
 }
 
@@ -103,6 +104,7 @@ fn dash_mapping_and_generation() {
               (--mapcat (list it it) '(a b))
               (-iterate #'1+ 3 4)
               (--iterate (* it 2) 1 5))"##,
+        r##"((2 3 4) (1 4 9) ((0 a) (1 b) (2 c)) ((0 . a) (1 . b) (2 . c)) (1 3 3 5) (1 20 3 40) (odd 2 odd) (1 even 3) (1 3 4) (1 20 4) (2 3 5) (2 3 40) (1 -1 2 -2) (a a b b) (3 4 5 6) (1 2 4 8 16))"##,
     );
 }
 
@@ -128,6 +130,7 @@ fn dash_left_and_right_reductions() {
               (--reductions-r (- it acc) '(10 2 1))
               (-reductions-r-from #'- 5 '(10 2 1))
               (--reductions-r-from (- it acc) 5 '(10 2 1)))"##,
+        r##"(16 16 7 7 9 9 4 4 (0 1 3 6) (0 1 3 6) (1 3 6) (1 3 6) (9 1 1) (9 1 1) (4 6 -4 5) (4 6 -4 5))"##,
     );
 }
 
@@ -161,6 +164,7 @@ fn dash_filtering_and_removal() {
               (-non-nil '(nil a nil b))
               (-count #'cl-evenp '(1 2 3 4))
               (--count (> it 2) '(1 2 3 4)))"##,
+        r##"((2 4) (3 4) (a b) (1 2) (1 3) (1 2) (2 4) (1 2) (1 4 3) (1 4 3) (2 3 4) (2 3 4) (1 2 3) (1 2 3) (1 2 4) (1 2 4) (a b) (2 4) (3 6) (a b) 2 2)"##,
     );
 }
 
@@ -189,6 +193,7 @@ fn dash_flattening_splicing_and_construction() {
               (--splice-list (numberp it) '(x y) '(a 1 b 2))
               (-cons* 1 2 3 '(4 5))
               (-snoc '(1 2) 3 4 5))"##,
+        r##"((1 2 3 4) (1 2 (3) 4) (1 2 3 4 . "ab") ((#1=(changed) #2=(b)) (#1# #2#)) (a 1 -1 b 2 -2) (a 1 10 b 2 20) (a x y b x y) (a x y b x y) (1 2 3 4 5) (1 2 3 4 5))"##,
     );
 }
 
@@ -216,6 +221,7 @@ fn dash_search_and_item_access() {
               (-fifth-item '(a b c d e f))
               (-last-item '(a b c d e f))
               (-butlast '(a b c d e f)))"##,
+        r##"(2 3 a "x" 6 9 t t 4 3 a b c d e f (a b c d e))"##,
     );
 }
 
@@ -251,6 +257,7 @@ fn dash_boolean_predicates_and_aliases() {
               (--only-some? (numberp it) '(a 1 b))
               (-only-some-p #'symbolp '(a 1 b))
               (--only-some-p (symbolp it) '(a 1 b)))"##,
+        r##"(t t t t t t t t t t t t t t t t t t t t t t t t t t)"##,
     );
 }
 
@@ -270,6 +277,7 @@ fn dash_slicing_taking_and_dropping() {
               (-take-last 3 '(a b c d e))
               (-drop 2 '(a b c d e))
               (-drop-last 2 '(a b c d e)))"##,
+        r##"((b d) (c d e f) (1 2) (1 2) (a 3) (3 1) (a b c) (c d e) (c d e) (a b c))"##,
     );
 }
 
@@ -292,6 +300,7 @@ fn dash_positional_updates() {
               (--update-at 2 (list it 'seen) '(a b c d))
               (-remove-at 2 '(a b c d))
               (-remove-at-indices '(1 3) '(a b c d e)))"##,
+        r##"(((a b) (c d)) (d e a b c) (b c d e a) (a b x c d) (a b x d) (a b C d) (a b (c seen) d) (a b d) (a c e))"##,
     );
 }
 
@@ -304,6 +313,7 @@ fn dash_replacement_variants() {
               (-replace 'x 'z '(a x b x))
               (-replace-first 'x 'z '(a x b x))
               (-replace-last 'x 'z '(a x b x)))"##,
+        r##"((a z b z) (a z b x) (a x b z))"##,
     );
 }
 
@@ -320,6 +330,7 @@ fn dash_splitting_and_separation() {
               (--split-when (numberp it) '(a b 1 c 2 d))
               (-separate #'numberp '(a 1 b 2))
               (--separate (symbolp it) '(a 1 b 2)))"##,
+        r##"(((1 2) (a 3)) ((1 2) (3 1)) ((a) (b c) (d)) ((a b) (c) (d)) ((a b) (c) (d)) ((1 2) (a b)) ((a b) (1 2)))"##,
     );
 }
 
@@ -344,6 +355,7 @@ fn dash_partitioning_and_grouping() {
               (-partition-before-item 'x '(a x b c x d))
               (-group-by #'cl-evenp '(1 2 3 4))
               (--group-by (if (numberp it) 'number 'other) '(a 1 b 2)))"##,
+        r##"(((1 2) (3 4)) ((1 2) (3 4) (5)) ((1 2) (2 3) (3 4)) ((1 2 3) (3 4 5) (5)) ((1 3) (2 4) (5)) ((1 3) (2 4) (5)) ((a 1 2) (b 3)) ((a 1 2) (b 3)) ((1 2) (3 4) (5)) ((1 2) (3 4) (5)) ((1) (2 3) (4 5)) ((a x) (b c x) (d)) ((a) (x b c) (x d)) ((nil 1 3) (t 2 4)) ((other a b) (number 1 2)))"##,
     );
 }
 
@@ -366,6 +378,7 @@ fn dash_zipping_interleaving_and_padding() {
               (-unzip '((1 a) (2 b)))
               (-cycle '(a b c))
               (-pad 'missing '(1 2 3) '(a b)))"##,
+        r##"((a x b x c) (1 a x 2 b y) ((1 . a) (2 . b)) ((1 a) (2 b)) ((1 a) (2 b)) ((1 a) (2 b) (3 missing)) ((1 2) (a b)) ((1 . a) (2 . b)) ((1 . a) (2 . b)) ((1 . a) (2 . b) (3 . missing)) ((1 . 2) (a . b)) #1=(a b c . #1#) ((1 2 3) (a b missing)))"##,
     );
 }
 
@@ -382,6 +395,7 @@ fn dash_annotation_tables_and_grades() {
                            '(1 2) '(a b))
               (-grade-up #'< '(30 10 20))
               (-grade-down #'< '(30 10 20)))"##,
+        r##"(((1 . "a") (3 . "bbb") (2 . "cc")) ((1 . 1) (4 . 2) (9 . 3)) ((10 20) (20 40) (30 60)) ((1 a) (2 a) (1 b) (2 b)) (1 2 0) (0 2 1))"##,
     );
 }
 
@@ -402,6 +416,7 @@ fn dash_index_search_and_selection() {
               (-select-by-indices '(0 2 4) '(a b c d e))
               (-select-columns '(0 2) '((a b c) (d e f)))
               (-select-column 1 '((a b c) (d e f))))"##,
+        r##"(2 2 1 (1 3) (2 3) (1 3) 3 2 (a c e) ((a c) (d f)) (b e))"##,
     );
 }
 
@@ -429,6 +444,7 @@ fn dash_threading_and_side_effect_macros() {
                   (setcdr it '(2 3))
                   (nreverse it))
                 value))"##,
+        r##"(12 9 12 36 12 nil 5 12 (1) (1))"##,
     );
 }
 
@@ -459,6 +475,7 @@ fn dash_destructuring_bindings() {
               (let (a b)
                 (-setq (a b) '(1 2))
                 (list a b)))"##,
+        r##"((1 2 (3 4)) (1 2 2 1) (1 2 [3 4]) (ada 36) (ada 36) ada ((1 a) (2 b)) (1 2))"##,
     );
 }
 
@@ -477,6 +494,7 @@ fn dash_conditional_bindings() {
               (--when-let 4 (* it 2))
               (-if-let (value nil) value 'else)
               (-if-let* ((a 1) (b nil)) (+ a b) 'else))"##,
+        r##"(6 3 10 8 6 10 8 else else)"##,
     );
 }
 
@@ -497,6 +515,7 @@ fn dash_set_operations_and_custom_comparison() {
                  (-distinct '("A" "A" "B"))
                  (-union '("A") '("A" "B"))
                  (-intersection '("A" "B") '("B")))))"##,
+        r##"((a b c) (a b c) (a b c d) (b c) (a c) ((a . 3) (b . 2) (c . 1)) (("A" "B") ("A" "B") ("B")))"##,
     );
 }
 
@@ -513,6 +532,7 @@ fn dash_combinatorics_and_sequence_edges() {
               (-tails '(a b c))
               (-common-prefix '(a b c) '(a b d) '(a b))
               (-common-suffix '(a b c) '(x b c) '(b c)))"##,
+        r##"(((a . #2=(b . #1=(c))) (a . #3=(b)) (a . #1#) (a) #2# #3# #1# nil) ((a b c) (a c b) (b a c) (b c a) (c a b) (c b a)) ((a a b) (a b a) (b a a)) (nil (a) (a b) (a b c)) ((a . #4=(b . #5=(c))) #4# #5# nil) (a b) (b c))"##,
     );
 }
 
@@ -537,6 +557,7 @@ fn dash_membership_relations_and_sorting() {
               (-list nil)
               (-list 1 2 3)
               (-repeat 3 'x))"##,
+        r##"((b c) nil t t t t t t t t (1 2 3) (1 2 3) nil (1 2 3) (x x x))"##,
     );
 }
 
@@ -564,6 +585,7 @@ fn dash_numeric_aggregates_and_ranges() {
                         '("a" "bbbb" "cc"))
               (-iota 5)
               (-iota 4 10 3))"##,
+        r##"(10 (1 3 6 10) 24 (1 2 6 24) 4 1 "a" "bbbb" "a" "bbbb" (0 1 2 3 4) (10 13 16 19))"##,
     );
 }
 
@@ -597,6 +619,7 @@ fn dash_tree_mapping_and_reduction() {
                      (clone (-clone source)))
                 (setcar (car clone) 'changed)
                 (list source clone)))"##,
+        r##"(t nil (a b) (a b) ((a b)) (2 (3 4) 5) (2 (4 6) 8) 14 14 14 14 10 10 10 10 (2 (3 4) 5) (2 (3 4) 5) ((1 #1=(2 3)) 1 #1# 2 3) ((1 #2=(2 3)) 1 #2# 2 3) (((a) (b c)) ((changed) (b c))))"##,
     );
 }
 
@@ -622,6 +645,7 @@ fn dash_fixpoint_unfold_and_closure_generators() {
               (funcall
                (-fixfn (lambda (number) (/ (+ number 10) 2)))
                0))"##,
+        r##"((a b) (a b) (1 2 3 4) (1 2 3 4) 14 (2 4 6 nil) 9)"##,
     );
 }
 
@@ -650,6 +674,7 @@ fn dash_function_combinators() {
                 (lambda (item)
                   (intern (upcase (symbol-name item)))))
                '(1 a)))"##,
+        r##"(13 7 (6 4 25) 11 6 9 7 (c a b) fixed (1 2 3 4) t t t (2 A))"##,
     );
 }
 
@@ -673,6 +698,7 @@ fn dash_package_integration_commands() {
                   (global-dash-fontify-mode -1)))
               (progn (dash-register-info-lookup) t)
               (dash-unload-function))"##,
+        r##"(t nil t t nil)"##,
     );
 }
 
@@ -691,6 +717,7 @@ fn dash_empty_collection_semantics() {
               (-powerset nil)
               (-tails nil)
               (-zip-lists nil nil))"##,
+        r##"(nil nil nil nil nil nil (nil) (nil) nil)"##,
     );
 }
 
@@ -703,6 +730,7 @@ fn dash_nil_short_circuit_semantics() {
               (-some-> nil 1+ (* 2))
               (-some->> nil (mapcar #'1+) (apply #'+))
               (-some--> nil (1+ it) (* it 2)))"##,
+        r##"(nil nil nil)"##,
     );
 }
 
@@ -711,14 +739,19 @@ fn dash_nil_short_circuit_semantics() {
 fn dash_reduce_empty_arity_signal() {
     assert_dash_signal_parity(
         "dash_reduce_empty_arity_signal",
-        r##"(-reduce (lambda (left right) (+ left right)) nil)"##,
+        r##"(-reduce #'cons nil)"##,
+        r##"(wrong-number-of-arguments #<subr cons> 0)"##,
     );
 }
 
 #[test]
 #[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_iota_negative_count_signal() {
-    assert_dash_signal_parity("dash_iota_negative_count_signal", r##"(-iota -1)"##);
+    assert_dash_signal_parity(
+        "dash_iota_negative_count_signal",
+        r##"(-iota -1)"##,
+        r##"(wrong-type-argument natnump -1)"##,
+    );
 }
 
 #[test]
@@ -727,6 +760,7 @@ fn dash_slice_zero_step_signal() {
     assert_dash_signal_parity(
         "dash_slice_zero_step_signal",
         r##"(-slice '(a b c) 0 nil 0)"##,
+        r##"(arith-error)"##,
     );
 }
 
@@ -736,5 +770,6 @@ fn dash_destructuring_short_vector_signal() {
     assert_dash_signal_parity(
         "dash_destructuring_short_vector_signal",
         r##"(-let ([a b c] [1 2]) (list a b c))"##,
+        r##"(wrong-type-argument arrayp nil)"##,
     );
 }

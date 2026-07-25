@@ -10,15 +10,15 @@ fn s_oracle() -> CachedMelpaOracle {
         .with_timeout(S_TEST_TIMEOUT)
 }
 
-fn assert_s_parity(name: &str, form: &str) {
+fn assert_s_parity(name: &str, form: &str, expected: &str) {
     s_oracle()
-        .run_value(name, form)
+        .run_value_exact(name, form, expected)
         .unwrap_or_else(|error| panic!("s parity case `{name}` failed:\n{error}"));
 }
 
-fn assert_s_signal_parity(name: &str, form: &str) {
+fn assert_s_signal_parity(name: &str, form: &str, expected: &str) {
     s_oracle()
-        .run_signal(name, form)
+        .run_signal_exact(name, form, expected)
         .unwrap_or_else(|error| panic!("s signal parity case `{name}` failed:\n{error}"));
 }
 
@@ -41,6 +41,7 @@ fn s_trimming_splitting_and_joining() {
               (s-lines "a\r\nb\nc\rd")
               (s-join "::" '("a" "b" "c"))
               (s-concat "a" "" "b" "c"))"##,
+        r##"("left  " "  right" "both" "a b c" "one\ntwo" "one\ntwo" ("a" "" "b" "") ("a" "b") ("a" "b" "c:d") ("a" "b") ("a" "b" "c" "d") "a::b::c" "abc")"##,
     );
 }
 
@@ -64,6 +65,7 @@ fn s_affixes_splicing_and_repetition() {
               (s-chop-suffix ".el" "s.el")
               (s-chop-suffix ".rs" "s.el")
               (s-chop-suffixes '(".gz" ".tar") "archive.tar.gz"))"##,
+        r##"("pre-value" "value-post" "Xabcd" "abXcd" "abcdX" "abXcd" "" "ababab" "value" "value" "value" "s" "s.el" "archive")"##,
     );
 }
 
@@ -87,6 +89,7 @@ fn s_shared_edges_chomp_and_truncation() {
               (s-truncate 8 "abcdefghijk" "…")
               (s-truncate 20 "short")
               (s-truncate 0 ""))"##,
+        r##"("prefix-" "" "same" "-suffix" "" "same" "line" "line" "line\n" "line" "abcde..." "abcdefg…" "short" "")"##,
     );
 }
 
@@ -112,6 +115,7 @@ fn s_wrapping_padding_and_substrings() {
               (s-chop-right 20 "abcdef")
               (s-wrap "value" "\"")
               (s-wrap "value" "<" ">"))"##,
+        r##"("one two\nthree\nfour" "   mid  " "long" "000042" "42...." "long" "abc" "abcdef" "def" "abcdef" "cdef" "" "abcd" "" "\"value\"" "<value>")"##,
     );
 }
 
@@ -147,6 +151,7 @@ fn s_primary_predicates_and_indices() {
               (s-index-of "it" "initial")
               (s-index-of "INIT" "initial" t)
               (s-index-of "missing" "initial"))"##,
+        r##"(t t t t t t t nil t t nil t t t t nil "value" t t t t t nil 2 0 nil)"##,
     );
 }
 
@@ -174,6 +179,7 @@ fn s_predicate_compatibility_aliases() {
               (s-suffix-p ".el" "init.el")
               (s-suffix? ".el" "init.el")
               (s-uppercase-p "UPPER"))"##,
+        r##"(t t t t t t t t t t t t t t t t t t)"##,
     );
 }
 
@@ -193,6 +199,7 @@ fn s_replacement_and_case_conversion() {
               (s-upcase "MiXeD ä")
               (s-capitalize "hELLO WORLD")
               (s-titleize "hELLO-world AGAIN"))"##,
+        r##"("one/two/three" "\\dollar5 + \\dollar10" "a#b#" "blue dog, dog" "mixed ä" "MIXED Ä" "Hello world" "Hello-World Again")"##,
     );
 }
 
@@ -215,6 +222,7 @@ fn s_threading_macro() {
                '(s-with value
                   (s-prepend "pre-")
                   (s-append "-post"))))"##,
+        r##"("[HELLO]" "cBa" "cba" (s-append "-post" (s-with value (s-prepend "pre-"))))"##,
     );
 }
 
@@ -230,6 +238,7 @@ fn s_reverse_ascii_multibyte_and_graphemes() {
               (s-reverse (string ?A #x0301 ?B))
               (s-reverse "😀ab")
               (multibyte-string-p (s-reverse "åß中")))"##,
+        r##"("fedcba" "" "中ßå" "BÁ" "ba😀" t)"##,
     );
 }
 
@@ -256,6 +265,7 @@ fn s_regexp_matches_and_positions() {
                 (let ((before (match-data)))
                   (s-match "\\([0-9]+\\)" "a12b")
                   (equal before (match-data)))))"##,
+        r##"((("x=1" "x" "1") ("y=22" "y" "22")) nil ((1 . 4)) ((2 . 3) (6 . 8)) ("ab-42" "ab" "42") ("two" "two") nil t)"##,
     );
 }
 
@@ -273,6 +283,7 @@ fn s_slicing_and_word_splitting() {
               (s-split-words "XMLHttpRequest")
               (s-split-words "")
               (s-split-words "  spaced  words  "))"##,
+        r##"(("l" "o" "w" "e" "r" "C" "a" "m" "e" "l" "H" "T" "T" "P") ("abc" "1" "2def" "3" "4") ("") ("lower" "Camel" "HTT" "P2Value") ("snake" "case" "dashed" "words") ("XML" "Http" "Request") nil ("spaced" "words"))"##,
     );
 }
 
@@ -291,6 +302,7 @@ fn s_word_style_transformations() {
               (s-titleized-words "HTTP_response CODE")
               (s-word-initials "Hyper Text Markup Language")
               (s-word-initials "snake_case"))"##,
+        r##"("httpResponseCode" "HttpResponseCode" "http_response_code" "http-response-code" "HTTP Response Code" "Http response code" "Http Response Code" "HTML" "sc")"##,
     );
 }
 
@@ -323,6 +335,7 @@ fn s_format_replacers_and_extra_values() {
                   "${key}"
                   (lambda (key suffix) (concat key suffix))
                   "!"))))"##,
+        r##"("Hello Ada" "Ada:Lisp" "two/zero/one" "Hello Ada" "KEY" "key!")"##,
     );
 }
 
@@ -341,6 +354,7 @@ fn s_lexical_format_macro_and_variable() {
               (s-lex-fmt|expand "${name}:${count}")
               (macroexpand
                '(s-lex-format "${name}:${count}")))"##,
+        r##"("Ada has 3 messages" "payload=(a \"b\")" (s-format "${name}:${count}" #2='aget (list (cons "name" (format #1=(if s-lex-value-as-lisp "%S" "%s") name)) (cons "count" (format #1# count)))) (s-format "${name}:${count}" #2# (list (cons "name" (format #1# name)) (cons "count" (format #1# count)))))"##,
     );
 }
 
@@ -359,6 +373,7 @@ fn s_match_counting_and_wrapping() {
               (s-wrap "value" "*")
               (s-wrap "value" "<" ">")
               (s-wrap "" "[" "]"))"##,
+        r##"(2 3 1 1 1 0 "*value*" "<value>" "[]")"##,
     );
 }
 
@@ -388,6 +403,7 @@ fn s_empty_and_boundary_values() {
               (s-mixedcase? "")
               (s-capitalized? "")
               (s-numeric? ""))"##,
+        r##"("" "" "" "value" "value" "" "" "" "" "" "" "" "abc" "abc" nil t t nil nil nil)"##,
     );
 }
 
@@ -397,6 +413,7 @@ fn s_unresolved_format_variable_signal() {
     assert_s_signal_parity(
         "s_unresolved_format_variable_signal",
         r##"(s-format "Hello ${missing}" (lambda (_key) nil))"##,
+        r##"(s-format-resolve . "${missing}")"##,
     );
 }
 
@@ -406,5 +423,6 @@ fn s_splice_out_of_range_signal() {
     assert_s_signal_parity(
         "s_splice_out_of_range_signal",
         r##"(s-splice "X" 99 "abc")"##,
+        r##"(args-out-of-range "abc" 99 3)"##,
     );
 }

@@ -559,6 +559,28 @@ pub struct ElispOracleReport {
     pub gnu_emacs: EvalOutcome,
 }
 
+impl ElispOracleReport {
+    /// Require one exact normalized value from both editor processes.
+    pub fn require_value(&self, name: &str, expected: &str) -> Result<(), String> {
+        self.require_outcome(name, &EvalOutcome::Value(expected.to_string()))
+    }
+
+    /// Require one exact normalized signal payload from both editor processes.
+    pub fn require_signal(&self, name: &str, expected: &str) -> Result<(), String> {
+        self.require_outcome(name, &EvalOutcome::Signal(expected.to_string()))
+    }
+
+    fn require_outcome(&self, name: &str, expected: &EvalOutcome) -> Result<(), String> {
+        if &self.gnu_emacs == expected && &self.neomacs == expected {
+            return Ok(());
+        }
+        Err(format!(
+            "strict oracle `{name}` expected `{expected}`\n  GNU Emacs got `{}`\n  Neomacs got `{}`",
+            self.gnu_emacs, self.neomacs
+        ))
+    }
+}
+
 /// Differential oracle for one exact MELPA package cached below `./tmp`.
 pub struct CachedMelpaOracle {
     package_name: String,
@@ -614,6 +636,30 @@ impl CachedMelpaOracle {
     /// Run a parity case that must signal in both editors.
     pub fn run_signal(&self, name: &str, probe: &str) -> Result<ElispOracleReport, String> {
         self.run_expected(name, probe, false)
+    }
+
+    /// Run a parity case and require one exact normalized value.
+    pub fn run_value_exact(
+        &self,
+        name: &str,
+        probe: &str,
+        expected: &str,
+    ) -> Result<ElispOracleReport, String> {
+        let report = self.run_value(name, probe)?;
+        report.require_value(name, expected)?;
+        Ok(report)
+    }
+
+    /// Run a parity case and require one exact normalized signal payload.
+    pub fn run_signal_exact(
+        &self,
+        name: &str,
+        probe: &str,
+        expected: &str,
+    ) -> Result<ElispOracleReport, String> {
+        let report = self.run_signal(name, probe)?;
+        report.require_signal(name, expected)?;
+        Ok(report)
     }
 
     fn run_expected(

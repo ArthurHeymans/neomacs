@@ -38,4 +38,6 @@ fn elisp_wrapper_captures_the_last_value_and_errors() {
     assert!(wrapper.contains("NEOMACS_TEST_SANDBOX_ROOT"));
     assert!(wrapper.contains("NEOMACS_TEST_WORKSPACE_ROOT"));
     assert!(wrapper.contains("neomacs--test-oracle-normalized"));
+    assert!(wrapper.contains("(print-escape-newlines t)"));
+    assert!(wrapper.contains("(print-escape-control-characters t)"));
 }

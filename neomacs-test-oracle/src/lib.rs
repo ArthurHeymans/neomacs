@@ -66,7 +66,9 @@ pub fn wrap_elisp_outcome(setup: &str, probe: &str, marker: &str) -> String {
     format!(
         r##"(let ((print-circle t)
                   (print-length nil)
-                  (print-level nil))
+                  (print-level nil)
+                  (print-escape-newlines t)
+                  (print-escape-control-characters t))
            (defun neomacs--test-oracle-normalize-string (value)
              (dolist
                  (root
