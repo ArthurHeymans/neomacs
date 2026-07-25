@@ -4735,6 +4735,27 @@ fn where_is_internal_reduces_string_menu_item_under_symbol_prefix_like_doom_lead
 }
 
 #[test]
+fn where_is_internal_finds_bindings_stored_in_an_inline_vector() {
+    // A keymap element may be an inline vector indexing bindings by char code
+    // (GNU `map_keymap_internal`). The reverse where-is scan lacked that arm, so
+    // such a command was unreachable by `where-is-internal` although
+    // `lookup-key` found it -- found by probing the element taxonomy, not by a
+    // bug report.
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let* ((v (make-vector 128 nil))
+                  (sub (list 'keymap v))
+                  (m (make-sparse-keymap)))
+             (aset v ?a 'vec-cmd)
+             (define-key m "p" sub)
+             (list (eq (lookup-key m "pa") 'vec-cmd)
+                   (equal (where-is-internal 'vec-cmd (list sub) t) [?a])
+                   (equal (where-is-internal 'vec-cmd (list m) t) [?p ?a])))"#,
+    );
+    assert_eq!(result, "OK (t t t)");
+}
+
+#[test]
 fn where_is_internal_descends_into_composed_keymaps() {
     // evil/general build active state keymaps with `make-composed-keymap`. The
     // reverse where-is scan must descend into a composed keymap's inline submaps

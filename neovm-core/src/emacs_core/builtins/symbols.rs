@@ -6358,29 +6358,32 @@ pub(crate) fn builtin_keymap_prompt(args: Vec<Value>) -> EvalResult {
 }
 
 fn keymap_prompt_scan(map: Value) -> Value {
-    let mut cursor = map;
-    let mut seen = 0usize;
-    while cursor.is_cons() {
-        seen += 1;
-        if seen > 10_000 {
-            return Value::NIL;
-        }
+    keymap_prompt_scan_at_depth(map, 0)
+}
 
-        let item = cursor.cons_car();
-        if item.is_string() {
-            return item;
-        }
-        if item.is_cons()
-            && crate::emacs_core::keymap::KeymapMarker::Keymap.is_value(item.cons_car())
-        {
-            let prompt = keymap_prompt_scan(item);
-            if !prompt.is_nil() {
-                return prompt;
-            }
-        }
-        cursor = cursor.cons_cdr();
+/// The first prompt string found in MAP's spine, descending into composed
+/// submaps and the parent. Built on the shared keymap-spine taxonomy so this
+/// scan cannot drift from the other spine walkers (see
+/// `keymap::for_each_keymap_element`).
+fn keymap_prompt_scan_at_depth(map: Value, depth: usize) -> Value {
+    use crate::emacs_core::keymap::KeymapElement;
+    if depth > 64 {
+        return Value::NIL;
     }
-    Value::NIL
+    let mut found = Value::NIL;
+    crate::emacs_core::keymap::for_each_keymap_element(&map, |element| {
+        if !found.is_nil() {
+            return; // the first prompt in spine order wins
+        }
+        match element {
+            KeymapElement::Prompt(prompt) => found = prompt,
+            KeymapElement::Submap(submap) => {
+                found = keymap_prompt_scan_at_depth(submap, depth + 1);
+            }
+            KeymapElement::Binding { .. } | KeymapElement::IndirectTail(_) => {}
+        }
+    });
+    found
 }
 
 pub(crate) fn plan_kill_emacs_request(

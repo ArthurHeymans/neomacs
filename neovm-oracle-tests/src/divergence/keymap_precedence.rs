@@ -204,6 +204,26 @@ fn div_km_where_is_internal_reduces_menu_item_leaves() {
 }
 
 #[test]
+fn div_km_where_is_internal_reports_inline_vector_bindings() {
+    // A keymap element may be an inline vector indexing bindings by char code
+    // (GNU `map_keymap_internal`). Forward `lookup-key` and the reverse
+    // `where-is-internal` scan must agree about it.
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (vec-cmd [97] [112 97])""#]];
+    crate::common::assert_oracle_parity_expect(
+        r##"
+(let* ((v (make-vector 128 nil)) (sub (list 'keymap v)) (m (make-sparse-keymap)))
+  (aset v ?a 'vec-cmd)
+  (define-key m "p" sub)
+  (list (lookup-key m "pa")
+        (where-is-internal 'vec-cmd (list sub) t)
+        (where-is-internal 'vec-cmd (list m) t)))
+"##,
+        expect,
+    );
+}
+
+#[test]
 fn div_km_where_is_internal_descends_composed_keymaps() {
     // `where-is-internal` must descend into a composed keymap's inline submaps
     // (`make-composed-keymap`), not just its parent, mirroring GNU `map_keymap`.

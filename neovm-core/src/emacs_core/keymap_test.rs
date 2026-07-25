@@ -587,6 +587,97 @@ fn list_keymap_for_each_binding_stops_before_direct_sparse_parent() {
 }
 
 #[test]
+fn list_keymap_for_each_binding_reports_inline_vector_slots() {
+    // GNU `map_keymap_internal` iterates an inline vector's slots as
+    // char-code -> binding pairs. This scan silently lacked that arm while
+    // `list_keymap_for_each_binding_recursive` -- the other copy of the same
+    // taxonomy, in this very file -- had it, so a vector-stored command was
+    // invisible to `where-is-internal` even though `lookup-key` found it.
+    crate::test_utils::init_test_tracing();
+    let mut slots = vec![Value::NIL; 128];
+    slots['a' as usize] = Value::symbol("vec-cmd");
+    let keymap = Value::list(vec![Value::symbol("keymap"), Value::vector(slots)]);
+
+    let mut seen = Vec::new();
+    list_keymap_for_each_binding(&keymap, |event, def| {
+        if !def.is_nil() {
+            seen.push((event, def));
+        }
+    });
+
+    assert_eq!(seen.len(), 1, "seen={seen:?}");
+    assert_eq!(seen[0].0, Value::fixnum('a' as i64));
+    assert_eq!(seen[0].1.as_symbol_name(), Some("vec-cmd"));
+}
+
+#[test]
+fn list_keymap_for_each_binding_normalizes_a_t_binding_to_nil() {
+    // GNU `map_keymap_item`: a `t` binding shadows lower-precedence keymaps just
+    // like an explicit nil binding, so it must be reported as nil rather than as
+    // a binding of the symbol `t`.
+    crate::test_utils::init_test_tracing();
+    let keymap = make_sparse_list_keymap();
+    list_keymap_define(keymap, Value::fixnum('u' as i64), Value::T);
+
+    let mut seen = Vec::new();
+    list_keymap_for_each_binding(&keymap, |event, def| seen.push((event, def)));
+
+    assert_eq!(seen.len(), 1, "seen={seen:?}");
+    assert_eq!(seen[0].0, Value::fixnum('u' as i64));
+    assert!(seen[0].1.is_nil(), "t binding must arrive as nil");
+}
+
+#[test]
+fn for_each_keymap_element_classifies_every_gnu_element_kind() {
+    // One decode of the spine union, so no consumer can silently miss a shape:
+    // prompt string, `(KEY . BINDING)` cons, inline vector, composed submap.
+    crate::test_utils::init_test_tracing();
+    let submap = make_sparse_list_keymap();
+    list_keymap_define(submap, Value::fixnum('s' as i64), Value::symbol("sub-cmd"));
+    let mut slots = vec![Value::NIL; 4];
+    slots[2] = Value::symbol("vec-cmd");
+    let keymap = Value::list(vec![
+        Value::symbol("keymap"),
+        Value::string("THE PROMPT"),
+        Value::cons(Value::fixnum('c' as i64), Value::symbol("cons-cmd")),
+        Value::vector(slots),
+        submap,
+    ]);
+
+    let mut prompts = Vec::new();
+    let mut bindings = Vec::new();
+    let mut submaps = 0usize;
+    for_each_keymap_element(&keymap, |element| match element {
+        KeymapElement::Prompt(prompt) => prompts.push(prompt),
+        KeymapElement::Binding { key, value } => {
+            if !value.is_nil() {
+                bindings.push((key, value));
+            }
+        }
+        KeymapElement::Submap(_) => submaps += 1,
+        KeymapElement::IndirectTail(_) => {}
+    });
+
+    assert_eq!(prompts.len(), 1);
+    assert_eq!(
+        prompts[0].as_lisp_string().unwrap().as_utf8_str(),
+        Some("THE PROMPT")
+    );
+    assert_eq!(
+        submaps, 1,
+        "the composed submap must be yielded, not misread"
+    );
+    // The cons binding and the populated vector slot -- the submap's own binding
+    // belongs to the submap, not to this level.
+    let names: Vec<Option<&str>> = bindings.iter().map(|(_, v)| v.as_symbol_name()).collect();
+    assert_eq!(
+        names,
+        vec![Some("cons-cmd"), Some("vec-cmd")],
+        "{bindings:?}"
+    );
+}
+
+#[test]
 fn list_keymap_accessible_descends_into_direct_sparse_parent() {
     crate::test_utils::init_test_tracing();
     let parent = make_sparse_list_keymap();

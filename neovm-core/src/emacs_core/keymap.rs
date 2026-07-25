@@ -3446,37 +3446,149 @@ fn keymap_value_eq(a: &Value, b: &Value) -> bool {
     }
 }
 
-/// Iterate over all bindings in a keymap (not following parent).
+// ---------------------------------------------------------------------------
+// Keymap spine taxonomy
+// ---------------------------------------------------------------------------
+
+/// Guard against a circular keymap spine (a `setcdr`-built cycle).
+const MAX_KEYMAP_SPINE_STEPS: usize = 100_000;
+/// Guard against mutually-nested keymaps when a consumer recurses into submaps.
+const MAX_KEYMAP_WALK_DEPTH: usize = 64;
+
+/// One element of a keymap's own spine, classified exactly as GNU
+/// `map_keymap_internal` / `access_keymap_1` (keymap.c) classify it.
+///
+/// A keymap is `(keymap ELEMENT... . TAIL)`, and "element" is an untyped union in
+/// Lisp. Re-decoding that union ad-hoc at each call site is how the shapes
+/// drift: this scan silently lacked the inline-vector arm that
+/// [`list_keymap_for_each_binding_recursive`] had, so a command bound through a
+/// vector was invisible to `where-is-internal` even though `lookup-key` found
+/// it. Decode the union once, here, and let `match` exhaustiveness oblige every
+/// consumer to face every shape.
+pub(crate) enum KeymapElement {
+    /// A key -> binding pair. Sources: a `(KEY . BINDING)` cons, one slot of an
+    /// inline vector (key = slot index), or one entry of a char-table (key = a
+    /// character, or a `(FROM . TO)` range).
+    ///
+    /// `value` is normalized like GNU `map_keymap_item`: a `t` value is an
+    /// explicit unbinding and is reported as nil.
+    Binding { key: Value, value: Value },
+    /// A keymap embedded in the spine: a composed submap
+    /// (`make-composed-keymap`) or the parent. GNU `map_keymap` treats the two
+    /// identically -- recurse into it, then continue with the rest of the spine
+    /// -- and both share the enclosing keymap's prefix.
+    Submap(Value),
+    /// A spine tail that is not a cons: typically a symbol whose function cell is
+    /// a keymap (GNU `map_keymap`: `if (!CONSP (map)) map = get_keymap (map,
+    /// ...)`). Resolving it needs an obarray, which this structural walk does not
+    /// take.
+    ///
+    /// KNOWN GAP, deliberately typed rather than silently skipped: neomacs
+    /// resolves this nowhere yet, so both `lookup-key` and `where-is-internal`
+    /// return nil where GNU finds the binding (reproduce by `setcdr`-ing a
+    /// keymap's tail to a symbol whose function cell is a keymap --
+    /// `set-keymap-parent` itself rejects non-keymaps, so this only arises from
+    /// hand-built spines). Fixing it means plumbing an `&Obarray` through the
+    /// whole forward lookup chain; doing it on only one side would make forward
+    /// and reverse lookup disagree, which is worse than today's consistent miss.
+    IndirectTail(#[expect(dead_code, reason = "known gap; see variant docs")] Value),
+    /// The keymap's prompt string (`make-sparse-keymap` PROMPT).
+    Prompt(Value),
+}
+
+/// GNU `map_keymap_item`: a `t` binding shadows lower-precedence keymaps exactly
+/// like an explicit nil binding, so it is reported as nil.
+fn normalized_binding_value(value: Value) -> Value {
+    if matches!(value.kind(), ValueKind::T) {
+        Value::NIL
+    } else {
+        value
+    }
+}
+
+/// Visit the elements of ONE keymap's spine, mirroring GNU
+/// `map_keymap_internal`: every binding at this level, in spine order.
+///
+/// Descent is deliberately *not* performed here -- embedded keymaps are yielded
+/// as [`KeymapElement::Submap`] so each consumer keeps its own policy. A
+/// single-level scan ignores them; a `map_keymap`-style walk recurses into them
+/// at the same prefix (they share this keymap's prefix). Elements that match none
+/// of GNU's cases are skipped, as GNU skips them.
+pub(crate) fn for_each_keymap_element<F>(keymap: &Value, mut f: F)
+where
+    F: FnMut(KeymapElement),
+{
+    let Some(mut cursor) = keymap_binding_spine(keymap) else {
+        return;
+    };
+    let mut steps = 0usize;
+    while cursor.is_cons() {
+        steps += 1;
+        if steps > MAX_KEYMAP_SPINE_STEPS {
+            return;
+        }
+        // The spine tail is itself a keymap (the classic parent). Everything
+        // remaining lives inside it, so hand it over and stop walking this level.
+        if is_list_keymap(&cursor) {
+            f(KeymapElement::Submap(cursor));
+            return;
+        }
+
+        let element = cursor.cons_car();
+        let rest = cursor.cons_cdr();
+
+        if is_list_keymap(&element) {
+            // A composed submap. GNU `map_keymap` recurses into it and then
+            // continues with the rest of the spine, so do not stop here.
+            f(KeymapElement::Submap(element));
+        } else if super::chartable::is_char_table(&element) {
+            super::chartable::for_each_non_nil_char_table_run(&element, |key, value| {
+                f(KeymapElement::Binding {
+                    key,
+                    value: normalized_binding_value(value),
+                });
+            });
+        } else if element.is_vector() {
+            // An inline vector indexes bindings by character code. GNU reports
+            // every slot, empty ones included.
+            if let Some(items) = element.as_vector_data() {
+                for (index, binding) in items.iter().enumerate() {
+                    f(KeymapElement::Binding {
+                        key: Value::fixnum(index as i64),
+                        value: normalized_binding_value(*binding),
+                    });
+                }
+            }
+        } else if element.is_cons() {
+            f(KeymapElement::Binding {
+                key: element.cons_car(),
+                value: normalized_binding_value(element.cons_cdr()),
+            });
+        } else if element.is_string() {
+            f(KeymapElement::Prompt(element));
+        }
+
+        cursor = rest;
+    }
+
+    // A non-nil, non-cons tail: a symbol that may name a keymap.
+    if !cursor.is_nil() {
+        f(KeymapElement::IndirectTail(cursor));
+    }
+}
+
+/// Iterate over all bindings in a keymap (not following parent or submaps).
 /// Calls `f(event, def)` for each binding.
 pub fn list_keymap_for_each_binding<F>(keymap: &Value, mut f: F)
 where
     F: FnMut(Value, Value),
 {
-    let Some(mut cursor) = keymap_binding_spine(keymap) else {
-        return;
-    };
-    while cursor.is_cons() {
-        if is_list_keymap(&cursor) {
-            break;
-        }
-        let entry_car = cursor.cons_car();
-        let entry_cdr = cursor.cons_cdr();
-
-        if super::chartable::is_char_table(&entry_car) {
-            super::chartable::for_each_non_nil_char_table_run(&entry_car, &mut f);
-        }
-
-        if entry_car.is_cons() {
-            let binding_car = entry_car.cons_car();
-            let binding_cdr = entry_car.cons_cdr();
-            f(binding_car, binding_cdr);
-        }
-
-        if is_list_keymap(&entry_cdr) {
-            break;
-        }
-        cursor = entry_cdr;
-    }
+    for_each_keymap_element(keymap, |element| match element {
+        KeymapElement::Binding { key, value } => f(key, value),
+        // Single-level by contract: descent, and the prefix bookkeeping it
+        // needs, belong to the caller.
+        KeymapElement::Submap(_) | KeymapElement::IndirectTail(_) | KeymapElement::Prompt(_) => {}
+    });
 }
 
 /// Iterate over all bindings in a keymap and its embedded/parent keymaps.
@@ -3494,51 +3606,18 @@ where
     where
         F: FnMut(Value, Value),
     {
-        if depth > 64 {
+        if depth > MAX_KEYMAP_WALK_DEPTH {
             return;
         }
-
-        let Some(mut cursor) = keymap_binding_spine(keymap) else {
-            return;
-        };
-
-        let mut steps = 0usize;
-        while cursor.is_cons() {
-            steps += 1;
-            if steps > 100_000 {
-                break;
-            }
-
-            if is_list_keymap(&cursor) {
-                walk(&cursor, f, depth + 1);
-                break;
-            }
-
-            let entry_car = cursor.cons_car();
-            let entry_cdr = cursor.cons_cdr();
-
-            if is_list_keymap(&entry_car) {
-                walk(&entry_car, f, depth + 1);
-            } else if super::chartable::is_char_table(&entry_car) {
-                super::chartable::for_each_non_nil_char_table_run(&entry_car, &mut *f);
-            } else if entry_car.is_vector() {
-                if let Some(items) = entry_car.as_vector_data() {
-                    for (idx, binding) in items.iter().enumerate() {
-                        f(Value::fixnum(idx as i64), *binding);
-                    }
-                }
-            } else if entry_car.is_cons() {
-                let binding_car = entry_car.cons_car();
-                let binding_cdr = entry_car.cons_cdr();
-                f(binding_car, binding_cdr);
-            }
-
-            if is_list_keymap(&entry_cdr) {
-                walk(&entry_cdr, f, depth + 1);
-                break;
-            }
-            cursor = entry_cdr;
-        }
+        for_each_keymap_element(keymap, |element| match element {
+            KeymapElement::Binding { key, value } => f(key, value),
+            // Composed submaps and the parent share this keymap's prefix, so
+            // their bindings belong to this traversal (GNU `map_keymap`).
+            KeymapElement::Submap(submap) => walk(&submap, f, depth + 1),
+            // Resolving a symbol tail to its keymap needs an obarray, which this
+            // signature does not take; callers that have one resolve it instead.
+            KeymapElement::IndirectTail(_) | KeymapElement::Prompt(_) => {}
+        });
     }
 
     walk(keymap, &mut f, 0);
