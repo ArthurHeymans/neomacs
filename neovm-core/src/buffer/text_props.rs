@@ -529,7 +529,7 @@ impl IntervalRun {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct IntervalTree {
     root: Option<IntervalId>,
     nodes: Vec<IntervalNode>,
@@ -557,6 +557,30 @@ struct IntervalTree {
     cache_start: AtomicUsize,
     cache_end: AtomicUsize,
     cache_id: AtomicUsize,
+}
+
+impl Default for IntervalTree {
+    /// Hand-written rather than derived so the EMPTY-MEMO SENTINEL holds on
+    /// every construction path.
+    ///
+    /// `#[derive(Default)]` gave `cache_gen == 0`, which equals the starting
+    /// `version` -- so a brand-new tree reported its memo as valid while
+    /// `cache_id` still pointed at a node that did not exist. The containment
+    /// check masked that (`0 <= pos && pos < 0` is never true), but the
+    /// sequential finger's `pos == cache_end` arm IS satisfied at position 0,
+    /// and indexed an empty node vec. `Clone` already used `u64::MAX` here; the
+    /// derive was the odd one out.
+    fn default() -> Self {
+        Self {
+            root: None,
+            nodes: Vec::new(),
+            version: AtomicU64::new(0),
+            cache_gen: AtomicU64::new(u64::MAX),
+            cache_start: AtomicUsize::new(0),
+            cache_end: AtomicUsize::new(0),
+            cache_id: AtomicUsize::new(0),
+        }
+    }
 }
 
 impl Clone for IntervalTree {
@@ -1502,6 +1526,37 @@ impl IntervalTree {
             let end = CharPos0::new(self.cache_end.load(Ordering::Relaxed));
             if start <= pos && pos < end {
                 return Some((start, IntervalId(self.cache_id.load(Ordering::Relaxed))));
+            }
+
+            // Sequential-scan finger. The containment memo above cannot serve a
+            // forward property scan: `SyntaxPropRange` caches whole RUNS, so it
+            // only calls back when it has consumed one and wants the position
+            // one PAST it -- never a position inside the cached interval. That
+            // pattern lands here every time, which is why a font-lock scroll
+            // profiled as almost pure root-descent (find_id 8.29% of self time,
+            // its hot instructions all parent/child pointer chasing).
+            //
+            // Such a lookup is asking for the tree-order successor, reachable in
+            // O(1) amortized via `next_id` instead of an O(log n) descent.
+            // Intervals tile the text contiguously (the invariant the forward
+            // walker in `intervals_from` already relies on), so the successor
+            // begins exactly where the cached interval ended. Zero-length nodes
+            // contain no position and are stepped over.
+            if pos == end {
+                let mut id = IntervalId(self.cache_id.load(Ordering::Relaxed));
+                let mut start = end;
+                while let Some(next) = self.next_id(id) {
+                    let next_end = start.add_len(self.node_len(next));
+                    if pos < next_end {
+                        self.cache_start.store(start.get(), Ordering::Relaxed);
+                        self.cache_end.store(next_end.get(), Ordering::Relaxed);
+                        self.cache_id.store(next.0, Ordering::Relaxed);
+                        self.cache_gen.store(version, Ordering::Relaxed);
+                        return Some((start, next));
+                    }
+                    id = next;
+                    start = next_end;
+                }
             }
         }
         let mut id = self.root?;

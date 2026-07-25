@@ -1999,3 +1999,91 @@ fn find_id_memo_never_disagrees_with_fresh_descent() {
         }
     }
 }
+
+#[test]
+fn find_id_sequential_finger_never_disagrees_with_fresh_descent() {
+    // Differential fuzz for the SEQUENTIAL-SCAN FINGER in find_id (the
+    // `pos == cache_end` arm that steps to the tree-order successor instead of
+    // re-descending).
+    //
+    // The existing find_id_memo_never_disagrees_with_fresh_descent probes
+    // RANDOM positions, which is exactly the pattern the finger does not serve,
+    // so it leaves this path nearly untested. Here every probe walks FORWARD
+    // from the end of the run just returned -- what a font-lock property scan
+    // does, and the only pattern that reaches the finger.
+    //
+    // Mutations are interleaved so a finger surviving a structural change (a
+    // stale parent link or a missed version bump) shows up as a disagreement.
+    let face = Value::symbol("face");
+    let bold = Value::symbol("bold");
+    let italic = Value::symbol("italic");
+
+    let mut table = TextPropertyTable::new();
+    table.put_property_in_char_range(char_range(0, 400), face, bold);
+
+    // Deterministic LCG -- no rng dependency, reproducible failures.
+    let mut rng: u64 = 0x0fed_cba9_8765_4321;
+    let mut next = |bound: usize| -> usize {
+        rng = rng
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        ((rng >> 33) as usize) % bound.max(1)
+    };
+
+    // Fragment the text into many intervals so the successor walk has work to
+    // do and a root descent would be genuinely deeper.
+    let mut hi = 400usize;
+    for i in 0..60 {
+        let lo = (i * 6) % hi;
+        let up = (lo + 3).min(hi);
+        if up > lo {
+            let v = if i % 2 == 0 { bold } else { italic };
+            table.put_property_in_char_range(char_range(lo, up), face, v);
+        }
+    }
+
+    for round in 0..400 {
+        // Full sequential sweep: each probe lands exactly on the end of the
+        // previously located run, which is the finger's entry condition.
+        let mut pos = 0usize;
+        let mut steps = 0;
+        while pos < hi && steps < 4096 {
+            let got = table.intervals.find_id(char_pos(pos));
+            let want = table.intervals.find_id_uncached(char_pos(pos));
+            assert_eq!(
+                got, want,
+                "finger disagreed with fresh descent at pos={pos} (hi={hi}, round={round})"
+            );
+            let Some((start, id)) = got else { break };
+            // Advance to one past this run -- the successor lookup.
+            let len = table.intervals.node_len(id).get().max(1);
+            pos = start.get() + len;
+            steps += 1;
+        }
+
+        // Mutate, then sweep again; a finger that outlived the change is caught
+        // on the next round's very first probes.
+        let a = next(hi + 1);
+        let b = next(hi + 1);
+        let (lo, up) = if a <= b { (a, b) } else { (b, a) };
+        match next(5) {
+            0 if up > lo => {
+                let v = if next(2) == 0 { bold } else { italic };
+                table.put_property_in_char_range(char_range(lo, up), face, v);
+            }
+            1 if up > lo => {
+                table.remove_property_in_char_range(char_range(lo, up), face);
+            }
+            2 => {
+                let len = 1 + next(8);
+                table.adjust_for_insert_at_char_pos(char_pos(lo.min(hi)), char_len(len));
+                hi += len;
+            }
+            3 if up > lo => {
+                table.adjust_for_delete_char_range(char_range(lo, up));
+                hi -= up - lo;
+            }
+            _ => {}
+        }
+    }
+}
