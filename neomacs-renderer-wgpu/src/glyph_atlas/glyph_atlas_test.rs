@@ -187,13 +187,17 @@ fn renderer_keeps_missing_ascii_on_primary_font() {
     use neomacs_display_protocol::font::{
         FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId,
     };
-    use neomacs_layout_engine::font_backend::{FontBackend, FontconfigBackend};
+    use neomacs_layout_engine::font_metrics::FontMetricsService;
 
-    let Some(matched) = FontconfigBackend.match_primary_font("Symbols Nerd Font Mono", 400, false)
-    else {
+    let Some(resolved) = FontMetricsService::new().resolved_font_for_face(
+        "Symbols Nerd Font Mono",
+        400,
+        false,
+        10.0,
+    ) else {
         return;
     };
-    if !matched
+    if !resolved
         .family
         .eq_ignore_ascii_case("Symbols Nerd Font Mono")
     {
@@ -202,15 +206,17 @@ fn renderer_keeps_missing_ascii_on_primary_font() {
     let Some(mut atlas) = try_test_atlas() else {
         return;
     };
-    let identity = matched.identity;
+    let family = resolved.family;
+    let weight = resolved.weight;
+    let identity = resolved.identity;
     let id = ResolvedFontId(1);
     let font = ResolvedFont {
         id,
         identity: identity.clone(),
-        family: matched.family,
+        family,
         full_name: None,
         postscript_name: identity.postscript_name.clone(),
-        weight: matched.weight.unwrap_or(400),
+        weight,
         slant: FontSlantKind::Normal,
         width: 5,
         pixel_size: 10.0,
@@ -258,13 +264,15 @@ fn renderer_replays_named_instance_weight_on_the_exact_raw_face() {
     use neomacs_display_protocol::font::{
         FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId,
     };
-    use neomacs_layout_engine::font_backend::{FontBackend, FontconfigBackend};
+    use neomacs_layout_engine::font_metrics::FontMetricsService;
 
-    let Some(matched) = FontconfigBackend.match_primary_font("Noto Sans", 700, false) else {
+    let Some(resolved) =
+        FontMetricsService::new().resolved_font_for_face("Noto Sans", 700, false, 18.0)
+    else {
         tracing::info!("skipping: Noto Sans Bold is not installed");
         return;
     };
-    if matched.identity.file_path.is_none() {
+    if resolved.identity.file_path.is_none() {
         tracing::info!("skipping: Fontconfig match has no file");
         return;
     }
@@ -272,14 +280,16 @@ fn renderer_replays_named_instance_weight_on_the_exact_raw_face() {
         tracing::info!("skipping: no headless wgpu adapter");
         return;
     };
-    let identity = matched.identity;
+    let family = resolved.family;
+    let weight = resolved.weight;
+    let identity = resolved.identity;
     let font = ResolvedFont {
         id: ResolvedFontId(1),
         identity: identity.clone(),
-        family: matched.family,
+        family,
         full_name: None,
         postscript_name: identity.postscript_name.clone(),
-        weight: matched.weight.unwrap_or(700),
+        weight,
         slant: FontSlantKind::Normal,
         width: 5,
         pixel_size: 18.0,
