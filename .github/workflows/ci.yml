@@ -3,6 +3,8 @@ name: ci
 on:
   push: {}
   workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 0"
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -14,6 +16,7 @@ env:
 jobs:
   fmt:
     name: cargo fmt (${{ matrix.label }})
+    if: github.event_name != 'schedule'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     env:
@@ -45,6 +48,7 @@ jobs:
 
   cargo-deny:
     name: cargo deny
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
@@ -60,6 +64,7 @@ jobs:
 
   check:
     name: cargo check workspace (${{ matrix.label }})
+    if: github.event_name != 'schedule'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     strategy:
@@ -232,6 +237,7 @@ jobs:
 
   neovm-core-tests:
     name: neovm-core tests shard ${{ matrix.partition }}/20 (linux x86_64)
+    if: github.event_name != 'schedule'
     needs: [neomacs-test-runtime, neomacs-workspace-test-archive]
     runs-on: ubuntu-22.04
     timeout-minutes: 60
@@ -327,6 +333,7 @@ jobs:
 
   neovm-oracle-tests:
     name: neovm-oracle-tests shard ${{ matrix.partition }}/20 (linux x86_64)
+    if: github.event_name != 'schedule'
     needs: [neomacs-test-runtime, neomacs-workspace-test-archive]
     runs-on: ubuntu-22.04
     timeout-minutes: 120
@@ -389,8 +396,76 @@ jobs:
             --partition slice:${{ matrix.partition }}/20 \
             --no-fail-fast
 
+  neomacs-melpa-tests:
+    name: MELPA offline compatibility and GNU parity (linux x86_64)
+    needs: [neomacs-test-runtime, neomacs-workspace-test-archive]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+      TMPDIR: ${{ github.workspace }}/tmp
+      NEOMACS_BIN: ${{ github.workspace }}/target/release/neomacs
+      NEOMACS_RUNTIME_ROOT: ${{ github.workspace }}
+      NEOMACS_MELPA_ORACLE_EMACS: /usr/bin/emacs
+    steps:
+      - *checkout
+      - *prepare_workspace_tmp
+      - *install_linux_deps
+      - name: Install GNU Emacs oracle
+        run: sudo apt-get install -y --no-install-recommends emacs-nox
+      - *install_rust
+      - *install_nextest
+      - *download_test_runtime
+      - *unpack_test_runtime
+      - *download_workspace_test_archive
+
+      - name: Run deterministic package ecosystem compatibility tests
+        run: |
+          cargo nextest run \
+            --archive-file neomacs-workspace-tests.tar.zst \
+            --extract-to "$TMPDIR/nextest" \
+            -E 'package(neomacs-melpa-tests)' \
+            --workspace-remap "$GITHUB_WORKSPACE" \
+            --success-output immediate \
+            --no-fail-fast
+
+  neomacs-melpa-live-canary:
+    name: MELPA live ecosystem canary (linux x86_64)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: [neomacs-test-runtime, neomacs-workspace-test-archive]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+      TMPDIR: ${{ github.workspace }}/tmp
+      NEOMACS_BIN: ${{ github.workspace }}/target/release/neomacs
+      NEOMACS_RUNTIME_ROOT: ${{ github.workspace }}
+    steps:
+      - *checkout
+      - *prepare_workspace_tmp
+      - *install_linux_deps
+      - *install_rust
+      - *install_nextest
+      - *download_test_runtime
+      - *unpack_test_runtime
+      - *download_workspace_test_archive
+
+      - name: Run current MELPA ecosystem canary
+        run: |
+          cargo nextest run \
+            --archive-file neomacs-workspace-tests.tar.zst \
+            --extract-to "$TMPDIR/nextest" \
+            --run-ignored only \
+            -E 'package(neomacs-melpa-tests) and test(=live_melpa_ecosystem_installs_and_survives_restart)' \
+            --workspace-remap "$GITHUB_WORKSPACE" \
+            --success-output immediate \
+            --no-fail-fast
+
   doom-install-compatibility:
     name: doom install compatibility (linux x86_64)
+    if: github.event_name != 'schedule'
     needs: neomacs-test-runtime
     runs-on: ubuntu-22.04
     timeout-minutes: 60

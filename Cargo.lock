@@ -3497,7 +3497,9 @@ dependencies = [
 name = "neomacs-melpa-tests"
 version = "0.0.14"
 dependencies = [
+ "sha2",
  "tempfile",
+ "wait-timeout",
 ]
 
 [[package]]

@@ -101,6 +101,52 @@ fn ci_runs_the_doom_install_contract_against_the_shared_runtime() {
 }
 
 #[test]
+fn ci_runs_offline_melpa_parity_from_shared_artifacts() {
+    let workflow = include_str!("../../.github/workflows/ci.yml");
+    let job = workflow
+        .split_once("\n  neomacs-melpa-tests:\n")
+        .map(|(_, job)| job)
+        .expect("ci must define a deterministic MELPA compatibility job");
+
+    assert!(job.contains("needs: [neomacs-test-runtime, neomacs-workspace-test-archive]"));
+    assert!(job.contains("- *download_test_runtime"));
+    assert!(job.contains("- *unpack_test_runtime"));
+    assert!(job.contains("- *download_workspace_test_archive"));
+    assert!(job.contains("NEOMACS_BIN: ${{ github.workspace }}/target/release/neomacs"));
+    assert!(job.contains("NEOMACS_MELPA_ORACLE_EMACS: /usr/bin/emacs"));
+    assert!(job.contains("sudo apt-get install -y --no-install-recommends emacs-nox"));
+    assert!(job.contains("-E 'package(neomacs-melpa-tests)'"));
+    assert!(job.contains("--success-output immediate"));
+}
+
+#[test]
+fn ci_runs_live_melpa_only_as_an_explicit_canary() {
+    let workflow = include_str!("../../.github/workflows/ci.yml");
+    let job = workflow
+        .split_once("\n  neomacs-melpa-live-canary:\n")
+        .map(|(_, job)| job)
+        .expect("ci must define a live MELPA canary job");
+
+    assert!(workflow.contains("schedule:"));
+    assert!(job.contains("needs: [neomacs-test-runtime, neomacs-workspace-test-archive]"));
+    assert!(job.contains("github.event_name == 'schedule'"));
+    assert!(job.contains("github.event_name == 'workflow_dispatch'"));
+    assert!(job.contains("- *download_test_runtime"));
+    assert!(job.contains("- *unpack_test_runtime"));
+    assert!(job.contains("- *download_workspace_test_archive"));
+    assert!(job.contains("--run-ignored only"));
+    assert!(job.contains("test(=live_melpa_ecosystem_installs_and_survives_restart)"));
+    assert!(job.contains("--success-output immediate"));
+}
+
+#[test]
+fn nextest_serializes_melpa_package_processes() {
+    let nextest = include_str!("../../.config/nextest.toml");
+    assert!(nextest.contains("filter = 'package(neomacs-melpa-tests)'"));
+    assert!(nextest.contains("threads-required = \"num-test-threads\""));
+}
+
+#[test]
 fn windows_installer_removes_the_legacy_path_rewrite_implementation() {
     let installer = include_str!("../../assets/windows-installer.nsi");
 

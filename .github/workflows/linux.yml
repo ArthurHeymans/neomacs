@@ -15,9 +15,14 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
+      TMPDIR: ${{ github.workspace }}/tmp
+      NEOMACS_MELPA_ORACLE_EMACS: /usr/bin/emacs
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Prepare workspace temp directory
+        run: mkdir -p "$TMPDIR"
 
       - name: Install system dependencies (apt)
         run: |
@@ -53,6 +58,7 @@ jobs:
             libxml2-dev \
             gnutls-bin \
             libgnutls28-dev \
+            emacs-nox \
             zlib1g-dev
 
       - name: Install Rust toolchain (from rust-toolchain.toml)

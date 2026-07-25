@@ -7,7 +7,9 @@ license.workspace = true
 publish = false
 
 [dependencies]
-# Packages are installed through neomacs's own `package-install` over the
-# network (not fetched from Rust), so no HTTP/tar deps are needed — only an
-# isolated temp `$HOME` per test.
-tempfile = "3"
+# Both frozen and live packages are installed through the editor's own
+# `package-install`; Rust only orchestrates isolated processes and verifies
+# pinned fixture checksums.
+tempfile.workspace = true
+wait-timeout.workspace = true
+sha2.workspace = true
