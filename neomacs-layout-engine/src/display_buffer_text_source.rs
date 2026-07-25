@@ -228,26 +228,20 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         // left those rendered as raw text. The run is already bounded at every
         // overlay boundary by `compute_stop_pos`, so the replacement spans the
         // overlay's extent.
-        let overlays = self.buffer.layout_overlays();
-        let overlay_display = overlays
-            .overlays_at_emacs_byte_pos(bytepos)
-            .iter()
-            .filter(|oid| {
-                // A windowed overlay's `display` replacement applies only in its
-                // own window (shared `window`-property rule).
-                crate::neovm_bridge::overlay_applies_to_window(self.buffer, **oid, self.window_id)
-            })
-            .filter_map(|oid| {
-                let value = overlays.overlay_get_named(*oid, Value::symbol("display"))?;
-                let priority = overlays
-                    .overlay_get_named(*oid, Value::symbol("priority"))
-                    .and_then(|value| value.as_int())
-                    .unwrap_or(0);
-                Some((priority, value))
-            })
-            .max_by_key(|(priority, _)| *priority)
-            .map(|(_, value)| value);
-        overlay_display.or_else(|| self.display_text_prop_at(bytepos))
+        // The single-winner policy, from the shared core primitive: the
+        // highest-precedence window-visible overlay carrying `display` wins and
+        // shadows the text property. Ordering is GNU `compare_overlays` (priority,
+        // containment, secondary priority, stable tiebreak); the previous
+        // `max_by_key` on a bare `priority` integer read a `(PRIMARY . SECONDARY)`
+        // priority as 0, ignored containment, and broke ties arbitrarily.
+        self.buffer
+            .layout_overlays()
+            .highest_priority_overlay_property_value_at_emacs_byte_pos(
+                bytepos,
+                Value::symbol("display"),
+                self.window_id,
+            )
+            .or_else(|| self.display_text_prop_at(bytepos))
     }
 
     /// The buffer `display` TEXT property at `bytepos`, resolving through

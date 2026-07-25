@@ -1886,44 +1886,44 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
 const INVISIBLE_SCAN_BYTE_LIMIT: usize = 2048;
 
 /// Whether an overlay's contributions (face, before/after strings) apply in the
-/// window currently being laid out. GNU restricts an overlay carrying a `window`
-/// property to that window only — e.g. hl-line with a non-sticky flag sets it to
-/// the selected window, so the same buffer in two windows highlights only the
-/// selected one. A missing or non-window (`nil`) `window` property is
-/// unrestricted, and `current_window_id == None` (frame chrome / TTY) applies
-/// every overlay, matching GNU's "no window ⇒ unrestricted".
+/// window currently being laid out — GNU `overlay_matches_window`: an overlay
+/// carrying a `window` property contributes in that window only (e.g. hl-line
+/// with a non-sticky flag sets it to the selected window, so the same buffer in
+/// two windows highlights only the selected one), a missing or non-window `window`
+/// property is unrestricted, and `current_window_id == None` (frame chrome / TTY)
+/// applies every overlay.
 ///
-/// This is the single source of truth for the check; every overlay-scanning path
-/// (buffer glyph faces, the row/extend fill, and overlay strings) calls it so the
-/// window rule can't drift between them again.
+/// Delegates to `OverlayList::overlay_applies_to_window`, which the core property
+/// resolvers apply themselves. The rule lives THERE, next to the precedence
+/// comparator, so a resolver and a hand-written overlay scan cannot disagree about
+/// which overlays speak in this window — which is how hl-line's per-window
+/// highlight leaked into every window before.
 pub(crate) fn overlay_applies_to_window<B: LayoutBufferView + ?Sized>(
     buffer: &B,
     overlay_id: Value,
     current_window_id: Option<u64>,
 ) -> bool {
-    let Some(window_prop) = buffer
+    buffer
         .layout_overlays()
-        .overlay_get_named(overlay_id, Value::symbol("window"))
-    else {
-        return true;
-    };
-    let Some(target_window_id) = window_prop.as_window_id() else {
-        return true;
-    };
-    current_window_id.is_none_or(|current| current == target_window_id)
+        .overlay_applies_to_window(overlay_id, current_window_id)
 }
 
 /// The overlay-`face` portion of GNU `face_at_buffer_position`: overlay `face`
-/// values at `bytepos`, ascending priority (merge in order — higher priority
-/// wins by being applied last), with windowed overlays filtered to `window_id`
-/// via [`overlay_applies_to_window`].
+/// values at `bytepos` in ascending `sort_overlays` precedence (merge in order —
+/// higher precedence wins by being applied last), windowed overlays filtered to
+/// `window_id`.
 ///
-/// This is the single implementation of that scan. Every face-resolution path
+/// Both the precedence order and the `window` filter come from
+/// `OverlayList::overlay_property_values_ascending_at_emacs_byte_pos`, the same
+/// core primitive family the single-winner resolvers (`display`, `invisible`,
+/// `mouse-face`) use, so the two policies cannot drift apart in ordering or in
+/// the `window` rule — which is exactly how hl-line's per-window highlight once
+/// leaked into every window.
+///
+/// This is the single implementation of the face scan. Every face-resolution path
 /// — the per-glyph buffer face (`BufferTextSourceCursor::face_at`) and the
 /// resolved-face/row-fill path (`FaceResolver::face_at_pos`) — calls it, so the
-/// priority ordering, `font-lock-face` fallback boundary, and the `window` rule
-/// can't drift apart the way they did before (which is exactly how hl-line's
-/// per-window highlight leaked into every window).
+/// `font-lock-face` fallback boundary stays consistent too.
 pub(crate) struct OverlayFacesAtPosition {
     /// Overlay `face` values to merge, in ascending priority.
     pub(crate) faces: Vec<Value>,
@@ -1939,11 +1939,11 @@ pub(crate) fn overlay_faces_at<B: LayoutBufferView + ?Sized>(
     current_window_id: Option<u64>,
 ) -> OverlayFacesAtPosition {
     let overlays = buffer.layout_overlays();
-    let overlay_ids = overlays.overlays_at_emacs_byte_pos(bytepos);
     let mut next_boundary: Option<EmacsBytePos> = None;
-    let mut faces: Vec<(i64, Value)> = Vec::new();
-    for oid in &overlay_ids {
-        let oid = *oid;
+    // GNU `face_at_buffer_position` narrows its `endptr` at EVERY overlay end at
+    // this position, not only at those carrying `face`, so a resolved-face cache
+    // re-resolves at every overlay boundary.
+    for oid in overlays.overlays_at_emacs_byte_pos(bytepos) {
         if let Some(end) = overlays.overlay_end_emacs_byte_pos(oid)
             && end.get() > bytepos.get()
         {
@@ -1952,21 +1952,20 @@ pub(crate) fn overlay_faces_at<B: LayoutBufferView + ?Sized>(
                 _ => end,
             });
         }
-        // A windowed overlay contributes its face only in its own window.
-        if !overlay_applies_to_window(buffer, oid, current_window_id) {
-            continue;
-        }
-        if let Some(face) = overlays.overlay_get_named(oid, Value::symbol("face")) {
-            let priority = overlays
-                .overlay_get_named(oid, Value::symbol("priority"))
-                .and_then(|value| value.as_int())
-                .unwrap_or(0);
-            faces.push((priority, face));
-        }
     }
-    faces.sort_by_key(|(priority, _)| *priority);
+    // `face` is GNU's one MERGE policy: overlay faces stack over the
+    // text-property face in ascending `sort_overlays` precedence. Ordering and the
+    // `window`-property filter come from the shared core primitive, so this path
+    // cannot drift from the single-winner resolvers -- it previously ordered by a
+    // bare `priority` integer, which reads a `(PRIMARY . SECONDARY)` priority as 0
+    // and drops GNU's containment rule.
+    let faces = overlays.overlay_property_values_ascending_at_emacs_byte_pos(
+        bytepos,
+        Value::symbol("face"),
+        current_window_id,
+    );
     OverlayFacesAtPosition {
-        faces: faces.into_iter().map(|(_, face)| face).collect(),
+        faces,
         next_boundary,
     }
 }
@@ -2185,42 +2184,35 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     /// property and the highest-priority overlay (GNU `invisible_p`).
     fn invisible_status_at(&self, charpos: i64) -> InvisibleStatus {
         let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
-        let text_invis = self
-            .buffer
-            .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("invisible"));
         let spec = self
             .buffer
             .layout_buffer_local_value("buffer-invisibility-spec")
             .unwrap_or(Value::T);
-        let mut status = InvisibleStatus::VISIBLE;
-        if let Some(value) = text_invis {
-            status = invisible_prop_status(Some(value), spec);
-        }
-        if !status.hidden {
-            let mut overlay_ids = self
-                .buffer
-                .layout_overlays()
-                .overlays_at_emacs_byte_pos(bytepos);
-            self.buffer
-                .layout_overlays()
-                .sort_overlay_ids_by_priority_desc(&mut overlay_ids);
-            for oid in overlay_ids {
-                // A windowed overlay's `invisible` only hides text in its window
-                // (same GNU rule as its face/strings — shared helper).
-                if !self.overlay_applies_to_window(oid) {
-                    continue;
-                }
-                let overlay_invis = self
-                    .buffer
-                    .layout_overlays()
-                    .overlay_get_named(oid, Value::symbol("invisible"));
-                status = invisible_prop_status(overlay_invis, spec);
-                if status.hidden {
-                    break;
-                }
-            }
-        }
-        status
+        // GNU `handle_invisible_prop` resolves `invisible` through
+        // `get_char_property_and_overlay (pos, Qinvisible, it->window)`: the
+        // highest-precedence overlay carrying `invisible` wins OUTRIGHT and
+        // shadows the text property, and its value is then judged against
+        // `buffer-invisibility-spec`.
+        //
+        // Hand-rolling that policy produced two rendering bugs, both of which hid
+        // text GNU shows: scanning on PAST the winner until some overlay happened
+        // to say "hidden" (so a low-priority `invisible` overrode a
+        // higher-priority overlay whose value is not in the spec), and consulting
+        // the text property FIRST (so a text property hid text that a covering
+        // overlay declared visible).
+        let value = self
+            .buffer
+            .layout_overlays()
+            .highest_priority_overlay_property_value_at_emacs_byte_pos(
+                bytepos,
+                Value::symbol("invisible"),
+                self.window_id,
+            )
+            .or_else(|| {
+                self.buffer
+                    .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("invisible"))
+            });
+        invisible_prop_status(value, spec)
     }
 
     /// Next position where the `invisible` property changes, combining the

@@ -481,6 +481,19 @@ impl OverlayList {
         overlay_property_named(overlay, prop_name)
     }
 
+    /// Whether `overlay`'s contributions apply in the window identified by
+    /// `window_id` -- GNU `overlay_matches_window` (src/window.h):
+    /// `! WINDOWP (window) || XWINDOW (window) == w`.
+    ///
+    /// Exposed because the rule must be the SAME one the property resolvers above
+    /// apply: a path that collects overlays itself (overlay strings, which order
+    /// by GNU `compare_overlay_entries` rather than by property precedence) still
+    /// has to filter windowed overlays identically, and a second copy of the rule
+    /// is how hl-line's per-window highlight leaked into every window before.
+    pub fn overlay_applies_to_window(&self, overlay: Value, window_id: Option<u64>) -> bool {
+        overlay_applies_to_window(overlay, window_id)
+    }
+
     pub fn overlay_plist(&self, overlay: Value) -> Option<Value> {
         if self.overlays.contains(&overlay) || overlay_live_buffer(overlay).is_none() {
             return Some(overlay.as_overlay_data().unwrap().plist);
@@ -567,8 +580,75 @@ impl OverlayList {
         self.best_overlay_for(property, |overlay| overlay_covers_pos(overlay, pos))
     }
 
-    /// Resolve GNU overlay precedence once and return the maximal contiguous
-    /// extent for which the winning non-nil property overlay is unchanged.
+    /// GNU `get_char_property_and_overlay` (src/textprop.c): PROPERTY's value from
+    /// the highest-precedence overlay at POS that carries it, with
+    /// window-specific overlays filtered against `window_id`.
+    ///
+    /// `None` means *no* overlay carries the property, and only then may the
+    /// caller fall back to the **text** property. An overlay that carries it
+    /// SHADOWS the text property outright: the value never merges with the
+    /// text-property value, and no lower-precedence overlay gets a say -- not even
+    /// when the winner's value happens to mean "inactive" (an `invisible` value
+    /// absent from `buffer-invisibility-spec`, say). That is the policy for
+    /// `display`, `invisible`, `fontified` and `mouse-face`. `face` is the sole
+    /// exception and uses
+    /// [`Self::overlay_property_values_ascending_at_emacs_byte_pos`].
+    ///
+    /// This is the value-only form of
+    /// [`Self::highest_priority_overlay_property_extent_at_emacs_byte_pos`], for
+    /// callers whose runs are already bounded at every overlay boundary and so do
+    /// not need the extent scan.
+    pub fn highest_priority_overlay_property_value_at_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        property: Value,
+        window_id: Option<u64>,
+    ) -> Option<Value> {
+        let mut active = ActivePropertyOverlays::new(property, window_id);
+        for overlay in self.overlays_at_emacs_byte_pos(pos) {
+            active.inspect_and_insert(overlay);
+        }
+        active
+            .winner()
+            .and_then(|overlay| overlay_property_named(overlay, property))
+    }
+
+    /// The overlay half of GNU `face_at_buffer_position` (src/xfaces.c): every
+    /// window-visible overlay's PROPERTY value at POS in ASCENDING precedence
+    /// (`sort_overlays` order), for the one policy where overlay values MERGE
+    /// instead of shadowing -- `face`. Higher precedence merges last and so wins.
+    ///
+    /// Ordering is GNU `compare_overlays`: priority, then containment weighed
+    /// against the secondary priority of a `(PRIMARY . SECONDARY)` `priority`
+    /// value, then a stable tiebreak. A bare `priority`-integer comparison is not
+    /// equivalent -- it silently reads a cons `priority` as 0 and drops the
+    /// containment rule.
+    pub fn overlay_property_values_ascending_at_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        property: Value,
+        window_id: Option<u64>,
+    ) -> Vec<Value> {
+        let mut carriers: Vec<Value> = self
+            .overlays_at_emacs_byte_pos(pos)
+            .into_iter()
+            .filter(|overlay| {
+                overlay_applies_to_window(*overlay, window_id)
+                    && overlay_property_named(*overlay, property)
+                        .is_some_and(|value| !value.is_nil())
+            })
+            .collect();
+        carriers.sort_by(|left, right| compare_overlay_precedence(*left, *right));
+        carriers
+            .into_iter()
+            .filter_map(|overlay| overlay_property_named(overlay, property))
+            .collect()
+    }
+
+    /// The same single-winner policy as
+    /// [`Self::highest_priority_overlay_property_value_at_emacs_byte_pos`], plus
+    /// the maximal contiguous extent over which that winner is unchanged -- GNU's
+    /// `endptr` narrowing, for callers that cache a resolved run.
     ///
     /// The interval tree initializes the overlays active at `pos`.  From there
     /// the start/end indexes are swept outward, updating a precedence heap only

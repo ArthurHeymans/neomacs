@@ -330,6 +330,144 @@ fn priority_sort_uses_gnu_precedence_rules() {
 }
 
 #[test]
+fn highest_priority_property_value_wins_outright_over_lower_precedence_carriers() {
+    // GNU `get_char_property_and_overlay`: the highest-precedence overlay carrying
+    // the property wins OUTRIGHT. No lower-precedence overlay gets a say, even
+    // when the winner's value means "inactive" downstream -- e.g. an `invisible`
+    // value absent from `buffer-invisibility-spec` keeps the text VISIBLE, and a
+    // lower-priority `invisible` must not hide it anyway. Scanning on past the
+    // winner is what hid text GNU shows.
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let property = Value::symbol("invisible");
+    let high = alloc_overlay(2, 10);
+    let low = alloc_overlay(2, 10);
+    list.insert_overlay(high);
+    list.insert_overlay(low);
+    list.overlay_put(high, property, Value::symbol("not-in-spec"))
+        .unwrap();
+    list.overlay_put(high, Value::symbol("priority"), Value::fixnum(10))
+        .unwrap();
+    list.overlay_put(low, property, Value::T).unwrap();
+    list.overlay_put(low, Value::symbol("priority"), Value::fixnum(1))
+        .unwrap();
+
+    let winner = list.highest_priority_overlay_property_value_at_emacs_byte_pos(
+        emacs_byte_pos(4),
+        property,
+        None,
+    );
+    assert_eq!(winner, Some(Value::symbol("not-in-spec")));
+}
+
+#[test]
+fn highest_priority_property_value_is_none_when_no_overlay_carries_it() {
+    // `None` is the caller's signal to fall back to the TEXT property. An overlay
+    // that does carry the property shadows the text property instead, so the
+    // fallback must be keyed on this and nothing else -- consulting the text
+    // property first is what hid text a covering overlay declared visible.
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let property = Value::symbol("invisible");
+    let unrelated = alloc_overlay(2, 10);
+    list.insert_overlay(unrelated);
+    list.overlay_put(unrelated, Value::symbol("face"), Value::symbol("bold"))
+        .unwrap();
+    // An explicit nil value does not count as carrying the property (GNU skips
+    // `NILP (tem)` candidates).
+    let nil_valued = alloc_overlay(2, 10);
+    list.insert_overlay(nil_valued);
+    list.overlay_put(nil_valued, property, Value::NIL).unwrap();
+
+    assert_eq!(
+        list.highest_priority_overlay_property_value_at_emacs_byte_pos(
+            emacs_byte_pos(4),
+            property,
+            None
+        ),
+        None
+    );
+}
+
+#[test]
+fn ascending_property_values_order_by_gnu_precedence_including_cons_priority() {
+    // The merge policy (`face`) needs GNU `sort_overlays` order, not a bare
+    // `priority` integer compare -- which reads a `(PRIMARY . SECONDARY)` priority
+    // as 0 and drops the containment rule.
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let property = Value::symbol("face");
+    let low = alloc_overlay(2, 7);
+    let high = alloc_overlay(4, 7);
+    list.insert_overlay(low);
+    list.insert_overlay(high);
+    list.overlay_put(low, property, Value::symbol("bold"))
+        .unwrap();
+    list.overlay_put(low, Value::symbol("priority"), Value::fixnum(1))
+        .unwrap();
+    list.overlay_put(high, property, Value::symbol("italic"))
+        .unwrap();
+    list.overlay_put(
+        high,
+        Value::symbol("priority"),
+        Value::cons(Value::fixnum(1), Value::fixnum(2)),
+    )
+    .unwrap();
+
+    // Ascending precedence: the winner merges LAST. Same ordering as
+    // `sort_overlay_ids_by_priority_desc`, reversed.
+    assert_eq!(
+        list.overlay_property_values_ascending_at_emacs_byte_pos(emacs_byte_pos(4), property, None),
+        vec![Value::symbol("bold"), Value::symbol("italic")]
+    );
+}
+
+#[test]
+fn property_resolvers_filter_window_specific_overlays() {
+    // Both policies honor the overlay `window` property (GNU
+    // `overlay_matches_window`), so a per-window highlight cannot leak into
+    // another window through either path.
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let property = Value::symbol("face");
+    let windowed = alloc_overlay(2, 10);
+    list.insert_overlay(windowed);
+    list.overlay_put(windowed, property, Value::symbol("hl-line"))
+        .unwrap();
+    list.overlay_put(windowed, Value::symbol("window"), Value::make_window(7))
+        .unwrap();
+
+    for window_id in [None, Some(7)] {
+        assert_eq!(
+            list.overlay_property_values_ascending_at_emacs_byte_pos(
+                emacs_byte_pos(4),
+                property,
+                window_id
+            ),
+            vec![Value::symbol("hl-line")],
+            "window_id={window_id:?} should see its own overlay"
+        );
+    }
+    assert!(
+        list.overlay_property_values_ascending_at_emacs_byte_pos(
+            emacs_byte_pos(4),
+            property,
+            Some(9)
+        )
+        .is_empty(),
+        "another window must not see a window-specific overlay"
+    );
+    assert_eq!(
+        list.highest_priority_overlay_property_value_at_emacs_byte_pos(
+            emacs_byte_pos(4),
+            property,
+            Some(9)
+        ),
+        None
+    );
+}
+
+#[test]
 fn property_extent_uses_gnu_winner_across_irrelevant_boundaries() {
     crate::test_utils::init_test_tracing();
     let mut list = OverlayList::new();
