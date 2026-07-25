@@ -1116,14 +1116,23 @@ pub(crate) fn builtin_display_supports_face_attributes_p(
     let requested_face = default_face.merge(&requested_attributes);
     // Stipple is a GUI-only background fill (GNU realizes it to a pixmap). On a
     // graphical frame report it supported so `indent-bars` selects the stipple
-    // path instead of falling back to a character bar; a TTY (no display host)
-    // never supports it.
+    // path instead of falling back to a character bar; a terminal frame never
+    // supports it.
     if requested_attributes.stipple.is_some() {
         return Ok(Value::bool_val(eval.display_host.is_some()));
     }
     let Some(host) = eval.display_host.as_mut() else {
-        // A terminal frame: GNU answers from the terminal's own capabilities
-        // (`tty_supports_face_attributes_p`, xfaces.c), NOT from font selection.
+        // A terminal frame: GNU dispatches on the frame type
+        // (`FRAME_WINDOW_P (f) ? gui_supports_face_attributes_p : ...`) and
+        // answers from the terminal's own capabilities
+        // (`tty_supports_face_attributes_p`, xfaces.c), never from font
+        // selection.
+        //
+        // NOTE: keyed off the absence of a display host rather than the frame's
+        // window system, because a frame built without one still reaches the GUI
+        // path in tests. Whether the live `-nw` frontend attaches a host -- in
+        // which case this branch is not reached there -- is unverified; the unit
+        // coverage below pins the semantics either way.
         return Ok(Value::bool_val(tty_supports_face_attributes_p(
             &default_face,
             &requested_attributes,
