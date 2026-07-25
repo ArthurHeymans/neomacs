@@ -243,6 +243,10 @@ pub struct ResolvedFont {
     pub pixel_size: f32,
     pub ascent_px: f32,
     pub descent_px: f32,
+    /// GNU `font->space_width`: also the advance used when an ASCII glyph is
+    /// unavailable in this primary font.
+    #[serde(default)]
+    pub space_advance_px: f32,
     pub source: FontResolutionSource,
 }
 

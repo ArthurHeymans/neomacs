@@ -188,6 +188,11 @@ enum GlyphRenderMode {
     Subpixel,
 }
 
+enum SingleCharGlyph {
+    Resolved(ResolvedGlyph),
+    MissingPrimaryAscii { advance_width: f32 },
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct CachedGlyphKey {
     glyph: GlyphIdentity,
@@ -227,6 +232,46 @@ struct CachedAtlasGlyph {
     entry: AnyAtlasEntry,
     advance_width: f32,
     last_accessed: u64,
+}
+
+/// Rasterize GNU's `font_not_found_p` representation: a one-pixel empty
+/// rectangle occupying the missing glyph's full advance and line height.
+fn rasterize_missing_glyph_box(
+    advance_width: f32,
+    line_height: f32,
+    ascent: f32,
+    scale_factor: f32,
+) -> RasterizeResult {
+    let scale = if scale_factor.is_finite() && scale_factor > 0.0 {
+        scale_factor
+    } else {
+        1.0
+    };
+    let advance_width = if advance_width.is_finite() && advance_width > 0.0 {
+        advance_width
+    } else {
+        1.0
+    };
+    let width = (advance_width * scale).round().max(1.0) as u32;
+    let height = (line_height * scale).round().max(1.0) as u32;
+    let mut pixel_data = vec![0; (width * height) as usize];
+    for y in 0..height {
+        for x in 0..width {
+            if x == 0 || x + 1 == width || y == 0 || y + 1 == height {
+                pixel_data[(y * width + x) as usize] = 255;
+            }
+        }
+    }
+    RasterizeResult {
+        width,
+        height,
+        pixel_data,
+        bearing_x: 0.0,
+        bearing_y: ascent.max(0.0) * scale,
+        is_color: false,
+        is_subpixel: false,
+        advance_width: advance_width * scale,
+    }
 }
 
 /// One rasterized sub-glyph awaiting compositing:
@@ -843,25 +888,33 @@ impl WgpuGlyphAtlas {
     /// Correctness: the font is chosen from the SAME sources the shaping path
     /// uses (`face_to_attrs_for_text`) — the layout's per-char resolved font
     /// (`frame_char_fonts`, populated for CJK/emoji/symbol fallback) first,
-    /// then the face's primary resolved font — so the concrete font matches. A
-    /// cmap MISS (`glyph_id == 0`, i.e. the resolved font does not cover the
-    /// char) returns `None` so the caller falls through to full shaping, which
-    /// runs the real fontconfig fallback. Isolated single codepoints in the
-    /// resolved font take no GSUB context substitution, so the cmap glyph id
-    /// equals the shaped one. Composed clusters never reach here (they route
-    /// through `frame_shaped_clusters`/`rasterize_resolved_cluster` already).
+    /// then the face's primary resolved font — so the concrete font matches.
+    /// For non-ASCII, a cmap miss returns `None` so emergency shaping can find
+    /// a covering fallback. ASCII is different: GNU `face_for_char` keeps it
+    /// on the realized primary face without a coverage lookup, and xdisp draws
+    /// an empty rectangle when that face lacks the glyph. Preserve that policy
+    /// as [`SingleCharGlyph::MissingPrimaryAscii`] instead of silently changing
+    /// fonts. Isolated single codepoints in the resolved font take no GSUB
+    /// context substitution, so the cmap glyph id equals the shaped one.
+    /// Composed clusters never reach here (they route through
+    /// `frame_shaped_clusters`/`rasterize_resolved_cluster` already).
     fn try_fast_single_char_glyph(
         &mut self,
         c: char,
         face: Option<&Face>,
-    ) -> Option<ResolvedGlyph> {
+    ) -> Option<SingleCharGlyph> {
         let face = face?;
-        let resolved_font_id = self
-            .frame_char_fonts
-            .get(&face.id)
-            .and_then(|by_char| by_char.get(&c).copied())
-            .or(face.default_resolved_font_id)?;
-        let weight = self.frame_fonts.get(&resolved_font_id)?.weight;
+        let resolved_font_id = if c.is_ascii() {
+            face.default_resolved_font_id?
+        } else {
+            self.frame_char_fonts
+                .get(&face.id)
+                .and_then(|by_char| by_char.get(&c).copied())
+                .or(face.default_resolved_font_id)?
+        };
+        let resolved_font = self.frame_fonts.get(&resolved_font_id)?;
+        let weight = resolved_font.weight;
+        let published_space_advance = resolved_font.space_advance_px;
         let font_id = self.local_fontdb_id_for(resolved_font_id)?;
         // Use the exact font instance `render_cache_key_image` will rasterize
         // (same id + weight), so the glyph id is guaranteed to belong to it.
@@ -869,8 +922,16 @@ impl WgpuGlyphAtlas {
         let swash = font.as_swash();
         let glyph_id = swash.charmap().map(c);
         if glyph_id == 0 {
-            // .notdef: the resolved font does not cover this char — defer to
-            // shaping so its fontconfig fallback picks a covering font.
+            if c.is_ascii() {
+                let font_size = effective_font_size(Some(face.font_size), self.default_font_size);
+                let advance_width =
+                    if published_space_advance.is_finite() && published_space_advance > 0.0 {
+                        published_space_advance
+                    } else {
+                        swash.glyph_metrics(&[]).scale(font_size).advance_width(0)
+                    };
+                return Some(SingleCharGlyph::MissingPrimaryAscii { advance_width });
+            }
             return None;
         }
         // Logical-pixel advance (pre scale_factor, matching the ResolvedGlyph
@@ -882,7 +943,7 @@ impl WgpuGlyphAtlas {
             .glyph_metrics(&[])
             .scale(font_size)
             .advance_width(glyph_id);
-        Some(ResolvedGlyph {
+        Some(SingleCharGlyph::Resolved(ResolvedGlyph {
             resolved_font_id,
             glyph_id,
             x: 0.0,
@@ -890,7 +951,20 @@ impl WgpuGlyphAtlas {
             x_advance,
             cluster_start: 0,
             cluster_end: c.len_utf8() as u32,
-        })
+        }))
+    }
+
+    fn rasterize_missing_primary_ascii(&self, advance_width: f32, face: &Face) -> RasterizeResult {
+        let line_height = match face.font_ascent + face.font_descent {
+            height if height > 0 => height as f32,
+            _ => self.default_line_height,
+        };
+        let ascent = if face.font_ascent > 0 {
+            face.font_ascent as f32
+        } else {
+            line_height * 0.8
+        };
+        rasterize_missing_glyph_box(advance_width, line_height, ascent, self.scale_factor)
     }
 
     /// Rasterize a single glyph and return pixel data (convenience wrapper)
@@ -902,17 +976,30 @@ impl WgpuGlyphAtlas {
         y_bin: SubpixelBin,
         enable_subpixel: bool,
     ) -> Option<RasterizeResult> {
-        if glyph_fast_path_enabled()
-            && let Some(rg) = self.try_fast_single_char_glyph(c, face)
-        {
-            let font_size = effective_font_size(face.map(|f| f.font_size), self.default_font_size);
-            return self.rasterize_resolved_cluster(
-                &[rg],
-                font_size,
-                x_bin,
-                y_bin,
-                enable_subpixel,
-            );
+        let fast_path_enabled = glyph_fast_path_enabled();
+        // ASCII coverage policy is correctness, not an optimization: even
+        // when the cmap fast path is disabled for A/B testing, inspect the
+        // primary face so a missing glyph cannot escape into fallback shaping.
+        if c.is_ascii() || fast_path_enabled {
+            match self.try_fast_single_char_glyph(c, face) {
+                Some(SingleCharGlyph::Resolved(glyph)) if fast_path_enabled => {
+                    let font_size =
+                        effective_font_size(face.map(|f| f.font_size), self.default_font_size);
+                    return self.rasterize_resolved_cluster(
+                        &[glyph],
+                        font_size,
+                        x_bin,
+                        y_bin,
+                        enable_subpixel,
+                    );
+                }
+                Some(SingleCharGlyph::Resolved(_)) => {}
+                Some(SingleCharGlyph::MissingPrimaryAscii { advance_width }) => {
+                    let face = face?;
+                    return Some(self.rasterize_missing_primary_ascii(advance_width, face));
+                }
+                None => {}
+            }
         }
         self.rasterize_text(&c.to_string(), face, x_bin, y_bin, enable_subpixel)
     }
@@ -1974,14 +2061,28 @@ impl WgpuGlyphAtlas {
 
         let c =
             char::from_u32(key.charcode).ok_or(GlyphAtlasError::InvalidCharCode(key.charcode))?;
-        if c.is_whitespace() {
-            return Err(GlyphAtlasError::Whitespace);
-        }
-
         let enable_subpixel = matches!(subpixel, SubpixelRequest::Enabled);
-        let result = self
-            .rasterize_glyph(c, face, key.x_bin, key.y_bin, enable_subpixel)
-            .ok_or(GlyphAtlasError::RasterizeFailed)?;
+        // Keep the ordinary-whitespace fast rejection. U+0020 is exceptional
+        // only when GNU's primary-ASCII policy leaves it missing: that case
+        // draws the missing-glyph box directly. Normal spaces never shape or
+        // allocate an atlas entry.
+        let whitespace_result = if c.is_whitespace() {
+            match self.try_fast_single_char_glyph(c, face) {
+                Some(SingleCharGlyph::MissingPrimaryAscii { advance_width }) => {
+                    let face = face.ok_or(GlyphAtlasError::RasterizeFailed)?;
+                    Some(self.rasterize_missing_primary_ascii(advance_width, face))
+                }
+                _ => return Err(GlyphAtlasError::Whitespace),
+            }
+        } else {
+            None
+        };
+        let result = match whitespace_result {
+            Some(result) => result,
+            None => self
+                .rasterize_glyph(c, face, key.x_bin, key.y_bin, enable_subpixel)
+                .ok_or(GlyphAtlasError::RasterizeFailed)?,
+        };
 
         if result.width == 0 || result.height == 0 {
             return Err(GlyphAtlasError::ZeroSize);

@@ -1630,7 +1630,14 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn push_tab_at_position(&mut self, face_id: FaceId, position: DisplayRowPosition) {
-        let space_width_px = self.glyph_advance_px(' ', face_id, 1);
+        // GNU's gui_produce_glyphs uses the TAB face's primary font
+        // `space_width`, not character fallback selection for U+0020.
+        let space_width_px = self
+            .glyph_measurer
+            .as_deref_mut()
+            .and_then(|measurer| measurer.face_space_width_px(face_id))
+            .filter(|width| width.is_finite() && *width > 0.0)
+            .unwrap_or_else(|| self.glyph_advance_px(' ', face_id, 1));
         let advance = self
             .layout
             .tab_policy

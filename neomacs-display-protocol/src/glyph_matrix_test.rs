@@ -2387,6 +2387,7 @@ fn resolved_fonts_survive_materialize_and_round_trip() {
             pixel_size: 15.0,
             ascent_px: 12.0,
             descent_px: 3.0,
+            space_advance_px: 8.0,
             source: FontResolutionSource::FacePrimary,
         },
     );

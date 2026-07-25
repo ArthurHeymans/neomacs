@@ -833,9 +833,16 @@ fn display_row_builder_tabs_use_realized_face_space_width_after_nerd_icon() {
         ) -> Option<f32> {
             match ch {
                 '\u{e6ad}' => Some(9.0),
-                ' ' | 'n' => Some(5.0),
+                // Character fallback may report a different U+0020 width.
+                // TAB geometry must not use it.
+                ' ' => Some(19.0),
+                'n' => Some(5.0),
                 _ => None,
             }
+        }
+
+        fn face_space_width_px(&mut self, _face_id: FaceId) -> Option<f32> {
+            Some(5.0)
         }
     }
 

@@ -1,7 +1,7 @@
 use super::{
-    FontconfigSubpixelOrder, GlyphAtlasError, GlyphKey, RasterizeResult, SubpixelBin,
-    WgpuGlyphAtlas, effective_font_size, glyph_font_identity, key_uses_default_font_metrics,
-    normalize_subpixel_mask,
+    FontconfigSubpixelOrder, GlyphAtlasError, GlyphKey, RasterizeResult, SingleCharGlyph,
+    SubpixelBin, WgpuGlyphAtlas, effective_font_size, glyph_font_identity,
+    key_uses_default_font_metrics, normalize_subpixel_mask, rasterize_missing_glyph_box,
 };
 use neomacs_display_protocol::types::FaceId;
 
@@ -15,6 +15,27 @@ fn normalize_subpixel_mask_preserves_rgb_order() {
 fn normalize_subpixel_mask_swaps_bgr_order() {
     let out = normalize_subpixel_mask(&[10, 20, 30], 1, FontconfigSubpixelOrder::Bgr);
     assert_eq!(out, vec![30, 20, 10, 30]);
+}
+
+#[test]
+fn missing_glyph_box_uses_layout_advance_and_face_line_metrics() {
+    let result = rasterize_missing_glyph_box(5.0, 10.0, 7.0, 2.0);
+
+    assert_eq!(result.width, 10);
+    assert_eq!(result.height, 20);
+    assert_eq!(result.advance_width, 10.0);
+    assert_eq!(result.bearing_y, 14.0);
+    assert_eq!(result.pixel_data.len(), 200);
+    for y in 0..result.height {
+        for x in 0..result.width {
+            let expected = if x == 0 || x + 1 == result.width || y == 0 || y + 1 == result.height {
+                255
+            } else {
+                0
+            };
+            assert_eq!(result.pixel_data[(y * result.width + x) as usize], expected);
+        }
+    }
 }
 
 #[test]
@@ -161,6 +182,76 @@ fn try_test_atlas() -> Option<WgpuGlyphAtlas> {
 
 #[cfg(unix)]
 #[test]
+fn renderer_keeps_missing_ascii_on_primary_font() {
+    use neomacs_display_protocol::face::Face;
+    use neomacs_display_protocol::font::{
+        FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId,
+    };
+    use neomacs_layout_engine::font_backend::{FontBackend, FontconfigBackend};
+
+    let Some(matched) = FontconfigBackend.match_primary_font("Symbols Nerd Font Mono", 400, false)
+    else {
+        return;
+    };
+    if !matched
+        .family
+        .eq_ignore_ascii_case("Symbols Nerd Font Mono")
+    {
+        return;
+    }
+    let Some(mut atlas) = try_test_atlas() else {
+        return;
+    };
+    let identity = matched.identity;
+    let id = ResolvedFontId(1);
+    let font = ResolvedFont {
+        id,
+        identity: identity.clone(),
+        family: matched.family,
+        full_name: None,
+        postscript_name: identity.postscript_name.clone(),
+        weight: matched.weight.unwrap_or(400),
+        slant: FontSlantKind::Normal,
+        width: 5,
+        pixel_size: 10.0,
+        ascent_px: 8.0,
+        descent_px: 2.0,
+        space_advance_px: 5.0,
+        source: FontResolutionSource::FacePrimary,
+    };
+    atlas.install_frame_fonts(
+        &[(id, font)].into_iter().collect(),
+        &Default::default(),
+        &Default::default(),
+    );
+    let mut face = Face::new(FaceId::new(7));
+    face.font_family = "Symbols Nerd Font Mono".to_string();
+    face.font_size = 10.0;
+    face.font_ascent = 8;
+    face.font_descent = 2;
+    face.default_resolved_font_id = Some(id);
+
+    assert!(matches!(
+        atlas.try_fast_single_char_glyph(' ', Some(&face)),
+        Some(SingleCharGlyph::MissingPrimaryAscii { advance_width: 5.0 })
+    ));
+    let result = atlas
+        .rasterize_glyph(
+            ' ',
+            Some(&face),
+            SubpixelBin::Zero,
+            SubpixelBin::Zero,
+            false,
+        )
+        .expect("missing ASCII renders GNU's empty box");
+    assert_eq!(result.width, 5);
+    assert_eq!(result.advance_width, 5.0);
+    assert_eq!(result.height, 10);
+    assert!(result.pixel_data.contains(&255));
+}
+
+#[cfg(unix)]
+#[test]
 #[tracing_test::traced_test]
 fn renderer_replays_named_instance_weight_on_the_exact_raw_face() {
     use cosmic_text::{Buffer, Metrics, Shaping};
@@ -194,6 +285,7 @@ fn renderer_replays_named_instance_weight_on_the_exact_raw_face() {
         pixel_size: 18.0,
         ascent_px: 0.0,
         descent_px: 0.0,
+        space_advance_px: 0.0,
         source: FontResolutionSource::FacePrimary,
     };
 
@@ -242,6 +334,7 @@ fn renderer_exact_attrs_reject_an_unopenable_identity() {
         pixel_size: 14.0,
         ascent_px: 0.0,
         descent_px: 0.0,
+        space_advance_px: 0.0,
         source: FontResolutionSource::FacePrimary,
     };
 
@@ -271,6 +364,7 @@ fn reused_resolved_font_id_invalidates_renderer_identity_caches() {
         pixel_size: 14.0,
         ascent_px: 0.0,
         descent_px: 0.0,
+        space_advance_px: 0.0,
         source: FontResolutionSource::FacePrimary,
     };
     let mut first = ResolvedFontTable::new();

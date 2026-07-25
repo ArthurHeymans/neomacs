@@ -14,7 +14,7 @@ fn realized_face_info(
     italic: bool,
     font_size: f32,
 ) -> Option<SelectedFontInfo> {
-    let resolved = svc.resolve_font_for_char(ch, family, weight, italic);
+    let resolved = svc.font_request_for_char(ch, family, weight, italic);
     let attrs = svc.build_attrs_for_resolved_char(&resolved)?;
     let line_height = font_size * 1.3;
     let metrics = safe_metrics(font_size, line_height);
@@ -490,6 +490,8 @@ fn selected_face_vertical_metrics_use_the_gnu_freetype_probe() {
 #[cfg(unix)]
 struct FixedPrimaryFontBackend {
     file: String,
+    face_index: u32,
+    slant: FontSlant,
 }
 
 #[cfg(unix)]
@@ -556,13 +558,13 @@ impl crate::font_backend::FontBackend for FixedPrimaryFontBackend {
         italic: bool,
     ) -> Option<crate::font_backend::PlatformFontMatch> {
         Some(crate::font_backend::PlatformFontMatch {
-            identity: ResolvedFontIdentity::from_file(&self.file, 0, None),
+            identity: ResolvedFontIdentity::from_file(&self.file, self.face_index, None),
             family: family.to_string(),
             weight: Some(weight),
             slant: if italic {
                 FontSlant::Italic
             } else {
-                FontSlant::Normal
+                self.slant
             },
         })
     }
@@ -588,6 +590,8 @@ fn explicit_primary_font_uses_fontconfig_static_file_when_cosmic_would_fallback(
         .expect("different static font file");
     svc.backend = Box::new(FixedPrimaryFontBackend {
         file: target.clone(),
+        face_index: 0,
+        slant: FontSlant::Normal,
     });
 
     let resolved = svc
@@ -598,6 +602,85 @@ fn explicit_primary_font_uses_fontconfig_static_file_when_cosmic_would_fallback(
         Some(target.as_str()),
         "fontconfig's primary file is GNU's authority even when it is static"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn ascii_character_resolution_keeps_primary_face_that_lacks_the_glyph() {
+    let mut svc = make_svc();
+    let primary = svc.font_system.db().faces().find_map(|face| {
+        let file = fontdb_face_file(face)?;
+        let lacks_ascii_space = svc
+            .font_system
+            .db()
+            .with_face_data(face.id, |data, face_index| {
+                TtfFace::parse(data, face_index)
+                    .ok()
+                    .is_some_and(|parsed| parsed.glyph_index(' ').is_none())
+            })
+            .unwrap_or(false);
+        lacks_ascii_space.then_some((file, face.index))
+    });
+    let Some((file, face_index)) = primary else {
+        return;
+    };
+    let requested_family = "neomacs-primary-without-ascii-space-fixture";
+    svc.backend = Box::new(FixedPrimaryFontBackend {
+        file: file.clone(),
+        face_index,
+        slant: FontSlant::Normal,
+    });
+
+    let expected_metrics = crate::font_probe::probe_font_px_metrics(&file, face_index, 10, None)
+        .expect("primary font metrics");
+    let resolved = svc
+        .resolved_font_for_char(' ', requested_family, 400, false, 10.0)
+        .expect("GNU assigns ASCII to the primary face even when its glyph is unavailable");
+
+    assert_eq!(resolved.identity.file_path.as_deref(), Some(file.as_str()));
+    assert_eq!(resolved.identity.file_face_index(), face_index);
+    assert_eq!(resolved.source, FontResolutionSource::FacePrimary);
+
+    let selected = svc
+        .select_font_for_char(' ', requested_family, 400, false, 10.0)
+        .expect("font-at selection keeps the GNU ASCII face");
+    assert_eq!(selected.file.as_deref(), Some(file.as_str()));
+    assert_eq!(
+        svc.char_width(' ', requested_family, 400, false, 10.0),
+        expected_metrics.space_width as f32,
+        "GNU measures missing ASCII with the primary font's .notdef advance"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn font_at_preserves_reverse_slant_from_platform_selection() {
+    let mut svc = make_svc();
+    let Some((file, face_index)) = svc
+        .font_system
+        .db()
+        .faces()
+        .find_map(|face| fontdb_face_file(face).map(|file| (file, face.index)))
+    else {
+        return;
+    };
+    svc.backend = Box::new(FixedPrimaryFontBackend {
+        file,
+        face_index,
+        slant: FontSlant::ReverseOblique,
+    });
+
+    let selected = svc
+        .select_font_for_char(
+            ' ',
+            "neomacs-reverse-slant-primary-fixture",
+            400,
+            false,
+            10.0,
+        )
+        .expect("font-at selection");
+
+    assert_eq!(selected.slant, FontSlant::ReverseOblique);
 }
 
 #[cfg(unix)]
@@ -932,18 +1015,37 @@ fn measure_with_resolved_fontsystem(
     italic: bool,
     font_size: f32,
 ) -> f32 {
-    let font = if ch.is_ascii() {
-        layout.resolved_font_for_face(requested_family, weight, italic, font_size)
+    let (font, primary_has_char) = if ch.is_ascii() {
+        let handle = layout
+            .materialized_font_for_face(requested_family, weight, italic, font_size)
+            .unwrap_or_else(|| {
+                panic!(
+                    "layout must publish an exact primary font for {} U+{:04X} family={requested_family} weight={weight} italic={italic}",
+                    ch.escape_default(),
+                    ch as u32
+                )
+            });
+        let has_char = layout.materialized_font_has_char(&handle, ch);
+        (Some(handle.font), Some(has_char))
     } else {
-        layout.resolved_font_for_char(ch, requested_family, weight, italic, font_size)
-    }
-    .unwrap_or_else(|| {
+        (
+            layout.resolved_font_for_char(ch, requested_family, weight, italic, font_size),
+            None,
+        )
+    };
+    let font = font.unwrap_or_else(|| {
         panic!(
             "layout must publish an exact font for render-boundary test: {} U+{:04X} family={requested_family} weight={weight} italic={italic}",
             ch.escape_default(),
             ch as u32
         )
     });
+    if (ch == ' ' || primary_has_char == Some(false)) && font.space_advance_px > 0.0 {
+        // Space has no raster image, and GNU measures unavailable ASCII with
+        // the primary `font->space_width`. The frame protocol publishes that
+        // hinted advance so rendering does not re-shape into another font.
+        return font.space_advance_px;
+    }
     let slant = match font.slant {
         FontSlantKind::Normal => FontSlant::Normal,
         FontSlantKind::Italic => FontSlant::Italic,
@@ -1103,7 +1205,7 @@ fn select_font_for_char_preserves_resolved_weight_for_variable_family_reports() 
 #[test]
 fn select_font_for_char_preserves_resolved_family_for_fallback_reports() {
     let mut svc = make_svc();
-    let resolved = svc.resolve_font_for_char('好', "Noto Sans Mono", 400, false);
+    let resolved = svc.font_request_for_char('好', "Noto Sans Mono", 400, false);
     let selected = svc
         .select_font_for_char('好', "Noto Sans Mono", 400, false, 24.0)
         .expect("selected font for fallback char");

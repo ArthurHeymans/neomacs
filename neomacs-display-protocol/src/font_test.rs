@@ -17,6 +17,7 @@ fn sample_font(id: u32) -> ResolvedFont {
         pixel_size: 15.0,
         ascent_px: 12.0,
         descent_px: 3.0,
+        space_advance_px: 8.0,
         source: FontResolutionSource::FacePrimary,
     }
 }

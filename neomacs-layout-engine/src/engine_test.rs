@@ -13983,6 +13983,12 @@ fn layout_frame_rust_nerd_font_alias_icon_uses_resolved_monospace_cell_width() {
         tab_face.is_italic(),
         tab_face.font_size,
     );
+    let expected_tab_advance = DisplayTabPolicy::every(1)
+        .advance_from(
+            DisplayRowPosition::new(icon.pixel_width, 1),
+            resolved_tab_space,
+        )
+        .pixel_width;
 
     assert!(
         (icon.pixel_width - resolved_icon_advance).abs() < 0.01,
@@ -13991,10 +13997,13 @@ fn layout_frame_rust_nerd_font_alias_icon_uses_resolved_monospace_cell_width() {
         resolved_icon_advance,
     );
     assert!(
-        (tab.pixel_width - resolved_tab_space).abs() < 0.01,
-        "at row start with tab-width 1, GNU places the tab after a one-cell icon at the next realized-font space; tab={} space={} row={glyphs:?}",
+        (tab.pixel_width - expected_tab_advance).abs() < 0.01,
+        "GNU computes tab stops and its minimum-one-space guard from the TAB face's primary-font space; tab={} expected={} space={} family={:?} size={} row={glyphs:?}",
         tab.pixel_width,
+        expected_tab_advance,
         resolved_tab_space,
+        tab_face.font_family,
+        tab_face.font_size,
     );
 }
 
