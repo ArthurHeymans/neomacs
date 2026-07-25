@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::{
-    FrameRect, PlaceChildQuery, PresentedClip, PresentedFramePlacement, PresentedFrameScene,
+    PlaceChildQuery, PresentedClip, PresentedFramePlacement, PresentedFrameScene,
 };
 
 /// State for one child frame.
@@ -67,8 +67,6 @@ impl ChildFrameManager {
         let outer = buf.frame_placement.outer_in_parent();
         let abs_x = outer.x();
         let abs_y = outer.y();
-        let width = buf.width;
-        let height = buf.height;
         let z_order = buf.frame_placement.z_order();
         let existing = self.frames.get_mut(&frame_id.get());
 
@@ -97,6 +95,16 @@ impl ChildFrameManager {
             );
             return false;
         };
+        let Ok(placed) = scene.place(PlaceChildQuery::new(
+            buf.frame_placement.frame(),
+            buf.frame_placement.presentation(),
+        )) else {
+            tracing::error!(
+                frame_id = frame_id.get(),
+                "rejecting child frame with invalid derived placement"
+            );
+            return false;
+        };
 
         let existed = self.frames.contains_key(&frame_id.get());
         tracing::debug!(
@@ -116,13 +124,10 @@ impl ChildFrameManager {
             ChildFrameEntry {
                 frame_id: frame_id.get(),
                 frame: buf,
-                abs_x,
-                abs_y,
-                clip_in_root: PresentedClip::Rect(
-                    FrameRect::new(abs_x, abs_y, width, height)
-                        .expect("child frame extent is valid"),
-                ),
-                z_path: vec![z_order],
+                abs_x: placed.root_relative().x(),
+                abs_y: placed.root_relative().y(),
+                clip_in_root: placed.clip_in_root(),
+                z_path: placed.z_path().to_vec(),
                 last_updated: self.frame_counter,
                 ingest_seq: super::frame_state::next_faces_ingest_seq(),
             },

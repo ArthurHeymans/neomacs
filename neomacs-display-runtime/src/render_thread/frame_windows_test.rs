@@ -62,7 +62,7 @@ fn set_parent_offset(frame: &mut FrameGlyphBuffer, x: f32, y: f32) {
         placement.frame(),
         placement.presentation(),
         placement.parent(),
-        neomacs_display_protocol::FrameRect::new(x, y, frame.width, frame.height).unwrap(),
+        neomacs_display_protocol::ParentFrameRect::new(x, y, frame.width, frame.height).unwrap(),
         placement.z_order(),
     );
 }

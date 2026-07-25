@@ -93,7 +93,7 @@ fn set_test_frame_placement(
         neomacs_display_protocol::DisplayFrameId::new(frame_id),
         frame.presentation_id,
         (parent_id != 0).then(|| neomacs_display_protocol::DisplayFrameId::new(parent_id)),
-        FrameRect::new(x, y, frame.width, frame.height).unwrap(),
+        neomacs_display_protocol::ParentFrameRect::new(x, y, frame.width, frame.height).unwrap(),
         z_order,
     );
 }

@@ -1,5 +1,5 @@
 use crate::{
-    DisplayFrameId, FrameDisplayState, FrameRect, PresentationId, PresentedFramePlacement,
+    DisplayFrameId, FrameDisplayState, ParentFrameRect, PresentationId, PresentedFramePlacement,
     PresentedHitIndex, SealedFramePresentation,
 };
 
@@ -10,7 +10,7 @@ fn coherent_state(revision: u64) -> FrameDisplayState {
         DisplayFrameId::new(7),
         state.presentation_id,
         None,
-        FrameRect::new(0.0, 0.0, 640.0, 384.0).unwrap(),
+        ParentFrameRect::new(0.0, 0.0, 640.0, 384.0).unwrap(),
         0,
     );
     state.presented_hit_index =
@@ -33,7 +33,7 @@ fn sealed_presentation_rejects_a_stale_frame_placement() {
         DisplayFrameId::new(7),
         PresentationId::new(40),
         None,
-        FrameRect::new(0.0, 0.0, 640.0, 384.0).unwrap(),
+        ParentFrameRect::new(0.0, 0.0, 640.0, 384.0).unwrap(),
         0,
     );
 

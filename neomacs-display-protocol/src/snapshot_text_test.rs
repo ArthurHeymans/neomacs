@@ -16,7 +16,8 @@ fn golden_state() -> FrameDisplayState {
         DisplayFrameId::new(1),
         state.presentation_id,
         None,
-        crate::FrameRect::new(0.0, 0.0, state.frame_pixel_width, state.frame_pixel_height).unwrap(),
+        crate::ParentFrameRect::new(0.0, 0.0, state.frame_pixel_width, state.frame_pixel_height)
+            .unwrap(),
         0,
     );
 

@@ -1,5 +1,7 @@
 use super::*;
 
+const TEST_ROOT_FRAME_ID: u64 = u64::MAX;
+
 /// Helper: create a FrameGlyphBuffer with specified frame_id, position, size, and z_order.
 fn make_child_buf(
     frame_id: u64,
@@ -12,7 +14,7 @@ fn make_child_buf(
     let mut buf = FrameGlyphBuffer::with_size(width, height);
     buf.set_frame_identity(
         neomacs_display_protocol::DisplayFrameId::new(frame_id),
-        neomacs_display_protocol::DisplayFrameId::new(0),
+        neomacs_display_protocol::DisplayFrameId::new(TEST_ROOT_FRAME_ID),
         parent_x,
         parent_y,
         z_order,
@@ -25,13 +27,32 @@ fn make_child_buf(
     buf
 }
 
+fn make_manager() -> ChildFrameManager {
+    let mut manager = ChildFrameManager::new();
+    let mut root = FrameGlyphBuffer::with_size(10_000.0, 10_000.0);
+    root.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(TEST_ROOT_FRAME_ID),
+        neomacs_display_protocol::DisplayFrameId::new(0),
+        0.0,
+        0.0,
+        i32::MIN,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+    manager.set_root_frame(Some(&root));
+    manager
+}
+
 // ===================================================================
 // Default / empty state
 // ===================================================================
 
 #[test]
 fn new_manager_is_empty() {
-    let mgr = ChildFrameManager::new();
+    let mgr = make_manager();
     assert!(mgr.is_empty());
     assert!(mgr.sorted_for_rendering().is_empty());
     assert!(mgr.frames.is_empty());
@@ -39,13 +60,13 @@ fn new_manager_is_empty() {
 
 #[test]
 fn new_manager_frame_counter_starts_at_zero() {
-    let mgr = ChildFrameManager::new();
+    let mgr = make_manager();
     assert_eq!(mgr.frame_counter, 0);
 }
 
 #[test]
 fn empty_manager_hit_test_returns_none() {
-    let mgr = ChildFrameManager::new();
+    let mgr = make_manager();
     assert_eq!(mgr.hit_test(100.0, 100.0), None);
 }
 
@@ -55,7 +76,7 @@ fn empty_manager_hit_test_returns_none() {
 
 #[test]
 fn tick_increments_frame_counter() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     assert_eq!(mgr.frame_counter, 0);
     mgr.tick();
     assert_eq!(mgr.frame_counter, 1);
@@ -69,7 +90,7 @@ fn tick_increments_frame_counter() {
 
 #[test]
 fn update_frame_inserts_single_frame() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     let buf = make_child_buf(100, 50.0, 75.0, 200.0, 100.0, 0);
     mgr.update_frame(buf);
 
@@ -87,7 +108,7 @@ fn update_frame_inserts_single_frame() {
 
 #[test]
 fn update_frame_sets_last_updated_to_current_counter() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     mgr.tick(); // counter = 1
     mgr.tick(); // counter = 2
 
@@ -100,7 +121,7 @@ fn update_frame_sets_last_updated_to_current_counter() {
 
 #[test]
 fn update_frame_replaces_existing_frame() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     // Insert initial
     let buf1 = make_child_buf(42, 10.0, 20.0, 100.0, 50.0, 1);
@@ -121,7 +142,7 @@ fn update_frame_replaces_existing_frame() {
 
 #[test]
 fn update_frame_keeps_ingest_seq_for_identical_frame() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     let buf = make_child_buf(42, 30.0, 40.0, 200.0, 80.0, 2);
 
     mgr.update_frame(buf.clone());
@@ -143,7 +164,7 @@ fn update_frame_keeps_ingest_seq_for_identical_frame() {
 
 #[test]
 fn update_frame_abs_position_from_parent_xy() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     let buf = make_child_buf(1, 123.5, 456.7, 300.0, 200.0, 0);
     mgr.update_frame(buf);
 
@@ -154,7 +175,7 @@ fn update_frame_abs_position_from_parent_xy() {
 
 #[test]
 fn nested_child_composes_parent_relative_offsets_once_and_clips_to_root() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     let mut root = FrameGlyphBuffer::with_size(200.0, 160.0);
     root.presentation_id = neomacs_display_protocol::PresentationId::new(1);
     root.set_frame_identity(
@@ -212,7 +233,9 @@ fn nested_child_composes_parent_relative_offsets_once_and_clips_to_root() {
     assert_eq!((entry.abs_x, entry.abs_y), (115.0, 92.0));
     assert_eq!(
         entry.clip_in_root,
-        PresentedClip::Rect(FrameRect::new(115.0, 92.0, 85.0, 68.0).unwrap())
+        PresentedClip::Rect(
+            neomacs_display_protocol::RootSurfaceRect::new(115.0, 92.0, 85.0, 68.0).unwrap(),
+        )
     );
     assert_eq!(mgr.hit_test(199.0, 159.0).unwrap().0, 30);
     assert_eq!(mgr.hit_test(201.0, 159.0), None);
@@ -220,7 +243,7 @@ fn nested_child_composes_parent_relative_offsets_once_and_clips_to_root() {
 
 #[test]
 fn fully_clipped_child_is_not_hittable() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     let mut root = FrameGlyphBuffer::with_size(100.0, 100.0);
     root.set_frame_identity(
         neomacs_display_protocol::DisplayFrameId::new(10),
@@ -254,8 +277,52 @@ fn fully_clipped_child_is_not_hittable() {
 }
 
 #[test]
+fn negative_child_origin_is_preserved_and_hit_testing_uses_the_clipped_extent() {
+    let mut mgr = make_manager();
+    let mut root = FrameGlyphBuffer::with_size(100.0, 100.0);
+    root.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(10),
+        neomacs_display_protocol::DisplayFrameId::new(0),
+        0.0,
+        0.0,
+        0,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+    mgr.set_root_frame(Some(&root));
+
+    let mut child = make_child_buf(20, -5.0, -7.0, 40.0, 30.0, 1);
+    child.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(20),
+        neomacs_display_protocol::DisplayFrameId::new(10),
+        -5.0,
+        -7.0,
+        1,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+
+    assert!(mgr.update_frame(child));
+    let entry = &mgr.frames[&20];
+    assert_eq!((entry.abs_x, entry.abs_y), (-5.0, -7.0));
+    assert_eq!(
+        entry.clip_in_root,
+        PresentedClip::Rect(
+            neomacs_display_protocol::RootSurfaceRect::new(0.0, 0.0, 35.0, 23.0).unwrap(),
+        )
+    );
+    assert_eq!(mgr.hit_test(0.0, 0.0), Some((20, 5.0, 7.0)));
+}
+
+#[test]
 fn missing_parent_is_rejected_instead_of_rewritten_as_a_root() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     let mut orphan = make_child_buf(30, 15.0, 12.0, 100.0, 80.0, 4);
     orphan.set_frame_identity(
         neomacs_display_protocol::DisplayFrameId::new(30),
@@ -275,8 +342,32 @@ fn missing_parent_is_rejected_instead_of_rewritten_as_a_root() {
 }
 
 #[test]
+fn overflowing_derived_child_origin_is_rejected_without_panicking() {
+    let mut mgr = make_manager();
+    let parent = make_child_buf(20, f32::MAX, 0.0, 10.0, 10.0, 1);
+    assert!(mgr.update_frame(parent));
+
+    let mut nested = make_child_buf(30, f32::MAX, 0.0, 10.0, 10.0, 2);
+    nested.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(30),
+        neomacs_display_protocol::DisplayFrameId::new(20),
+        f32::MAX,
+        0.0,
+        2,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+
+    assert!(!mgr.update_frame(nested));
+    assert!(!mgr.frames.contains_key(&30));
+}
+
+#[test]
 fn cyclic_replacement_is_rejected_transactionally() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     let mut root = FrameGlyphBuffer::with_size(200.0, 160.0);
     root.set_frame_identity(
         neomacs_display_protocol::DisplayFrameId::new(10),
@@ -351,7 +442,7 @@ fn cyclic_replacement_is_rejected_transactionally() {
 
 #[test]
 fn removing_parent_cascades_to_all_descendants() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     let mut root = FrameGlyphBuffer::with_size(200.0, 160.0);
     root.set_frame_identity(
         neomacs_display_protocol::DisplayFrameId::new(10),
@@ -406,7 +497,7 @@ fn removing_parent_cascades_to_all_descendants() {
 
 #[test]
 fn sorted_for_rendering_orders_by_z_order_ascending() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     // Insert in non-sorted order
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 10));
@@ -422,7 +513,7 @@ fn sorted_for_rendering_orders_by_z_order_ascending() {
 
 #[test]
 fn sorted_for_rendering_handles_negative_z_order() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 0));
     mgr.update_frame(make_child_buf(2, 0.0, 0.0, 100.0, 100.0, -5));
@@ -436,7 +527,7 @@ fn sorted_for_rendering_handles_negative_z_order() {
 
 #[test]
 fn sorted_for_rendering_same_z_order_is_stable_count() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     // All same z_order -- we just verify all 3 are present
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 0));
@@ -452,7 +543,7 @@ fn sorted_for_rendering_same_z_order_is_stable_count() {
 
 #[test]
 fn render_order_updates_when_z_order_changes() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 1));
     mgr.update_frame(make_child_buf(2, 0.0, 0.0, 100.0, 100.0, 2));
@@ -474,7 +565,7 @@ fn render_order_updates_when_z_order_changes() {
 
 #[test]
 fn remove_frame_removes_existing() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 0));
     mgr.update_frame(make_child_buf(2, 0.0, 0.0, 100.0, 100.0, 1));
 
@@ -487,7 +578,7 @@ fn remove_frame_removes_existing() {
 
 #[test]
 fn remove_frame_nonexistent_is_noop() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 0));
 
     mgr.remove_frame(999); // does not exist
@@ -497,7 +588,7 @@ fn remove_frame_nonexistent_is_noop() {
 
 #[test]
 fn remove_all_frames_leaves_empty() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 0));
     mgr.update_frame(make_child_buf(2, 0.0, 0.0, 100.0, 100.0, 1));
 
@@ -513,7 +604,7 @@ fn remove_all_frames_leaves_empty() {
 
 #[test]
 fn hit_test_single_frame_inside() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     // Frame at (100, 200) with size 300x150
     mgr.update_frame(make_child_buf(1, 100.0, 200.0, 300.0, 150.0, 0));
 
@@ -528,7 +619,7 @@ fn hit_test_single_frame_inside() {
 
 #[test]
 fn hit_test_single_frame_outside() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     mgr.update_frame(make_child_buf(1, 100.0, 200.0, 300.0, 150.0, 0));
 
     // Click to the left
@@ -543,7 +634,7 @@ fn hit_test_single_frame_outside() {
 
 #[test]
 fn hit_test_frame_boundary_top_left_corner() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     mgr.update_frame(make_child_buf(1, 100.0, 200.0, 300.0, 150.0, 0));
 
     // Exact top-left corner (inclusive)
@@ -556,7 +647,7 @@ fn hit_test_frame_boundary_top_left_corner() {
 
 #[test]
 fn hit_test_frame_boundary_bottom_right_exclusive() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 0));
 
     // Right at the boundary (100.0 is exclusive)
@@ -570,7 +661,7 @@ fn hit_test_frame_boundary_bottom_right_exclusive() {
 
 #[test]
 fn hit_test_overlapping_frames_returns_topmost() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     // Frame A: z_order=1, at (0,0) 200x200
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 200.0, 200.0, 1));
@@ -588,7 +679,7 @@ fn hit_test_overlapping_frames_returns_topmost() {
 
 #[test]
 fn hit_test_overlapping_frames_returns_lower_when_top_not_hit() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     // Frame A: z_order=1, at (0,0) 200x200
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 200.0, 200.0, 1));
@@ -606,7 +697,7 @@ fn hit_test_overlapping_frames_returns_lower_when_top_not_hit() {
 
 #[test]
 fn hit_test_no_frames_hit() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     mgr.update_frame(make_child_buf(1, 100.0, 100.0, 50.0, 50.0, 0));
     mgr.update_frame(make_child_buf(2, 200.0, 200.0, 50.0, 50.0, 1));
 
@@ -616,7 +707,7 @@ fn hit_test_no_frames_hit() {
 
 #[test]
 fn hit_test_three_overlapping_layers() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     // Three frames all overlapping at (100, 100), different z orders
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 200.0, 200.0, 1));
@@ -633,7 +724,7 @@ fn hit_test_three_overlapping_layers() {
 
 #[test]
 fn prune_stale_removes_old_frames() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     // Frame inserted at counter=0
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 0));
@@ -659,7 +750,7 @@ fn prune_stale_removes_old_frames() {
 
 #[test]
 fn prune_stale_keeps_recently_updated() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 0));
     mgr.tick(); // counter=1
@@ -673,7 +764,7 @@ fn prune_stale_keeps_recently_updated() {
 
 #[test]
 fn prune_stale_no_frames_is_noop() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     mgr.tick();
     mgr.prune_stale(1);
     assert!(mgr.is_empty());
@@ -681,7 +772,7 @@ fn prune_stale_no_frames_is_noop() {
 
 #[test]
 fn prune_stale_all_stale_leaves_empty() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 0));
     mgr.update_frame(make_child_buf(2, 0.0, 0.0, 100.0, 100.0, 1));
@@ -698,7 +789,7 @@ fn prune_stale_all_stale_leaves_empty() {
 
 #[test]
 fn prune_stale_updates_render_order() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 1));
     mgr.tick(); // counter=1
@@ -718,7 +809,7 @@ fn prune_stale_updates_render_order() {
 
 #[test]
 fn prune_stale_boundary_exact_threshold() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     // counter=0, insert frame
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 0));
@@ -734,7 +825,7 @@ fn prune_stale_boundary_exact_threshold() {
 
 #[test]
 fn prune_stale_max_age_zero_removes_all_except_current() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     // Insert at counter=0
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 0));
@@ -753,7 +844,7 @@ fn prune_stale_max_age_zero_removes_all_except_current() {
 
 #[test]
 fn prune_stale_saturating_sub_prevents_underflow() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     // counter=0, max_age=1000 -- saturating_sub yields 0
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 0));
     mgr.prune_stale(1000);
@@ -767,7 +858,7 @@ fn prune_stale_saturating_sub_prevents_underflow() {
 
 #[test]
 fn render_order_correct_after_mixed_operations() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     // Insert 3 frames
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 10));
@@ -788,7 +879,7 @@ fn render_order_correct_after_mixed_operations() {
 
 #[test]
 fn render_order_after_update_preserves_all_frames() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 1));
     mgr.update_frame(make_child_buf(2, 0.0, 0.0, 100.0, 100.0, 2));
@@ -807,7 +898,7 @@ fn render_order_after_update_preserves_all_frames() {
 
 #[test]
 fn render_order_single_frame() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     mgr.update_frame(make_child_buf(42, 10.0, 20.0, 300.0, 200.0, 0));
 
     let order = mgr.sorted_for_rendering();
@@ -821,7 +912,7 @@ fn render_order_single_frame() {
 
 #[test]
 fn is_empty_after_insert_and_remove() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
     assert!(mgr.is_empty());
 
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 0));
@@ -837,7 +928,7 @@ fn is_empty_after_insert_and_remove() {
 
 #[test]
 fn hit_test_after_prune_stale() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     // Insert two non-overlapping frames
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 100.0, 100.0, 0));
@@ -867,7 +958,7 @@ fn hit_test_after_prune_stale() {
 
 #[test]
 fn hit_test_respects_updated_z_order() {
-    let mut mgr = ChildFrameManager::new();
+    let mut mgr = make_manager();
 
     // Two overlapping frames, frame 1 on top
     mgr.update_frame(make_child_buf(1, 0.0, 0.0, 200.0, 200.0, 10));

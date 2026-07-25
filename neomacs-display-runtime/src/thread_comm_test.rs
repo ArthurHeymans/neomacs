@@ -10,7 +10,7 @@ fn sealed_test_state(mut state: FrameDisplayState) -> SealedFramePresentation {
         neomacs_display_protocol::DisplayFrameId::new(1),
         state.presentation_id,
         None,
-        neomacs_display_protocol::FrameRect::new(0.0, 0.0, 1.0, 1.0).unwrap(),
+        neomacs_display_protocol::ParentFrameRect::new(0.0, 0.0, 1.0, 1.0).unwrap(),
         0,
     );
     state.presented_hit_index = neomacs_display_protocol::PresentedHitIndex::from_parts(

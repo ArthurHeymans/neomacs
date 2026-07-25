@@ -128,7 +128,7 @@ impl PresentationGeometry {
             neomacs_display_protocol::DisplayFrameId::new(frame.0),
             neomacs_display_protocol::PresentationId::new(presentation.get()),
             None,
-            neomacs_display_protocol::FrameRect::new(0.0, 0.0, 0.0, 0.0)
+            neomacs_display_protocol::ParentFrameRect::new(0.0, 0.0, 0.0, 0.0)
                 .expect("zero root extent is valid for compatibility construction"),
             0,
         );
@@ -163,7 +163,7 @@ impl PresentationGeometry {
             neomacs_display_protocol::DisplayFrameId::new(frame.0),
             neomacs_display_protocol::PresentationId::new(presentation.get()),
             parent.map(|parent| neomacs_display_protocol::DisplayFrameId::new(parent.0)),
-            neomacs_display_protocol::FrameRect::new(left, top, width as f32, height as f32)
+            neomacs_display_protocol::ParentFrameRect::new(left, top, width as f32, height as f32)
                 .map_err(|_| GeometryError::InvalidExtent)?,
             z_order,
         );

@@ -288,7 +288,7 @@ fn make_grid_state(
         DisplayFrameId::new(frame_id),
         state.presentation_id,
         (parent_id != 0).then(|| DisplayFrameId::new(parent_id)),
-        crate::FrameRect::new(
+        crate::ParentFrameRect::new(
             parent_x,
             parent_y,
             state.frame_pixel_width,
@@ -518,6 +518,134 @@ fn rasterize_frame_tree_skips_border_for_undecorated_child() {
     assert_eq!(desired_char(&rif, 3, 3), ' ');
     assert_eq!(desired_char(&rif, 3, 4), ' ');
     assert_eq!(desired_char(&rif, 3, 7), ' ');
+}
+
+#[test]
+fn rasterize_frame_tree_clips_negative_child_origin_without_shifting_its_content() {
+    let root = make_grid_state(1, 0, 0.0, 0.0, 6, 3, "root");
+    let mut child = make_grid_state(2, 1, -1.0, 0.0, 3, 1, "ABC");
+    child.undecorated = true;
+
+    let mut rif = TtyRif::new(6, 3);
+    rif.rasterize_frame_tree(&root, &[child]);
+
+    assert_eq!(desired_char(&rif, 0, 0), 'B');
+    assert_eq!(desired_char(&rif, 0, 1), 'C');
+    assert_eq!(desired_char(&rif, 0, 2), 'o');
+}
+
+#[test]
+fn rasterize_frame_tree_clips_negative_child_rows_without_shifting_the_source_row() {
+    let root = make_grid_state(1, 0, 0.0, 0.0, 6, 3, "root");
+    let mut child = make_grid_state(2, 1, 0.0, -1.0, 2, 2, "AA");
+    child.undecorated = true;
+    let mut second_row = GlyphRow::new(GlyphRowRole::Text);
+    second_row.glyphs[GlyphArea::Text as usize].push(Glyph::char('B', FaceId::new(0), 0));
+    second_row.glyphs[GlyphArea::Text as usize].push(Glyph::char('B', FaceId::new(0), 1));
+    child.window_matrices[0].matrix.rows[1] = second_row;
+
+    let mut rif = TtyRif::new(6, 3);
+    rif.rasterize_frame_tree(&root, &[child]);
+
+    assert_eq!(desired_char(&rif, 0, 0), 'B');
+    assert_eq!(desired_char(&rif, 0, 1), 'B');
+    assert_eq!(desired_char(&rif, 1, 0), ' ');
+}
+
+#[test]
+fn rasterize_frame_tree_clips_a_decorated_child_at_the_left_edge() {
+    let root = make_grid_state(1, 0, 0.0, 0.0, 6, 4, "root");
+    let child = make_grid_state(2, 1, -1.0, 1.0, 3, 1, "ABC");
+
+    let mut rif = TtyRif::new(6, 4);
+    rif.rasterize_frame_tree(&root, &[child]);
+
+    assert_eq!(
+        [
+            desired_char(&rif, 0, 0),
+            desired_char(&rif, 0, 1),
+            desired_char(&rif, 0, 2),
+        ],
+        ['-', '-', '+']
+    );
+    assert_eq!(
+        [
+            desired_char(&rif, 1, 0),
+            desired_char(&rif, 1, 1),
+            desired_char(&rif, 1, 2),
+        ],
+        ['B', 'C', '|']
+    );
+    assert_eq!(
+        [
+            desired_char(&rif, 2, 0),
+            desired_char(&rif, 2, 1),
+            desired_char(&rif, 2, 2),
+        ],
+        ['-', '-', '+']
+    );
+}
+
+#[test]
+fn rasterize_fully_clipped_decorated_child_suppresses_edge_only_border_like_gnu() {
+    let root = make_grid_state(1, 0, 0.0, 0.0, 6, 3, "root");
+    let child = make_grid_state(2, 1, -3.0, 1.0, 3, 1, "ABC");
+
+    let mut rif = TtyRif::new(6, 3);
+    rif.rasterize_frame_tree(&root, &[child]);
+
+    // GNU's copy_child_glyphs returns before drawing borders when the child
+    // frame rectangle has no interior intersection with the root.
+    assert_eq!(desired_char(&rif, 1, 0), ' ');
+}
+
+#[test]
+fn rasterize_frame_tree_hides_a_child_cursor_clipped_off_the_left_edge() {
+    let root = make_grid_state(1, 0, 0.0, 0.0, 6, 3, "root");
+    let mut child = make_grid_state(2, 1, -2.0, 0.0, 3, 1, "ABC");
+    child.undecorated = true;
+    child.phys_cursor = Some(PhysCursor {
+        window_id: DisplayWindowId::new(102),
+        charpos: 0,
+        row: 0,
+        col: 0,
+        x: 0.0,
+        y: 0.0,
+        width: 1.0,
+        height: 1.0,
+        ascent: 1.0,
+        style: CursorStyle::FilledBox,
+        color: Color::WHITE,
+        slot_id: DisplaySlotId {
+            window_id: DisplayWindowId::new(102),
+            row: 0,
+            col: 0,
+        },
+        cursor_fg: Color::BLACK,
+    });
+
+    let mut rif = TtyRif::new(6, 3);
+    rif.rasterize_frame_tree(&root, &[child]);
+
+    assert!(!rif.cursor_visible);
+}
+
+#[test]
+fn clipping_a_wide_child_glyph_does_not_leave_an_unrenderable_padding_cell() {
+    let root = make_grid_state(1, 0, 0.0, 0.0, 4, 2, "root");
+    let mut child = make_grid_state(2, 1, -1.0, 0.0, 2, 1, "");
+    child.undecorated = true;
+    let row = &mut child.window_matrices[0].matrix.rows[0];
+    let mut wide = Glyph::char('\u{4f60}', FaceId::new(0), 0);
+    wide.wide = true;
+    row.glyphs[GlyphArea::Text as usize].push(wide);
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::padding_for(FaceId::new(0), 0));
+
+    let mut rif = TtyRif::new(4, 2);
+    rif.rasterize_frame_tree(&root, &[child]);
+
+    assert_eq!(desired_char(&rif, 0, 0), ' ');
+    assert!(!rif.desired.cells[0].padding);
 }
 
 #[test]

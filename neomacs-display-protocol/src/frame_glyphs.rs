@@ -1348,7 +1348,7 @@ impl FrameGlyphBuffer {
             frame_id,
             self.presentation_id,
             (parent_id.get() != 0).then_some(parent_id),
-            crate::FrameRect::new(parent_x, parent_y, self.width, self.height)
+            crate::ParentFrameRect::new(parent_x, parent_y, self.width, self.height)
                 .expect("frame identity placement is valid"),
             z_order,
         );

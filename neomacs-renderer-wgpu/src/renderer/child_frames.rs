@@ -5,10 +5,10 @@ use super::super::vertex::{RectVertex, RoundedRectVertex, Uniforms};
 use super::WgpuRenderer;
 use neomacs_display_protocol::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::types::{AnimatedCursor, Color};
-use neomacs_display_protocol::{FrameRect, PointerAppearanceSelection};
+use neomacs_display_protocol::{PointerAppearanceSelection, RootSurfaceRect};
 
 fn child_scissor(
-    clip: FrameRect,
+    clip: RootSurfaceRect,
     scale_factor: f32,
     surface_width: u32,
     surface_height: u32,
@@ -41,7 +41,7 @@ impl WgpuRenderer {
         child: &FrameGlyphBuffer,
         offset_x: f32,
         offset_y: f32,
-        clip_in_root: FrameRect,
+        clip_in_root: RootSurfaceRect,
         glyph_atlas: &mut WgpuGlyphAtlas,
         surface_width: u32,
         surface_height: u32,
@@ -358,13 +358,13 @@ mod tests {
 
     #[test]
     fn partial_child_clip_becomes_one_physical_scissor_for_all_render_passes() {
-        let clip = FrameRect::new(10.25, 20.5, 30.25, 40.0).unwrap();
+        let clip = RootSurfaceRect::new(10.25, 20.5, 30.25, 40.0).unwrap();
         assert_eq!(child_scissor(clip, 1.5, 200, 200), Some((15, 30, 46, 61)));
     }
 
     #[test]
     fn child_clip_outside_surface_has_no_renderable_scissor() {
-        let clip = FrameRect::new(300.0, 300.0, 20.0, 20.0).unwrap();
+        let clip = RootSurfaceRect::new(300.0, 300.0, 20.0, 20.0).unwrap();
         assert_eq!(child_scissor(clip, 1.0, 200, 200), None);
     }
 }

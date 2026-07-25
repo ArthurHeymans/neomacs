@@ -213,6 +213,19 @@ fn builder_can_preserve_exact_frame_pixel_size() {
 }
 
 #[test]
+fn builder_preserves_negative_child_frame_origin_for_parent_clipping() {
+    let mut builder = DisplayOutputBuilder::new();
+    builder.set_output_frame_identity(2, 1, -1.0, -2.0, 1, true, 0.0, Color::BLACK, 1.0, true);
+
+    let state = builder.finish(80, 24, 1.0, 1.0);
+    let placement = state.frame_placement;
+
+    assert_eq!(placement.parent(), Some(DisplayFrameId::new(1)));
+    assert_eq!(placement.outer_in_parent().x(), -1.0);
+    assert_eq!(placement.outer_in_parent().y(), -2.0);
+}
+
+#[test]
 fn builder_tracks_single_window_single_row() {
     let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 24, 80, Rect::new(0.0, 0.0, 640.0, 384.0), true);

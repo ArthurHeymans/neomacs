@@ -302,7 +302,7 @@ impl OutputFrameBuildState {
             self.frame_id,
             state.presentation_id,
             parent,
-            neomacs_display_protocol::FrameRect::new(
+            neomacs_display_protocol::ParentFrameRect::new(
                 x,
                 y,
                 state.frame_pixel_width,

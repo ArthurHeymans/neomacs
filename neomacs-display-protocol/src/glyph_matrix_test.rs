@@ -1498,7 +1498,7 @@ fn materialize_copies_metadata() {
         DisplayFrameId::new(123),
         state.presentation_id,
         Some(DisplayFrameId::new(456)),
-        crate::FrameRect::new(
+        crate::ParentFrameRect::new(
             10.0,
             20.0,
             state.frame_pixel_width,

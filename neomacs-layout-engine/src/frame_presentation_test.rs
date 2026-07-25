@@ -1,6 +1,6 @@
 use super::*;
 use neomacs_display_protocol::{
-    DisplayFrameId, FrameDisplayState, FrameRect, InteractionId, PresentationId,
+    DisplayFrameId, FrameDisplayState, FrameRect, InteractionId, ParentFrameRect, PresentationId,
     PresentedFramePlacement, PresentedPointerRegion, PresentedPointerSourceMap,
 };
 
@@ -11,7 +11,7 @@ fn resolved_state(revision: u64) -> FrameDisplayState {
         DisplayFrameId::new(7),
         state.presentation_id,
         None,
-        FrameRect::new(0.0, 0.0, 640.0, 384.0).unwrap(),
+        ParentFrameRect::new(0.0, 0.0, 640.0, 384.0).unwrap(),
         0,
     );
     state
@@ -61,7 +61,7 @@ fn resolved_frame_rejects_mismatched_placement_revision() {
         DisplayFrameId::new(7),
         PresentationId::new(40),
         None,
-        FrameRect::new(0.0, 0.0, 640.0, 384.0).unwrap(),
+        ParentFrameRect::new(0.0, 0.0, 640.0, 384.0).unwrap(),
         0,
     );
 

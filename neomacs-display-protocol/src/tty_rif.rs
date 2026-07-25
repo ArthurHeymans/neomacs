@@ -316,8 +316,8 @@ impl TtyRif {
                 continue;
             }
             let outer = child.frame_placement.outer_in_parent();
-            let origin_col = outer.x().max(0.0).round() as usize;
-            let origin_row = outer.y().max(0.0).round() as usize;
+            let origin_col = outer.x().round() as i64;
+            let origin_row = outer.y().round() as i64;
             self.draw_child_border(child, origin_col, origin_row);
             self.rasterize_state_at(child, origin_col, origin_row, true);
         }
@@ -330,8 +330,8 @@ impl TtyRif {
     fn rasterize_state_at(
         &mut self,
         state: &FrameDisplayState,
-        origin_col: usize,
-        origin_row: usize,
+        origin_col: i64,
+        origin_row: i64,
         clear_frame_rect: bool,
     ) {
         self.install_state_faces(state);
@@ -345,14 +345,11 @@ impl TtyRif {
                 bg: self.default_bg,
                 ..CellAttrs::default()
             };
-            let max_row = origin_row
-                .saturating_add(state.frame_rows)
-                .min(self.desired.height);
-            let max_col = origin_col
-                .saturating_add(state.frame_cols)
-                .min(self.desired.width);
-            for row in origin_row..max_row {
-                for col in origin_col..max_col {
+            let visible_rows =
+                visible_cell_range(origin_row, state.frame_rows, self.desired.height);
+            let visible_cols = visible_cell_range(origin_col, state.frame_cols, self.desired.width);
+            for row in visible_rows {
+                for col in visible_cols.clone() {
                     self.desired.set(row, col, ' ', attrs, false);
                 }
             }
@@ -361,9 +358,14 @@ impl TtyRif {
         if let Some(cursor) = state.phys_cursor.as_ref() {
             let (cursor_col, cursor_row) =
                 terminal_cursor_cell(cursor.x, cursor.y, state.char_width, state.char_height);
-            self.cursor_row = cursor_row.saturating_add(origin_row as u16);
-            self.cursor_col = cursor_col.saturating_add(origin_col as u16);
-            self.cursor_visible = true;
+            let cursor_row = origin_row.saturating_add(i64::from(cursor_row));
+            let cursor_col = origin_col.saturating_add(i64::from(cursor_col));
+            self.cursor_visible = visible_cell(cursor_row, self.desired.height).is_some()
+                && visible_cell(cursor_col, self.desired.width).is_some();
+            if self.cursor_visible {
+                self.cursor_row = u16::try_from(cursor_row).unwrap_or(u16::MAX);
+                self.cursor_col = u16::try_from(cursor_col).unwrap_or(u16::MAX);
+            }
             self.cursor_shape = match cursor.style {
                 CursorStyle::FilledBox | CursorStyle::Hollow => TerminalCursorShape::Block,
                 CursorStyle::Bar(_) => TerminalCursorShape::Bar,
@@ -378,8 +380,8 @@ impl TtyRif {
         let char_w = state.char_width.max(1.0);
         let char_h = state.char_height.max(1.0);
         for band in state.frame_chrome.bands() {
-            let band_col = origin_col + (band.bounds().x() / char_w).round() as usize;
-            let band_row = origin_row + (band.bounds().y() / char_h).round() as usize;
+            let band_col = origin_col + (band.bounds().x() / char_w).round() as i64;
+            let band_row = origin_row + (band.bounds().y() / char_h).round() as i64;
             match band.content() {
                 FrameChromeContent::DisplayRow(content) => {
                     self.rasterize_glyph_row(band_col, band_row, content.row());
@@ -404,14 +406,18 @@ impl TtyRif {
                 // margin reservation in dispnew.c: text-area glyph pointers are
                 // offset past left margin columns, chrome rows are not.
                 let row_bounds = entry.row_pixel_bounds(glyph_row.role);
-                let row_col = origin_col + (row_bounds.x / char_w).round().max(0.0) as usize;
-                let row_base = origin_row + (row_bounds.y / char_h).round().max(0.0) as usize;
+                let row_col = origin_col + (row_bounds.x / char_w).round().max(0.0) as i64;
+                let row_base = origin_row + (row_bounds.y / char_h).round().max(0.0) as i64;
                 // GNU keeps two coordinate domains in each glyph row:
                 // VPOS/HPOS are grid coordinates, while Y/X are pixel
                 // coordinates for GUI redisplay.  TTY output is written by
                 // matrix row index, so pixel_y/height_px must not stretch or
                 // skip terminal rows.
-                self.rasterize_glyph_row(row_col, row_base + row_idx, glyph_row);
+                self.rasterize_glyph_row(
+                    row_col,
+                    row_base.saturating_add(usize_to_i64_saturating(row_idx)),
+                    glyph_row,
+                );
             }
         }
 
@@ -423,12 +429,7 @@ impl TtyRif {
         // background.
     }
 
-    fn draw_child_border(
-        &mut self,
-        child: &FrameDisplayState,
-        origin_col: usize,
-        origin_row: usize,
-    ) {
+    fn draw_child_border(&mut self, child: &FrameDisplayState, origin_col: i64, origin_row: i64) {
         if child.undecorated {
             return;
         }
@@ -440,41 +441,47 @@ impl TtyRif {
             return;
         }
 
+        let width = usize_to_i64_saturating(width);
+        let height = usize_to_i64_saturating(height);
         let left = origin_col.saturating_sub(1);
         let right = origin_col.saturating_add(width);
         let top = origin_row.saturating_sub(1);
         let bottom = origin_row.saturating_add(height);
+        let visible_cols = visible_cell_range(origin_col, child.frame_cols, self.desired.width);
+        let visible_rows = visible_cell_range(origin_row, child.frame_rows, self.desired.height);
+        if visible_cols.is_empty() || visible_rows.is_empty() {
+            return;
+        }
 
-        if origin_row > 0 {
-            for col in origin_col..origin_col.saturating_add(width).min(self.desired.width) {
+        if let Some(top) = visible_cell(top, self.desired.height) {
+            for col in visible_cols.clone() {
                 self.desired.set(top, col, '-', attrs, false);
             }
-            if origin_col > 0 {
+            if let Some(left) = visible_cell(left, self.desired.width) {
                 self.desired.set(top, left, '+', attrs, false);
             }
-            if right < self.desired.width {
+            if let Some(right) = visible_cell(right, self.desired.width) {
                 self.desired.set(top, right, '+', attrs, false);
             }
         }
 
-        if bottom < self.desired.height {
-            for col in origin_col..origin_col.saturating_add(width).min(self.desired.width) {
+        if let Some(bottom) = visible_cell(bottom, self.desired.height) {
+            for col in visible_cols {
                 self.desired.set(bottom, col, '-', attrs, false);
             }
-            if origin_col > 0 {
+            if let Some(left) = visible_cell(left, self.desired.width) {
                 self.desired.set(bottom, left, '+', attrs, false);
             }
-            if right < self.desired.width {
+            if let Some(right) = visible_cell(right, self.desired.width) {
                 self.desired.set(bottom, right, '+', attrs, false);
             }
         }
 
-        let row_end = origin_row.saturating_add(height).min(self.desired.height);
-        for row in origin_row..row_end {
-            if origin_col > 0 {
+        for row in visible_rows {
+            if let Some(left) = visible_cell(left, self.desired.width) {
                 self.desired.set(row, left, '|', attrs, false);
             }
-            if right < self.desired.width {
+            if let Some(right) = visible_cell(right, self.desired.width) {
                 self.desired.set(row, right, '|', attrs, false);
             }
         }
@@ -493,8 +500,8 @@ impl TtyRif {
     fn rasterize_frame_menu_content(
         &mut self,
         menu: &crate::frame_chrome::MenuBarContent,
-        origin_col: usize,
-        origin_row: usize,
+        origin_col: i64,
+        origin_row: i64,
         frame_cols: usize,
         lines: usize,
     ) {
@@ -514,28 +521,34 @@ impl TtyRif {
                 inverse: style.inverse,
             },
         );
-        let lines = lines.min(self.desired.height.saturating_sub(origin_row));
-        let width = frame_cols.min(self.desired.width.saturating_sub(origin_col));
-        if lines == 0 || width == 0 {
+        let visible_rows = visible_cell_range(origin_row, lines, self.desired.height);
+        let visible_cols = visible_cell_range(origin_col, frame_cols, self.desired.width);
+        if visible_rows.is_empty() || visible_cols.is_empty() {
             return;
         }
-        for row in 0..lines {
-            for col in 0..width {
-                self.desired
-                    .set(origin_row + row, origin_col + col, ' ', attrs, false);
+        for row in visible_rows {
+            for col in visible_cols.clone() {
+                self.desired.set(row, col, ' ', attrs, false);
             }
         }
         let mut col = 0;
         for positioned in menu.items() {
             for ch in positioned.item().label.chars() {
-                if col >= width {
+                if col >= frame_cols {
                     return;
                 }
-                self.desired
-                    .set(origin_row, origin_col + col, ch, attrs, false);
+                if let (Some(row), Some(screen_col)) = (
+                    visible_cell(origin_row, self.desired.height),
+                    visible_cell(
+                        origin_col.saturating_add(usize_to_i64_saturating(col)),
+                        self.desired.width,
+                    ),
+                ) {
+                    self.desired.set(row, screen_col, ch, attrs, false);
+                }
                 col += 1;
             }
-            if col < width {
+            if col < frame_cols {
                 col += 1;
             }
         }
@@ -566,13 +579,15 @@ impl TtyRif {
     /// character plus combining extenders. Zero-width format joiners/selectors
     /// (ZWJ, ZWNJ, variation selectors) that the GUI shaper would consume are
     /// dropped — a terminal would otherwise show them as their own mark.
-    fn write_grapheme_cell(&mut self, row: usize, col: &mut usize, text: &str, attrs: CellAttrs) {
+    fn write_grapheme_cell(&mut self, row: usize, col: &mut i64, text: &str, attrs: CellAttrs) {
         let mut chars = text.chars().filter(|c| !is_tty_skippable_format(*c));
         let base = chars.next().unwrap_or(' ');
         let rest: String = chars.collect();
-        self.desired
-            .set_cluster(row, *col, base, &rest, attrs, false);
-        *col += 1;
+        if let Some(col) = visible_cell(*col, self.desired.width) {
+            self.desired
+                .set_cluster(row, col, base, &rest, attrs, false);
+        }
+        *col = col.saturating_add(1);
     }
 
     /// Diff the desired grid against the current grid and generate ANSI escape
@@ -677,15 +692,15 @@ impl TtyRif {
 
     fn rasterize_face_fill(
         &mut self,
-        origin_col: usize,
-        origin_row: usize,
+        origin_col: i64,
+        origin_row: i64,
         state: &FrameDisplayState,
         fill: &FaceFillItem,
     ) {
         let char_w = state.char_width.max(1.0);
         let char_h = state.char_height.max(1.0);
-        let start_col = origin_col + (fill.bounds.x / char_w).round().max(0.0) as usize;
-        let start_row = origin_row + (fill.bounds.y / char_h).round().max(0.0) as usize;
+        let start_col = origin_col + (fill.bounds.x / char_w).round().max(0.0) as i64;
+        let start_row = origin_row + (fill.bounds.y / char_h).round().max(0.0) as i64;
         let width_cols = (fill.bounds.width / char_w).ceil().max(0.0) as usize;
         let height_rows = (fill.bounds.height / char_h).ceil().max(0.0) as usize;
         if width_cols == 0 || height_rows == 0 {
@@ -693,12 +708,10 @@ impl TtyRif {
         }
 
         let attrs = self.resolve_attrs(fill.face_id);
-        let max_row = start_row
-            .saturating_add(height_rows)
-            .min(self.desired.height);
-        let max_col = start_col.saturating_add(width_cols).min(self.desired.width);
-        for row in start_row..max_row {
-            for col in start_col..max_col {
+        let visible_rows = visible_cell_range(start_row, height_rows, self.desired.height);
+        let visible_cols = visible_cell_range(start_col, width_cols, self.desired.width);
+        for row in visible_rows {
+            for col in visible_cols.clone() {
                 self.desired.set(row, col, ' ', attrs, false);
             }
         }
@@ -706,37 +719,51 @@ impl TtyRif {
 
     fn rasterize_glyph_row(
         &mut self,
-        screen_col_start: usize,
-        screen_row: usize,
+        screen_col_start: i64,
+        screen_row: i64,
         glyph_row: &GlyphRow,
     ) {
-        if !glyph_row.enabled || screen_row >= self.desired.height {
+        let Some(screen_row) = visible_cell(screen_row, self.desired.height) else {
+            return;
+        };
+        if !glyph_row.enabled {
             return;
         }
 
         // A row's horizontal start and source slot are one authoritative
         // placement.  TTY cells have no sub-cell positioning, so project the
         // pixel offset to its already-resolved display column.
-        let mut col = screen_col_start.saturating_add(usize::from(glyph_row.start_col));
+        let mut col = screen_col_start.saturating_add(i64::from(glyph_row.start_col));
+        let screen_width = usize_to_i64_saturating(self.desired.width);
 
         for area_idx in 0..3 {
             let glyphs = &glyph_row.glyphs[area_idx];
             let mut glyph_idx = 0;
+            let mut preceding_wide_base_visible = None;
             while glyph_idx < glyphs.len() {
                 let glyph = &glyphs[glyph_idx];
-                if col >= self.desired.width {
+                if col >= screen_width {
                     break;
                 }
 
                 if glyph.padding {
                     let attrs = self.resolve_attrs(glyph.face_id);
-                    self.desired.set(screen_row, col, ' ', attrs, true);
-                    col += 1;
+                    if let Some(col) = visible_cell(col, self.desired.width) {
+                        self.desired.set(
+                            screen_row,
+                            col,
+                            ' ',
+                            attrs,
+                            preceding_wide_base_visible.take().unwrap_or(true),
+                        );
+                    }
+                    col = col.saturating_add(1);
                     glyph_idx += 1;
                     continue;
                 }
 
                 let attrs = self.resolve_attrs(glyph.face_id);
+                let base_visible = visible_cell(col, self.desired.width).is_some();
                 // Composite glyphs (base char + grapheme-cluster
                 // extenders) occupy one cell whose content is the full
                 // cluster string, mirroring GNU's COMPOSITE_GLYPH.
@@ -772,7 +799,7 @@ impl TtyRif {
                             }
                             let consumed = graphemes.len() - 1;
                             for grapheme in graphemes {
-                                if col >= self.desired.width {
+                                if col >= screen_width {
                                     break;
                                 }
                                 self.write_grapheme_cell(screen_row, &mut col, grapheme, attrs);
@@ -783,11 +810,13 @@ impl TtyRif {
                     GlyphType::Stretch { width_cols } => {
                         let width_cols = usize::from((*width_cols).max(1));
                         for _ in 0..width_cols {
-                            if col >= self.desired.width {
+                            if col >= screen_width {
                                 break;
                             }
-                            self.desired.set(screen_row, col, ' ', attrs, false);
-                            col += 1;
+                            if let Some(col) = visible_cell(col, self.desired.width) {
+                                self.desired.set(screen_row, col, ' ', attrs, false);
+                            }
+                            col = col.saturating_add(1);
                         }
                     }
                     GlyphType::Surface { width_cols, .. } => {
@@ -799,28 +828,35 @@ impl TtyRif {
                         // the single-char fallthrough arm would not.
                         let width_cols = usize::from((*width_cols).max(1));
                         for ch in surface_tty_placeholder(width_cols).chars() {
-                            if col >= self.desired.width {
+                            if col >= screen_width {
                                 break;
                             }
-                            self.desired.set(screen_row, col, ch, attrs, false);
-                            col += 1;
+                            if let Some(col) = visible_cell(col, self.desired.width) {
+                                self.desired.set(screen_row, col, ch, attrs, false);
+                            }
+                            col = col.saturating_add(1);
                         }
                     }
                     _ => {
                         let ch = glyph_to_char(glyph);
-                        self.desired.set(screen_row, col, ch, attrs, false);
-                        col += 1;
+                        if let Some(col) = visible_cell(col, self.desired.width) {
+                            self.desired.set(screen_row, col, ch, attrs, false);
+                        }
+                        col = col.saturating_add(1);
 
                         let next_is_explicit_padding = glyph.wide
                             && glyphs
                                 .get(glyph_idx + 1)
                                 .is_some_and(|next_glyph| next_glyph.padding);
-                        if glyph.wide && !next_is_explicit_padding && col < self.desired.width {
-                            self.desired.set(screen_row, col, ' ', attrs, true);
-                            col += 1;
+                        if glyph.wide && !next_is_explicit_padding && col < screen_width {
+                            if let Some(col) = visible_cell(col, self.desired.width) {
+                                self.desired.set(screen_row, col, ' ', attrs, base_visible);
+                            }
+                            col = col.saturating_add(1);
                         }
                     }
                 }
+                preceding_wide_base_visible = glyph.wide.then_some(base_visible);
                 glyph_idx += 1;
             }
         }
@@ -829,6 +865,22 @@ impl TtyRif {
         // glyph output by `tty_set_cursor`; row cursor markers do not
         // become painted cell attributes.
     }
+}
+
+fn usize_to_i64_saturating(value: usize) -> i64 {
+    i64::try_from(value).unwrap_or(i64::MAX)
+}
+
+fn visible_cell(value: i64, limit: usize) -> Option<usize> {
+    usize::try_from(value).ok().filter(|value| *value < limit)
+}
+
+fn visible_cell_range(start: i64, extent: usize, limit: usize) -> std::ops::Range<usize> {
+    let limit = usize_to_i64_saturating(limit);
+    let end = start.saturating_add(usize_to_i64_saturating(extent));
+    let visible_start = start.clamp(0, limit);
+    let visible_end = end.clamp(visible_start, limit);
+    visible_start as usize..visible_end as usize
 }
 
 fn row_has_composite_cells(row: &[TtyCell]) -> bool {
@@ -1164,8 +1216,8 @@ impl TtyRif {
     fn dump_frame_display_state_to_log(
         &self,
         state: &FrameDisplayState,
-        origin_col: usize,
-        origin_row: usize,
+        origin_col: i64,
+        origin_row: i64,
     ) {
         tracing::info!(
             target: "neomacs_display_protocol::tty_rif",
