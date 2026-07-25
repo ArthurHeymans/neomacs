@@ -230,13 +230,7 @@ pub(crate) fn normalize_lisp_string_start_arg(
         ));
     }
     let start_char_idx = start_idx as usize;
-    if start_char_idx == len as usize {
-        return Ok(string.byte_len());
-    }
-    Ok(crate::emacs_core::emacs_char::char_to_byte_pos(
-        string.as_bytes(),
-        start_char_idx,
-    ))
+    Ok(string.char_to_byte_pos(start_char_idx))
 }
 
 // ---------------------------------------------------------------------------

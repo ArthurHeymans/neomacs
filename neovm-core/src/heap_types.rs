@@ -631,6 +631,32 @@ impl LispString {
         self.sbytes()
     }
 
+    /// Return the byte offset for a character position.
+    ///
+    /// Mirrors GNU `string_char_to_byte`: when `SCHARS == SBYTES`, every
+    /// character occupies one byte even if the string is marked multibyte, so
+    /// the conversion is an O(1) identity operation.
+    pub(crate) fn char_to_byte_pos(&self, char_pos: usize) -> usize {
+        let char_pos = char_pos.min(self.schars());
+        if !self.is_multibyte() || self.schars() == self.sbytes() {
+            char_pos
+        } else {
+            emacs_char::char_to_byte_pos(self.as_bytes(), char_pos)
+        }
+    }
+
+    /// Return the character position for a byte offset.
+    ///
+    /// Mirrors GNU `string_byte_to_char`'s `SCHARS == SBYTES` fast path.
+    pub(crate) fn byte_to_char_pos(&self, byte_pos: usize) -> usize {
+        let byte_pos = byte_pos.min(self.sbytes());
+        if !self.is_multibyte() || self.schars() == self.sbytes() {
+            byte_pos
+        } else {
+            emacs_char::byte_to_char_pos(self.as_bytes(), byte_pos)
+        }
+    }
+
     /// Heap bytes reserved by an owned byte backing, including capacity for
     /// GNU's trailing NUL. Mapped/static strings reserve no allocator-backed
     /// payload bytes in this process; their bytes belong to the pdump mapping
@@ -693,17 +719,30 @@ impl LispString {
         }
     }
 
-    fn slice_bytes_no_properties(&self, start: usize, end: usize) -> Option<Self> {
+    fn slice_bytes_no_properties_with_char_len(
+        &self,
+        start: usize,
+        end: usize,
+        char_len: Option<usize>,
+    ) -> Option<Self> {
         if end > self.as_bytes().len() || start > end {
             return None;
         }
         let slice = &self.as_bytes()[start..end];
         Some(if self.size_byte >= 0 {
             // multibyte
-            Self::from_emacs_bytes(slice.to_vec())
+            if let Some(char_len) = char_len {
+                Self::from_owned_payload(slice.to_vec(), char_len, slice.len() as i64)
+            } else {
+                Self::from_emacs_bytes(slice.to_vec())
+            }
         } else {
             Self::from_unibyte(slice.to_vec())
         })
+    }
+
+    fn slice_bytes_no_properties(&self, start: usize, end: usize) -> Option<Self> {
+        self.slice_bytes_no_properties_with_char_len(start, end, None)
     }
 
     /// Byte-index slice without text properties, matching GNU
@@ -712,19 +751,44 @@ impl LispString {
         self.slice_bytes_no_properties(start, end)
     }
 
+    /// Byte-index slice without text properties when the caller already knows
+    /// the corresponding character bounds.
+    pub(crate) fn slice_no_properties_with_char_bounds(
+        &self,
+        start: usize,
+        end: usize,
+        char_start: usize,
+        char_end: usize,
+    ) -> Option<Self> {
+        if char_start > char_end || char_end > self.schars() {
+            return None;
+        }
+        self.slice_bytes_no_properties_with_char_len(start, end, Some(char_end - char_start))
+    }
+
     /// Byte-index slice that preserves text properties, matching GNU
     /// `substring`/`substring_both`.
     pub fn slice(&self, start: usize, end: usize) -> Option<Self> {
-        let mut result = self.slice_bytes_no_properties(start, end)?;
-
         let (char_start, char_end) = if self.is_multibyte() {
-            (
-                emacs_char::byte_to_char_pos(self.as_bytes(), start),
-                emacs_char::byte_to_char_pos(self.as_bytes(), end),
-            )
+            (self.byte_to_char_pos(start), self.byte_to_char_pos(end))
         } else {
             (start, end)
         };
+        self.slice_with_char_bounds(start, end, char_start, char_end)
+    }
+
+    /// Byte-index slice that preserves text properties when the caller already
+    /// knows the corresponding character bounds, matching GNU
+    /// `substring_both`.
+    pub(crate) fn slice_with_char_bounds(
+        &self,
+        start: usize,
+        end: usize,
+        char_start: usize,
+        char_end: usize,
+    ) -> Option<Self> {
+        let mut result =
+            self.slice_no_properties_with_char_bounds(start, end, char_start, char_end)?;
         let intervals = self.intervals().slice_char_range(CharRange::new(
             CharPos0::new(char_start),
             CharPos0::new(char_end),

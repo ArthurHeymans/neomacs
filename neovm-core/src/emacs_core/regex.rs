@@ -383,11 +383,7 @@ impl SearchedString {
         let Some(string) = self.as_lisp_string() else {
             return 0;
         };
-        if string.is_multibyte() {
-            crate::emacs_core::emacs_char::byte_to_char_pos(string.as_bytes(), byte_pos)
-        } else {
-            byte_pos.min(string.byte_len())
-        }
+        string.byte_to_char_pos(byte_pos)
     }
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -403,13 +399,7 @@ impl SearchedString {
 }
 
 pub fn char_pos_to_byte_lisp_string(s: &crate::heap_types::LispString, char_pos: usize) -> usize {
-    if !s.is_multibyte() {
-        return char_pos.min(s.byte_len());
-    }
-    if char_pos >= s.schars() {
-        return s.byte_len();
-    }
-    crate::emacs_core::emacs_char::char_to_byte_pos(s.as_bytes(), char_pos)
+    s.char_to_byte_pos(char_pos)
 }
 
 impl MatchData {

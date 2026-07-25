@@ -194,8 +194,8 @@ fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResul
                     ));
                 }
                 let (byte_from, byte_to) = if src.is_multibyte() {
-                    let bf = crate::emacs_core::emacs_char::char_to_byte_pos(src_bytes, from);
-                    let bt = crate::emacs_core::emacs_char::char_to_byte_pos(src_bytes, to);
+                    let bf = src.char_to_byte_pos(from);
+                    let bt = src.char_to_byte_pos(to);
                     (bf, bt)
                 } else {
                     (from, to)
@@ -211,10 +211,10 @@ fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResul
                     ));
                 }
                 let result = if preserve_props {
-                    src.slice(byte_from, byte_to)
+                    src.slice_with_char_bounds(byte_from, byte_to, from, to)
                         .expect("validated storage substring bounds")
                 } else {
-                    src.slice_no_properties(byte_from, byte_to)
+                    src.slice_no_properties_with_char_bounds(byte_from, byte_to, from, to)
                         .expect("validated storage substring bounds")
                 };
                 let sliced_props = if let Some(src_table) = src_props.as_ref() {

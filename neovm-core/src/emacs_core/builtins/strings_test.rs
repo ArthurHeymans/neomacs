@@ -62,6 +62,36 @@ fn substring_copies_text_properties_through_gnu_add_properties_order() {
 }
 
 #[test]
+fn split_ascii_multibyte_string_uses_gnu_identity_position_conversion() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    let field_count = 256;
+    let input = (0..field_count)
+        .map(|index| format!("src/module-{index:04}/file.rs\0"))
+        .collect::<String>();
+    let input_len = input.len();
+    let input = Value::heap_string(LispString::from_utf8(&input));
+
+    crate::emacs_core::emacs_char::reset_position_conversion_scan_steps_for_test();
+    let result = eval
+        .funcall_general(
+            Value::symbol("split-string"),
+            vec![input, Value::string("\0"), Value::T],
+        )
+        .expect("split-string should succeed");
+    let scan_steps = crate::emacs_core::emacs_char::position_conversion_scan_steps_for_test();
+    let fields = crate::emacs_core::value::list_to_vec(&result)
+        .expect("split-string should return a proper list");
+
+    assert_eq!(fields.len(), field_count);
+    assert_eq!(
+        scan_steps, 0,
+        "GNU treats ASCII multibyte offsets as identity conversions; \
+         split-string scanned {scan_steps} characters for {input_len} input bytes"
+    );
+}
+
+#[test]
 fn concat_preserves_multibyte_text_properties_as_char_intervals() {
     crate::test_utils::init_test_tracing();
 

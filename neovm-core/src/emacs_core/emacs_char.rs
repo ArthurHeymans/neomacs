@@ -1323,6 +1323,30 @@ pub fn chars_in_multibyte(bytes: &[u8]) -> usize {
     count
 }
 
+#[cfg(test)]
+thread_local! {
+    static POSITION_CONVERSION_SCAN_STEPS: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn record_position_conversion_scan_step() {
+    POSITION_CONVERSION_SCAN_STEPS.with(|steps| steps.set(steps.get() + 1));
+}
+
+#[cfg(not(test))]
+fn record_position_conversion_scan_step() {}
+
+#[cfg(test)]
+pub(crate) fn reset_position_conversion_scan_steps_for_test() {
+    POSITION_CONVERSION_SCAN_STEPS.with(|steps| steps.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn position_conversion_scan_steps_for_test() -> usize {
+    POSITION_CONVERSION_SCAN_STEPS.with(std::cell::Cell::get)
+}
+
 /// Convert a character index to a byte offset.
 ///
 /// Returns the byte position of the `char_idx`-th character (0-based).
@@ -1331,6 +1355,7 @@ pub fn char_to_byte_pos(bytes: &[u8], char_idx: usize) -> usize {
     let mut pos = 0usize;
     let mut ci = 0usize;
     while ci < char_idx && pos < bytes.len() {
+        record_position_conversion_scan_step();
         let (_, len) = string_char(&bytes[pos..]);
         pos += len;
         ci += 1;
@@ -1346,6 +1371,7 @@ pub fn byte_to_char_pos(bytes: &[u8], byte_pos: usize) -> usize {
     let mut pos = 0usize;
     let mut ci = 0usize;
     while pos < byte_pos && pos < bytes.len() {
+        record_position_conversion_scan_step();
         let (_, len) = string_char(&bytes[pos..]);
         pos += len;
         ci += 1;
