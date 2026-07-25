@@ -1474,8 +1474,8 @@ impl<'a> Vm<'a> {
         // branch, transfer the rest of this interpreted call into native code at
         // the loop header. Gated once here (opt-in, kill-switch aware); `osr_tried`
         // latches so a loop that can't/didn't OSR is probed only once per frame.
-        let osr_enabled = crate::emacs_core::jit::jit_osr_on()
-            && crate::emacs_core::jit::jit_runtime_enabled();
+        let osr_enabled =
+            crate::emacs_core::jit::jit_osr_on() && crate::emacs_core::jit::jit_runtime_enabled();
         let mut osr_tried = false;
 
         // A6: base+len of the operand stack live in registers for the whole

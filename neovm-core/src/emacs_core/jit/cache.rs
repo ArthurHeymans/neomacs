@@ -174,18 +174,15 @@ fn compile_osr_leaf(
         return None;
     }
     let ops = func.executable_ops();
-    let native_arity =
-        func.params.required.len() + func.params.optional.len() + usize::from(func.params.rest.is_some());
+    let native_arity = func.params.required.len()
+        + func.params.optional.len()
+        + usize::from(func.params.rest.is_some());
     let offset_map = func.executable_gnu_byte_offset_map();
     let cfg = super::compile::analyze_cfg(ops, &func.constants, offset_map, native_arity).ok()?;
     // The loop header must be a real block boundary with a known entry depth and
     // no active handler frames (belt-and-suspenders with the op scan).
     let entry_depth = *cfg.entry_depth.get(&osr_pc)?;
-    if !cfg
-        .entry_handlers
-        .get(&osr_pc)
-        .is_none_or(|h| h.is_empty())
-    {
+    if !cfg.entry_handlers.get(&osr_pc).is_none_or(|h| h.is_empty()) {
         return None;
     }
     let leaf = super::compile::lower_leaf_full_osr(

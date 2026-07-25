@@ -1200,7 +1200,13 @@ mod tests {
             mir.blocks
                 .iter()
                 .flat_map(|b| b.insts.iter())
-                .any(|i| matches!(&i.op, MirOp::Opaque { op: Op::VarSet(0), .. })),
+                .any(|i| matches!(
+                    &i.op,
+                    MirOp::Opaque {
+                        op: Op::VarSet(0),
+                        ..
+                    }
+                )),
             "a 0-result VarSet must survive into the MIR (else the side effect is dropped)"
         );
     }

@@ -1751,14 +1751,12 @@ pub extern "C" fn neovm_jit_arith_spec(
             // extra dispatch. `None` on any non-fixnum arg or an `ash` overflow ->
             // the generic bounce below. lognot is 1-arg (dummy `b`, ignored); the
             // 2-arg ops read both operands only inside their own arm.
-            let fix2 = || {
-                match (
-                    Value::from_bits(a as usize).as_fixnum(),
-                    Value::from_bits(b as usize).as_fixnum(),
-                ) {
-                    (Some(l), Some(r)) => Some((l, r)),
-                    _ => None,
-                }
+            let fix2 = || match (
+                Value::from_bits(a as usize).as_fixnum(),
+                Value::from_bits(b as usize).as_fixnum(),
+            ) {
+                (Some(l), Some(r)) => Some((l, r)),
+                _ => None,
             };
             let res: Option<i64> = match kind {
                 ARITH_KIND_LOGAND => fix2().map(|(l, r)| l & r),
@@ -3861,11 +3859,12 @@ fn inline_arith_callee_syms(
     ops: &[Op],
     constants: &[Value],
 ) -> Vec<crate::emacs_core::intern::SymId> {
-    let mut syms: Vec<crate::emacs_core::intern::SymId> = arith_intrinsic_call_sites(ops, constants)
-        .into_iter()
-        .filter(|&(_, _, op)| arith_op_inlines(op))
-        .map(|(_, sym, _)| sym)
-        .collect();
+    let mut syms: Vec<crate::emacs_core::intern::SymId> =
+        arith_intrinsic_call_sites(ops, constants)
+            .into_iter()
+            .filter(|&(_, _, op)| arith_op_inlines(op))
+            .map(|(_, sym, _)| sym)
+            .collect();
     syms.sort_by_key(|s| s.0);
     syms.dedup();
     syms
@@ -11734,13 +11733,13 @@ mod tests {
             ("logand", 12, 10, 8),
             ("logior", 12, 10, 14),
             ("logxor", 12, 10, 6),
-            ("logand", -1, 5, 5),     // two's-complement: -1 is all-ones
-            ("logior", -8, 3, -5),    // sign bit survives
+            ("logand", -1, 5, 5),  // two's-complement: -1 is all-ones
+            ("logior", -8, 3, -5), // sign bit survives
             ("logxor", -1, -1, 0),
-            ("ash", 3, 4, 48),        // left shift: 3 << 4
-            ("ash", 5, 0, 5),         // no shift
-            ("ash", 256, -3, 32),     // right shift: 256 >> 3
-            ("ash", -7, -1, -4),      // arithmetic right shift: floor(-3.5) = -4
+            ("ash", 3, 4, 48),    // left shift: 3 << 4
+            ("ash", 5, 0, 5),     // no shift
+            ("ash", 256, -3, 32), // right shift: 256 >> 3
+            ("ash", -7, -1, -4),  // arithmetic right shift: floor(-3.5) = -4
         ] {
             let leaf = mk(name, 2, &ev.obarray);
             #[cfg(debug_assertions)]
@@ -11856,7 +11855,12 @@ mod tests {
             ("lognot", 1, vec![5], -6),
             ("lognot", 1, vec![-1], 0),
             ("lognot", 1, vec![0], -1),
-            ("lognot", 1, vec![Value::MOST_NEGATIVE_FIXNUM], Value::MOST_POSITIVE_FIXNUM),
+            (
+                "lognot",
+                1,
+                vec![Value::MOST_NEGATIVE_FIXNUM],
+                Value::MOST_POSITIVE_FIXNUM,
+            ),
         ] {
             let leaf = mk(name, nargs, &ev.obarray);
             assert!(
@@ -11876,7 +11880,10 @@ mod tests {
             ash_leaf.inline_deps().is_empty(),
             "ash stays on the shim — no inline redefinition dep"
         );
-        assert_eq!(ash_leaf.call(ctx, &[int(3), int(4)]), NativeRun::Ok(int(48).bits()));
+        assert_eq!(
+            ash_leaf.call(ctx, &[int(3), int(4)]),
+            NativeRun::Ok(int(48).bits())
+        );
         // A non-fixnum arg on an inline op DEOPTS (guard fails) — it never runs the
         // inline `&` on a non-fixnum; the caller re-runs the real logand interpreted.
         let leaf = mk("logand", 2, &ev.obarray);
@@ -14237,7 +14244,14 @@ mod tests {
                     let resumed = {
                         let mut vm = Vm::from_context(&mut ev);
                         vm.run_resumed_frame(
-                            &f, Value::NIL, pc, &stack, handlers, &binds, spec_base, cond_base,
+                            &f,
+                            Value::NIL,
+                            pc,
+                            &stack,
+                            handlers,
+                            &binds,
+                            spec_base,
+                            cond_base,
                         )
                     };
                     match (&resumed, &interp) {
