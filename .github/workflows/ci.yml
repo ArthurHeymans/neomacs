@@ -413,7 +413,7 @@ jobs:
       - *prepare_workspace_tmp
       - *install_linux_deps
       - name: Install GNU Emacs oracle
-        run: sudo apt-get install -y --no-install-recommends emacs-nox
+        run: sudo apt-get install -y --no-install-recommends emacs-nox gnupg
       - *install_rust
       - *install_nextest
       - *download_test_runtime

@@ -1,0 +1,12 @@
+(unless (file-exists-p package-quickstart-file)
+  (error "package quickstart file was not generated"))
+(unless (fboundp 'simple-single-mode)
+  (error "simple-single autoload was absent from quickstart"))
+(unless (fboundp 'multi-file-mode)
+  (error "multi-file autoload was absent from quickstart"))
+(unless (package-installed-p 'simple-two-depend)
+  (error "dependency-chain package was absent after quickstart"))
+(unless (package-installed-p 'multi-file)
+  (error "tar package was absent after quickstart"))
+
+(princ "NEOMACS-MELPA-RESULT:(:quickstart t :autoloads t :dependencies t :restart t)")

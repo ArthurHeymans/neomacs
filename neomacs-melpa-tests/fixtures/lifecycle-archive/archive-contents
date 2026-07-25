@@ -1,0 +1,6 @@
+(1
+ (future-only .
+              [(1 0)
+               ((emacs (99 0)))
+               "Package requiring a future Emacs"
+               single]))

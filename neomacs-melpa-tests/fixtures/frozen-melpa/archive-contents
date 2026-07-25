@@ -18,4 +18,5 @@
     [(20220902 1511)
      nil
      "The long lost Emacs string manipulation library"
-     tar]))
+     tar])
+)

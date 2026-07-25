@@ -114,7 +114,7 @@ fn ci_runs_offline_melpa_parity_from_shared_artifacts() {
     assert!(job.contains("- *download_workspace_test_archive"));
     assert!(job.contains("NEOMACS_BIN: ${{ github.workspace }}/target/release/neomacs"));
     assert!(job.contains("NEOMACS_MELPA_ORACLE_EMACS: /usr/bin/emacs"));
-    assert!(job.contains("sudo apt-get install -y --no-install-recommends emacs-nox"));
+    assert!(job.contains("sudo apt-get install -y --no-install-recommends emacs-nox gnupg"));
     assert!(job.contains("-E 'package(neomacs-melpa-tests)'"));
     assert!(job.contains("--success-output immediate"));
 }
@@ -381,11 +381,7 @@ fn windows_gstreamer_packager_accepts_official_pango_runtime_shape() {
 }
 
 fn parse_options(args: &[&str]) -> FreshBuildOptions {
-    FreshBuildOptions::parse(
-        PathBuf::from("/repo"),
-        args.iter().map(|arg| OsString::from(arg)),
-    )
-    .unwrap()
+    FreshBuildOptions::parse(PathBuf::from("/repo"), args.iter().map(OsString::from)).unwrap()
 }
 
 #[test]
@@ -1802,15 +1798,177 @@ fn generated_unidata_admin_files_match_gnu_clean_shape() {
     );
 }
 
+#[test]
+fn refresh_melpa_fixtures_command_parses_offline_source_and_packages() {
+    let repo = tempdir().join("repo");
+    let command = XtaskCommand::parse(
+        repo.clone(),
+        [
+            OsString::from("refresh-melpa-fixtures"),
+            OsString::from("--source"),
+            OsString::from("mirror"),
+            OsString::from("--fixture-dir"),
+            OsString::from("fixtures"),
+            OsString::from("--package"),
+            OsString::from("alpha"),
+            OsString::from("--snapshot-date"),
+            OsString::from("2026-07-25"),
+        ],
+    )
+    .unwrap();
+
+    let XtaskCommand::RefreshMelpaFixtures(options) = command else {
+        panic!("expected refresh-melpa-fixtures command");
+    };
+    assert_eq!(options.repo_root, repo);
+    assert_eq!(
+        options.source,
+        FixtureSource::Directory(repo.join("mirror"))
+    );
+    assert_eq!(options.fixture_dir, repo.join("fixtures"));
+    assert_eq!(options.packages, vec!["alpha"]);
+    assert_eq!(options.snapshot_date.as_deref(), Some("2026-07-25"));
+}
+
+#[test]
+fn refresh_melpa_fixtures_builds_a_valid_offline_snapshot() {
+    let root = tempdir();
+    let repo = root.join("repo");
+    let source = repo.join("mirror");
+    let fixture_dir = repo.join("fixtures");
+    fs::create_dir_all(repo.join("lisp")).unwrap();
+    fs::create_dir_all(repo.join("tmp")).unwrap();
+    fs::create_dir_all(&source).unwrap();
+    fs::create_dir_all(&fixture_dir).unwrap();
+    fs::write(fixture_dir.join("obsolete-0.1.tar"), b"obsolete").unwrap();
+    fs::write(
+        source.join("archive-contents"),
+        r##"(1
+ (alpha .
+        [(20260725 1200)
+         nil
+         "Offline fixture"
+         tar]))
+"##,
+    )
+    .unwrap();
+    write_melpa_tar_fixture(
+        &source.join("alpha-20260725.1200.tar"),
+        "alpha",
+        "20260725.1200",
+        "0123456789abcdef0123456789abcdef01234567",
+    );
+
+    refresh_melpa_fixtures(&MelpaFixtureOptions {
+        repo_root: repo,
+        source: FixtureSource::Directory(source),
+        fixture_dir: fixture_dir.clone(),
+        packages: vec!["alpha".to_string()],
+        snapshot_date: Some("2026-07-25".to_string()),
+    })
+    .unwrap();
+
+    assert!(fixture_dir.join("alpha-20260725.1200.tar").is_file());
+    assert!(!fixture_dir.join("obsolete-0.1.tar").exists());
+    assert_eq!(
+        fs::read_to_string(fixture_dir.join("packages.txt")).unwrap(),
+        "alpha\n"
+    );
+    let archive = fs::read_to_string(fixture_dir.join("archive-contents")).unwrap();
+    assert!(archive.contains("(alpha ."));
+    assert!(archive.ends_with(")\n"));
+    let sums = fs::read_to_string(fixture_dir.join("SHA256SUMS")).unwrap();
+    assert!(sums.ends_with("  alpha-20260725.1200.tar\n"));
+    let readme = fs::read_to_string(fixture_dir.join("README.md")).unwrap();
+    assert!(readme.contains("| alpha | 20260725.1200 |"));
+    assert!(readme.contains("`0123456789abcdef0123456789abcdef01234567`"));
+    assert!(readme.contains("GPL-3.0-or-later"));
+}
+
+#[test]
+fn refresh_melpa_fixtures_rejects_packages_built_into_neomacs() {
+    let root = tempdir();
+    let repo = root.join("repo");
+    let source = repo.join("mirror");
+    let fixture_dir = repo.join("fixtures");
+    fs::create_dir_all(repo.join("lisp")).unwrap();
+    fs::create_dir_all(repo.join("tmp")).unwrap();
+    fs::create_dir_all(&source).unwrap();
+    fs::write(repo.join("lisp/alpha.el"), ";;; alpha.el\n").unwrap();
+    fs::write(
+        source.join("archive-contents"),
+        r##"(1
+ (alpha . [(1 0) nil "Built in" tar]))
+"##,
+    )
+    .unwrap();
+    write_melpa_tar_fixture(
+        &source.join("alpha-1.0.tar"),
+        "alpha",
+        "1.0",
+        "0123456789abcdef0123456789abcdef01234567",
+    );
+
+    let error = refresh_melpa_fixtures(&MelpaFixtureOptions {
+        repo_root: repo,
+        source: FixtureSource::Directory(source),
+        fixture_dir,
+        packages: vec!["alpha".to_string()],
+        snapshot_date: Some("2026-07-25".to_string()),
+    })
+    .unwrap_err()
+    .to_string();
+
+    assert!(error.contains("built into Neomacs"), "{error}");
+    assert!(error.contains("lisp/alpha.el"), "{error}");
+}
+
+fn write_melpa_tar_fixture(output: &Path, package: &str, version: &str, commit: &str) {
+    let root = format!("{package}-{version}");
+    let pkg = format!(
+        r##"(define-package "{package}" "{version}" "Fixture" nil
+  :commit "{commit}")
+"##
+    );
+    let source = format!(
+        r##";;; {package}.el --- fixture
+;; This file is free software: you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
+(provide '{package})
+"##
+    );
+    let file = fs::File::create(output).unwrap();
+    let mut archive = tar::Builder::new(file);
+    for (name, contents) in [
+        (format!("{root}/{package}-pkg.el"), pkg),
+        (format!("{root}/{package}.el"), source),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(contents.len().try_into().unwrap());
+        header.set_mode(0o644);
+        header.set_cksum();
+        archive
+            .append_data(&mut header, name, contents.as_bytes())
+            .unwrap();
+    }
+    archive.finish().unwrap();
+}
+
 fn tempdir() -> PathBuf {
-    let dir = env::temp_dir().join(format!(
-        "xtask-tests-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask lives under the repository root")
+        .join("tmp")
+        .join(format!(
+            "xtask-tests-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
     fs::create_dir_all(&dir).unwrap();
     dir
 }

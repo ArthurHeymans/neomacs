@@ -12,6 +12,12 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::time::Instant;
 
+mod melpa_fixtures;
+
+#[cfg(test)]
+use melpa_fixtures::FixtureSource;
+use melpa_fixtures::{MelpaFixtureOptions, refresh_melpa_fixtures};
+
 type DynError = Box<dyn Error>;
 type Result<T> = std::result::Result<T, DynError>;
 
@@ -39,6 +45,12 @@ struct FreshBuildOptions {
     /// they landed. With `--dry-run` the producer only LISTS candidates + dedup
     /// stats (no link/write). xtask itself does not link neovm-core.
     aot_preload: bool,
+}
+
+#[derive(Debug, Clone)]
+enum XtaskCommand {
+    FreshBuild(FreshBuildOptions),
+    RefreshMelpaFixtures(MelpaFixtureOptions),
 }
 
 #[derive(Debug, Clone)]
@@ -265,8 +277,23 @@ fn main() {
 
 fn try_main() -> Result<()> {
     let repo_root = repository_root();
-    let options = FreshBuildOptions::parse(repo_root, env::args_os().skip(1))?;
-    run_fresh_build(&options)
+    match XtaskCommand::parse(repo_root, env::args_os().skip(1))? {
+        XtaskCommand::FreshBuild(options) => run_fresh_build(&options),
+        XtaskCommand::RefreshMelpaFixtures(options) => refresh_melpa_fixtures(&options),
+    }
+}
+
+impl XtaskCommand {
+    fn parse(repo_root: PathBuf, args: impl IntoIterator<Item = OsString>) -> Result<Self> {
+        let args = args.into_iter().collect::<Vec<_>>();
+        if matches!(args.first(), Some(command) if command == "refresh-melpa-fixtures") {
+            return Ok(Self::RefreshMelpaFixtures(MelpaFixtureOptions::parse(
+                repo_root,
+                args.into_iter().skip(1),
+            )?));
+        }
+        FreshBuildOptions::parse(repo_root, args).map(Self::FreshBuild)
+    }
 }
 
 impl FreshBuildOptions {
@@ -3920,8 +3947,13 @@ fn print_usage() {
 fn usage_text() -> &'static str {
     "\
 Usage: cargo xtask [fresh-build] --release [--bin-dir DIR] [--runtime-root DIR] [--dry-run] [--native-comp|--no-native-comp] [--skip-build] [--no-byte-compile] [--aot-preload]
+       cargo xtask refresh-melpa-fixtures [--source URL_OR_DIR] [--fixture-dir DIR] [--package NAME]...
 
 --release is required: fresh-build produces the runnable runtime binary and is a release-only operation.
+
+`refresh-melpa-fixtures` updates the checksum-pinned offline MELPA test
+archive. It reads package names from packages.txt unless --package is given
+and stages all downloads below the repository's ./tmp directory.
 
 Build the GNU-shaped Neomacs runtime pipeline:
   1. cargo build --verbose -p neomacs [--features wpe-webkit on Linux] [--release]

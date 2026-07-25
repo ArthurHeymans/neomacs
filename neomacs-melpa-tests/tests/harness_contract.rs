@@ -4,8 +4,8 @@ use std::process::Command;
 use std::time::Duration;
 
 use neomacs_melpa_tests::{
-    EmacsRuntime, MelpaSandbox, PackageScenario, PackageSource, ScenarioPhase, run_scenario,
-    workspace_root,
+    EmacsRuntime, ErtScenario, MelpaSandbox, PackageScenario, PackageSource, ScenarioPhase,
+    run_ert_scenario, run_scenario, workspace_root,
 };
 
 #[test]
@@ -186,4 +186,46 @@ printf 'NEOMACS-MELPA-INSTALLED:simple-single\t1.3\n'
             "error did not contain `{expected}`: {error}"
         );
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn ert_scenario_forwards_the_test_file_and_selector() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = MelpaSandbox::new("ert-runtime-contract").expect("create fixture sandbox");
+    let invocation_log = fixture.root().join("ert-invocation");
+    let runtime_script = fixture.root().join("fake-ert-emacs");
+    fs::write(
+        &runtime_script,
+        format!(
+            r##"#!/bin/sh
+printf '%s\n' "$*" > '{}'
+printf '%s\n' 'Ran 3 tests, 3 results as expected, 0 unexpected, 1 skipped' >&2
+"##,
+            invocation_log.display()
+        ),
+    )
+    .expect("write fake ERT runtime");
+    fs::set_permissions(&runtime_script, fs::Permissions::from_mode(0o755))
+        .expect("make fake ERT runtime executable");
+
+    let test_file = workspace_root().join("test/lisp/emacs-lisp/package-tests.el");
+    let scenario = ErtScenario::new(
+        "upstream-install-contract",
+        &test_file,
+        r##"'(member package-test-install-single package-test-install-file)"##,
+    );
+    let report = run_ert_scenario(&EmacsRuntime::new("fake-ert", runtime_script), &scenario)
+        .expect("run fake ERT scenario");
+
+    let invocation = fs::read_to_string(invocation_log).expect("read ERT invocation");
+    assert!(invocation.contains(&format!("-l {}", test_file.display())));
+    assert!(invocation.contains("ert-run-tests-batch"));
+    assert!(invocation.contains("package-test-install-single"));
+    assert_eq!(report.phase.phase, ScenarioPhase::Ert);
+    assert_eq!(report.summary.total, 3);
+    assert_eq!(report.summary.expected, 3);
+    assert_eq!(report.summary.unexpected, 0);
+    assert_eq!(report.summary.skipped, 1);
 }

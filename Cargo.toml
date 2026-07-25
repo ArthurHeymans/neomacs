@@ -212,6 +212,7 @@ expect-test = "1.5.1"
 tempfile = "3.27.0"
 colored = "3"
 wait-timeout = "0.2"
+tar = "0.4.44"
 
 [profile.release]
 lto = true
