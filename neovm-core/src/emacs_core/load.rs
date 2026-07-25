@@ -176,43 +176,40 @@ pub(crate) fn decode_emacs_utf8(bytes: &[u8]) -> String {
             continue;
         }
         // Valid 2-byte UTF-8 (C2-DF).
-        if b >= 0xC2 && b <= 0xDF && i + 1 < bytes.len() && (bytes[i + 1] & 0xC0) == 0x80 {
-            if let Some(s) = std::str::from_utf8(&bytes[i..i + 2]).ok() {
-                out.push_str(s);
-                i += 2;
-                continue;
-            }
+        if (0xC2..=0xDF).contains(&b)
+            && i + 1 < bytes.len()
+            && (bytes[i + 1] & 0xC0) == 0x80
+            && let Ok(s) = std::str::from_utf8(&bytes[i..i + 2])
+        {
+            out.push_str(s);
+            i += 2;
+            continue;
         }
         // Valid 3-byte UTF-8 (E0-EF).
-        if b >= 0xE0
-            && b <= 0xEF
+        if (0xE0..=0xEF).contains(&b)
             && i + 2 < bytes.len()
             && (bytes[i + 1] & 0xC0) == 0x80
             && (bytes[i + 2] & 0xC0) == 0x80
+            && let Ok(s) = std::str::from_utf8(&bytes[i..i + 3])
         {
-            if let Some(s) = std::str::from_utf8(&bytes[i..i + 3]).ok() {
-                out.push_str(s);
-                i += 3;
-                continue;
-            }
+            out.push_str(s);
+            i += 3;
+            continue;
         }
         // Valid standard 4-byte UTF-8 (F0-F4, code point <= 10FFFF).
-        if b >= 0xF0
-            && b <= 0xF4
+        if (0xF0..=0xF4).contains(&b)
             && i + 3 < bytes.len()
             && (bytes[i + 1] & 0xC0) == 0x80
             && (bytes[i + 2] & 0xC0) == 0x80
             && (bytes[i + 3] & 0xC0) == 0x80
+            && let Ok(s) = std::str::from_utf8(&bytes[i..i + 4])
         {
-            if let Some(s) = std::str::from_utf8(&bytes[i..i + 4]).ok() {
-                out.push_str(s);
-                i += 4;
-                continue;
-            }
+            out.push_str(s);
+            i += 4;
+            continue;
         }
         // Extended 4-byte (F5-F7): Emacs-internal code point > U+10FFFF.
-        if b >= 0xF5
-            && b <= 0xF7
+        if (0xF5..=0xF7).contains(&b)
             && i + 3 < bytes.len()
             && (bytes[i + 1] & 0xC0) == 0x80
             && (bytes[i + 2] & 0xC0) == 0x80
@@ -227,8 +224,7 @@ pub(crate) fn decode_emacs_utf8(bytes: &[u8]) -> String {
             continue;
         }
         // Extended 5-byte (F8-FB): still accepted by Emacs's internal UTF-8.
-        if b >= 0xF8
-            && b <= 0xFB
+        if (0xF8..=0xFB).contains(&b)
             && i + 4 < bytes.len()
             && (bytes[i + 1] & 0xC0) == 0x80
             && (bytes[i + 2] & 0xC0) == 0x80
@@ -245,8 +241,7 @@ pub(crate) fn decode_emacs_utf8(bytes: &[u8]) -> String {
             continue;
         }
         // Extended 6-byte (FC-FD): highest Emacs internal codes.
-        if b >= 0xFC
-            && b <= 0xFD
+        if (0xFC..=0xFD).contains(&b)
             && i + 5 < bytes.len()
             && (bytes[i + 1] & 0xC0) == 0x80
             && (bytes[i + 2] & 0xC0) == 0x80
@@ -752,9 +747,8 @@ fn strict_load_suffix_list(
                 })
         })
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|flow| {
+        .inspect_err(|_flow| {
             tracing::debug!(variable = name, "invalid live load suffix list");
-            flow
         })
 }
 
@@ -805,13 +799,9 @@ fn find_for_base(
     }
 
     // Surface unsupported compressed compiled artifacts explicitly.
-    for compiled in unsupported_compiled_suffixed_paths(base) {
-        if compiled.exists() {
-            return Some(compiled);
-        }
-    }
-
-    None
+    unsupported_compiled_suffixed_paths(base)
+        .into_iter()
+        .find(|compiled| compiled.exists())
 }
 
 fn expand_tilde_path_buf(path: &LispString) -> PathBuf {
@@ -822,15 +812,15 @@ fn expand_tilde_path_buf(path: &LispString) -> PathBuf {
             if let Some(home) = std::env::var_os("HOME") {
                 return PathBuf::from(home);
             }
-        } else if bytes.starts_with(b"~/") {
-            if let Some(home) = std::env::var_os("HOME") {
-                let mut expanded = PathBuf::from(home);
-                expanded.push(std::ffi::OsString::from_vec(bytes[2..].to_vec()));
-                return expanded;
-            }
+        } else if bytes.starts_with(b"~/")
+            && let Some(home) = std::env::var_os("HOME")
+        {
+            let mut expanded = PathBuf::from(home);
+            expanded.push(std::ffi::OsString::from_vec(bytes[2..].to_vec()));
+            return expanded;
         }
 
-        return load_path_buf(path);
+        load_path_buf(path)
     }
 
     #[cfg(not(unix))]
@@ -1382,12 +1372,11 @@ pub(crate) fn get_eager_macroexpand_fn(eval: &super::eval::Context) -> Option<Va
     // Respect the Elisp `macroexp--pending-eager-loads` variable.
     // When it starts with `skip`, eager expansion is suppressed (mirrors
     // the check in `internal-macroexpand-for-load` in macroexp.el).
-    if let Some(val) = eval.obarray().symbol_value("macroexp--pending-eager-loads") {
-        if val.is_cons() {
-            if val.cons_car().is_symbol_named("skip") {
-                return None;
-            }
-        }
+    if let Some(val) = eval.obarray().symbol_value("macroexp--pending-eager-loads")
+        && val.is_cons()
+        && val.cons_car().is_symbol_named("skip")
+    {
+        return None;
     }
     let f = eval
         .obarray()
@@ -2362,8 +2351,7 @@ fn run_after_load_evaluation(eval: &mut super::eval::Context, path_lisp: &LispSt
             let err_msg = match &e {
                 super::error::Flow::Signal(sig) => {
                     let sym = super::intern::resolve_sym(sig.symbol);
-                    let data: Vec<String> =
-                        sig.data.iter().map(|v| format_value_for_error(v)).collect();
+                    let data: Vec<String> = sig.data.iter().map(format_value_for_error).collect();
                     format!("({} {})", sym, data.join(" "))
                 }
                 other => format!("{other:?}"),
@@ -2924,10 +2912,8 @@ fn value_quoted_symbol_name(value: Value) -> Option<String> {
     // Handle (quote sym) form: a two-element list where the first element is
     // the symbol `quote` and the second is the symbol to extract.
     let items = list_to_vec(&value)?;
-    if items.len() == 2 {
-        if items[0].is_symbol_named("quote") {
-            return items[1].as_symbol_name().map(|s| s.to_owned());
-        }
+    if items.len() == 2 && items[0].is_symbol_named("quote") {
+        return items[1].as_symbol_name().map(|s| s.to_owned());
     }
     None
 }
@@ -3874,7 +3860,7 @@ fn normalize_bootstrap_runtime_surface(
     }
 
     for name in &strip_names {
-        eval.obarray_mut().fmakunbound(&name);
+        eval.obarray_mut().fmakunbound(name);
         eval.autoloads.remove(name);
         let _ = super::builtins::builtin_put(
             eval,
@@ -4746,7 +4732,7 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         super::environment::install_host_environment_snapshot(&mut eval);
         let bootstrap_features = normalized_bootstrap_features(extra_features);
         for feature in &bootstrap_features {
-            let _ = eval.provide_value(Value::symbol(&feature), None);
+            let _ = eval.provide_value(Value::symbol(feature), None);
         }
         maybe_trace_bootstrap_step(format!(
             "create_bootstrap_evaluator_with_features: provided-features={bootstrap_features:?}"
@@ -5221,10 +5207,10 @@ pub(crate) fn create_bootstrap_evaluator_cached_at_path(
         return Ok(eval);
     }
 
-    if dump_path.exists() {
-        if let Some(eval) = try_load_dump(dump_path, &project_root, "after acquiring write lock")? {
-            return Ok(eval);
-        }
+    if dump_path.exists()
+        && let Some(eval) = try_load_dump(dump_path, &project_root, "after acquiring write lock")?
+    {
+        return Ok(eval);
     }
 
     // Full bootstrap
@@ -5286,10 +5272,10 @@ pub(crate) fn create_bootstrap_evaluator_cached_at_path(
 /// Expand `~/` prefix to the HOME directory, matching GNU Emacs's
 /// `Fsubstitute_in_file_name` (lread.c:1155).
 pub(crate) fn expand_tilde(path: &str) -> String {
-    if path.starts_with("~/") {
-        if let Some(home) = std::env::var_os("HOME") {
-            return format!("{}{}", home.to_string_lossy(), &path[1..]);
-        }
+    if path.starts_with("~/")
+        && let Some(home) = std::env::var_os("HOME")
+    {
+        return format!("{}{}", home.to_string_lossy(), &path[1..]);
     }
     path.to_string()
 }

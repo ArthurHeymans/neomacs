@@ -10,12 +10,13 @@
 //! property values, strings, counts) — never on overlay/buffer identity.
 //!
 //! Workflow:
-//!   - Bake/update GNU expectations:
-//!       NEOVM_ORACLE_MODE=refresh UPDATE_EXPECT=1 cargo test -p neovm-oracle-tests --test ... emacsorphanage_ov
-//!   - Verify Neomacs matches the live GNU oracle:
-//!       NEOVM_ORACLE_MODE=verify cargo test ...
-//!   - Fast CI (Neomacs only, against checked-in expectations):
-//!       cargo test ...            (snapshot mode is the default)
+//!
+//! - Bake/update GNU expectations with
+//!   `NEOVM_ORACLE_MODE=refresh UPDATE_EXPECT=1 cargo nextest run -p neovm-oracle-tests -E 'test(emacsorphanage_ov)'`.
+//! - Verify Neomacs against the live GNU oracle with
+//!   `NEOVM_ORACLE_MODE=verify cargo nextest run -p neovm-oracle-tests -E 'test(emacsorphanage_ov)'`.
+//! - Run fast snapshot-mode CI with
+//!   `cargo nextest run -p neovm-oracle-tests -E 'test(emacsorphanage_ov)'`.
 
 use std::path::PathBuf;
 
@@ -50,6 +51,9 @@ fn ov_el_present() -> bool {
 /// Skip gracefully when the package corpus is not checked out. This keeps the
 /// suite green on machines/CI without the org mirror while exercising real
 /// divergences wherever the corpus is present.
+// The library artifact strips `#[test]` functions, so their macro invocations
+// are absent there even though the test artifacts use this macro.
+#[allow(unused_macros)]
 macro_rules! return_if_corpus_missing {
     () => {
         if !ov_el_present() {

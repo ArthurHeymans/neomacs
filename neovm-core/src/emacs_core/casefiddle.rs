@@ -752,7 +752,7 @@ fn capitalize_with_word_pred(
             Ok(result)
         }
         ValueKind::Fixnum(c) => {
-            let code = c as i64;
+            let code = c;
             Ok(Value::fixnum(upcase_char_override(code, casetab)))
         }
         _ => Err(signal(
@@ -802,7 +802,7 @@ fn upcase_initials_with_word_pred(
             Ok(result)
         }
         ValueKind::Fixnum(c) => {
-            let code = c as i64;
+            let code = c;
             Ok(Value::fixnum(upcase_char_override(code, casetab)))
         }
         _ => Err(signal(

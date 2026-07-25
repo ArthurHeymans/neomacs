@@ -521,9 +521,7 @@ enum ProcessOutputServiceActivity {
 
 impl ProcessOutputServiceActivity {
     fn record(self, target: bool) -> Self {
-        if target {
-            Self::Target
-        } else if matches!(self, Self::Target) {
+        if target || matches!(self, Self::Target) {
             Self::Target
         } else {
             Self::Any
@@ -3011,10 +3009,10 @@ fn start_async_network_dns_lookup(
         let result = resolve_network_socket_addrs_raw(&thread_host, port, family, socket_type);
         let _ = sender.send(result);
         thread_ready.store(true, Ordering::Release);
-        if let Some(notifier) = notifier {
-            if let Err(error) = notifier.notify() {
-                tracing::error!(%error, "failed to wake evaluator after asynchronous DNS lookup");
-            }
+        if let Some(notifier) = notifier
+            && let Err(error) = notifier.notify()
+        {
+            tracing::error!(%error, "failed to wake evaluator after asynchronous DNS lookup");
         }
     });
     PendingDnsRequest {
@@ -3050,11 +3048,10 @@ fn nowait_tcp_immediate_addrs(
         return Some(vec![SocketAddr::new(ip, port)]);
     }
     let ip = host.parse::<IpAddr>().ok()?;
-    let family_matches = match (family, ip) {
-        (NetworkProcessFamily::Ipv4, IpAddr::V6(_)) => false,
-        (NetworkProcessFamily::Ipv6, IpAddr::V4(_)) => false,
-        _ => true,
-    };
+    let family_matches = !matches!(
+        (family, ip),
+        (NetworkProcessFamily::Ipv4, IpAddr::V6(_)) | (NetworkProcessFamily::Ipv6, IpAddr::V4(_))
+    );
     family_matches.then_some(vec![SocketAddr::new(ip, port)])
 }
 
@@ -3370,7 +3367,7 @@ impl ProcessManager {
         event: polling::Event,
     ) -> Result<(), String> {
         let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(fd) };
-        Self::modify_poll_source(poller, &borrowed, event)
+        Self::modify_poll_source(poller, borrowed, event)
     }
 
     #[cfg(unix)]
@@ -3407,7 +3404,7 @@ impl ProcessManager {
         use std::os::unix::io::AsRawFd;
         let fd = stdout.as_raw_fd();
         let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(fd) };
-        let _ = poller.delete(&borrowed);
+        let _ = poller.delete(borrowed);
     }
 
     #[cfg(not(unix))]
@@ -3447,7 +3444,7 @@ impl ProcessManager {
         use std::os::unix::io::AsRawFd;
         let fd = stderr.as_raw_fd();
         let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(fd) };
-        let _ = poller.delete(&borrowed);
+        let _ = poller.delete(borrowed);
     }
 
     #[cfg(not(unix))]
@@ -3487,7 +3484,7 @@ impl ProcessManager {
         use std::os::unix::io::AsRawFd;
         let fd = stdin.as_raw_fd();
         let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(fd) };
-        let _ = poller.delete(&borrowed);
+        let _ = poller.delete(borrowed);
     }
 
     #[cfg(not(unix))]
@@ -3528,7 +3525,7 @@ impl ProcessManager {
             .and_then(|master| master.as_raw_fd())
         {
             let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(master) };
-            let _ = poller.delete(&borrowed);
+            let _ = poller.delete(borrowed);
         }
     }
 
@@ -4211,10 +4208,7 @@ impl ProcessManager {
     }
 
     fn poll_child_exit_status(&mut self, id: ProcessId) -> Option<Value> {
-        let proc = match self.processes.get_mut(&id) {
-            Some(p) => p,
-            None => return None,
-        };
+        let proc = self.processes.get_mut(&id)?;
 
         if proc.status_notify_pending || !process_status_is_run(&proc.status) {
             return None;
@@ -4243,10 +4237,7 @@ impl ProcessManager {
         }
 
         // Pipe child path.
-        let child = match proc.child.as_mut() {
-            Some(c) => c,
-            None => return None,
-        };
+        let child = proc.child.as_mut()?;
         match child.try_wait() {
             Ok(Some(status)) => Some(process_status_from_exit(&status)),
             Ok(None) => None, // Still running
@@ -4522,7 +4513,7 @@ impl ProcessManager {
                     .and_then(|master| master.as_raw_fd()),
             ) {
                 let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(master) };
-                let _ = poller.delete(&borrowed);
+                let _ = poller.delete(borrowed);
             }
             proc.pty_reader = None;
         }
@@ -5230,6 +5221,9 @@ impl ProcessManager {
         &mut self,
         id: ProcessId,
     ) -> Vec<AcceptedNetworkConnection> {
+        // Accepted transports stay by value through this short-lived local
+        // dispatch, avoiding an allocation for every accepted connection.
+        #[allow(clippy::large_enum_variant)]
         enum AcceptedSocket {
             Tcp {
                 stream: TcpStream,
@@ -5782,24 +5776,19 @@ impl super::eval::Context {
         let mut outcome = ProcessOutputServiceOutcome::default();
         let is_target = target_process == Some(stderr_id);
 
-        loop {
-            match self.processes.read_process_output_result(stderr_id) {
-                ProcessOutputRead::Data { data, bytes_read } => {
-                    if bytes_read > 0 {
-                        outcome.record_activity(is_target);
-                    }
-                    if !data.is_empty() {
-                        let filter = self
-                            .processes
-                            .get(stderr_id)
-                            .map(|p| p.filter)
-                            .unwrap_or(Value::NIL);
-                        self.run_process_filter_callback(stderr_id, filter, &data)?;
-                    }
-                }
-                ProcessOutputRead::WouldBlock
-                | ProcessOutputRead::Eof
-                | ProcessOutputRead::NoSource => break,
+        while let ProcessOutputRead::Data { data, bytes_read } =
+            self.processes.read_process_output_result(stderr_id)
+        {
+            if bytes_read > 0 {
+                outcome.record_activity(is_target);
+            }
+            if !data.is_empty() {
+                let filter = self
+                    .processes
+                    .get(stderr_id)
+                    .map(|p| p.filter)
+                    .unwrap_or(Value::NIL);
+                self.run_process_filter_callback(stderr_id, filter, &data)?;
             }
         }
 
@@ -6009,7 +5998,7 @@ impl super::eval::Context {
         let mut split_stderr_owners_with_output = Vec::new();
 
         for pid in proc_ids {
-            let is_target = target_process.map_or(true, |target| target == pid);
+            let is_target = target_process.is_none_or(|target| target == pid);
             if self
                 .processes
                 .get(pid)
@@ -6293,13 +6282,12 @@ impl super::eval::Context {
                         // remote peer\n" (`status_message`). Derive the
                         // sentinel text from the status so the two can never
                         // disagree.
-                        if let Some(proc) = self.processes.get_mut(pid) {
-                            if process_status_is_run(&proc.status)
+                        if let Some(proc) = self.processes.get_mut(pid)
+                            && (process_status_is_run(&proc.status)
                                 || ProcessStatusSymbol::from_status_value(proc.status)
-                                    == Some(ProcessStatusSymbol::Open)
-                            {
-                                proc.status = process_status_exit_value(256);
-                            }
+                                    == Some(ProcessStatusSymbol::Open))
+                        {
+                            proc.status = process_status_exit_value(256);
                         }
                         self.processes.deactivate_network_process_io(pid);
                         let sentinel = self
@@ -6459,26 +6447,19 @@ impl super::eval::Context {
         // in the pipe after the child exited are not lost when the process is
         // reaped below.
         let mut saw_output = false;
-        loop {
-            match self.processes.read_process_output_result(pid) {
-                ProcessOutputRead::Data { data, bytes_read } => {
-                    if bytes_read > 0 {
-                        saw_output = true;
-                    }
-                    if !data.is_empty() {
-                        let filter = self
-                            .processes
-                            .get(pid)
-                            .map(|p| p.filter)
-                            .unwrap_or(Value::NIL);
-                        self.run_process_filter_callback(pid, filter, &data)?;
-                    }
-                }
-                ProcessOutputRead::WouldBlock
-                | ProcessOutputRead::Eof
-                | ProcessOutputRead::NoSource => {
-                    break;
-                }
+        while let ProcessOutputRead::Data { data, bytes_read } =
+            self.processes.read_process_output_result(pid)
+        {
+            if bytes_read > 0 {
+                saw_output = true;
+            }
+            if !data.is_empty() {
+                let filter = self
+                    .processes
+                    .get(pid)
+                    .map(|p| p.filter)
+                    .unwrap_or(Value::NIL);
+                self.run_process_filter_callback(pid, filter, &data)?;
             }
         }
         if let Some(proc) = self.processes.get_mut(pid)
@@ -6551,7 +6532,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 }
 
 fn check_keyword_arg_pairs(args: &[Value]) -> Result<(), Flow> {
-    if args.len() % 2 == 0 {
+    if args.len().is_multiple_of(2) {
         Ok(())
     } else {
         Err(signal(LispCondition::MalformedKeywordArgList, vec![]))
@@ -7117,10 +7098,10 @@ fn resolve_optional_process_or_current_buffer_in_state(
     buffers: &BufferManager,
     value: Option<&Value>,
 ) -> Result<ProcessId, Flow> {
-    if let Some(v) = value {
-        if !v.is_nil() {
-            return resolve_get_process_designator_in_state(processes, buffers, v);
-        }
+    if let Some(v) = value
+        && !v.is_nil()
+    {
+        return resolve_get_process_designator_in_state(processes, buffers, v);
     }
 
     let current_buffer = buffers
@@ -7369,18 +7350,18 @@ fn resolve_optional_process_with_explicit_return_in_state(
     buffers: &BufferManager,
     value: Option<&Value>,
 ) -> Result<(ProcessId, Value), Flow> {
-    if let Some(v) = value {
-        if !v.is_nil() && is_stale_process_id_designator_in_manager(processes, v) {
-            if let Some(id) = process_value_to_id(v) {
-                return Err(signal_process_not_active_in_manager(processes, id));
-            }
-        }
+    if let Some(v) = value
+        && !v.is_nil()
+        && is_stale_process_id_designator_in_manager(processes, v)
+        && let Some(id) = process_value_to_id(v)
+    {
+        return Err(signal_process_not_active_in_manager(processes, id));
     }
-    if let Some(v) = value {
-        if !v.is_nil() {
-            let id = resolve_get_process_designator_in_state(processes, buffers, v)?;
-            return Ok((id, *v));
-        }
+    if let Some(v) = value
+        && !v.is_nil()
+    {
+        let id = resolve_get_process_designator_in_state(processes, buffers, v)?;
+        return Ok((id, *v));
     }
     let id = resolve_optional_process_or_current_buffer_in_state(processes, buffers, value)?;
     Ok((id, Value::NIL))
@@ -7397,40 +7378,40 @@ fn resolve_signal_process_target_in_state(
     buffers: &BufferManager,
     value: Option<&Value>,
 ) -> Result<SignalProcessTarget, Flow> {
-    if let Some(v) = value {
-        if !v.is_nil() {
-            // A first-class process object designates that process while live;
-            // once it has exited, GNU still signals the recorded OS pid.
-            if let Some(id) = v.as_process_id() {
-                return if processes.get(id).is_some() {
-                    Ok(SignalProcessTarget::Process(id))
-                } else {
-                    Ok(SignalProcessTarget::Pid(id as i64))
-                };
-            }
-            return match v.kind() {
-                ValueKind::String => {
-                    let name_str = process_owned_runtime_string(*v);
-                    Ok(match processes.find_by_name(&name_str) {
-                        Some(id) => SignalProcessTarget::Process(id),
-                        None => SignalProcessTarget::MissingNamedProcess,
-                    })
-                }
-                // GNU `Fsignal_process` treats a bare integer as a literal OS
-                // PID, not a process-object id.
-                ValueKind::Fixnum(pid) if pid >= 0 => {
-                    let id = pid as ProcessId;
-                    if processes.get(id).is_some() {
-                        Ok(SignalProcessTarget::Process(id))
-                    } else {
-                        Ok(SignalProcessTarget::Pid(pid))
-                    }
-                }
-                _ => Ok(SignalProcessTarget::Process(
-                    resolve_get_process_designator_in_state(processes, buffers, v)?,
-                )),
+    if let Some(v) = value
+        && !v.is_nil()
+    {
+        // A first-class process object designates that process while live;
+        // once it has exited, GNU still signals the recorded OS pid.
+        if let Some(id) = v.as_process_id() {
+            return if processes.get(id).is_some() {
+                Ok(SignalProcessTarget::Process(id))
+            } else {
+                Ok(SignalProcessTarget::Pid(id as i64))
             };
         }
+        return match v.kind() {
+            ValueKind::String => {
+                let name_str = process_owned_runtime_string(*v);
+                Ok(match processes.find_by_name(&name_str) {
+                    Some(id) => SignalProcessTarget::Process(id),
+                    None => SignalProcessTarget::MissingNamedProcess,
+                })
+            }
+            // GNU `Fsignal_process` treats a bare integer as a literal OS
+            // PID, not a process-object id.
+            ValueKind::Fixnum(pid) if pid >= 0 => {
+                let id = pid as ProcessId;
+                if processes.get(id).is_some() {
+                    Ok(SignalProcessTarget::Process(id))
+                } else {
+                    Ok(SignalProcessTarget::Pid(pid))
+                }
+            }
+            _ => Ok(SignalProcessTarget::Process(
+                resolve_get_process_designator_in_state(processes, buffers, v)?,
+            )),
+        };
     }
 
     let id = resolve_optional_process_or_current_buffer_in_state(processes, buffers, value)?;
@@ -9684,7 +9665,7 @@ fn connect_network_process_at_explicit_address(
             // status without `exec_sentinel`; only the deferred `:nowait`
             // completion path in `wait_reading_process_output` delivers
             // "open\n" / "failed with code N\n".
-            return Ok(Value::make_process(id));
+            Ok(Value::make_process(id))
         }
         #[cfg(unix)]
         NetworkAddressSpec::Local(path) => {
@@ -10154,7 +10135,7 @@ fn connect_network_process_at_explicit_address(
 
             eval.processes.register_socket_fd(id).ok();
 
-            return Ok(Value::make_process(id));
+            Ok(Value::make_process(id))
         }
     }
 }
@@ -10323,7 +10304,7 @@ fn connect_datagram_network_process(
         apply_connection_process_flags(proc, noquery, stop);
     }
     eval.processes.register_socket_fd(id).ok();
-    return Ok(Value::make_process(id));
+    Ok(Value::make_process(id))
 }
 
 /// `make-network-process` server mode for stream sockets: bind, listen,
@@ -10421,7 +10402,7 @@ fn listen_stream_network_process(
         apply_connection_process_flags(proc, noquery, stop);
     }
     eval.processes.register_socket_fd(id).ok();
-    return Ok(Value::make_process(id));
+    Ok(Value::make_process(id))
 }
 
 /// `make-network-process` for `:family 'local` (unix-domain sockets):
@@ -10963,7 +10944,7 @@ fn connect_local_socket_process(
 
         eval.processes.register_socket_fd(id).ok();
 
-        return Ok(Value::make_process(id));
+        Ok(Value::make_process(id))
     }
 }
 
@@ -11825,10 +11806,10 @@ pub(crate) fn builtin_start_process(
     let id = eval
         .processes
         .create_process_lisp_resolved(name, buffer, program, proc_args, executable);
-    if let Some(cwd) = &subprocess_cwd {
-        if let Some(proc) = eval.processes.get_mut(id) {
-            proc.default_directory = Some(cwd.clone());
-        }
+    if let Some(cwd) = &subprocess_cwd
+        && let Some(proc) = eval.processes.get_mut(id)
+    {
+        proc.default_directory = Some(cwd.clone());
     }
     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
 
@@ -12071,7 +12052,7 @@ pub(crate) fn builtin_continue_process(
         ));
     }
     let (id, _) = resolve_optional_process_with_explicit_return_in_state(
-        &mut eval.processes,
+        &eval.processes,
         &eval.buffers,
         args.first(),
     )?;
@@ -12220,10 +12201,11 @@ pub(crate) fn builtin_signal_process_impl(
         ));
     }
 
-    if let Some(process) = args.first() {
-        if !process.is_nil() && is_stale_process_id_designator_in_manager(processes, process) {
-            return Ok(Value::fixnum(-1));
-        }
+    if let Some(process) = args.first()
+        && !process.is_nil()
+        && is_stale_process_id_designator_in_manager(processes, process)
+    {
+        return Ok(Value::fixnum(-1));
     }
 
     let signal_num = parse_signal_number(&args[1])?;
@@ -12610,6 +12592,7 @@ pub(crate) fn builtin_make_process_impl(
     )
 }
 
+#[allow(clippy::too_many_arguments)] // process creation keeps host/runtime services independently borrowed
 fn builtin_make_process_impl_with_environment(
     processes: &mut ProcessManager,
     buffers: &mut BufferManager,
@@ -12765,20 +12748,20 @@ fn builtin_make_process_impl_with_environment(
     }
 
     // Set filter and sentinel if provided.
-    if !filter.is_nil() {
-        if let Some(proc) = processes.get_mut(id) {
-            proc.filter = filter;
-        }
+    if !filter.is_nil()
+        && let Some(proc) = processes.get_mut(id)
+    {
+        proc.filter = filter;
     }
-    if !sentinel.is_nil() {
-        if let Some(proc) = processes.get_mut(id) {
-            proc.sentinel = sentinel;
-        }
+    if !sentinel.is_nil()
+        && let Some(proc) = processes.get_mut(id)
+    {
+        proc.sentinel = sentinel;
     }
-    if !stderrproc.is_nil() {
-        if let Some(proc) = processes.get_mut(id) {
-            proc.stderrproc = stderrproc;
-        }
+    if !stderrproc.is_nil()
+        && let Some(proc) = processes.get_mut(id)
+    {
+        proc.stderrproc = stderrproc;
     }
     if let Some(proc) = processes.get_mut(id) {
         proc.default_directory = subprocess_cwd;
@@ -12794,18 +12777,18 @@ fn builtin_make_process_impl_with_environment(
     // these through `coding_inherit_eol_type` (unlike set-process-coding-system).
     // When :coding is absent/nil we keep the process default
     // (utf-8-unix . utf-8-unix), matching GNU's `default-process-coding-system`.
-    if let Some(coding) = coding_val {
-        if !coding.is_nil() {
-            let (decode, encode) = if coding.is_cons() {
-                (coding.cons_car(), coding.cons_cdr())
-            } else {
-                (coding, coding)
-            };
-            if let Some(proc) = processes.get_mut(id) {
-                proc.coding_decode = decode;
-                proc.coding_encode = encode;
-                proc.coding_explicitly_set = true;
-            }
+    if let Some(coding) = coding_val
+        && !coding.is_nil()
+    {
+        let (decode, encode) = if coding.is_cons() {
+            (coding.cons_car(), coding.cons_cdr())
+        } else {
+            (coding, coding)
+        };
+        if let Some(proc) = processes.get_mut(id) {
+            proc.coding_decode = decode;
+            proc.coding_encode = encode;
+            proc.coding_explicitly_set = true;
         }
     }
 
@@ -12879,18 +12862,17 @@ fn parse_accept_process_output_request(
         ));
     }
 
-    if let Some(process) = args.first() {
-        if !process.is_nil()
-            && resolve_live_process_designator_in_manager(processes, process).is_none()
-        {
-            if is_stale_process_id_designator_in_manager(processes, process) {
-                return Ok(None);
-            }
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("processp"), *process],
-            ));
+    if let Some(process) = args.first()
+        && !process.is_nil()
+        && resolve_live_process_designator_in_manager(processes, process).is_none()
+    {
+        if is_stale_process_id_designator_in_manager(processes, process) {
+            return Ok(None);
         }
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("processp"), *process],
+        ));
     }
 
     if let Some(seconds) = args.get(1) {
@@ -12934,7 +12916,7 @@ fn parse_accept_process_output_request(
 
     let just_this_one = target_id.is_some() && args.get(3).is_some_and(|value| value.is_truthy());
     let allow_timers = if target_id.is_some() {
-        !args.get(3).map_or(false, |v| v.is_fixnum())
+        !args.get(3).is_some_and(|v| v.is_fixnum())
     } else {
         true
     };
@@ -12944,7 +12926,7 @@ fn parse_accept_process_output_request(
         ProcessOutputWaitTiming::For(timeout)
     } else if target_id.is_some()
         && !milliseconds_supplied
-        && args.get(1).map_or(true, |value| value.is_nil())
+        && args.get(1).is_none_or(|value| value.is_nil())
     {
         ProcessOutputWaitTiming::Forever
     } else {
@@ -12989,10 +12971,10 @@ pub(crate) fn builtin_process_send_string(
         .as_lisp_string()
         .cloned()
         .ok_or_else(|| signal_wrong_type_string(args[1]))?;
-    if let Some(id) = process_value_to_id(&args[0]) {
-        if is_stale_process_id_designator_in_manager(&eval.processes, &args[0]) {
-            return Err(signal_process_not_running_in_manager(&eval.processes, id));
-        }
+    if let Some(id) = process_value_to_id(&args[0])
+        && is_stale_process_id_designator_in_manager(&eval.processes, &args[0])
+    {
+        return Err(signal_process_not_running_in_manager(&eval.processes, id));
     }
     let id = resolve_get_process_designator_in_state(&eval.processes, &eval.buffers, &args[0])?;
     eval.wait_while_network_process_connecting(id)?;
@@ -13019,10 +13001,10 @@ pub(crate) fn builtin_process_send_string_impl(
         .as_lisp_string()
         .cloned()
         .ok_or_else(|| signal_wrong_type_string(args[1]))?;
-    if let Some(id) = process_value_to_id(&args[0]) {
-        if is_stale_process_id_designator_in_manager(processes, &args[0]) {
-            return Err(signal_process_not_running_in_manager(processes, id));
-        }
+    if let Some(id) = process_value_to_id(&args[0])
+        && is_stale_process_id_designator_in_manager(processes, &args[0])
+    {
+        return Err(signal_process_not_running_in_manager(processes, id));
     }
     let id = resolve_get_process_designator_in_state(processes, buffers, &args[0])?;
     if processes
@@ -13644,11 +13626,11 @@ pub(crate) fn builtin_process_send_region(
 ) -> EvalResult {
     expect_args("process-send-region", &args, 3)?;
 
-    if let Some(id) = process_value_to_id(&args[0]) {
-        if is_stale_process_id_designator_in_manager(&eval.processes, &args[0]) {
-            let _ = super::position::LispRegionArgs::from_values(&eval.buffers, args[1], args[2])?;
-            return Err(signal_process_not_running_in_manager(&eval.processes, id));
-        }
+    if let Some(id) = process_value_to_id(&args[0])
+        && is_stale_process_id_designator_in_manager(&eval.processes, &args[0])
+    {
+        let _ = super::position::LispRegionArgs::from_values(&eval.buffers, args[1], args[2])?;
+        return Err(signal_process_not_running_in_manager(&eval.processes, id));
     }
 
     let id = resolve_get_process_designator_in_state(&eval.processes, &eval.buffers, &args[0])?;
@@ -13685,11 +13667,11 @@ pub(crate) fn builtin_process_send_region_impl(
 ) -> EvalResult {
     expect_args("process-send-region", &args, 3)?;
 
-    if let Some(id) = process_value_to_id(&args[0]) {
-        if is_stale_process_id_designator_in_manager(processes, &args[0]) {
-            let _ = super::position::LispRegionArgs::from_values(&*buffers, args[1], args[2])?;
-            return Err(signal_process_not_running_in_manager(processes, id));
-        }
+    if let Some(id) = process_value_to_id(&args[0])
+        && is_stale_process_id_designator_in_manager(processes, &args[0])
+    {
+        let _ = super::position::LispRegionArgs::from_values(&*buffers, args[1], args[2])?;
+        return Err(signal_process_not_running_in_manager(processes, id));
     }
 
     let id = resolve_get_process_designator_in_state(processes, buffers, &args[0])?;
@@ -13786,19 +13768,19 @@ pub(crate) fn builtin_process_send_eof_impl(
             ],
         ));
     }
-    if let Some(process) = args.first() {
-        if !process.is_nil() {
-            if let Some(id) = process_value_to_id(process) {
-                if is_stale_process_id_designator_in_manager(processes, process) {
-                    return Err(signal_process_not_running_in_manager(processes, id));
-                }
-            }
-            let id = resolve_get_process_designator_in_state(processes, buffers, process)?;
-            if let Some(proc) = processes.get_mut(id) {
-                send_eof_to_process(proc)?;
-            }
-            return Ok(*process);
+    if let Some(process) = args.first()
+        && !process.is_nil()
+    {
+        if let Some(id) = process_value_to_id(process)
+            && is_stale_process_id_designator_in_manager(processes, process)
+        {
+            return Err(signal_process_not_running_in_manager(processes, id));
         }
+        let id = resolve_get_process_designator_in_state(processes, buffers, process)?;
+        if let Some(proc) = processes.get_mut(id) {
+            send_eof_to_process(proc)?;
+        }
+        return Ok(*process);
     }
     let id = resolve_optional_process_or_current_buffer_in_state(processes, buffers, args.first())?;
     if let Some(proc) = processes.get_mut(id) {
@@ -13868,12 +13850,11 @@ pub(crate) fn builtin_process_running_child_p_impl(
             ],
         ));
     }
-    if let Some(process) = args.first() {
-        if let Some(id) = process_value_to_id(process) {
-            if is_stale_process_id_designator_in_manager(processes, process) {
-                return Err(signal_process_not_active_in_manager(processes, id));
-            }
-        }
+    if let Some(process) = args.first()
+        && let Some(id) = process_value_to_id(process)
+        && is_stale_process_id_designator_in_manager(processes, process)
+    {
+        return Err(signal_process_not_active_in_manager(processes, id));
     }
     let id = resolve_optional_process_or_current_buffer_in_state(processes, buffers, args.first())?;
     let proc = processes

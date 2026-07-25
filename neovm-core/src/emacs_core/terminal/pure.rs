@@ -787,9 +787,7 @@ pub(crate) fn builtin_terminal_live_p(
     // Return the window system type so framep-on-display works correctly.
     if let Some(window_system) = window_system {
         Ok(window_system)
-    } else if terminal_has_frame {
-        Ok(Value::T)
-    } else if runtime.controlling_tty || runtime.tty_type.is_some() {
+    } else if terminal_has_frame || runtime.controlling_tty || runtime.tty_type.is_some() {
         Ok(Value::T)
     } else if crate::emacs_core::display::x_window_system_active(eval) {
         Ok(Value::symbol(
@@ -1137,10 +1135,10 @@ pub(crate) fn delete_terminal_owned(
     eval.command_loop
         .keyboard
         .delete_terminal_kboard(terminal_id);
-    if eval.frames.selected_frame().is_none() {
-        if let Some(next_selected) = eval.frames.frame_list().into_iter().next() {
-            let _ = eval.frames.select_frame(next_selected);
-        }
+    if eval.frames.selected_frame().is_none()
+        && let Some(next_selected) = eval.frames.frame_list().into_iter().next()
+    {
+        let _ = eval.frames.select_frame(next_selected);
     }
     eval.sync_keyboard_terminal_owner();
     Ok(Value::NIL)

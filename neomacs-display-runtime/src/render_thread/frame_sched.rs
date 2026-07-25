@@ -59,18 +59,14 @@ impl Damage {
 }
 
 /// The least expensive category of work capable of producing correct pixels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum Invalidation {
+    #[default]
     None,
     /// Recompose existing layer content; sample dynamic state only.
-    CompositeOnly {
-        layers: LayerMask,
-    },
+    CompositeOnly { layers: LayerMask },
     /// Repaint the named layers, then compose.
-    RepaintLayers {
-        layers: LayerMask,
-        damage: Damage,
-    },
+    RepaintLayers { layers: LayerMask, damage: Damage },
     /// A new editor scene generation: rebuild static content.
     RebuildScene,
 }
@@ -305,12 +301,6 @@ struct DueDemand {
     /// OnDemand contributions record work without driving.
     driving: bool,
     reasons: Vec<DemandReason>,
-}
-
-impl Default for Invalidation {
-    fn default() -> Self {
-        Invalidation::None
-    }
 }
 
 impl DueDemand {

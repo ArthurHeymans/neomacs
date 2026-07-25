@@ -212,7 +212,7 @@ pub(super) fn expect_char_equal_code(value: &Value) -> Result<i64, Flow> {
 
 pub(super) fn expect_character_code(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
-        ValueKind::Fixnum(c) if (0..=0x3F_FFFF).contains(&c) => Ok(c as i64),
+        ValueKind::Fixnum(c) if (0..=0x3F_FFFF).contains(&c) => Ok(c),
         _other => {
             maybe_trace_characterp_nil(value, "expect_character_code");
             Err(signal(
@@ -4421,12 +4421,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(3),
     );
     ctx.defsubr_slice("string", |_ctx, args| builtin_string_slice(args), 0, None);
-    ctx.defsubr(
-        "string-width",
-        |ctx, args| builtin_string_width(ctx, args),
-        1,
-        Some(3),
-    );
+    ctx.defsubr("string-width", builtin_string_width, 1, Some(3));
     ctx.defsubr("delete", builtin_delete_with_ctx, 2, Some(2));
     ctx.defsubr_2("delq", builtin_delq_2, 2);
     ctx.defsubr("elt", |_ctx, args| builtin_elt(args), 2, Some(2));
@@ -4532,7 +4527,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "current-time",
-        |ctx, args| super::timefns::builtin_current_time_in_context(ctx, args),
+        super::timefns::builtin_current_time_in_context,
         0,
         Some(0),
     );
@@ -4569,7 +4564,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "force-mode-line-update",
-        |ctx, args| builtin_force_mode_line_update(ctx, args),
+        builtin_force_mode_line_update,
         0,
         Some(1),
     );
@@ -4582,25 +4577,25 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr("invocation-name", builtin_invocation_name, 0, Some(0));
     ctx.defsubr(
         "file-name-directory",
-        |ctx, args| super::fileio::builtin_file_name_directory(ctx, args),
+        super::fileio::builtin_file_name_directory,
         0,
         None,
     );
     ctx.defsubr(
         "file-name-nondirectory",
-        |ctx, args| super::fileio::builtin_file_name_nondirectory(ctx, args),
+        super::fileio::builtin_file_name_nondirectory,
         0,
         None,
     );
     ctx.defsubr(
         "file-name-as-directory",
-        |ctx, args| super::fileio::builtin_file_name_as_directory(ctx, args),
+        super::fileio::builtin_file_name_as_directory,
         1,
         Some(1),
     );
     ctx.defsubr(
         "directory-file-name",
-        |ctx, args| super::fileio::builtin_directory_file_name(ctx, args),
+        super::fileio::builtin_directory_file_name,
         1,
         Some(1),
     );
@@ -4624,7 +4619,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "substitute-in-file-name",
-        |ctx, args| super::fileio::builtin_substitute_in_file_name(ctx, args),
+        super::fileio::builtin_substitute_in_file_name,
         0,
         None,
     );
@@ -4636,13 +4631,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "set-file-selinux-context",
-        |ctx, args| super::fileio::builtin_set_file_selinux_context(ctx, args),
+        super::fileio::builtin_set_file_selinux_context,
         2,
         Some(2),
     );
     ctx.defsubr(
         "visited-file-modtime",
-        |ctx, args| super::fileio::builtin_visited_file_modtime(ctx, args),
+        super::fileio::builtin_visited_file_modtime,
         0,
         Some(0),
     );
@@ -4660,7 +4655,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "unhandled-file-name-directory",
-        |ctx, args| super::fileio::builtin_unhandled_file_name_directory_eval(ctx, args),
+        super::fileio::builtin_unhandled_file_name_directory_eval,
         1,
         Some(1),
     );
@@ -4750,13 +4745,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "define-fringe-bitmap",
-        |ctx, args| builtin_define_fringe_bitmap(ctx, args),
+        builtin_define_fringe_bitmap,
         2,
         Some(5),
     );
     ctx.defsubr(
         "destroy-fringe-bitmap",
-        |ctx, args| builtin_destroy_fringe_bitmap(ctx, args),
+        builtin_destroy_fringe_bitmap,
         1,
         Some(1),
     );
@@ -4768,7 +4763,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "display--update-for-mouse-movement",
-        |ctx, args| builtin_display_update_for_mouse_movement(ctx, args),
+        builtin_display_update_for_mouse_movement,
         3,
         Some(3),
     );
@@ -4799,12 +4794,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             Some(3),
         ),
     );
-    ctx.defsubr(
-        "describe-vector",
-        |ctx, args| builtin_describe_vector(ctx, args),
-        1,
-        Some(2),
-    );
+    ctx.defsubr("describe-vector", builtin_describe_vector, 1, Some(2));
     ctx.defsubr(
         "face-attributes-as-vector",
         |_ctx, args| super::xfaces::builtin_face_attributes_as_vector(args),
@@ -4991,19 +4981,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(2),
     );
-    ctx.defsubr(
-        "gap-position",
-        |ctx, args| builtin_gap_position(ctx, args),
-        0,
-        Some(0),
-    );
+    ctx.defsubr("gap-position", builtin_gap_position, 0, Some(0));
     record_builtin_no_eval_policy("gap-position", BuiltinNoEvalPolicy::RequiresEvalState);
-    ctx.defsubr(
-        "gap-size",
-        |ctx, args| builtin_gap_size(ctx, args),
-        0,
-        Some(0),
-    );
+    ctx.defsubr("gap-size", builtin_gap_size, 0, Some(0));
     record_builtin_no_eval_policy("gap-size", BuiltinNoEvalPolicy::RequiresEvalState);
     ctx.defsubr(
         "garbage-collect-heapsize",
@@ -5170,25 +5150,25 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "internal--set-buffer-modified-tick",
-        |ctx, args| builtin_internal_set_buffer_modified_tick(ctx, args),
+        builtin_internal_set_buffer_modified_tick,
         1,
         Some(2),
     );
     ctx.defsubr(
         "internal--track-mouse",
-        |ctx, args| builtin_internal_track_mouse(ctx, args),
+        builtin_internal_track_mouse,
         1,
         Some(1),
     );
     ctx.defsubr(
         "internal-char-font",
-        |ctx, args| super::font::builtin_internal_char_font(ctx, args),
+        super::font::builtin_internal_char_font,
         1,
         Some(2),
     );
     ctx.defsubr(
         "internal-complete-buffer",
-        |ctx, args| builtin_internal_complete_buffer(ctx, args),
+        builtin_internal_complete_buffer,
         3,
         Some(3),
     );
@@ -5200,19 +5180,19 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "internal-event-symbol-parse-modifiers",
-        |ctx, args| builtin_internal_event_symbol_parse_modifiers(ctx, args),
+        builtin_internal_event_symbol_parse_modifiers,
         1,
         Some(1),
     );
     ctx.defsubr(
         "internal-handle-focus-in",
-        |ctx, args| builtin_internal_handle_focus_in(ctx, args),
+        builtin_internal_handle_focus_in,
         1,
         Some(1),
     );
     ctx.defsubr(
         "internal-set-lisp-face-attribute-from-resource",
-        |ctx, args| builtin_internal_set_lisp_face_attribute_from_resource(ctx, args),
+        builtin_internal_set_lisp_face_attribute_from_resource,
         3,
         Some(4),
     );
@@ -5265,8 +5245,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
                 }
             };
 
-            for i in 0..constants.len() {
-                constants[i] = super::builtins::try_convert_nested_compiled_literal(constants[i]);
+            for constant in &mut constants {
+                *constant = super::builtins::try_convert_nested_compiled_literal(*constant);
             }
 
             let (ops, gnu_byte_offset_map) =
@@ -5481,7 +5461,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "menu-bar-menu-at-x-y",
-        |ctx, args| builtin_menu_bar_menu_at_x_y(ctx, args),
+        builtin_menu_bar_menu_at_x_y,
         2,
         Some(3),
     );
@@ -5491,12 +5471,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(0),
     );
-    ctx.defsubr(
-        "module-load",
-        |ctx, args| builtin_module_load(ctx, args),
-        1,
-        Some(1),
-    );
+    ctx.defsubr("module-load", builtin_module_load, 1, Some(1));
     ctx.defsubr(
         "newline-cache-check",
         |_ctx, args| builtin_newline_cache_check(args),
@@ -5527,12 +5502,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(1),
     );
-    ctx.defsubr(
-        "object-intervals",
-        |ctx, args| builtin_object_intervals(ctx, args),
-        1,
-        Some(1),
-    );
+    ctx.defsubr("object-intervals", builtin_object_intervals, 1, Some(1));
     ctx.defsubr("open-dribble-file", builtin_open_dribble_file, 1, Some(1));
     ctx.defsubr(
         "open-font",
@@ -5570,57 +5540,37 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
-    ctx.defsubr(
-        "position-symbol",
-        |ctx, args| builtin_position_symbol(ctx, args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "profiler-cpu-log",
-        |ctx, args| builtin_profiler_cpu_log(ctx, args),
-        0,
-        Some(0),
-    );
+    ctx.defsubr("position-symbol", builtin_position_symbol, 2, Some(2));
+    ctx.defsubr("profiler-cpu-log", builtin_profiler_cpu_log, 0, Some(0));
     ctx.defsubr(
         "profiler-cpu-running-p",
-        |ctx, args| builtin_profiler_cpu_running_p(ctx, args),
+        builtin_profiler_cpu_running_p,
         0,
         Some(0),
     );
-    ctx.defsubr(
-        "profiler-cpu-start",
-        |ctx, args| builtin_profiler_cpu_start(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "profiler-cpu-stop",
-        |ctx, args| builtin_profiler_cpu_stop(ctx, args),
-        0,
-        Some(0),
-    );
+    ctx.defsubr("profiler-cpu-start", builtin_profiler_cpu_start, 1, Some(1));
+    ctx.defsubr("profiler-cpu-stop", builtin_profiler_cpu_stop, 0, Some(0));
     ctx.defsubr(
         "profiler-memory-log",
-        |ctx, args| builtin_profiler_memory_log(ctx, args),
+        builtin_profiler_memory_log,
         0,
         Some(0),
     );
     ctx.defsubr(
         "profiler-memory-running-p",
-        |ctx, args| builtin_profiler_memory_running_p(ctx, args),
+        builtin_profiler_memory_running_p,
         0,
         Some(0),
     );
     ctx.defsubr(
         "profiler-memory-start",
-        |ctx, args| builtin_profiler_memory_start(ctx, args),
+        builtin_profiler_memory_start,
         0,
         Some(0),
     );
     ctx.defsubr(
         "profiler-memory-stop",
-        |ctx, args| builtin_profiler_memory_stop(ctx, args),
+        builtin_profiler_memory_stop,
         0,
         Some(0),
     );
@@ -5765,28 +5715,23 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "set-fringe-bitmap-face",
-        |ctx, args| builtin_set_fringe_bitmap_face(ctx, args),
+        builtin_set_fringe_bitmap_face,
         1,
         Some(2),
     );
     ctx.defsubr(
         "set-minibuffer-window",
-        |ctx, args| builtin_set_minibuffer_window(ctx, args),
+        builtin_set_minibuffer_window,
         1,
         Some(1),
     );
     ctx.defsubr(
         "set-mouse-pixel-position",
-        |ctx, args| builtin_set_mouse_pixel_position(ctx, args),
+        builtin_set_mouse_pixel_position,
         3,
         Some(3),
     );
-    ctx.defsubr(
-        "set-mouse-position",
-        |ctx, args| builtin_set_mouse_position(ctx, args),
-        3,
-        Some(3),
-    );
+    ctx.defsubr("set-mouse-position", builtin_set_mouse_position, 3, Some(3));
     ctx.defsubr(
         "set-window-new-normal",
         super::window_cmds::builtin_set_window_new_normal,
@@ -5947,13 +5892,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "unencodable-char-position",
-        |ctx, args| super::coding::builtin_unencodable_char_position(ctx, args),
+        super::coding::builtin_unencodable_char_position,
         3,
         Some(5),
     );
     ctx.defsubr(
         "unicode-property-table-internal",
-        |ctx, args| super::chartable::builtin_unicode_property_table_internal(ctx, args),
+        super::chartable::builtin_unicode_property_table_internal,
         1,
         Some(1),
     );
@@ -6161,25 +6106,25 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "treesit-induce-sparse-tree",
-        |ctx, args| builtin_treesit_induce_sparse_tree(ctx, args),
+        builtin_treesit_induce_sparse_tree,
         2,
         Some(4),
     );
     ctx.defsubr(
         "treesit-language-abi-version",
-        |ctx, args| builtin_treesit_language_abi_version(ctx, args),
+        builtin_treesit_language_abi_version,
         0,
         Some(1),
     );
     ctx.defsubr(
         "treesit-language-version",
-        |ctx, args| builtin_treesit_language_version(ctx, args),
+        builtin_treesit_language_version,
         0,
         Some(1),
     );
     ctx.defsubr(
         "treesit-language-available-p",
-        |ctx, args| builtin_treesit_language_available_p(ctx, args),
+        builtin_treesit_language_available_p,
         1,
         Some(2),
     );
@@ -6189,69 +6134,49 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(1),
     );
-    ctx.defsubr(
-        "treesit-node-check",
-        |ctx, args| builtin_treesit_node_check(ctx, args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "treesit-node-child",
-        |ctx, args| builtin_treesit_node_child(ctx, args),
-        2,
-        Some(3),
-    );
+    ctx.defsubr("treesit-node-check", builtin_treesit_node_check, 2, Some(2));
+    ctx.defsubr("treesit-node-child", builtin_treesit_node_child, 2, Some(3));
     ctx.defsubr(
         "treesit-node-child-by-field-name",
-        |ctx, args| builtin_treesit_node_child_by_field_name(ctx, args),
+        builtin_treesit_node_child_by_field_name,
         2,
         Some(2),
     );
     ctx.defsubr(
         "treesit-node-child-count",
-        |ctx, args| builtin_treesit_node_child_count(ctx, args),
+        builtin_treesit_node_child_count,
         1,
         Some(2),
     );
     ctx.defsubr(
         "treesit-node-descendant-for-range",
-        |ctx, args| builtin_treesit_node_descendant_for_range(ctx, args),
+        builtin_treesit_node_descendant_for_range,
         3,
         Some(4),
     );
-    ctx.defsubr(
-        "treesit-node-end",
-        |ctx, args| builtin_treesit_node_end(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-node-eq",
-        |ctx, args| builtin_treesit_node_eq(ctx, args),
-        2,
-        Some(2),
-    );
+    ctx.defsubr("treesit-node-end", builtin_treesit_node_end, 1, Some(1));
+    ctx.defsubr("treesit-node-eq", builtin_treesit_node_eq, 2, Some(2));
     ctx.defsubr(
         "treesit-node-field-name-for-child",
-        |ctx, args| builtin_treesit_node_field_name_for_child(ctx, args),
+        builtin_treesit_node_field_name_for_child,
         2,
         Some(2),
     );
     ctx.defsubr(
         "treesit-node-first-child-for-pos",
-        |ctx, args| builtin_treesit_node_first_child_for_pos(ctx, args),
+        builtin_treesit_node_first_child_for_pos,
         2,
         Some(3),
     );
     ctx.defsubr(
         "treesit-node-match-p",
-        |ctx, args| builtin_treesit_node_match_p(ctx, args),
+        builtin_treesit_node_match_p,
         2,
         Some(3),
     );
     ctx.defsubr(
         "treesit-node-next-sibling",
-        |ctx, args| builtin_treesit_node_next_sibling(ctx, args),
+        builtin_treesit_node_next_sibling,
         1,
         Some(2),
     );
@@ -6263,7 +6188,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "treesit-node-parent",
-        |ctx, args| builtin_treesit_node_parent(ctx, args),
+        builtin_treesit_node_parent,
         1,
         Some(1),
     );
@@ -6275,73 +6200,63 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "treesit-node-prev-sibling",
-        |ctx, args| builtin_treesit_node_prev_sibling(ctx, args),
+        builtin_treesit_node_prev_sibling,
         1,
         Some(2),
     );
-    ctx.defsubr(
-        "treesit-node-start",
-        |ctx, args| builtin_treesit_node_start(ctx, args),
-        1,
-        Some(1),
-    );
+    ctx.defsubr("treesit-node-start", builtin_treesit_node_start, 1, Some(1));
     ctx.defsubr(
         "treesit-node-string",
-        |ctx, args| builtin_treesit_node_string(ctx, args),
+        builtin_treesit_node_string,
         1,
         Some(1),
     );
-    ctx.defsubr(
-        "treesit-node-type",
-        |ctx, args| builtin_treesit_node_type(ctx, args),
-        1,
-        Some(1),
-    );
+    ctx.defsubr("treesit-node-type", builtin_treesit_node_type, 1, Some(1));
     ctx.defsubr(
         "treesit-parser-add-notifier",
-        |ctx, args| builtin_treesit_parser_add_notifier(ctx, args),
+        builtin_treesit_parser_add_notifier,
         2,
         Some(2),
     );
     ctx.defsubr(
         "treesit-parser-buffer",
-        |ctx, args| builtin_treesit_parser_buffer(ctx, args),
+        builtin_treesit_parser_buffer,
         1,
         Some(1),
     );
     ctx.defsubr(
         "treesit-parser-create",
-        |ctx, args| builtin_treesit_parser_create(ctx, args),
+        builtin_treesit_parser_create,
         1,
         Some(4),
     );
     ctx.defsubr(
         "treesit-parser-delete",
-        |ctx, args| builtin_treesit_parser_delete(ctx, args),
+        builtin_treesit_parser_delete,
         1,
         Some(1),
     );
     ctx.defsubr(
         "treesit-parser-included-ranges",
-        |ctx, args| builtin_treesit_parser_included_ranges(ctx, args),
+        builtin_treesit_parser_included_ranges,
         1,
         Some(1),
     );
     ctx.defsubr(
         "treesit-parser-language",
-        |ctx, args| builtin_treesit_parser_language(ctx, args),
+        builtin_treesit_parser_language,
         1,
         Some(1),
     );
     ctx.defsubr(
         "treesit-parser-list",
-        |ctx, args| builtin_treesit_parser_list(ctx, args),
+        builtin_treesit_parser_list,
         0,
         Some(3),
     );
     ctx.defsubr(
         "treesit-parser-notifiers",
-        |ctx, args| builtin_treesit_parser_notifiers(ctx, args),
+        builtin_treesit_parser_notifiers,
         1,
         Some(1),
     );
@@ -6353,28 +6268,23 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "treesit-parser-remove-notifier",
-        |ctx, args| builtin_treesit_parser_remove_notifier(ctx, args),
+        builtin_treesit_parser_remove_notifier,
         2,
         Some(2),
     );
     ctx.defsubr(
         "treesit-parser-root-node",
-        |ctx, args| builtin_treesit_parser_root_node(ctx, args),
+        builtin_treesit_parser_root_node,
         1,
         Some(1),
     );
     ctx.defsubr(
         "treesit-parser-set-included-ranges",
-        |ctx, args| builtin_treesit_parser_set_included_ranges(ctx, args),
+        builtin_treesit_parser_set_included_ranges,
         2,
         Some(2),
     );
-    ctx.defsubr(
-        "treesit-parser-tag",
-        |ctx, args| builtin_treesit_parser_tag(ctx, args),
-        1,
-        Some(1),
-    );
+    ctx.defsubr("treesit-parser-tag", builtin_treesit_parser_tag, 1, Some(1));
     ctx.defsubr(
         "treesit-pattern-expand",
         |_ctx, args| builtin_treesit_pattern_expand(args),
@@ -6383,13 +6293,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "treesit-query-capture",
-        |ctx, args| builtin_treesit_query_capture(ctx, args),
+        builtin_treesit_query_capture,
         2,
         Some(6),
     );
     ctx.defsubr(
         "treesit-query-compile",
-        |ctx, args| builtin_treesit_query_compile(ctx, args),
+        builtin_treesit_query_compile,
         2,
         Some(3),
     );
@@ -6413,43 +6323,43 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "treesit-search-forward",
-        |ctx, args| builtin_treesit_search_forward(ctx, args),
+        builtin_treesit_search_forward,
         2,
         Some(4),
     );
     ctx.defsubr(
         "treesit-search-subtree",
-        |ctx, args| builtin_treesit_search_subtree(ctx, args),
+        builtin_treesit_search_subtree,
         2,
         Some(5),
     );
     ctx.defsubr(
         "treesit-subtree-stat",
-        |ctx, args| builtin_treesit_subtree_stat(ctx, args),
+        builtin_treesit_subtree_stat,
         1,
         Some(1),
     );
     ctx.defsubr(
         "treesit-grammar-location",
-        |ctx, args| builtin_treesit_grammar_location(ctx, args),
+        builtin_treesit_grammar_location,
         1,
         Some(1),
     );
     ctx.defsubr(
         "treesit-tracking-line-column-p",
-        |ctx, args| builtin_treesit_tracking_line_column_p(ctx, args),
+        builtin_treesit_tracking_line_column_p,
         0,
         Some(1),
     );
     ctx.defsubr(
         "treesit-parser-tracking-line-column-p",
-        |ctx, args| builtin_treesit_parser_tracking_line_column_p(ctx, args),
+        builtin_treesit_parser_tracking_line_column_p,
         1,
         Some(1),
     );
     ctx.defsubr(
         "treesit-query-eagerly-compiled-p",
-        |ctx, args| builtin_treesit_query_eagerly_compiled_p(ctx, args),
+        builtin_treesit_query_eagerly_compiled_p,
         1,
         Some(1),
     );
@@ -6461,49 +6371,49 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "treesit-parser-embed-level",
-        |ctx, args| builtin_treesit_parser_embed_level(ctx, args),
+        builtin_treesit_parser_embed_level,
         1,
         Some(1),
     );
     ctx.defsubr(
         "treesit-parser-set-embed-level",
-        |ctx, args| builtin_treesit_parser_set_embed_level(ctx, args),
+        builtin_treesit_parser_set_embed_level,
         2,
         Some(2),
     );
     ctx.defsubr(
         "treesit-parse-string",
-        |ctx, args| builtin_treesit_parse_string(ctx, args),
+        builtin_treesit_parse_string,
         2,
         Some(2),
     );
     ctx.defsubr(
         "treesit-parser-changed-regions",
-        |ctx, args| builtin_treesit_parser_changed_regions(ctx, args),
+        builtin_treesit_parser_changed_regions,
         1,
         Some(1),
     );
     ctx.defsubr(
         "treesit-parser-changed-ranges",
-        |ctx, args| builtin_treesit_parser_changed_ranges(ctx, args),
+        builtin_treesit_parser_changed_ranges,
         1,
         Some(1),
     );
     ctx.defsubr(
         "treesit--linecol-at",
-        |ctx, args| builtin_treesit_linecol_at(ctx, args),
+        builtin_treesit_linecol_at,
         1,
         Some(1),
     );
     ctx.defsubr(
         "treesit--linecol-cache-set",
-        |ctx, args| builtin_treesit_linecol_cache_set(ctx, args),
+        builtin_treesit_linecol_cache_set,
         3,
         Some(3),
     );
     ctx.defsubr(
         "treesit--linecol-cache",
-        |ctx, args| builtin_treesit_linecol_cache(ctx, args),
+        builtin_treesit_linecol_cache,
         0,
         Some(0),
     );
@@ -6540,7 +6450,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         );
         ctx.defsubr(
             "sqlite-execute-batch",
-            |ctx, args| super::sqlite::builtin_sqlite_execute_batch(ctx, args),
+            super::sqlite::builtin_sqlite_execute_batch,
             2,
             Some(2),
         );
@@ -6552,7 +6462,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         );
         ctx.defsubr(
             "sqlite-load-extension",
-            |ctx, args| super::sqlite::builtin_sqlite_load_extension(ctx, args),
+            super::sqlite::builtin_sqlite_load_extension,
             2,
             Some(2),
         );
@@ -6829,13 +6739,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "buffer-local-toplevel-value",
-        |ctx, args| super::custom::builtin_buffer_local_toplevel_value(ctx, args),
+        super::custom::builtin_buffer_local_toplevel_value,
         0,
         None,
     );
     ctx.defsubr(
         "set-buffer-local-toplevel-value",
-        |ctx, args| super::custom::builtin_set_buffer_local_toplevel_value(ctx, args),
+        super::custom::builtin_set_buffer_local_toplevel_value,
         0,
         None,
     );
@@ -6847,7 +6757,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "internal-delete-indirect-variable",
-        |ctx, args| builtin_internal_delete_indirect_variable(ctx, args),
+        builtin_internal_delete_indirect_variable,
         0,
         None,
     );
@@ -6921,7 +6831,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "cancel-kbd-macro-events",
-        |ctx, args| builtin_cancel_kbd_macro_events(ctx, args),
+        builtin_cancel_kbd_macro_events,
         0,
         Some(0),
     );
@@ -7985,7 +7895,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "combine-after-change-execute",
-        |ctx, args| builtin_combine_after_change_execute(ctx, args),
+        builtin_combine_after_change_execute,
         0,
         Some(0),
     );
@@ -8167,7 +8077,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "time-convert",
-        |ctx, args| super::timefns::builtin_time_convert_in_context(ctx, args),
+        super::timefns::builtin_time_convert_in_context,
         1,
         Some(2),
     );
@@ -8273,7 +8183,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "color-gray-p",
-        |ctx, args| super::font::builtin_color_gray_p(ctx, args),
+        super::font::builtin_color_gray_p,
         1,
         Some(2),
     );
@@ -8285,7 +8195,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "color-distance",
-        |ctx, args| super::font::builtin_color_distance(ctx, args),
+        super::font::builtin_color_distance,
         2,
         Some(4),
     );
@@ -8712,7 +8622,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "force-window-update",
-        |ctx, args| super::dispnew::pure::builtin_force_window_update(ctx, args),
+        super::dispnew::pure::builtin_force_window_update,
         0,
         Some(1),
     );
@@ -8738,7 +8648,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "x-focus-frame",
-        |ctx, args| super::display::builtin_x_focus_frame(ctx, args),
+        super::display::builtin_x_focus_frame,
         1,
         Some(2),
     );
@@ -8834,13 +8744,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "x-popup-dialog",
-        |ctx, args| super::display::builtin_x_popup_dialog(ctx, args),
+        super::display::builtin_x_popup_dialog,
         2,
         Some(3),
     );
     ctx.defsubr(
         "x-popup-menu",
-        |ctx, args| super::display::builtin_x_popup_menu(ctx, args),
+        super::display::builtin_x_popup_menu,
         2,
         Some(2),
     );
@@ -8936,7 +8846,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "delete-terminal",
-        |ctx, args| super::terminal::pure::builtin_delete_terminal(ctx, args),
+        super::terminal::pure::builtin_delete_terminal,
         0,
         Some(2),
     );
@@ -9010,12 +8920,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
 
     // -- Display engine (xdisp) --
-    ctx.defsubr(
-        "invisible-p",
-        |ctx, args| super::xdisp::builtin_invisible_p(ctx, args),
-        1,
-        Some(1),
-    );
+    ctx.defsubr("invisible-p", super::xdisp::builtin_invisible_p, 1, Some(1));
     ctx.defsubr(
         "line-pixel-height",
         |_ctx, args| super::xdisp::builtin_line_pixel_height(args),
@@ -9036,7 +8941,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "current-bidi-paragraph-direction",
-        |ctx, args| super::xdisp::builtin_current_bidi_paragraph_direction(ctx, args),
+        super::xdisp::builtin_current_bidi_paragraph_direction,
         0,
         Some(1),
     );
@@ -9074,13 +8979,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     // -- XML/decompress --
     ctx.defsubr(
         "libxml-parse-html-region",
-        |ctx, args| super::xml::builtin_libxml_parse_html_region(ctx, args),
+        super::xml::builtin_libxml_parse_html_region,
         0,
         Some(4),
     );
     ctx.defsubr(
         "libxml-parse-xml-region",
-        |ctx, args| super::xml::builtin_libxml_parse_xml_region(ctx, args),
+        super::xml::builtin_libxml_parse_xml_region,
         0,
         Some(4),
     );
@@ -9098,7 +9003,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "zlib-decompress-region",
-        |ctx, args| super::zlib::builtin_zlib_decompress_region(ctx, args),
+        super::zlib::builtin_zlib_decompress_region,
         2,
         Some(3),
     );
@@ -9192,7 +9097,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "dbus-message-internal",
-        |ctx, args| super::dbus::builtin_dbus_message_internal(ctx, args),
+        super::dbus::builtin_dbus_message_internal,
         0,
         None,
     );
@@ -9234,7 +9139,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "composition-get-gstring",
-        |ctx, args| super::composite::builtin_composition_get_gstring(ctx, args),
+        super::composite::builtin_composition_get_gstring,
         4,
         Some(4),
     );
@@ -9268,13 +9173,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "read-coding-system",
-        |ctx, args| super::lread::builtin_read_coding_system(ctx, args),
+        super::lread::builtin_read_coding_system,
         1,
         Some(2),
     );
     ctx.defsubr(
         "read-non-nil-coding-system",
-        |ctx, args| super::lread::builtin_read_non_nil_coding_system(ctx, args),
+        super::lread::builtin_read_non_nil_coding_system,
         1,
         Some(1),
     );

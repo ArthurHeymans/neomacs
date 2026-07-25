@@ -39,6 +39,12 @@ pub struct ConsCell {
 }
 
 impl ConsCell {
+    /// Read the live cons cell's cdr union member.
+    ///
+    /// # Safety
+    ///
+    /// `self` must represent an allocated cons cell, so `cdr_or_next.cdr` is
+    /// the active union field rather than `next_free`.
     #[inline]
     pub unsafe fn cdr(&self) -> TaggedValue {
         unsafe { self.cdr_or_next.cdr }
@@ -50,6 +56,11 @@ impl ConsCell {
     /// publication-ordering contract on [`load_value_atomic`]): dereferencing
     /// a freshly-published heap pointer loaded here observes the pointee's
     /// fully-written `GcHeader`.
+    ///
+    /// # Safety
+    ///
+    /// `self` must point to a live cons cell whose words are accessed only by
+    /// the atomic load/store helpers while concurrent collection is possible.
     #[inline]
     pub unsafe fn load_car(&self) -> TaggedValue {
         let p = &self.car as *const TaggedValue as *const AtomicUsize;
@@ -57,6 +68,11 @@ impl ConsCell {
     }
 
     /// Atomic (acquire) read of `cdr` (the cdr/next-free union word).
+    ///
+    /// # Safety
+    ///
+    /// `self` must represent a live cons cell, making `cdr` the active union
+    /// field, and concurrent writes must use [`Self::set_cdr`].
     #[inline]
     pub unsafe fn load_cdr(&self) -> TaggedValue {
         let p = &self.cdr_or_next as *const ConsCdrOrNext as *const AtomicUsize;
@@ -68,23 +84,46 @@ impl ConsCell {
     /// GC-visible cell must happen-after the pointee's header/constructor
     /// writes (the publication-ordering contract on [`load_value_atomic`]).
     /// On x86-TSO both release stores and plain stores compile to `mov`.
+    ///
+    /// # Safety
+    ///
+    /// `self` must be a live cons cell and the supplied tagged value must obey
+    /// the GC publication contract described above.
     #[inline]
     pub unsafe fn set_car(&mut self, value: TaggedValue) {
         let p = &self.car as *const TaggedValue as *const AtomicUsize;
         unsafe { (*p).store(value.0, Ordering::Release) };
     }
 
+    /// Store the cdr using release ordering.
+    ///
+    /// # Safety
+    ///
+    /// `self` must be a live cons cell and `value` must be a valid tagged value
+    /// whose pointee, if any, has been fully initialized before publication.
     #[inline]
     pub unsafe fn set_cdr(&mut self, value: TaggedValue) {
         let p = &self.cdr_or_next as *const ConsCdrOrNext as *const AtomicUsize;
         unsafe { (*p).store(value.0, Ordering::Release) };
     }
 
+    /// Read the free-list link from a reclaimed cons cell.
+    ///
+    /// # Safety
+    ///
+    /// `self` must be a free cons cell, making `next_free` the active union
+    /// field.
     #[inline]
     pub unsafe fn free_next(&self) -> *mut ConsCell {
         unsafe { self.cdr_or_next.next_free }
     }
 
+    /// Convert a reclaimed cons cell into a free-list node.
+    ///
+    /// # Safety
+    ///
+    /// The cell must no longer be reachable as a live cons, and `next` must be
+    /// null or point to another valid free-list node.
     #[inline]
     pub unsafe fn set_free_next(&mut self, next: *mut ConsCell) {
         self.car = TaggedValue::NIL;
@@ -385,6 +424,9 @@ impl LispValueSlice {
         self.0.to_vec()
     }
 
+    // This unsized slice view cannot implement `Clone`; the historical method
+    // intentionally materializes an owned vector.
+    #[allow(clippy::should_implement_trait)]
     pub fn clone(&self) -> Vec<TaggedValue> {
         self.to_vec()
     }

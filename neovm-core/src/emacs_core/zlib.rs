@@ -79,7 +79,7 @@ pub(crate) fn builtin_zlib_decompress_region(
     let decompressed = decompress_auto(&compressed, allow_partial);
 
     match decompressed {
-        Some((data, remaining)) if remaining == 0 => {
+        Some((data, 0)) => {
             let replacement = LispString::from_emacs_bytes(data);
             let change = text_change_for_lisp_string_replacement_in_manager(
                 &ctx.buffers,
@@ -131,10 +131,12 @@ fn decompress_auto(compressed: &[u8], allow_partial: bool) -> Option<(Vec<u8>, u
         return Some(result);
     }
     // Gzip magic number: 0x1f 0x8b
-    if compressed.len() >= 2 && compressed[0] == 0x1f && compressed[1] == 0x8b {
-        if let Ok(data) = decompress_gzip(compressed) {
-            return Some((data, 0));
-        }
+    if compressed.len() >= 2
+        && compressed[0] == 0x1f
+        && compressed[1] == 0x8b
+        && let Ok(data) = decompress_gzip(compressed)
+    {
+        return Some((data, 0));
     }
     // Try zlib format.
     decompress_zlib(compressed).ok().map(|data| (data, 0))

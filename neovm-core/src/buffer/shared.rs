@@ -17,6 +17,12 @@ struct SharedUndoStateInner {
     point_before_command_or_undo: Option<CharPos0>,
 }
 
+impl Default for SharedUndoState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SharedUndoState {
     pub fn new() -> Self {
         Self::from_parts(Value::NIL, false, false)

@@ -375,28 +375,28 @@ fn format_opaque_handle_in_state(
     if let Some(handle) = super::terminal::pure::print_terminal_handle(value) {
         return Some(handle);
     }
-    if super::marker::is_marker(value) {
-        if let Some(marker) = value.as_marker_data() {
-            let mut out = String::from("#<marker ");
-            if marker.insertion_type {
-                out.push_str("(moves after insertion) ");
-            }
-            // T7: read authoritative charpos (1-based Lisp shape) directly
-            // from LispMarker, not the deleted stale `position` cache.
-            if let Some(buffer_id) = marker.buffer
-                && let Some(buffer) = buffers.get(buffer_id)
-            {
-                out.push_str(&format!(
-                    "at {} in {}",
-                    marker.charpos + 1,
-                    buffer.name_runtime_string_owned()
-                ));
-            } else {
-                out.push_str("in no buffer");
-            }
-            out.push('>');
-            return Some(out);
+    if super::marker::is_marker(value)
+        && let Some(marker) = value.as_marker_data()
+    {
+        let mut out = String::from("#<marker ");
+        if marker.insertion_type {
+            out.push_str("(moves after insertion) ");
         }
+        // T7: read authoritative charpos (1-based Lisp shape) directly
+        // from LispMarker, not the deleted stale `position` cache.
+        if let Some(buffer_id) = marker.buffer
+            && let Some(buffer) = buffers.get(buffer_id)
+        {
+            out.push_str(&format!(
+                "at {} in {}",
+                marker.charpos + 1,
+                buffer.name_runtime_string_owned()
+            ));
+        } else {
+            out.push_str("in no buffer");
+        }
+        out.push('>');
+        return Some(out);
     }
     if let Some(overlay) = value.as_overlay_data() {
         if let Some(buffer_id) = overlay.buffer
@@ -444,17 +444,16 @@ fn format_window_handle_in_state(
     id: u64,
 ) -> String {
     let window_id = WindowId(id);
-    if let Some(frame_id) = frames.find_window_frame_id(window_id) {
-        if let Some(frame) = frames.get(frame_id) {
-            if let Some(window) = frame.find_window(window_id) {
-                if let Some(buffer_id) = window.buffer_id() {
-                    if let Some(buffer) = buffers.get(buffer_id) {
-                        return format!("#<window {id} on {}>", buffer.name_runtime_string_owned());
-                    }
-                }
-                return format!("#<window {id} on {}>", frame.name_runtime_string_owned());
-            }
+    if let Some(frame_id) = frames.find_window_frame_id(window_id)
+        && let Some(frame) = frames.get(frame_id)
+        && let Some(window) = frame.find_window(window_id)
+    {
+        if let Some(buffer_id) = window.buffer_id()
+            && let Some(buffer) = buffers.get(buffer_id)
+        {
+            return format!("#<window {id} on {}>", buffer.name_runtime_string_owned());
         }
+        return format!("#<window {id} on {}>", frame.name_runtime_string_owned());
     }
     format!("#<window {id}>")
 }
@@ -471,7 +470,7 @@ pub(crate) fn print_options_from_state(obarray: &super::symbol::Obarray) -> Prin
         .is_some_and(|v| v.is_truthy());
     let print_quoted = obarray
         .symbol_value("print-quoted")
-        .map_or(true, |v| v.is_truthy());
+        .is_none_or(|v| v.is_truthy());
     let print_symbols_bare = obarray
         .symbol_value("print-symbols-bare")
         .is_some_and(|v| v.is_truthy());
@@ -722,11 +721,11 @@ impl PrintShorthandSymbol {
         value.as_symbol_name()?.parse().ok()
     }
 
-    fn string_form<'a>(
+    fn string_form(
         self,
-        payload: &'a Value,
+        payload: &Value,
         options: PrintOptions,
-    ) -> Option<(&'static str, &'a Value, PrintOptions)> {
+    ) -> Option<(&'static str, &Value, PrintOptions)> {
         match self {
             Self::Quote => Some(("'", payload, options)),
             Self::Function => Some(("#'", payload, options)),
@@ -744,11 +743,11 @@ impl PrintShorthandSymbol {
         }
     }
 
-    fn bytes_form<'a>(
+    fn bytes_form(
         self,
-        payload: &'a Value,
+        payload: &Value,
         options: PrintOptions,
-    ) -> Option<(&'static [u8], &'a Value, PrintOptions)> {
+    ) -> Option<(&'static [u8], &Value, PrintOptions)> {
         match self {
             Self::Quote => Some((b"'" as &[u8], payload, options)),
             Self::Function => Some((b"#'" as &[u8], payload, options)),

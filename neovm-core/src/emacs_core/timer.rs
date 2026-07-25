@@ -373,7 +373,7 @@ pub(crate) fn builtin_sleep_for(eval: &mut super::eval::Context, args: Vec<Value
                 break;
             }
             let remaining = end_time.duration_until(now);
-            let _ = eval.wait_for_duration_until_timer_deadline(remaining, end_time)?;
+            eval.wait_for_duration_until_timer_deadline(remaining, end_time)?;
         }
     }
 

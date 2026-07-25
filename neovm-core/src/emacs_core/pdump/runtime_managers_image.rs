@@ -355,7 +355,7 @@ fn write_font_lock_defaults(
         out,
         &defaults.keywords,
         "font-lock keyword count",
-        |out, keyword| write_font_lock_keyword(out, keyword),
+        write_font_lock_keyword,
     )?;
     write_bool(out, defaults.case_fold);
     write_opt_lisp_string(out, defaults.syntax_table_lisp.as_ref())?;

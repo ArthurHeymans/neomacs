@@ -1016,7 +1016,6 @@ impl RenderApp {
                     self.effects.click_halo.duration_ms,
                 );
             }
-            return;
         }
     }
 
@@ -1247,7 +1246,6 @@ impl RenderApp {
             if let Some(event) = event {
                 self.comms.send_input(event);
             }
-            return;
         }
     }
 
@@ -1286,7 +1284,6 @@ impl RenderApp {
                 webkit_rel_y: wk_ry,
             });
             self.record_idle_dim_activity(window_id);
-            return;
         }
     }
 }

@@ -48,15 +48,35 @@ pub(super) fn snap_glyph_origin(phys_x: f32, phys_y: f32) -> (i32, i32, Subpixel
     )
 }
 
+struct ClippedMediaRect {
+    draw_x: f32,
+    draw_y: f32,
+    draw_width: f32,
+    draw_height: f32,
+    u_min: f32,
+    u_max: f32,
+    v_min: f32,
+    v_max: f32,
+}
+
 fn clipped_media_rect(
     x: f32,
     y: f32,
     width: f32,
     height: f32,
     clip: Option<&Rect>,
-) -> Option<(f32, f32, f32, f32, f32, f32, f32, f32)> {
+) -> Option<ClippedMediaRect> {
     let Some(clip) = clip else {
-        return Some((x, y, width, height, 0.0, 1.0, 0.0, 1.0));
+        return Some(ClippedMediaRect {
+            draw_x: x,
+            draw_y: y,
+            draw_width: width,
+            draw_height: height,
+            u_min: 0.0,
+            u_max: 1.0,
+            v_min: 0.0,
+            v_max: 1.0,
+        });
     };
     let left = x.max(clip.x);
     let top = y.max(clip.y);
@@ -67,16 +87,16 @@ fn clipped_media_rect(
     if draw_width <= 0.0 || draw_height <= 0.0 || width <= 0.0 || height <= 0.0 {
         return None;
     }
-    Some((
-        left,
-        top,
+    Some(ClippedMediaRect {
+        draw_x: left,
+        draw_y: top,
         draw_width,
         draw_height,
-        (left - x) / width,
-        (right - x) / width,
-        (top - y) / height,
-        (bottom - y) / height,
-    ))
+        u_min: (left - x) / width,
+        u_max: (right - x) / width,
+        v_min: (top - y) / height,
+        v_max: (bottom - y) / height,
+    })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -733,21 +753,23 @@ impl WgpuRenderer {
                             width: clip.width,
                             height: clip.height,
                         });
-                        let Some((glyph_x, glyph_y, glyph_w, glyph_h, u0, u1, v0, v1)) =
-                            clipped_media_rect(
-                                base_glyph_x,
-                                base_glyph_y,
-                                base_glyph_w,
-                                base_glyph_h,
-                                effective_clip.as_ref(),
-                            )
-                        else {
+                        let Some(clipped) = clipped_media_rect(
+                            base_glyph_x,
+                            base_glyph_y,
+                            base_glyph_w,
+                            base_glyph_h,
+                            effective_clip.as_ref(),
+                        ) else {
                             continue;
                         };
-                        let tex_u_min = base_u_min + (base_u_max - base_u_min) * u0;
-                        let tex_u_max = base_u_min + (base_u_max - base_u_min) * u1;
-                        let tex_v_min = base_v_min + (base_v_max - base_v_min) * v0;
-                        let tex_v_max = base_v_min + (base_v_max - base_v_min) * v1;
+                        let glyph_x = clipped.draw_x;
+                        let glyph_y = clipped.draw_y;
+                        let glyph_w = clipped.draw_width;
+                        let glyph_h = clipped.draw_height;
+                        let tex_u_min = base_u_min + (base_u_max - base_u_min) * clipped.u_min;
+                        let tex_u_max = base_u_min + (base_u_max - base_u_min) * clipped.u_max;
+                        let tex_v_min = base_v_min + (base_v_max - base_v_min) * clipped.v_min;
+                        let tex_v_max = base_v_min + (base_v_max - base_v_min) * clipped.v_max;
 
                         let mut effective_fg = *fg;
                         let mut effective_bg =
@@ -1634,14 +1656,14 @@ impl WgpuRenderer {
                 } = glyph
                     && self.caches.image.get(image_id.get()).is_some()
                 {
-                    let effective_clip = clip_rect.clone();
-                    let Some((draw_x, draw_y, draw_width, draw_height, u0, u1, v0, v1)) =
+                    let effective_clip = *clip_rect;
+                    let Some(clipped) =
                         clipped_media_rect(*x, *y, *width, *height, effective_clip.as_ref())
                     else {
                         continue;
                     };
-                    let ix = draw_x + offset_x;
-                    let iy = draw_y + offset_y;
+                    let ix = clipped.draw_x + offset_x;
+                    let iy = clipped.draw_y + offset_y;
                     tracing::debug!(
                         "render_frame_content: image {} at ({:.1},{:.1}) size {:.1}x{:.1}",
                         image_id,
@@ -1655,12 +1677,12 @@ impl WgpuRenderer {
                         vertices: textured_quad_vertices_uv(
                             ix,
                             iy,
-                            draw_width,
-                            draw_height,
-                            u0,
-                            u1,
-                            v0,
-                            v1,
+                            clipped.draw_width,
+                            clipped.draw_height,
+                            clipped.u_min,
+                            clipped.u_max,
+                            clipped.v_min,
+                            clipped.v_max,
                         ),
                     });
                     if let Some(paint) = pointer_override.image_override(glyph_index)

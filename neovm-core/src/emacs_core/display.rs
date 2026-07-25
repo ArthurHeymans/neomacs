@@ -217,27 +217,25 @@ fn format_get_device_terminal_arg_eval(eval: &super::eval::Context, value: &Valu
         _ => None,
     };
 
-    if let Some(window_id) = window_id {
-        if let Some(frame_id) = eval.frames.find_window_frame_id(window_id) {
-            if let Some(frame) = eval.frames.get(frame_id) {
-                if let Some(window) = frame.find_window(window_id) {
-                    if let Some(buffer_id) = window.buffer_id() {
-                        if let Some(buffer) = eval.buffers.get(buffer_id) {
-                            return format!(
-                                "#<window {} on {}>",
-                                window_id.0,
-                                buffer.name_runtime_string_owned()
-                            );
-                        }
-                    }
-                    return format!(
-                        "#<window {} on {}>",
-                        window_id.0,
-                        frame.name_runtime_string_owned()
-                    );
-                }
-            }
+    if let Some(window_id) = window_id
+        && let Some(frame_id) = eval.frames.find_window_frame_id(window_id)
+        && let Some(frame) = eval.frames.get(frame_id)
+        && let Some(window) = frame.find_window(window_id)
+    {
+        if let Some(buffer_id) = window.buffer_id()
+            && let Some(buffer) = eval.buffers.get(buffer_id)
+        {
+            return format!(
+                "#<window {} on {}>",
+                window_id.0,
+                buffer.name_runtime_string_owned()
+            );
         }
+        return format!(
+            "#<window {} on {}>",
+            window_id.0,
+            frame.name_runtime_string_owned()
+        );
     }
 
     super::print::print_value(value)
@@ -681,10 +679,10 @@ fn x_optional_display_query_error_eval(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_max_args(name, &args, 1)?;
-    if let Some(display) = args.first() {
-        if live_frame_designator_p(eval, display) {
-            return Err(x_window_system_frame_error());
-        }
+    if let Some(display) = args.first()
+        && live_frame_designator_p(eval, display)
+    {
+        return Err(x_window_system_frame_error());
     }
     x_optional_display_query_error(name, &args)
 }
@@ -892,9 +890,8 @@ pub(crate) fn builtin_window_system(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_max_args("window-system", &args, 1)?;
-    if args.first().map_or(true, |v| v.is_nil()) {
-        if let Some(window_system) = selected_frame_window_system_symbol_in_state(&mut eval.frames)
-        {
+    if args.first().is_none_or(|v| v.is_nil()) {
+        if let Some(window_system) = selected_frame_window_system_symbol_in_state(&eval.frames) {
             return Ok(window_system);
         }
     } else if let Some(window_system) =
@@ -914,10 +911,11 @@ pub(crate) fn builtin_window_system(
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_edges(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_range_args("frame-edges", &args, 0, 2)?;
-    if let Some(frame) = args.first() {
-        if !frame.is_nil() && !live_frame_designator_p(eval, frame) {
-            return Err(frame_not_live_error_eval(eval, frame));
-        }
+    if let Some(frame) = args.first()
+        && !frame.is_nil()
+        && !live_frame_designator_p(eval, frame)
+    {
+        return Err(frame_not_live_error_eval(eval, frame));
     }
     Ok(Value::list(vec![
         Value::fixnum(0),
@@ -1018,13 +1016,14 @@ pub(crate) fn builtin_x_display_list(args: Vec<Value>) -> EvalResult {
 /// (x-frame-edges &optional FRAME TYPE) -> nil in batch/no-X context.
 pub(crate) fn builtin_x_frame_edges(args: Vec<Value>) -> EvalResult {
     expect_max_args("x-frame-edges", &args, 2)?;
-    if let Some(frame) = args.first() {
-        if !frame.is_nil() && !frame.is_frame() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("frame-live-p"), *frame],
-            ));
-        }
+    if let Some(frame) = args.first()
+        && !frame.is_nil()
+        && !frame.is_frame()
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("frame-live-p"), *frame],
+        ));
     }
     Ok(Value::NIL)
 }
@@ -1032,13 +1031,14 @@ pub(crate) fn builtin_x_frame_edges(args: Vec<Value>) -> EvalResult {
 /// (x-frame-geometry &optional FRAME) -> nil in batch/no-X context.
 pub(crate) fn builtin_x_frame_geometry(args: Vec<Value>) -> EvalResult {
     expect_max_args("x-frame-geometry", &args, 1)?;
-    if let Some(frame) = args.first() {
-        if !frame.is_nil() && !frame.is_frame() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("frame-live-p"), *frame],
-            ));
-        }
+    if let Some(frame) = args.first()
+        && !frame.is_nil()
+        && !frame.is_frame()
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("frame-live-p"), *frame],
+        ));
     }
     Ok(Value::NIL)
 }
@@ -1081,7 +1081,7 @@ pub(crate) fn builtin_x_send_client_message(args: Vec<Value>) -> EvalResult {
 }
 
 fn validate_x_popup_dialog_args(args: &[Value]) -> Result<(), Flow> {
-    expect_range_args("x-popup-dialog", &args, 2, 3)?;
+    expect_range_args("x-popup-dialog", args, 2, 3)?;
 
     if !args[0].is_frame() && !args[0].is_t() {
         return Err(signal(
@@ -1246,10 +1246,8 @@ fn popup_menu_from_keymap(menu: Value, is_tty: bool) -> Option<(Vec<PopupMenuEnt
             // So on TTY we must NOT inline the submenu's children here —
             // recursing flattens, e.g., all of Help -> Describe's items into
             // the parent pane and pushes later items off-screen.
-            if !is_tty {
-                if let Some(child_menu) = submenu {
-                    append_keymap(child_menu, depth + 1, is_tty, path, entries, events);
-                }
+            if !is_tty && let Some(child_menu) = submenu {
+                append_keymap(child_menu, depth + 1, is_tty, path, entries, events);
             }
 
             path.pop();
@@ -1370,7 +1368,7 @@ fn popup_menu_position(ctx: &mut Context, position: Value) -> PopupMenuPosition 
         };
         let placement = if menu_bar {
             let native_anchor = if let Some(anchor) = ctx.pending_menu_bar_popup_anchor.as_ref()
-                && posn_frame_id.map_or(true, |id| id == anchor.frame_id)
+                && posn_frame_id.is_none_or(|id| id == anchor.frame_id)
             {
                 let anchor = neomacs_display_protocol::Rect::new(
                     anchor.x as f32,
@@ -1708,6 +1706,7 @@ fn x_popup_menu_interactive(ctx: &mut Context, position: Value, menu: Value) -> 
     ctx.unbind_to_with_result(specpdl_count, result)
 }
 
+#[allow(clippy::too_many_arguments)] // popup-loop inputs mirror the display-host boundary
 fn x_popup_menu_interactive_loop(
     ctx: &mut Context,
     position: Value,
@@ -2117,13 +2116,14 @@ pub(crate) fn builtin_x_family_fonts(args: Vec<Value>) -> EvalResult {
     if let Some(frame) = args.get(1) {
         expect_optional_window_system_frame_arg(frame)?;
     }
-    if let Some(family) = args.first() {
-        if !family.is_nil() && !family.is_string() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("stringp"), *family],
-            ));
-        }
+    if let Some(family) = args.first()
+        && !family.is_nil()
+        && !family.is_string()
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("stringp"), *family],
+        ));
     }
     Ok(Value::NIL)
 }
@@ -2279,10 +2279,10 @@ pub(crate) fn builtin_gui_set_selection(args: Vec<Value>) -> EvalResult {
 /// (x-selection-exists-p &optional SELECTION TYPE) -> nil in batch/no-X context.
 pub(crate) fn builtin_x_selection_exists_p(args: Vec<Value>) -> EvalResult {
     expect_max_args("x-selection-exists-p", &args, 2)?;
-    if let Some(selection) = args.first() {
-        if !selection.is_nil() {
-            expect_symbol_key(selection)?;
-        }
+    if let Some(selection) = args.first()
+        && !selection.is_nil()
+    {
+        expect_symbol_key(selection)?;
     }
     Ok(Value::NIL)
 }
@@ -2290,10 +2290,10 @@ pub(crate) fn builtin_x_selection_exists_p(args: Vec<Value>) -> EvalResult {
 /// (x-selection-owner-p &optional SELECTION TYPE) -> nil in batch/no-X context.
 pub(crate) fn builtin_x_selection_owner_p(args: Vec<Value>) -> EvalResult {
     expect_max_args("x-selection-owner-p", &args, 2)?;
-    if let Some(selection) = args.first() {
-        if !selection.is_nil() {
-            expect_symbol_key(selection)?;
-        }
+    if let Some(selection) = args.first()
+        && !selection.is_nil()
+    {
+        expect_symbol_key(selection)?;
     }
     Ok(Value::NIL)
 }
@@ -2494,13 +2494,13 @@ pub(crate) fn builtin_x_close_connection(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("x-close-connection", &args, 1)?;
-    if let Some(display) = args.first() {
-        if live_frame_designator_p(eval, display) {
-            return Err(signal(
-                "error",
-                vec![Value::string("Window system frame should be used")],
-            ));
-        }
+    if let Some(display) = args.first()
+        && live_frame_designator_p(eval, display)
+    {
+        return Err(signal(
+            "error",
+            vec![Value::string("Window system frame should be used")],
+        ));
     }
     match args[0].kind() {
         ValueKind::Nil => Err(signal(

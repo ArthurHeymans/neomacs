@@ -514,7 +514,7 @@ pub(crate) fn builtin_kill_local_variable_impl(
     ctx: &mut crate::emacs_core::eval::Context,
     args: &[Value],
 ) -> Result<KillLocalVariableOutcome, Flow> {
-    expect_args("kill-local-variable", &args, 1)?;
+    expect_args("kill-local-variable", args, 1)?;
     let symbol = match args[0].kind() {
         ValueKind::Symbol(id) => id,
         ValueKind::Nil => intern("nil"),
@@ -547,10 +547,8 @@ pub(crate) fn builtin_kill_local_variable_impl(
                 let fwd = unsafe { &*s.val.fwd };
                 if matches!(fwd.ty, LispFwdType::BufferObj) {
                     let buf_fwd = unsafe { &*(fwd as *const _ as *const LispBufferObjFwd) };
-                    crate::buffer::buffer::lookup_buffer_slot(resolved_name).and_then(|info| {
-                        crate::buffer::buffer::BufferSlot::from_u16(buf_fwd.offset)
-                            .map(|slot| (info, slot))
-                    })
+                    crate::buffer::buffer::lookup_buffer_slot(resolved_name)
+                        .zip(crate::buffer::buffer::BufferSlot::from_u16(buf_fwd.offset))
                 } else {
                     None
                 }

@@ -776,6 +776,9 @@ pub struct PresentedWindowRegions {
 
 /// Atomic geometry state for one window in a presentation.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+// This is a by-value protocol snapshot. Boxing `Complete` would add allocation
+// and pointer chasing to every presented window and would remove `Copy`.
+#[allow(clippy::large_enum_variant)]
 pub enum PresentedWindowGeometry {
     Complete {
         cell_origin: PresentedCellOrigin,

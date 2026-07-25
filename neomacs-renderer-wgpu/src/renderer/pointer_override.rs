@@ -316,7 +316,7 @@ impl PointerOverrideResolver {
             width: clip.width(),
             height: clip.height(),
         };
-        base.map_or(Some(override_rect.clone()), |base| {
+        base.map_or(Some(override_rect), |base| {
             intersect_rect(base, &override_rect)
         })
     }
@@ -338,7 +338,7 @@ fn intersect_rect(left: &Rect, right: &Rect) -> Option<Rect> {
     let y = left.y.max(right.y);
     let right_edge = (left.x + left.width).min(right.x + right.width);
     let bottom = (left.y + left.height).min(right.y + right.height);
-    (right_edge > x && bottom > y).then(|| Rect {
+    (right_edge > x && bottom > y).then_some(Rect {
         x,
         y,
         width: right_edge - x,

@@ -194,6 +194,8 @@ pub enum CompletionTable {
     /// Fixed list of completion candidates.
     List(Vec<LispString>),
     /// Dynamic completion function: given the current input, returns matching candidates.
+    #[allow(clippy::type_complexity)]
+    // callable is the public dynamic-completion representation
     Function(Box<dyn Fn(&LispString) -> Vec<LispString>>),
     /// File name completion rooted at a directory.
     FileNames { directory: LispString },
@@ -2440,9 +2442,7 @@ pub(crate) fn builtin_flex_cost_gotoh(
     let mut d = vec![POS_INF; size];
     // ...except the first row of D, which gets gap_open_cost/2 for cheaper
     // leading gaps, and D[-1,-1] = 0 to promote matches at the beginning.
-    for j in 0..width {
-        d[j] = GAP_OPEN_COST / 2;
-    }
+    d[..width].fill(GAP_OPEN_COST / 2);
     d[0] = 0;
 
     let idx = |i: isize, j: isize| -> usize { ((i + 1) as usize) * width + (j + 1) as usize };
@@ -2455,13 +2455,10 @@ pub(crate) fn builtin_flex_cost_gotoh(
     let mut prev_match: usize = 0;
 
     // Forward pass.
-    for i in 0..patlen {
-        let pat_char = pat_chars[i];
+    for (i, &pat_char) in pat_chars.iter().enumerate() {
         let mut match_seen = false;
         let start = prev_match;
-        for j in start..strlen {
-            let str_char = str_chars[j];
-
+        for (j, &str_char) in str_chars.iter().enumerate().skip(start) {
             let cmatch = if ignore_case {
                 downcased(pat_char) == downcased(str_char)
             } else {

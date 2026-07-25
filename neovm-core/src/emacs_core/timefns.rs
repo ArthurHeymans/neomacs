@@ -123,7 +123,7 @@ impl TimeMicros {
         }
     }
 
-    fn to_list(&self) -> Value {
+    fn to_list(self) -> Value {
         let high = self.secs >> 16;
         let low = self.secs & 0xFFFF;
         Value::list(vec![
@@ -135,7 +135,7 @@ impl TimeMicros {
     }
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn to_float(&self) -> f64 {
+    fn to_float(self) -> f64 {
         self.secs as f64 + self.usecs as f64 / 1_000_000.0
     }
 
@@ -226,11 +226,11 @@ impl TimeMicros {
         Ok(TimeMicros { secs, usecs, psecs })
     }
 
-    fn to_ticks_hz(&self, hz: i64) -> Value {
+    fn to_ticks_hz(self, hz: i64) -> Value {
         self.to_ticks_hz_integer(&Integer::from(hz))
     }
 
-    fn to_ticks_hz_integer(&self, hz: &Integer) -> Value {
+    fn to_ticks_hz_integer(self, hz: &Integer) -> Value {
         let trillion = Integer::from(1_000_000_000_000i64);
         let total_psecs = Integer::from(self.secs) * &trillion
             + Integer::from(self.usecs) * Integer::from(1_000_000i64)
@@ -711,7 +711,7 @@ fn decode_lisp_time(val: &Value) -> Result<DecodedLispTime, Flow> {
                 // (TICKS . HZ): TICKS integer, HZ positive integer.
                 let ticks = value_to_integer(&high).ok_or_else(time_spec_invalid)?;
                 let hz = value_to_integer(&low).ok_or_else(time_spec_invalid)?;
-                if hz <= Integer::from(0) {
+                if hz <= 0 {
                     return Err(time_spec_invalid());
                 }
                 Ok(DecodedLispTime {
@@ -760,7 +760,7 @@ fn ticks_hz_list4(ticks: &Integer, hz: &Integer) -> Value {
 /// True if the positive integer HZ divides evenly into a trillion
 /// (GNU `trillion_factor`, `src/timefns.c:98`).
 fn trillion_factor(hz: &Integer) -> bool {
-    &trillion_int() % hz == Integer::from(0)
+    &trillion_int() % hz == 0
 }
 
 /// GNU `ticks_hz_seconds` (`src/timefns.c:800`): floor(ticks / hz) — the whole
@@ -814,7 +814,7 @@ fn time_arith(a: &Value, b: &Value, subtract: bool) -> Result<Value, Flow> {
         }
 
         let ig = integer_gcd(&iticks, &ihz);
-        if ig > Integer::from(1) {
+        if ig > 1 {
             iticks /= &ig;
             ihz /= &ig;
             let hzmin = if da.th.hz < db.th.hz {
@@ -826,11 +826,7 @@ fn time_arith(a: &Value, b: &Value, subtract: bool) -> Result<Value, Flow> {
                 // rescale = ceil(hzmin / ihz).
                 let rescale = {
                     let (q, r) = integer_fdiv_qr(hzmin, &ihz);
-                    if r == Integer::from(0) {
-                        q
-                    } else {
-                        q + Integer::from(1)
-                    }
+                    if r == 0 { q } else { q + Integer::from(1) }
                 };
                 iticks *= &rescale;
                 ihz *= &rescale;
@@ -852,7 +848,7 @@ fn time_arith_to_lisp(
     da: &DecodedLispTime,
     db: &DecodedLispTime,
 ) -> Value {
-    if hz == Integer::from(1) {
+    if hz == 1 {
         return Value::make_integer(ticks);
     }
     let a_is_ticks_hz = da.form == TimeInputForm::TicksHz;
@@ -1051,7 +1047,7 @@ enum ZoneRule {
 }
 
 thread_local! {
-    static TIME_ZONE_RULE: RefCell<ZoneRule> = RefCell::new(ZoneRule::Local);
+    static TIME_ZONE_RULE: RefCell<ZoneRule> = const { RefCell::new(ZoneRule::Local) };
 }
 
 /// Reset timezone rule to default (called from Context::new).
@@ -1486,7 +1482,7 @@ fn time_convert_default_hz(value: &Value) -> i64 {
             }
             if let Some(items) = list_to_vec(value) {
                 match items.len() {
-                    0 | 1 | 2 => 1,
+                    0..=2 => 1,
                     3 => 1_000_000,
                     _ => 1_000_000_000_000,
                 }
@@ -1644,6 +1640,7 @@ fn mktime_with_isdst(
 /// rules and the forced `isdst` flag, mirroring GNU `Fencode_time` +
 /// `mktime_z`. For zones without DST transitions (`Utc`/fixed offsets) the flag
 /// is irrelevant and a plain offset subtraction suffices.
+#[allow(clippy::too_many_arguments)] // broken-down time fields mirror encode-time's positional contract
 fn encode_time_to_epoch(
     sec: i64,
     min: i64,
@@ -1700,7 +1697,7 @@ fn parse_time_convert_form(form: &Value, current_time_list: bool) -> Result<Time
                 .as_bignum()
                 .expect("ValueKind::Bignum must carry Integer payload")
                 .clone();
-            if hz > Integer::from(0) {
+            if hz > 0 {
                 Ok(TimeConvertForm::ExplicitHz(hz))
             } else {
                 Err(invalid_time_frequency_error(form))
@@ -2012,7 +2009,7 @@ pub(crate) fn builtin_decode_time(args: Vec<Value>) -> EvalResult {
     // returns `(HZ * tm_sec + mod(ticks, HZ)) . HZ` (`src/timefns.c:1596`);
     // otherwise SEC is the integer `tm_sec`.
     let sec = match sec_value {
-        Some((ticks, hz)) if hz != Integer::from(1) => {
+        Some((ticks, hz)) if hz != 1 => {
             // GNU `mpz_fdiv_r`: the floor remainder is always non-negative.
             let (_, rem) = integer_fdiv_qr(&ticks, &hz);
             let sec_ticks = &hz * Integer::from(dt.sec) + rem;

@@ -73,6 +73,7 @@ pub fn af_inet6() -> i32 {
 #[cfg(unix)]
 pub fn classify_family(raw: i32) -> NetFamily {
     match raw {
+        r if r == libc::AF_UNSPEC => NetFamily::Unspecified,
         r if r == libc::AF_INET => NetFamily::Ipv4,
         r if r == libc::AF_INET6 => NetFamily::Ipv6,
         r if r == libc::AF_UNIX => NetFamily::Local,

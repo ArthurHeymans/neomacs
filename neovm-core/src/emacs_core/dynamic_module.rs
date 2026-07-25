@@ -600,7 +600,7 @@ pub(crate) fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
 fn module_panic_flow(payload: Box<dyn std::any::Any + Send>) -> Flow {
     signal(
         "error",
-        vec![Value::string(&format!(
+        vec![Value::string(format!(
             "neomacs internal error: {}",
             panic_message(&*payload)
         ))],
@@ -764,11 +764,11 @@ unsafe extern "C" fn module_make_global_ref(
         GLOBAL_REFS.with(|refs| {
             let mut refs = refs.borrow_mut();
             for entry_opt in refs.iter_mut() {
-                if let Some(entry) = entry_opt {
-                    if entry.value == lisp_val {
-                        entry.refcount += 1;
-                        return entry.tag_ptr;
-                    }
+                if let Some(entry) = entry_opt
+                    && entry.value == lisp_val
+                {
+                    entry.refcount += 1;
+                    return entry.tag_ptr;
                 }
             }
             let tag = Box::into_raw(Box::new(emacs_value_tag { v: lisp_val }));
@@ -795,15 +795,15 @@ unsafe extern "C" fn module_free_global_ref(_env: *mut emacs_env, global_value: 
         GLOBAL_REFS.with(|refs| {
             let mut refs = refs.borrow_mut();
             for entry_opt in refs.iter_mut() {
-                if let Some(entry) = entry_opt {
-                    if entry.tag_ptr == global_value {
-                        entry.refcount -= 1;
-                        if entry.refcount <= 0 {
-                            drop(Box::from_raw(global_value));
-                            *entry_opt = None;
-                        }
-                        return;
+                if let Some(entry) = entry_opt
+                    && entry.tag_ptr == global_value
+                {
+                    entry.refcount -= 1;
+                    if entry.refcount <= 0 {
+                        drop(Box::from_raw(global_value));
+                        *entry_opt = None;
                     }
+                    return;
                 }
             }
         });
@@ -1248,14 +1248,14 @@ unsafe extern "C" fn module_set_user_ptr(env: *mut emacs_env, arg: emacs_value, 
             return;
         }
         let val = value_to_lisp(arg);
-        if let Some(veclike_ptr) = val.as_veclike_ptr() {
-            if val.veclike_type() == Some(VecLikeType::UserPtr) {
-                unsafe {
-                    let up = veclike_ptr as *mut UserPtrObj;
-                    (*up).ptr = ptr;
-                }
-                return;
+        if let Some(veclike_ptr) = val.as_veclike_ptr()
+            && val.veclike_type() == Some(VecLikeType::UserPtr)
+        {
+            unsafe {
+                let up = veclike_ptr as *mut UserPtrObj;
+                (*up).ptr = ptr;
             }
+            return;
         }
         if !env.is_null() {
             unsafe {
@@ -1306,14 +1306,14 @@ unsafe extern "C" fn module_set_user_finalizer(
             return;
         }
         let val = value_to_lisp(arg);
-        if let Some(veclike_ptr) = val.as_veclike_ptr() {
-            if val.veclike_type() == Some(VecLikeType::UserPtr) {
-                unsafe {
-                    let up = veclike_ptr as *mut UserPtrObj;
-                    (*up).finalizer = fin;
-                }
-                return;
+        if let Some(veclike_ptr) = val.as_veclike_ptr()
+            && val.veclike_type() == Some(VecLikeType::UserPtr)
+        {
+            unsafe {
+                let up = veclike_ptr as *mut UserPtrObj;
+                (*up).finalizer = fin;
             }
+            return;
         }
         if !env.is_null() {
             unsafe {
@@ -1484,27 +1484,27 @@ unsafe extern "C" fn module_extract_time(env: *mut emacs_env, arg: emacs_value) 
                 };
             }
             let val = value_to_lisp(arg);
-            if let Some(items) = val.as_vector_data() {
-                if items.len() >= 2 {
-                    let sec_high = items[0].as_fixnum().unwrap_or(0);
-                    let sec_low = items[1].as_fixnum().unwrap_or(0);
-                    let micros = if items.len() >= 3 {
-                        items[2].as_fixnum().unwrap_or(0)
-                    } else {
-                        0
-                    };
-                    let picos = if items.len() >= 4 {
-                        items[3].as_fixnum().unwrap_or(0)
-                    } else {
-                        0
-                    };
-                    let seconds = (sec_high << 16) | (sec_low as u16 as i64);
-                    let nanoseconds = micros * 1000 + picos / 1000;
-                    return emacs_time {
-                        tv_sec: seconds as libc::time_t,
-                        tv_nsec: nanoseconds as libc::c_long,
-                    };
-                }
+            if let Some(items) = val.as_vector_data()
+                && items.len() >= 2
+            {
+                let sec_high = items[0].as_fixnum().unwrap_or(0);
+                let sec_low = items[1].as_fixnum().unwrap_or(0);
+                let micros = if items.len() >= 3 {
+                    items[2].as_fixnum().unwrap_or(0)
+                } else {
+                    0
+                };
+                let picos = if items.len() >= 4 {
+                    items[3].as_fixnum().unwrap_or(0)
+                } else {
+                    0
+                };
+                let seconds = (sec_high << 16) | (sec_low as u16 as i64);
+                let nanoseconds = micros * 1000 + picos / 1000;
+                return emacs_time {
+                    tv_sec: seconds as libc::time_t,
+                    tv_nsec: nanoseconds as libc::c_long,
+                };
             }
             if let Some(n) = val.as_fixnum() {
                 return emacs_time {
@@ -1533,8 +1533,8 @@ unsafe extern "C" fn module_make_time(env: *mut emacs_env, time: emacs_time) -> 
         if !module_function_begin(env) {
             return std::ptr::null_mut();
         }
-        let seconds = time.tv_sec as i64;
-        let nanoseconds = time.tv_nsec as i64;
+        let seconds = time.tv_sec;
+        let nanoseconds = time.tv_nsec;
         let list = Value::list(vec![
             Value::fixnum((seconds >> 16) & 0xFFFF),
             Value::fixnum(seconds & 0xFFFF),
@@ -1595,11 +1595,11 @@ unsafe extern "C" fn module_extract_big_integer(
         }
         if val.veclike_type() == Some(VecLikeType::Bignum) {
             let b = val.as_bignum().unwrap();
-            let is_neg = *b < Integer::from(0);
+            let is_neg = *b < 0;
             let abs_b = if is_neg { -b.clone() } else { b.clone() };
             unsafe {
                 if !sign.is_null() {
-                    *sign = if *b > Integer::from(0) {
+                    *sign = if *b > 0 {
                         1
                     } else if is_neg {
                         -1
@@ -1731,14 +1731,14 @@ unsafe extern "C" fn module_set_function_finalizer(
             return;
         }
         let val = value_to_lisp(arg);
-        if let Some(veclike_ptr) = val.as_veclike_ptr() {
-            if val.veclike_type() == Some(VecLikeType::ModuleFunction) {
-                unsafe {
-                    let mf = veclike_ptr as *mut ModuleFunctionObj;
-                    (*mf).finalizer = fin;
-                }
-                return;
+        if let Some(veclike_ptr) = val.as_veclike_ptr()
+            && val.veclike_type() == Some(VecLikeType::ModuleFunction)
+        {
+            unsafe {
+                let mf = veclike_ptr as *mut ModuleFunctionObj;
+                (*mf).finalizer = fin;
             }
+            return;
         }
         if !env.is_null() {
             unsafe {
@@ -1806,26 +1806,26 @@ unsafe extern "C" fn module_make_interactive(
         }
         let func_val = value_to_lisp(function);
         let spec_val = value_to_lisp(spec);
-        if let Some(veclike_ptr) = func_val.as_veclike_ptr() {
-            if func_val.veclike_type() == Some(VecLikeType::ModuleFunction) {
-                // SATB deletion barrier BEFORE clobbering the live, GC-traced
-                // `interactive_form` slot: log the pre-overwrite children so a value
-                // reachable only through the old form is retained if a concurrent
-                // mark is in flight. Owner-driven; a no-op unless a mark is active.
-                // Without it, a second make-interactive overwriting a still-reachable
-                // form mid-mark would drop it. See CONCURRENT_GC.md "Insertion
-                // coverage".
-                note_heap_write(func_val, HeapWriteKind::ModuleFunction);
-                unsafe {
-                    let mf = veclike_ptr as *mut ModuleFunctionObj;
-                    (*mf).interactive_form = if spec_val.is_nil() {
-                        Value::list(vec![Value::symbol("interactive")])
-                    } else {
-                        Value::list(vec![Value::symbol("interactive"), spec_val])
-                    };
-                }
-                return;
+        if let Some(veclike_ptr) = func_val.as_veclike_ptr()
+            && func_val.veclike_type() == Some(VecLikeType::ModuleFunction)
+        {
+            // SATB deletion barrier BEFORE clobbering the live, GC-traced
+            // `interactive_form` slot: log the pre-overwrite children so a value
+            // reachable only through the old form is retained if a concurrent
+            // mark is in flight. Owner-driven; a no-op unless a mark is active.
+            // Without it, a second make-interactive overwriting a still-reachable
+            // form mid-mark would drop it. See CONCURRENT_GC.md "Insertion
+            // coverage".
+            note_heap_write(func_val, HeapWriteKind::ModuleFunction);
+            unsafe {
+                let mf = veclike_ptr as *mut ModuleFunctionObj;
+                (*mf).interactive_form = if spec_val.is_nil() {
+                    Value::list(vec![Value::symbol("interactive")])
+                } else {
+                    Value::list(vec![Value::symbol("interactive"), spec_val])
+                };
             }
+            return;
         }
         unsafe {
             let priv_ = &mut *(*env).private_members;
@@ -2023,7 +2023,7 @@ pub fn load_module(ctx: &mut Context, path: std::path::PathBuf) -> EvalResult {
     let lib = unsafe { Library::new(&path) }.map_err(|e| {
         signal(
             "module-open-failed",
-            vec![Value::string(&path_str), Value::string(&e.to_string())],
+            vec![Value::string(&path_str), Value::string(e.to_string())],
         )
     })?;
 
@@ -2047,7 +2047,6 @@ pub fn load_module(ctx: &mut Context, path: std::path::PathBuf) -> EvalResult {
             )
         })?;
     let init_fn_ptr: EmacsInitFn = *init_fn;
-    drop(init_fn);
 
     let mut env_priv = Box::new(emacs_env_private {
         pending_non_local_exit: emacs_funcall_exit::Return,

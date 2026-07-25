@@ -938,11 +938,11 @@ impl Face {
                 .clone()
                 .or_else(|| self.box_border.clone()),
             inverse_video: overlay.inverse_video.or(self.inverse_video),
-            stipple: overlay.stipple.clone().or_else(|| self.stipple.clone()),
+            stipple: overlay.stipple.or(self.stipple),
             extend: overlay.extend.or(self.extend),
             inherit: overlay.inherit.or(self.inherit),
             overstrike: overlay.overstrike || self.overstrike,
-            doc: overlay.doc.clone().or_else(|| self.doc.clone()),
+            doc: overlay.doc.or(self.doc),
             overline_color: overlay.overline_color.or(self.overline_color),
             strike_through_color: overlay.strike_through_color.or(self.strike_through_color),
             distant_foreground: overlay.distant_foreground.or(self.distant_foreground),
@@ -1359,10 +1359,10 @@ impl FaceRemapping {
         match spec.kind() {
             // Simple symbol remap: (FACE . other-face)
             ValueKind::Symbol(_) | ValueKind::T | ValueKind::String => {
-                if let Some(name) = normalized_face_name_value(spec) {
-                    if !name.is_symbol_named("nil") {
-                        return vec![FaceRemapEntry::RemapFace(name)];
-                    }
+                if let Some(name) = normalized_face_name_value(spec)
+                    && !name.is_symbol_named("nil")
+                {
+                    return vec![FaceRemapEntry::RemapFace(name)];
                 }
                 Vec::new()
             }
@@ -1387,18 +1387,18 @@ impl FaceRemapping {
                 for item in &items {
                     match item.kind() {
                         ValueKind::Symbol(_) | ValueKind::T | ValueKind::String => {
-                            if let Some(name) = normalized_face_name_value(item) {
-                                if !name.is_symbol_named("nil") {
-                                    entries.push(FaceRemapEntry::RemapFace(name));
-                                }
+                            if let Some(name) = normalized_face_name_value(item)
+                                && !name.is_symbol_named("nil")
+                            {
+                                entries.push(FaceRemapEntry::RemapFace(name));
                             }
                         }
                         ValueKind::Cons => {
-                            if let Some(sub_items) = list_to_vec(item) {
-                                if sub_items.first().is_some_and(|v| v.is_keyword()) {
-                                    let face = Face::from_plist("--remap--", &sub_items);
-                                    entries.push(FaceRemapEntry::RemapAttrs(face));
-                                }
+                            if let Some(sub_items) = list_to_vec(item)
+                                && sub_items.first().is_some_and(|v| v.is_keyword())
+                            {
+                                let face = Face::from_plist("--remap--", &sub_items);
+                                entries.push(FaceRemapEntry::RemapAttrs(face));
                             }
                         }
                         _ => {}
@@ -1753,9 +1753,7 @@ impl FaceTable {
     /// Ensure a face exists (create empty if not present).
     pub fn ensure_face(&mut self, name: &str) {
         let key = face_symbol_value(name);
-        if !self.faces.contains_key(&key) {
-            self.faces.insert(key, Face::new(name));
-        }
+        self.faces.entry(key).or_insert_with(|| Face::new(name));
     }
 
     /// Update a single attribute on a face.
@@ -1900,27 +1898,27 @@ impl FaceTable {
         // Check face-remapping-alist — but only if we haven't already
         // visited this face (cycle detection, matching GNU's
         // push_named_merge_point).
-        if !seen.contains(&key) {
-            if let Some(entries) = remapping.get(name) {
-                seen.insert(key);
-                let base = self.resolve("default");
-                let mut result = base;
-                for entry in entries {
-                    match entry {
-                        FaceRemapEntry::RemapFace(target) => {
-                            if let Some(target_name) = target.as_symbol_name() {
-                                let resolved =
-                                    self.resolve_remapped(target_name, remapping, seen, depth + 1);
-                                result = result.merge(&resolved);
-                            }
-                        }
-                        FaceRemapEntry::RemapAttrs(attrs) => {
-                            result = result.merge(attrs);
+        if !seen.contains(&key)
+            && let Some(entries) = remapping.get(name)
+        {
+            seen.insert(key);
+            let base = self.resolve("default");
+            let mut result = base;
+            for entry in entries {
+                match entry {
+                    FaceRemapEntry::RemapFace(target) => {
+                        if let Some(target_name) = target.as_symbol_name() {
+                            let resolved =
+                                self.resolve_remapped(target_name, remapping, seen, depth + 1);
+                            result = result.merge(&resolved);
                         }
                     }
+                    FaceRemapEntry::RemapAttrs(attrs) => {
+                        result = result.merge(attrs);
+                    }
                 }
-                return result;
             }
+            return result;
         }
 
         // No remapping — fall back to normal resolution.
@@ -1959,30 +1957,26 @@ impl FaceTable {
         }
 
         let key = face_symbol_value(name);
-        if !seen.contains(&key) {
-            if let Some(entries) = remapping.get(name) {
-                seen.insert(key);
-                let mut result = Face::new(name);
-                for entry in entries {
-                    match entry {
-                        FaceRemapEntry::RemapFace(target) => {
-                            if let Some(target_name) = target.as_symbol_name() {
-                                let resolved = self.resolve_remapped_raw(
-                                    target_name,
-                                    remapping,
-                                    seen,
-                                    depth + 1,
-                                );
-                                result = result.merge(&resolved);
-                            }
-                        }
-                        FaceRemapEntry::RemapAttrs(attrs) => {
-                            result = result.merge(attrs);
+        if !seen.contains(&key)
+            && let Some(entries) = remapping.get(name)
+        {
+            seen.insert(key);
+            let mut result = Face::new(name);
+            for entry in entries {
+                match entry {
+                    FaceRemapEntry::RemapFace(target) => {
+                        if let Some(target_name) = target.as_symbol_name() {
+                            let resolved =
+                                self.resolve_remapped_raw(target_name, remapping, seen, depth + 1);
+                            result = result.merge(&resolved);
                         }
                     }
+                    FaceRemapEntry::RemapAttrs(attrs) => {
+                        result = result.merge(attrs);
+                    }
                 }
-                return result;
             }
+            return result;
         }
 
         // No remapping — use the raw face definition (not resolved).

@@ -940,14 +940,18 @@ fn display_media_face_metrics(
     resolved_face: &ResolvedFace,
     fallback: DisplayRowFallbackMetrics,
 ) -> DisplayRowFallbackMetrics {
-    let row_height = (resolved_face.font_line_height.is_finite()
-        && resolved_face.font_line_height > 0.0)
-        .then_some(resolved_face.font_line_height)
-        .unwrap_or_else(|| fallback.row_height());
-    let ascent = (resolved_face.font_ascent.is_finite() && resolved_face.font_ascent > 0.0)
-        .then_some(resolved_face.font_ascent)
-        .unwrap_or_else(|| fallback.ascent())
-        .min(row_height);
+    let row_height =
+        if resolved_face.font_line_height.is_finite() && resolved_face.font_line_height > 0.0 {
+            resolved_face.font_line_height
+        } else {
+            fallback.row_height()
+        };
+    let ascent = if resolved_face.font_ascent.is_finite() && resolved_face.font_ascent > 0.0 {
+        resolved_face.font_ascent
+    } else {
+        fallback.ascent()
+    }
+    .min(row_height);
     DisplayRowFallbackMetrics::from_default_face_extents(fallback.char_width(), row_height, ascent)
 }
 

@@ -250,10 +250,9 @@ fn object_needs_extra(obj: &DumpHeapObject) -> bool {
         text_props,
         ..
     } = obj
+        && text_props.is_empty()
     {
-        if text_props.is_empty() {
-            return false;
-        }
+        return false;
     }
     !matches!(
         obj,
@@ -304,9 +303,9 @@ pub(crate) fn load_compact_heap_objects_from_object_extra(
     }
     let mut objects = vec![DumpHeapObject::Free; count];
     let mut present = vec![false; count];
-    for index in 0..count {
+    for (index, is_present) in present.iter_mut().enumerate() {
         if mapped_object_is_self_contained(spans.get(index), mapped_heap)? {
-            present[index] = true;
+            *is_present = true;
         }
     }
 

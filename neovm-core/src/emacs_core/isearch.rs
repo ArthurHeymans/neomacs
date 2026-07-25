@@ -1219,11 +1219,11 @@ impl QueryReplaceManager {
             case_fold,
         );
 
-        if let Some(range) = result {
-            if range.end() <= limit {
-                state.current_match = Some(range);
-                return Some(range);
-            }
+        if let Some(range) = result
+            && range.end() <= limit
+        {
+            state.current_match = Some(range);
+            return Some(range);
         }
 
         state.current_match = None;
@@ -1536,7 +1536,7 @@ fn find_match(
                 .matches
                 .into_iter()
                 .filter_map(|groups| groups.first().and_then(|group| *group))
-                .last()
+                .next_back()
         }
     } else {
         // Literal search over Emacs bytes (issue #131): byte-exact when not

@@ -782,15 +782,15 @@ fn node_metrics(node: &Option<Box<RopeNode>>) -> TextMetrics {
 }
 
 fn leftmost_chunk_len(node: &RopeNode) -> EmacsByteLen {
-    if node.left.is_some() {
-        return leftmost_chunk_len(node.left.as_ref().expect("left child"));
+    if let Some(left) = node.left.as_ref() {
+        return leftmost_chunk_len(left);
     }
     node.chunk.emacs_byte_len()
 }
 
 fn rightmost_chunk_len(node: &RopeNode) -> EmacsByteLen {
-    if node.right.is_some() {
-        return rightmost_chunk_len(node.right.as_ref().expect("right child"));
+    if let Some(right) = node.right.as_ref() {
+        return rightmost_chunk_len(right);
     }
     node.chunk.emacs_byte_len()
 }

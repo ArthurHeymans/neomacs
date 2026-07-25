@@ -72,12 +72,12 @@ fn delete_quit_restore_popup_windows_showing_buffer(
                 let Some(frame) = frames.get(frame_id) else {
                     continue;
                 };
-                if frame.minibuffer_window == Some(window_id) || frame.window_list().len() <= 1 {
-                    false
-                } else if frame
-                    .find_window(window_id)
-                    .and_then(|window| window.buffer_id())
-                    != Some(buffer_id)
+                if frame.minibuffer_window == Some(window_id)
+                    || frame.window_list().len() <= 1
+                    || frame
+                        .find_window(window_id)
+                        .and_then(|window| window.buffer_id())
+                        != Some(buffer_id)
                 {
                     false
                 } else {
@@ -656,10 +656,10 @@ pub(crate) fn builtin_kill_buffer(eval: &mut super::eval::Context, args: Vec<Val
     }
 
     if current_will_die {
-        if let Some(next) = replacement {
-            if eval.buffers.get(next).is_some() {
-                eval.set_current_buffer_unrecorded(next)?;
-            }
+        if let Some(next) = replacement
+            && eval.buffers.get(next).is_some()
+        {
+            eval.set_current_buffer_unrecorded(next)?;
         }
         if eval.buffers.current_buffer().is_none() {
             if let Some(next) = eval.buffers.buffer_list().into_iter().next() {
@@ -1287,7 +1287,7 @@ pub(crate) fn builtin_insert_buffer_substring(
 ) -> EvalResult {
     expect_range_args("insert-buffer-substring", &args, 1, 3)?;
     let buffer_id =
-        resolve_buffer_designator_allow_nil_current_in_manager(&mut eval.buffers, &args[0])?;
+        resolve_buffer_designator_allow_nil_current_in_manager(&eval.buffers, &args[0])?;
     let (default_start, default_end) = buffer_id
         .and_then(|id| {
             eval.buffers.get(id).map(|buf| {
@@ -1299,18 +1299,18 @@ pub(crate) fn builtin_insert_buffer_substring(
         })
         .unwrap_or((1, 1));
     let start = if args.len() > 1 && !args[1].is_nil() {
-        expect_integer_or_marker_in_buffers(&mut eval.buffers, &args[1])?
+        expect_integer_or_marker_in_buffers(&eval.buffers, &args[1])?
     } else {
         default_start
     };
     let end = if args.len() > 2 && !args[2].is_nil() {
-        expect_integer_or_marker_in_buffers(&mut eval.buffers, &args[2])?
+        expect_integer_or_marker_in_buffers(&eval.buffers, &args[2])?
     } else {
         default_end
     };
 
     let text = checked_buffer_substring_for_char_region_in_manager(
-        &mut eval.buffers,
+        &eval.buffers,
         buffer_id,
         LispCharPos1::new(start),
         LispCharPos1::new(end),
@@ -1513,7 +1513,7 @@ fn myers_edit_runs(
     // `v[k]` holds the furthest-reaching x on diagonal k for the current d.
     // We snapshot `v` after each d so we can backtrack the path afterwards.
     let max_d = (n + m) as usize;
-    let offset = (n + m) as isize; // index shift so k in [-(n+m), n+m] is >= 0.
+    let offset = n + m; // index shift so k in [-(n+m), n+m] is >= 0.
     let vsize = (2 * (n + m) + 1) as usize;
     let mut v = vec![0isize; vsize];
     let mut trace: Vec<Vec<isize>> = Vec::with_capacity(max_d + 1);
@@ -1654,8 +1654,8 @@ pub(crate) fn builtin_replace_region_contents(
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let start = expect_integer_or_marker_in_buffers(&mut eval.buffers, &args[0])?;
-    let end = expect_integer_or_marker_in_buffers(&mut eval.buffers, &args[1])?;
+    let start = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
+    let end = expect_integer_or_marker_in_buffers(&eval.buffers, &args[1])?;
 
     // GNU editfns.c `Freplace_region_contents`: if SOURCE is a function, call
     // it with no arguments and the current buffer narrowed to BEG..END, and use
@@ -1677,8 +1677,7 @@ pub(crate) fn builtin_replace_region_contents(
         source = narrow_result?;
     }
 
-    let source_value =
-        replace_region_source_value_in_state(&mut eval.buffers, &source, current_id)?;
+    let source_value = replace_region_source_value_in_state(&eval.buffers, &source, current_id)?;
     // When SOURCE is a buffer, source_value is a FRESH substring held only
     // in this Rust local while modification hooks run arbitrary Lisp during
     // the replacement below; root it for the rest of the function. Normal
@@ -1704,12 +1703,12 @@ pub(crate) fn builtin_replace_region_contents(
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let start_byte = buf.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(start));
         let end_byte = buf.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(end));
-        let byte_range = if start_byte <= end_byte {
+
+        if start_byte <= end_byte {
             EmacsByteRange::new(start_byte, end_byte)
         } else {
             EmacsByteRange::new(end_byte, start_byte)
-        };
-        byte_range
+        }
     };
     let old_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
         &eval.buffers,
@@ -2611,9 +2610,9 @@ pub(crate) fn builtin_constrain_to_field(
     let mut new_pos = if let Some(point) = orig_point {
         point
     } else {
-        expect_integer_or_marker_in_buffers(&mut eval.buffers, &args[0])?
+        expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?
     };
-    let old_pos = expect_integer_or_marker_in_buffers(&mut eval.buffers, &args[1])?;
+    let old_pos = expect_integer_or_marker_in_buffers(&eval.buffers, &args[1])?;
     let escape_from_edge = args.get(2).is_some_and(|value| value.is_truthy());
     let only_in_line = args.get(3).is_some_and(|value| value.is_truthy());
 
@@ -2624,21 +2623,21 @@ pub(crate) fn builtin_constrain_to_field(
             &eval.obarray,
             &[],
             None,
-            &mut eval.buffers,
+            &eval.buffers,
             vec![Value::fixnum(old_pos), *capture_prop],
         )?;
         old_capture.is_nil()
             && (old_pos <= point_min
                 || char_property_in_current_buffer(
                     &eval.obarray,
-                    &mut eval.buffers,
+                    &eval.buffers,
                     old_pos,
                     *capture_prop,
                 )?
                 .is_nil()
                 || char_property_in_current_buffer(
                     &eval.obarray,
-                    &mut eval.buffers,
+                    &eval.buffers,
                     old_pos - 1,
                     *capture_prop,
                 )?
@@ -2649,14 +2648,14 @@ pub(crate) fn builtin_constrain_to_field(
 
     let field_boundaries_present = !char_property_in_current_buffer(
         &eval.obarray,
-        &mut eval.buffers,
+        &eval.buffers,
         new_pos,
         Value::symbol("field"),
     )?
     .is_nil()
         || !char_property_in_current_buffer(
             &eval.obarray,
-            &mut eval.buffers,
+            &eval.buffers,
             old_pos,
             Value::symbol("field"),
         )?
@@ -2664,7 +2663,7 @@ pub(crate) fn builtin_constrain_to_field(
         || (new_pos > point_min
             && !char_property_in_current_buffer(
                 &eval.obarray,
-                &mut eval.buffers,
+                &eval.buffers,
                 new_pos - 1,
                 Value::symbol("field"),
             )?
@@ -2672,7 +2671,7 @@ pub(crate) fn builtin_constrain_to_field(
         || (old_pos > point_min
             && !char_property_in_current_buffer(
                 &eval.obarray,
-                &mut eval.buffers,
+                &eval.buffers,
                 old_pos - 1,
                 Value::symbol("field"),
             )?
@@ -2714,11 +2713,7 @@ pub(crate) fn builtin_constrain_to_field(
             !forward
         };
         let same_line = !only_in_line
-            || !current_buffer_has_newline_between_positions(
-                &mut eval.buffers,
-                new_pos,
-                field_bound,
-            )?;
+            || !current_buffer_has_newline_between_positions(&eval.buffers, new_pos, field_bound)?;
         if should_constrain && same_line {
             new_pos = field_bound;
         }
@@ -3019,7 +3014,7 @@ pub(crate) fn builtin_delete_field(
     let (beg, end) = find_field_bounds_in_state(
         &eval.obarray,
         &[],
-        &mut eval.buffers,
+        &eval.buffers,
         args.first(),
         false,
         None,
@@ -3794,7 +3789,7 @@ pub(crate) fn insert_string_value_in_current_buffer(
 
 pub(super) fn insert_char_code_from_value(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
-        ValueKind::Fixnum(c) => Ok(c as i64),
+        ValueKind::Fixnum(c) => Ok(c),
         _other => Err(signal(
             LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), *value],
@@ -3964,8 +3959,8 @@ pub(crate) fn builtin_subst_char_in_region(
 ) -> EvalResult {
     expect_range_args("subst-char-in-region", &args, 4, 5)?;
 
-    let start = expect_integer_or_marker_in_buffers(&mut eval.buffers, &args[0])?;
-    let end = expect_integer_or_marker_in_buffers(&mut eval.buffers, &args[1])?;
+    let start = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
+    let end = expect_integer_or_marker_in_buffers(&eval.buffers, &args[1])?;
     let from_code = expect_character_code(&args[2])?;
     let to_code = expect_character_code(&args[3])?;
     let noundo = args.get(4).is_some_and(|value| !value.is_nil());
@@ -4061,6 +4056,7 @@ pub(crate) fn builtin_subst_char_in_region(
     Ok(Value::NIL)
 }
 
+#[allow(clippy::too_many_arguments)] // keeps the scan's validated region and replacement state explicit
 fn subst_char_in_region_scan(
     eval: &super::eval::Context,
     current_id: BufferId,
@@ -4809,7 +4805,7 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
 
         if !string.is_multibyte() {
             // Unibyte: direct byte access
-            return Ok(Value::fixnum((string.as_bytes()[pos] & 0xFF) as i64));
+            return Ok(Value::fixnum(string.as_bytes()[pos] as i64));
         }
         // Use lisp_string_char_codes which handles sentinel translation
         let codes = super::lisp_string_char_codes(string);

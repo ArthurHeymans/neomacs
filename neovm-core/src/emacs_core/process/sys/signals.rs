@@ -136,10 +136,10 @@ pub fn signal_description(signum: i32) -> String {
 #[cfg(unix)]
 pub fn signal_number_from_description(name: &str) -> Option<i32> {
     // portable_pty falls back to "Signal N" when strsignal yields NULL.
-    if let Some(rest) = name.strip_prefix("Signal ") {
-        if let Ok(n) = rest.trim().parse::<i32>() {
-            return Some(n);
-        }
+    if let Some(rest) = name.strip_prefix("Signal ")
+        && let Ok(n) = rest.trim().parse::<i32>()
+    {
+        return Some(n);
     }
     for signum in 1..=64i32 {
         // SAFETY: `strsignal` returns NULL or a valid static C string.

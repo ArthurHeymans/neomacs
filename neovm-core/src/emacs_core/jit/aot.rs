@@ -3650,7 +3650,7 @@ fn load_preload_uncached() -> Option<std::sync::Arc<super::compile::LoadedUnit>>
             e
         })
         .ok()?;
-    let unit = std::sync::Arc::new(super::compile::LoadedUnit::new(lib.into()));
+    let unit = std::sync::Arc::new(super::compile::LoadedUnit::new(lib));
     tracing::debug!("aot-preload: loaded {}", so_path.display());
     Some(unit)
 }
@@ -4207,7 +4207,7 @@ pub(crate) fn drain_aot_pgo_to_dir(
         cands.push((bc.runtime.heat(), content_hash, bc, arity));
     }
     // Hottest first (stable within equal heat = obarray order).
-    cands.sort_by(|a, b| b.0.cmp(&a.0));
+    cands.sort_by_key(|candidate| std::cmp::Reverse(candidate.0));
 
     let mut emitted = 0usize;
     for (_heat, content_hash, bc, arity) in cands {
@@ -4409,10 +4409,13 @@ fn define_leaf_into_module(
 }
 
 /// R2-E: prepare the baseline-tier AOT emit for a body the MIR tier rejects.
-/// Returns the per-leaf reloc set (const-relocs + named-builtin op-symbols, #16/#17)
-/// + the recipe bytes, or `None` if any const/symbol is outside the recipe subset
-/// (gensym / non-recipe-able) → the caller bails to the JIT. Shared by the
-/// single-leaf and (later) multi-leaf baseline emit paths.
+/// Returns the per-leaf reloc set (const-relocs plus named-builtin op-symbols,
+/// #16/#17) together with the recipe bytes, or `None` if any const/symbol is
+/// outside the recipe subset (gensym / non-recipe-able), in which case the
+/// caller bails to the JIT. Shared by the single-leaf and (later) multi-leaf
+/// baseline emit paths.
+// Private handoff of the relocation values, lookup index, and encoded recipe.
+#[allow(clippy::type_complexity)]
 fn prepare_baseline_relocs(
     ops: &[Op],
     constants: &[Value],

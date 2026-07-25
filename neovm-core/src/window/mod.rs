@@ -457,6 +457,9 @@ fn redisplay_f32_bits(value: f32) -> u32 {
 
 /// A window in the window tree.
 #[derive(Clone, Debug)]
+// Window nodes own their complete leaf/split state and are cloned as snapshots;
+// boxing the larger leaf would add indirection throughout the hot layout path.
+#[allow(clippy::large_enum_variant)]
 pub enum Window {
     /// Leaf window displaying a buffer.
     Leaf {
@@ -3817,6 +3820,7 @@ impl Default for FrameManager {
 /// - `None` / `Some(0)`: 50/50 split.
 /// - `Some(n)` (n > 0): the new window gets `n` units.
 /// - `Some(n)` (n < 0): the target window keeps `|n|` units.
+#[allow(clippy::too_many_arguments)] // recursive split carries the explicit IDs and requested geometry
 fn split_window_in_tree(
     tree: &mut Window,
     target: WindowId,
@@ -4814,7 +4818,7 @@ fn redistribute_bounds(children: &mut [Window], parent: Rect) {
             // Horizontal split
             let widths = distributed_sizes_preserving_fixed(parent.width, children, true);
             let mut edge = parent.x.round();
-            for (child, width) in children.iter_mut().zip(widths.into_iter()) {
+            for (child, width) in children.iter_mut().zip(widths) {
                 child.set_bounds(Rect::new(
                     edge,
                     parent.y.round(),
@@ -4827,7 +4831,7 @@ fn redistribute_bounds(children: &mut [Window], parent: Rect) {
             // Vertical split
             let heights = distributed_sizes_preserving_fixed(parent.height, children, false);
             let mut edge = parent.y.round();
-            for (child, height) in children.iter_mut().zip(heights.into_iter()) {
+            for (child, height) in children.iter_mut().zip(heights) {
                 child.set_bounds(Rect::new(
                     parent.x.round(),
                     edge,

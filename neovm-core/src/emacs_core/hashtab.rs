@@ -65,10 +65,10 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
 }
 
 fn validate_optional_obarray_arg(args: &[Value]) -> Result<(), Flow> {
-    if let Some(obarray) = args.get(1) {
-        if !obarray.is_nil() {
-            crate::emacs_core::builtins::symbols::check_obarray_value(*obarray)?;
-        }
+    if let Some(obarray) = args.get(1)
+        && !obarray.is_nil()
+    {
+        crate::emacs_core::builtins::symbols::check_obarray_value(*obarray)?;
     }
     Ok(())
 }
@@ -143,11 +143,7 @@ fn sxhash_combine(x: u64, y: u64) -> u64 {
 /// numerically-equal bignums hash identically regardless of heap address.
 fn sxhash_bignum(value: &Value) -> Option<u64> {
     let bignum = value.as_bignum()?;
-    let mut hash: u64 = if *bignum < malachite::integer::Integer::from(0) {
-        1
-    } else {
-        0
-    };
+    let mut hash: u64 = if *bignum < 0 { 1 } else { 0 };
     for limb in bignum.unsigned_abs_ref().to_limbs_asc() {
         hash = sxhash_combine(hash, limb);
     }
@@ -558,11 +554,11 @@ fn internal_hash_table_nonempty_buckets(table: &LispHashTable) -> Vec<Vec<(Value
     }
     let bucket_count = internal_hash_table_index_size(table).max(1);
     let index_bits = bucket_count.trailing_zeros();
-    let test = table.test.clone();
+    let test = table.test;
     let mut buckets: Vec<Vec<(Value, i64)>> = vec![Vec::new(); bucket_count];
     for key in table.live_hash_keys_in_slot_order() {
         if table.data.contains_key(key) {
-            let hash = internal_hash_table_diagnostic_hash(key, test.clone());
+            let hash = internal_hash_table_diagnostic_hash(key, test);
             let index = knuth_hash_index(hash, index_bits);
             buckets[index].push((hash_key_to_visible_value(table, key), hash as i64));
         }

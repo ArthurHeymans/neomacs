@@ -523,14 +523,13 @@ fn gnutls_cipher_algorithm(
         return Err(invalid_gnutls_algorithm("cipher", *value));
     }
 
-    if let Some(items) = list_to_vec(value) {
-        if let Some(id) = plist_fixnum(&items, ":cipher-id")
-            && let Some(algorithm) = CIPHER_ALGORITHMS
-                .iter()
-                .find(|algorithm| algorithm.id == id)
-        {
-            return Ok(*algorithm);
-        }
+    if let Some(items) = list_to_vec(value)
+        && let Some(id) = plist_fixnum(&items, ":cipher-id")
+        && let Some(algorithm) = CIPHER_ALGORITHMS
+            .iter()
+            .find(|algorithm| algorithm.id == id)
+    {
+        return Ok(*algorithm);
     }
 
     Err(invalid_gnutls_algorithm("cipher", *value))
@@ -556,12 +555,11 @@ fn gnutls_algorithm(
         return Err(invalid_gnutls_algorithm(description, *value));
     }
 
-    if let Some(items) = list_to_vec(value) {
-        if let Some(id) = plist_fixnum(&items, id_key)
-            && let Some(algorithm) = algorithms.iter().find(|algorithm| algorithm.id == id)
-        {
-            return Ok(*algorithm);
-        }
+    if let Some(items) = list_to_vec(value)
+        && let Some(id) = plist_fixnum(&items, id_key)
+        && let Some(algorithm) = algorithms.iter().find(|algorithm| algorithm.id == id)
+    {
+        return Ok(*algorithm);
     }
 
     Err(invalid_gnutls_algorithm(description, *value))

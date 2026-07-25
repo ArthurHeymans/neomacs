@@ -774,7 +774,7 @@ pub fn compare_grids_strict(
     let in_range = |r: u16| {
         opts.row_range
             .as_ref()
-            .map_or(true, |range| range.contains(&r))
+            .is_none_or(|range| range.contains(&r))
     };
 
     // Per-grid canonical face-class labels, assigned by first appearance in a

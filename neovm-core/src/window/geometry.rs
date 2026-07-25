@@ -142,6 +142,7 @@ impl PresentationGeometry {
         })
     }
 
+    #[allow(clippy::too_many_arguments)] // constructor receives the complete immutable frame placement
     pub(crate) fn new_with_frame_placement(
         frame: FrameId,
         presentation: PresentationId,

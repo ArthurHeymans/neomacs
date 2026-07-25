@@ -68,12 +68,11 @@ where
         }
 
         tail = tail.cons_cdr();
-        if tail.is_cons() {
-            if let Some(cycle_tail) =
+        if tail.is_cons()
+            && let Some(cycle_tail) =
                 for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
-            {
-                return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
-            }
+        {
+            return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
         }
     }
 
@@ -99,12 +98,11 @@ pub(crate) fn proper_list_length_or_signal(list: Value) -> Result<usize, Flow> {
         len = len.saturating_add(1);
 
         tail = tail.cons_cdr();
-        if tail.is_cons() {
-            if let Some(cycle_tail) =
+        if tail.is_cons()
+            && let Some(cycle_tail) =
                 for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
-            {
-                return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
-            }
+        {
+            return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
         }
     }
 
@@ -130,12 +128,11 @@ pub(crate) fn collect_proper_list_items(list: Value) -> Result<Vec<Value>, Flow>
         items.push(tail.cons_car());
 
         tail = tail.cons_cdr();
-        if tail.is_cons() {
-            if let Some(cycle_tail) =
+        if tail.is_cons()
+            && let Some(cycle_tail) =
                 for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
-            {
-                return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
-            }
+        {
+            return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
         }
     }
 
@@ -593,12 +590,11 @@ fn list_length_internal_for_predicate(mut sequence: Value, mut len: i64) -> Resu
         }
 
         sequence = sequence.cons_cdr();
-        if sequence.is_cons() {
-            if let Some(cycle_tail) =
+        if sequence.is_cons()
+            && let Some(cycle_tail) =
                 for_each_tail_cycle_tail(sequence, &mut tortoise, &mut max, &mut n, &mut q)
-            {
-                return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
-            }
+        {
+            return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
         }
     }
     Ok(len)
@@ -745,7 +741,7 @@ fn expect_nthcdr_count(value: Value) -> Result<NthcdrCount, Flow> {
         ValueKind::Fixnum(n) => Ok(NthcdrCount::Fixnum(n)),
         ValueKind::Veclike(VecLikeType::Bignum) => {
             let n = value.as_bignum().expect("bignum kind").clone();
-            if n < Integer::from(0) {
+            if n < 0 {
                 Ok(NthcdrCount::NegativeBignum)
             } else {
                 Ok(NthcdrCount::PositiveBignum(n))
@@ -772,24 +768,24 @@ fn nthcdr_impl(n_value: Value, list: Value) -> EvalResult {
         _ => list,
     };
 
-    if let NthcdrCount::Fixnum(n) = &count {
-        if *n <= 127 {
-            for _ in 0..(*n as usize) {
-                match tail.kind() {
-                    ValueKind::Cons => {
-                        tail = tail.cons_cdr();
-                    }
-                    ValueKind::Nil => return Ok(Value::NIL),
-                    _ => {
-                        return Err(signal(
-                            LispCondition::WrongTypeArgument,
-                            vec![Value::symbol("listp"), list],
-                        ));
-                    }
+    if let NthcdrCount::Fixnum(n) = &count
+        && *n <= 127
+    {
+        for _ in 0..(*n as usize) {
+            match tail.kind() {
+                ValueKind::Cons => {
+                    tail = tail.cons_cdr();
+                }
+                ValueKind::Nil => return Ok(Value::NIL),
+                _ => {
+                    return Err(signal(
+                        LispCondition::WrongTypeArgument,
+                        vec![Value::symbol("listp"), list],
+                    ));
                 }
             }
-            return Ok(tail);
         }
+        return Ok(tail);
     }
 
     nthcdr_large_or_bignum(count, tail, list)
@@ -903,12 +899,11 @@ fn builtin_append_slice_impl(args: &[Value]) -> EvalResult {
             append_element(result, last, tail.cons_car());
 
             tail = tail.cons_cdr();
-            if tail.is_cons() {
-                if let Some(cycle_tail) =
+            if tail.is_cons()
+                && let Some(cycle_tail) =
                     for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
-                {
-                    return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
-                }
+            {
+                return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
             }
         }
 
@@ -1265,11 +1260,11 @@ pub(crate) fn builtin_assoc_slice(eval: &mut super::eval::Context, args: &[Value
         let test_fn = args
             .get(2)
             .and_then(|value| if value.is_nil() { None } else { Some(*value) });
-        if test_fn.is_some() {
+        if let Some(test_fn) = test_fn {
             let roots = eval.save_specpdl_roots();
             eval.push_specpdl_root(*key);
             eval.push_specpdl_root(list);
-            eval.push_specpdl_root(test_fn.unwrap());
+            eval.push_specpdl_root(test_fn);
             // Root the moving tail across the predicate: TESTFN can setcdr
             // the alist, unlinking the current tail from the rooted head;
             // the slot keeps the remainder alive transitively.
@@ -1279,11 +1274,7 @@ pub(crate) fn builtin_assoc_slice(eval: &mut super::eval::Context, args: &[Value
                 let pair_car = tail.cons_car();
                 if let ValueKind::Cons = pair_car.kind() {
                     let entry_key = pair_car.cons_car();
-                    let matches = if let Some(test_fn) = &test_fn {
-                        eval.apply2(*test_fn, entry_key, *key)?.is_truthy()
-                    } else {
-                        equal_value_swp(key, &entry_key, 0, eval.symbols_with_pos_enabled)
-                    };
+                    let matches = eval.apply2(test_fn, entry_key, *key)?.is_truthy();
                     if matches {
                         return Ok(Some(pair_car));
                     }
@@ -1421,12 +1412,11 @@ pub(crate) fn builtin_copy_sequence(args: Vec<Value>) -> EvalResult {
                 prev = next;
 
                 tail = tail.cons_cdr();
-                if tail.is_cons() {
-                    if let Some(cycle_tail) =
+                if tail.is_cons()
+                    && let Some(cycle_tail) =
                         for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
-                    {
-                        return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
-                    }
+                {
+                    return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
                 }
             }
 
@@ -1449,13 +1439,13 @@ pub(crate) fn builtin_copy_sequence(args: Vec<Value>) -> EvalResult {
             }
             let new_val = Value::heap_string(string.clone());
             // Copy text properties
-            if new_val.is_string() {
-                if let Some(table) = get_string_text_properties_table_for_value(args[0]) {
-                    set_string_text_properties_table_for_value(
-                        new_val,
-                        table.copy_interval_plist_spines(),
-                    );
-                }
+            if new_val.is_string()
+                && let Some(table) = get_string_text_properties_table_for_value(args[0])
+            {
+                set_string_text_properties_table_for_value(
+                    new_val,
+                    table.copy_interval_plist_spines(),
+                );
             }
             Ok(new_val)
         }
@@ -1519,12 +1509,11 @@ where
         }
 
         tail = next;
-        if tail.is_cons() {
-            if let Some(cycle_tail) =
+        if tail.is_cons()
+            && let Some(cycle_tail) =
                 for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
-            {
-                return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
-            }
+        {
+            return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
         }
     }
 

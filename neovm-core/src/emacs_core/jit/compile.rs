@@ -2706,6 +2706,9 @@ pub(crate) struct AotLeafMeta {
 /// `.so`). This enum just records the backing so drop releases the right thing.
 /// No catch-all when matching on it — the compiler enforces that a new backing
 /// is handled everywhere (the GC-tested completeness rule).
+// Both variants own their backing directly so the compiled entry cannot outlive
+// its mapped code; another allocation would only narrow this private enum.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum LeafBacking {
     /// JIT: the `JITModule` owns the executable memory `entry` points into.
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -3186,13 +3189,12 @@ impl CompiledLeaf {
         // whose extent held it exits (any exit — a leaf-locally caught panic
         // leaves via STATUS_OK much later). A floor below our entry is an
         // outer leaf's residue: leave it set for that leaf's own exit.
-        if let Some(b) = &bases {
-            if let Some(floor) = PENDING_ROOT_SWEEP_FLOOR.with(|f| f.get()) {
-                if floor >= b.roots() {
-                    restore_scratch_gc_roots(b.roots());
-                    PENDING_ROOT_SWEEP_FLOOR.with(|f| f.set(None));
-                }
-            }
+        if let Some(b) = &bases
+            && let Some(floor) = PENDING_ROOT_SWEEP_FLOOR.with(|f| f.get())
+            && floor >= b.roots()
+        {
+            restore_scratch_gc_roots(b.roots());
+            PENDING_ROOT_SWEEP_FLOOR.with(|f| f.set(None));
         }
         if status == STATUS_DEOPT_AT {
             // Precise deopt: NO frame unwind — the resumed interpreter frame
@@ -3584,10 +3586,10 @@ fn jit_profile_emit(f: &ByteCodeFunction, obarray: Option<&Obarray>, compiled: b
             | Op::GotoIfNil(t)
             | Op::GotoIfNotNil(t)
             | Op::GotoIfNilElsePop(t)
-            | Op::GotoIfNotNilElsePop(t) => {
-                if (*t as usize) <= i {
-                    backedges += 1;
-                }
+            | Op::GotoIfNotNilElsePop(t)
+                if (*t as usize) <= i =>
+            {
+                backedges += 1;
             }
             _ => {}
         }
@@ -3936,10 +3938,8 @@ fn body_is_jit_profitable(ops: &[Op], constants: &[Value]) -> bool {
             // via the classifier's OWN predicate, so the gate agrees exactly with
             // what tiers. Non-intrinsifiable CBSym ops still count as calls, so a
             // genuinely call-dominated non-spec body stays protected.
-            Op::CallBuiltinSym(sym, n) => {
-                if cbsym_spec_kind(*sym, *n as usize).is_none() {
-                    calls += 1;
-                }
+            Op::CallBuiltinSym(sym, n) if cbsym_spec_kind(*sym, *n as usize).is_none() => {
+                calls += 1;
             }
             _ => {}
         }
@@ -3999,42 +3999,43 @@ fn compile_bytecode_function_inner(
     // faster than the baseline's per-op untag/retag. Fall back to the baseline on
     // any bail (calls, cons, optional/&rest args, ...). Restricted to no
     // optional/&rest so the MIR's argument seeding matches `native_arity`.
-    if !has_rest && f.params.optional.is_empty() {
-        if let Ok(mut mir) = mir::build_mir(ops, &f.constants, native_arity) {
-            // Inline pure single-block callees (resolved through the obarray). When
-            // a call is inlined the body can become pure (no Opaque), so
-            // lower_mir_pure handles it and unboxing/guard-elision flow ACROSS the
-            // former call boundary. Record the armed function_epoch so the dispatch
-            // re-JITs if any inlined callee is later redefined (see CompiledLeaf
-            // ::inline_epoch).
-            let mut inlined_syms: Vec<crate::emacs_core::intern::SymId> = Vec::new();
-            let inline_epoch = obarray.and_then(|ob| {
-                let armed = ob.function_epoch();
-                let n = mir::inline_pure_single_block_callees(
-                    &mut mir,
-                    &|sym| resolve_inline_callee(ob, sym),
-                    MAX_INLINE_INSTS,
-                    &mut inlined_syms,
-                );
-                (n > 0).then_some(armed)
-            });
-            if let Ok(mut leaf) = lower_mir_pure(&mir) {
-                // Tier gate: a call-bearing MIR leaf (has_side_effects) only earns
-                // the MIR tier when it INLINED something — that's the one case the
-                // MIR tier beats the baseline (cross-boundary unboxing/elision).
-                // For a plain non-inlined call the baseline is strictly better
-                // (spec-call native-to-native speculation + battle-tested), so let
-                // it fall through. Pure (call-free) leaves always take the MIR tier.
-                if !leaf.has_side_effects || inline_epoch.is_some() {
-                    leaf.required = required;
-                    leaf.has_rest = has_rest;
-                    leaf.inline_epoch = inline_epoch;
-                    // The precise dependency set (registered into INLINE_DEPS at the
-                    // cache compile-miss site so a redefinition of any inlined callee
-                    // evicts exactly this leaf).
-                    leaf.inline_deps = inlined_syms.into();
-                    return Ok(leaf);
-                }
+    if !has_rest
+        && f.params.optional.is_empty()
+        && let Ok(mut mir) = mir::build_mir(ops, &f.constants, native_arity)
+    {
+        // Inline pure single-block callees (resolved through the obarray). When
+        // a call is inlined the body can become pure (no Opaque), so
+        // lower_mir_pure handles it and unboxing/guard-elision flow ACROSS the
+        // former call boundary. Record the armed function_epoch so the dispatch
+        // re-JITs if any inlined callee is later redefined (see CompiledLeaf
+        // ::inline_epoch).
+        let mut inlined_syms: Vec<crate::emacs_core::intern::SymId> = Vec::new();
+        let inline_epoch = obarray.and_then(|ob| {
+            let armed = ob.function_epoch();
+            let n = mir::inline_pure_single_block_callees(
+                &mut mir,
+                &|sym| resolve_inline_callee(ob, sym),
+                MAX_INLINE_INSTS,
+                &mut inlined_syms,
+            );
+            (n > 0).then_some(armed)
+        });
+        if let Ok(mut leaf) = lower_mir_pure(&mir) {
+            // Tier gate: a call-bearing MIR leaf (has_side_effects) only earns
+            // the MIR tier when it INLINED something — that's the one case the
+            // MIR tier beats the baseline (cross-boundary unboxing/elision).
+            // For a plain non-inlined call the baseline is strictly better
+            // (spec-call native-to-native speculation + battle-tested), so let
+            // it fall through. Pure (call-free) leaves always take the MIR tier.
+            if !leaf.has_side_effects || inline_epoch.is_some() {
+                leaf.required = required;
+                leaf.has_rest = has_rest;
+                leaf.inline_epoch = inline_epoch;
+                // The precise dependency set (registered into INLINE_DEPS at the
+                // cache compile-miss site so a redefinition of any inlined callee
+                // evicts exactly this leaf).
+                leaf.inline_deps = inlined_syms.into();
+                return Ok(leaf);
             }
         }
     }
@@ -4104,14 +4105,13 @@ fn emit_guard(fb: &mut FunctionBuilder, deopt: Block, cond: ClifValue) {
 /// every use, so eliding its guard cannot change any result or deopt.
 fn is_fixnum_const(fb: &FunctionBuilder, v: ClifValue) -> bool {
     use cranelift_codegen::ir::{InstructionData, Opcode, ValueDef};
-    if let ValueDef::Result(inst, _) = fb.func.dfg.value_def(v) {
-        if let InstructionData::UnaryImm {
+    if let ValueDef::Result(inst, _) = fb.func.dfg.value_def(v)
+        && let InstructionData::UnaryImm {
             opcode: Opcode::Iconst,
             imm,
         } = fb.func.dfg.insts[inst]
-        {
-            return (imm.bits() & FIXNUM_CHECK_MASK as i64) == FIXNUM_CHECK_VALUE as i64;
-        }
+    {
+        return (imm.bits() & FIXNUM_CHECK_MASK as i64) == FIXNUM_CHECK_VALUE as i64;
     }
     false
 }
@@ -4128,16 +4128,14 @@ fn is_fixnum_const(fb: &FunctionBuilder, v: ClifValue) -> bool {
 /// here removes a dead tag-test the optimizer would otherwise leave in.
 fn is_nonheap_const(fb: &FunctionBuilder, v: ClifValue) -> bool {
     use cranelift_codegen::ir::{InstructionData, Opcode, ValueDef};
-    if let ValueDef::Result(inst, _) = fb.func.dfg.value_def(v) {
-        if let InstructionData::UnaryImm {
+    if let ValueDef::Result(inst, _) = fb.func.dfg.value_def(v)
+        && let InstructionData::UnaryImm {
             opcode: Opcode::Iconst,
             imm,
         } = fb.func.dfg.insts[inst]
-        {
-            let bits = imm.bits() as usize;
-            return (bits & FIXNUM_CHECK_MASK) == FIXNUM_CHECK_VALUE
-                || (bits & TAG_MASK) == TAG_SYMBOL;
-        }
+    {
+        let bits = imm.bits() as usize;
+        return (bits & FIXNUM_CHECK_MASK) == FIXNUM_CHECK_VALUE || (bits & TAG_MASK) == TAG_SYMBOL;
     }
     false
 }
@@ -8015,11 +8013,11 @@ fn find_spec_sites(
     // values below were already unknown) and later pushes re-grow it, so
     // top-relative reads inside the suffix stay exact.
     let mut tags: Vec<Option<u16>> = Vec::new();
-    for i in 0..ops.len() {
+    for (i, op) in ops.iter().enumerate() {
         if leaders.binary_search(&i).is_ok() {
             tags.clear();
         }
-        match &ops[i] {
+        match op {
             Op::Constant(cidx) => {
                 let tag = constants
                     .get(*cidx as usize)
@@ -8332,6 +8330,7 @@ pub(crate) struct Cfg {
 /// analysis on first sight. Depth, bind count, and handler stack must be
 /// non-negative and consistent across all paths (the byte-compiler guarantees
 /// a single static value per program point), so each block is analyzed once.
+#[allow(clippy::too_many_arguments)] // dataflow successor state remains split for in-place updates
 fn push_succ(
     entry_depth: &mut HashMap<usize, usize>,
     entry_binds: &mut HashMap<usize, usize>,
@@ -8432,10 +8431,8 @@ pub(crate) fn analyze_cfg(
                     leader_set.insert(i + 1);
                 }
             }
-            Op::Return | Op::Throw => {
-                if i + 1 < n {
-                    leader_set.insert(i + 1);
-                }
+            Op::Return | Op::Throw if i + 1 < n => {
+                leader_set.insert(i + 1);
             }
             _ => {}
         }
@@ -8929,10 +8926,10 @@ fn compute_known_fixnum_slots(
                 edges.push((end, k.clone()));
             }
             for (t, contrib) in &edges {
-                if let Some(into) = in_sets.get_mut(t) {
-                    if meet(into, contrib) {
-                        iterate = true;
-                    }
+                if let Some(into) = in_sets.get_mut(t)
+                    && meet(into, contrib)
+                {
+                    iterate = true;
                 }
             }
         }
@@ -9171,13 +9168,13 @@ pub fn lower_leaf_full_osr(
     let mut reloc_vals: Vec<Value> = Vec::new();
     let mut reloc_index: std::collections::HashMap<usize, u32> = std::collections::HashMap::new();
     for op in ops {
-        if let Op::Constant(idx) = op {
-            if let Some(v) = constants.get(*idx as usize) {
-                if v.is_heap_object() && !reloc_index.contains_key(&v.bits()) {
-                    reloc_index.insert(v.bits(), reloc_vals.len() as u32);
-                    reloc_vals.push(*v);
-                }
-            }
+        if let Op::Constant(idx) = op
+            && let Some(v) = constants.get(*idx as usize)
+            && v.is_heap_object()
+            && !reloc_index.contains_key(&v.bits())
+        {
+            reloc_index.insert(v.bits(), reloc_vals.len() as u32);
+            reloc_vals.push(*v);
         }
     }
     let reloc_data: Box<[Value]> = reloc_vals.into_boxed_slice();
@@ -9749,11 +9746,11 @@ fn build_leaf_fn<M: Module>(
             Some(p) => (cfg.entry_depth[&p], block_for[&p]),
             None => (arity, block_for[&0]),
         };
-        for i in 0..seed_count {
+        for (i, var) in vars.iter().take(seed_count).enumerate() {
             let v = fb
                 .ins()
                 .load(types::I64, MemFlags::trusted(), args_ptr, (i * 8) as i32);
-            fb.def_var(vars[i], v);
+            fb.def_var(*var, v);
         }
         fb.ins().jump(jump_target, &[]);
 

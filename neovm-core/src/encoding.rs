@@ -2161,7 +2161,7 @@ fn decode_via_utf7(bytes: &[u8], imap: bool) -> Vec<u8> {
                 }
             }
         }
-        while run.len() % 4 != 0 {
+        while !run.len().is_multiple_of(4) {
             run.push(b'=');
         }
         if let Some(decoded) = crate::emacs_core::fns::base64_standard_decode(&run) {
@@ -2270,7 +2270,7 @@ fn decode_via_hz(bytes: &[u8], gb2312: SymId) -> Vec<u8> {
                 _ => {}
             }
         }
-        if in_gb && b >= 0x21 && b < 0x7F && i + 1 < bytes.len() {
+        if in_gb && (0x21..0x7F).contains(&b) && i + 1 < bytes.len() {
             let code = (i64::from(b) << 8) | i64::from(bytes[i + 1]);
             if let Some(ch) = crate::emacs_core::charset::charset_decode_char(gb2312, code) {
                 emit(ch as u32, &mut out);
@@ -3126,7 +3126,7 @@ fn detect_undecided_coding(bytes: &[u8], prefer_utf_8: bool) -> &'static str {
     // charset category is bound to iso-latin-1; it accepts when every high byte
     // is a valid Latin-1 graphic (>= 0xA0). 0x80-0x9F would need the
     // latin-extra-code-table; treat them as non-Latin-1 here.
-    if eight_bit && bytes.iter().all(|&b| b < 0x80 || b >= 0xA0) {
+    if eight_bit && bytes.iter().all(|&b| !(0x80..0xA0).contains(&b)) {
         return "iso-latin-1";
     }
     // NUL or otherwise undetectable -> raw passthrough.
@@ -3271,7 +3271,7 @@ fn builtin_coding_string_in_context(
             .clone();
         ctx.set_variable(
             "last-coding-system-used",
-            Value::symbol(&canonical_context_coding_name(ctx, &coding)),
+            Value::symbol(canonical_context_coding_name(ctx, &coding)),
         );
         let Some(buffer_id) = destination else {
             return Ok(result);
@@ -3377,7 +3377,7 @@ fn builtin_coding_string_in_context(
         .clone();
     ctx.set_variable(
         "last-coding-system-used",
-        Value::symbol(&canonical_context_coding_name(ctx, &coding)),
+        Value::symbol(canonical_context_coding_name(ctx, &coding)),
     );
 
     let Some(buffer_id) = destination else {
@@ -3470,10 +3470,10 @@ fn builtin_coding_region(
     // A DESTINATION that is the current buffer means in-place conversion
     // (GNU `code_convert_region` with dst_object == the source buffer), not an
     // insertion that would duplicate the text.
-    if let Some(Some(dest_id)) = destination {
-        if Some(dest_id) == ctx.buffers.current_buffer_id() {
-            destination = Some(None);
-        }
+    if let Some(Some(dest_id)) = destination
+        && Some(dest_id) == ctx.buffers.current_buffer_id()
+    {
+        destination = Some(None);
     }
     let Some(byte_range) =
         crate::emacs_core::editfns::current_buffer_accessible_char_region_in_buffers(
@@ -3508,7 +3508,7 @@ fn builtin_coding_region(
         None => {
             ctx.set_variable(
                 "last-coding-system-used",
-                Value::symbol(&canonical_context_coding_name(ctx, &coding)),
+                Value::symbol(canonical_context_coding_name(ctx, &coding)),
             );
             Ok(result)
         }
@@ -3571,7 +3571,7 @@ fn builtin_coding_region(
             }
             ctx.set_variable(
                 "last-coding-system-used",
-                Value::symbol(&canonical_context_coding_name(ctx, &coding)),
+                Value::symbol(canonical_context_coding_name(ctx, &coding)),
             );
             Ok(Value::fixnum(produced_chars as i64))
         }
@@ -3593,7 +3593,7 @@ fn builtin_coding_region(
             insert_coding_result(ctx, buffer_id, &stored, restore_point)?;
             ctx.set_variable(
                 "last-coding-system-used",
-                Value::symbol(&canonical_context_coding_name(ctx, &coding)),
+                Value::symbol(canonical_context_coding_name(ctx, &coding)),
             );
             Ok(Value::fixnum(produced_chars as i64))
         }
@@ -3647,7 +3647,7 @@ fn builtin_char_width_with_display_table(
 ) -> EvalResult {
     expect_args("char-width", &args, 1)?;
     let code = match args[0].kind() {
-        ValueKind::Fixnum(c) => c as i64,
+        ValueKind::Fixnum(c) => c,
         _other => {
             return Err(signal(
                 LispCondition::WrongTypeArgument,
@@ -3857,7 +3857,7 @@ pub(crate) fn builtin_char_or_string_p(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_char_displayable_p(args: Vec<Value>) -> EvalResult {
     expect_args("char-displayable-p", &args, 1)?;
     let code = match args[0].kind() {
-        ValueKind::Fixnum(c) => c as i64,
+        ValueKind::Fixnum(c) => c,
         _other => {
             return Err(signal(
                 LispCondition::WrongTypeArgument,

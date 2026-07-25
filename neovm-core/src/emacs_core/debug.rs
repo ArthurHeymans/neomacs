@@ -100,7 +100,7 @@ impl Backtrace {
         let mut out = String::new();
         // Print newest frame first (like Emacs *Backtrace* buffer)
         for (i, frame) in self.frames.iter().rev().enumerate() {
-            let kind = if frame.is_special_form { "  " } else { "  " };
+            let kind = "  ";
             let function = print_value(&frame.function);
             let args_str = frame
                 .args

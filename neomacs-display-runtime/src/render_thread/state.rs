@@ -615,16 +615,9 @@ impl Default for ChildFrameStyle {
     }
 }
 
+#[derive(Default)]
 pub(super) struct ToolbarResources {
     pub(super) icon_textures: HashMap<(ToolBarImageSource, u32), u32>,
-}
-
-impl Default for ToolbarResources {
-    fn default() -> Self {
-        Self {
-            icon_textures: HashMap::new(),
-        }
-    }
 }
 
 pub(super) struct RenderGpuContext {

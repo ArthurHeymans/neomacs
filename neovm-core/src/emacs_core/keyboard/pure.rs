@@ -217,12 +217,10 @@ fn describe_int_key(code: i64) -> Result<String, Flow> {
     // Emacs renders M-TAB style integer events through control notation (`C-M-i`),
     // while plain/shift/super/alt TAB keeps named `TAB` rendering.
     let tab_meta_control_notation = base == 9 && meta;
-    if !tab_meta_control_notation {
-        if let Some(name) = named_char_name(base) {
-            push_prefixes(&mut out, ctrl);
-            out.push_str(name);
-            return Ok(out);
-        }
+    if !tab_meta_control_notation && let Some(name) = named_char_name(base) {
+        push_prefixes(&mut out, ctrl);
+        out.push_str(name);
+        return Ok(out);
     }
 
     if let Some(sfx) = control_char_suffix(base) {
@@ -309,14 +307,12 @@ pub(crate) fn key_sequence_values(value: &Value) -> Result<Vec<Value>, Flow> {
             let converted: Vec<Value> = elems
                 .into_iter()
                 .map(|e| {
-                    if e.is_cons() {
-                        if let Some(items) = list_to_vec(&e) {
-                            if items.len() > 1 {
-                                if let Some(c) = convert_lucid_event_list(&items) {
-                                    return c;
-                                }
-                            }
-                        }
+                    if e.is_cons()
+                        && let Some(items) = list_to_vec(&e)
+                        && items.len() > 1
+                        && let Some(c) = convert_lucid_event_list(&items)
+                    {
+                        return c;
                     }
                     e
                 })
@@ -437,13 +433,12 @@ pub(crate) fn convert_lucid_event_list(items: &[Value]) -> Option<Value> {
     let mut base: Option<Value> = None;
     for (idx, item) in items.iter().enumerate() {
         if base.is_none() {
-            if let Some(sym) = item.as_symbol_name() {
-                if idx + 1 < items.len()
-                    && let Some(bit) = event_modifier_bit(sym)
-                {
-                    mod_bits |= bit;
-                    continue;
-                }
+            if let Some(sym) = item.as_symbol_name()
+                && idx + 1 < items.len()
+                && let Some(bit) = event_modifier_bit(sym)
+            {
+                mod_bits |= bit;
+                continue;
             }
             base = Some(*item);
         } else {
@@ -454,10 +449,10 @@ pub(crate) fn convert_lucid_event_list(items: &[Value]) -> Option<Value> {
 
     let mut base = base?;
 
-    if let ValueKind::Symbol(id) = base.kind() {
-        if let Some(code) = lucid_symbol_char_base(resolve_sym(id)) {
-            base = Value::fixnum(code);
-        }
+    if let ValueKind::Symbol(id) = base.kind()
+        && let Some(code) = lucid_symbol_char_base(resolve_sym(id))
+    {
+        base = Value::fixnum(code);
     }
 
     match base.kind() {
@@ -477,14 +472,16 @@ pub(crate) fn convert_lucid_event_list(items: &[Value]) -> Option<Value> {
             if ctrl && code <= 31 {
                 mod_bits &= !KEY_CHAR_CTRL;
             }
-            if ctrl && code != 32 && code != 63 {
-                if let Some(resolved) = resolve_control_code(code) {
-                    if (65..=90).contains(&code) {
-                        mod_bits |= KEY_CHAR_SHIFT;
-                    }
-                    code = resolved;
-                    mod_bits &= !KEY_CHAR_CTRL;
+            if ctrl
+                && code != 32
+                && code != 63
+                && let Some(resolved) = resolve_control_code(code)
+            {
+                if (65..=90).contains(&code) {
+                    mod_bits |= KEY_CHAR_SHIFT;
                 }
+                code = resolved;
+                mod_bits &= !KEY_CHAR_CTRL;
             }
             Some(Value::fixnum(code | mod_bits))
         }

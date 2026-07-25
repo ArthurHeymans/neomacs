@@ -339,13 +339,12 @@ impl FreshBuildOptions {
         }
 
         if !release {
-            return Err(format!(
-                "fresh-build must be used with --release.\n\n\
+            return Err("fresh-build must be used with --release.\n\n\
                  fresh-build builds the runnable GNU-shaped runtime pipeline \
                  (cargo build, temacs bootstrap, byte-compilation, pdump) and is a \
                  release-only operation. Re-run with:\n    cargo xtask fresh-build --release"
-            )
-            .into());
+                .to_string()
+                .into());
         }
 
         let bin_dir = bin_dir.unwrap_or_else(|| default_bin_dir(&repo_root));
@@ -1807,6 +1806,12 @@ fn make_output_writable(options: &FreshBuildOptions, output: &Path) -> Result<()
         return Ok(());
     }
     let mut permissions = fs::metadata(output)?.permissions();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        permissions.set_mode(permissions.mode() | 0o200);
+    }
+    #[cfg(not(unix))]
     permissions.set_readonly(false);
     fs::set_permissions(output, permissions)?;
     Ok(())
@@ -2845,10 +2850,7 @@ fn lisp_dirs_matching_gnu_subdirs(
 ) -> Result<Vec<PathBuf>> {
     let mut dirs = Vec::new();
     collect_lisp_dirs(lisp_root, &mut dirs)?;
-    dirs.retain(|dir| {
-        dir.strip_prefix(lisp_root)
-            .map_or(true, |relative| include_relative(relative))
-    });
+    dirs.retain(|dir| dir.strip_prefix(lisp_root).map_or(true, &include_relative));
     dirs.sort();
     Ok(dirs)
 }
@@ -3472,9 +3474,7 @@ fn compile_main_needs_rebuild(source: &Path) -> bool {
 fn source_has_no_byte_compile_marker(source: &Path) -> Result<bool> {
     let contents = fs::read(source)?;
     let contents = String::from_utf8_lossy(&contents);
-    Ok(contents
-        .lines()
-        .any(|line| gnu_no_byte_compile_marker_line(line)))
+    Ok(contents.lines().any(gnu_no_byte_compile_marker_line))
 }
 
 fn parse_compile_main_dependencies(

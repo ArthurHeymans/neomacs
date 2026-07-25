@@ -321,7 +321,7 @@ fn expect_margin_width(value: &Value) -> Result<usize, Flow> {
     match value.kind() {
         ValueKind::Nil => Ok(0),
         ValueKind::Fixnum(n) => {
-            if n < 0 || n > MAX_MARGIN {
+            if !(0..=MAX_MARGIN).contains(&n) {
                 return Err(signal(
                     LispCondition::ArgsOutOfRange,
                     vec![
@@ -551,10 +551,10 @@ fn resolve_window_id_or_error_in_state(
 }
 
 fn format_window_designator_for_error_in_state(frames: &FrameManager, value: &Value) -> String {
-    if let Some(wid) = window_id_from_designator(value) {
-        if frames.is_window_object_id(wid) || value.is_window() {
-            return format!("#<window {}>", wid.0);
-        }
+    if let Some(wid) = window_id_from_designator(value)
+        && (frames.is_window_object_id(wid) || value.is_window())
+    {
+        return format!("#<window {}>", wid.0);
     }
     super::print::print_value(value)
 }
@@ -1018,7 +1018,7 @@ fn filtered_window_prev_buffers(
             };
             !items
                 .first()
-                .is_some_and(|first| discarded_buffers.iter().any(|buffer| *buffer == *first))
+                .is_some_and(|first| discarded_buffers.contains(first))
         })
         .collect())
 }
@@ -1035,7 +1035,7 @@ fn filtered_window_next_buffers(
     })?;
     Ok(next_entries
         .into_iter()
-        .filter(|entry| !discarded_buffers.iter().any(|buffer| *buffer == *entry))
+        .filter(|entry| !discarded_buffers.contains(entry))
         .collect())
 }
 
@@ -2121,12 +2121,10 @@ pub(crate) fn builtin_window_point(
             let selected_live_window = frames.get(fid).is_some_and(|frame| {
                 frame.selected_window == wid && frame.selected_window != WindowId(0)
             });
-            if selected_live_window {
-                if let Some(buffer) = buffers.get(*buffer_id) {
-                    return Ok(Value::fixnum(
-                        buffer.point_char_pos().get().saturating_add(1) as i64,
-                    ));
-                }
+            if selected_live_window && let Some(buffer) = buffers.get(*buffer_id) {
+                return Ok(Value::fixnum(
+                    buffer.point_char_pos().get().saturating_add(1) as i64,
+                ));
             }
             Ok(Value::fixnum(point.as_i64()))
         }
@@ -2148,46 +2146,39 @@ pub(crate) fn builtin_set_window_start(
         // GNU Fset_window_start: w->force_start = !NILP (noforce) ? 0 : 1 —
         // an explicit start is honored by the next redisplay (point moves
         // into the window if needed) unless NOFORCE asks for the soft mode.
-        let force_start_p = args.get(2).map_or(true, |noforce| noforce.is_nil());
+        let force_start_p = args.get(2).is_none_or(|noforce| noforce.is_nil());
         let is_minibuffer = frames
             .get(fid)
             .is_some_and(|frame| frame.minibuffer_window == Some(wid));
         match pos {
             IntegerOrMarkerArg::Int(pos) => {
-                if !is_minibuffer {
-                    if let Some(clamped) =
+                if !is_minibuffer
+                    && let Some(clamped) =
                         clamped_window_position_in_state(frames, buffers, fid, wid, pos)
-                    {
-                        if let Some(window) = frames
-                            .get_mut(fid)
-                            .and_then(|frame| frame.find_window_mut(wid))
-                        {
-                            crate::window::window_markers::set_window_start_with_marker(
-                                buffers, window, clamped,
-                            );
-                            set_window_force_start(window, force_start_p);
-                        }
-                    }
+                    && let Some(window) = frames
+                        .get_mut(fid)
+                        .and_then(|frame| frame.find_window_mut(wid))
+                {
+                    crate::window::window_markers::set_window_start_with_marker(
+                        buffers, window, clamped,
+                    );
+                    set_window_force_start(window, force_start_p);
                 }
                 Value::fixnum(pos)
             }
             IntegerOrMarkerArg::Marker { raw, position } => {
-                if !is_minibuffer {
-                    if let Some(pos) = position {
-                        if let Some(clamped) =
-                            clamped_window_position_in_state(frames, buffers, fid, wid, pos)
-                        {
-                            if let Some(window) = frames
-                                .get_mut(fid)
-                                .and_then(|frame| frame.find_window_mut(wid))
-                            {
-                                crate::window::window_markers::set_window_start_with_marker(
-                                    buffers, window, clamped,
-                                );
-                                set_window_force_start(window, force_start_p);
-                            }
-                        }
-                    }
+                if !is_minibuffer
+                    && let Some(pos) = position
+                    && let Some(clamped) =
+                        clamped_window_position_in_state(frames, buffers, fid, wid, pos)
+                    && let Some(window) = frames
+                        .get_mut(fid)
+                        .and_then(|frame| frame.find_window_mut(wid))
+                {
+                    crate::window::window_markers::set_window_start_with_marker(
+                        buffers, window, clamped,
+                    );
+                    set_window_force_start(window, force_start_p);
                 }
                 raw
             }
@@ -2224,34 +2215,32 @@ pub(crate) fn builtin_set_window_point(
         .is_some_and(|frame| frame.minibuffer_window == Some(wid));
     match pos {
         IntegerOrMarkerArg::Int(pos) => {
-            if !is_minibuffer {
-                if let Some(clamped) =
+            if !is_minibuffer
+                && let Some(clamped) =
                     clamped_window_position_in_state(frames, buffers, fid, wid, pos)
+            {
+                let selected_live_window = frames
+                    .get(fid)
+                    .is_some_and(|frame| frame.selected_window == wid);
+                let mut buffer_to_move = None;
+                if let Some(window) = frames
+                    .get_mut(fid)
+                    .and_then(|frame| frame.find_window_mut(wid))
                 {
-                    let selected_live_window = frames
-                        .get(fid)
-                        .is_some_and(|frame| frame.selected_window == wid);
-                    let mut buffer_to_move = None;
-                    if let Some(window) = frames
-                        .get_mut(fid)
-                        .and_then(|frame| frame.find_window_mut(wid))
+                    let buffer_id = window.buffer_id();
+                    crate::window::window_markers::set_window_point_with_marker(
+                        buffers, window, clamped,
+                    );
+                    if selected_live_window
+                        && let Some(buffer_id) = buffer_id
+                        && let Some(buffer) = buffers.get(buffer_id)
                     {
-                        let buffer_id = window.buffer_id();
-                        crate::window::window_markers::set_window_point_with_marker(
-                            buffers, window, clamped,
-                        );
-                        if selected_live_window {
-                            if let Some(buffer_id) = buffer_id
-                                && let Some(buffer) = buffers.get(buffer_id)
-                            {
-                                buffer_to_move =
-                                    Some((buffer_id, buffer.lisp_pos_to_emacs_byte_pos(clamped)));
-                            }
-                        }
+                        buffer_to_move =
+                            Some((buffer_id, buffer.lisp_pos_to_emacs_byte_pos(clamped)));
                     }
-                    if let Some((buffer_id, byte_pos)) = buffer_to_move {
-                        let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, byte_pos);
-                    }
+                }
+                if let Some((buffer_id, byte_pos)) = buffer_to_move {
+                    let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, byte_pos);
                 }
             }
             Ok(Value::fixnum(pos))
@@ -2280,13 +2269,12 @@ pub(crate) fn builtin_set_window_point(
                     crate::window::window_markers::set_window_point_with_marker(
                         buffers, window, clamped,
                     );
-                    if selected_live_window {
-                        if let Some(buffer_id) = buffer_id
-                            && let Some(buffer) = buffers.get(buffer_id)
-                        {
-                            buffer_to_move =
-                                Some((buffer_id, buffer.lisp_pos_to_emacs_byte_pos(clamped)));
-                        }
+                    if selected_live_window
+                        && let Some(buffer_id) = buffer_id
+                        && let Some(buffer) = buffers.get(buffer_id)
+                    {
+                        buffer_to_move =
+                            Some((buffer_id, buffer.lisp_pos_to_emacs_byte_pos(clamped)));
                     }
                 }
                 if let Some((buffer_id, byte_pos)) = buffer_to_move {
@@ -3215,6 +3203,8 @@ pub(crate) fn builtin_window_tab_line_height(
 }
 
 #[derive(Clone, Copy)]
+// Variant names are the GNU-visible chrome concepts used at call sites.
+#[allow(clippy::enum_variant_names)]
 enum WindowChromeMetric {
     ModeLine,
     HeaderLine,
@@ -3689,10 +3679,8 @@ pub(crate) fn builtin_window_list(eval: &mut super::eval::Context, args: Vec<Val
         window_ids.rotate_left(pos);
     }
     let mut ids: Vec<Value> = window_ids.into_iter().map(window_value).collect();
-    if include_minibuffer {
-        if let Some(minibuffer_wid) = frame.minibuffer_window {
-            ids.push(window_value(minibuffer_wid));
-        }
+    if include_minibuffer && let Some(minibuffer_wid) = frame.minibuffer_window {
+        ids.push(window_value(minibuffer_wid));
     }
     Ok(Value::list(ids))
 }
@@ -3757,10 +3745,10 @@ pub(crate) fn builtin_window_list_1(
 
         // GNU Emacs starts traversal at WINDOW when it appears in the returned list.
         let mut window_ids = frame.window_list();
-        if frame_id == fid {
-            if let Some(start_index) = window_ids.iter().position(|wid| *wid == start_wid) {
-                window_ids.rotate_left(start_index);
-            }
+        if frame_id == fid
+            && let Some(start_index) = window_ids.iter().position(|wid| *wid == start_wid)
+        {
+            window_ids.rotate_left(start_index);
         }
 
         for window_id in window_ids {
@@ -3849,7 +3837,7 @@ pub(crate) fn builtin_window_dedicated_p(
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
     let w = get_leaf(frames, fid, wid)?;
     match w {
-        Window::Leaf { dedicated, .. } => Ok(dedicated.clone()),
+        Window::Leaf { dedicated, .. } => Ok(*dedicated),
         _ => Ok(Value::NIL),
     }
 }
@@ -3860,13 +3848,13 @@ pub(crate) fn builtin_set_window_dedicated_p(
 ) -> EvalResult {
     let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
     expect_args("set-window-dedicated-p", &args, 2)?;
-    let flag = args[1].clone();
+    let flag = args[1];
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
-    if let Some(w) = frames.get_mut(fid).and_then(|f| f.find_window_mut(wid)) {
-        if let Window::Leaf { dedicated, .. } = w {
-            *dedicated = flag.clone();
-        }
+    if let Some(w) = frames.get_mut(fid).and_then(|f| f.find_window_mut(wid))
+        && let Window::Leaf { dedicated, .. } = w
+    {
+        *dedicated = flag;
     }
     Ok(flag)
 }
@@ -3950,10 +3938,9 @@ pub(crate) fn builtin_window_at(eval: &mut super::eval::Context, args: Vec<Value
 
     if let (Some(minibuffer_wid), Some(minibuffer_leaf)) =
         (frame.minibuffer_window, frame.minibuffer_leaf.as_ref())
+        && minibuffer_leaf.bounds().contains(px, py)
     {
-        if minibuffer_leaf.bounds().contains(px, py) {
-            return Ok(window_value(minibuffer_wid));
-        }
+        return Ok(window_value(minibuffer_wid));
     }
 
     Ok(Value::NIL)
@@ -4095,7 +4082,7 @@ pub(crate) fn builtin_delete_window(
     if let Some(buffer_id) = selected_buffer {
         eval.buffers.switch_current(buffer_id);
     }
-    note_selected_window_buffer_in_state(&mut eval.frames, &mut eval.buffers, fid);
+    note_selected_window_buffer_in_state(&eval.frames, &mut eval.buffers, fid);
     // GNU defers `window-configuration-change-hook' to the redisplay-driven
     // `run_window_change_functions' (window.c:4308-4312); neomacs mirrors this
     // in `run_redisplay_window_change_hooks'.  See `builtin_split_window_internal'.
@@ -4132,7 +4119,7 @@ pub(crate) fn builtin_delete_other_windows(
     if let Some(buffer_id) = selected_buffer {
         eval.buffers.switch_current(buffer_id);
     }
-    note_selected_window_buffer_in_state(&mut eval.frames, &mut eval.buffers, fid);
+    note_selected_window_buffer_in_state(&eval.frames, &mut eval.buffers, fid);
     // GNU defers `window-configuration-change-hook' to the redisplay-driven
     // `run_window_change_functions' (window.c:4308-4312); neomacs mirrors this
     // in `run_redisplay_window_change_hooks'.  See `builtin_split_window_internal'.
@@ -4394,14 +4381,13 @@ pub(crate) fn builtin_select_window(
         // record_buffer updates buffer lists and hooks; display count/time are
         // updated by set_window_buffer, not by selecting an already visible
         // window.
-        if record_selection {
-            if let Some(buffer_id) = frames
+        if record_selection
+            && let Some(buffer_id) = frames
                 .get(fid)
                 .and_then(|f| f.find_window(wid))
                 .and_then(Window::buffer_id)
-            {
-                record_buffer_in_state(frames, buffers, buffer_id, fid)?;
-            }
+        {
+            record_buffer_in_state(frames, buffers, buffer_id, fid)?;
         }
         let run_buffer_list_hook = record_selection
             && selected_window_buffer_state_in_frame(frames, fid)
@@ -4723,20 +4709,16 @@ pub(crate) fn builtin_set_window_buffer(
         // when the buffer changes (switch-to-buffer / set-window-buffer).
         if old_state.is_some_and(|(old_buf, _, _, ded)| {
             old_buf != buf_id && ded != Value::NIL && ded != Value::T
-        }) {
-            if let Some(frame) = frames.get_mut(fid) {
-                if let Some(Window::Leaf { dedicated, .. }) = frame.find_window_mut(wid) {
-                    *dedicated = Value::NIL;
-                }
-            }
+        }) && let Some(frame) = frames.get_mut(fid)
+            && let Some(Window::Leaf { dedicated, .. }) = frame.find_window_mut(wid)
+        {
+            *dedicated = Value::NIL;
         }
         update_buffer_display_metadata_in_state(buffers, buf_id)?;
-        if let Some(frame) = frames.get_mut(fid) {
-            if let Some(window) = frame.find_window_mut(wid) {
-                super::super::window::window_markers::create_window_markers(
-                    buffers, window, buf_id,
-                );
-            }
+        if let Some(frame) = frames.get_mut(fid)
+            && let Some(window) = frame.find_window_mut(wid)
+        {
+            super::super::window::window_markers::create_window_markers(buffers, window, buf_id);
         }
         if selected_window == Some(wid)
             && let Some(buffer) = buffers.get_mut(buf_id)
@@ -4883,20 +4865,20 @@ pub(crate) fn builtin_display_buffer(
             _ => return false,
         };
         // car could be a symbol directly ...
-        if let Some(sym_name) = car.as_symbol_name() {
-            if sym_name == name {
-                return true;
-            }
+        if let Some(sym_name) = car.as_symbol_name()
+            && sym_name == name
+        {
+            return true;
         }
         // ... or a list of symbols.
         let mut cursor = car;
         while cursor.is_cons() {
             let snap_car = cursor.cons_car();
             let snap_cdr = cursor.cons_cdr();
-            if let Some(sym_name) = snap_car.as_symbol_name() {
-                if sym_name == name {
-                    return true;
-                }
+            if let Some(sym_name) = snap_car.as_symbol_name()
+                && sym_name == name
+            {
+                return true;
             }
             cursor = snap_cdr;
         }
@@ -4911,10 +4893,10 @@ pub(crate) fn builtin_display_buffer(
             .get(fid)
             .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
         for wid in frame.window_list() {
-            if let Some(w) = frame.find_window(wid) {
-                if w.buffer_id() == Some(buf_id) {
-                    return Ok(window_value(wid));
-                }
+            if let Some(w) = frame.find_window(wid)
+                && w.buffer_id() == Some(buf_id)
+            {
+                return Ok(window_value(wid));
             }
         }
     }
@@ -5269,6 +5251,7 @@ fn frame_size_param_to_pixels(param: FrameSizeParam, item_size: f32) -> u32 {
     }
 }
 
+#[allow(clippy::too_many_arguments)] // keeps text/pixel geometry inputs explicit at the resize boundary
 fn frame_resize_request_from_params(
     width: Option<FrameSizeParam>,
     height: Option<FrameSizeParam>,
@@ -5792,26 +5775,26 @@ fn scroll_lines_in_state(
     arg: Option<&Value>,
     direction: i64,
 ) -> i64 {
-    if let Some(v) = arg {
-        if !v.is_nil() {
-            if crate::emacs_core::value::eq_value(v, &Value::symbol("-")) {
-                let wh = window_body_height_impl(frames, buffers, vec![])
-                    .ok()
-                    .and_then(|v| v.as_fixnum())
-                    .unwrap_or(24);
-                let ctx = obarray
-                    .symbol_value("next-screen-context-lines")
-                    .and_then(|v| v.as_fixnum())
-                    .unwrap_or(2);
-                return -((wh - ctx).max(1) * direction);
-            }
-            // Explicit line count.
-            let n = match v.kind() {
-                ValueKind::Fixnum(n) => n,
-                _ => 1,
-            };
-            return n * direction;
+    if let Some(v) = arg
+        && !v.is_nil()
+    {
+        if crate::emacs_core::value::eq_value(v, &Value::symbol("-")) {
+            let wh = window_body_height_impl(frames, buffers, vec![])
+                .ok()
+                .and_then(|v| v.as_fixnum())
+                .unwrap_or(24);
+            let ctx = obarray
+                .symbol_value("next-screen-context-lines")
+                .and_then(|v| v.as_fixnum())
+                .unwrap_or(2);
+            return -((wh - ctx).max(1) * direction);
         }
+        // Explicit line count.
+        let n = match v.kind() {
+            ValueKind::Fixnum(n) => n,
+            _ => 1,
+        };
+        return n * direction;
     }
     // nil or absent: full window minus context lines.
     let wh = window_body_height_impl(frames, buffers, vec![])
@@ -6107,25 +6090,21 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
         // Set window-start.
         let pos_lisp = buf.emacs_byte_pos_to_lisp_char_pos(pos).as_i64();
         if let Some(clamped) = clamped_window_position_in_state(frames, buffers, fid, wid, pos_lisp)
-        {
-            if let Some(window) = frames
+            && let Some(window) = frames
                 .get_mut(fid)
                 .and_then(|frame| frame.find_window_mut(wid))
+        {
+            crate::window::window_markers::set_window_start_with_marker(buffers, window, clamped);
+            if let Window::Leaf {
+                window_end_valid,
+                vscroll,
+                preserve_vscroll_p,
+                ..
+            } = window
             {
-                crate::window::window_markers::set_window_start_with_marker(
-                    buffers, window, clamped,
-                );
-                if let Window::Leaf {
-                    window_end_valid,
-                    vscroll,
-                    preserve_vscroll_p,
-                    ..
-                } = window
-                {
-                    *window_end_valid = false;
-                    *vscroll = 0;
-                    *preserve_vscroll_p = false;
-                }
+                *window_end_valid = false;
+                *vscroll = 0;
+                *preserve_vscroll_p = false;
             }
         }
     } // end borrow scope
@@ -6279,7 +6258,7 @@ pub(crate) fn builtin_make_frame_invisible(
                 if let Some(old_fid) = eval.frames.selected_frame().map(|frame| frame.id) {
                     remember_selected_window_point_in_state(
                         &mut eval.frames,
-                        &mut eval.buffers,
+                        &eval.buffers,
                         old_fid,
                     );
                 }
@@ -6289,11 +6268,7 @@ pub(crate) fn builtin_make_frame_invisible(
                     {
                         let _ = eval.frames.note_window_selected(selected_wid);
                     }
-                    sync_selected_window_buffer_in_state(
-                        &mut eval.frames,
-                        &mut eval.buffers,
-                        fallback,
-                    );
+                    sync_selected_window_buffer_in_state(&eval.frames, &mut eval.buffers, fallback);
                     eval.sync_keyboard_terminal_owner();
                 }
             }
@@ -6390,10 +6365,10 @@ pub(crate) fn builtin_select_frame(
             vec![Value::symbol("frame-live-p"), args[0]],
         ));
     }
-    if args.get(1).is_none_or(|v| v.is_nil()) {
-        if let Some(selected_wid) = frames.get(fid).map(|f| f.selected_window) {
-            let _ = frames.note_window_selected(selected_wid);
-        }
+    if args.get(1).is_none_or(|v| v.is_nil())
+        && let Some(selected_wid) = frames.get(fid).map(|f| f.selected_window)
+    {
+        let _ = frames.note_window_selected(selected_wid);
     }
     sync_selected_window_buffer_in_state(frames, buffers, fid);
     eval.sync_keyboard_terminal_owner();
@@ -6445,10 +6420,10 @@ pub(crate) fn builtin_select_frame_set_input_focus(
             vec![Value::symbol("frame-live-p"), args[0]],
         ));
     }
-    if args.get(1).is_none_or(|v| v.is_nil()) {
-        if let Some(selected_wid) = frames.get(fid).map(|f| f.selected_window) {
-            let _ = frames.note_window_selected(selected_wid);
-        }
+    if args.get(1).is_none_or(|v| v.is_nil())
+        && let Some(selected_wid) = frames.get(fid).map(|f| f.selected_window)
+    {
+        let _ = frames.note_window_selected(selected_wid);
     }
     sync_selected_window_buffer_in_state(frames, buffers, fid);
     eval.sync_keyboard_terminal_owner();
@@ -7274,58 +7249,58 @@ fn make_frame_plain(
     let mut no_split = false;
 
     // Parse optional alist parameters.
-    if let Some(params) = args.first() {
-        if let Some(items) = super::value::list_to_vec(params) {
-            for item in &items {
-                if item.is_cons() {
-                    let pair_car = item.cons_car();
-                    let pair_cdr = item.cons_cdr();
-                    if let Some(key) = pair_car.as_symbol_id() {
-                        all_params.push((pair_car, pair_cdr));
-                        match resolve_sym(key) {
-                            "width" => {
-                                if let Some(size) = parse_frame_size_param(pair_cdr) {
-                                    requested_width = Some(size);
-                                    width = frame_size_param_to_cells(size, 1.0).max(1) as u32;
-                                }
+    if let Some(params) = args.first()
+        && let Some(items) = super::value::list_to_vec(params)
+    {
+        for item in &items {
+            if item.is_cons() {
+                let pair_car = item.cons_car();
+                let pair_cdr = item.cons_cdr();
+                if let Some(key) = pair_car.as_symbol_id() {
+                    all_params.push((pair_car, pair_cdr));
+                    match resolve_sym(key) {
+                        "width" => {
+                            if let Some(size) = parse_frame_size_param(pair_cdr) {
+                                requested_width = Some(size);
+                                width = frame_size_param_to_cells(size, 1.0).max(1) as u32;
                             }
-                            "height" => {
-                                if let Some(size) = parse_frame_size_param(pair_cdr) {
-                                    requested_height = Some(size);
-                                    height = frame_size_param_to_cells(size, 1.0).max(1) as u32;
-                                }
-                            }
-                            "name" => {
-                                if let Some(value) = frame_name_parameter_value(&pair_cdr) {
-                                    name = value;
-                                }
-                            }
-                            "parent-frame" => {
-                                if pair_cdr
-                                    .as_frame_id()
-                                    .map(|id| frames.get(FrameId(id)).is_some())
-                                    .unwrap_or(false)
-                                {
-                                    parent_frame = pair_cdr;
-                                }
-                            }
-                            "left" => {
-                                if let Some(n) = pair_cdr.as_int() {
-                                    left = n;
-                                }
-                            }
-                            "top" => {
-                                if let Some(n) = pair_cdr.as_int() {
-                                    top = n;
-                                }
-                            }
-                            "visibility" => visibility = Some(pair_cdr.is_truthy()),
-                            "minibuffer" => minibuffer_param = Some(pair_cdr),
-                            "undecorated" => undecorated = pair_cdr.is_truthy(),
-                            "no-accept-focus" => no_accept_focus = pair_cdr.is_truthy(),
-                            "unsplittable" => no_split = pair_cdr.is_truthy(),
-                            _ => {}
                         }
+                        "height" => {
+                            if let Some(size) = parse_frame_size_param(pair_cdr) {
+                                requested_height = Some(size);
+                                height = frame_size_param_to_cells(size, 1.0).max(1) as u32;
+                            }
+                        }
+                        "name" => {
+                            if let Some(value) = frame_name_parameter_value(&pair_cdr) {
+                                name = value;
+                            }
+                        }
+                        "parent-frame" => {
+                            if pair_cdr
+                                .as_frame_id()
+                                .map(|id| frames.get(FrameId(id)).is_some())
+                                .unwrap_or(false)
+                            {
+                                parent_frame = pair_cdr;
+                            }
+                        }
+                        "left" => {
+                            if let Some(n) = pair_cdr.as_int() {
+                                left = n;
+                            }
+                        }
+                        "top" => {
+                            if let Some(n) = pair_cdr.as_int() {
+                                top = n;
+                            }
+                        }
+                        "visibility" => visibility = Some(pair_cdr.is_truthy()),
+                        "minibuffer" => minibuffer_param = Some(pair_cdr),
+                        "undecorated" => undecorated = pair_cdr.is_truthy(),
+                        "no-accept-focus" => no_accept_focus = pair_cdr.is_truthy(),
+                        "unsplittable" => no_split = pair_cdr.is_truthy(),
+                        _ => {}
                     }
                 }
             }
@@ -7730,7 +7705,7 @@ pub(crate) fn x_create_frame_impl(
         frame_size_param_to_pixels(size, metrics.char_height)
             .saturating_add(2 * internal_border_width)
     });
-    let height_px = text_height_px.map(|text| text).unwrap_or_else(|| {
+    let height_px = text_height_px.unwrap_or_else(|| {
         if is_child_frame {
             metrics.height_px
         } else {
@@ -8023,19 +7998,20 @@ pub(crate) fn delete_frame_owned(
             .get(frame_id)
             .is_none_or(|frame| frame.terminal_id != terminal_id)
     });
-    if mode.allows_terminal_cascade() && terminal_is_empty && !eval.frames.frame_list().is_empty() {
-        if let Some(terminal) =
+    if mode.allows_terminal_cascade()
+        && terminal_is_empty
+        && !eval.frames.frame_list().is_empty()
+        && let Some(terminal) =
             crate::emacs_core::terminal::pure::terminal_handle_value_for_id(terminal_id)
-        {
-            let _ = crate::emacs_core::terminal::pure::delete_terminal_owned(
-                eval,
-                crate::emacs_core::terminal::pure::terminal_handle_id(&terminal)
-                    .expect("live terminal handle id"),
-                crate::emacs_core::terminal::pure::DeleteTerminalMode::Public {
-                    force_non_nil: true,
-                },
-            )?;
-        }
+    {
+        let _ = crate::emacs_core::terminal::pure::delete_terminal_owned(
+            eval,
+            crate::emacs_core::terminal::pure::terminal_handle_id(&terminal)
+                .expect("live terminal handle id"),
+            crate::emacs_core::terminal::pure::DeleteTerminalMode::Public {
+                force_non_nil: true,
+            },
+        )?;
     }
     eval.sync_keyboard_terminal_owner();
     if mode.runs_hooks_immediately() {
@@ -8290,7 +8266,6 @@ pub(crate) fn builtin_frame_parameters(
             continue;
         }
         if k.as_symbol_name()
-            .as_deref()
             .is_some_and(|name| name == "width" || name == "height" || name == "visibility")
         {
             continue;
@@ -8298,7 +8273,7 @@ pub(crate) fn builtin_frame_parameters(
         // `font-parameter' is a neomacs-internal frame slot used by the font
         // resolution machinery (font.rs); GNU has no such frame parameter and
         // never reports it from `frame-parameters'.  Skip it.
-        if k.as_symbol_name().as_deref() == Some("font-parameter") {
+        if k.as_symbol_name() == Some("font-parameter") {
             continue;
         }
         let value = k
@@ -8524,24 +8499,24 @@ pub(crate) fn builtin_modify_frame_parameters(
                     }
                     _ => match FrameParamKey::from_symbol_id(key) {
                         FrameParamKey::Known(FrameParam::Name) => {
-                            if let Some(name) = frame_name_parameter_value(&pair_cdr) {
-                                if let Some(frame) = eval.frames.get_mut(fid) {
-                                    frame.set_name_parameter_value(name);
-                                }
+                            if let Some(name) = frame_name_parameter_value(&pair_cdr)
+                                && let Some(frame) = eval.frames.get_mut(fid)
+                            {
+                                frame.set_name_parameter_value(name);
                             }
                         }
                         FrameParamKey::Known(FrameParam::Title) => {
-                            if let Some(title) = frame_title_parameter_value(&pair_cdr) {
-                                if let Some(frame) = eval.frames.get_mut(fid) {
-                                    frame.title = title;
-                                }
+                            if let Some(title) = frame_title_parameter_value(&pair_cdr)
+                                && let Some(frame) = eval.frames.get_mut(fid)
+                            {
+                                frame.title = title;
                             }
                         }
                         FrameParamKey::Known(FrameParam::IconName) => {
-                            if let Some(icon_name) = frame_icon_name_parameter_value(&pair_cdr) {
-                                if let Some(frame) = eval.frames.get_mut(fid) {
-                                    frame.icon_name = icon_name;
-                                }
+                            if let Some(icon_name) = frame_icon_name_parameter_value(&pair_cdr)
+                                && let Some(frame) = eval.frames.get_mut(fid)
+                            {
+                                frame.icon_name = icon_name;
                             }
                         }
                         FrameParamKey::Known(FrameParam::ParentFrame) => {
@@ -9036,24 +9011,22 @@ pub(crate) fn builtin_window_resize_apply_total(
 
     // Handle minibuffer window — its `new_total` lives on the
     // minibuffer leaf itself now.
-    if !horflag {
-        if frame.minibuffer_window.is_some() {
-            if let Some(mb) = frame.minibuffer_leaf.as_mut() {
-                if let Some(new_total) = mb.new_total() {
-                    let root_bounds = *frame.root_window.bounds();
-                    let mb_top = root_bounds.y + root_bounds.height;
-                    let mb_bounds = *mb.bounds();
-                    let new_h = new_total.max(0) as f32 * ch;
-                    mb.set_bounds(crate::window::Rect::new(
-                        mb_bounds.x,
-                        mb_top,
-                        mb_bounds.width,
-                        new_h,
-                    ));
-                    mb.set_new_total(None);
-                }
-            }
-        }
+    if !horflag
+        && frame.minibuffer_window.is_some()
+        && let Some(mb) = frame.minibuffer_leaf.as_mut()
+        && let Some(new_total) = mb.new_total()
+    {
+        let root_bounds = *frame.root_window.bounds();
+        let mb_top = root_bounds.y + root_bounds.height;
+        let mb_bounds = *mb.bounds();
+        let new_h = new_total.max(0) as f32 * ch;
+        mb.set_bounds(crate::window::Rect::new(
+            mb_bounds.x,
+            mb_top,
+            mb_bounds.width,
+            new_h,
+        ));
+        mb.set_new_total(None);
     }
 
     // Ensure root + minibuffer fit in frame after total resize.
@@ -9487,7 +9460,7 @@ pub(crate) fn builtin_fit_window_to_buffer(
         match w {
             Window::Leaf {
                 buffer_id, bounds, ..
-            } => (*buffer_id, bounds.clone()),
+            } => (*buffer_id, *bounds),
             _ => return Ok(Value::NIL),
         }
     };
@@ -9528,10 +9501,10 @@ pub(crate) fn builtin_fit_window_to_buffer(
         .unwrap_or(16.0);
     let new_pixel_height = (desired as f32 * ch) + ch; // +1 row for mode line
     let current_height = bounds.height;
-    if (new_pixel_height - current_height).abs() > 0.5 {
-        if let Some(frame) = eval.frames.get_mut(fid) {
-            let _ = resize_window_by_delta_px(frame, wid, new_pixel_height - current_height, false);
-        }
+    if (new_pixel_height - current_height).abs() > 0.5
+        && let Some(frame) = eval.frames.get_mut(fid)
+    {
+        let _ = resize_window_by_delta_px(frame, wid, new_pixel_height - current_height, false);
     }
 
     Ok(Value::NIL)

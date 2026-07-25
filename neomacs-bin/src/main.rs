@@ -977,10 +977,12 @@ impl ResolvedSurfaceMemo {
         request: SurfaceResolveRequest,
         resolved: Option<ResolvedSurface>,
     ) -> Option<u32> {
-        if self.entries.contains_key(&request) {
+        if let std::collections::hash_map::Entry::Occupied(mut entry) =
+            self.entries.entry(request.clone())
+        {
             // Re-resolution of a known spec: refresh the value in place and
             // keep the FIFO position so `order` never holds duplicate keys.
-            self.entries.insert(request, resolved);
+            entry.insert(resolved);
             return None;
         }
         let evicted = if self.entries.len() >= RESOLVED_SURFACE_MEMO_CAP {
@@ -2952,10 +2954,10 @@ fn run_gui_evaluator_worker(
                     if input_tx.send(kb_event).is_err() {
                         break;
                     }
-                    if let Some(notifier) = &input_notifier {
-                        if let Err(error) = notifier.notify() {
-                            tracing::error!(%error, "input bridge failed to wake evaluator");
-                        }
+                    if let Some(notifier) = &input_notifier
+                        && let Err(error) = notifier.notify()
+                    {
+                        tracing::error!(%error, "input bridge failed to wake evaluator");
                     }
                 }
             }
@@ -3093,10 +3095,10 @@ static DIAG_INSTALLED: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 /// Wake the Lisp thread if its notifier has been published (best-effort — an
 /// active editor also drains queued tasks on its next loop iteration).
 fn diag_wake_lisp() {
-    if let Some(notifier) = DIAG_NOTIFIER.get() {
-        if let Err(error) = notifier.notify() {
-            tracing::warn!(%error, "diagnostics task failed to wake evaluator");
-        }
+    if let Some(notifier) = DIAG_NOTIFIER.get()
+        && let Err(error) = notifier.notify()
+    {
+        tracing::warn!(%error, "diagnostics task failed to wake evaluator");
     }
 }
 
@@ -3465,10 +3467,10 @@ pub fn run(mode: RuntimeMode) {
                         if input_tx.send(kb_event).is_err() {
                             break; // Context dropped
                         }
-                        if let Some(notifier) = &input_notifier {
-                            if let Err(error) = notifier.notify() {
-                                tracing::error!(%error, "input bridge failed to wake evaluator");
-                            }
+                        if let Some(notifier) = &input_notifier
+                            && let Err(error) = notifier.notify()
+                        {
+                            tracing::error!(%error, "input bridge failed to wake evaluator");
                         }
                     }
                 }

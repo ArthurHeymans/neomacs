@@ -229,10 +229,11 @@ fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResul
             let new_val = Value::heap_string(result);
 
             // Preserve text properties from source string
-            if preserve_props && new_val.is_string() {
-                if let Some(sliced) = sliced_props {
-                    set_string_text_properties_table_for_value(new_val, sliced);
-                }
+            if preserve_props
+                && new_val.is_string()
+                && let Some(sliced) = sliced_props
+            {
+                set_string_text_properties_table_for_value(new_val, sliced);
             }
 
             Ok(new_val)
@@ -432,14 +433,14 @@ pub(crate) fn builtin_concat_slice(args: &[Value]) -> EvalResult {
             let mut combined_table = crate::buffer::text_props::TextPropertyTable::new();
             let mut has_props = false;
             for (src_val, offset) in &string_sources {
-                if let Some(src_table) = get_string_text_properties_table_for_value(*src_val) {
-                    if !src_table.is_empty() {
-                        combined_table.append_shifted_via_add_text_properties_at_char_offset(
-                            &src_table,
-                            CharLen::new(*offset),
-                        );
-                        has_props = true;
-                    }
+                if let Some(src_table) = get_string_text_properties_table_for_value(*src_val)
+                    && !src_table.is_empty()
+                {
+                    combined_table.append_shifted_via_add_text_properties_at_char_offset(
+                        &src_table,
+                        CharLen::new(*offset),
+                    );
+                    has_props = true;
                 }
             }
             if has_props {
@@ -518,14 +519,14 @@ pub(crate) fn builtin_concat_slice(args: &[Value]) -> EvalResult {
             let mut combined_table = crate::buffer::text_props::TextPropertyTable::new();
             let mut has_props = false;
             for (src_val, offset) in &string_sources {
-                if let Some(src_table) = get_string_text_properties_table_for_value(*src_val) {
-                    if !src_table.is_empty() {
-                        combined_table.append_shifted_via_add_text_properties_at_char_offset(
-                            &src_table,
-                            CharLen::new(*offset),
-                        );
-                        has_props = true;
-                    }
+                if let Some(src_table) = get_string_text_properties_table_for_value(*src_val)
+                    && !src_table.is_empty()
+                {
+                    combined_table.append_shifted_via_add_text_properties_at_char_offset(
+                        &src_table,
+                        CharLen::new(*offset),
+                    );
+                    has_props = true;
                 }
             }
             if has_props {
@@ -554,7 +555,7 @@ pub(crate) fn builtin_string_to_number(args: Vec<Value>) -> EvalResult {
         ));
     }
 
-    let s = s.trim_start_matches(|c: char| c == ' ' || c == '\t');
+    let s = s.trim_start_matches([' ', '\t']);
     if base == 10 {
         let special_float =
             NativeRegex::new(r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)[eE]\+(?:INF|NaN)")
@@ -581,7 +582,7 @@ pub(crate) fn builtin_string_to_number(args: Vec<Value>) -> EvalResult {
                 token[dot_pos + 1..]
                     .chars()
                     .next()
-                    .map_or(false, |c| c.is_ascii_digit())
+                    .is_some_and(|c| c.is_ascii_digit())
             } else {
                 false
             };
@@ -719,7 +720,7 @@ fn upcase_with_override(
             // Unicode mapping when the table has no explicit entry.
             let mapped = casetab
                 .map(super::super::casetab::CaseMap::Up, c)
-                .unwrap_or_else(|| upcase_char_code_emacs_compat(c as i64));
+                .unwrap_or_else(|| upcase_char_code_emacs_compat(c));
             if let Some(ch) = u32::try_from(mapped).ok().and_then(char::from_u32) {
                 Ok(Value::fixnum(ch as i64))
             } else {
@@ -1012,7 +1013,7 @@ fn downcase_with_word_pred(
             // mapping only when there is no explicit entry.
             let mapped = casetab
                 .map(super::super::casetab::CaseMap::Down, c)
-                .unwrap_or_else(|| downcase_char_code_emacs_compat(c as i64));
+                .unwrap_or_else(|| downcase_char_code_emacs_compat(c));
             if let Some(ch) = u32::try_from(mapped).ok().and_then(char::from_u32) {
                 Ok(Value::fixnum(ch as i64))
             } else {
@@ -1328,10 +1329,10 @@ fn apply_width(s: &str, spec: &FormatSpec) -> String {
         format!("{:<width$}", s, width = w)
     } else if spec.zero && !spec.minus {
         // For zero-padding, handle negative numbers specially
-        if s.starts_with('-') {
-            format!("-{:0>width$}", &s[1..], width = w - 1)
-        } else if s.starts_with('+') {
-            format!("+{:0>width$}", &s[1..], width = w - 1)
+        if let Some(unsigned) = s.strip_prefix('-') {
+            format!("-{unsigned:0>width$}", width = w - 1)
+        } else if let Some(unsigned) = s.strip_prefix('+') {
+            format!("+{unsigned:0>width$}", width = w - 1)
         } else {
             format!("{:0>width$}", s, width = w)
         }
@@ -1426,7 +1427,7 @@ fn format_int_spec(n: i64, spec: &FormatSpec) -> String {
 /// `ToStringBase` trait for the underlying numeric conversion. The
 /// flag/width/precision handling is identical.
 fn format_bignum_spec(n: &Integer, spec: &FormatSpec) -> String {
-    let negative = *n < Integer::from(0);
+    let negative = *n < 0;
     let abs = n.clone().abs();
     let mut digits = match spec.conversion {
         'b' | 'B' => abs.to_string_base(2),
@@ -1616,11 +1617,11 @@ fn format_string_spec_tracked(
         while pos < data.len() {
             let (code, len) = next_format_unit(data, pos, is_multibyte);
             let display_width = format_unit_display_width(code, is_multibyte);
-            if let Some(prec) = spec.precision {
-                if content_width + display_width > prec {
-                    saw_limit = true;
-                    break;
-                }
+            if let Some(prec) = spec.precision
+                && content_width + display_width > prec
+            {
+                saw_limit = true;
+                break;
             }
             content_width += display_width;
             pos += len;
@@ -1728,7 +1729,7 @@ fn push_format_literal_code(
 /// Issue #131: `do_format` builds its result directly as canonical Emacs
 /// internal-encoding bytes (no storage-string round-trip), so these helpers walk
 /// and measure Emacs bytes the way `display_width_emacs`/`decode_units_emacs` do.
-
+///
 /// Decode `data` (Emacs internal encoding) into its character codes.
 fn decode_emacs_codes(data: &[u8]) -> Vec<u32> {
     let mut codes = Vec::new();
@@ -1831,6 +1832,9 @@ fn emacs_bytes_to_unibyte(data: &[u8]) -> Vec<u8> {
     out
 }
 
+// The tuple is the private, single-return handoff for bytes, property spans,
+// source spans, and multibyte state; naming its four parts occurs at the caller.
+#[allow(clippy::type_complexity)]
 fn do_format(
     args: &[Value],
     princ_fn: &dyn Fn(&Value) -> Vec<u8>,
@@ -2091,7 +2095,7 @@ fn apply_format_string_prop_spans(result: Value, format_value: Value, spans: &[F
     }
 
     let mut table = crate::emacs_core::value::get_string_text_properties_table_for_value(result)
-        .unwrap_or_else(crate::buffer::text_props::TextPropertyTable::new);
+        .unwrap_or_default();
     let mut touched = false;
 
     for src_interval in src_table.intervals_snapshot() {
@@ -2163,7 +2167,7 @@ fn apply_format_prop_spans(result: Value, args: &[Value], spans: &[FormatPropSpa
         return;
     };
     let mut table = crate::emacs_core::value::get_string_text_properties_table_for_value(result)
-        .unwrap_or_else(crate::buffer::text_props::TextPropertyTable::new);
+        .unwrap_or_default();
     let mut touched = false;
     for span in spans {
         let Some(arg) = args.get(span.arg_idx) else {

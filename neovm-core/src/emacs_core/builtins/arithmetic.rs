@@ -422,7 +422,7 @@ pub(crate) fn builtin_div(args: Vec<Value>) -> EvalResult {
             // then continue.
             let mut bacc = Integer::from(acc);
             let big = a.as_bignum().unwrap();
-            if *big == Integer::from(0) {
+            if *big == 0 {
                 return Err(signal(LispCondition::ArithError, vec![]));
             }
             bacc /= big;
@@ -451,7 +451,7 @@ fn div_one_arg(arg: &Value) -> EvalResult {
     }
     if let Some(big) = arg.as_bignum() {
         // GNU: dividing 1 by any bignum yields 0 (since |bignum| > MAX_FIXNUM).
-        if *big == Integer::from(0) {
+        if *big == 0 {
             return Err(signal(LispCondition::ArithError, vec![]));
         }
         return Ok(Value::fixnum(0));
@@ -466,7 +466,7 @@ fn div_one_arg(arg: &Value) -> EvalResult {
 fn continue_bignum_div(rest: &[Value], mut acc: Integer) -> EvalResult {
     for a in rest {
         if let Some(big) = a.as_bignum() {
-            if *big == Integer::from(0) {
+            if *big == 0 {
                 return Err(signal(LispCondition::ArithError, vec![]));
             }
             acc /= big;
@@ -521,15 +521,15 @@ fn integer_remainder(num: &Value, den: &Value, modulo: bool) -> EvalResult {
     if num.is_bignum() || den.is_bignum() {
         let num_big = bignum_or_int_to_integer(num)?;
         let den_big = bignum_or_int_to_integer(den)?;
-        if den_big == Integer::from(0) {
+        if den_big == 0 {
             return Err(signal(LispCondition::ArithError, vec![]));
         }
-        let mut r = Integer::from(&num_big % &den_big);
+        let mut r = &num_big % &den_big;
         if modulo {
-            let r_neg = r < Integer::from(0);
-            let d_neg = den_big < Integer::from(0);
+            let r_neg = r < 0;
+            let d_neg = den_big < 0;
             // Wrong sign means r and d have opposite signs.
-            if r_neg != d_neg && r != Integer::from(0) {
+            if r_neg != d_neg && r != 0 {
                 r += &den_big;
             }
         }
@@ -545,10 +545,7 @@ fn integer_remainder(num: &Value, den: &Value, modulo: bool) -> EvalResult {
         return Err(signal(LispCondition::ArithError, vec![]));
     }
     // i64::MIN % -1 is 0 mathematically, but checked_rem returns None.
-    let r = match a.checked_rem(b) {
-        Some(r) => r,
-        None => 0,
-    };
+    let r: i64 = a.checked_rem(b).unwrap_or_default();
     let r = if modulo && r != 0 && (r < 0) != (b < 0) {
         r + b
     } else {
@@ -914,18 +911,16 @@ pub(crate) fn builtin_ash_slice(args: &[Value]) -> EvalResult {
             if value
                 .as_fixnum()
                 .map(|n| n == 0)
-                .or_else(|| value.as_bignum().map(|b| *b == Integer::from(0)))
+                .or_else(|| value.as_bignum().map(|b| *b == 0))
                 .unwrap_or(false)
             {
                 return Ok(Value::fixnum(0));
             }
-            if *big < Integer::from(0) {
+            if *big < 0 {
                 // Negative count + nonzero value: result is 0 (or -1 for negative).
                 let sign_neg = match value.kind() {
                     ValueKind::Fixnum(n) => n < 0,
-                    ValueKind::Veclike(VecLikeType::Bignum) => {
-                        *value.as_bignum().unwrap() < Integer::from(0)
-                    }
+                    ValueKind::Veclike(VecLikeType::Bignum) => *value.as_bignum().unwrap() < 0,
                     _ => {
                         return Err(signal(
                             LispCondition::WrongTypeArgument,
@@ -981,10 +976,7 @@ pub(crate) fn builtin_ash_slice(args: &[Value]) -> EvalResult {
         // Arithmetic right shift (toward -infinity, i.e. mpz_fdiv_q_2exp).
         // For very large negative counts, the value is shifted away;
         // GNU returns -1 for negative VALUE and 0 otherwise.
-        let neg_count = match count_i64.checked_neg() {
-            Some(c) => c,
-            None => i64::MAX,
-        };
+        let neg_count = count_i64.checked_neg().unwrap_or(i64::MAX);
         let bits = u32::try_from(neg_count).unwrap_or(u32::MAX);
         // Integer >> u32 does mpz_fdiv_q_2exp (floor division).
         value_big >> bits
@@ -1269,7 +1261,7 @@ fn rounding_with_divisor(
             return Ok(Value::make_int(int_div(a, d)));
         }
     }
-    if args[1].is_bignum() && *args[1].as_bignum().unwrap() == Integer::from(0) {
+    if args[1].is_bignum() && *args[1].as_bignum().unwrap() == 0 {
         return Err(signal(LispCondition::ArithError, vec![]));
     }
     // Mixed bignum / float / fixnum 2-arg fallback. For non-float
@@ -1289,12 +1281,12 @@ fn rounding_with_divisor(
     // truncation and reapply the rounding flavor on the residue.
     let a = bignum_or_int_to_integer(&args[0])?;
     let d = bignum_or_int_to_integer(&args[1])?;
-    if d == Integer::from(0) {
+    if d == 0 {
         return Err(signal(LispCondition::ArithError, vec![]));
     }
     // Truncation (toward-zero) division as the building block.
-    let q = Integer::from(&a / &d);
-    let r = Integer::from(&a - Integer::from(&q * &d));
+    let q = &a / &d;
+    let r = &a - (&q * &d);
     // Apply the same flavor that the int_div lambda would for fixnums,
     // but in GMP. We dispatch by name because the closure type erases
     // intent — and there are only four flavors.
@@ -1303,7 +1295,7 @@ fn rounding_with_divisor(
         "floor" => {
             // Toward -inf: if remainder is nonzero and r and d have
             // opposite signs, subtract 1.
-            if r != Integer::from(0) && (r < Integer::from(0)) != (d < Integer::from(0)) {
+            if r != 0 && (r < 0) != (d < 0) {
                 q - Integer::from(1)
             } else {
                 q
@@ -1312,7 +1304,7 @@ fn rounding_with_divisor(
         "ceiling" => {
             // Toward +inf: if remainder is nonzero and r and d have
             // the same sign, add 1.
-            if r != Integer::from(0) && (r < Integer::from(0)) == (d < Integer::from(0)) {
+            if r != 0 && (r < 0) == (d < 0) {
                 q + Integer::from(1)
             } else {
                 q
@@ -1325,15 +1317,15 @@ fn rounding_with_divisor(
             use std::cmp::Ordering;
             match abs_r2.cmp(&abs_d) {
                 Ordering::Greater => {
-                    if (r < Integer::from(0)) == (d < Integer::from(0)) {
+                    if (r < 0) == (d < 0) {
                         q + Integer::from(1)
                     } else {
                         q - Integer::from(1)
                     }
                 }
                 Ordering::Equal => {
-                    if &q & Integer::from(1) != Integer::from(0) {
-                        if (r < Integer::from(0)) == (d < Integer::from(0)) {
+                    if &q & Integer::from(1) != 0 {
+                        if (r < 0) == (d < 0) {
                             q + Integer::from(1)
                         } else {
                             q - Integer::from(1)
@@ -1522,7 +1514,7 @@ pub(crate) fn builtin_expt(args: Vec<Value>) -> EvalResult {
     let exp_val = &args[1];
     let exp_is_neg = match exp_val.kind() {
         ValueKind::Fixnum(n) => n < 0,
-        ValueKind::Veclike(VecLikeType::Bignum) => *exp_val.as_bignum().unwrap() < Integer::from(0),
+        ValueKind::Veclike(VecLikeType::Bignum) => *exp_val.as_bignum().unwrap() < 0,
         _ => {
             return Err(signal(
                 LispCondition::WrongTypeArgument,
@@ -1544,9 +1536,7 @@ pub(crate) fn builtin_expt(args: Vec<Value>) -> EvalResult {
                 // 0^0 = 1 in elisp, 0^positive = 0.
                 let exp_zero = match exp_val.kind() {
                     ValueKind::Fixnum(n) => n == 0,
-                    ValueKind::Veclike(VecLikeType::Bignum) => {
-                        *exp_val.as_bignum().unwrap() == Integer::from(0)
-                    }
+                    ValueKind::Veclike(VecLikeType::Bignum) => *exp_val.as_bignum().unwrap() == 0,
                     _ => false,
                 };
                 return Ok(Value::fixnum(if exp_zero { 1 } else { 0 }));
@@ -1556,7 +1546,7 @@ pub(crate) fn builtin_expt(args: Vec<Value>) -> EvalResult {
                 let odd = match exp_val.kind() {
                     ValueKind::Fixnum(n) => n & 1 == 1,
                     ValueKind::Veclike(VecLikeType::Bignum) => {
-                        exp_val.as_bignum().unwrap() & Integer::from(1) != Integer::from(0)
+                        exp_val.as_bignum().unwrap() & Integer::from(1) != 0
                     }
                     _ => false,
                 };

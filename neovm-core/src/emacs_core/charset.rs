@@ -1418,7 +1418,7 @@ fn expect_fixnump(value: &Value) -> Result<i64, Flow> {
 
 fn encode_char_input(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
-        ValueKind::Fixnum(c) if (0..=0x3F_FFFF).contains(&c) => Ok(c as i64),
+        ValueKind::Fixnum(c) if (0..=0x3F_FFFF).contains(&c) => Ok(c),
         _ => Err(signal(
             LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), *value],

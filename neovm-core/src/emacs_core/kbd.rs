@@ -85,7 +85,7 @@ impl EventModifier {
         }
     }
 
-    fn strip_kbd_prefix<'a>(self, token: &'a str) -> Option<&'a str> {
+    fn strip_kbd_prefix(self, token: &str) -> Option<&str> {
         let rest = token.strip_prefix(self.kbd_prefix())?;
         (!rest.is_empty()).then_some(rest)
     }
@@ -491,11 +491,12 @@ fn encode_char(ch: char, mods: Modifiers, allow_ctrl_resolution: bool) -> Encode
     let mut base = ch as i64;
     let mut ctrl = mods.ctrl;
 
-    if ctrl && allow_ctrl_resolution {
-        if let Some(resolved) = resolve_control_char(ch) {
-            base = resolved;
-            ctrl = false;
-        }
+    if ctrl
+        && allow_ctrl_resolution
+        && let Some(resolved) = resolve_control_char(ch)
+    {
+        base = resolved;
+        ctrl = false;
     }
 
     if !mods.meta && !mods.shift && !mods.super_ && !mods.hyper && !mods.alt && !ctrl {

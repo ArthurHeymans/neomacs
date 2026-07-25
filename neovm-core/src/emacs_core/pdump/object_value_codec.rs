@@ -1470,23 +1470,23 @@ impl<'a> Cursor<'a> {
     }
 
     pub(crate) fn read_u16(&mut self, what: &str) -> Result<u16, DumpError> {
-        Ok(self.read_unaligned::<u16>(what)?)
+        self.read_unaligned::<u16>(what)
     }
 
     pub(crate) fn read_u32(&mut self, what: &str) -> Result<u32, DumpError> {
-        Ok(self.read_unaligned::<u32>(what)?)
+        self.read_unaligned::<u32>(what)
     }
 
     pub(crate) fn read_u64(&mut self, what: &str) -> Result<u64, DumpError> {
-        Ok(self.read_unaligned::<u64>(what)?)
+        self.read_unaligned::<u64>(what)
     }
 
     pub(crate) fn read_i64(&mut self, what: &str) -> Result<i64, DumpError> {
-        Ok(self.read_unaligned::<i64>(what)?)
+        self.read_unaligned::<i64>(what)
     }
 
     pub(crate) fn read_f64(&mut self, what: &str) -> Result<f64, DumpError> {
-        Ok(self.read_unaligned::<f64>(what)?)
+        self.read_unaligned::<f64>(what)
     }
 
     pub(crate) fn read_exact(&mut self, len: usize, what: &str) -> Result<&'a [u8], DumpError> {

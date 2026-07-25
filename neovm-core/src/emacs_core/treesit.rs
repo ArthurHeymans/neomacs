@@ -382,6 +382,7 @@ impl TreeSitterManager {
             .map(|entry| entry.value)
     }
 
+    #[allow(clippy::too_many_arguments)] // parser registry stores the full GNU-visible parser identity
     pub(crate) fn insert_parser(
         &mut self,
         value: Value,
@@ -442,10 +443,10 @@ impl TreeSitterManager {
                 if entry.deleted {
                     return None;
                 }
-                if let Some(language) = language {
-                    if entry.language != language {
-                        return None;
-                    }
+                if let Some(language) = language
+                    && entry.language != language
+                {
+                    return None;
                 }
                 if !tag_filter.matches(entry.tag) {
                     return None;

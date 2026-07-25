@@ -942,6 +942,11 @@ impl PresentedSourcePaintSpan {
     }
 
     #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    #[must_use]
     pub const fn hover(&self) -> Option<PointerDrawMode> {
         self.hover
     }

@@ -273,12 +273,16 @@ impl BookmarkManager {
     }
 
     // pdump accessors
+    // Bookmark keys retain exact Lisp-string equality and are stable under the
+    // non-moving GC despite their interior-mutability marker.
+    #[allow(clippy::mutable_key_type)]
     pub(crate) fn dump_bookmarks(&self) -> &HashMap<BookmarkKey, Bookmark> {
         &self.bookmarks
     }
     pub(crate) fn dump_recent(&self) -> &[LispString] {
         &self.recent
     }
+    #[allow(clippy::mutable_key_type)] // restores the exact Lisp bookmark-key representation
     pub(crate) fn from_dump(
         bookmarks: HashMap<BookmarkKey, Bookmark>,
         recent: Vec<LispString>,
@@ -753,10 +757,10 @@ fn default_bookmark_file() -> LispString {
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn active_bookmark_default_file(eval: &super::eval::Context) -> LispString {
-    if let Some(v) = eval.obarray.symbol_value("bookmark-default-file") {
-        if let Some(ls) = v.as_lisp_string() {
-            return ls.clone();
-        }
+    if let Some(v) = eval.obarray.symbol_value("bookmark-default-file")
+        && let Some(ls) = v.as_lisp_string()
+    {
+        return ls.clone();
     }
     default_bookmark_file()
 }

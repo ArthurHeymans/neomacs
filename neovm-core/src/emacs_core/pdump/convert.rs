@@ -1409,12 +1409,12 @@ impl<'a> LoadDecoder<'a> {
                 // state-marker resolution can do an O(1) lookup instead of a
                 // heap-wide walk. Both call sites consult `markers_by_id` in
                 // place of the retired `find_marker_by_id_during_load`.
-                if let Some(id) = marker.marker_id {
-                    if let Some(ptr) = value.as_veclike_ptr() {
-                        self.state
-                            .markers_by_id
-                            .insert(id, ptr as *mut crate::tagged::header::MarkerObj);
-                    }
+                if let Some(id) = marker.marker_id
+                    && let Some(ptr) = value.as_veclike_ptr()
+                {
+                    self.state
+                        .markers_by_id
+                        .insert(id, ptr as *mut crate::tagged::header::MarkerObj);
                 }
                 value
             }
@@ -2256,7 +2256,7 @@ pub(crate) fn dump_lambda_params(p: &LambdaParams) -> DumpLambdaParams {
     DumpLambdaParams {
         required: p.required.iter().map(|s| dump_sym_id(*s)).collect(),
         optional: p.optional.iter().map(|s| dump_sym_id(*s)).collect(),
-        rest: p.rest.map(|s| dump_sym_id(s)),
+        rest: p.rest.map(dump_sym_id),
     }
 }
 
@@ -2366,7 +2366,7 @@ pub(crate) fn dump_hash_table_weakness(w: &HashTableWeakness) -> DumpHashTableWe
 pub(crate) fn dump_hash_table(encoder: &mut DumpEncoder, ht: &LispHashTable) -> DumpLispHashTable {
     DumpLispHashTable {
         test: dump_hash_table_test(&ht.test),
-        test_name: ht.test_name.map(|s| dump_sym_id(s)),
+        test_name: ht.test_name.map(dump_sym_id),
         size: ht.size,
         weakness: ht.weakness.as_ref().map(dump_hash_table_weakness),
         rehash_size: ht.rehash_size,
@@ -3930,9 +3930,7 @@ fn load_bytecode_owned(
         arglist,
         lexical: bc.lexical,
         env: decoder.load_opt_value_owned(bc.env),
-        gnu_byte_offset_map: bc
-            .gnu_byte_offset_map
-            .map(|pairs| load_byte_offset_map(pairs)),
+        gnu_byte_offset_map: bc.gnu_byte_offset_map.map(load_byte_offset_map),
         gnu_bytecode_bytes: bc.gnu_bytecode_bytes,
         docstring: bc.docstring.map(load_lisp_string_owned),
         doc_form: decoder.load_opt_value_owned(bc.doc_form),
@@ -4379,8 +4377,8 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
             dump_buffer_byte_to_char_pos(&text, dump_emacs_byte_pos(db.pt)).get()
         }
     });
-    let _mark_char = match db.mark {
-        Some(mark) => Some(db.mark_char.unwrap_or_else(|| {
+    let _mark_char = db.mark.map(|mark| {
+        db.mark_char.unwrap_or_else(|| {
             if mark == db.begv {
                 begv_char
             } else if mark == db.zv {
@@ -4388,9 +4386,8 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
             } else {
                 dump_buffer_byte_to_char_pos(&text, dump_emacs_byte_pos(mark)).get()
             }
-        })),
-        None => None,
-    };
+        })
+    });
     // v26: walk `db.markers` in dumped chain order (head→tail). For each
     // entry, resolve the backing MarkerObj allocated during
     // `preload_tagged_heap` so the chain reuses the same allocation that
@@ -4761,6 +4758,9 @@ pub(crate) fn load_buffer_manager(
 
 // --- Sub-managers ---
 
+// Restores exact Lisp-string keys from the dump into the runtime's non-moving
+// GC representation.
+#[allow(clippy::mutable_key_type)]
 pub(crate) fn load_autoload_manager(
     decoder: &mut LoadDecoder,
     dam: &DumpAutoloadManager,
@@ -5733,6 +5733,7 @@ pub(crate) fn load_register_manager(
     RegisterManager::from_dump(registers)
 }
 
+#[allow(clippy::mutable_key_type)] // restores exact Lisp bookmark-key semantics
 pub(crate) fn load_bookmark_manager(dbm: &DumpBookmarkManager) -> BookmarkManager {
     let bookmarks: HashMap<crate::emacs_core::bookmark::BookmarkKey, Bookmark> =
         if !dbm.bookmarks_lisp.is_empty() {

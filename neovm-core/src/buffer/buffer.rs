@@ -1420,20 +1420,6 @@ fn buffer_undo_list_sym() -> SymId {
     *SYM.get_or_init(|| intern("buffer-undo-list"))
 }
 
-/// Coerce a write value to fit a slot's predicate. Mirrors GNU's
-/// `store_symval_forwarding` predicate path:
-///
-///  - `"stringp"`: accept strings or nil; reject everything else by
-///    keeping the previous slot value (a real GNU build would signal
-///    `wrong-type-argument`; we conservatively no-op so legacy tests
-///    that wrote `t` or numbers don't blow up here — the assign hot
-///    path will eventually reject them once predicate dispatch is
-///    formalised).
-///  - `"booleanp"`: canonicalise any truthy value to `Value::T` and
-///    any nil to `Value::NIL`. Used for slots like `buffer-read-only`
-///    and `enable-multibyte-characters` whose GNU equivalents are
-///    declared `BVAR_PER_BUFFER_TYPE_BOOL`.
-///  - Anything else (including `""`): store as-is.
 /// Look up `key` in a buffer-local alist. Returns the cdr of the
 /// matching `(key . val)` pair, or `None` if absent. Mirrors GNU
 /// `assq_no_quit` (`fns.c:1520-1543`) used by `Flocal_variable_p`
@@ -3626,10 +3612,10 @@ impl Buffer {
                 }
                 if keep {
                     // Append this `alist` cons to the new chain.
-                    if new_tail.is_none() {
-                        new_head = alist;
+                    if let Some(tail) = new_tail {
+                        tail.set_cdr(alist);
                     } else {
-                        new_tail.unwrap().set_cdr(alist);
+                        new_head = alist;
                     }
                     new_tail = Some(alist);
                 } else {
@@ -4570,8 +4556,10 @@ impl BufferManager {
     /// markers are spliced out of the intrusive chain before the sweep
     /// frees them. Mirrors GNU `sweep_buffer → unchain_dead_markers` (`alloc.c`).
     ///
-    /// SAFETY: callers must ensure no concurrent borrows of the returned
-    /// storage exist. Stop-the-world GC is the only caller.
+    /// # Safety
+    ///
+    /// Callers must ensure no concurrent borrows of the returned storage
+    /// exist. Stop-the-world GC is the only caller.
     pub unsafe fn collect_marker_chain_head_slots(
         &self,
     ) -> Vec<*mut *mut crate::tagged::header::MarkerObj> {
@@ -4957,11 +4945,10 @@ impl BufferManager {
             }
         }
 
-        if self.buffers.contains_key(&buffer_id) {
-            if let Some(restrictions) = restrictions.filter(|restrictions| !restrictions.is_empty())
-            {
-                self.labeled_restrictions.insert(buffer_id, restrictions);
-            }
+        if self.buffers.contains_key(&buffer_id)
+            && let Some(restrictions) = restrictions.filter(|restrictions| !restrictions.is_empty())
+        {
+            self.labeled_restrictions.insert(buffer_id, restrictions);
         }
     }
 
@@ -5618,7 +5605,7 @@ impl BufferManager {
 
     pub fn restore_saved_restriction_state(&mut self, saved: SavedRestrictionState) {
         let buffer_id = saved.buffer_id;
-        if self.buffers.get(&buffer_id).is_none() {
+        if !self.buffers.contains_key(&buffer_id) {
             self.replace_labeled_restrictions(buffer_id, None);
             return;
         }

@@ -281,12 +281,11 @@ typed_subr! {
         // symbol is never in any local_var_alist, so skip the per-buffer scan.
         let localized = obarray.is_localized(resolved);
         // specbind writes directly to obarray, so no dynamic stack lookup needed.
-        if let Some(buf) = eval.buffers.current_buffer() {
-            if let Some(binding) = buf.get_buffer_local_binding_by_sym_id_gated(resolved, localized)
+        if let Some(buf) = eval.buffers.current_buffer()
+            && let Some(binding) = buf.get_buffer_local_binding_by_sym_id_gated(resolved, localized)
             {
                 return Ok(Value::bool_val(binding.as_value().is_some()));
             }
-        }
         Ok(Value::bool_val(
             obarray.boundp_id(resolved) || obarray.is_constant_id(resolved),
         ))
@@ -1233,11 +1232,11 @@ fn macroexpand_once_with_environment<R: MacroexpandRuntime>(
     let mut environment_binding = None;
     while let Some(definition_symbol) = symbol_id(&current_definition) {
         current_symbol = definition_symbol;
-        if let Some(env) = environment {
-            if let Some(binding) = macroexpand_environment_binding_by_id(env, definition_symbol) {
-                environment_binding = Some(binding);
-                break;
-            }
+        if let Some(env) = environment
+            && let Some(binding) = macroexpand_environment_binding_by_id(env, definition_symbol)
+        {
+            environment_binding = Some(binding);
+            break;
         }
 
         let Some(function) = runtime.symbol_function_by_id(definition_symbol) else {
@@ -1390,9 +1389,7 @@ pub(crate) fn symbol_function_cell_in_obarray(obarray: &Obarray, symbol: SymId) 
         return None;
     }
 
-    let Some(current_name) = resolve_sym_lisp_string(symbol).as_utf8_str() else {
-        return None;
-    };
+    let current_name = resolve_sym_lisp_string(symbol).as_utf8_str()?;
 
     if let Some(alias_target) = pure_builtin_symbol_alias_target(current_name) {
         return Some(Value::symbol(alias_target));
@@ -1451,12 +1448,11 @@ pub(super) fn resolve_indirect_symbol(eval: &super::eval::Context, name: &str) -
 pub(crate) fn builtin_macrop(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("macrop", &args, 1)?;
     if let Some(symbol) = symbol_id(&args[0]) {
-        if is_canonical_symbol_id(symbol) {
-            if let Some(function) =
+        if is_canonical_symbol_id(symbol)
+            && let Some(function) =
                 startup_virtual_autoload_function_cell(eval, resolve_sym(symbol))
-            {
-                return super::subr_info::macrop_check(&function);
-            }
+        {
+            return super::subr_info::macrop_check(&function);
         }
         if let Some(function) = resolve_indirect_symbol_by_id(eval, symbol).map(|(_, value)| value)
         {
@@ -1551,10 +1547,10 @@ pub(crate) fn obarray_bucket_find(
             ValueKind::Cons => {
                 let car = current.cons_car();
                 let cdr = current.cons_cdr();
-                if let Some(sym_name) = car.as_symbol_lisp_string() {
-                    if sym_name == normalized.as_ref() {
-                        return Some(car);
-                    }
+                if let Some(sym_name) = car.as_symbol_lisp_string()
+                    && sym_name == normalized.as_ref()
+                {
+                    return Some(car);
                 }
                 current = cdr;
             }
@@ -1635,7 +1631,7 @@ pub(crate) fn builtin_intern_fn(eval: &mut super::eval::Context, args: Vec<Value
     // Debug: validate string arg before access
     if args[0].is_string() {
         let ptr = args[0].as_string_ptr().unwrap();
-        let header = unsafe { &(*(ptr as *const crate::tagged::header::StringObj)).header };
+        let header = unsafe { &(*ptr).header };
         if !matches!(header.kind, crate::tagged::header::HeapObjectKind::String) {
             // Dump bc_buf state for debugging
             let bc_buf_len = eval.bc_buf.len();
@@ -1935,15 +1931,15 @@ pub(crate) fn builtin_minibuffer_innermost_command_loop_p(args: Vec<Value>) -> E
 
 pub(crate) fn builtin_next_frame(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_range_args("next-frame", &args, 0, 2)?;
-    if let Some(frame) = args.first() {
-        if !frame.is_nil() {
-            let _ = super::window_cmds::resolve_frame_id_in_state(
-                &mut eval.frames,
-                &mut eval.buffers,
-                Some(frame),
-                "frame-live-p",
-            )?;
-        }
+    if let Some(frame) = args.first()
+        && !frame.is_nil()
+    {
+        let _ = super::window_cmds::resolve_frame_id_in_state(
+            &mut eval.frames,
+            &mut eval.buffers,
+            Some(frame),
+            "frame-live-p",
+        )?;
     }
     super::window_cmds::builtin_selected_frame(eval, Vec::new())
 }
@@ -1953,28 +1949,29 @@ pub(crate) fn builtin_previous_frame(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_range_args("previous-frame", &args, 0, 2)?;
-    if let Some(frame) = args.first() {
-        if !frame.is_nil() {
-            let _ = super::window_cmds::resolve_frame_id_in_state(
-                &mut eval.frames,
-                &mut eval.buffers,
-                Some(frame),
-                "frame-live-p",
-            )?;
-        }
+    if let Some(frame) = args.first()
+        && !frame.is_nil()
+    {
+        let _ = super::window_cmds::resolve_frame_id_in_state(
+            &mut eval.frames,
+            &mut eval.buffers,
+            Some(frame),
+            "frame-live-p",
+        )?;
     }
     super::window_cmds::builtin_selected_frame(eval, Vec::new())
 }
 
 pub(crate) fn builtin_raise_frame(args: Vec<Value>) -> EvalResult {
     expect_range_args("raise-frame", &args, 0, 1)?;
-    if let Some(frame) = args.first() {
-        if !frame.is_nil() && !frame.is_frame() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("frame-live-p"), *frame],
-            ));
-        }
+    if let Some(frame) = args.first()
+        && !frame.is_nil()
+        && !frame.is_frame()
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("frame-live-p"), *frame],
+        ));
     }
     Ok(Value::NIL)
 }
@@ -2313,11 +2310,11 @@ struct LiveSnapshotVerticalMotion {
     moved: i64,
 }
 
-fn live_vertical_motion_snapshot<'a>(
-    eval: &'a super::eval::Context,
+fn live_vertical_motion_snapshot(
+    eval: &super::eval::Context,
     window: Option<Value>,
     current_buffer: BufferId,
-) -> Option<&'a WindowDisplaySnapshot> {
+) -> Option<&WindowDisplaySnapshot> {
     let window = window.filter(|value| !value.is_nil());
     let (frame, window_id) = if let Some(window) = window {
         let window_id = WindowId(window.as_window_id()?);
@@ -2547,13 +2544,14 @@ pub(crate) fn builtin_vertical_motion(
         }
     };
     // Validate optional WINDOW arg.
-    if let Some(window) = args.get(1) {
-        if !window.is_nil() && !window.is_window() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("window-live-p"), *window],
-            ));
-        }
+    if let Some(window) = args.get(1)
+        && !window.is_nil()
+        && !window.is_window()
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("window-live-p"), *window],
+        ));
     }
 
     let Some(current_id) = eval.buffers.current_buffer_id() else {
@@ -2818,13 +2816,13 @@ pub(crate) fn builtin_map_charset_chars(
         Some(value) => Some(expect_wholenump(&value)?),
         None => None,
     };
-    let ranges = crate::emacs_core::charset::map_charset_char_ranges(&charset, from_code, to_code)
+    let ranges = crate::emacs_core::charset::map_charset_char_ranges(charset, from_code, to_code)
         .ok_or_else(|| {
-            signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("charsetp"), args[1]],
-            )
-        })?;
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("charsetp"), args[1]],
+        )
+    })?;
     let function = args[0];
     let arg = args.get(2).copied().unwrap_or(Value::NIL);
     for (from, to) in ranges {
@@ -2903,13 +2901,14 @@ pub(crate) fn builtin_marker_last_position(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_newline_cache_check(args: Vec<Value>) -> EvalResult {
     expect_range_args("newline-cache-check", &args, 0, 1)?;
-    if let Some(buffer) = args.first() {
-        if !buffer.is_nil() && !buffer.is_buffer() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("bufferp"), *buffer],
-            ));
-        }
+    if let Some(buffer) = args.first()
+        && !buffer.is_nil()
+        && !buffer.is_buffer()
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("bufferp"), *buffer],
+        ));
     }
     Ok(Value::NIL)
 }
@@ -2934,7 +2933,7 @@ pub(crate) fn builtin_menu_bar_menu_at_x_y(
         .and_then(|frame| frame.as_frame_id().map(crate::window::FrameId))
         .or_else(|| eval.frames.selected_frame().map(|frame| frame.id));
     if let Some(anchor) = &eval.pending_menu_bar_popup_anchor
-        && frame_id.map_or(true, |id| id == anchor.frame_id)
+        && frame_id.is_none_or(|id| id == anchor.frame_id)
         && let Some(menu_key) = &anchor.menu_key
     {
         return Ok(Value::symbol(menu_key));
@@ -3525,13 +3524,14 @@ pub(crate) fn builtin_redirect_frame_focus(args: Vec<Value>) -> EvalResult {
             vec![Value::symbol("framep"), args[0]],
         ));
     }
-    if let Some(focus_frame) = args.get(1) {
-        if !focus_frame.is_nil() && !focus_frame.is_frame() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("frame-live-p"), *focus_frame],
-            ));
-        }
+    if let Some(focus_frame) = args.get(1)
+        && !focus_frame.is_nil()
+        && !focus_frame.is_frame()
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("frame-live-p"), *focus_frame],
+        ));
     }
     Ok(Value::NIL)
 }
@@ -3651,13 +3651,14 @@ pub(crate) fn builtin_set_fontset_font(
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_set_frame_window_state_change(args: Vec<Value>) -> EvalResult {
     expect_range_args("set-frame-window-state-change", &args, 0, 2)?;
-    if let Some(frame) = args.first() {
-        if !frame.is_nil() && !frame.is_frame() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("frame-live-p"), *frame],
-            ));
-        }
+    if let Some(frame) = args.first()
+        && !frame.is_nil()
+        && !frame.is_frame()
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("frame-live-p"), *frame],
+        ));
     }
     Ok(Value::NIL)
 }
@@ -3878,8 +3879,8 @@ fn levenshtein_distance_codes(a: &[u32], b: &[u32]) -> usize {
     let n = b.len();
     let mut prev = vec![0usize; n + 1];
     let mut curr = vec![0usize; n + 1];
-    for j in 0..=n {
-        prev[j] = j;
+    for (j, value) in prev.iter_mut().enumerate() {
+        *value = j;
     }
     for i in 1..=m {
         curr[0] = i;
@@ -3897,8 +3898,8 @@ fn levenshtein_distance_bytes(a: &[u8], b: &[u8]) -> usize {
     let n = b.len();
     let mut prev = vec![0usize; n + 1];
     let mut curr = vec![0usize; n + 1];
-    for j in 0..=n {
-        prev[j] = j;
+    for (j, value) in prev.iter_mut().enumerate() {
+        *value = j;
     }
     for i in 1..=m {
         curr[0] = i;
@@ -4872,14 +4873,11 @@ pub(crate) fn builtin_interactive_form(
                 if !eval
                     .obarray
                     .is_function_unbound("oclosure-interactive-form")
-                {
-                    if let Ok(result) =
+                    && let Ok(result) =
                         eval.apply(Value::symbol("oclosure-interactive-form"), vec![fun])
-                    {
-                        if !result.is_nil() {
-                            return Ok(result);
-                        }
-                    }
+                    && !result.is_nil()
+                {
+                    return Ok(result);
                 }
             }
             Ok(Value::NIL)
@@ -4909,14 +4907,11 @@ pub(crate) fn builtin_interactive_form(
                 && !eval
                     .obarray
                     .is_function_unbound("oclosure-interactive-form")
-            {
-                if let Ok(result) =
+                && let Ok(result) =
                     eval.apply(Value::symbol("oclosure-interactive-form"), vec![fun])
-                {
-                    if !result.is_nil() {
-                        return Ok(result);
-                    }
-                }
+                && !result.is_nil()
+            {
+                return Ok(result);
             }
             Ok(Value::NIL)
         }
@@ -4982,11 +4977,7 @@ pub(crate) fn builtin_local_variable_if_set_p(
             // Read the BLV's own local_if_set flag — mirrors GNU
             // `local-variable-if-set-p` SYMBOL_LOCALIZED arm at
             // `data.c:2450-2454`.
-            if ctx
-                .obarray
-                .blv(resolved_id)
-                .map_or(false, |b| b.local_if_set)
-            {
+            if ctx.obarray.blv(resolved_id).is_some_and(|b| b.local_if_set) {
                 return Ok(Value::T);
             }
             // Otherwise defer to local-variable-p with BUFFER
@@ -5013,10 +5004,10 @@ pub(crate) fn builtin_local_variable_if_set_p(
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_lock_buffer(args: Vec<Value>) -> EvalResult {
     expect_range_args("lock-buffer", &args, 0, 1)?;
-    if let Some(filename) = args.first() {
-        if !filename.is_nil() {
-            let _ = expect_lisp_string(filename)?;
-        }
+    if let Some(filename) = args.first()
+        && !filename.is_nil()
+    {
+        let _ = expect_lisp_string(filename)?;
     }
     Ok(Value::NIL)
 }
@@ -5029,7 +5020,7 @@ pub(crate) fn builtin_lock_file(args: Vec<Value>) -> EvalResult {
 }
 
 thread_local! {
-    static LOSSAGE_SIZE: RefCell<i64> = RefCell::new(300);
+    static LOSSAGE_SIZE: RefCell<i64> = const { RefCell::new(300) };
 }
 
 pub(super) fn reset_symbols_thread_locals() {
@@ -5040,31 +5031,31 @@ pub(super) fn reset_symbols_thread_locals() {
 pub(crate) fn builtin_lossage_size(args: Vec<Value>) -> EvalResult {
     expect_range_args("lossage-size", &args, 0, 1)?;
 
-    if let Some(value) = args.first() {
-        if !value.is_nil() {
-            let n = match value.kind() {
-                ValueKind::Fixnum(n) => n,
-                _ => {
-                    return Err(signal(
-                        LispCondition::UserError,
-                        vec![Value::string("Value must be a positive integer")],
-                    ));
-                }
-            };
-            if n < 0 {
+    if let Some(value) = args.first()
+        && !value.is_nil()
+    {
+        let n = match value.kind() {
+            ValueKind::Fixnum(n) => n,
+            _ => {
                 return Err(signal(
                     LispCondition::UserError,
                     vec![Value::string("Value must be a positive integer")],
                 ));
             }
-            if n < 100 {
-                return Err(signal(
-                    LispCondition::UserError,
-                    vec![Value::string("Value must be >= 100")],
-                ));
-            }
-            LOSSAGE_SIZE.with(|slot| *slot.borrow_mut() = n);
+        };
+        if n < 0 {
+            return Err(signal(
+                LispCondition::UserError,
+                vec![Value::string("Value must be a positive integer")],
+            ));
         }
+        if n < 100 {
+            return Err(signal(
+                LispCondition::UserError,
+                vec![Value::string("Value must be >= 100")],
+            ));
+        }
+        LOSSAGE_SIZE.with(|slot| *slot.borrow_mut() = n);
     }
 
     Ok(Value::fixnum(LOSSAGE_SIZE.with(|slot| *slot.borrow())))
@@ -5288,11 +5279,11 @@ pub(crate) fn builtin_internal_describe_syntax_value(
         }
         out.push_str("\twhich means: ");
         out.push_str(syntax_description_word(class));
-        if !matching.is_nil() {
-            if let Some(ch) = matching.as_fixnum().and_then(|n| char::from_u32(n as u32)) {
-                out.push_str(", matches ");
-                out.push(ch);
-            }
+        if !matching.is_nil()
+            && let Some(ch) = matching.as_fixnum().and_then(|n| char::from_u32(n as u32))
+        {
+            out.push_str(", matches ");
+            out.push(ch);
         }
         if flags.contains(crate::emacs_core::syntax::SyntaxFlags::COMMENT_START_FIRST) {
             out.push_str(",\n\t  is the first character of a comment-start sequence");
@@ -5895,10 +5886,10 @@ pub(crate) fn builtin_malloc_info(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_malloc_trim(args: Vec<Value>) -> EvalResult {
     expect_range_args("malloc-trim", &args, 0, 1)?;
-    if let Some(pad) = args.first() {
-        if !pad.is_nil() {
-            let _ = expect_wholenump(pad)?;
-        }
+    if let Some(pad) = args.first()
+        && !pad.is_nil()
+    {
+        let _ = expect_wholenump(pad)?;
     }
     Ok(Value::T)
 }
@@ -6299,7 +6290,7 @@ pub(crate) fn builtin_handler_bind_1(
             ],
         ));
     }
-    if args.len() % 2 == 0 {
+    if args.len().is_multiple_of(2) {
         let message = super::strings::builtin_format_message_slice(
             eval,
             &[Value::string(
@@ -6559,6 +6550,7 @@ pub(crate) fn make_byte_code_from_parts(
     )
 }
 
+#[allow(clippy::too_many_arguments)] // preserves the observable GNU closure-slot layout
 fn make_byte_code_from_parts_with_slots(
     arglist: &Value,
     bytecode_str: &Value,
@@ -6611,8 +6603,8 @@ fn make_byte_code_from_parts_with_slots(
     // GNU `.elc` constants may contain nested `#[...]` bytecode objects or
     // `#s(hash-table ...)` literals. Convert them into real runtime objects
     // before decoding/executing the bytecode.
-    for i in 0..constants.len() {
-        constants[i] = try_convert_nested_compiled_literal(constants[i]);
+    for constant in &mut constants {
+        *constant = try_convert_nested_compiled_literal(*constant);
     }
 
     // 4. Decode GNU bytecodes

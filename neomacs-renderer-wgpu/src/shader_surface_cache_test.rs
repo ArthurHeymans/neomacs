@@ -161,7 +161,7 @@ fn active_animation_max_fps_takes_max_cap_and_uncapped_forces_full_rate() {
     let image = ImageCache::new(&device);
     let mut cache = ShaderSurfaceCache::new(&device);
     let format = wgpu::TextureFormat::Rgba8UnormSrgb;
-    let mut make = |cache: &mut ShaderSurfaceCache, id: u32, fps: Option<u32>| -> bool {
+    let make = |cache: &mut ShaderSurfaceCache, id: u32, fps: Option<u32>| -> bool {
         cache
             .create_shader(
                 &device,

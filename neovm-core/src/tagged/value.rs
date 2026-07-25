@@ -414,7 +414,7 @@ impl TaggedValue {
     #[inline]
     pub fn is_char(self) -> bool {
         if let Some(n) = self.as_fixnum() {
-            n >= 0 && n <= 0x3F_FFFF // GNU MAX_CHAR
+            (0..=0x3F_FFFF).contains(&n) // GNU MAX_CHAR
         } else {
             false
         }
@@ -564,7 +564,7 @@ impl TaggedValue {
     #[inline]
     pub fn as_char(self) -> Option<char> {
         if let Some(n) = self.as_fixnum() {
-            if n >= 0 && n <= 0x3F_FFFF {
+            if (0..=0x3F_FFFF).contains(&n) {
                 // GNU Emacs allows codepoints up to MAX_CHAR (0x3FFFFF)
                 // which includes non-Unicode internal chars. For Rust char,
                 // we can only convert valid Unicode codepoints.
@@ -959,7 +959,7 @@ impl TaggedValue {
             // Safety: the string object is alive (caller must ensure no GC).
             // Lifetime is extended to 'static — same pattern as old Value::as_str.
             unsafe {
-                let header = &(*(ptr as *const super::header::StringObj)).header;
+                let header = &(*ptr).header;
                 if !matches!(header.kind, super::header::HeapObjectKind::String) {
                     panic!(
                         "BUG: StringObj header.kind = {:?} (expected String) — \

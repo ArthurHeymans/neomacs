@@ -345,13 +345,14 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
 }
 
 fn expect_optional_command_keys_vector(keys: Option<&Value>) -> Result<(), Flow> {
-    if let Some(keys_value) = keys {
-        if !keys_value.is_nil() && !keys_value.is_vector() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("vectorp"), *keys_value],
-            ));
-        }
+    if let Some(keys_value) = keys
+        && !keys_value.is_nil()
+        && !keys_value.is_vector()
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("vectorp"), *keys_value],
+        ));
     }
     Ok(())
 }
@@ -398,7 +399,7 @@ pub(crate) fn builtin_call_interactively(eval: &mut Context, args: Vec<Value>) -
         ));
     }
 
-    let Some((resolved_symbol, func)) = resolve_command_target(&eval, &func_val) else {
+    let Some((resolved_symbol, func)) = resolve_command_target(eval, &func_val) else {
         return Err(signal(LispCondition::VoidFunction, vec![func_val]));
     };
     let context =
@@ -716,13 +717,14 @@ pub(crate) fn builtin_command_remapping_impl(
 ) -> EvalResult {
     expect_min_args("command-remapping", &args, 1)?;
     expect_max_args("command-remapping", &args, 3)?;
-    if let Some(keymap) = args.get(2) {
-        if !keymap.is_nil() && !command_remapping_keymap_arg_valid(keymap) {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("keymapp"), *keymap],
-            ));
-        }
+    if let Some(keymap) = args.get(2)
+        && !keymap.is_nil()
+        && !command_remapping_keymap_arg_valid(keymap)
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("keymapp"), *keymap],
+        ));
     }
     let Some(command_name) = command_remapping_command_name(&args[0]) else {
         return Ok(Value::NIL);
@@ -1024,7 +1026,6 @@ fn resolve_function_designator_symbol_in_state(
     symbol: SymId,
 ) -> Option<(SymId, Value)> {
     crate::emacs_core::builtins::symbols::resolve_indirect_symbol_by_id_in_obarray(obarray, symbol)
-        .map(|(resolved, value)| (resolved, value))
 }
 
 fn symbol_utf8_name(symbol: SymId) -> Option<&'static str> {
@@ -1041,10 +1042,10 @@ fn command_object_p_in_state(
     value: &Value,
     for_call_interactively: bool,
 ) -> bool {
-    if let Some(symbol) = resolved_symbol {
-        if interactive.is_interactive(symbol) || builtin_command_symbol(symbol) {
-            return true;
-        }
+    if let Some(symbol) = resolved_symbol
+        && (interactive.is_interactive(symbol) || builtin_command_symbol(symbol))
+    {
+        return true;
     }
     if value_is_interactive_autoload(value) {
         return true;
@@ -1077,12 +1078,10 @@ fn command_object_p_in_state(
                     .closure_doc_form()
                     .flatten()
                     .is_some_and(|v| v.as_symbol_name().is_some())
+                    && let Some(symbol) = resolved_symbol
+                    && interactive.is_interactive(symbol)
                 {
-                    if let Some(symbol) = resolved_symbol {
-                        if interactive.is_interactive(symbol) {
-                            return true;
-                        }
-                    }
+                    return true;
                 }
                 false
             } else {
@@ -1272,16 +1271,14 @@ struct InteractiveInvocationContext {
 impl InteractiveInvocationContext {
     fn from_keys_arg_in_state(read_command_keys: &[Value], keys: Option<&Value>) -> Self {
         let mut context = Self::default();
-        if let Some(keys_val) = keys {
-            if keys_val.is_vector() {
-                if let Some(vec_data) = keys_val.as_vector_data() {
-                    if !vec_data.is_empty() {
-                        context.command_keys = vec_data.clone();
-                        context.has_command_keys_context = true;
-                        return context;
-                    }
-                }
-            }
+        if let Some(keys_val) = keys
+            && keys_val.is_vector()
+            && let Some(vec_data) = keys_val.as_vector_data()
+            && !vec_data.is_empty()
+        {
+            context.command_keys = vec_data.clone();
+            context.has_command_keys_context = true;
+            return context;
         }
         if !read_command_keys.is_empty() {
             context.command_keys = read_command_keys.to_vec();
@@ -1377,12 +1374,10 @@ fn interactive_capture_up_event_in_vm_batch_runtime(
     context.pending_up_event = None;
     if interactive_last_key_sequence_event(sequence)
         .is_some_and(|event| interactive_event_is_down_event(&event))
+        && let Some(up_event) = super::lread::builtin_read_event_in_runtime(shared, &[])?
+        && !up_event.is_nil()
     {
-        if let Some(up_event) = super::lread::builtin_read_event_in_runtime(shared, &[])? {
-            if !up_event.is_nil() {
-                context.pending_up_event = Some(up_event);
-            }
-        }
+        context.pending_up_event = Some(up_event);
     }
     Ok(())
 }
@@ -1558,7 +1553,7 @@ fn interactive_next_event_with_parameters_in_state(
     interactive_last_input_event_with_parameters_in_state(obarray, dynamic)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
+#[allow(dead_code, clippy::too_many_arguments)] // explicit split-state compatibility seam
 fn interactive_args_from_string_code_in_state(
     obarray: &mut Obarray,
     dynamic: &mut Vec<OrderedRuntimeBindingMap>,
@@ -1735,7 +1730,7 @@ fn interactive_args_from_string_code_in_vm_runtime(
                 }
                 InteractiveControlLetter::InvokingEvent => {
                     if let Some(event) = interactive_next_event_with_parameters_in_state(
-                        &mut shared.obarray,
+                        &shared.obarray,
                         &[],
                         context,
                     ) {
@@ -2256,9 +2251,9 @@ fn interactive_apply_prefix_flags(
     for prefix_flag in prefix_flags {
         match prefix_flag {
             '*' => interactive_require_writable_current_buffer_in_state(
-                &mut eval.obarray,
-                &mut [],
-                &mut eval.buffers,
+                &eval.obarray,
+                &[],
+                &eval.buffers,
             )?,
             '@' => interactive_select_window_from_prefix_context(eval, context)?,
             '^' => interactive_apply_shift_selection_prefix_in_state(
@@ -2749,12 +2744,11 @@ fn resolve_interactive_invocation_args(
     kind: CommandInvocationKind,
     context: &mut InteractiveInvocationContext,
 ) -> Result<Vec<Value>, Flow> {
-    if value_is_interactive_autoload(func) {
-        if let Ok(iform) = eval.apply(Value::symbol("interactive-form"), vec![invocation_function])
-            && let Some(args) = interactive_args_from_interactive_form(eval, iform, kind, context)?
-        {
-            return Ok(args);
-        }
+    if value_is_interactive_autoload(func)
+        && let Ok(iform) = eval.apply(Value::symbol("interactive-form"), vec![invocation_function])
+        && let Some(args) = interactive_args_from_interactive_form(eval, iform, kind, context)?
+    {
+        return Ok(args);
     }
 
     if let Some(spec_value) = resolved_symbol
@@ -2828,22 +2822,22 @@ fn resolve_interactive_invocation_args(
 
     // For bytecoded functions: extract interactive spec from closure slot 5
     // (mirrors GNU Emacs CLOSURE_INTERACTIVE handling in callint.c)
-    if let Some(bc) = func.get_bytecode_data() {
-        if bc.observable_closure_slot_count() > 5 {
-            let spec_val = stored_interactive_spec_value(bc.interactive.unwrap_or(Value::NIL));
-            if let Some(s) = spec_val.as_lisp_string() {
-                // String interactive spec — parse as code letters
-                if let Some(args) = interactive_args_from_string_code(eval, s, kind, context)? {
-                    return Ok(args);
-                }
-            } else if spec_val.is_nil() {
-                // (interactive) with no args
-                return Ok(Vec::new());
-            } else {
-                // Non-string spec — evaluate as a form (like GNU Feval(specs, env))
-                let value = eval.eval_value(&spec_val)?;
-                return Ok(interactive_form_value_to_args(value)?);
+    if let Some(bc) = func.get_bytecode_data()
+        && bc.observable_closure_slot_count() > 5
+    {
+        let spec_val = stored_interactive_spec_value(bc.interactive.unwrap_or(Value::NIL));
+        if let Some(s) = spec_val.as_lisp_string() {
+            // String interactive spec — parse as code letters
+            if let Some(args) = interactive_args_from_string_code(eval, s, kind, context)? {
+                return Ok(args);
             }
+        } else if spec_val.is_nil() {
+            // (interactive) with no args
+            return Ok(Vec::new());
+        } else {
+            // Non-string spec — evaluate as a form (like GNU Feval(specs, env))
+            let value = eval.eval_value(&spec_val)?;
+            return interactive_form_value_to_args(value);
         }
     }
 
@@ -3082,7 +3076,7 @@ pub(crate) fn resolve_call_interactively_target_and_args_in_eval(
     Ok((func, call_args))
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
+#[allow(dead_code, clippy::too_many_arguments)] // explicit split-state compatibility seam
 pub(crate) fn resolve_call_interactively_target_and_args_in_state(
     obarray: &mut Obarray,
     dynamic: &mut Vec<OrderedRuntimeBindingMap>,
@@ -3679,21 +3673,19 @@ pub(crate) fn builtin_key_binding_impl(
     // key_events_from_designator below.
     if let Some(position) = args.get(3)
         && let ValueKind::Fixnum(pos_int) = position.kind()
+        && let Some(buf_id) = ctx.buffers.current_buffer_id()
+        && let Some(buf) = ctx.buffers.get(buf_id)
     {
-        if let Some(buf_id) = ctx.buffers.current_buffer_id()
-            && let Some(buf) = ctx.buffers.get(buf_id)
-        {
-            // Lisp positions are 1-based character positions, so
-            // valid range is `[char_min + 1, char_max + 1]`.
-            let lisp_min = buf.point_min_lisp_char_pos().as_i64();
-            let lisp_max = buf.point_max_lisp_char_pos().as_i64();
-            if pos_int < lisp_min || pos_int > lisp_max {
-                let buffer_value = Value::make_buffer(buf_id);
-                return Err(signal(
-                    LispCondition::ArgsOutOfRange,
-                    vec![buffer_value, *position],
-                ));
-            }
+        // Lisp positions are 1-based character positions, so
+        // valid range is `[char_min + 1, char_max + 1]`.
+        let lisp_min = buf.point_min_lisp_char_pos().as_i64();
+        let lisp_max = buf.point_max_lisp_char_pos().as_i64();
+        if pos_int < lisp_min || pos_int > lisp_max {
+            let buffer_value = Value::make_buffer(buf_id);
+            return Err(signal(
+                LispCondition::ArgsOutOfRange,
+                vec![buffer_value, *position],
+            ));
         }
     }
     let string_designator = args[0].is_string();
@@ -3814,14 +3806,12 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
     // other command, search for the keys bound to that remap target instead.
     // (keymap.c: `tem = Fcommand_remapping (definition, Qnil, keymaps); if
     // (NILP (no_remap) && !NILP (tem)) definition = tem;`)
-    if !no_remap {
-        if let Some(command_name) = command_remapping_command_name(&definition) {
-            if let Some(target) = command_remapping_lookup_in_keymaps(&keymaps, command_name) {
-                if !target.is_nil() {
-                    definition = target;
-                }
-            }
-        }
+    if !no_remap
+        && let Some(command_name) = command_remapping_command_name(&definition)
+        && let Some(target) = command_remapping_lookup_in_keymaps(&keymaps, command_name)
+        && !target.is_nil()
+    {
+        definition = target;
     }
 
     // Collect the raw candidate sequences (longest-to-shortest, possibly
@@ -3865,29 +3855,30 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
 
         // If this is a `[remap COMMAND]` pseudo-key, replace it with the key
         // sequences that actually run COMMAND (unless NO-REMAP suppresses it).
-        if !no_remap && !remapped {
-            if let Some(function) = where_is_remap_pseudo_key_command(&sequence) {
-                let mut seqs = Vec::new();
-                for keymap in &keymaps {
-                    collect_where_is_sequences_value(
-                        eval.obarray(),
-                        keymap,
-                        &function,
-                        &mut seqs,
-                        no_menu_bindings,
-                        noindirect,
-                        0,
-                    );
-                }
-                // `collect_where_is_sequences_value` already returns sequences
-                // in the public `where-is-internal` order.  GNU reverses here
-                // because its lower-level `where_is_internal` helper returns
-                // the internal cons order; reversing here would make later
-                // global bindings outrank earlier active maps.
-                seqs.append(&mut remapped_sequences);
-                remapped_sequences = seqs;
-                continue;
+        if !no_remap
+            && !remapped
+            && let Some(function) = where_is_remap_pseudo_key_command(&sequence)
+        {
+            let mut seqs = Vec::new();
+            for keymap in &keymaps {
+                collect_where_is_sequences_value(
+                    eval.obarray(),
+                    keymap,
+                    &function,
+                    &mut seqs,
+                    no_menu_bindings,
+                    noindirect,
+                    0,
+                );
             }
+            // `collect_where_is_sequences_value` already returns sequences
+            // in the public `where-is-internal` order.  GNU reverses here
+            // because its lower-level `where_is_internal` helper returns
+            // the internal cons order; reversing here would make later
+            // global bindings outrank earlier active maps.
+            seqs.append(&mut remapped_sequences);
+            remapped_sequences = seqs;
+            continue;
         }
 
         let sequence = metize_key_sequence(&sequence);
@@ -3923,14 +3914,14 @@ fn metize_key_sequence(seq: &[Value]) -> Vec<Value> {
     let mut out = Vec::with_capacity(seq.len());
     let mut i = 0;
     while i < seq.len() {
-        if i + 1 < seq.len() && seq[i].as_fixnum() == Some(27) {
-            if let Some(next) = seq[i + 1].as_fixnum() {
-                if next & KEY_CHAR_META == 0 {
-                    out.push(Value::fixnum(next | KEY_CHAR_META));
-                    i += 2;
-                    continue;
-                }
-            }
+        if i + 1 < seq.len()
+            && seq[i].as_fixnum() == Some(27)
+            && let Some(next) = seq[i + 1].as_fixnum()
+            && next & KEY_CHAR_META == 0
+        {
+            out.push(Value::fixnum(next | KEY_CHAR_META));
+            i += 2;
+            continue;
         }
         out.push(seq[i]);
         i += 1;
@@ -4136,10 +4127,10 @@ fn binding_matches_definition(binding: &Value, definition: &Value) -> bool {
         return bid == did;
     }
     // Check if binding is a symbol matching a Subr definition name
-    if let Some(bname) = binding.as_symbol_name() {
-        if let Some(id) = definition.as_subr_id() {
-            return bname == resolve_sym(id);
-        }
+    if let Some(bname) = binding.as_symbol_name()
+        && let Some(id) = definition.as_subr_id()
+    {
+        return bname == resolve_sym(id);
     }
     binding == definition
 }
@@ -4240,10 +4231,7 @@ fn where_is_prefix_starts_with_mouse_event(prefix: &[Value]) -> bool {
 }
 
 fn event_symbol_base_for_mouse_event_filter(mut name: &str) -> String {
-    loop {
-        let Some((prefix, rest)) = name.split_once('-') else {
-            break;
-        };
+    while let Some((prefix, rest)) = name.split_once('-') {
         if matches!(
             prefix,
             "A" | "alt"
@@ -4360,7 +4348,7 @@ fn collect_where_is_sequences_value(
             }
             let mut sequence = map_prefix.clone();
             sequence.push(event);
-            if !out.iter().any(|existing| *existing == sequence) {
+            if !out.contains(&sequence) {
                 out.push(sequence);
             }
         }

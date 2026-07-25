@@ -264,20 +264,20 @@ pub(crate) fn scan_storage_units(s: &str, multibyte: bool) -> Vec<StorageUnit> {
             continue;
         }
 
-        if code == EXT_SEQ_PREFIX {
-            if let Some((end, cp)) = decode_extended_sequence_span(s, idx) {
-                let byte_len = ((s[idx..end].chars().nth(1).expect("extended len sentinel") as u32)
-                    - EXT_SEQ_LEN_BASE) as usize;
-                out.push(StorageUnit {
-                    storage_start: idx,
-                    storage_end: end,
-                    code: cp,
-                    display_width: 1,
-                    logical_byte_len: byte_len,
-                });
-                idx = end;
-                continue;
-            }
+        if code == EXT_SEQ_PREFIX
+            && let Some((end, cp)) = decode_extended_sequence_span(s, idx)
+        {
+            let byte_len = ((s[idx..end].chars().nth(1).expect("extended len sentinel") as u32)
+                - EXT_SEQ_LEN_BASE) as usize;
+            out.push(StorageUnit {
+                storage_start: idx,
+                storage_end: end,
+                code: cp,
+                display_width: 1,
+                logical_byte_len: byte_len,
+            });
+            idx = end;
+            continue;
         }
 
         let width = crate::encoding::char_width(ch);
@@ -333,10 +333,10 @@ pub(crate) fn storage_code_step(s: &str, pos: usize, multibyte: bool) -> Option<
         return Some((code - UNIBYTE_BYTE_SENTINEL_BASE, next));
     }
 
-    if code == EXT_SEQ_PREFIX {
-        if let Some((end, cp)) = decode_extended_sequence_span(s, pos) {
-            return Some((cp, end));
-        }
+    if code == EXT_SEQ_PREFIX
+        && let Some((end, cp)) = decode_extended_sequence_span(s, pos)
+    {
+        return Some((cp, end));
     }
 
     Some((code, next))
@@ -863,7 +863,7 @@ pub(crate) fn decode_units_emacs(data: &[u8], is_multibyte: bool) -> Vec<(u32, u
             .map(|&b| {
                 let width = if b < 0x80 {
                     char::from_u32(b as u32)
-                        .map(|ch| crate::encoding::char_width(ch))
+                        .map(crate::encoding::char_width)
                         .unwrap_or(1)
                 } else {
                     1

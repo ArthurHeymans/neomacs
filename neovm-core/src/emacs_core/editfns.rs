@@ -20,7 +20,6 @@ use crate::buffer::{
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
-use malachite::integer::Integer;
 #[cfg(unix)]
 use std::ffi::CStr;
 use strum::IntoStaticStr;
@@ -416,12 +415,11 @@ pub(crate) fn signal_after_change(
     // modification hooks, so do it up front. A pure insertion (old_len == 0)
     // cannot empty an overlay, so skip it; likewise skip buffers with no
     // overlays to keep the hot path allocation-free.
-    if old_len.get() > 0 {
-        if let Some(current_id) = ctx.buffers.current_buffer_id() {
-            if buffer_has_overlays(ctx, current_id) {
-                evaporate_emptied_overlays(ctx, current_id);
-            }
-        }
+    if old_len.get() > 0
+        && let Some(current_id) = ctx.buffers.current_buffer_id()
+        && buffer_has_overlays(ctx, current_id)
+    {
+        evaporate_emptied_overlays(ctx, current_id);
     }
 
     if inhibit_modification_hooks(ctx) {
@@ -815,31 +813,34 @@ fn collect_overlay_change_hooks(
             (!value.is_nil()).then_some(value)
         };
 
-        if insertion && (beg_pos == ov_start || end_pos == ov_start) {
-            if let Some(hook_val) = overlay_hook("insert-in-front-hooks") {
-                result.push(OverlayModificationHook {
-                    hook_list: hook_val,
-                    overlay: ov_id,
-                });
-            }
+        if insertion
+            && (beg_pos == ov_start || end_pos == ov_start)
+            && let Some(hook_val) = overlay_hook("insert-in-front-hooks")
+        {
+            result.push(OverlayModificationHook {
+                hook_list: hook_val,
+                overlay: ov_id,
+            });
         }
-        if insertion && (beg_pos == ov_end || end_pos == ov_end) {
-            if let Some(hook_val) = overlay_hook("insert-behind-hooks") {
-                result.push(OverlayModificationHook {
-                    hook_list: hook_val,
-                    overlay: ov_id,
-                });
-            }
+        if insertion
+            && (beg_pos == ov_end || end_pos == ov_end)
+            && let Some(hook_val) = overlay_hook("insert-behind-hooks")
+        {
+            result.push(OverlayModificationHook {
+                hook_list: hook_val,
+                overlay: ov_id,
+            });
         }
         // GNU intersection test (open interval):
         //   end > obegin && begin < oend
-        if end_pos > ov_start && beg_pos < ov_end {
-            if let Some(hook_val) = overlay_hook("modification-hooks") {
-                result.push(OverlayModificationHook {
-                    hook_list: hook_val,
-                    overlay: ov_id,
-                });
-            }
+        if end_pos > ov_start
+            && beg_pos < ov_end
+            && let Some(hook_val) = overlay_hook("modification-hooks")
+        {
+            result.push(OverlayModificationHook {
+                hook_list: hook_val,
+                overlay: ov_id,
+            });
         }
     }
     result
@@ -1494,7 +1495,7 @@ pub(crate) fn builtin_logcount(args: Vec<Value>) -> EvalResult {
     match args[0].kind() {
         ValueKind::Veclike(VecLikeType::Bignum) => {
             let n = args[0].as_bignum().expect("bignum kind");
-            let bits = if *n < Integer::from(0) {
+            let bits = if *n < 0 {
                 n.checked_count_zeros()
                     .expect("negative bignum has zero count")
             } else {
@@ -1678,15 +1679,15 @@ fn encode_translation_to(to: &Value, multibyte: bool) -> Vec<u8> {
         }
     } else if let Some(items) = to.as_vector_data() {
         for ch in items.iter() {
-            if let Some(c) = ch.as_fixnum() {
-                if (0..=MAX_CHAR as i64).contains(&c) {
-                    if multibyte {
-                        let mut buf = [0u8; MAX_MULTIBYTE_LENGTH];
-                        let n = char_string(c as u32, &mut buf);
-                        bytes.extend_from_slice(&buf[..n]);
-                    } else {
-                        bytes.push((c & 0xff) as u8);
-                    }
+            if let Some(c) = ch.as_fixnum()
+                && (0..=MAX_CHAR as i64).contains(&c)
+            {
+                if multibyte {
+                    let mut buf = [0u8; MAX_MULTIBYTE_LENGTH];
+                    let n = char_string(c as u32, &mut buf);
+                    bytes.extend_from_slice(&buf[..n]);
+                } else {
+                    bytes.push((c & 0xff) as u8);
                 }
             }
         }
@@ -1870,12 +1871,12 @@ pub(crate) fn builtin_translate_region_internal(
                     if let Some(items) = val.as_vector_data() {
                         let mut bytes = Vec::new();
                         for ch in items.iter() {
-                            if let Some(c) = ch.as_fixnum() {
-                                if (0..=MAX_CHAR as i64).contains(&c) {
-                                    let mut buf = [0u8; MAX_MULTIBYTE_LENGTH];
-                                    let n = char_string(c as u32, &mut buf);
-                                    bytes.extend_from_slice(&buf[..n]);
-                                }
+                            if let Some(c) = ch.as_fixnum()
+                                && (0..=MAX_CHAR as i64).contains(&c)
+                            {
+                                let mut buf = [0u8; MAX_MULTIBYTE_LENGTH];
+                                let n = char_string(c as u32, &mut buf);
+                                bytes.extend_from_slice(&buf[..n]);
                             }
                         }
                         new_bytes = Some(bytes);
@@ -1946,7 +1947,7 @@ pub(crate) fn builtin_translate_region_internal(
                 characters_changed += added;
                 // GNU `replace_range (pos, pos + 1, [TO ...])` relocates point
                 // when the single replaced char ends at or before point.
-                if cur_char + 1 <= point_char {
+                if cur_char < point_char {
                     point_char_delta += added - 1;
                 }
             } else {

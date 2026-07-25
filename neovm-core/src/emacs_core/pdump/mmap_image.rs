@@ -388,7 +388,7 @@ fn validate_image(mmap: MmapMut) -> Result<LoadedMmapImage, DumpError> {
                 "section {idx} reserved field is nonzero"
             )));
         }
-        if raw.offset % SECTION_ALIGN != 0 {
+        if !raw.offset.is_multiple_of(SECTION_ALIGN) {
             return Err(DumpError::ImageFormatError(format!(
                 "section {idx} offset {} is not {SECTION_ALIGN}-byte aligned",
                 raw.offset

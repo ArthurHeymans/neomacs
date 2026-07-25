@@ -165,11 +165,7 @@ std::cfg_select! {
                 let result = axes
                     .iter()
                     .zip(coords)
-                    .filter_map(|(axis, value)| {
-                        (*value != axis.def).then(|| {
-                            FontVariationCoord::new(axis.tag as u32, *value as f32 / 65536.0)
-                        })
-                    })
+                    .filter(|&(axis, value)| *value != axis.def).map(|(axis, value)| FontVariationCoord::new(axis.tag as u32, *value as f32 / 65536.0))
                     .collect();
                 ft::FT_Done_MM_Var(library.raw(), mm);
                 result

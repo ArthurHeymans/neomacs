@@ -65,6 +65,9 @@ impl OutputCursorInstallRequest {
 }
 
 #[derive(Clone, Debug)]
+// Installation requests are consumed immediately and keep artifacts by value
+// to avoid allocating per scene item.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum OutputFrameArtifactInstallRequest {
     Background {
         bounds: Rect,
@@ -153,6 +156,9 @@ pub(crate) struct OutputPresentedWindowGeometryInstallRequest {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+// Presentation geometry is a `Copy` protocol value; boxing it would change the
+// request semantics and add allocation to window publication.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum OutputWindowMetadataInstallRequest {
     TextDisplayRange(OutputTextWindowDisplayRangeInstallRequest),
     PresentedGeometry(OutputPresentedWindowGeometryInstallRequest),

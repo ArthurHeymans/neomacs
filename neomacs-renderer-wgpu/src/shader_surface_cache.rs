@@ -702,12 +702,13 @@ impl ShaderSurfaceCache {
             // `:fps` cap — skip an animated re-render arriving sooner than
             // 1/fps since the last one. A dirty surface always renders
             // (create / uniform change / DPI rescale), regardless of cap.
-            if !surface.dirty && animating {
-                if let (Some(fps), Some(last)) = (surface.fps, surface.last_render) {
-                    let min_interval = Duration::from_secs_f32(1.0 / fps.max(1) as f32);
-                    if now.duration_since(last) < min_interval {
-                        continue;
-                    }
+            if !surface.dirty
+                && animating
+                && let (Some(fps), Some(last)) = (surface.fps, surface.last_render)
+            {
+                let min_interval = Duration::from_secs_f32(1.0 / fps.max(1) as f32);
+                if now.duration_since(last) < min_interval {
+                    continue;
                 }
             }
             // Advance the clock by real wall-time since THIS surface last

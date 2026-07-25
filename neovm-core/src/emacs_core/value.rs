@@ -33,8 +33,7 @@ use crate::tagged::gc::{
 use crate::tagged::header::{
     BufferObj, ByteCodeObj, CHAR_TABLE_TOP_SLOTS, CharTableObj, ConsCell, FrameObj, HashTableObj,
     LambdaObj, LispValueSlice, MacroObj, MarkerObj, ObarrayObj, OverlayObj, ProcessObj, RecordObj,
-    StringObj, SubCharTableObj, SurfaceObj, TimerObj, VectorObj, WindowObj, XwidgetObj,
-    XwidgetViewObj,
+    SubCharTableObj, SurfaceObj, TimerObj, VectorObj, WindowObj, XwidgetObj, XwidgetViewObj,
 };
 use crate::tagged::mutate;
 use crate::tagged::value::{TAG_BITS, TAG_MASK, TaggedValue};
@@ -84,6 +83,12 @@ impl PartialEq for OrderedSymMap {
             .iter()
             .zip(other.entries.iter())
             .all(|((k1, v1), (k2, v2))| k1 == k2 && eq_value(v1, v2))
+    }
+}
+
+impl Default for OrderedSymMap {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -181,6 +186,12 @@ pub struct OrderedRuntimeBindingMap {
 impl PartialEq for OrderedRuntimeBindingMap {
     fn eq(&self, other: &Self) -> bool {
         self.entries == other.entries
+    }
+}
+
+impl Default for OrderedRuntimeBindingMap {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -286,7 +297,7 @@ fn as_neovm_int(value: u64) -> i64 {
 // ---------------------------------------------------------------------------
 
 fn string_text_props(value: Value) -> Option<&'static TextPropertyTable> {
-    let ptr = value.as_string_ptr()? as *const StringObj;
+    let ptr = value.as_string_ptr()?;
     Some(unsafe { (*ptr).data.intervals() })
 }
 
@@ -1165,6 +1176,9 @@ impl Eq for HashKey {}
 
 impl HashKey {
     /// Create a string hash key by allocating on the heap.
+    // This constructor accepts owned or borrowed text, unlike `FromStr`, and
+    // is an established public helper used by table clients.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: impl Into<String>) -> Self {
         // For `equal` hash tables, use text content directly
         HashKey::Text(s.into().into_boxed_str())
@@ -1498,12 +1512,11 @@ impl TaggedValue {
     /// returns a fixnum if the value fits in fixnum range, otherwise
     /// allocates a bignum object.
     pub fn make_integer(value: Integer) -> Self {
-        if let Ok(small) = i64::try_from(&value) {
-            if (TaggedValue::MOST_NEGATIVE_FIXNUM..=TaggedValue::MOST_POSITIVE_FIXNUM)
+        if let Ok(small) = i64::try_from(&value)
+            && (TaggedValue::MOST_NEGATIVE_FIXNUM..=TaggedValue::MOST_POSITIVE_FIXNUM)
                 .contains(&small)
-            {
-                return Self::fixnum(small);
-            }
+        {
+            return Self::fixnum(small);
         }
         Self::bignum(value)
     }
@@ -1532,7 +1545,7 @@ impl TaggedValue {
         #[cfg(debug_assertions)]
         if car.is_string() {
             let ptr = car.as_string_ptr().unwrap();
-            let hdr = unsafe { &(*(ptr as *const crate::tagged::header::StringObj)).header };
+            let hdr = unsafe { &(*ptr).header };
             if !matches!(hdr.kind, crate::tagged::header::HeapObjectKind::String) {
                 // Check if the address is actually a VecLike — dump its type_tag
                 let vlh = unsafe { &*(ptr as *const crate::tagged::header::VecLikeHeader) };
@@ -1900,7 +1913,7 @@ impl TaggedValue {
 
     /// Check if a string is multibyte.
     pub fn string_is_multibyte(self) -> bool {
-        self.as_lisp_string().map_or(false, |s| s.is_multibyte())
+        self.as_lisp_string().is_some_and(|s| s.is_multibyte())
     }
 
     /// Get the closure slot vector for a Lambda or Macro.
@@ -2395,7 +2408,7 @@ impl TaggedValue {
         self.to_eql_key()
     }
 
-    fn to_eq_key(&self) -> HashKey {
+    fn to_eq_key(self) -> HashKey {
         match self.kind() {
             ValueKind::Nil => HashKey::Nil,
             ValueKind::T => HashKey::True,
@@ -2420,7 +2433,7 @@ impl TaggedValue {
         }
     }
 
-    fn to_eql_key(&self) -> HashKey {
+    fn to_eql_key(self) -> HashKey {
         match self.kind() {
             ValueKind::Fixnum(n) => HashKey::Int(n),
             ValueKind::Float => HashKey::Float(self.xfloat().to_bits()),
@@ -2442,22 +2455,22 @@ impl TaggedValue {
         }
     }
 
-    fn to_equal_key(&self) -> HashKey {
+    fn to_equal_key(self) -> HashKey {
         let mut seen = Vec::new();
         self.to_equal_key_depth_swp(0, &mut seen, false)
     }
 
-    fn to_equal_key_swp(&self, symbols_with_pos_enabled: bool) -> HashKey {
+    fn to_equal_key_swp(self, symbols_with_pos_enabled: bool) -> HashKey {
         let mut seen = Vec::new();
         self.to_equal_key_depth_swp(0, &mut seen, symbols_with_pos_enabled)
     }
 
-    fn to_equal_key_depth(&self, depth: usize, seen: &mut Vec<usize>) -> HashKey {
+    fn to_equal_key_depth(self, depth: usize, seen: &mut Vec<usize>) -> HashKey {
         self.to_equal_key_depth_swp(depth, seen, false)
     }
 
     fn to_equal_key_depth_swp(
-        &self,
+        self,
         depth: usize,
         seen: &mut Vec<usize>,
         symbols_with_pos_enabled: bool,
@@ -2514,7 +2527,7 @@ impl TaggedValue {
             }
             ValueKind::Veclike(VecLikeType::Vector) | ValueKind::Veclike(VecLikeType::Record) => {
                 if self.is_vector()
-                    && let Some(key) = bool_vector_equal_hash_key(self)
+                    && let Some(key) = bool_vector_equal_hash_key(&self)
                 {
                     return key;
                 }
@@ -2538,7 +2551,7 @@ impl TaggedValue {
                 HashKey::EqualVec(keys.into_boxed_slice())
             }
             ValueKind::Veclike(VecLikeType::Marker) => {
-                super::marker::marker_equal_hash_key_value(self)
+                super::marker::marker_equal_hash_key_value(&self)
             }
             ValueKind::Veclike(VecLikeType::Overlay) => {
                 if let Some(overlay) = self.as_overlay_data() {
@@ -2562,7 +2575,7 @@ impl TaggedValue {
                     return HashKey::Cycle(index as u32);
                 }
                 seen.push(ptr);
-                let key = closure_to_equal_key(*self, depth + 1, seen);
+                let key = closure_to_equal_key(self, depth + 1, seen);
                 seen.pop();
                 key
             }
@@ -3441,7 +3454,7 @@ pub fn list_to_vec(value: &Value) -> Option<Vec<Value>> {
             result.push(hare.cons_car());
             hare = hare.cons_cdr();
             step += 1;
-            if step % 2 == 0 {
+            if step.is_multiple_of(2) {
                 if tortoise.is_cons() {
                     tortoise = tortoise.cons_cdr();
                 }

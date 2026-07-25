@@ -10,13 +10,15 @@
 //! inconsistent for the menu-bar top margin (`FRAME_TOP_MARGIN`), and
 //! matching it would mean reproducing those artifacts rather than a clean
 //! shape:
-//!   * The internal root node always reports `top_line = FRAME_TOP_MARGIN`
-//!     (e.g. `(0 1 80 25)`), but its *horizontal* children are laid out at
-//!     `top = 0` — the parent's reported edges do not contain its children.
-//!   * A *vertical* root combination shifts the content and the minibuffer
-//!     down by the margin, placing the minibuffer at row 25 of a 25-row
-//!     frame (`frame-total-lines` stays 25) — i.e. GNU's batch geometry
-//!     overflows the frame.
+//!
+//! - The internal root node always reports `top_line = FRAME_TOP_MARGIN`
+//!   (e.g. `(0 1 80 25)`), but its *horizontal* children are laid out at
+//!   `top = 0` — the parent's reported edges do not contain its children.
+//! - A *vertical* root combination shifts the content and the minibuffer
+//!   down by the margin, placing the minibuffer at row 25 of a 25-row
+//!   frame (`frame-total-lines` stays 25) — i.e. GNU's batch geometry
+//!   overflows the frame.
+//!
 //! neomacs reports consistent, non-overflowing window-edge coordinates
 //! (menu/tab-bar lines are overlaid chrome that do not reduce the window
 //! text area; verified against GNU Emacs 31.0.90, frame.h

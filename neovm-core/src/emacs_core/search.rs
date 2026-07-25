@@ -291,10 +291,8 @@ fn translate_match_data_to_substring(
     searched_string: super::regex::SearchedString,
 ) -> super::regex::MatchData {
     let mut translated = match_data.clone();
-    for group in translated.groups.iter_mut() {
-        if let Some(group) = group {
-            *group = group.translate_saturating(delta);
-        }
+    for group in translated.groups.iter_mut().flatten() {
+        *group = group.translate_saturating(delta);
     }
     translated.set_string_source(Some(searched_string));
     translated
@@ -677,10 +675,8 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
         ));
         // Group positions are 1-based buffer chars; re-base them to 0-based
         // offsets within `source` (whose char 0 is the first char of group 0).
-        for group in &mut replacement_match_data.groups {
-            if let Some(group) = group {
-                *group = group.saturating_sub(group0_start);
-            }
+        for group in replacement_match_data.groups.iter_mut().flatten() {
+            *group = group.saturating_sub(group0_start);
         }
         replacement_match_data
             .set_string_source(Some(super::regex::SearchedString::Owned(source.clone())));
@@ -706,13 +702,11 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
                 .min(source.byte_len());
             source.slice(0, rel).map(|s| s.schars()).unwrap_or(0)
         };
-        for group in &mut replacement_match_data.groups {
-            if let Some(group) = group {
-                *group = super::regex::MatchGroup::new(
-                    byte_to_char(group.start()),
-                    byte_to_char(group.end()),
-                );
-            }
+        for group in replacement_match_data.groups.iter_mut().flatten() {
+            *group = super::regex::MatchGroup::new(
+                byte_to_char(group.start()),
+                byte_to_char(group.end()),
+            );
         }
         replacement_match_data
             .set_string_source(Some(super::regex::SearchedString::Owned(source.clone())));
@@ -915,48 +909,45 @@ pub(crate) fn builtin_replace_regexp_in_string(
         eval.push_specpdl_root(*searched);
     }
 
-    let result = (|| -> EvalResult {
-        replace_regexp_in_string_lisp(&args, case_fold, |match_span, translated_md| {
-            // GNU wraps the whole function in `save-match-data`, but each REP
-            // callback observes the translated substring-local match data.
-            eval.match_data = translated_md.clone();
-            let Some(match_group) = translated_md
-                .as_ref()
-                .and_then(|md| md.groups.first().and_then(|group| *group))
-            else {
-                return Err(signal(
-                    "error",
-                    vec![
-                        Value::string("replace-match subexpression does not exist"),
-                        Value::fixnum(subexp as i64),
-                    ],
-                ));
-            };
-            let match_start = match_group.start();
-            let match_end = match_group.end();
-            let match_start_byte =
-                super::regex::char_pos_to_byte_lisp_string(match_span, match_start);
-            let match_end_byte = super::regex::char_pos_to_byte_lisp_string(match_span, match_end);
-            let matched = match_span
-                .slice(match_start_byte, match_end_byte)
-                .expect("translated match bounds must slice");
-            let func_result = eval.apply(func, vec![Value::heap_string(matched)])?;
-            let replacement = func_result.as_lisp_string().ok_or_else(|| {
-                signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("stringp"), func_result],
-                )
-            })?;
-            replace_match_on_substring(
-                match_span,
-                replacement,
-                fixedcase,
-                literal,
-                subexp,
-                translated_md,
+    let result = replace_regexp_in_string_lisp(&args, case_fold, |match_span, translated_md| {
+        // GNU wraps the whole function in `save-match-data`, but each REP
+        // callback observes the translated substring-local match data.
+        eval.match_data = translated_md.clone();
+        let Some(match_group) = translated_md
+            .as_ref()
+            .and_then(|md| md.groups.first().and_then(|group| *group))
+        else {
+            return Err(signal(
+                "error",
+                vec![
+                    Value::string("replace-match subexpression does not exist"),
+                    Value::fixnum(subexp as i64),
+                ],
+            ));
+        };
+        let match_start = match_group.start();
+        let match_end = match_group.end();
+        let match_start_byte = super::regex::char_pos_to_byte_lisp_string(match_span, match_start);
+        let match_end_byte = super::regex::char_pos_to_byte_lisp_string(match_span, match_end);
+        let matched = match_span
+            .slice(match_start_byte, match_end_byte)
+            .expect("translated match bounds must slice");
+        let func_result = eval.apply(func, vec![Value::heap_string(matched)])?;
+        let replacement = func_result.as_lisp_string().ok_or_else(|| {
+            signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("stringp"), func_result],
             )
-        })
-    })();
+        })?;
+        replace_match_on_substring(
+            match_span,
+            replacement,
+            fixedcase,
+            literal,
+            subexp,
+            translated_md,
+        )
+    });
 
     eval.match_data = saved_match_data;
     eval.restore_specpdl_roots(gc_roots);

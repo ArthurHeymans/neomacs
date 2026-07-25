@@ -3020,18 +3020,16 @@ impl crate::emacs_core::eval::Context {
             target_fid
         );
         if let Some(fid) = target_fid {
-            if trace_frame_geometry {
-                if let Some(frame) = self.frames.get(fid) {
-                    tracing::debug!(
-                        "apply_resize_input_event: before fid={:?} selected={:?} size={}x{} effective_ws={:?} param_ws={:?}",
-                        fid,
-                        selected_fid,
-                        frame.width,
-                        frame.height,
-                        frame.effective_window_system(),
-                        frame.parameter("window-system")
-                    );
-                }
+            if trace_frame_geometry && let Some(frame) = self.frames.get(fid) {
+                tracing::debug!(
+                    "apply_resize_input_event: before fid={:?} selected={:?} size={}x{} effective_ws={:?} param_ws={:?}",
+                    fid,
+                    selected_fid,
+                    frame.width,
+                    frame.height,
+                    frame.effective_window_system(),
+                    frame.parameter("window-system")
+                );
             }
             apply_resize_input_event_in_keyboard_runtime(
                 &mut self.frames,
@@ -3386,10 +3384,10 @@ impl crate::emacs_core::eval::Context {
         emacs_frame_id: u64,
     ) -> Result<(), crate::emacs_core::error::Flow> {
         self.timer_resume_idle();
-        if let Some(event) = self.make_lispy_delete_frame_event(emacs_frame_id) {
-            if self.execute_special_event_if_bound(event)? {
-                return Ok(());
-            }
+        if let Some(event) = self.make_lispy_delete_frame_event(emacs_frame_id)
+            && self.execute_special_event_if_bound(event)?
+        {
+            return Ok(());
         }
         self.command_loop.running = false;
         Err(crate::emacs_core::error::signal(
@@ -3864,14 +3862,14 @@ impl crate::emacs_core::eval::Context {
                 // corrects the "echo regardless of
                 // echo-keystrokes" bug but leaves the deadline
                 // scheduler for a later pass.
-                if self.lisp_echo_keystrokes_seconds().is_some_and(|s| s > 0.0) {
-                    if let Some(echo_msg) = self.prefix_echo_message(&translated_events) {
-                        let full = match key_sequence_prompt.as_deref() {
-                            Some(prompt) => format!("{prompt}{echo_msg}"),
-                            None => echo_msg,
-                        };
-                        self.set_current_message(Some(LispString::from_utf8(&full)));
-                    }
+                if self.lisp_echo_keystrokes_seconds().is_some_and(|s| s > 0.0)
+                    && let Some(echo_msg) = self.prefix_echo_message(&translated_events)
+                {
+                    let full = match key_sequence_prompt.as_deref() {
+                        Some(prompt) => format!("{prompt}{echo_msg}"),
+                        None => echo_msg,
+                    };
+                    self.set_current_message(Some(LispString::from_utf8(&full)));
                 }
                 continue;
             }
@@ -3908,9 +3906,7 @@ impl crate::emacs_core::eval::Context {
                 return Some(event);
             }
 
-            let Some(ref rx) = self.input_rx else {
-                return None;
-            };
+            let rx = self.input_rx.as_ref()?;
             match rx.try_recv() {
                 Ok(event) => self
                     .command_loop
@@ -5153,9 +5149,7 @@ impl crate::emacs_core::eval::Context {
             ValueKind::Cons => {
                 let mut slots = crate::emacs_core::value::list_to_vec(&event)?;
                 let head = slots.first_mut()?;
-                if head.as_symbol_name().is_none() {
-                    return None;
-                }
+                head.as_symbol_name()?;
                 *head = Value::symbol(symbol_name);
                 Some(Value::list(slots))
             }
@@ -5329,6 +5323,7 @@ impl crate::emacs_core::eval::Context {
             .unwrap_or(Value::NIL)
     }
 
+    #[allow(clippy::too_many_arguments)] // event geometry mirrors the Lisp mouse-event payload
     fn chrome_mouse_click_event(
         &self,
         area: &'static str,
@@ -5835,10 +5830,10 @@ impl crate::emacs_core::eval::Context {
         self.command_loop.idle_start_time = Some(now);
         self.command_loop.last_idle_start_time = Some(now);
 
-        if self.obarray.fboundp("internal-timer-start-idle") {
-            if let Err(err) = self.apply(Value::symbol("internal-timer-start-idle"), vec![]) {
-                tracing::warn!("internal-timer-start-idle failed: {:?}", err);
-            }
+        if self.obarray.fboundp("internal-timer-start-idle")
+            && let Err(err) = self.apply(Value::symbol("internal-timer-start-idle"), vec![])
+        {
+            tracing::warn!("internal-timer-start-idle failed: {:?}", err);
         }
     }
 

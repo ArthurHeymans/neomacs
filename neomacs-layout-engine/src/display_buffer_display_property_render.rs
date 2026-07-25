@@ -33,6 +33,9 @@ pub(crate) struct BufferDisplayPropertyTextReplacementWalkUpdate {
     source_position: DisplaySourceTextPosition,
 }
 
+// These short-lived walk outcomes carry complete display items by value;
+// boxing would add an allocation on the text-layout hot path.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum BufferDisplayPropertyTextReplacementRenderOutcome {
     Rendered(BufferDisplayPropertyTextReplacementOutcome),
     Fallback(DisplaySourceStepItem),

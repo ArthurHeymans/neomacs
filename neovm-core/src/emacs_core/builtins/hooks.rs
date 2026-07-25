@@ -57,12 +57,11 @@ fn expect_optional_live_frame_designator_in_state(
     if value.is_nil() {
         return Ok(());
     }
-    if value.is_frame() {
-        if let Some(fid) = value.as_frame_id() {
-            if frames.get(crate::window::FrameId(fid)).is_some() {
-                return Ok(());
-            }
-        }
+    if value.is_frame()
+        && let Some(fid) = value.as_frame_id()
+        && frames.get(crate::window::FrameId(fid)).is_some()
+    {
+        return Ok(());
     }
     Err(signal(
         LispCondition::WrongTypeArgument,
@@ -515,12 +514,11 @@ pub(super) fn expect_optional_live_window_designator(
     if value.is_nil() {
         return Ok(());
     }
-    if value.is_window() {
-        if let Some(wid) = value.as_window_id() {
-            if eval.frames.is_live_window_id(crate::window::WindowId(wid)) {
-                return Ok(());
-            }
-        }
+    if value.is_window()
+        && let Some(wid) = value.as_window_id()
+        && eval.frames.is_live_window_id(crate::window::WindowId(wid))
+    {
+        return Ok(());
     }
     Err(signal(
         LispCondition::WrongTypeArgument,
@@ -916,7 +914,7 @@ pub(crate) fn builtin_current_window_configuration(
     expect_max_args("current-window-configuration", &args, 1)?;
 
     let frame = if let Some(frame) = args.first() {
-        expect_optional_live_frame_designator_in_state(frame, &mut eval.frames)?;
+        expect_optional_live_frame_designator_in_state(frame, &eval.frames)?;
         if frame.is_nil() {
             super::window_cmds::selected_frame_impl(&mut eval.frames, &mut eval.buffers, vec![])?
         } else {
@@ -950,7 +948,7 @@ pub(crate) fn builtin_current_window_configuration(
             minibuffer_window: frame_state.minibuffer_window,
             minibuffer_leaf: frame_state.minibuffer_leaf.clone(),
         };
-        normalize_selected_window_point_in_snapshot(&mut snapshot, &mut eval.buffers);
+        normalize_selected_window_point_in_snapshot(&mut snapshot, &eval.buffers);
         save_snapshot_persistent_window_parameters(
             &mut snapshot,
             eval.obarray
@@ -963,10 +961,10 @@ pub(crate) fn builtin_current_window_configuration(
         WINDOW_CONFIGURATION_SNAPSHOTS.with(|slot| {
             let mut store = slot.borrow_mut();
             store.insert(serial, snapshot);
-            if store.len() > 4096 {
-                if let Some(oldest) = store.keys().min().copied() {
-                    store.remove(&oldest);
-                }
+            if store.len() > 4096
+                && let Some(oldest) = store.keys().min().copied()
+            {
+                store.remove(&oldest);
             }
         });
         return Ok(make_window_configuration_value(frame, serial, roots));
@@ -1059,23 +1057,23 @@ pub(crate) fn builtin_set_window_configuration(
             )
             .ok()
             .and_then(|value| value.as_buffer_id());
-            if let Some(substitute) = substitute {
-                if let Some(frame) = eval.frames.get_mut(snapshot.frame_id) {
-                    for wid in dead_leaf_windows {
-                        if let Some(crate::window::Window::Leaf { buffer_id, .. }) =
-                            frame.find_window_mut(wid)
-                        {
-                            *buffer_id = substitute;
-                        }
+            if let Some(substitute) = substitute
+                && let Some(frame) = eval.frames.get_mut(snapshot.frame_id)
+            {
+                for wid in dead_leaf_windows {
+                    if let Some(crate::window::Window::Leaf { buffer_id, .. }) =
+                        frame.find_window_mut(wid)
+                    {
+                        *buffer_id = substitute;
                     }
                 }
             }
         }
-        if let Some((buffer_id, point)) = selected_window_state {
-            if let Some(buffer) = eval.buffers.get(buffer_id) {
-                let byte_pos = buffer.lisp_pos_to_emacs_byte_pos(point);
-                let _ = eval.buffers.goto_buffer_emacs_byte_pos(buffer_id, byte_pos);
-            }
+        if let Some((buffer_id, point)) = selected_window_state
+            && let Some(buffer) = eval.buffers.get(buffer_id)
+        {
+            let byte_pos = buffer.lisp_pos_to_emacs_byte_pos(point);
+            let _ = eval.buffers.goto_buffer_emacs_byte_pos(buffer_id, byte_pos);
         }
         if let Some(buffer_id) = snapshot.current_buffer {
             if eval.buffers.get(buffer_id).is_some() {
@@ -1236,7 +1234,7 @@ pub(crate) fn builtin_featurep(eval: &mut super::eval::Context, args: Vec<Value>
         &eval.obarray,
         &mut eval.features,
     );
-    if !eval.features.iter().any(|feature| *feature == sym_id) {
+    if !eval.features.contains(&sym_id) {
         return Ok(Value::NIL);
     }
 

@@ -313,7 +313,7 @@ impl ReadSymbolShorthands {
                 Some((shorthand, longhand))
             })
             .collect::<Vec<_>>();
-        pairs.sort_by(|left, right| right.0.sbytes().cmp(&left.0.sbytes()));
+        pairs.sort_by_key(|pair| std::cmp::Reverse(pair.0.sbytes()));
         Some(Self { pairs })
     }
 
@@ -494,14 +494,14 @@ fn substitute_read_placeholder_recurse(
             }
             let _ = subtree.replace_vector_data(items);
         }
-    } else if subtree.is_record() {
-        if let Some(items) = subtree.as_record_data() {
-            let mut items = items.clone();
-            for item in &mut items {
-                *item = substitute_read_placeholder_recurse(object, placeholder, *item, seen);
-            }
-            let _ = subtree.replace_record_data(items);
+    } else if subtree.is_record()
+        && let Some(items) = subtree.as_record_data()
+    {
+        let mut items = items.clone();
+        for item in &mut items {
+            *item = substitute_read_placeholder_recurse(object, placeholder, *item, seen);
         }
+        let _ = subtree.replace_record_data(items);
     }
 
     subtree
@@ -2053,33 +2053,33 @@ impl<'a> Reader<'a> {
         let mut user_cmp_function = None;
         let mut user_hash_function = None;
 
-        if let Some(test_value) = plist_get(plist, HashTableLiteralKey::Test) {
-            if !test_value.is_nil() {
-                let Some(name) = test_value.as_symbol_name() else {
-                    return Err(self.signal_error(
-                        "wrong-type-argument",
-                        vec![Value::symbol("symbolp"), test_value],
-                        "symbolp",
-                    ));
-                };
-                test_name = Some(intern(name));
-                test = match HashTableTest::from_symbol_name(name) {
-                    Some(test) => test,
-                    None => {
-                        if let Some(alias) = lookup_hash_table_test_alias(name) {
-                            user_cmp_function = alias.user_cmp_function;
-                            user_hash_function = alias.user_hash_function;
-                            alias.standard_test.unwrap_or(HashTableTest::Equal)
-                        } else {
-                            return Err(self.signal_error(
-                                "error",
-                                vec![Value::string("Invalid hash table test"), test_value],
-                                "Invalid hash table test",
-                            ));
-                        }
+        if let Some(test_value) = plist_get(plist, HashTableLiteralKey::Test)
+            && !test_value.is_nil()
+        {
+            let Some(name) = test_value.as_symbol_name() else {
+                return Err(self.signal_error(
+                    "wrong-type-argument",
+                    vec![Value::symbol("symbolp"), test_value],
+                    "symbolp",
+                ));
+            };
+            test_name = Some(intern(name));
+            test = match HashTableTest::from_symbol_name(name) {
+                Some(test) => test,
+                None => {
+                    if let Some(alias) = lookup_hash_table_test_alias(name) {
+                        user_cmp_function = alias.user_cmp_function;
+                        user_hash_function = alias.user_hash_function;
+                        alias.standard_test.unwrap_or(HashTableTest::Equal)
+                    } else {
+                        return Err(self.signal_error(
+                            "error",
+                            vec![Value::string("Invalid hash table test"), test_value],
+                            "Invalid hash table test",
+                        ));
                     }
-                };
-            }
+                }
+            };
         }
 
         let weakness = match plist_get(plist, HashTableLiteralKey::Weakness) {
@@ -2161,64 +2161,64 @@ impl<'a> Reader<'a> {
             )));
         }
 
-        if !token.had_escape {
-            if let Some(token_text) = token.as_utf8() {
-                // Try integer. Funnel through Value::make_integer so a value
-                // that fits in i64 but not in fixnum (62-bit) is promoted to
-                // a bignum, matching GNU `string_to_number` behavior. On i64
-                // overflow, fall through to a malachite::Integer parse so true
-                // bignum literals work.
-                if looks_like_integer(token_text) {
-                    // A single trailing "." with no fractional digits and no
-                    // exponent is an integer terminator in GNU's reader (e.g.
-                    // "5." reads as the integer 5, not the float 5.0). Strip it
-                    // before parsing the magnitude. See `string_to_number` in
-                    // GNU `src/lread.c`: float_syntax requires TRAIL_INT or an
-                    // exponent, so "1." is lexed as an integer.
-                    let digits = token_text.strip_suffix('.').unwrap_or(token_text);
-                    if let Ok(n) = digits.parse::<i64>() {
-                        return Ok(Value::make_integer(Integer::from(n)));
-                    }
-                    if let Ok(parsed) = digits.parse::<Integer>() {
-                        return Ok(Value::make_integer(parsed));
-                    }
+        if !token.had_escape
+            && let Some(token_text) = token.as_utf8()
+        {
+            // Try integer. Funnel through Value::make_integer so a value
+            // that fits in i64 but not in fixnum (62-bit) is promoted to
+            // a bignum, matching GNU `string_to_number` behavior. On i64
+            // overflow, fall through to a malachite::Integer parse so true
+            // bignum literals work.
+            if looks_like_integer(token_text) {
+                // A single trailing "." with no fractional digits and no
+                // exponent is an integer terminator in GNU's reader (e.g.
+                // "5." reads as the integer 5, not the float 5.0). Strip it
+                // before parsing the magnitude. See `string_to_number` in
+                // GNU `src/lread.c`: float_syntax requires TRAIL_INT or an
+                // exponent, so "1." is lexed as an integer.
+                let digits = token_text.strip_suffix('.').unwrap_or(token_text);
+                if let Ok(n) = digits.parse::<i64>() {
+                    return Ok(Value::make_integer(Integer::from(n)));
                 }
+                if let Ok(parsed) = digits.parse::<Integer>() {
+                    return Ok(Value::make_integer(parsed));
+                }
+            }
 
-                // Try float — handles 1.5, 1e10, .5, 1.5e-3, etc.
-                if looks_like_float(token_text) {
-                    if let Ok(f) = token_text.parse::<f64>() {
-                        return Ok(Value::make_float(f));
-                    }
-                    if let Some(f) = parse_emacs_special_float(token_text) {
-                        return Ok(Value::make_float(f));
-                    }
+            // Try float — handles 1.5, 1e10, .5, 1.5e-3, etc.
+            if looks_like_float(token_text) {
+                if let Ok(f) = token_text.parse::<f64>() {
+                    return Ok(Value::make_float(f));
                 }
+                if let Some(f) = parse_emacs_special_float(token_text) {
+                    return Ok(Value::make_float(f));
+                }
+            }
 
-                // t and nil
-                if token_text == "t" {
-                    return Ok(Value::T);
-                }
-                if token_text == "nil" {
-                    return Ok(Value::NIL);
-                }
+            // t and nil
+            if token_text == "t" {
+                return Ok(Value::T);
+            }
+            if token_text == "nil" {
+                return Ok(Value::NIL);
+            }
 
-                // A bare `.` is the symbol `.` only when it directly precedes a
-                // closing delimiter (e.g. `(a .)` => `(a \.)`, matching GNU
-                // lread.c which does not treat `)`/`]` as dot terminators).
-                // Otherwise — at top level (`(read ".")`) or as a dotted
-                // separator with no following element — GNU signals
-                // invalid-read-syntax instead of reading the symbol `\.`.
-                if token_text == "." {
-                    match self.current_code() {
-                        Some(c) if c == b')' as u32 || c == b']' as u32 => {}
-                        _ => return Err(self.error(".")),
-                    }
+            // A bare `.` is the symbol `.` only when it directly precedes a
+            // closing delimiter (e.g. `(a .)` => `(a \.)`, matching GNU
+            // lread.c which does not treat `)`/`]` as dot terminators).
+            // Otherwise — at top level (`(read ".")`) or as a dotted
+            // separator with no following element — GNU signals
+            // invalid-read-syntax instead of reading the symbol `\.`.
+            if token_text == "." {
+                match self.current_code() {
+                    Some(c) if c == b')' as u32 || c == b']' as u32 => {}
+                    _ => return Err(self.error(".")),
                 }
+            }
 
-                // Emacs reader shorthand: bare ## reads as the symbol with empty name.
-                if token_text == "##" && !token.had_escape {
-                    return Ok(Value::from_sym_id(intern("")));
-                }
+            // Emacs reader shorthand: bare ## reads as the symbol with empty name.
+            if token_text == "##" && !token.had_escape {
+                return Ok(Value::from_sym_id(intern("")));
             }
         }
 
@@ -2228,12 +2228,12 @@ impl<'a> Reader<'a> {
         // same atom the LispString path would (name_atom_from_str for ASCII ==
         // LispString::from_unibyte). This skips the per-token heap LispString
         // for the overwhelming majority of symbols read while loading.
-        if self.shorthands.is_none() && !token.had_escape {
-            if let Some(text) = token.as_utf8() {
-                if text.is_ascii() {
-                    return Ok(Value::from_sym_id(intern(text)));
-                }
-            }
+        if self.shorthands.is_none()
+            && !token.had_escape
+            && let Some(text) = token.as_utf8()
+            && text.is_ascii()
+        {
+            return Ok(Value::from_sym_id(intern(text)));
         }
 
         // Cold path: non-ASCII / escaped / shorthand-rewritten symbols keep the
@@ -2450,10 +2450,10 @@ impl<'a> Reader<'a> {
     /// one-entry `step_cache`.  The read hot path peeks then advances over the
     /// same position, so caching makes it decode each char once.
     fn code_and_next(&self, pos: usize) -> Option<(u32, usize)> {
-        if let Some((cached_pos, code, next)) = self.step_cache.get() {
-            if cached_pos == pos {
-                return Some((code, next));
-            }
+        if let Some((cached_pos, code, next)) = self.step_cache.get()
+            && cached_pos == pos
+        {
+            return Some((code, next));
         }
         let decoded = self.decode_step(pos)?;
         self.step_cache.set(Some((pos, decoded.0, decoded.1)));

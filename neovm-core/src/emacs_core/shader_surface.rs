@@ -219,7 +219,7 @@ fn resolve_channel_value(
 /// objects, so an un-destroyed surface no longer leaks until exit. Signals
 /// an error otherwise — including WGSL compile errors with naga diagnostics.
 pub(crate) fn builtin_neomacs_surface_create(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if args.len() % 2 != 0 {
+    if !args.len().is_multiple_of(2) {
         return Err(surface_error(
             "neomacs-surface-create: expected keyword/value pairs",
         ));

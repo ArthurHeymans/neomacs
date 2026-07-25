@@ -24,18 +24,17 @@ pub(crate) fn builtin_ignore(_args: Vec<Value>) -> EvalResult {
 /// `message_log_check_duplicate` (xdisp.c).
 fn parse_logged_message_line(line: &[u8]) -> (&[u8], i64) {
     const SUFFIX: &[u8] = b" times]";
-    if let Some(rest) = line.strip_suffix(SUFFIX) {
-        if let Some(open) = rest.iter().rposition(|&b| b == b'[') {
-            let digits = &rest[open + 1..];
-            if open >= 2
-                && rest[open - 1] == b' '
-                && !digits.is_empty()
-                && digits.iter().all(u8::is_ascii_digit)
-            {
-                if let Ok(k) = std::str::from_utf8(digits).unwrap_or("").parse::<i64>() {
-                    return (&rest[..open - 1], k);
-                }
-            }
+    if let Some(rest) = line.strip_suffix(SUFFIX)
+        && let Some(open) = rest.iter().rposition(|&b| b == b'[')
+    {
+        let digits = &rest[open + 1..];
+        if open >= 2
+            && rest[open - 1] == b' '
+            && !digits.is_empty()
+            && digits.iter().all(u8::is_ascii_digit)
+            && let Ok(k) = std::str::from_utf8(digits).unwrap_or("").parse::<i64>()
+        {
+            return (&rest[..open - 1], k);
         }
     }
     (line, 1)
@@ -67,7 +66,7 @@ fn message_log_coalesce(
     let read_start = EmacsBytePos::new(old_full_end.get().saturating_sub(window).max(bob.get()));
     let tail = buf.buffer_substring_bytes_range(EmacsByteRange::new(read_start, old_full_end));
     // Each logged message ends with a newline; strip it and isolate the line.
-    let Some((&b'\n', without_nl)) = tail.split_last().map(|(l, r)| (l, r)) else {
+    let Some((&b'\n', without_nl)) = tail.split_last() else {
         return no_coalesce;
     };
     let (line, line_bol_offset) = match without_nl.iter().rposition(|&b| b == b'\n') {
@@ -274,16 +273,15 @@ pub(crate) fn builtin_message(ctx: &mut super::eval::Context, args: Vec<Value>) 
         ctx.clear_echo_area_message();
         return Ok(Value::NIL);
     }
-    if args[0].is_string() {
-        if args[0]
+    if args[0].is_string()
+        && args[0]
             .as_lisp_string()
             .expect("string")
             .as_bytes()
             .is_empty()
-        {
-            ctx.clear_echo_area_message();
-            return Ok(args[0]);
-        }
+    {
+        ctx.clear_echo_area_message();
+        return Ok(args[0]);
     }
     // GNU Emacs's `message` ALWAYS calls `format-message` on the args,
     // even for a single string argument.  This converts %% -> % and

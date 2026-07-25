@@ -278,7 +278,7 @@ fn parse_xml_attributes(
         let raw_key = String::from_utf8_lossy(key);
         let key = scopes.resolve(raw_key.as_ref());
         let val = attr
-            .unescape_value()
+            .normalized_value(quick_xml::XmlVersion::Implicit1_0)
             .map(|value| value.into_owned())
             .unwrap_or_else(|_| String::from_utf8_lossy(&attr.value).into_owned());
         result.push(Value::cons(Value::symbol(&key), Value::string(&val)));

@@ -123,13 +123,14 @@ pub(crate) fn builtin_redraw_frame(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_range_args("redraw-frame", &args, 0, 1)?;
-    if let Some(frame) = args.first() {
-        if !frame.is_nil() && !live_frame_designator_p(eval, frame) {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("frame-live-p"), *frame],
-            ));
-        }
+    if let Some(frame) = args.first()
+        && !frame.is_nil()
+        && !live_frame_designator_p(eval, frame)
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("frame-live-p"), *frame],
+        ));
     }
     Ok(Value::NIL)
 }
@@ -218,9 +219,11 @@ pub(crate) fn builtin_internal_show_cursor_p(
 /// (force-window-update &optional OBJECT) -> t/nil
 ///
 /// GNU `Fforce_window_update` (`src/window.c:4488`):
-///   * nil OBJECT      -> mark everything for redisplay, return t.
-///   * a live WINDOW   -> mark that window, return t.
-///   * a buffer/string -> return t iff that buffer is shown in some window.
+///
+/// - nil OBJECT: mark everything for redisplay, return t.
+/// - a live WINDOW: mark that window, return t.
+/// - a buffer/string: return t iff that buffer is shown in some window.
+///
 /// neomacs has no incremental redisplay state to mark, but the *return value*
 /// is observable (oracle test cx409): a live window must yield t, not nil.
 /// The previous stub returned nil for *every* non-nil OBJECT, which is wrong

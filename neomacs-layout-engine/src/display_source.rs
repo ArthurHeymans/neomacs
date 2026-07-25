@@ -2200,7 +2200,7 @@ pub(crate) enum LispStringSourceOrigin {
 }
 
 impl LispStringSourceOrigin {
-    const fn from_display_property(self) -> bool {
+    const fn is_from_display_property(self) -> bool {
         matches!(self, Self::BufferDisplayReplacement(_))
     }
 
@@ -2244,6 +2244,9 @@ impl DisplayItemSource for LispStringSourceCursor {
     }
 }
 
+// The action transports complete display items without allocating in the
+// string-source walk.
+#[allow(clippy::large_enum_variant)]
 enum LispStringAction {
     PopFrame,
     PushReplacement {
@@ -2387,7 +2390,7 @@ impl LispStringSourceFrame {
             value,
             base_face,
             replacement_source,
-            origin.from_display_property(),
+            origin.is_from_display_property(),
             origin.pointer_occurrence(),
         )
     }
@@ -2672,6 +2675,8 @@ pub(crate) enum DisplayPropertySourceAction {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+// Cursor actions are ephemeral hot-path values; keep `DisplayItem` inline.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum DisplayPropertySourceCursorAction {
     PushReplacement {
         value: Value,

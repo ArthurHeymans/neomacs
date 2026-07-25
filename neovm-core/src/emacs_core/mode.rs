@@ -230,6 +230,7 @@ impl ModeLineFormat {
     }
 
     /// Render the mode-line to a string for the given buffer.
+    #[allow(clippy::too_many_arguments)] // mode-line fields mirror the renderer's public inputs
     pub fn render(
         &self,
         buffer_id: u64,
@@ -256,10 +257,10 @@ impl ModeLineFormat {
                 }
                 ModeLineElement::MinorModes => {
                     for minor_name in registry.active_minor_modes(buffer_id) {
-                        if let Some(mode) = registry.minor_modes.get(&mode_symbol_id(minor_name)) {
-                            if let Some(ref lighter) = mode.lighter {
-                                out.push_str(&mode_display_text(lighter));
-                            }
+                        if let Some(mode) = registry.minor_modes.get(&mode_symbol_id(minor_name))
+                            && let Some(ref lighter) = mode.lighter
+                        {
+                            out.push_str(&mode_display_text(lighter));
                         }
                     }
                 }
@@ -462,10 +463,10 @@ impl ModeRegistry {
     pub fn is_minor_mode_active(&self, buffer_id: u64, mode_name: &str) -> bool {
         let mode_symbol = mode_symbol(mode_name);
         // Check buffer-local first.
-        if let Some(modes) = self.buffer_minor_modes.get(&buffer_id) {
-            if modes.contains(&mode_symbol) {
-                return true;
-            }
+        if let Some(modes) = self.buffer_minor_modes.get(&buffer_id)
+            && modes.contains(&mode_symbol)
+        {
+            return true;
         }
         // Check global.
         self.global_minor_modes.contains(&mode_symbol)
@@ -531,14 +532,13 @@ impl ModeRegistry {
 
     /// Register a custom variable.
     pub fn register_custom_variable(&mut self, name: &str, var: CustomVariable) {
-        if let Some(group_name) = var.group {
-            if let Some(group_symbol) = group_name.as_symbol_id()
-                && let Some(group) = self.custom_groups.get_mut(&group_symbol)
-            {
-                let member = mode_symbol(name);
-                if !group.members.contains(&member) {
-                    group.members.push(member);
-                }
+        if let Some(group_name) = var.group
+            && let Some(group_symbol) = group_name.as_symbol_id()
+            && let Some(group) = self.custom_groups.get_mut(&group_symbol)
+        {
+            let member = mode_symbol(name);
+            if !group.members.contains(&member) {
+                group.members.push(member);
             }
         }
         self.custom_variables.insert(mode_symbol_id(name), var);
@@ -601,10 +601,10 @@ impl ModeRegistry {
         let mut parts = vec![pretty];
 
         for minor_name in self.active_minor_modes(buffer_id) {
-            if let Some(mode) = self.minor_modes.get(&mode_symbol_id(minor_name)) {
-                if let Some(ref lighter) = mode.lighter {
-                    parts.push(mode_display_text(lighter));
-                }
+            if let Some(mode) = self.minor_modes.get(&mode_symbol_id(minor_name))
+                && let Some(ref lighter) = mode.lighter
+            {
+                parts.push(mode_display_text(lighter));
             }
         }
 
@@ -670,6 +670,7 @@ impl ModeRegistry {
     pub(crate) fn dump_fundamental_mode(&self) -> Value {
         self.fundamental_mode
     }
+    #[allow(clippy::too_many_arguments)] // restores the manager's independent persisted tables
     pub(crate) fn from_dump(
         major_modes: HashMap<SymId, MajorMode>,
         minor_modes: HashMap<SymId, MinorMode>,

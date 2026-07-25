@@ -472,7 +472,7 @@ pub(crate) fn parse_sort_options(args: &[Value]) -> Result<SortOptions, Flow> {
     if args.len() == 2 {
         lessp_fn = args[1];
         in_place = true;
-    } else if args.len() % 2 == 0 {
+    } else if args.len().is_multiple_of(2) {
         return Err(signal(
             "error",
             vec![Value::string("Invalid argument list")],
@@ -522,7 +522,7 @@ pub(crate) fn builtin_sort_slice(eval: &mut super::eval::Context, args: &[Value]
         lessp_fn,
         reverse,
         in_place,
-    } = parse_sort_options(&args)?;
+    } = parse_sort_options(args)?;
 
     match args[0].kind() {
         ValueKind::Nil => Ok(Value::NIL),
@@ -1043,6 +1043,7 @@ fn merge_runs(
     }
 }
 
+#[allow(clippy::too_many_arguments)] // TimSort merge state follows the reference algorithm directly
 fn merge_lo(
     runtime: &mut impl SortRuntime,
     items: &mut [SortItem],
@@ -1209,6 +1210,7 @@ fn merge_lo(
     }
 }
 
+#[allow(clippy::too_many_arguments)] // TimSort merge state follows the reference algorithm directly
 fn merge_hi(
     runtime: &mut impl SortRuntime,
     items: &mut [SortItem],

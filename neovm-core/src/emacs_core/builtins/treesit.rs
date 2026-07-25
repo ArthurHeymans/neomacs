@@ -799,10 +799,10 @@ fn pattern_keyword_expansion(name: &str) -> Option<&'static str> {
 }
 
 fn expand_pattern_value(pattern: Value) -> Result<String, Flow> {
-    if let Some(name) = pattern.as_symbol_name() {
-        if let Some(expanded) = pattern_keyword_expansion(name) {
-            return Ok(expanded.to_string());
-        }
+    if let Some(name) = pattern.as_symbol_name()
+        && let Some(expanded) = pattern_keyword_expansion(name)
+    {
+        return Ok(expanded.to_string());
     }
 
     if let Some(text) = pattern.as_str_owned() {
@@ -1297,6 +1297,7 @@ fn descend_to_leaf(mut node: tree_sitter::Node<'_>, forward: bool) -> tree_sitte
     node
 }
 
+#[allow(clippy::too_many_arguments)] // tree-sitter traversal state is explicit and allocation-free
 fn search_subtree_impl<'tree>(
     eval: &mut super::eval::Context,
     parser_id: u64,
@@ -2021,13 +2022,12 @@ pub(crate) fn builtin_treesit_parser_create(
     }
 
     let (orig_buffer_id, root_buffer_id, buffer_value) = resolve_buffer_ids(eval, args.get(1))?;
-    if args.get(2).is_none_or(|value| value.is_nil()) {
-        if let Some(existing) = eval
+    if args.get(2).is_none_or(|value| value.is_nil())
+        && let Some(existing) = eval
             .treesit
             .find_reusable_parser(orig_buffer_id, language, tag)
-        {
-            return Ok(existing);
-        }
+    {
+        return Ok(existing);
     }
 
     let (loaded_language, _) = load_language(eval, language).map_err(|detail| {
@@ -2987,7 +2987,7 @@ pub(crate) fn builtin_treesit_parser_set_embed_level(
         Value::NIL
     } else {
         let level = expect_wholenump(&args[1])?;
-        Value::fixnum(level as i64)
+        Value::fixnum(level)
     };
     if !args[0].set_record_slot(PARSER_SLOT_EMBED_LEVEL, level) {
         return Err(signal(

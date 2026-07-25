@@ -285,6 +285,9 @@ fn current_unix_timestamp() -> i64 {
 /// (`lib/strftime.c`): the flag characters `_`/`-`/`+`/`0` select these, and
 /// `ZERO_PAD` is the default that each directive may override.
 #[derive(Clone, Copy, PartialEq, Eq)]
+// Names mirror GNU `enum pad_style`; retaining that vocabulary makes the
+// strftime port directly auditable.
+#[allow(clippy::enum_variant_names)]
 enum Pad {
     Zero,       // ZERO_PAD: directive default; turns into AlwaysZero (or SpacePad)
     SpacePad,   // SPACE_PAD: `_` flag

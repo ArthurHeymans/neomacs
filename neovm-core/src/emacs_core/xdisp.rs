@@ -272,23 +272,21 @@ fn space_spec_advance_columns(plist: Value, cur_col: usize) -> Option<usize> {
     let qcalign = Value::symbol(":align-to");
 
     // `:width N` => advance N columns from the current position.
-    if let Some(width) = super::plist::plist_get(plist, &qcwidth) {
-        if !width.is_nil() {
-            if let Some(cols) = calc_space_columns(width, false) {
-                return Some(cols.max(0.0).round() as usize);
-            }
-        }
+    if let Some(width) = super::plist::plist_get(plist, &qcwidth)
+        && !width.is_nil()
+        && let Some(cols) = calc_space_columns(width, false)
+    {
+        return Some(cols.max(0.0).round() as usize);
     }
 
     // `:align-to COL` => advance so the running column reaches COL (never go
     // backwards, matching GNU which never produces a negative-width space).
-    if let Some(align) = super::plist::plist_get(plist, &qcalign) {
-        if !align.is_nil() {
-            if let Some(target) = calc_space_columns(align, true) {
-                let target = target.max(0.0).round() as usize;
-                return Some(target.saturating_sub(cur_col));
-            }
-        }
+    if let Some(align) = super::plist::plist_get(plist, &qcalign)
+        && !align.is_nil()
+        && let Some(target) = calc_space_columns(align, true)
+    {
+        let target = target.max(0.0).round() as usize;
+        return Some(target.saturating_sub(cur_col));
     }
 
     None
@@ -316,6 +314,7 @@ pub(crate) enum CharColumnWidth {
 /// `char_width` selects the per-char column accounting (see [`CharColumnWidth`]).
 /// `x_limit` / `y_limit` cap the measured columns-per-line and lines (used by
 /// `buffer-text-pixel-size`); pass `None` for an unbounded scan.
+#[allow(clippy::too_many_arguments)] // measurement bounds and display policy are independent inputs
 pub(crate) fn region_text_metrics_with_display(
     eval: &super::eval::Context,
     buffer_id: BufferId,
@@ -374,13 +373,12 @@ pub(crate) fn region_text_metrics_with_display(
         // column width and advance over the whole property/overlay run atomically.
         if let Some((width, run_end)) =
             display_space_run(eval, buf, scan, state.cur_col, &display_sym, end)
+            && run_end > scan
         {
-            if run_end > scan {
-                state.advance_columns(width);
-                state.last_code = None;
-                scan = run_end.min(end);
-                continue;
-            }
+            state.advance_columns(width);
+            state.last_code = None;
+            scan = run_end.min(end);
+            continue;
         }
 
         let scan_pos = EmacsBytePos::new(scan);
@@ -456,11 +454,11 @@ impl ScanState {
     }
 
     fn cap_line(&mut self) {
-        if let Some(limit) = self.x_limit {
-            if self.cur_col >= limit {
-                self.cur_col = limit;
-                self.line_capped = true;
-            }
+        if let Some(limit) = self.x_limit
+            && self.cur_col >= limit
+        {
+            self.cur_col = limit;
+            self.line_capped = true;
         }
     }
 
@@ -660,36 +658,33 @@ fn collect_overlay_strings_at(buf: &Buffer, pos: usize, before: bool) -> Vec<Ove
     for oid in overlay_ids {
         let priority = overlay_string_priority(oid);
 
-        if before && buf.overlays.overlay_start_emacs_byte_pos(oid) == Some(bytepos) {
-            if let Some(val) = buf
+        if before
+            && buf.overlays.overlay_start_emacs_byte_pos(oid) == Some(bytepos)
+            && let Some(val) = buf
                 .overlays
                 .overlay_get_named(oid, Value::symbol("before-string"))
-            {
-                if val.is_string() {
-                    entries.push(OverlayStringEntry {
-                        string: val,
-                        overlay: oid,
-                        after_string_p: false,
-                        priority,
-                    });
-                }
-            }
+            && val.is_string()
+        {
+            entries.push(OverlayStringEntry {
+                string: val,
+                overlay: oid,
+                after_string_p: false,
+                priority,
+            });
         }
 
-        if buf.overlays.overlay_end_emacs_byte_pos(oid) == Some(bytepos) {
-            if let Some(val) = buf
+        if buf.overlays.overlay_end_emacs_byte_pos(oid) == Some(bytepos)
+            && let Some(val) = buf
                 .overlays
                 .overlay_get_named(oid, Value::symbol("after-string"))
-            {
-                if val.is_string() {
-                    entries.push(OverlayStringEntry {
-                        string: val,
-                        overlay: oid,
-                        after_string_p: true,
-                        priority,
-                    });
-                }
-            }
+            && val.is_string()
+        {
+            entries.push(OverlayStringEntry {
+                string: val,
+                overlay: oid,
+                after_string_p: true,
+                priority,
+            });
         }
     }
 
@@ -765,24 +760,23 @@ fn walk_overlay_string(
         // `display` change, advancing the column by the resolved width.
         if let Some((width, run_end_char)) =
             string_display_space_run(eval, string, char_index, state.cur_col, display_sym)
+            && run_end_char > char_index
         {
-            if run_end_char > char_index {
-                state.advance_columns(width);
-                // Skip the covered chars (advance both char and byte cursors).
-                let mut skip = run_end_char.min(schars) - char_index;
-                while skip > 0 && byte_off < bytes.len() {
-                    let len = if multibyte {
-                        super::emacs_char::string_char(&bytes[byte_off..]).1.max(1)
-                    } else {
-                        1
-                    };
-                    byte_off += len;
-                    char_index += 1;
-                    skip -= 1;
-                }
-                state.last_code = None;
-                continue;
+            state.advance_columns(width);
+            // Skip the covered chars (advance both char and byte cursors).
+            let mut skip = run_end_char.min(schars) - char_index;
+            while skip > 0 && byte_off < bytes.len() {
+                let len = if multibyte {
+                    super::emacs_char::string_char(&bytes[byte_off..]).1.max(1)
+                } else {
+                    1
+                };
+                byte_off += len;
+                char_index += 1;
+                skip -= 1;
             }
+            state.last_code = None;
+            continue;
         }
 
         let (code, len) = if multibyte {
@@ -862,6 +856,9 @@ fn trim_window_text_to_non_empty_line_end(bytes: &[u8]) -> &[u8] {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
+// Variant names intentionally map to the Lisp symbols `mode-line`,
+// `header-line`, and `tab-line`.
+#[allow(clippy::enum_variant_names)]
 enum WindowLineSelector {
     ModeLine,
     HeaderLine,
@@ -892,21 +889,22 @@ fn window_text_pixel_size_includes_mode_line(mode_lines: Option<&Value>) -> bool
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_format_mode_line(args: Vec<Value>) -> EvalResult {
     expect_args_range("format-mode-line", &args, 1, 4)?;
-    if let Some(window) = args.get(2) {
-        if !window.is_nil() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("windowp"), *window],
-            ));
-        }
+    if let Some(window) = args.get(2)
+        && !window.is_nil()
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("windowp"), *window],
+        ));
     }
-    if let Some(buffer) = args.get(3) {
-        if !buffer.is_nil() && !buffer.is_buffer() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("bufferp"), *buffer],
-            ));
-        }
+    if let Some(buffer) = args.get(3)
+        && !buffer.is_nil()
+        && !buffer.is_buffer()
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("bufferp"), *buffer],
+        ));
     }
     Ok(Value::string(""))
 }
@@ -988,15 +986,13 @@ pub(crate) fn builtin_format_mode_line_ctx(
 /// mode-line row.
 ///
 /// Arguments:
-/// - `eval`       : evaluator context (for risky-local lookup and
-///                  `:eval` evaluation).
-/// - `format_val` : the mode-line format expression — the buffer's
-///                  `mode-line-format` slot value, already
-///                  resolved.
-/// - `window`     : target window (for %-spec position info).
-/// - `buffer`     : target buffer (for buffer-local percent specs).
-/// - `target_cols`: the row width in character cells. `%-` fills to
-///                  this width.
+///
+/// - `eval`: evaluator context (for risky-local lookup and `:eval` evaluation).
+/// - `format_val`: the mode-line format expression — the buffer's
+///   `mode-line-format` slot value, already resolved.
+/// - `window`: target window (for %-spec position info).
+/// - `buffer`: target buffer (for buffer-local percent specs).
+/// - `target_cols`: the row width in character cells. `%-` fills to this width.
 ///
 /// Returns the fully rendered mode-line as a propertized string. On
 /// any evaluator error the function returns an empty string; callers
@@ -1494,22 +1490,23 @@ fn resolve_mode_line_window<'a>(
     window_arg: Option<&Value>,
 ) -> Option<&'a crate::window::Window> {
     // Try explicit window argument first.
-    if let Some(windowish) = window_arg {
-        if !windowish.is_nil() {
-            let wid = if let Some(id) = windowish.as_window_id() {
-                Some(crate::window::WindowId(id))
-            } else if let Some(id) = windowish.as_fixnum().filter(|&id| id >= 0) {
-                Some(crate::window::WindowId(id as u64))
-            } else {
-                None
-            };
-            if let Some(wid) = wid {
-                for fid in frames.frame_list() {
-                    if let Some(frame) = frames.get(fid) {
-                        if let Some(window) = frame.find_window(wid) {
-                            return Some(window);
-                        }
-                    }
+    if let Some(windowish) = window_arg
+        && !windowish.is_nil()
+    {
+        let wid = if let Some(id) = windowish.as_window_id() {
+            Some(crate::window::WindowId(id))
+        } else {
+            windowish
+                .as_fixnum()
+                .filter(|&id| id >= 0)
+                .map(|id| crate::window::WindowId(id as u64))
+        };
+        if let Some(wid) = wid {
+            for fid in frames.frame_list() {
+                if let Some(frame) = frames.get(fid)
+                    && let Some(window) = frame.find_window(wid)
+                {
+                    return Some(window);
                 }
             }
         }
@@ -1615,7 +1612,7 @@ fn percent99(n: usize, d: usize) -> usize {
     if d == 0 {
         return 0;
     }
-    let pct = (d - 1 + 100 * n) / d;
+    let pct = (100 * n).div_ceil(d);
     pct.min(99)
 }
 
@@ -1761,13 +1758,13 @@ impl ModeLineRendered {
                         .take(end_char - start_char)
                         .map(|c| c as u32),
                 );
-                if value.is_string() {
-                    if let Some(props) = get_string_text_properties_table_for_value(*value) {
-                        self.text_props.append_shifted_at_char_offset(
-                            &props.slice_char_range(display_char_range(start_char, end_char)),
-                            CharLen::new(char_offset),
-                        );
-                    }
+                if value.is_string()
+                    && let Some(props) = get_string_text_properties_table_for_value(*value)
+                {
+                    self.text_props.append_shifted_at_char_offset(
+                        &props.slice_char_range(display_char_range(start_char, end_char)),
+                        CharLen::new(char_offset),
+                    );
                 }
             }
         }
@@ -1994,6 +1991,7 @@ fn append_mode_line_percent_lisp_text_spec(
     append_mode_line_rendered_segment(result, &segment, field_width, 0);
 }
 
+#[allow(clippy::too_many_arguments)] // split evaluator state avoids aliasing the full Context
 fn append_mode_line_string_in_state(
     obarray: &crate::emacs_core::symbol::Obarray,
     dynamic: &[OrderedRuntimeBindingMap],
@@ -2080,33 +2078,32 @@ fn format_mode_line_recursive(
             // two names to a single hardcoded space, which silently
             // discarded the `(:eval (unless (display-graphic-p) "-%-"))`
             // dash-fill construct that bindings.el installs on TTY.
-            if let Some(name) = format.as_symbol_name() {
-                if let Some(val) =
+            if let Some(name) = format.as_symbol_name()
+                && let Some(val) =
                     mode_line_symbol_value_in_state(&eval.obarray, &[], &eval.buffers, name)
-                    && !val.is_nil()
-                {
-                    if val.is_string() {
-                        append_mode_line_string_in_state(
-                            &eval.obarray,
-                            &[],
-                            &eval.buffers,
-                            &eval.processes,
-                            eval.recursive_command_loop_depth(),
-                            pctx,
-                            result,
-                            &val,
-                            true,
-                        );
-                    } else {
-                        format_mode_line_recursive(
-                            eval,
-                            pctx,
-                            &val,
-                            result,
-                            depth + 1,
-                            risky || !mode_line_symbol_is_risky(&eval.obarray, name),
-                        );
-                    }
+                && !val.is_nil()
+            {
+                if val.is_string() {
+                    append_mode_line_string_in_state(
+                        &eval.obarray,
+                        &[],
+                        &eval.buffers,
+                        &eval.processes,
+                        eval.recursive_command_loop_depth(),
+                        pctx,
+                        result,
+                        &val,
+                        true,
+                    );
+                } else {
+                    format_mode_line_recursive(
+                        eval,
+                        pctx,
+                        &val,
+                        result,
+                        depth + 1,
+                        risky || !mode_line_symbol_is_risky(&eval.obarray, name),
+                    );
                 }
             }
         }
@@ -2189,7 +2186,7 @@ fn format_mode_line_recursive(
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
+#[allow(dead_code, clippy::too_many_arguments)] // split-state mode-line compatibility seam
 fn format_mode_line_recursive_in_state(
     obarray: &crate::emacs_core::symbol::Obarray,
     dynamic: &[OrderedRuntimeBindingMap],
@@ -2219,27 +2216,26 @@ fn format_mode_line_recursive_in_state(
             // No special case for mode-line-front-space or
             // mode-line-end-spaces; see the note on the equivalent
             // branch in `format_mode_line_recursive`.
-            if let Some(name) = format.as_symbol_name() {
-                if let Some(val) = mode_line_symbol_value_in_state(obarray, dynamic, buffers, name)
-                    && !val.is_nil()
-                {
-                    if val.is_string() {
-                        append_mode_line_string_in_state(
-                            obarray, dynamic, buffers, processes, 0, pctx, result, &val, true,
-                        );
-                    } else if format_mode_line_recursive_in_state(
-                        obarray,
-                        dynamic,
-                        buffers,
-                        processes,
-                        pctx,
-                        &val,
-                        result,
-                        depth + 1,
-                        risky || !mode_line_symbol_is_risky(obarray, name),
-                    ) {
-                        return true;
-                    }
+            if let Some(name) = format.as_symbol_name()
+                && let Some(val) = mode_line_symbol_value_in_state(obarray, dynamic, buffers, name)
+                && !val.is_nil()
+            {
+                if val.is_string() {
+                    append_mode_line_string_in_state(
+                        obarray, dynamic, buffers, processes, 0, pctx, result, &val, true,
+                    );
+                } else if format_mode_line_recursive_in_state(
+                    obarray,
+                    dynamic,
+                    buffers,
+                    processes,
+                    pctx,
+                    &val,
+                    result,
+                    depth + 1,
+                    risky || !mode_line_symbol_is_risky(obarray, name),
+                ) {
+                    return true;
                 }
             }
         }
@@ -2355,7 +2351,7 @@ fn format_mode_line_recursive_in_state(
     false
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
+#[allow(dead_code, clippy::too_many_arguments)] // split-state mode-line compatibility seam
 fn format_mode_line_recursive_in_state_with_eval(
     obarray: &crate::emacs_core::symbol::Obarray,
     dynamic: &[OrderedRuntimeBindingMap],
@@ -2386,28 +2382,27 @@ fn format_mode_line_recursive_in_state_with_eval(
             // No special case for mode-line-front-space or
             // mode-line-end-spaces; they are ordinary symbols whose
             // value must be resolved and recursed on.
-            if let Some(name) = format.as_symbol_name() {
-                if let Some(val) = mode_line_symbol_value_in_state(obarray, dynamic, buffers, name)
-                    && !val.is_nil()
-                {
-                    if val.is_string() {
-                        append_mode_line_string_in_state(
-                            obarray, dynamic, buffers, processes, 0, pctx, result, &val, true,
-                        );
-                    } else {
-                        format_mode_line_recursive_in_state_with_eval(
-                            obarray,
-                            dynamic,
-                            buffers,
-                            processes,
-                            pctx,
-                            &val,
-                            result,
-                            depth + 1,
-                            risky || !mode_line_symbol_is_risky(obarray, name),
-                            eval_form,
-                        )?;
-                    }
+            if let Some(name) = format.as_symbol_name()
+                && let Some(val) = mode_line_symbol_value_in_state(obarray, dynamic, buffers, name)
+                && !val.is_nil()
+            {
+                if val.is_string() {
+                    append_mode_line_string_in_state(
+                        obarray, dynamic, buffers, processes, 0, pctx, result, &val, true,
+                    );
+                } else {
+                    format_mode_line_recursive_in_state_with_eval(
+                        obarray,
+                        dynamic,
+                        buffers,
+                        processes,
+                        pctx,
+                        &val,
+                        result,
+                        depth + 1,
+                        risky || !mode_line_symbol_is_risky(obarray, name),
+                        eval_form,
+                    )?;
                 }
             }
         }
@@ -2540,6 +2535,7 @@ fn format_mode_line_recursive_in_state_with_eval(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)] // split evaluator state avoids aliasing the full Context
 fn expand_mode_line_percent_in_state(
     obarray: &crate::emacs_core::symbol::Obarray,
     dynamic: &[OrderedRuntimeBindingMap],
@@ -3327,13 +3323,13 @@ pub(crate) fn builtin_line_pixel_height(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_window_text_pixel_size(args: Vec<Value>) -> EvalResult {
     expect_args_range("window-text-pixel-size", &args, 0, 7)?;
 
-    if let Some(window) = args.first() {
-        if !window.is_nil() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("window-live-p"), *window],
-            ));
-        }
+    if let Some(window) = args.first()
+        && !window.is_nil()
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("window-live-p"), *window],
+        ));
     }
     if let Some(from) = args.get(1) {
         validate_window_text_pixel_size_from_arg(*from)?;
@@ -3528,19 +3524,21 @@ fn resolve_live_window_for_text_pixel_size(
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_pos_visible_in_window_p(args: Vec<Value>) -> EvalResult {
     expect_args_range("pos-visible-in-window-p", &args, 0, 3)?;
-    if let Some(window) = args.get(1) {
-        if !window.is_nil() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("window-live-p"), *window],
-            ));
-        }
+    if let Some(window) = args.get(1)
+        && !window.is_nil()
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("window-live-p"), *window],
+        ));
     }
     // POS can be nil (point), t (end of buffer), or an integer/marker.
-    if let Some(pos) = args.first() {
-        if !pos.is_nil() && !pos.is_t() && !pos.is_symbol_named("t") {
-            expect_integer_or_marker(pos)?;
-        }
+    if let Some(pos) = args.first()
+        && !pos.is_nil()
+        && !pos.is_t()
+        && !pos.is_symbol_named("t")
+    {
+        expect_integer_or_marker(pos)?;
     }
     Ok(Value::NIL)
 }
@@ -3556,10 +3554,12 @@ pub(crate) fn builtin_pos_visible_in_window_p_ctx(
     if eval.noninteractive() {
         expect_args_range("pos-visible-in-window-p", &args, 0, 3)?;
         validate_optional_window_designator_in_state(&eval.frames, args.get(1), "window-live-p")?;
-        if let Some(pos) = args.first() {
-            if !pos.is_nil() && !pos.is_t() && !pos.is_symbol_named("t") {
-                expect_integer_or_marker(pos)?;
-            }
+        if let Some(pos) = args.first()
+            && !pos.is_nil()
+            && !pos.is_t()
+            && !pos.is_symbol_named("t")
+        {
+            expect_integer_or_marker(pos)?;
         }
         return Ok(Value::NIL);
     }
@@ -3631,43 +3631,42 @@ fn window_line_height_impl(
 ) -> EvalResult {
     expect_args_range("window-line-height", &args, 0, 2)?;
     validate_optional_window_designator_in_state(&*frames, args.get(1), "window-live-p")?;
-    if let Some((fid, wid)) = resolve_live_window_identity(frames, args.get(1))? {
-        if let Some(frame) = frames.get(fid) {
-            if let Some(snapshot) = frame.redisplay_snapshot(wid) {
-                let line_spec = args.first().copied().unwrap_or(Value::NIL);
-                let metrics = if line_spec.is_nil() {
-                    resolve_exact_visible_metrics(frames, buffers, args.get(1), None)?.and_then(
-                        |(_, metrics)| {
-                            snapshot
-                                .row_metrics(metrics.row)
-                                .map(|row| snapshot_text_row_line_metrics(snapshot, row))
-                        },
-                    )
-                } else if let Some(selector) = WindowLineSelector::from_lisp_value(line_spec) {
-                    snapshot_chrome_line_metrics(snapshot, selector)
-                } else {
-                    let line_num = match line_spec.kind() {
-                        ValueKind::Fixnum(n) => n,
-                        _other => {
-                            return Err(signal(
-                                LispCondition::WrongTypeArgument,
-                                vec![Value::symbol("integerp"), line_spec],
-                            ));
-                        }
-                    };
-                    snapshot_text_line_metrics(snapshot, line_num)
-                };
-                if let Some(metrics) = metrics {
-                    return Ok(Value::list(vec![
-                        Value::fixnum(metrics.height),
-                        Value::fixnum(metrics.vpos),
-                        Value::fixnum(metrics.ypos),
-                        Value::fixnum(metrics.offbot),
-                    ]));
+    if let Some((fid, wid)) = resolve_live_window_identity(frames, args.get(1))?
+        && let Some(frame) = frames.get(fid)
+        && let Some(snapshot) = frame.redisplay_snapshot(wid)
+    {
+        let line_spec = args.first().copied().unwrap_or(Value::NIL);
+        let metrics = if line_spec.is_nil() {
+            resolve_exact_visible_metrics(frames, buffers, args.get(1), None)?.and_then(
+                |(_, metrics)| {
+                    snapshot
+                        .row_metrics(metrics.row)
+                        .map(|row| snapshot_text_row_line_metrics(snapshot, row))
+                },
+            )
+        } else if let Some(selector) = WindowLineSelector::from_lisp_value(line_spec) {
+            snapshot_chrome_line_metrics(snapshot, selector)
+        } else {
+            let line_num = match line_spec.kind() {
+                ValueKind::Fixnum(n) => n,
+                _other => {
+                    return Err(signal(
+                        LispCondition::WrongTypeArgument,
+                        vec![Value::symbol("integerp"), line_spec],
+                    ));
                 }
-                return Ok(Value::NIL);
-            }
+            };
+            snapshot_text_line_metrics(snapshot, line_num)
+        };
+        if let Some(metrics) = metrics {
+            return Ok(Value::list(vec![
+                Value::fixnum(metrics.height),
+                Value::fixnum(metrics.vpos),
+                Value::fixnum(metrics.ypos),
+                Value::fixnum(metrics.offbot),
+            ]));
         }
+        return Ok(Value::NIL);
     }
     let Some(ctx) = resolve_live_window_display_context(frames, buffers, args.get(1))? else {
         return Ok(Value::NIL);
@@ -3964,10 +3963,10 @@ pub(crate) fn builtin_current_bidi_paragraph_direction(
 /// `fixnump` argument contract when PARAGRAPH-DIRECTION is non-nil.
 pub(crate) fn builtin_bidi_resolved_levels(args: Vec<Value>) -> EvalResult {
     expect_args_range("bidi-resolved-levels", &args, 0, 1)?;
-    if let Some(direction) = args.first() {
-        if !direction.is_nil() {
-            expect_fixnum_arg("fixnump", direction)?;
-        }
+    if let Some(direction) = args.first()
+        && !direction.is_nil()
+    {
+        expect_fixnum_arg("fixnump", direction)?;
     }
     Ok(Value::NIL)
 }
@@ -4091,8 +4090,7 @@ pub(crate) fn builtin_move_to_window_line(
     if target_line == 0 {
         target_char_pos = start_char;
     } else {
-        let mut char_idx = 0usize;
-        for (_, c) in text.char_indices().skip(start_char) {
+        for (char_idx, (_, c)) in text.char_indices().skip(start_char).enumerate() {
             if c == '\n' {
                 lines_seen += 1;
                 if lines_seen == target_line {
@@ -4100,7 +4098,6 @@ pub(crate) fn builtin_move_to_window_line(
                     break;
                 }
             }
-            char_idx += 1;
         }
         // If we exhausted the text before reaching target_line, go to buffer end.
         if lines_seen < target_line {
@@ -4345,17 +4342,18 @@ fn validate_optional_window_designator_in_state(
     }
     let wid = if let Some(id) = windowish.as_window_id() {
         Some(WindowId(id))
-    } else if let Some(id) = windowish.as_fixnum().filter(|&id| id >= 0) {
-        Some(WindowId(id as u64))
     } else {
-        None
+        windowish
+            .as_fixnum()
+            .filter(|&id| id >= 0)
+            .map(|id| WindowId(id as u64))
     };
     if let Some(wid) = wid {
         for fid in frames.frame_list() {
-            if let Some(frame) = frames.get(fid) {
-                if frame.find_window(wid).is_some() {
-                    return Ok(());
-                }
+            if let Some(frame) = frames.get(fid)
+                && frame.find_window(wid).is_some()
+            {
+                return Ok(());
             }
         }
     }
@@ -4382,10 +4380,10 @@ fn validate_optional_buffer_designator_in_state(
     if bufferish.is_nil() {
         return Ok(());
     }
-    if let Some(id) = bufferish.as_buffer_id() {
-        if buffers.get(id).is_some() {
-            return Ok(());
-        }
+    if let Some(id) = bufferish.as_buffer_id()
+        && buffers.get(id).is_some()
+    {
+        return Ok(());
     }
     Err(signal(
         LispCondition::WrongTypeArgument,
@@ -4404,10 +4402,11 @@ fn resolve_optional_window_buffer(
 
     let wid = if let Some(id) = windowish.as_window_id() {
         Some(WindowId(id))
-    } else if let Some(id) = windowish.as_fixnum().filter(|&id| id >= 0) {
-        Some(WindowId(id as u64))
     } else {
-        None
+        windowish
+            .as_fixnum()
+            .filter(|&id| id >= 0)
+            .map(|id| WindowId(id as u64))
     }?;
 
     for fid in eval.frames.frame_list() {
@@ -4434,10 +4433,11 @@ fn resolve_optional_window_buffer_in_state(
 
     let wid = if let Some(id) = windowish.as_window_id() {
         Some(WindowId(id))
-    } else if let Some(id) = windowish.as_fixnum().filter(|&id| id >= 0) {
-        Some(WindowId(id as u64))
     } else {
-        None
+        windowish
+            .as_fixnum()
+            .filter(|&id| id >= 0)
+            .map(|id| WindowId(id as u64))
     }?;
 
     for fid in frames.frame_list() {
@@ -4457,10 +4457,10 @@ fn resolve_mode_line_buffer(
     window: Option<&Value>,
     buffer: Option<&Value>,
 ) -> Option<BufferId> {
-    if let Some(buf_val) = buffer {
-        if let Some(id) = buf_val.as_buffer_id() {
-            return Some(id);
-        }
+    if let Some(buf_val) = buffer
+        && let Some(id) = buf_val.as_buffer_id()
+    {
+        return Some(id);
     }
     resolve_optional_window_buffer(eval, window)
 }
@@ -4471,10 +4471,10 @@ fn resolve_mode_line_buffer_in_state(
     window: Option<&Value>,
     buffer: Option<&Value>,
 ) -> Option<BufferId> {
-    if let Some(buf_val) = buffer {
-        if let Some(id) = buf_val.as_buffer_id() {
-            return Some(id);
-        }
+    if let Some(buf_val) = buffer
+        && let Some(id) = buf_val.as_buffer_id()
+    {
+        return Some(id);
     }
     resolve_optional_window_buffer_in_state(frames, window)
 }
@@ -5257,12 +5257,8 @@ pub(crate) fn builtin_posn_at_point(
 ) -> EvalResult {
     expect_args_range("posn-at-point", &args, 0, 2)?;
     validate_optional_window_designator_in_state(&eval.frames, args.get(1), "window-live-p")?;
-    let Some((window_id, metrics)) = resolve_exact_visible_metrics(
-        &mut eval.frames,
-        &mut eval.buffers,
-        args.get(1),
-        args.first(),
-    )?
+    let Some((window_id, metrics)) =
+        resolve_exact_visible_metrics(&eval.frames, &eval.buffers, args.get(1), args.first())?
     else {
         return Ok(Value::NIL);
     };

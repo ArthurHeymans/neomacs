@@ -104,6 +104,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
     /// Cursor with no window context (overlay `window` properties unrestricted).
     /// Used by tests and any non-window caller; the redisplay path uses
     /// [`new_for_window`](Self::new_for_window).
+    #[allow(dead_code)] // retained for non-window callers and focused tests
     pub(crate) fn new(
         buffer_id: BufferId,
         buffer: &'a B,

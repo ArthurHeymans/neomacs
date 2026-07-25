@@ -155,7 +155,7 @@ pub(crate) fn builtin_characterp(args: Vec<Value>) -> EvalResult {
     // in the valid Unicode range (0..MAX_CHAR).  Its obsolete second
     // argument is accepted for compatibility and ignored.
     let is_char = match args[0].kind() {
-        ValueKind::Fixnum(n) => n >= 0 && n <= 0x3F_FFFF, // MAX_CHAR in Emacs
+        ValueKind::Fixnum(n) => (0..=0x3F_FFFF).contains(&n), // MAX_CHAR in Emacs
         _ => false,
     };
     Ok(Value::bool_val(is_char))
@@ -306,14 +306,14 @@ pub(crate) fn builtin_cl_type_of(args: Vec<Value>) -> EvalResult {
     // record, and slot 1 of that record is the class name.
     if args[0].is_record() {
         let tag = args[0].as_record_data().and_then(|v| v.first().copied());
-        if let Some(tag_val) = tag {
-            if tag_val.is_record() {
-                let tag_vec = tag_val.as_record_data();
-                if let Some(tv) = tag_vec {
-                    if tv.len() > 1 {
-                        return Ok(tv[1]);
-                    }
-                }
+        if let Some(tag_val) = tag
+            && tag_val.is_record()
+        {
+            let tag_vec = tag_val.as_record_data();
+            if let Some(tv) = tag_vec
+                && tv.len() > 1
+            {
+                return Ok(tv[1]);
             }
         }
         return Ok(tag.unwrap_or_else(|| Value::symbol("record")));

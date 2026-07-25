@@ -383,8 +383,8 @@ impl ThreadManager {
     /// Return all thread ids.
     pub fn all_thread_ids(&self) -> Vec<u64> {
         self.threads
-            .iter()
-            .filter_map(|(id, _)| self.thread_alive_p(*id).then_some(*id))
+            .keys()
+            .filter_map(|id| self.thread_alive_p(*id).then_some(*id))
             .collect()
     }
 

@@ -178,6 +178,9 @@ impl OutputRowMetricsRequest {
 }
 
 impl OutputRowLifecycleRequest {
+    // Called through the output-builder layer, which is feature-selected out of
+    // some workspace builds but exercised by layout tests and full builds.
+    #[allow(dead_code)]
     pub(crate) fn begin(row: usize, role: GlyphRowRole, mode_line: bool) -> Self {
         Self::Begin(OutputRowBeginRequest::new(row, role, mode_line))
     }

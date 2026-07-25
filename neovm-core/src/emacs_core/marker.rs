@@ -275,18 +275,17 @@ pub(crate) fn marker_position_as_int_with_buffers(
 
     // Special mark-marker: resolves via buffer's tracked mark-char.
     // (See buffer.rs mark_char() for how the mark position is stored.)
-    if is_mark_marker(v) {
-        if let Some(buf_id) = marker_buffer_id(v)
-            && let Some(buf) = buffers.get(buf_id)
-        {
-            return match buf.mark_char_pos() {
-                Some(char_pos) => Ok(char_pos.to_lisp().as_i64()),
-                None => Err(signal(
-                    "error",
-                    vec![Value::string("Marker does not point anywhere")],
-                )),
-            };
-        }
+    if is_mark_marker(v)
+        && let Some(buf_id) = marker_buffer_id(v)
+        && let Some(buf) = buffers.get(buf_id)
+    {
+        return match buf.mark_char_pos() {
+            Some(char_pos) => Ok(char_pos.to_lisp().as_i64()),
+            None => Err(signal(
+                "error",
+                vec![Value::string("Marker does not point anywhere")],
+            )),
+        };
     }
 
     let data = v.as_marker_data().unwrap();
@@ -775,13 +774,13 @@ pub(crate) fn builtin_mark_marker(eval: &mut super::eval::Context, args: Vec<Val
         .id;
 
     // Return the real marker created by set_mark_emacs_byte_pos, if it exists.
-    if let Some(buf) = eval.buffers.get(buffer_id) {
-        if !buf.mark_marker_ptr.is_null() {
-            unsafe {
-                return Ok(Value::from_veclike_ptr(
-                    buf.mark_marker_ptr as *const crate::tagged::header::VecLikeHeader,
-                ));
-            }
+    if let Some(buf) = eval.buffers.get(buffer_id)
+        && !buf.mark_marker_ptr.is_null()
+    {
+        unsafe {
+            return Ok(Value::from_veclike_ptr(
+                buf.mark_marker_ptr as *const crate::tagged::header::VecLikeHeader,
+            ));
         }
     }
 

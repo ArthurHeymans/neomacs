@@ -267,7 +267,7 @@ fn next_column_for_code(column: usize, code: u32, width: usize, tab_width: usize
 }
 
 fn raw_unibyte_display_width(byte: u8) -> usize {
-    if byte < 0o40 || byte >= 0o177 { 4 } else { 1 }
+    if !(0o40..0o177).contains(&byte) { 4 } else { 1 }
 }
 
 /// Upper bound (in chars) on how far ahead a single stop computation looks for
@@ -555,20 +555,21 @@ fn space_spec_width(plist: Value, col: usize) -> Option<usize> {
         return Some(n as usize);
     }
     // Float branch reads the *last* probed value, which is `:relative-width`.
-    if let Some(f) = rel_prop.as_float() {
-        if (0.0..=(i32::MAX as f64)).contains(&f) {
-            return Some((f + 0.5) as usize);
-        }
+    if let Some(f) = rel_prop.as_float()
+        && (0.0..=(i32::MAX as f64)).contains(&f)
+    {
+        return Some((f + 0.5) as usize);
     }
     // `:align-to COL`: width = COL - col.
     let align_prop = super::plist::plist_get(plist, &qcalign).unwrap_or(Value::NIL);
     if let Some(n) = ranged_fixnum(align_prop, col as i64, align_to_max) {
         return Some((n as usize).saturating_sub(col));
     }
-    if let Some(f) = align_prop.as_float() {
-        if f >= col as f64 && f <= align_to_max as f64 {
-            return Some(((f + 0.5) as usize).saturating_sub(col));
-        }
+    if let Some(f) = align_prop.as_float()
+        && f >= col as f64
+        && f <= align_to_max as f64
+    {
+        return Some(((f + 0.5) as usize).saturating_sub(col));
     }
     None
 }
@@ -829,14 +830,13 @@ fn scan_for_column(
     while scan < end {
         if let Some(next_visible) =
             super::xdisp::zero_width_invisible_run_end_byte(ctx, buffer_id, scan)?
+            && next_visible > scan
         {
-            if next_visible > scan {
-                scan = next_visible.min(end);
-                if scan >= end {
-                    break;
-                }
-                continue;
+            scan = next_visible.min(end);
+            if scan >= end {
+                break;
             }
+            continue;
         }
 
         if column >= goal {
@@ -848,29 +848,29 @@ fn scan_for_column(
         // `current_column_1` / `Fmove_to_column` consult `display` specs via
         // `check_display_width`). Advance by the spec's display width over the
         // whole property/overlay run, atomically (no splitting a display run).
-        if let Some((disp_width, run_end_byte)) = display_run_at(ctx, buffer_id, scan, column) {
-            if run_end_byte > scan {
-                previous_byte_pos = scan;
-                previous_column = column;
-                previous_code = None;
-                column = column.saturating_add(disp_width);
-                scan = run_end_byte.min(end);
-                continue;
-            }
+        if let Some((disp_width, run_end_byte)) = display_run_at(ctx, buffer_id, scan, column)
+            && run_end_byte > scan
+        {
+            previous_byte_pos = scan;
+            previous_column = column;
+            previous_code = None;
+            column = column.saturating_add(disp_width);
+            scan = run_end_byte.min(end);
+            continue;
         }
 
         // A `composition` property lays its covered characters out as the
         // composed glyphs (GNU's display scan via get_composition_id), so the
         // run advances by the glyphs' width over the composed character count.
-        if let Some((comp_width, comp_end)) = composition_run_at(ctx, buffer_id, scan) {
-            if comp_end > scan {
-                previous_byte_pos = scan;
-                previous_column = column;
-                previous_code = None;
-                column = column.saturating_add(comp_width);
-                scan = comp_end.min(end);
-                continue;
-            }
+        if let Some((comp_width, comp_end)) = composition_run_at(ctx, buffer_id, scan)
+            && comp_end > scan
+        {
+            previous_byte_pos = scan;
+            previous_column = column;
+            previous_code = None;
+            column = column.saturating_add(comp_width);
+            scan = comp_end.min(end);
+            continue;
         }
 
         let (code, char_len, width) = {

@@ -223,20 +223,20 @@ fn sync_leaf(window: &mut Window, bm: &BufferManager, edited_buffer_id: BufferId
         return;
     }
 
-    if let Some(mid) = *start_marker_id {
-        if let Some(pos) = marker_lisp_position(bm, *buffer_id, mid) {
-            *window_start = pos;
-        }
+    if let Some(mid) = *start_marker_id
+        && let Some(pos) = marker_lisp_position(bm, *buffer_id, mid)
+    {
+        *window_start = pos;
     }
-    if let Some(mid) = *point_marker_id {
-        if let Some(pos) = marker_lisp_position(bm, *buffer_id, mid) {
-            *point = pos;
-        }
+    if let Some(mid) = *point_marker_id
+        && let Some(pos) = marker_lisp_position(bm, *buffer_id, mid)
+    {
+        *point = pos;
     }
-    if let Some(mid) = *old_point_marker_id {
-        if let Some(pos) = marker_lisp_position(bm, *buffer_id, mid) {
-            *old_point = pos;
-        }
+    if let Some(mid) = *old_point_marker_id
+        && let Some(pos) = marker_lisp_position(bm, *buffer_id, mid)
+    {
+        *old_point = pos;
     }
 }
 

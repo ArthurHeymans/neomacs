@@ -265,12 +265,10 @@ fn resolve_eval_buffer_id_in_state(
                 .find_buffer_by_name(&name)
                 .ok_or_else(|| signal("error", vec![Value::string("No such buffer")]))?
         }),
-        Some(other) => {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("stringp"), *other],
-            ));
-        }
+        Some(other) => Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("stringp"), *other],
+        )),
     }
 }
 
@@ -1013,10 +1011,11 @@ fn normalize_locate_file_public_predicate(
     if matches!(predicate.kind(), ValueKind::Symbol(_)) && !functionp {
         return Ok(access_mask_from_predicate_symbols(&[predicate]));
     }
-    if predicate.is_cons() && !functionp {
-        if let Some(items) = list_to_vec(&predicate) {
-            return Ok(access_mask_from_predicate_symbols(&items));
-        }
+    if predicate.is_cons()
+        && !functionp
+        && let Some(items) = list_to_vec(&predicate)
+    {
+        return Ok(access_mask_from_predicate_symbols(&items));
     }
     Ok(predicate)
 }

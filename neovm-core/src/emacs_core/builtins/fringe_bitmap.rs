@@ -158,10 +158,10 @@ impl FringeBitmapRegistry {
         };
         // Preserve a face override set by an earlier `set-fringe-bitmap-face`
         // when a later `define-fringe-bitmap` replaces the geometry only.
-        if bitmap.face.is_none() {
-            if let Some(prev) = self.user_bitmaps.get(&sym) {
-                bitmap.face = prev.face.clone();
-            }
+        if bitmap.face.is_none()
+            && let Some(prev) = self.user_bitmaps.get(&sym)
+        {
+            bitmap.face = prev.face.clone();
         }
         self.user_bitmaps.insert(sym, bitmap);
         self.by_index.insert(index, sym);

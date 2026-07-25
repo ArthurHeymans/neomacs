@@ -453,10 +453,10 @@ pub(crate) fn builtin_set_standard_case_table(
 }
 
 fn ensure_standard_case_table_object_in_state(obarray: &mut super::symbol::Obarray) -> EvalResult {
-    if let Some(value) = obarray.symbol_value(STANDARD_CASE_TABLE_SYMBOL).cloned() {
-        if is_case_table(&value) {
-            return Ok(value);
-        }
+    if let Some(value) = obarray.symbol_value(STANDARD_CASE_TABLE_SYMBOL).cloned()
+        && is_case_table(&value)
+    {
+        return Ok(value);
     }
     let table = make_standard_case_table_value();
     obarray.set_symbol_value(STANDARD_CASE_TABLE_SYMBOL, table);
@@ -818,9 +818,9 @@ fn set_canon(case_table: Value, key: Value, elt: Value) -> Result<(), Flow> {
 
 fn map_case_table(
     table: Value,
-    mut f: impl FnMut(Value, Value) -> Result<(), Flow>,
+    f: impl FnMut(Value, Value) -> Result<(), Flow>,
 ) -> Result<(), Flow> {
-    super::chartable::for_each_char_table_mapping(&table, |key, value| f(key, value))
+    super::chartable::for_each_char_table_mapping(&table, f)
 }
 
 fn ensure_case_table_derived_slots(table: Value) -> Result<(), Flow> {

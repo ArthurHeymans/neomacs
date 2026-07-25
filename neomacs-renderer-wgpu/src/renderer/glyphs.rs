@@ -1209,6 +1209,9 @@ impl WgpuRenderer {
         );
     }
 
+    // The parameter mirrors `FrameParams` and the display-runtime effects
+    // boundary; a local alias would only hide this one site.
+    #[allow(clippy::type_complexity)]
     #[allow(clippy::too_many_arguments)]
     fn render_frame_glyphs_impl(
         &mut self,

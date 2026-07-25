@@ -206,7 +206,7 @@ impl RegexOp {
     fn from_byte(b: u8) -> Option<Self> {
         if b <= 33 {
             // SAFETY: all values 0-33 are valid enum variants
-            Some(unsafe { std::mem::transmute(b) })
+            Some(unsafe { std::mem::transmute::<u8, RegexOp>(b) })
         } else {
             None
         }
@@ -1168,14 +1168,13 @@ pub(crate) fn regex_compile_lisp_with_translation(
                         // the current group has not been pushed yet.  Reusing a
                         // number for a sequential/closed group stays legal (so
                         // `\(?1:\)\(?1:\)` and `\(\)\(?1:\)` remain accepted).
-                        if let Some(n) = explicit_group {
-                            if n <= buf.re_nsub
-                                && compile_stack.iter().any(|e| e.assigned_group == Some(n))
-                            {
-                                return Err(RegexCompileError {
-                                    message: "Invalid regular expression".to_string(),
-                                });
-                            }
+                        if let Some(n) = explicit_group
+                            && n <= buf.re_nsub
+                            && compile_stack.iter().any(|e| e.assigned_group == Some(n))
+                        {
+                            return Err(RegexCompileError {
+                                message: "Invalid regular expression".to_string(),
+                            });
                         }
 
                         compile_stack.push(CompileStackEntry {
@@ -2600,7 +2599,7 @@ fn compile_charset(
 }
 
 fn add_charset_char(
-    buffer: &mut Vec<u8>,
+    buffer: &mut [u8],
     bitmap_start: usize,
     c: u32,
     mb_ranges: &mut Vec<(char, char)>,
@@ -2628,7 +2627,7 @@ fn add_charset_char(
 }
 
 fn add_charset_range(
-    buffer: &mut Vec<u8>,
+    buffer: &mut [u8],
     bitmap_start: usize,
     mb_ranges: &mut Vec<(char, char)>,
     mut start: u32,
@@ -2719,7 +2718,7 @@ fn push_or_merge_multibyte_range(ranges: &mut Vec<(char, char)>, ch: char) {
 /// merged into the range table; translated unibyte characters are reflected in
 /// the bitmap.
 fn add_multibyte_range(
-    buffer: &mut Vec<u8>,
+    buffer: &mut [u8],
     bitmap_start: usize,
     ranges: &mut Vec<(char, char)>,
     start: char,
@@ -2766,7 +2765,7 @@ fn add_multibyte_range(
 /// mapping disagrees with Emacs's case canon table, but the GNU-
 /// parity fix is to consult the same translate table both sides.
 fn set_bitmap_bit(
-    buffer: &mut Vec<u8>,
+    buffer: &mut [u8],
     bitmap_start: usize,
     c: u8,
     translate: Option<&CaseTranslation>,
@@ -2826,7 +2825,7 @@ fn set_bitmap_raw_bit(buffer: &mut [u8], bitmap_start: usize, c: u8) {
 /// compilation is tracked as audit #8.
 fn apply_posix_class(
     name: &str,
-    buffer: &mut Vec<u8>,
+    buffer: &mut [u8],
     bitmap_start: usize,
     mb_ranges: &mut Vec<(char, char)>,
     class_bits: &mut u32,
@@ -3027,12 +3026,12 @@ fn parse_interval(
     // upper bound is smaller than the lower bound (e.g. `a\{2,1\}`), signaling
     // `(invalid-regexp "Invalid content of \\{\\}")`.  An unbounded `\{n,\}`
     // (max == None) is always valid.
-    if let Some(m) = max {
-        if m < min {
-            return Err(RegexCompileError {
-                message: "Invalid content of \\{\\}".to_string(),
-            });
-        }
+    if let Some(m) = max
+        && m < min
+    {
+        return Err(RegexCompileError {
+            message: "Invalid content of \\{\\}".to_string(),
+        });
     }
 
     // Expect \}
@@ -3061,7 +3060,7 @@ fn checked_u16_counter(value: usize) -> Result<u16, RegexCompileError> {
 }
 
 fn store_jump_at(
-    buffer: &mut Vec<u8>,
+    buffer: &mut [u8],
     op_pos: usize,
     op: RegexOp,
     target: usize,
@@ -3073,7 +3072,7 @@ fn store_jump_at(
 }
 
 fn store_jump2_at(
-    buffer: &mut Vec<u8>,
+    buffer: &mut [u8],
     op_pos: usize,
     op: RegexOp,
     target: usize,
@@ -3354,7 +3353,7 @@ fn default_char_has_category(c: char, cat: u8) -> bool {
         b'G' => matches!(cp, 0x0370..=0x03FF | 0x1F00..=0x1FFF),
 
         // y  -- Cyrillic.
-        b'y' | b'Y' => matches!(cp, 0x0400..=0x04FF | 0x0500..=0x052F),
+        b'y' | b'Y' => matches!(cp, 0x0400..=0x052F),
 
         // b  -- Arabic.
         b'b' => matches!(cp, 0x0600..=0x06FF | 0x0750..=0x077F | 0xFB50..=0xFDFF),
@@ -6119,10 +6118,11 @@ fn compile_fastmap(pattern: &mut CompiledPattern, syntax: &dyn SyntaxLookup) {
                     let bitmap_len = bytecode[pc] as usize & 0x7F;
                     pc += 1;
                     for c in 0..256usize {
-                        if c / 8 < bitmap_len && pc + c / 8 < bytecode.len() {
-                            if (bytecode[pc + c / 8] >> (c % 8)) & 1 != 0 {
-                                pattern.fastmap[c] = true;
-                            }
+                        if c / 8 < bitmap_len
+                            && pc + c / 8 < bytecode.len()
+                            && (bytecode[pc + c / 8] >> (c % 8)) & 1 != 0
+                        {
+                            pattern.fastmap[c] = true;
                         }
                     }
                     // If this charset has multibyte ranges, conservatively

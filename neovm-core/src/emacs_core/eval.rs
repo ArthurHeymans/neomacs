@@ -632,7 +632,7 @@ impl GnuTimerTimestamp {
         }
 
         let mut secs = secs as u64;
-        let mut nanos = (usecs as u32) * 1_000 + ((psecs.max(0) as u32) + 999) / 1_000;
+        let mut nanos = (usecs as u32) * 1_000 + (psecs.max(0) as u32).div_ceil(1_000);
         if nanos >= 1_000_000_000 {
             secs += 1;
             nanos -= 1_000_000_000;
@@ -731,7 +731,7 @@ fn value_fingerprint(
         }
         ValueKind::String => {
             5u8.hash(hasher);
-            let key = value.bits() as usize;
+            let key = value.bits();
             if depth == 0 || !seen.insert(key) {
                 key.hash(hasher);
                 return;
@@ -752,7 +752,7 @@ fn value_fingerprint(
         }
         ValueKind::Cons => {
             6u8.hash(hasher);
-            let key = value.bits() as usize;
+            let key = value.bits();
             if depth == 0 || !seen.insert(key) {
                 key.hash(hasher);
                 return;
@@ -769,7 +769,7 @@ fn value_fingerprint(
         }
         ValueKind::Veclike(VecLikeType::Vector) => {
             7u8.hash(hasher);
-            let key = value.bits() as usize;
+            let key = value.bits();
             if depth == 0 || !seen.insert(key) {
                 key.hash(hasher);
                 return;
@@ -1178,7 +1178,7 @@ pub(crate) fn feature_present_in_state(
 ) -> bool {
     refresh_features_from_variable_in_state(obarray, features);
     let id = intern(name);
-    features.iter().any(|feature| *feature == id)
+    features.contains(&id)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -1190,7 +1190,7 @@ pub(crate) fn add_feature_in_state(obarray: &mut Obarray, features: &mut Vec<Sym
 
 pub(crate) fn add_feature_id_in_state(obarray: &mut Obarray, features: &mut Vec<SymId>, id: SymId) {
     refresh_features_from_variable_in_state(obarray, features);
-    if features.iter().any(|feature| *feature == id) {
+    if features.contains(&id) {
         return;
     }
     let current = obarray
@@ -2227,6 +2227,8 @@ pub struct Context {
     /// the resulting `FrameGlyphBuffer` to the render thread.
     ///
     /// `None` in batch mode (no display).
+    #[allow(clippy::type_complexity)]
+    // frontend callback seam avoids a core/layout dependency cycle
     pub redisplay_fn: Option<Box<dyn FnMut(&mut Self)>>,
     /// Frontend-installed frame snapshot hook (`neomacs--frame-snapshot`).
     /// Same seam pattern as `redisplay_fn`: neovm-core cannot reach the
@@ -2796,6 +2798,7 @@ fn unwind_lambda_bindings_after_error(
     );
 }
 
+#[allow(clippy::too_many_arguments)] // keeps the evaluator's independently borrowed state split
 fn bind_lambda_args_from_arglist(
     obarray: &mut Obarray,
     specpdl: &mut Vec<SpecBinding>,
@@ -3747,7 +3750,7 @@ impl Context {
                 continue;
             }
 
-            if signal_conditions.iter().any(|item| *item == entry) {
+            if signal_conditions.contains(&entry) {
                 return Ok(true);
             }
         }
@@ -8538,10 +8541,7 @@ impl Context {
             .obarray
             .symbol_value_id_or_nil(self.throw_on_input_symbol);
 
-        if flag
-            .as_symbol_id()
-            .map_or(false, |sym| sym == self.kill_emacs_symbol)
-        {
+        if flag.as_symbol_id() == Some(self.kill_emacs_symbol) {
             self.request_shutdown(0, false);
             return Err(signal(LispCondition::Quit, vec![]));
         }
@@ -8617,10 +8617,9 @@ impl Context {
             && self
                 .quit_requested
                 .swap(false, std::sync::atomic::Ordering::Relaxed)
+            && self.quit_flag.is_nil()
         {
-            if self.quit_flag.is_nil() {
-                self.set_quit_flag_value(Value::T);
-            }
+            self.set_quit_flag_value(Value::T);
         }
         let quit_flag = self.quit_flag;
         if quit_flag.is_nil() {
@@ -8661,9 +8660,7 @@ impl Context {
     }
 
     pub(crate) fn event_is_quit_char(&self, event: &Value) -> bool {
-        event
-            .as_fixnum()
-            .map_or(false, |code| code == self.quit_char)
+        event.as_fixnum() == Some(self.quit_char)
     }
 
     pub(crate) fn request_quit_from_keyboard_input(&mut self) {
@@ -9395,6 +9392,7 @@ impl Context {
         }
     }
 
+    #[allow(clippy::too_many_arguments)] // publishes GNU's complete window-position tuple atomically
     pub fn publish_redisplay_window_positions(
         &mut self,
         frame_id: crate::window::FrameId,
@@ -9772,9 +9770,7 @@ impl Context {
     }
 
     pub fn clear_current_message(&mut self) {
-        if self.clear_echo_area_message() == EchoMessageClearResult::PreserveEchoArea {
-            return;
-        }
+        if self.clear_echo_area_message() == EchoMessageClearResult::PreserveEchoArea {}
     }
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -10018,10 +10014,9 @@ impl Context {
                     || id == byte_code_literal_symbol()
                     || id == byte_code_symbol()
             )
+            && let Some(result) = self.try_special_form_value_id(sym_id, original_args)
         {
-            if let Some(result) = self.try_special_form_value_id(sym_id, original_args) {
-                return result;
-            }
+            return result;
         }
 
         // Resolve function value
@@ -10037,10 +10032,10 @@ impl Context {
                     Some(f) => {
                         let mut f = f;
                         // Follow symbol indirection (GNU eval.c:2604)
-                        if let Some(alias_id) = f.as_symbol_id() {
-                            if let Some(resolved) = self.obarray.indirect_function_id(alias_id) {
-                                f = resolved;
-                            }
+                        if let Some(alias_id) = f.as_symbol_id()
+                            && let Some(resolved) = self.obarray.indirect_function_id(alias_id)
+                        {
+                            f = resolved;
                         }
                         // Handle autoload
                         if super::autoload::is_autoload_value(&f) {
@@ -10138,7 +10133,7 @@ impl Context {
             let bt_count = self.specpdl.len();
             self.push_backtrace_frame(original_fun, &arg_values);
             let expanded =
-                self.with_macro_expansion_scope(|eval| eval.apply_lambda(func, arg_values.into()));
+                self.with_macro_expansion_scope(|eval| eval.apply_lambda(func, arg_values));
             let expanded = self.unbind_to_with_result(bt_count, expanded);
             let expanded = expanded?;
             let expanded_root_count = self.specpdl.len();
@@ -10285,21 +10280,21 @@ impl Context {
         if !cursor.is_nil() {
             return Err(self.listp_error(cursor));
         }
-        if let Some((sym_id, entry)) = direct_subr_entry {
-            if Self::subr_entry_uses_fixed_value_call(entry) {
-                self.set_backtrace_args_evalled_owned(outer_bt_count, args);
+        if let Some((sym_id, entry)) = direct_subr_entry
+            && Self::subr_entry_uses_fixed_value_call(entry)
+        {
+            self.set_backtrace_args_evalled_owned(outer_bt_count, args);
 
-                let result = self.maybe_grow_eval_stack(|ctx| {
-                    ctx.dispatch_subr_entry_from_backtrace_unchecked(entry, outer_bt_count)
-                        .unwrap_or_else(|| {
-                            Err(signal(
-                                LispCondition::VoidFunction,
-                                vec![Value::from_sym_id(sym_id)],
-                            ))
-                        })
-                });
-                return self.unbind_to_with_result(args_roots_base, result);
-            }
+            let result = self.maybe_grow_eval_stack(|ctx| {
+                ctx.dispatch_subr_entry_from_backtrace_unchecked(entry, outer_bt_count)
+                    .unwrap_or_else(|| {
+                        Err(signal(
+                            LispCondition::VoidFunction,
+                            vec![Value::from_sym_id(sym_id)],
+                        ))
+                    })
+            });
+            return self.unbind_to_with_result(args_roots_base, result);
         }
 
         self.set_backtrace_args_evalled(outer_bt_count, &args);
@@ -10521,10 +10516,10 @@ impl Context {
         // resolving variable aliases and does not rescan declared-special
         // flags on ordinary reads. Declared-special affects how bindings are
         // created, not whether an existing lexical cell is readable.
-        if self.lexical_binding() {
-            if let Some(value) = self.lexenv_lookup_cached_in(self.lexenv, sym_id) {
-                return Ok(value);
-            }
+        if self.lexical_binding()
+            && let Some(value) = self.lexenv_lookup_cached_in(self.lexenv, sym_id)
+        {
+            return Ok(value);
         }
 
         // GNU keywords are self-valued constants installed by `intern_sym`;
@@ -10948,10 +10943,10 @@ impl Context {
                 } else {
                     None
                 };
-                if matches!(ht.test, HashTableTest::Eq | HashTableTest::Eql) {
-                    if let (Some(old_ptr), Some(new_ptr)) = (old_ptr, new_ptr) {
-                        ht.replace_pointer_key(old_ptr, new_ptr, *to);
-                    }
+                if matches!(ht.test, HashTableTest::Eq | HashTableTest::Eql)
+                    && let (Some(old_ptr), Some(new_ptr)) = (old_ptr, new_ptr)
+                {
+                    ht.replace_pointer_key(old_ptr, new_ptr, *to);
                 }
                 for item in ht.data.values_mut() {
                     Self::replace_alias_refs_in_value(item, from, to, visited);
@@ -11095,7 +11090,7 @@ impl Context {
     }
 
     fn sf_quote_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
-        Ok(self.one_unevalled_arg(call_name, tail)?)
+        self.one_unevalled_arg(call_name, tail)
     }
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -11885,10 +11880,10 @@ impl Context {
             lexenv: self.lexenv,
         });
         let result = self.eval_sub(body);
-        if let Ok(v) = result {
-            if let Some(SpecBinding::GcRoot { value }) = self.specpdl.get_mut(root_slot) {
-                *value = v;
-            }
+        if let Ok(v) = result
+            && let Some(SpecBinding::GcRoot { value }) = self.specpdl.get_mut(root_slot)
+        {
+            *value = v;
         }
         match self.unbind_to_result(root_slot) {
             Ok(()) => result,
@@ -12270,9 +12265,8 @@ impl Context {
             _ => Vec::new(),
         };
 
-        for i in 0..constants.len() {
-            constants[i] =
-                crate::emacs_core::builtins::try_convert_nested_compiled_literal(constants[i]);
+        for constant in &mut constants {
+            *constant = crate::emacs_core::builtins::try_convert_nested_compiled_literal(*constant);
         }
 
         let (ops, gnu_byte_offset_map) =
@@ -12612,8 +12606,8 @@ impl Context {
             &mut self.features,
             &self.require_stack,
             feature,
-            filename.clone(),
-            noerror.clone(),
+            filename,
+            noerror,
         ) {
             Err(e) => {
                 let rendered = super::error::format_flow_with_eval(self, &e);
@@ -13346,24 +13340,21 @@ impl Context {
         if specpdl_len == count {
             return result;
         }
-        if specpdl_len == count + 1 {
-            match self.specpdl.last() {
-                Some(
-                    SpecBinding::GcRoot { .. }
-                    | SpecBinding::Nop
-                    | SpecBinding::Backtrace {
-                        debug_on_exit: false,
-                        ..
-                    },
-                ) => {
-                    let binding = self.specpdl.pop().expect("specpdl_len checked above");
-                    if let SpecBinding::Backtrace { args, .. } = binding {
-                        self.release_backtrace_args(&args);
-                    }
-                    return result;
-                }
-                _ => {}
+        if specpdl_len == count + 1
+            && let Some(
+                SpecBinding::GcRoot { .. }
+                | SpecBinding::Nop
+                | SpecBinding::Backtrace {
+                    debug_on_exit: false,
+                    ..
+                },
+            ) = self.specpdl.last()
+        {
+            let binding = self.specpdl.pop().expect("specpdl_len checked above");
+            if let SpecBinding::Backtrace { args, .. } = binding {
+                self.release_backtrace_args(&args);
             }
+            return result;
         }
         if self.specpdl[count..]
             .iter()
@@ -13459,7 +13450,7 @@ impl Context {
         if record_backtrace {
             self.push_backtrace_frame(function, &args);
         }
-        let result = (|| {
+        let result = {
             if self.gc_safe_point_exact_should_collect() {
                 self.gc_collect_from_current_roots();
             }
@@ -13468,7 +13459,7 @@ impl Context {
             // depth intervals so normal startup is not dominated by TLS lookups
             // in stacker::maybe_grow.
             self.maybe_grow_eval_stack(|ctx| ctx.funcall_general_untraced(function, args))
-        })();
+        };
         self.depth -= 1;
         let result = self.dispatch_signal_result_if_needed(result);
         self.unbind_to_with_result(bt_count, result)
@@ -13930,13 +13921,13 @@ impl Context {
                 vec![wrong_arity_callee, Value::fixnum(nargs as i64)],
             )));
         }
-        if let Some(max) = entry.max_args {
-            if nargs as u16 > max {
-                return Some(Err(signal(
-                    LispCondition::WrongNumberOfArguments,
-                    vec![wrong_arity_callee, Value::fixnum(nargs as i64)],
-                )));
-            }
+        if let Some(max) = entry.max_args
+            && nargs as u16 > max
+        {
+            return Some(Err(signal(
+                LispCondition::WrongNumberOfArguments,
+                vec![wrong_arity_callee, Value::fixnum(nargs as i64)],
+            )));
         }
         Some(self.dispatch_subr_func_unchecked(func, args))
     }
@@ -14348,7 +14339,8 @@ impl Context {
                     );
                 }
                 let function_is_callable = self.function_value_is_callable(&func);
-                let result = match self.apply_untraced(func, args) {
+
+                match self.apply_untraced(func, args) {
                     Err(Flow::Signal(sig))
                         if sig.symbol_name() == "invalid-function" && !function_is_callable =>
                     {
@@ -14358,8 +14350,7 @@ impl Context {
                         ))
                     }
                     other => other,
-                };
-                result
+                }
             }
             NamedCallTarget::Subr(func) => {
                 let Some((sym_id, entry)) = subr_entry_from_value(func) else {
@@ -14396,7 +14387,8 @@ impl Context {
                     );
                 }
                 let function_is_callable = self.function_value_is_callable(&func);
-                let result = match self.apply(func, args) {
+
+                match self.apply(func, args) {
                     Err(Flow::Signal(sig))
                         if sig.symbol_name() == "invalid-function" && !function_is_callable =>
                     {
@@ -14406,8 +14398,7 @@ impl Context {
                         ))
                     }
                     other => other,
-                };
-                result
+                }
             }
             NamedCallTarget::Subr(func) => {
                 let _sym_id = intern(name);
@@ -15144,65 +15135,64 @@ impl Context {
         //      value into wherever the BLV cache currently points.
         if let Some(sym_slot) = self.obarray.get_by_id(resolved)
             && sym_slot.redirect() == crate::emacs_core::symbol::SymbolRedirect::Localized
+            && let Some(buf_id) = self.buffers.current_buffer_id()
         {
-            if let Some(buf_id) = self.buffers.current_buffer_id() {
-                let (cur_val, alist) = match self.buffers.get(buf_id) {
-                    Some(buf) => (Value::make_buffer(buf.id), buf.local_var_alist),
-                    None => (Value::NIL, Value::NIL),
-                };
-                // Force a swap so blv.found / blv.valcell match the
-                // current buffer state. After this, blv.where_buf =
-                // cur_val.
-                let old_val = self
-                    .obarray
-                    .find_symbol_value_in_buffer(
-                        resolved,
-                        Some(buf_id),
-                        cur_val,
-                        alist,
-                        None,
-                        0u64,
-                        None,
-                    )
-                    .unwrap_or(Value::NIL);
-                let has_local_binding = self
-                    .obarray
-                    .has_per_buffer_binding(resolved, cur_val, alist);
-                if has_local_binding {
-                    self.specpdl.push(SpecBinding::LetLocal {
-                        sym_id: resolved,
-                        old_value: old_val,
-                        buffer_id: buf_id,
-                    });
-                } else {
-                    self.specpdl.push(SpecBinding::LetDefault {
-                        sym_id: resolved,
-                        old_value: Some(old_val),
-                        buffer_id: Some(buf_id),
-                    });
-                }
-                if self.watchers.has_watchers(resolved) {
-                    let _ = self.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "let");
-                }
-                // Write the new value via set_internal_localized
-                // with bindflag=Bind. Bind never auto-creates a new
-                // alist entry, so a let on a non-buffer-local
-                // LOCALIZED symbol writes to defcell.cdr (the
-                // global default), matching GNU.
-                let new_alist = self.obarray.set_internal_localized(
+            let (cur_val, alist) = match self.buffers.get(buf_id) {
+                Some(buf) => (Value::make_buffer(buf.id), buf.local_var_alist),
+                None => (Value::NIL, Value::NIL),
+            };
+            // Force a swap so blv.found / blv.valcell match the
+            // current buffer state. After this, blv.where_buf =
+            // cur_val.
+            let old_val = self
+                .obarray
+                .find_symbol_value_in_buffer(
                     resolved,
-                    value,
+                    Some(buf_id),
                     cur_val,
                     alist,
-                    crate::emacs_core::symbol::SetInternalBind::Bind,
-                    false,
-                );
-                if let Some(buf) = self.buffers.get_mut(buf_id) {
-                    buf.local_var_alist = new_alist;
-                }
-                self.sync_cached_runtime_binding_by_id(resolved, value);
-                return;
+                    None,
+                    0u64,
+                    None,
+                )
+                .unwrap_or(Value::NIL);
+            let has_local_binding = self
+                .obarray
+                .has_per_buffer_binding(resolved, cur_val, alist);
+            if has_local_binding {
+                self.specpdl.push(SpecBinding::LetLocal {
+                    sym_id: resolved,
+                    old_value: old_val,
+                    buffer_id: buf_id,
+                });
+            } else {
+                self.specpdl.push(SpecBinding::LetDefault {
+                    sym_id: resolved,
+                    old_value: Some(old_val),
+                    buffer_id: Some(buf_id),
+                });
             }
+            if self.watchers.has_watchers(resolved) {
+                let _ = self.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "let");
+            }
+            // Write the new value via set_internal_localized
+            // with bindflag=Bind. Bind never auto-creates a new
+            // alist entry, so a let on a non-buffer-local
+            // LOCALIZED symbol writes to defcell.cdr (the
+            // global default), matching GNU.
+            let new_alist = self.obarray.set_internal_localized(
+                resolved,
+                value,
+                cur_val,
+                alist,
+                crate::emacs_core::symbol::SetInternalBind::Bind,
+                false,
+            );
+            if let Some(buf) = self.buffers.get_mut(buf_id) {
+                buf.local_var_alist = new_alist;
+            }
+            self.sync_cached_runtime_binding_by_id(resolved, value);
+            return;
         }
 
         // Plain value path (GNU: SYMBOL_PLAINVAL)
@@ -16036,11 +16026,12 @@ pub(crate) fn makunbound_runtime_binding_in_state(
         .blv(sym_id)
         .map(|blv| blv.local_if_set)
         .unwrap_or(false);
-    if symbol_is_canonical && local_if_set {
-        if let Some(current_id) = buffers.current_buffer_id() {
-            let _ = buffers.set_buffer_local_void_property_by_sym_id(current_id, sym_id);
-            return;
-        }
+    if symbol_is_canonical
+        && local_if_set
+        && let Some(current_id) = buffers.current_buffer_id()
+    {
+        let _ = buffers.set_buffer_local_void_property_by_sym_id(current_id, sym_id);
+        return;
     }
 
     obarray.makunbound_id(sym_id);
@@ -16679,15 +16670,14 @@ impl Context {
         if self.obarray.is_constant_id(resolved_id)
             && !self.has_local_binding_by_id(sym_id)
             && (resolved_id == sym_id || !self.has_local_binding_by_id(resolved_id))
-        {
-            if let Some(result) = super::builtins::constant_set_outcome_in_obarray(
+            && let Some(result) = super::builtins::constant_set_outcome_in_obarray(
                 self.obarray(),
                 resolved_id,
                 value_from_symbol_id(sym_id),
                 value,
-            ) {
-                return result;
-            }
+            )
+        {
+            return result;
         }
 
         let where_value = self.variable_watcher_where_for_set_by_id(resolved_id);

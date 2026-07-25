@@ -70,7 +70,7 @@ pub fn is_char_table(v: &Value) -> bool {
         vec.len() >= CT_EXTRA_START
             && vec[0]
                 .as_symbol_id()
-                .map_or(false, |id| resolve_sym(id) == CHAR_TABLE_TAG)
+                .is_some_and(|id| resolve_sym(id) == CHAR_TABLE_TAG)
     } else {
         false
     }
@@ -87,7 +87,7 @@ pub fn is_bool_vector(v: &Value) -> bool {
         vec.len() >= 2
             && vec[0]
                 .as_symbol_id()
-                .map_or(false, |id| resolve_sym(id) == BOOL_VECTOR_TAG)
+                .is_some_and(|id| resolve_sym(id) == BOOL_VECTOR_TAG)
     } else {
         false
     }
@@ -100,9 +100,9 @@ pub(crate) fn bool_vector_length(v: &Value) -> Option<i64> {
     };
     let vec = v.as_vector_data().unwrap();
     if vec.len() < 2
-        || !vec[0]
+        || vec[0]
             .as_symbol_id()
-            .map_or(false, |id| resolve_sym(id) == BOOL_VECTOR_TAG)
+            .is_none_or(|id| resolve_sym(id) != BOOL_VECTOR_TAG)
     {
         return None;
     }
@@ -140,7 +140,7 @@ pub(crate) fn char_table_length(v: &Value) -> Option<i64> {
     if vec.len() >= CT_EXTRA_START
         && vec[0]
             .as_symbol_id()
-            .map_or(false, |id| resolve_sym(id) == CHAR_TABLE_TAG)
+            .is_some_and(|id| resolve_sym(id) == CHAR_TABLE_TAG)
     {
         Some(CT_LOGICAL_LENGTH)
     } else {
@@ -1337,16 +1337,17 @@ fn ct_get_char(vec: &[Value], ch: i64, is_uniprop: bool) -> Option<Value> {
             ValueKind::Cons => {
                 let pair_car = key.cons_car();
                 let pair_cdr = key.cons_cdr();
-                if let (Some(min), Some(max)) = (pair_car.as_fixnum(), pair_cdr.as_fixnum()) {
-                    if ch >= min && ch <= max {
-                        return Some(ct_entry_value_for_char(
-                            vec[i + 1],
-                            min,
-                            max,
-                            ch,
-                            is_uniprop,
-                        ));
-                    }
+                if let (Some(min), Some(max)) = (pair_car.as_fixnum(), pair_cdr.as_fixnum())
+                    && ch >= min
+                    && ch <= max
+                {
+                    return Some(ct_entry_value_for_char(
+                        vec[i + 1],
+                        min,
+                        max,
+                        ch,
+                        is_uniprop,
+                    ));
                 }
             }
             _ => {}
@@ -1394,9 +1395,7 @@ fn ct_lookup_ascii_cached(table: &Value, ch: i64) -> Option<Value> {
         {
             return None;
         }
-        let Some(cache_range) = ct_ascii_cache_range(vec_ref) else {
-            return None;
-        };
+        let cache_range = ct_ascii_cache_range(vec_ref)?;
 
         let value = vec_ref[cache_range.start + ch];
         if !value.is_nil() {
@@ -1499,10 +1498,10 @@ pub(crate) fn ct_lookup(table: &Value, ch: i64) -> EvalResult {
     // the table is to index without copying.
     let vec_ref = table.as_vector_data().unwrap();
 
-    if let Some(val) = ct_get_char(vec_ref, ch, is_char_code_property_vec(vec_ref)) {
-        if !val.is_nil() {
-            return Ok(val);
-        }
+    if let Some(val) = ct_get_char(vec_ref, ch, is_char_code_property_vec(vec_ref))
+        && !val.is_nil()
+    {
+        return Ok(val);
     }
 
     let default = vec_ref[CT_DEFAULT];
@@ -1564,10 +1563,10 @@ pub(crate) fn translate_char(table: &Value, c: i64) -> i64 {
 ///     `Vchar_unify_table` after `load_charset`.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn maybe_unify_char(c: i64, val: &Value) -> i64 {
-    if let Some(n) = val.as_fixnum() {
-        if (0..=MAX_CHAR).contains(&n) {
-            return n;
-        }
+    if let Some(n) = val.as_fixnum()
+        && (0..=MAX_CHAR).contains(&n)
+    {
+        return n;
     }
     // nil, or charset-symbol fallback — TODO: full charset support.
     c
@@ -1775,11 +1774,12 @@ fn append_atomic_run(out: &mut Vec<(Value, i64, i64)>, value: Value, start: i64,
     if start > end {
         return;
     }
-    if let Some((last_value, _last_start, last_end)) = out.last_mut() {
-        if *last_end + 1 == start && *last_value == value {
-            *last_end = end;
-            return;
-        }
+    if let Some((last_value, _last_start, last_end)) = out.last_mut()
+        && *last_end + 1 == start
+        && *last_value == value
+    {
+        *last_end = end;
+        return;
     }
     out.push((value, start, end));
 }
@@ -3292,7 +3292,7 @@ fn bv_bits(vec: &[Value]) -> Vec<bool> {
     let mut bits = Vec::with_capacity(len);
     for i in 0..len {
         let v = &vec[2 + i];
-        bits.push(v.as_fixnum().map_or(false, |n| n != 0));
+        bits.push(v.as_fixnum().is_some_and(|n| n != 0));
     }
     bits
 }
@@ -3528,7 +3528,7 @@ fn store_bv_result_with_expected_lengths(
         let current = slots
             .get(2 + i)
             .copied()
-            .map(|value| value.as_fixnum().map_or(false, |n| n != 0))
+            .map(|value| value.as_fixnum().is_some_and(|n| n != 0))
             .unwrap_or(false);
         current != b
     });

@@ -62,7 +62,7 @@ pub(crate) fn builtin_neomacs_effect_get(
         .map_err(|error| effect_error("neomacs-effect-get", error))?;
     let mut result = Vec::with_capacity(properties.len() * 2);
     for (name, value) in properties {
-        result.push(Value::keyword(&format!(":{name}")));
+        result.push(Value::keyword(format!(":{name}")));
         result.push(value_to_lisp(value));
     }
     Ok(Value::list(result))

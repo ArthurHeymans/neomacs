@@ -122,7 +122,7 @@ fn extract_char(value: &Value, fn_name: &str) -> Result<char, Flow> {
 
 fn extract_char_code(value: &Value, _fn_name: &str) -> Result<i64, Flow> {
     match value.kind() {
-        ValueKind::Fixnum(c) => Ok(c as i64),
+        ValueKind::Fixnum(c) => Ok(c),
         _ => Err(signal(
             LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), *value],
@@ -463,7 +463,7 @@ fn category_set_contains(category_set: &Value, category: char) -> Result<bool, F
     Ok(vec
         .get(bit_idx)
         .and_then(|v| v.as_fixnum())
-        .map_or(false, |n| n != 0))
+        .is_some_and(|n| n != 0))
 }
 
 pub(crate) fn char_has_category_in_table(

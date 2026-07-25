@@ -83,7 +83,7 @@ fn expect_wholenump(val: &Value) -> Result<i64, Flow> {
 
 fn expect_character_code(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
-        ValueKind::Fixnum(c) if (0..=0x3F_FFFF).contains(&c) => Ok(c as i64),
+        ValueKind::Fixnum(c) if (0..=0x3F_FFFF).contains(&c) => Ok(c),
         _ => Err(signal(
             LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), *val],

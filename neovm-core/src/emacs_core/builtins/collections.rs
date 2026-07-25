@@ -318,7 +318,7 @@ pub(crate) fn builtin_vconcat_slice(args: &[Value]) -> EvalResult {
                 ));
             }
             ValueKind::Veclike(VecLikeType::Vector) => {
-                result.extend(arg.as_vector_data().unwrap().clone().into_iter())
+                result.extend(arg.as_vector_data().unwrap().clone())
             }
             ValueKind::String => {
                 let string = arg.as_lisp_string().expect("string");
@@ -328,11 +328,9 @@ pub(crate) fn builtin_vconcat_slice(args: &[Value]) -> EvalResult {
             }
             ValueKind::Nil => {}
             ValueKind::Cons => result.extend(super::cons_list::collect_proper_list_items(*arg)?),
-            ValueKind::Veclike(VecLikeType::Lambda) => {
-                result.extend(lambda_to_closure_vector(arg).into_iter())
-            }
+            ValueKind::Veclike(VecLikeType::Lambda) => result.extend(lambda_to_closure_vector(arg)),
             ValueKind::Veclike(VecLikeType::ByteCode) => {
-                result.extend(bytecode_to_closure_vector(arg).into_iter())
+                result.extend(bytecode_to_closure_vector(arg))
             }
             _ => {
                 return Err(signal(
@@ -453,7 +451,7 @@ pub(crate) fn builtin_define_hash_table_test(args: Vec<Value>) -> EvalResult {
     register_hash_table_test_alias(
         alias_name,
         HashTableTestAlias {
-            standard_test: standard_test.clone(),
+            standard_test,
             user_cmp_function: standard_test.is_none().then_some(args[1]),
             user_hash_function: standard_test.is_none().then_some(args[2]),
         },
@@ -466,7 +464,7 @@ pub(crate) fn builtin_make_hash_table(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_make_hash_table_slice(args: &[Value]) -> EvalResult {
-    if args.len() % 2 != 0 {
+    if !args.len().is_multiple_of(2) {
         return Err(signal(
             "error",
             vec![Value::string("Odd number of arguments")],
@@ -559,11 +557,11 @@ pub(crate) fn builtin_make_hash_table_slice(args: &[Value]) -> EvalResult {
     if table.is_hash_table() {
         let _ = table.with_hash_table_mut(|ht| {
             ht.test_name = test_name;
-            if let Some(name_id) = test_name {
-                if let Some(alias) = lookup_hash_table_test_alias(resolve_sym(name_id)) {
-                    ht.user_cmp_function = alias.user_cmp_function;
-                    ht.user_hash_function = alias.user_hash_function;
-                }
+            if let Some(name_id) = test_name
+                && let Some(alias) = lookup_hash_table_test_alias(resolve_sym(name_id))
+            {
+                ht.user_cmp_function = alias.user_cmp_function;
+                ht.user_hash_function = alias.user_hash_function;
             }
         });
     }
@@ -818,7 +816,7 @@ fn builtin_puthash_values(
     match table.kind() {
         ValueKind::Veclike(VecLikeType::HashTable) => {
             check_mutable_hash_table(table)?;
-            let test = table.as_hash_table().unwrap().test.clone();
+            let test = table.as_hash_table().unwrap().test;
             let key = key_value.to_hash_key_swp(&test, symbols_with_pos_enabled);
             let _ = table.with_hash_table_mut(|ht| {
                 if let Some(slot) = ht.data.get_mut(&key) {
@@ -917,7 +915,7 @@ pub(crate) fn builtin_remhash_values(
     match table.kind() {
         ValueKind::Veclike(VecLikeType::HashTable) => {
             check_mutable_hash_table(table)?;
-            let test = table.as_hash_table().unwrap().test.clone();
+            let test = table.as_hash_table().unwrap().test;
             let key = key_value.to_hash_key_swp(&test, symbols_with_pos_enabled);
             let _ = table.with_hash_table_mut(|ht| {
                 let _ = ht.data.remove(&key);
@@ -1226,7 +1224,6 @@ pub(crate) fn builtin_plist_member(
     expect_range_args("plist-member", &args, 2, 3)?;
     let plist = args[0];
     let prop = args[1];
-    let predicate = predicate;
 
     // Root Values that survive across eval.apply() in the loop.
     let roots = eval.save_specpdl_roots();

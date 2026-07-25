@@ -520,7 +520,7 @@ fn configure_subprocess_environment(
 }
 
 fn is_file_keyword(value: &Value) -> bool {
-    value.as_keyword_id().map_or(false, |k| {
+    value.as_keyword_id().is_some_and(|k| {
         let n = resolve_sym(k);
         n == ":file" || n == "file"
     })
@@ -811,7 +811,7 @@ fn run_process_command_in_state(
     destination: &Value,
     cmd_args: &[LispString],
 ) -> EvalResult {
-    let destination_spec = parse_call_process_destination(&mut eval.buffers, destination)?;
+    let destination_spec = parse_call_process_destination(&eval.buffers, destination)?;
     // GNU `Fcall_process`: validate the cwd via `get_current_directory` (signals
     // "Setting current directory" for an inaccessible local dir) and expand a
     // relative INFILE against `default-directory`, both *before* spawning. The cwd

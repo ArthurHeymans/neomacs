@@ -200,17 +200,15 @@ fn resolve_documentation_function_value(
 
     if let Some(alias_symbol) =
         super::builtins::symbols::symbol_id_checked(&resolved, symbols_with_pos_enabled)
-    {
-        if let Some(indirect) =
+        && let Some(indirect) =
             super::builtins::symbols::resolve_indirect_symbol_by_id_in_obarray_checked(
                 obarray,
                 alias_symbol,
                 symbols_with_pos_enabled,
             )
             .map(|(_, value)| value)
-        {
-            resolved = indirect;
-        }
+    {
+        resolved = indirect;
     }
 
     Ok(resolved)

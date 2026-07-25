@@ -224,7 +224,7 @@ impl DisplayPointerSourceRange {
         };
         let (kind, source_id) = match self.source {
             DisplaySourcePosition::Buffer { buffer_id, .. } => {
-                (GlyphPointerSourceKind::Buffer, buffer_id.0 as u64)
+                (GlyphPointerSourceKind::Buffer, buffer_id.0)
             }
             DisplaySourcePosition::LispString { source_id, .. } => {
                 (GlyphPointerSourceKind::LispString, source_id.get())
@@ -245,7 +245,7 @@ impl DisplayPointerSourceRange {
                 buffer_id,
                 anchor_charpos,
             } => GlyphPointerOccurrenceIdentity::BufferDisplayReplacement {
-                buffer_id: buffer_id.0 as u64,
+                buffer_id: buffer_id.0,
                 anchor: anchor_charpos.get() as u64,
             },
         };
@@ -698,6 +698,8 @@ pub(crate) enum GlyphlessMethod {
     ZeroWidth,
     #[allow(dead_code)]
     ThinSpace,
+    #[allow(dead_code)]
+    // supported rendering mode; current production classifier does not select it
     HexCode,
     EmptyBox,
 }

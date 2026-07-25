@@ -897,18 +897,17 @@ pub(crate) fn builtin_describe_buffer_bindings(args: Vec<Value>) -> EvalResult {
             vec![Value::symbol("bufferp"), args[0]],
         ));
     }
-    if let Some(prefixes) = args.get(1) {
-        if !prefixes.is_nil()
-            && !(prefixes.is_cons()
-                || prefixes.is_vector()
-                || prefixes.is_string()
-                || prefixes.is_nil())
-        {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("sequencep"), *prefixes],
-            ));
-        }
+    if let Some(prefixes) = args.get(1)
+        && !prefixes.is_nil()
+        && !(prefixes.is_cons()
+            || prefixes.is_vector()
+            || prefixes.is_string()
+            || prefixes.is_nil())
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("sequencep"), *prefixes],
+        ));
     }
     Ok(Value::NIL)
 }
@@ -1264,18 +1263,19 @@ pub(crate) fn builtin_mouse_position_in_root_frame(args: Vec<Value>) -> EvalResu
 
 pub(crate) fn builtin_fringe_bitmaps_at_pos(args: Vec<Value>) -> EvalResult {
     expect_range_args("fringe-bitmaps-at-pos", &args, 0, 2)?;
-    if let Some(pos) = args.first() {
-        if !pos.is_nil() {
-            let _ = expect_integer_or_marker(pos)?;
-        }
+    if let Some(pos) = args.first()
+        && !pos.is_nil()
+    {
+        let _ = expect_integer_or_marker(pos)?;
     }
-    if let Some(window) = args.get(1) {
-        if !window.is_nil() && !window.is_window() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("window-live-p"), *window],
-            ));
-        }
+    if let Some(window) = args.get(1)
+        && !window.is_nil()
+        && !window.is_window()
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("window-live-p"), *window],
+        ));
     }
     Ok(Value::NIL)
 }

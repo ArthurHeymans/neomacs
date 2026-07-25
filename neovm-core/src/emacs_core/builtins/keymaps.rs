@@ -41,6 +41,7 @@ fn ensure_global_keymap(eval: &mut super::eval::Context) -> Value {
     ensure_global_keymap_in_obarray(&mut eval.obarray)
 }
 
+#[allow(clippy::too_many_arguments)] // mirrors the Lisp helper's positional argument contract
 fn call_help_describe_map_tree(
     eval: &mut super::eval::Context,
     startmap: Value,
@@ -157,11 +158,10 @@ fn lucid_event_type_list_p(value: &Value) -> bool {
     if !value.is_cons() {
         return false;
     }
-    match value.cons_car().as_symbol_name() {
-        Some("help-echo" | "vertical-line" | "mode-line" | "tab-line" | "header-line") => {
-            return false;
-        }
-        _ => {}
+    if let Some("help-echo" | "vertical-line" | "mode-line" | "tab-line" | "header-line") =
+        value.cons_car().as_symbol_name()
+    {
+        return false;
     }
 
     let mut cursor = *value;
@@ -203,8 +203,8 @@ pub(super) fn builtin_accessible_keymaps(
 pub(crate) fn builtin_accessible_keymaps_impl(obarray: &Obarray, args: &[Value]) -> EvalResult {
     use crate::emacs_core::value::{ValueKind, VecLikeType};
 
-    expect_min_args("accessible-keymaps", &args, 1)?;
-    expect_max_args("accessible-keymaps", &args, 2)?;
+    expect_min_args("accessible-keymaps", args, 1)?;
+    expect_max_args("accessible-keymaps", args, 2)?;
     let keymap = expect_keymap_in_obarray(obarray, &args[0])?;
 
     // Collect all accessible keymaps
@@ -212,57 +212,57 @@ pub(crate) fn builtin_accessible_keymaps_impl(obarray: &Obarray, args: &[Value])
     list_keymap_accessible(&keymap, &mut all_out);
 
     // If prefix argument is provided, filter results
-    if let Some(prefix_arg) = args.get(1) {
-        if !prefix_arg.is_nil() {
-            // Must be a sequence (string or vector), not a list or non-sequence
-            let prefix_events: Vec<Value> = match prefix_arg.kind() {
-                ValueKind::String => {
-                    // String prefix — convert to events
-                    expect_key_events(prefix_arg)?
-                }
-                ValueKind::Veclike(VecLikeType::Vector) => {
-                    // Vector prefix — elements are events directly
-                    prefix_arg.as_vector_data().unwrap().clone()
-                }
-                ValueKind::Cons => {
-                    // Lists are not valid as key sequences for prefix
-                    return Err(super::error::signal(
-                        LispCondition::WrongTypeArgument,
-                        vec![Value::symbol("arrayp"), *prefix_arg],
-                    ));
-                }
-                _ => {
-                    return Err(super::error::signal(
-                        LispCondition::WrongTypeArgument,
-                        vec![Value::symbol("sequencep"), *prefix_arg],
-                    ));
-                }
-            };
+    if let Some(prefix_arg) = args.get(1)
+        && !prefix_arg.is_nil()
+    {
+        // Must be a sequence (string or vector), not a list or non-sequence
+        let prefix_events: Vec<Value> = match prefix_arg.kind() {
+            ValueKind::String => {
+                // String prefix — convert to events
+                expect_key_events(prefix_arg)?
+            }
+            ValueKind::Veclike(VecLikeType::Vector) => {
+                // Vector prefix — elements are events directly
+                prefix_arg.as_vector_data().unwrap().clone()
+            }
+            ValueKind::Cons => {
+                // Lists are not valid as key sequences for prefix
+                return Err(super::error::signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("arrayp"), *prefix_arg],
+                ));
+            }
+            _ => {
+                return Err(super::error::signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("sequencep"), *prefix_arg],
+                ));
+            }
+        };
 
-            // Filter: only keep entries whose prefix starts with the given prefix
-            let filtered: Vec<Value> = all_out
-                .into_iter()
-                .filter(|entry| {
-                    if entry.is_cons() {
-                        let pair_car = entry.cons_car();
-                        let _pair_cdr = entry.cons_cdr();
-                        // pair_car is the prefix vector
-                        if pair_car.is_vector() {
-                            let entry_prefix = pair_car.as_vector_data().unwrap().clone();
-                            if entry_prefix.len() >= prefix_events.len() {
-                                return entry_prefix[..prefix_events.len()] == prefix_events[..];
-                            }
+        // Filter: only keep entries whose prefix starts with the given prefix
+        let filtered: Vec<Value> = all_out
+            .into_iter()
+            .filter(|entry| {
+                if entry.is_cons() {
+                    let pair_car = entry.cons_car();
+                    let _pair_cdr = entry.cons_cdr();
+                    // pair_car is the prefix vector
+                    if pair_car.is_vector() {
+                        let entry_prefix = pair_car.as_vector_data().unwrap().clone();
+                        if entry_prefix.len() >= prefix_events.len() {
+                            return entry_prefix[..prefix_events.len()] == prefix_events[..];
                         }
                     }
-                    false
-                })
-                .collect();
+                }
+                false
+            })
+            .collect();
 
-            if filtered.is_empty() {
-                return Ok(Value::NIL);
-            }
-            return Ok(Value::list(filtered));
+        if filtered.is_empty() {
+            return Ok(Value::NIL);
         }
+        return Ok(Value::list(filtered));
     }
 
     Ok(Value::list(all_out))
@@ -277,7 +277,7 @@ pub(super) fn builtin_make_keymap(
 }
 
 pub(crate) fn builtin_make_keymap_pure(args: &[Value]) -> EvalResult {
-    expect_max_args("make-keymap", &args, 1)?;
+    expect_max_args("make-keymap", args, 1)?;
     let keymap = make_list_keymap();
     if let Some(prompt) = args.first()
         && !prompt.is_nil()
@@ -297,13 +297,13 @@ pub(super) fn builtin_make_sparse_keymap(
 ) -> EvalResult {
     expect_max_args("make-sparse-keymap", &args, 1)?;
     // GNU keymap.c: (make-sparse-keymap "prompt") → (keymap "prompt")
-    if let Some(prompt) = args.first() {
-        if prompt.is_string() {
-            return Ok(Value::cons(
-                KeymapMarker::Keymap.symbol_value(),
-                Value::cons(*prompt, Value::NIL),
-            ));
-        }
+    if let Some(prompt) = args.first()
+        && prompt.is_string()
+    {
+        return Ok(Value::cons(
+            KeymapMarker::Keymap.symbol_value(),
+            Value::cons(*prompt, Value::NIL),
+        ));
     }
     Ok(make_sparse_list_keymap())
 }
@@ -314,7 +314,7 @@ pub(super) fn builtin_copy_keymap(eval: &mut super::eval::Context, args: Vec<Val
 }
 
 pub(crate) fn builtin_copy_keymap_impl(obarray: &Obarray, args: &[Value]) -> EvalResult {
-    expect_args("copy-keymap", &args, 1)?;
+    expect_args("copy-keymap", args, 1)?;
     let keymap = expect_keymap_in_obarray(obarray, &args[0])?;
     Ok(list_keymap_copy(&keymap))
 }
@@ -566,18 +566,17 @@ pub(super) fn builtin_describe_buffer_bindings(
             vec![Value::symbol("bufferp"), args[0]],
         ));
     }
-    if let Some(prefixes) = args.get(1) {
-        if !prefixes.is_nil()
-            && !(prefixes.is_cons()
-                || prefixes.is_vector()
-                || prefixes.is_string()
-                || prefixes.is_nil())
-        {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("sequencep"), *prefixes],
-            ));
-        }
+    if let Some(prefixes) = args.get(1)
+        && !prefixes.is_nil()
+        && !(prefixes.is_cons()
+            || prefixes.is_vector()
+            || prefixes.is_string()
+            || prefixes.is_nil())
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("sequencep"), *prefixes],
+        ));
     }
 
     let buffer = args[0];
@@ -715,7 +714,7 @@ pub(crate) fn builtin_current_active_maps_impl(
     ctx: &mut crate::emacs_core::eval::Context,
     args: &[Value],
 ) -> EvalResult {
-    expect_max_args("current-active-maps", &args, 2)?;
+    expect_max_args("current-active-maps", args, 2)?;
     let obey_overriding_local_maps = args.first().is_some_and(|v| v.is_truthy());
     let maps = current_active_maps_for_position(ctx, obey_overriding_local_maps, args.get(1))?;
     Ok(Value::list(maps))
@@ -733,7 +732,7 @@ pub(crate) fn builtin_current_minor_mode_maps_impl(
     ctx: &crate::emacs_core::eval::Context,
     args: &[Value],
 ) -> EvalResult {
-    expect_args("current-minor-mode-maps", &args, 0)?;
+    expect_args("current-minor-mode-maps", args, 0)?;
     let maps = collect_minor_mode_maps_in_state(
         &ctx.obarray,
         &[],
@@ -932,7 +931,7 @@ pub(super) fn builtin_keymapp(eval: &mut super::eval::Context, args: Vec<Value>)
 }
 
 pub(crate) fn builtin_keymapp_impl(obarray: &Obarray, args: &[Value]) -> EvalResult {
-    expect_args("keymapp", &args, 1)?;
+    expect_args("keymapp", args, 1)?;
     Ok(maybe_keymap_in_obarray(obarray, &args[0])
         .map(|_| Value::T)
         .unwrap_or(Value::NIL))

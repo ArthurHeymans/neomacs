@@ -141,14 +141,14 @@ fn generate_x11_color_table(project_root: &Path, _manifest_dir: &Path) {
         // Remaining is the color name (may contain spaces)
         let name: String = parts.collect::<Vec<_>>().join(" ");
 
-        if let (Some(r), Some(g), Some(b)) = (r, g, b) {
-            if !name.is_empty() {
-                let lower = name.to_lowercase();
-                let no_spaces = lower.replace(' ', "");
-                colors.entry(lower.clone()).or_insert((r, g, b));
-                if no_spaces != lower {
-                    colors.entry(no_spaces).or_insert((r, g, b));
-                }
+        if let (Some(r), Some(g), Some(b)) = (r, g, b)
+            && !name.is_empty()
+        {
+            let lower = name.to_lowercase();
+            let no_spaces = lower.replace(' ', "");
+            colors.entry(lower.clone()).or_insert((r, g, b));
+            if no_spaces != lower {
+                colors.entry(no_spaces).or_insert((r, g, b));
             }
         }
     }

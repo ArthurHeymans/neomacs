@@ -48,12 +48,10 @@ fn match_data_for_explicit_string_arg(
             .searched_buffer_id()
             .and_then(|buffer_id| buffers.get(buffer_id))
     {
-        for group in &mut converted.groups {
-            if let Some(group) = group {
-                let start = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.start()));
-                let end = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.end()));
-                *group = MatchGroup::new(start.max(0) as usize, end.max(0) as usize);
-            }
+        for group in converted.groups.iter_mut().flatten() {
+            let start = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.start()));
+            let end = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.end()));
+            *group = MatchGroup::new(start.max(0) as usize, end.max(0) as usize);
         }
     }
     converted.set_string_source(None);
@@ -119,7 +117,7 @@ pub(crate) fn builtin_search_forward_with_state(
             match opts.direction {
                 SearchDirection::Forward => super::regex::search_forward(
                     buf,
-                    &pattern,
+                    pattern,
                     opts.bound.map(|bound| bound.get()),
                     false,
                     case_fold,
@@ -127,7 +125,7 @@ pub(crate) fn builtin_search_forward_with_state(
                 ),
                 SearchDirection::Backward => super::regex::search_backward(
                     buf,
-                    &pattern,
+                    pattern,
                     opts.bound.map(|bound| bound.get()),
                     false,
                     case_fold,
@@ -400,7 +398,7 @@ pub(crate) fn builtin_search_backward_with_state(
             match opts.direction {
                 SearchDirection::Forward => super::regex::search_forward(
                     buf,
-                    &pattern,
+                    pattern,
                     opts.bound.map(|bound| bound.get()),
                     false,
                     case_fold,
@@ -408,7 +406,7 @@ pub(crate) fn builtin_search_backward_with_state(
                 ),
                 SearchDirection::Backward => super::regex::search_backward(
                     buf,
-                    &pattern,
+                    pattern,
                     opts.bound.map(|bound| bound.get()),
                     false,
                     case_fold,
@@ -874,7 +872,7 @@ pub(crate) fn builtin_string_match_with_state(
                     let default_syntax = crate::emacs_core::regex_emacs::DefaultSyntaxLookup;
                     let buffer_syntax = syntax_table.map(|syntax_table| {
                         crate::emacs_core::regex_emacs::BufferSyntaxLookup {
-                            syntax_table: syntax_table.clone(),
+                            syntax_table: *syntax_table,
                             category_table,
                         }
                     });
@@ -1001,7 +999,7 @@ pub(crate) fn builtin_posix_string_match_with_state(
                     let default_syntax = crate::emacs_core::regex_emacs::DefaultSyntaxLookup;
                     let buffer_syntax = syntax_table.map(|syntax_table| {
                         crate::emacs_core::regex_emacs::BufferSyntaxLookup {
-                            syntax_table: syntax_table.clone(),
+                            syntax_table: *syntax_table,
                             category_table,
                         }
                     });
@@ -1064,7 +1062,7 @@ pub(crate) fn builtin_string_match_p_with_case_fold(
             let default_syntax = crate::emacs_core::regex_emacs::DefaultSyntaxLookup;
             let buffer_syntax = syntax_table.map(|syntax_table| {
                 crate::emacs_core::regex_emacs::BufferSyntaxLookup {
-                    syntax_table: syntax_table.clone(),
+                    syntax_table: *syntax_table,
                     category_table,
                 }
             });
@@ -1223,10 +1221,11 @@ pub(crate) fn builtin_match_string(
                 char_pos_to_byte_lisp_string(string, start),
                 char_pos_to_byte_lisp_string(string, end),
             );
-            if byte_end <= string.byte_len() && byte_start <= byte_end {
-                if let Some(slice) = string.slice(byte_start, byte_end).map(Value::heap_string) {
-                    return Ok(slice);
-                }
+            if byte_end <= string.byte_len()
+                && byte_start <= byte_end
+                && let Some(slice) = string.slice(byte_start, byte_end).map(Value::heap_string)
+            {
+                return Ok(slice);
             }
             return Ok(Value::NIL);
         }
@@ -1242,19 +1241,19 @@ pub(crate) fn builtin_match_string(
 
     // Otherwise, if the match was against a string, use that string.
     if let Some(searched) = md.searched_string() {
-        if let super::regex::SearchedString::Heap(val) = searched {
-            if let Some(string) = val.as_lisp_string() {
-                if let Some(slice) = slice_lisp_string(string, true) {
-                    return Ok(slice);
-                }
-                return Ok(Value::NIL);
-            }
-        }
-
-        if let Some(string) = searched.as_lisp_string() {
+        if let super::regex::SearchedString::Heap(val) = searched
+            && let Some(string) = val.as_lisp_string()
+        {
             if let Some(slice) = slice_lisp_string(string, true) {
                 return Ok(slice);
             }
+            return Ok(Value::NIL);
+        }
+
+        if let Some(string) = searched.as_lisp_string()
+            && let Some(slice) = slice_lisp_string(string, true)
+        {
+            return Ok(slice);
         }
         return Ok(Value::NIL);
     }
@@ -1413,10 +1412,10 @@ pub(crate) fn builtin_match_data_with_state(
     }
 
     let reuse = args.get(1).copied().unwrap_or(Value::NIL);
-    if args.get(2).is_some_and(|arg| arg.is_truthy()) {
-        if let Some(bufs) = buffers.as_deref_mut() {
-            reseat_match_data_markers(bufs, reuse, None);
-        }
+    if args.get(2).is_some_and(|arg| arg.is_truthy())
+        && let Some(bufs) = buffers.as_deref_mut()
+    {
+        reseat_match_data_markers(bufs, reuse, None);
     }
 
     let Some(md) = match_data else {
@@ -1503,10 +1502,11 @@ pub(crate) fn builtin_match_data_with_state(
         }
     }
 
-    if integers && !md.is_string_match() {
-        if let Some(buffer_id) = searched_buffer_id {
-            flat.push(Value::make_buffer(buffer_id));
-        }
+    if integers
+        && !md.is_string_match()
+        && let Some(buffer_id) = searched_buffer_id
+    {
+        flat.push(Value::make_buffer(buffer_id));
     }
     Ok(store_match_data_in_reuse(reuse, &flat))
 }
@@ -1678,10 +1678,8 @@ pub(crate) fn builtin_set_match_data(
 
 fn translate_match_data(match_data: &mut Option<super::regex::MatchData>, delta: i64) {
     if let Some(md) = match_data {
-        for group in md.groups.iter_mut() {
-            if let Some(group) = group {
-                *group = group.translate_saturating(delta);
-            }
+        for group in md.groups.iter_mut().flatten() {
+            *group = group.translate_saturating(delta);
         }
     }
 }
@@ -1698,12 +1696,10 @@ pub(crate) fn builtin_match_data_translate_with_state(
     {
         let buffer_id = md.searched_buffer_id();
         if let Some(buf) = buffer_id.and_then(|buffer_id| buffers.get(buffer_id)) {
-            for group in &mut md.groups {
-                if let Some(group) = group {
-                    let start = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.start()));
-                    let end = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.end()));
-                    *group = MatchGroup::new(start.max(0) as usize, end.max(0) as usize);
-                }
+            for group in md.groups.iter_mut().flatten() {
+                let start = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.start()));
+                let end = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.end()));
+                *group = MatchGroup::new(start.max(0) as usize, end.max(0) as usize);
             }
             md.source = super::regex::MatchSource::Buffer {
                 id: buffer_id,
@@ -2014,76 +2010,73 @@ pub(crate) fn builtin_replace_match(
         } else {
             0usize
         };
-        if let Some(ref md) = eval.match_data {
-            if !md.is_string_match() {
-                if md.groups.get(subexp).is_some_and(|group| group.is_some()) {
-                    let newtext_lisp = expect_lisp_string(&args[0])?;
-                    let fixedcase = args.get(1).is_some_and(|arg| arg.is_truthy());
-                    let literal = args.get(2).is_some_and(|arg| arg.is_truthy());
-                    let raw_subexp = args.get(4).copied().unwrap_or(Value::NIL);
-                    let missing_subexp_error = super::regex::REPLACE_MATCH_SUBEXP_MISSING;
-                    // C-level `error()' messages are requoted via
-                    // `text-quoting-style' by GNU's doprnt.
-                    let quoting_style =
-                        crate::emacs_core::coding::effective_text_quoting_style(&eval.obarray);
-                    let change = {
-                        let buf = eval.buffers.current_buffer().ok_or_else(|| {
-                            signal("error", vec![Value::string("No current buffer")])
-                        })?;
-                        let (oldstart, oldend, replacement) =
-                            crate::emacs_core::search::compute_buffer_replacement_lisp_string(
-                                buf,
-                                newtext_lisp,
-                                fixedcase,
-                                literal,
-                                subexp,
-                                &eval.match_data,
+        if let Some(ref md) = eval.match_data
+            && !md.is_string_match()
+            && md.groups.get(subexp).is_some_and(|group| group.is_some())
+        {
+            let newtext_lisp = expect_lisp_string(&args[0])?;
+            let fixedcase = args.get(1).is_some_and(|arg| arg.is_truthy());
+            let literal = args.get(2).is_some_and(|arg| arg.is_truthy());
+            let raw_subexp = args.get(4).copied().unwrap_or(Value::NIL);
+            let missing_subexp_error = super::regex::REPLACE_MATCH_SUBEXP_MISSING;
+            // C-level `error()' messages are requoted via
+            // `text-quoting-style' by GNU's doprnt.
+            let quoting_style =
+                crate::emacs_core::coding::effective_text_quoting_style(&eval.obarray);
+            let change = {
+                let buf = eval
+                    .buffers
+                    .current_buffer()
+                    .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+                let (oldstart, oldend, replacement) =
+                    crate::emacs_core::search::compute_buffer_replacement_lisp_string(
+                        buf,
+                        newtext_lisp,
+                        fixedcase,
+                        literal,
+                        subexp,
+                        &eval.match_data,
+                    )
+                    .map_err(|msg| {
+                        if msg == missing_subexp_error {
+                            signal(
+                                "error",
+                                vec![Value::string(missing_subexp_error), raw_subexp],
                             )
-                            .map_err(|msg| {
-                                if msg == missing_subexp_error {
-                                    signal(
-                                        "error",
-                                        vec![Value::string(missing_subexp_error), raw_subexp],
-                                    )
-                                } else {
-                                    signal(
-                                        "error",
-                                        vec![Value::string(
-                                            crate::emacs_core::coding::requote_c_error_message(
-                                                &msg,
-                                                quoting_style,
-                                            ),
-                                        )],
-                                    )
-                                }
-                            })?;
-                        let current_id = eval.buffers.current_buffer_id().ok_or_else(|| {
-                            signal("error", vec![Value::string("No current buffer")])
-                        })?;
-                        let change =
-                            super::editfns::text_change_for_lisp_string_replacement_in_manager(
-                                &eval.buffers,
-                                current_id,
-                                EmacsByteRange::new(
-                                    EmacsBytePos::new(oldstart),
-                                    EmacsBytePos::new(oldend),
-                                ),
-                                &replacement,
-                            )?;
-                        change
-                    };
-                    super::editfns::signal_before_text_change(eval, change)?;
-                    let result = builtin_replace_match_with_state_and_flags(
-                        &eval.obarray,
-                        &mut eval.buffers,
-                        &mut eval.match_data,
-                        &args,
-                        case_symbols_as_words,
-                    )?;
-                    super::editfns::signal_after_text_change(eval, change)?;
-                    return Ok(result);
-                }
-            }
+                        } else {
+                            signal(
+                                "error",
+                                vec![Value::string(
+                                    crate::emacs_core::coding::requote_c_error_message(
+                                        &msg,
+                                        quoting_style,
+                                    ),
+                                )],
+                            )
+                        }
+                    })?;
+                let current_id = eval
+                    .buffers
+                    .current_buffer_id()
+                    .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+
+                super::editfns::text_change_for_lisp_string_replacement_in_manager(
+                    &eval.buffers,
+                    current_id,
+                    EmacsByteRange::new(EmacsBytePos::new(oldstart), EmacsBytePos::new(oldend)),
+                    &replacement,
+                )?
+            };
+            super::editfns::signal_before_text_change(eval, change)?;
+            let result = builtin_replace_match_with_state_and_flags(
+                &eval.obarray,
+                &mut eval.buffers,
+                &mut eval.match_data,
+                &args,
+                case_symbols_as_words,
+            )?;
+            super::editfns::signal_after_text_change(eval, change)?;
+            return Ok(result);
         }
     }
 

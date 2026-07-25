@@ -184,16 +184,16 @@ impl AbbrevManager {
 
     fn expand_abbrev_by_sym(&mut self, table_sym: SymId, word: &str) -> Option<String> {
         let key = runtime_string_to_abbrev_string(&word.to_lowercase());
-        if let Some(tbl) = self.tables.get_mut(&table_sym) {
-            if let Some(ab) = tbl.abbrevs.get_mut(&key) {
-                ab.count += 1;
-                let expansion = apply_case(
-                    &abbrev_string_to_runtime(&ab.expansion),
-                    word,
-                    tbl.case_fixed,
-                );
-                return Some(expansion);
-            }
+        if let Some(tbl) = self.tables.get_mut(&table_sym)
+            && let Some(ab) = tbl.abbrevs.get_mut(&key)
+        {
+            ab.count += 1;
+            let expansion = apply_case(
+                &abbrev_string_to_runtime(&ab.expansion),
+                word,
+                tbl.case_fixed,
+            );
+            return Some(expansion);
         }
         let parent = self.tables.get(&table_sym).and_then(|t| t.parent.clone());
         if let Some(parent_name) = parent {
@@ -370,10 +370,10 @@ fn obarray_bucket_find(bucket: Value, name: &str) -> Option<Value> {
             ValueKind::Cons => {
                 let car = current.cons_car();
                 let cdr = current.cons_cdr();
-                if let Some(sym_name) = car.as_symbol_name() {
-                    if sym_name == name {
-                        return Some(car);
-                    }
+                if let Some(sym_name) = car.as_symbol_name()
+                    && sym_name == name
+                {
+                    return Some(car);
                 }
                 current = cdr;
             }
@@ -573,20 +573,19 @@ pub(crate) fn builtin_make_abbrev_table(
     )?;
 
     // Process optional property list
-    if let Some(props_val) = args.first() {
-        if !props_val.is_nil() {
-            if let Some(props) = list_to_vec(props_val) {
-                let mut i = 0;
-                while i + 1 < props.len() {
-                    let prop = &props[i];
-                    let val = props[i + 1];
-                    if let Some(prop_name) = prop.as_symbol_name() {
-                        eval.obarray_mut()
-                            .put_property_id(header_id, intern(prop_name), val)?;
-                    }
-                    i += 2;
-                }
+    if let Some(props_val) = args.first()
+        && !props_val.is_nil()
+        && let Some(props) = list_to_vec(props_val)
+    {
+        let mut i = 0;
+        while i + 1 < props.len() {
+            let prop = &props[i];
+            let val = props[i + 1];
+            if let Some(prop_name) = prop.as_symbol_name() {
+                eval.obarray_mut()
+                    .put_property_id(header_id, intern(prop_name), val)?;
             }
+            i += 2;
         }
     }
 
@@ -716,14 +715,14 @@ pub(crate) fn builtin_abbrev_symbol(
     let name = expect_string(&args[0])?;
 
     // If TABLE is provided
-    if let Some(table_val) = args.get(1) {
-        if !table_val.is_nil() {
-            let vec_val = expect_abbrev_table(eval, table_val)?;
-            if let Some(sym) = find_abbrev_symbol_in_table(eval, &name, vec_val) {
-                return Ok(sym);
-            }
-            return Ok(Value::NIL);
+    if let Some(table_val) = args.get(1)
+        && !table_val.is_nil()
+    {
+        let vec_val = expect_abbrev_table(eval, table_val)?;
+        if let Some(sym) = find_abbrev_symbol_in_table(eval, &name, vec_val) {
+            return Ok(sym);
         }
+        return Ok(Value::NIL);
     }
 
     // Fall back to global-abbrev-table
@@ -732,10 +731,10 @@ pub(crate) fn builtin_abbrev_symbol(
         .symbol_value("global-abbrev-table")
         .cloned()
         .unwrap_or(Value::NIL);
-    if expect_abbrev_table(eval, &global_table).is_ok() {
-        if let Some(sym) = find_abbrev_symbol_in_table(eval, &name, global_table) {
-            return Ok(sym);
-        }
+    if expect_abbrev_table(eval, &global_table).is_ok()
+        && let Some(sym) = find_abbrev_symbol_in_table(eval, &name, global_table)
+    {
+        return Ok(sym);
     }
     Ok(Value::NIL)
 }
@@ -752,20 +751,20 @@ pub(crate) fn builtin_abbrev_expansion(
     let name = expect_string(&args[0])?;
 
     // If TABLE is provided
-    if let Some(table_val) = args.get(1) {
-        if !table_val.is_nil() {
-            let vec_val = expect_abbrev_table(eval, table_val)?;
-            if let Some(sym) = find_abbrev_symbol_in_table(eval, &name, vec_val) {
-                if let Some(sym_id) = symbol_id(sym) {
-                    return Ok(eval
-                        .obarray()
-                        .symbol_value_id(sym_id)
-                        .cloned()
-                        .unwrap_or(Value::NIL));
-                }
-            }
-            return Ok(Value::NIL);
+    if let Some(table_val) = args.get(1)
+        && !table_val.is_nil()
+    {
+        let vec_val = expect_abbrev_table(eval, table_val)?;
+        if let Some(sym) = find_abbrev_symbol_in_table(eval, &name, vec_val)
+            && let Some(sym_id) = symbol_id(sym)
+        {
+            return Ok(eval
+                .obarray()
+                .symbol_value_id(sym_id)
+                .cloned()
+                .unwrap_or(Value::NIL));
         }
+        return Ok(Value::NIL);
     }
 
     // Fall back to global-abbrev-table
@@ -774,16 +773,15 @@ pub(crate) fn builtin_abbrev_expansion(
         .symbol_value("global-abbrev-table")
         .cloned()
         .unwrap_or(Value::NIL);
-    if expect_abbrev_table(eval, &global_table).is_ok() {
-        if let Some(sym) = find_abbrev_symbol_in_table(eval, &name, global_table) {
-            if let Some(sym_id) = symbol_id(sym) {
-                return Ok(eval
-                    .obarray()
-                    .symbol_value_id(sym_id)
-                    .cloned()
-                    .unwrap_or(Value::NIL));
-            }
-        }
+    if expect_abbrev_table(eval, &global_table).is_ok()
+        && let Some(sym) = find_abbrev_symbol_in_table(eval, &name, global_table)
+        && let Some(sym_id) = symbol_id(sym)
+    {
+        return Ok(eval
+            .obarray()
+            .symbol_value_id(sym_id)
+            .cloned()
+            .unwrap_or(Value::NIL));
     }
     Ok(Value::NIL)
 }
@@ -874,26 +872,24 @@ fn find_abbrev_symbol_in_table(
             })
         });
 
-    if let Some(sym) = direct.or(folded) {
-        if let Some(sym_id) = symbol_id(sym) {
-            if eval
-                .obarray()
-                .symbol_value_id(sym_id)
-                .is_some_and(|value| !value.is_nil())
-            {
-                return Some(sym);
-            }
-        }
+    if let Some(sym) = direct.or(folded)
+        && let Some(sym_id) = symbol_id(sym)
+        && eval
+            .obarray()
+            .symbol_value_id(sym_id)
+            .is_some_and(|value| !value.is_nil())
+    {
+        return Some(sym);
     }
 
-    if let Some(parents) = get_table_property(eval, vec_val, ":parents") {
-        if let Some(parent_list) = list_to_vec(&parents) {
-            for parent in &parent_list {
-                if expect_abbrev_table(eval, parent).is_ok() {
-                    if let Some(sym) = find_abbrev_symbol_in_table(eval, abbrev, *parent) {
-                        return Some(sym);
-                    }
-                }
+    if let Some(parents) = get_table_property(eval, vec_val, ":parents")
+        && let Some(parent_list) = list_to_vec(&parents)
+    {
+        for parent in &parent_list {
+            if expect_abbrev_table(eval, parent).is_ok()
+                && let Some(sym) = find_abbrev_symbol_in_table(eval, abbrev, *parent)
+            {
+                return Some(sym);
             }
         }
     }
@@ -951,11 +947,11 @@ pub(crate) fn builtin_define_abbrev_table(
     let mut already_in_list = false;
     if let Some(items) = list_to_vec(&current_list) {
         for item in &items {
-            if let (Some(a), Some(b)) = (item.as_symbol_name(), name_sym.as_symbol_name()) {
-                if a == b {
-                    already_in_list = true;
-                    break;
-                }
+            if let (Some(a), Some(b)) = (item.as_symbol_name(), name_sym.as_symbol_name())
+                && a == b
+            {
+                already_in_list = true;
+                break;
             }
         }
     }
@@ -967,11 +963,11 @@ pub(crate) fn builtin_define_abbrev_table(
     }
 
     // Process DOCSTRING (3rd arg) -- store as table property if it's a string
-    if let Some(docstring) = args.get(2) {
-        if docstring.is_string() {
-            eval.obarray_mut()
-                .put_property_id(header_id, intern(":docstring"), *docstring)?;
-        }
+    if let Some(docstring) = args.get(2)
+        && docstring.is_string()
+    {
+        eval.obarray_mut()
+            .put_property_id(header_id, intern(":docstring"), *docstring)?;
     }
 
     // Process properties (PROPS after docstring)
@@ -991,30 +987,30 @@ pub(crate) fn builtin_define_abbrev_table(
 
     // Process DEFS (2nd arg) -- list of (name expansion hook &rest props)
     let defs = &args[1];
-    if !defs.is_nil() {
-        if let Some(def_list) = list_to_vec(defs) {
-            for def_val in &def_list {
-                if let Some(def_items) = list_to_vec(def_val) {
-                    if def_items.len() >= 2 {
-                        let abbrev_name = expect_string(&def_items[0])?;
-                        let expansion = def_items[1];
-                        let hook = if def_items.len() > 2 {
-                            def_items[2]
-                        } else {
-                            Value::NIL
-                        };
+    if !defs.is_nil()
+        && let Some(def_list) = list_to_vec(defs)
+    {
+        for def_val in &def_list {
+            if let Some(def_items) = list_to_vec(def_val)
+                && def_items.len() >= 2
+            {
+                let abbrev_name = expect_string(&def_items[0])?;
+                let expansion = def_items[1];
+                let hook = if def_items.len() > 2 {
+                    def_items[2]
+                } else {
+                    Value::NIL
+                };
 
-                        // Build args for define-abbrev
-                        let mut da_args = vec![table, Value::string(&abbrev_name), expansion, hook];
+                // Build args for define-abbrev
+                let mut da_args = vec![table, Value::string(&abbrev_name), expansion, hook];
 
-                        // Append remaining items as keyword properties
-                        if def_items.len() > 3 {
-                            da_args.extend_from_slice(&def_items[3..]);
-                        }
-
-                        builtin_define_abbrev(eval, da_args)?;
-                    }
+                // Append remaining items as keyword properties
+                if def_items.len() > 3 {
+                    da_args.extend_from_slice(&def_items[3..]);
                 }
+
+                builtin_define_abbrev(eval, da_args)?;
             }
         }
     }

@@ -704,7 +704,7 @@ const VM_STACK_GROWTH_PROBE_INTERVAL: usize = 16;
 
 impl<'a> crate::emacs_core::hook_runtime::HookRuntime for Vm<'a> {
     fn hook_context(&self) -> &crate::emacs_core::eval::Context {
-        &self.ctx
+        self.ctx
     }
 
     fn call_hook_callable(&mut self, function: Value, args: &[Value]) -> EvalResult {
@@ -1259,8 +1259,7 @@ impl<'a> Vm<'a> {
                 let v = self.ctx.bc_buf[args_start + i];
                 if v.is_string() {
                     let ptr = v.as_string_ptr().unwrap();
-                    let hdr =
-                        unsafe { &(*(ptr as *const crate::tagged::header::StringObj)).header };
+                    let hdr = unsafe { &(*ptr).header };
                     if !matches!(hdr.kind, crate::tagged::header::HeapObjectKind::String) {
                         panic!(
                             "RUN_FRAME ARG BUG: arg[{}] = {:#x} (ptr {:?}, kind={:?}) is corrupt string. \
@@ -1479,13 +1478,14 @@ impl<'a> Vm<'a> {
         // that path cost +1.8% on byte-compile even with the JIT disabled
         // (measured; the tax persisted under `NEOVM_JIT=0`, which is what pinned
         // it to the interpreter path rather than to compile-time analysis).
+        #[cfg(feature = "jit")]
         let mut osr_tried = false;
 
         // A6: base+len of the operand stack live in registers for the whole
         // dispatch loop (GNU keeps top/pc in locals, bytecode.c). Every
         // escape into Context/eval publishes first and reacquires after; the
         // publish is a move, so a stale cursor use is a compile error.
-        let mut cursor = StackCursor::acquire(&mut self.ctx);
+        let mut cursor = StackCursor::acquire(self.ctx);
 
         macro_rules! stk {
             () => {
@@ -1594,6 +1594,7 @@ impl<'a> Vm<'a> {
                         // toward tier-up, so a hot INNER LOOP in a rarely-called
                         // body still goes native on its next entry. Piggybacks on
                         // the existing per-wrap cold path; no per-iteration cost.
+                        #[cfg(feature = "jit")]
                         func.runtime.note_loop_work();
                         vm_try!(self.ctx.bytecode_branch_maybe_gc_and_quit());
                         // OSR: the loop is hot and this is a backward branch (its
@@ -1607,6 +1608,7 @@ impl<'a> Vm<'a> {
                         // opt-in knob (default OFF, so it short-circuits the rest
                         // for every stock build), then the kill switch, then the
                         // heat load.
+                        #[cfg(feature = "jit")]
                         if !osr_tried
                             && crate::emacs_core::jit::jit_osr_on()
                             && crate::emacs_core::jit::jit_runtime_enabled()
@@ -1624,7 +1626,6 @@ impl<'a> Vm<'a> {
                                     return Ok(Value::from_bits(bits));
                                 }
                                 Some(crate::emacs_core::jit::compile::NativeRun::Signal) => {
-                                    cursor = StackCursor::acquire(&mut self.ctx);
                                     let flow = crate::emacs_core::jit::compile::take_pending_flow()
                                         .expect("OSR Signal must stash a pending flow");
                                     resume_flow!(flow)
@@ -1832,9 +1833,9 @@ impl<'a> Vm<'a> {
                     let val = stk!().pop().unwrap_or(Value::NIL);
                     bind_stack.push(self.ctx.specpdl.len());
                     // specbind can run variable watchers (Lisp) — escape.
-                    cursor.publish(&mut self.ctx);
+                    cursor.publish(self.ctx);
                     self.ctx.specbind(name_id, val);
-                    cursor = StackCursor::acquire(&mut self.ctx);
+                    cursor = StackCursor::acquire(self.ctx);
                 }
                 Op::Unbind(n) => {
                     let n = *n as usize;
@@ -1847,9 +1848,9 @@ impl<'a> Vm<'a> {
                         0
                     };
                     // unbind_to can run unwind-protect cleanups — escape.
-                    cursor.publish(&mut self.ctx);
+                    cursor.publish(self.ctx);
                     self.ctx.unbind_to(target);
-                    cursor = StackCursor::acquire(&mut self.ctx);
+                    cursor = StackCursor::acquire(self.ctx);
                 }
 
                 // -- Function calls --
@@ -1970,11 +1971,11 @@ impl<'a> Vm<'a> {
                         let spread = list_to_vec(&last).unwrap_or_default();
                         // The spread grows bc_buf (reserve can realloc), so it
                         // runs published; reacquire picks up the new base.
-                        cursor.publish(&mut self.ctx);
+                        cursor.publish(self.ctx);
                         self.ctx.bc_buf.truncate(args_start + n - 1);
                         self.ctx.bc_buf.reserve(spread.len());
                         self.ctx.bc_buf.extend_from_slice(&spread);
-                        cursor = StackCursor::acquire(&mut self.ctx);
+                        cursor = StackCursor::acquire(self.ctx);
                         let total = n - 1 + spread.len();
                         // Writeback gate tests the first POST-spread argument
                         // (for (apply f '("str" ...)) the string comes from
@@ -2080,7 +2081,7 @@ impl<'a> Vm<'a> {
                         jump_table.kind(),
                         ValueKind::Veclike(VecLikeType::HashTable)
                     ) {
-                        cursor.publish(&mut self.ctx);
+                        cursor.publish(self.ctx);
                         resume_flow!(signal(
                             LispCondition::WrongTypeArgument,
                             vec![Value::symbol("hash-table-p"), jump_table],
@@ -2091,8 +2092,8 @@ impl<'a> Vm<'a> {
                     let key = dispatch.to_hash_key_swp(&ht.test, self.ctx.symbols_with_pos_enabled);
                     let target = ht.data.get(&key).copied();
 
-                    match target {
-                        Some(target_val) => match target_val.kind() {
+                    if let Some(target_val) = target {
+                        match target_val.kind() {
                             ValueKind::Fixnum(addr) => {
                                 pc_local = vm_try!(resolve_switch_target(func, addr));
                             }
@@ -2102,13 +2103,12 @@ impl<'a> Vm<'a> {
                                     vec![Value::symbol("integerp"), target_val],
                                 )));
                             }
-                        },
-                        None => {}
+                        }
                     }
                 }
                 Op::Return => {
                     let result = stk!().pop().unwrap_or(Value::NIL);
-                    cursor.publish(&mut self.ctx);
+                    cursor.publish(self.ctx);
                     return Ok(result);
                 }
                 Op::SaveCurrentBuffer => {
@@ -2166,7 +2166,7 @@ impl<'a> Vm<'a> {
                     // during the body frees the configuration and restore
                     // silently no-ops (GNU keeps it on the specpdl via
                     // record_unwind_protect, bytecode.c:945-952).
-                    cursor.publish(&mut self.ctx);
+                    cursor.publish(self.ctx);
                     let root_scope = self.ctx.save_vm_roots();
                     self.push_dynamic_vm_root(saved);
                     self.push_dynamic_vm_root(progn_form);
@@ -2177,7 +2177,7 @@ impl<'a> Vm<'a> {
                             vec![saved],
                         );
                     self.ctx.restore_vm_roots(root_scope);
-                    cursor = StackCursor::acquire(&mut self.ctx);
+                    cursor = StackCursor::acquire(self.ctx);
 
                     match body_result {
                         Ok(result) => {
@@ -2186,7 +2186,7 @@ impl<'a> Vm<'a> {
                         }
                         Err(flow) => {
                             vm_try!(restore_result);
-                            cursor.publish(&mut self.ctx);
+                            cursor.publish(self.ctx);
                             resume_flow!(flow)
                         }
                     }
@@ -2207,8 +2207,8 @@ impl<'a> Vm<'a> {
                             let av = a.xfixnum();
                             let bv = b.xfixnum();
                             let res = av + bv;
-                            if res >= Value::MOST_NEGATIVE_FIXNUM
-                                && res <= Value::MOST_POSITIVE_FIXNUM
+                            if (Value::MOST_NEGATIVE_FIXNUM..=Value::MOST_POSITIVE_FIXNUM)
+                                .contains(&res)
                             {
                                 unsafe {
                                     *cursor.get_unchecked_mut(len - 2) = Value::fixnum(res);
@@ -2238,7 +2238,8 @@ impl<'a> Vm<'a> {
                         let av = a.xfixnum();
                         let bv = b.xfixnum();
                         let res = av - bv;
-                        if res >= Value::MOST_NEGATIVE_FIXNUM && res <= Value::MOST_POSITIVE_FIXNUM
+                        if (Value::MOST_NEGATIVE_FIXNUM..=Value::MOST_POSITIVE_FIXNUM)
+                            .contains(&res)
                         {
                             stk!()[len - 2] = Value::fixnum(res);
                             stk!().pop();
@@ -2263,8 +2264,8 @@ impl<'a> Vm<'a> {
                         let av = a.xfixnum();
                         let bv = b.xfixnum();
                         if let Some(res) = av.checked_mul(bv) {
-                            if res >= Value::MOST_NEGATIVE_FIXNUM
-                                && res <= Value::MOST_POSITIVE_FIXNUM
+                            if (Value::MOST_NEGATIVE_FIXNUM..=Value::MOST_POSITIVE_FIXNUM)
+                                .contains(&res)
                             {
                                 stk!()[len - 2] = Value::fixnum(res);
                                 stk!().pop();
@@ -2299,11 +2300,7 @@ impl<'a> Vm<'a> {
                         let bv = b.xfixnum();
                         if bv != 0 {
                             // Emacs truncation division (towards zero), matching C semantics
-                            let res = if (av < 0) != (bv < 0) && av % bv != 0 {
-                                av / bv
-                            } else {
-                                av / bv
-                            };
+                            let res = av / bv;
                             stk!()[len - 2] = Value::fixnum(res);
                             stk!().pop();
                         } else {
@@ -2946,7 +2943,7 @@ impl<'a> Vm<'a> {
                 Op::Throw => {
                     let val = stk!().pop().unwrap_or(Value::NIL);
                     let tag = stk!().pop().unwrap_or(Value::NIL);
-                    cursor.publish(&mut self.ctx);
+                    cursor.publish(self.ctx);
                     resume_flow!(Flow::Throw { tag, value: val })
                 }
 
@@ -3051,7 +3048,7 @@ impl<'a> Vm<'a> {
         // Fell off the end — return TOS or nil
         *pc = pc_local;
         let result = stk!().pop().unwrap_or(Value::NIL);
-        cursor.publish(&mut self.ctx);
+        cursor.publish(self.ctx);
         Ok(result)
     }
 
@@ -3263,10 +3260,10 @@ impl<'a> Vm<'a> {
                     _ => None,
                 };
                 let _ = value.with_hash_table_mut(|ht| {
-                    if matches!(ht.test, HashTableTest::Eq | HashTableTest::Eql) {
-                        if let (Some(old_ptr), Some(new_ptr)) = (old_ptr, new_ptr) {
-                            ht.replace_pointer_key(old_ptr, new_ptr, *to);
-                        }
+                    if matches!(ht.test, HashTableTest::Eq | HashTableTest::Eql)
+                        && let (Some(old_ptr), Some(new_ptr)) = (old_ptr, new_ptr)
+                    {
+                        ht.replace_pointer_key(old_ptr, new_ptr, *to);
                     }
                     for item in ht.data.values_mut() {
                         Self::replace_alias_refs_in_value(item, from, to, visited);
@@ -3305,13 +3302,11 @@ impl<'a> Vm<'a> {
                     return Ok(val);
                 }
                 let name_localized = self.ctx.obarray.is_localized(name_id);
-                if let Some(buf) = self.ctx.buffers.current_buffer() {
-                    if let Some(blv) = buf.get_buffer_local_by_sym_id_gated(name_id, name_localized)
-                    {
-                        if !blv.is_nil() {
-                            return Ok(blv);
-                        }
-                    }
+                if let Some(buf) = self.ctx.buffers.current_buffer()
+                    && let Some(blv) = buf.get_buffer_local_by_sym_id_gated(name_id, name_localized)
+                    && !blv.is_nil()
+                {
+                    return Ok(blv);
                 }
                 return Ok(val);
             }
@@ -3399,12 +3394,11 @@ impl<'a> Vm<'a> {
         // the per-buffer scan for them (slot/undo names still resolve inside the
         // gated call). See `Obarray::is_localized`.
         let name_localized = self.ctx.obarray.is_localized(name_id);
-        if let Some(buf) = self.ctx.buffers.current_buffer() {
-            if let Some(val) = buf.get_buffer_local_by_sym_id_gated(name_id, name_localized) {
-                if !val.is_nil() {
-                    return Ok(val);
-                }
-            }
+        if let Some(buf) = self.ctx.buffers.current_buffer()
+            && let Some(val) = buf.get_buffer_local_by_sym_id_gated(name_id, name_localized)
+            && !val.is_nil()
+        {
+            return Ok(val);
         }
 
         // GNU `bytecode.c:Bvarref` falls back to `Fsymbol_value`.
@@ -3417,10 +3411,10 @@ impl<'a> Vm<'a> {
 
         // Retry buffer-local for nil-valued defaults (e.g. unset
         // `buffer-undo-list` on a clean buffer).
-        if let Some(buf) = self.ctx.buffers.current_buffer() {
-            if let Some(val) = buf.get_buffer_local_by_sym_id_gated(name_id, name_localized) {
-                return Ok(val);
-            }
+        if let Some(buf) = self.ctx.buffers.current_buffer()
+            && let Some(val) = buf.get_buffer_local_by_sym_id_gated(name_id, name_localized)
+        {
+            return Ok(val);
         }
 
         Err(signal(
@@ -3466,106 +3460,105 @@ impl<'a> Vm<'a> {
         // route to `slots[off]` rather than `buffer_defaults`. This
         // mirrors GNU `set_internal` SYMBOL_FORWARDED arm at
         // `data.c:1774-1786` which calls `SET_PER_BUFFER_VALUE_P`.
-        if matches!(redirect, Some(SymbolRedirect::Forwarded)) {
-            if let Some(buf_id) = self.ctx.buffers.current_buffer_id() {
-                use crate::emacs_core::forward::{LispBufferObjFwd, LispFwdType};
-                let fwd_ptr = self
-                    .ctx
-                    .obarray
-                    .get_by_id(resolved)
-                    .map(|s| unsafe { s.val.fwd });
-                if let Some(fwd) = fwd_ptr {
-                    // Safety: install_buffer_objfwd leaks a 'static
-                    // descriptor and the symbol's redirect tag is
-                    // immutable once installed.
-                    let header = unsafe { &*fwd };
-                    if matches!(header.ty, LispFwdType::BufferObj) {
-                        let buf_fwd = unsafe { &*(fwd as *const LispBufferObjFwd) };
-                        let Some(slot) =
-                            crate::buffer::buffer::BufferSlot::from_u16(buf_fwd.offset)
-                        else {
-                            return Err(signal(
-                                "error",
-                                vec![Value::string("Invalid buffer slot offset")],
-                            ));
-                        };
-                        let offset = slot.index();
-                        let flags_idx = buf_fwd.local_flags_idx;
-                        let slot_exists = self
-                            .ctx
-                            .buffers
-                            .get(buf_id)
-                            .is_some_and(|buf| offset < buf.slots.len());
-                        if slot_exists {
-                            let where_value = Value::make_buffer(buf_id);
-                            self.run_variable_watchers_by_id_with_where(
-                                resolved,
-                                &value,
-                                &Value::NIL,
-                                "set",
-                                &where_value,
-                            )?;
-                            if let Some(buf) = self.ctx.buffers.get_mut(buf_id) {
-                                buf.slots[offset] = value;
-                                if flags_idx >= 0 {
-                                    buf.set_slot_local_flag(slot, true);
-                                }
+        if matches!(redirect, Some(SymbolRedirect::Forwarded))
+            && let Some(buf_id) = self.ctx.buffers.current_buffer_id()
+        {
+            use crate::emacs_core::forward::{LispBufferObjFwd, LispFwdType};
+            let fwd_ptr = self
+                .ctx
+                .obarray
+                .get_by_id(resolved)
+                .map(|s| unsafe { s.val.fwd });
+            if let Some(fwd) = fwd_ptr {
+                // Safety: install_buffer_objfwd leaks a 'static
+                // descriptor and the symbol's redirect tag is
+                // immutable once installed.
+                let header = unsafe { &*fwd };
+                if matches!(header.ty, LispFwdType::BufferObj) {
+                    let buf_fwd = unsafe { &*(fwd as *const LispBufferObjFwd) };
+                    let Some(slot) = crate::buffer::buffer::BufferSlot::from_u16(buf_fwd.offset)
+                    else {
+                        return Err(signal(
+                            "error",
+                            vec![Value::string("Invalid buffer slot offset")],
+                        ));
+                    };
+                    let offset = slot.index();
+                    let flags_idx = buf_fwd.local_flags_idx;
+                    let slot_exists = self
+                        .ctx
+                        .buffers
+                        .get(buf_id)
+                        .is_some_and(|buf| offset < buf.slots.len());
+                    if slot_exists {
+                        let where_value = Value::make_buffer(buf_id);
+                        self.run_variable_watchers_by_id_with_where(
+                            resolved,
+                            &value,
+                            &Value::NIL,
+                            "set",
+                            &where_value,
+                        )?;
+                        if let Some(buf) = self.ctx.buffers.get_mut(buf_id) {
+                            buf.slots[offset] = value;
+                            if flags_idx >= 0 {
+                                buf.set_slot_local_flag(slot, true);
                             }
-                            self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
-                            // Finding 6: this FORWARDED fast-path writes the
-                            // per-buffer display slot directly and returns
-                            // WITHOUT routing through
-                            // `set_runtime_binding_in_state`, so it must mark
-                            // redisplay dirty itself. This is the hot path for
-                            // `(setq truncate-lines t)` run from byte-compiled
-                            // code — the common case in real usage.
-                            self.ctx.mark_redisplay_dirty_if_display_var(resolved);
-                            return Ok(());
                         }
+                        self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
+                        // Finding 6: this FORWARDED fast-path writes the
+                        // per-buffer display slot directly and returns
+                        // WITHOUT routing through
+                        // `set_runtime_binding_in_state`, so it must mark
+                        // redisplay dirty itself. This is the hot path for
+                        // `(setq truncate-lines t)` run from byte-compiled
+                        // code — the common case in real usage.
+                        self.ctx.mark_redisplay_dirty_if_display_var(resolved);
+                        return Ok(());
                     }
                 }
             }
         }
 
-        if matches!(redirect, Some(SymbolRedirect::Localized)) {
-            if let Some(buf_id) = self.ctx.buffers.current_buffer_id() {
-                // Extract buffer state before obarray borrow.
-                let (cur_val, alist) = match self.ctx.buffers.get(buf_id) {
-                    Some(buf) => (Value::make_buffer(buf.id), buf.local_var_alist),
-                    None => (Value::NIL, Value::NIL),
-                };
-                // GNU `eval.c:3559-3577 (let_shadows_buffer_binding_p)`
-                // only treats SPECPDL_LET_DEFAULT for the current buffer
-                // as shadowing. SPECPDL_LET_LOCAL is explicitly excluded
-                // by bug#62419.
-                let let_shadows = self.ctx.let_shadows_buffer_binding_p(resolved);
-                let where_value = self.ctx.variable_watcher_where_for_set_by_id(resolved);
-                self.run_variable_watchers_by_id_with_where(
-                    resolved,
-                    &value,
-                    &Value::NIL,
-                    "set",
-                    &where_value,
-                )?;
-                let new_alist = self.ctx.obarray.set_internal_localized(
-                    resolved,
-                    value,
-                    cur_val,
-                    alist,
-                    SetInternalBind::Set,
-                    let_shadows,
-                );
-                // Store back the (possibly extended) alist.
-                if let Some(buf) = self.ctx.buffers.get_mut(buf_id) {
-                    buf.local_var_alist = new_alist;
-                }
-                self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
-                // Finding 6: a LOCALIZED display variable set from
-                // byte-compiled code must also nudge redisplay (this arm
-                // returns without `set_runtime_binding_in_state`).
-                self.ctx.mark_redisplay_dirty_if_display_var(resolved);
-                return Ok(());
+        if matches!(redirect, Some(SymbolRedirect::Localized))
+            && let Some(buf_id) = self.ctx.buffers.current_buffer_id()
+        {
+            // Extract buffer state before obarray borrow.
+            let (cur_val, alist) = match self.ctx.buffers.get(buf_id) {
+                Some(buf) => (Value::make_buffer(buf.id), buf.local_var_alist),
+                None => (Value::NIL, Value::NIL),
+            };
+            // GNU `eval.c:3559-3577 (let_shadows_buffer_binding_p)`
+            // only treats SPECPDL_LET_DEFAULT for the current buffer
+            // as shadowing. SPECPDL_LET_LOCAL is explicitly excluded
+            // by bug#62419.
+            let let_shadows = self.ctx.let_shadows_buffer_binding_p(resolved);
+            let where_value = self.ctx.variable_watcher_where_for_set_by_id(resolved);
+            self.run_variable_watchers_by_id_with_where(
+                resolved,
+                &value,
+                &Value::NIL,
+                "set",
+                &where_value,
+            )?;
+            let new_alist = self.ctx.obarray.set_internal_localized(
+                resolved,
+                value,
+                cur_val,
+                alist,
+                SetInternalBind::Set,
+                let_shadows,
+            );
+            // Store back the (possibly extended) alist.
+            if let Some(buf) = self.ctx.buffers.get_mut(buf_id) {
+                buf.local_var_alist = new_alist;
             }
+            self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
+            // Finding 6: a LOCALIZED display variable set from
+            // byte-compiled code must also nudge redisplay (this arm
+            // returns without `set_runtime_binding_in_state`).
+            self.ctx.mark_redisplay_dirty_if_display_var(resolved);
+            return Ok(());
         }
 
         // Legacy path: set_runtime_binding_in_state routes to
@@ -3863,10 +3856,10 @@ impl<'a> Vm<'a> {
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn ensure_global_keymap(&mut self) -> Value {
-        if let Some(value) = self.ctx.obarray.symbol_value("global-map").copied() {
-            if crate::emacs_core::keymap::is_list_keymap(&value) {
-                return value;
-            }
+        if let Some(value) = self.ctx.obarray.symbol_value("global-map").copied()
+            && crate::emacs_core::keymap::is_list_keymap(&value)
+        {
+            return value;
         }
         let keymap = crate::emacs_core::keymap::make_list_keymap();
         self.ctx.obarray.set_symbol_value("global-map", keymap);
@@ -4477,7 +4470,7 @@ impl<'a> Vm<'a> {
     }
 
     fn call_function_untraced_owned(&mut self, func_val: Value, args: LispArgVec) -> EvalResult {
-        let result = match func_val.kind() {
+        match func_val.kind() {
             // Fast path: bytecoded calls dispatch through the shared JIT
             // tier-up seam (Context::execute_bytecode_call) — matching GNU's
             // CLOSUREP → goto setup_frame shape when the plan says interpret,
@@ -4515,8 +4508,7 @@ impl<'a> Vm<'a> {
             // Everything else: shared dispatch via funcall_general on Context.
             // Matches GNU Emacs where exec_byte_code delegates to funcall_general.
             _ => self.ctx.funcall_general_untraced(func_val, args),
-        };
-        result
+        }
     }
 
     fn try_call_builtin_subr_from_stack_args(
@@ -5228,7 +5220,7 @@ impl<'a> Vm<'a> {
             vm.push_dynamic_vm_root(plan.func);
             let (_function, call_args) =
                 crate::emacs_core::interactive::resolve_call_interactively_target_and_args_with_vm_fallback(
-                    &mut vm.ctx,
+                    vm.ctx,
                     &mut plan,
                 )?;
             for value in call_args.iter().copied() {
@@ -5249,7 +5241,7 @@ impl<'a> Vm<'a> {
 
     fn builtin_mapatoms_shared(&mut self, args: &[Value]) -> EvalResult {
         let (func, symbols) =
-            crate::emacs_core::hashtab::collect_mapatoms_symbols(&self.ctx, args.to_vec())?;
+            crate::emacs_core::hashtab::collect_mapatoms_symbols(self.ctx, args.to_vec())?;
         self.with_dynamic_vm_roots(|vm| {
             vm.push_dynamic_vm_root(func);
             // `symbols` contains immediate IDs backed by the append-only
@@ -5301,7 +5293,7 @@ impl<'a> crate::emacs_core::builtins::symbols::MacroexpandRuntime for Vm<'a> {
             for value in args.iter().copied() {
                 vm.push_dynamic_vm_root(value);
             }
-            crate::emacs_core::autoload::builtin_autoload_do_load_in_vm_runtime(&mut vm.ctx, &args)
+            crate::emacs_core::autoload::builtin_autoload_do_load_in_vm_runtime(vm.ctx, &args)
         })?;
         Ok(())
     }

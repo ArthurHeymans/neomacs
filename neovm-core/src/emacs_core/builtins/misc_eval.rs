@@ -30,11 +30,11 @@ pub(crate) fn builtin_get_pos_property_impl(
 
     if let Some(str_val) = args.get(2).filter(|v| v.is_string()) {
         if get_string_text_properties_table_for_value(*str_val).is_some() {
-            return Ok(super::textprop::builtin_get_text_property_in_state(
+            return super::textprop::builtin_get_text_property_in_state(
                 obarray,
                 buffers,
                 vec![Value::fixnum(pos), prop, *str_val],
-            )?);
+            );
         }
         return Ok(Value::NIL);
     }
@@ -93,14 +93,14 @@ pub(crate) fn builtin_next_char_property_change_in_buffers(
     let overlay_next =
         super::textprop::builtin_next_overlay_change_in_buffers(buffers, vec![args[0]])?;
     let mut temp = overlay_next;
-    if let Some(limit) = args.get(1) {
-        if !limit.is_nil() {
-            let lim_int = super::buffers::expect_integer_or_marker_in_buffers(buffers, limit)?;
-            if let Some(temp_int) = (|| temp.as_fixnum())() {
-                if lim_int < temp_int {
-                    temp = Value::fixnum(lim_int);
-                }
-            }
+    if let Some(limit) = args.get(1)
+        && !limit.is_nil()
+    {
+        let lim_int = super::buffers::expect_integer_or_marker_in_buffers(buffers, limit)?;
+        if let Some(temp_int) = temp.as_fixnum()
+            && lim_int < temp_int
+        {
+            temp = Value::fixnum(lim_int);
         }
     }
     super::textprop::builtin_next_property_change_in_buffers(
@@ -162,33 +162,28 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
         let current_props = table.get_properties_at_char_pos(ref_char);
         let mut cursor = CharPos0::new(char_pos);
 
-        loop {
-            match table.previous_property_change_before_char_pos(cursor) {
-                Some(prev) => {
-                    if let Some(lim) = limit_pos {
-                        if (prev.get() as i64) <= lim {
-                            return Ok(match limit_val {
-                                Some(lv) => Value::fixnum(lv),
-                                None => Value::NIL,
-                            });
-                        }
-                    }
-                    let check = prev.saturating_sub_len(CharLen::new(1));
-                    let new_props = table.get_properties_at_char_pos(check);
-                    if new_props != current_props {
-                        return Ok(Value::fixnum(textprop::string_char_to_elisp_pos(s, prev)));
-                    }
-                    if prev == CharPos0::ZERO {
-                        break;
-                    }
-                    cursor = if prev < cursor {
-                        prev
-                    } else {
-                        prev.saturating_sub_len(CharLen::new(1))
-                    };
-                }
-                None => break,
+        while let Some(prev) = table.previous_property_change_before_char_pos(cursor) {
+            if let Some(lim) = limit_pos
+                && (prev.get() as i64) <= lim
+            {
+                return Ok(match limit_val {
+                    Some(lv) => Value::fixnum(lv),
+                    None => Value::NIL,
+                });
             }
+            let check = prev.saturating_sub_len(CharLen::new(1));
+            let new_props = table.get_properties_at_char_pos(check);
+            if new_props != current_props {
+                return Ok(Value::fixnum(textprop::string_char_to_elisp_pos(s, prev)));
+            }
+            if prev == CharPos0::ZERO {
+                break;
+            }
+            cursor = if prev < cursor {
+                prev
+            } else {
+                prev.saturating_sub_len(CharLen::new(1))
+            };
         }
 
         return Ok(match limit_val {
@@ -232,32 +227,27 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
     let current_props = buf.text_props_get_properties_at_emacs_byte_pos(ref_byte);
     let mut cursor = EmacsBytePos::new(byte_pos);
 
-    loop {
-        match buf.text_props_previous_change_before_emacs_byte_pos(cursor) {
-            Some(prev) => {
-                if let (Some(lim), Some(lv)) = (limit_pos, limit_val) {
-                    if textprop::byte_to_elisp_pos(buf, prev) <= lim {
-                        return Ok(Value::fixnum(lv));
-                    }
-                }
-
-                let check = textprop::emacs_byte_pos_of_preceding_char(buf, prev);
-                let new_props = buf.text_props_get_properties_at_emacs_byte_pos(check);
-                if new_props != current_props {
-                    return Ok(Value::fixnum(textprop::byte_to_elisp_pos(buf, prev)));
-                }
-
-                if prev == EmacsBytePos::ZERO {
-                    break;
-                }
-                cursor = if prev < cursor {
-                    prev
-                } else {
-                    textprop::emacs_byte_pos_of_preceding_char(buf, prev)
-                };
-            }
-            None => break,
+    while let Some(prev) = buf.text_props_previous_change_before_emacs_byte_pos(cursor) {
+        if let (Some(lim), Some(lv)) = (limit_pos, limit_val)
+            && textprop::byte_to_elisp_pos(buf, prev) <= lim
+        {
+            return Ok(Value::fixnum(lv));
         }
+
+        let check = textprop::emacs_byte_pos_of_preceding_char(buf, prev);
+        let new_props = buf.text_props_get_properties_at_emacs_byte_pos(check);
+        if new_props != current_props {
+            return Ok(Value::fixnum(textprop::byte_to_elisp_pos(buf, prev)));
+        }
+
+        if prev == EmacsBytePos::ZERO {
+            break;
+        }
+        cursor = if prev < cursor {
+            prev
+        } else {
+            textprop::emacs_byte_pos_of_preceding_char(buf, prev)
+        };
     }
 
     match limit_val {
@@ -285,14 +275,14 @@ pub(crate) fn builtin_previous_char_property_change_in_buffers(
     let overlay_prev =
         super::textprop::builtin_previous_overlay_change_in_buffers(buffers, vec![args[0]])?;
     let mut temp = overlay_prev;
-    if let Some(limit) = args.get(1) {
-        if !limit.is_nil() {
-            let lim_int = super::buffers::expect_integer_or_marker_in_buffers(buffers, limit)?;
-            if let Some(temp_int) = temp.as_fixnum() {
-                if lim_int > temp_int {
-                    temp = Value::fixnum(lim_int);
-                }
-            }
+    if let Some(limit) = args.get(1)
+        && !limit.is_nil()
+    {
+        let lim_int = super::buffers::expect_integer_or_marker_in_buffers(buffers, limit)?;
+        if let Some(temp_int) = temp.as_fixnum()
+            && lim_int > temp_int
+        {
+            temp = Value::fixnum(lim_int);
         }
     }
     builtin_previous_property_change_in_buffers(buffers, vec![args[0], Value::NIL, temp])
@@ -1658,7 +1648,7 @@ fn print_value_princ_bytes_inner(
     let print_quoted = ctx
         .obarray
         .symbol_value("print-quoted")
-        .map_or(true, |v| v.is_truthy());
+        .is_none_or(|v| v.is_truthy());
     let prin1_bytes = |v: &Value| {
         super::error::print_value_bytes_in_state(
             &ctx.obarray,
@@ -2318,10 +2308,10 @@ pub(crate) fn builtin_propertize(args: Vec<Value>) -> EvalResult {
     });
 
     // Copy existing text properties from source string
-    if args[0].is_string() {
-        if let Some(src_table) = get_string_text_properties_table_for_value(args[0]) {
-            set_string_text_properties_table_for_value(new_str, src_table);
-        }
+    if args[0].is_string()
+        && let Some(src_table) = get_string_text_properties_table_for_value(args[0])
+    {
+        set_string_text_properties_table_for_value(new_str, src_table);
     }
 
     // Parse and apply plist properties.
@@ -2335,8 +2325,7 @@ pub(crate) fn builtin_propertize(args: Vec<Value>) -> EvalResult {
             .as_lisp_string()
             .expect("new string must carry LispString payload")
             .schars();
-        let mut table = get_string_text_properties_table_for_value(new_str)
-            .unwrap_or_else(|| crate::buffer::text_props::TextPropertyTable::new());
+        let mut table = get_string_text_properties_table_for_value(new_str).unwrap_or_default();
         let pairs = &args[1..];
         // Collect chunks and iterate in reverse to match GNU's reversal behavior
         let chunks: Vec<&[Value]> = pairs.chunks(2).collect();
@@ -2380,7 +2369,7 @@ fn process_cpu_time_micros() -> i64 {
             if unsafe {
                 libc::clock_gettime(libc::CLOCK_PROCESS_CPUTIME_ID, &mut ts)
             } == 0 {
-                ts.tv_sec as i64 * 1_000_000 + ts.tv_nsec as i64 / 1_000
+                ts.tv_sec * 1_000_000 + ts.tv_nsec / 1_000
             } else {
                 0
             }

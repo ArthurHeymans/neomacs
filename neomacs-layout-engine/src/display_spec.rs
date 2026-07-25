@@ -555,9 +555,7 @@ pub(crate) fn parse_display_surface_source_layout(
                 channel0 = (!value.is_nil()).then_some(value);
             }
             Some(DisplayMediaKey::Fps) => {
-                fps = parse_image_dimension(value)
-                    .filter(|n| *n > 0)
-                    .map(|n| n as u32);
+                fps = parse_image_dimension(value).filter(|n| *n > 0);
             }
             Some(DisplayMediaKey::Width) => {
                 if let Some(parsed) = parse_image_dimension(value) {

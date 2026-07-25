@@ -618,6 +618,10 @@ pub enum UiCommand {
 
 /// Config and styling commands.
 #[derive(Debug)]
+// This public command enum preserves its established by-value payload API.
+// Boxing `VisualConfig` only to narrow the enum would break downstream
+// constructors and destructuring code.
+#[allow(clippy::large_enum_variant)]
 pub enum ConfigCommand {
     /// Enable or disable font ligatures
     SetLigaturesEnabled { enabled: bool },
@@ -676,6 +680,9 @@ impl ClipboardCommand {
 
 /// Command from Emacs to render thread
 #[derive(Debug)]
+// This public transport enum preserves its established by-value command API.
+// Boxing `Config` would move the same downstream break one level outward.
+#[allow(clippy::large_enum_variant)]
 pub enum RenderCommand {
     Lifecycle(LifecycleCommand),
     Window(WindowCommand),
@@ -745,6 +752,12 @@ impl ThreadComms {
         };
 
         (emacs, render)
+    }
+}
+
+impl Default for ThreadComms {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

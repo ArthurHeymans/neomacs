@@ -933,13 +933,11 @@ pub fn translate_emacs_regex(pattern: &str) -> String {
                         i += 1 + next_len;
                     }
                     // Known escape sequences — pass through
-                    'w' | 'W' | 'b' | 'B' | 'd' | 'D' | 'n' | 't' | 'r' => match next {
-                        _ => {
-                            out.push('\\');
-                            out.push(next);
-                            i += 1 + next_len;
-                        }
-                    },
+                    'w' | 'W' | 'b' | 'B' | 'd' | 'D' | 'n' | 't' | 'r' => {
+                        out.push('\\');
+                        out.push(next);
+                        i += 1 + next_len;
+                    }
                     // Literal backslash
                     '\\' => {
                         out.push_str("\\\\");
@@ -2287,7 +2285,7 @@ pub fn re_search_backward_with_posix(
             CompiledSearchPattern::Emacs(cp) => {
                 // Backward search: negative range means search backward.
                 let range = -((start_rel - limit_rel) as isize);
-                regex_emacs::re_search(cp.as_ref(), &text, start_rel, range, &syn, start_rel).map(
+                regex_emacs::re_search(cp.as_ref(), text, start_rel, range, &syn, start_rel).map(
                     |(_pos, regs)| {
                         let mut md = buffer_match_data_from_registers(&regs, region_start.get());
                         md.set_buffer_id(buffer_id);
@@ -2496,7 +2494,7 @@ pub fn looking_at_with_posix(
     let compiled =
         compile_search_pattern_with_posix(&pattern_for_compile(pattern), case_fold, posix, &syn)?;
 
-    match with_buffer_emacs_bytes_for_search(buf, accessible.range(), |text| match &compiled {
+    with_buffer_emacs_bytes_for_search(buf, accessible.range(), |text| match &compiled {
         CompiledSearchPattern::Literal(literal) => {
             let tail = &text[start_rel..];
             let matched = literal_find_emacs_bytes(tail, literal, multibyte, case_fold)
@@ -2513,7 +2511,7 @@ pub fn looking_at_with_posix(
         }
         CompiledSearchPattern::Emacs(cp) => {
             if let Some((_end, regs)) =
-                regex_emacs::re_match(cp.as_ref(), &text, start_rel, text.len(), &syn, start_rel)
+                regex_emacs::re_match(cp.as_ref(), text, start_rel, text.len(), &syn, start_rel)
             {
                 let mut md = buffer_match_data_from_registers(&regs, region_start.get());
                 md.set_buffer_id(buffer_id);
@@ -2523,10 +2521,7 @@ pub fn looking_at_with_posix(
                 Ok(false)
             }
         }
-    }) {
-        Ok(matched) => Ok(matched),
-        Err(err) => Err(err),
-    }
+    })
 }
 
 pub(crate) fn looking_at_lisp_with_posix(
@@ -2736,6 +2731,7 @@ pub(crate) fn string_match_full_with_case_fold_source_lisp_pattern_posix(
     )
 }
 
+#[allow(clippy::too_many_arguments)] // matching options remain explicit at the GNU-regexp boundary
 pub(crate) fn string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
     pattern: &LispString,
     string: &crate::heap_types::LispString,
@@ -3001,6 +2997,7 @@ pub fn replace_match_string(
 /// and `case-symbols-as-words` into the case-preservation decision.
 /// For pure string replacement (no buffer in scope), pass `None` for
 /// the table to get GNU's standard-table baseline behavior.
+#[allow(clippy::too_many_arguments)] // public replacement options mirror Lisp replace-match semantics
 pub fn replace_match_string_with_syntax(
     source: &[u8],
     source_multibyte: bool,
@@ -3088,6 +3085,7 @@ fn compute_replacement(
 /// eight-bit raw bytes and Private-Use-Area glyphs survive intact
 /// instead of round-tripping through the legacy PUA-sentinel storage
 /// form.
+#[allow(clippy::too_many_arguments)] // private worker carries the same explicit replacement semantics
 fn compute_replacement_with_syntax(
     newtext: &str,
     fixedcase: bool,
@@ -3260,16 +3258,16 @@ fn build_replacement(
             match next {
                 '&' => {
                     // Whole match
-                    if let Some(Some(group)) = md.groups.first() {
-                        if let Some(text) = extract_group(
+                    if let Some(Some(group)) = md.groups.first()
+                        && let Some(text) = extract_group(
                             source,
                             group.start(),
                             group.end(),
                             string_char_positions,
                             buffer_lisp_char_positions,
-                        ) {
-                            out.extend_from_slice(text);
-                        }
+                        )
+                    {
+                        out.extend_from_slice(text);
                     }
                     i += 1 + next_len;
                 }
@@ -3277,16 +3275,16 @@ fn build_replacement(
                     // GNU search.c:2549 — explicit `c >= '1' && c <= '9'`.
                     // `\0` intentionally falls through to the error arm.
                     let group = (next as u8 - b'0') as usize;
-                    if let Some(Some(group)) = md.groups.get(group) {
-                        if let Some(text) = extract_group(
+                    if let Some(Some(group)) = md.groups.get(group)
+                        && let Some(text) = extract_group(
                             source,
                             group.start(),
                             group.end(),
                             string_char_positions,
                             buffer_lisp_char_positions,
-                        ) {
-                            out.extend_from_slice(text);
-                        }
+                        )
+                    {
+                        out.extend_from_slice(text);
                     }
                     i += 1 + next_len;
                 }

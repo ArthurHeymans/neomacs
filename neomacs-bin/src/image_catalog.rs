@@ -349,7 +349,7 @@ fn placeholder_image_dimensions(request: &ImageResolveRequest) -> (u32, u32) {
 
 fn home_directory_from_environment() -> Option<String> {
     std::env::var_os("HOME")
-        .or_else(|| {
+        .or({
             #[cfg(windows)]
             {
                 std::env::var_os("APPDATA").or_else(|| std::env::var_os("USERPROFILE"))

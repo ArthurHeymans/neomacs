@@ -453,6 +453,9 @@ impl GuiFrameRenderState {
         }
     }
 
+    // Retained for focused render-state tests; production callers inspect the
+    // retained frame through narrower accessors.
+    #[allow(dead_code)]
     pub(super) fn current_frame_clone(&self) -> Option<FrameGlyphBuffer> {
         self.compositor.current_frame.clone()
     }
@@ -579,9 +582,7 @@ impl GuiFrameRenderState {
     }
 
     fn active_pointer_damage(&mut self) -> Option<PendingPointerDamage> {
-        let Some(active) = self.pointer_appearance.active() else {
-            return None;
-        };
+        let active = self.pointer_appearance.active()?;
         let key = active.key();
         let frame_and_offset = if key.frame_id() == 0 || key.frame_id() == self.emacs_frame_id {
             self.compositor
@@ -1363,10 +1364,9 @@ impl GuiFrameRenderState {
             self.compositor.dirty = true;
             if let Some(previous) = previous_presentation
                 && previous != next_presentation
+                && self.pointer_appearance.retire(previous)
             {
-                if self.pointer_appearance.retire(previous) {
-                    self.record_pointer_paint_transition(before);
-                }
+                self.record_pointer_paint_transition(before);
             }
         }
         changed

@@ -644,9 +644,7 @@ enum WaitProcessActivity {
 
 impl WaitProcessActivity {
     fn record(self, target: bool) -> Self {
-        if target {
-            Self::Target
-        } else if matches!(self, Self::Target) {
+        if target || matches!(self, Self::Target) {
             Self::Target
         } else {
             Self::Any

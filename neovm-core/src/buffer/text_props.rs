@@ -1446,10 +1446,7 @@ impl IntervalTree {
     }
 
     fn prune_trailing_empty_intervals(&mut self) {
-        loop {
-            let Some(root) = self.root else {
-                break;
-            };
+        while let Some(root) = self.root {
             let rightmost = self.rightmost_id(root);
             if !self.nodes[rightmost.0].is_empty_plist() {
                 break;
@@ -2192,7 +2189,6 @@ impl TextPropertyTable {
         }
 
         if plist.is_empty() {
-            return;
         } else {
             self.intervals.prune_trailing_empty_intervals();
         }
@@ -2369,9 +2365,7 @@ impl TextPropertyTable {
                 // pos is past the last interval: the value there is nil, and the
                 // nearest change back is at the tree end (last interval's value vs
                 // the implicit trailing nil).
-                let Some(last) = self.intervals.last_interval() else {
-                    return None;
-                };
+                let last = self.intervals.last_interval()?;
                 let tree_len = CharPos0::ZERO.add_len(self.intervals.len());
                 (None, tree_len, Some(last))
             }
@@ -2595,9 +2589,7 @@ impl TextPropertyTable {
                 return Some(key.max(range.start()));
             }
             let next_key = self.intervals.interval_end(key, id);
-            let Some(next_id) = self.intervals.next_id(id) else {
-                return None;
-            };
+            let next_id = self.intervals.next_id(id)?;
             key = next_key;
             id = next_id;
         }

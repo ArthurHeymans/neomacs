@@ -316,10 +316,10 @@ fn current_user_home_bytes() -> Option<Vec<u8>> {
     #[cfg(unix)]
     {
         for var in ["LOGNAME", "USER"] {
-            if let Some(user) = std::env::var_os(var) {
-                if let Some(home) = user_homedir_bytes(user.as_bytes()) {
-                    return Some(home);
-                }
+            if let Some(user) = std::env::var_os(var)
+                && let Some(home) = user_homedir_bytes(user.as_bytes())
+            {
+                return Some(home);
             }
         }
         let passwd = unsafe { libc::getpwuid(libc::getuid()) };
@@ -2027,10 +2027,10 @@ fn home_directory_for_expand_file_name(eval: &mut Context) -> Option<Vec<u8>> {
     // fallback, a session with HOME unset -- e.g. a minimal Windows build env,
     // where GNU relies on `init_environment` having set HOME -- leaves `~`
     // unexpanded, so `directory-files "~"` fails at startup.
-    if let Ok(value) = super::process::builtin_getenv_internal(eval, vec![Value::string("HOME")]) {
-        if let Some(ls) = value.as_lisp_string() {
-            return Some(ls.as_bytes().to_vec());
-        }
+    if let Ok(value) = super::process::builtin_getenv_internal(eval, vec![Value::string("HOME")])
+        && let Some(ls) = value.as_lisp_string()
+    {
+        return Some(ls.as_bytes().to_vec());
     }
     current_user_home_bytes()
 }
@@ -2934,12 +2934,11 @@ pub(crate) fn default_directory_lisp_in_state(
     _dynamic: &[OrderedRuntimeBindingMap],
     buffers: &crate::buffer::BufferManager,
 ) -> Option<crate::heap_types::LispString> {
-    if let Some(buf) = buffers.current_buffer() {
-        if let Some(val) = buf.get_buffer_local("default-directory") {
-            if let Some(string) = val.as_lisp_string() {
-                return Some(string.clone());
-            }
-        }
+    if let Some(buf) = buffers.current_buffer()
+        && let Some(val) = buf.get_buffer_local("default-directory")
+        && let Some(string) = val.as_lisp_string()
+    {
+        return Some(string.clone());
     }
     obarray
         .symbol_value("default-directory")
@@ -3177,16 +3176,14 @@ fn barf_or_query_if_file_exists(
     // non-symlink-following stat so a dangling symlink still counts as
     // existing, and so a directory is reported distinctly.
     let mut exists = known_to_exist;
-    if !known_to_exist {
-        if let Ok(metadata) = fs::symlink_metadata(&path) {
-            if metadata.is_dir() {
-                return Err(signal(
-                    LispCondition::FileError,
-                    vec![Value::string("File is a directory"), absname_value],
-                ));
-            }
-            exists = true;
+    if !known_to_exist && let Ok(metadata) = fs::symlink_metadata(&path) {
+        if metadata.is_dir() {
+            return Err(signal(
+                LispCondition::FileError,
+                vec![Value::string("File is a directory"), absname_value],
+            ));
         }
+        exists = true;
     }
 
     if !exists {
@@ -4093,41 +4090,41 @@ pub(crate) fn builtin_verify_visited_file_modtime(
 pub(crate) fn builtin_set_visited_file_modtime(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_max_args("set-visited-file-modtime", &args, 1)?;
 
-    if let Some(arg) = args.first() {
-        if !arg.is_nil() {
-            // Explicit timestamp argument.
-            validate_set_visited_file_modtime_arg(arg)?;
-            // GNU `Fset_visited_file_modtime': an integer "flag" (-1/0) sets the
-            // unknown-modtime sentinel (this is how `clear-visited-file-modtime'
-            // works -- it calls `(set-visited-file-modtime 0)'); any other time
-            // form is decoded (including the 4-element (HIGH LOW USEC PSEC)
-            // list) into one (sec, nsec) via `lisp_time_argument', rather than
-            // taking elements 0 and 1 as raw seconds and nanoseconds.
-            // (neomacs represents an unknown modtime as None.)
-            let decoded = if arg.as_fixnum().is_some() {
-                None
-            } else {
-                Some(crate::emacs_core::timefns::time_value_seconds_and_nanos(
-                    arg,
-                )?)
-            };
-            let buf = eval
-                .buffers
-                .current_buffer_mut()
-                .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-            match decoded {
-                None => {
-                    buf.modtime_sec = None;
-                    buf.modtime_nsec = None;
-                }
-                Some((sec, nsec)) => {
-                    buf.modtime_sec = Some(sec);
-                    buf.modtime_nsec = Some(nsec as i32);
-                }
+    if let Some(arg) = args.first()
+        && !arg.is_nil()
+    {
+        // Explicit timestamp argument.
+        validate_set_visited_file_modtime_arg(arg)?;
+        // GNU `Fset_visited_file_modtime': an integer "flag" (-1/0) sets the
+        // unknown-modtime sentinel (this is how `clear-visited-file-modtime'
+        // works -- it calls `(set-visited-file-modtime 0)'); any other time
+        // form is decoded (including the 4-element (HIGH LOW USEC PSEC)
+        // list) into one (sec, nsec) via `lisp_time_argument', rather than
+        // taking elements 0 and 1 as raw seconds and nanoseconds.
+        // (neomacs represents an unknown modtime as None.)
+        let decoded = if arg.as_fixnum().is_some() {
+            None
+        } else {
+            Some(crate::emacs_core::timefns::time_value_seconds_and_nanos(
+                arg,
+            )?)
+        };
+        let buf = eval
+            .buffers
+            .current_buffer_mut()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        match decoded {
+            None => {
+                buf.modtime_sec = None;
+                buf.modtime_nsec = None;
             }
-            buf.modtime_size = None;
-            return Ok(Value::NIL);
+            Some((sec, nsec)) => {
+                buf.modtime_sec = Some(sec);
+                buf.modtime_nsec = Some(nsec as i32);
+            }
         }
+        buf.modtime_size = None;
+        return Ok(Value::NIL);
     }
 
     // No arg — stat the visited file
@@ -4142,22 +4139,19 @@ pub(crate) fn builtin_set_visited_file_modtime(eval: &mut Context, args: Vec<Val
             vec![Value::symbol("stringp"), Value::NIL],
         ));
     };
-    match std::fs::metadata(&path) {
-        Ok(meta) => {
-            let buf = eval
-                .buffers
-                .current_buffer_mut()
-                .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-            if let Ok(mtime) = meta.modified() {
-                let dur = mtime
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default();
-                buf.modtime_sec = Some(dur.as_secs() as i64);
-                buf.modtime_nsec = Some(dur.subsec_nanos() as i32);
-                buf.modtime_size = Some(meta.len() as i64);
-            }
+    if let Ok(meta) = std::fs::metadata(&path) {
+        let buf = eval
+            .buffers
+            .current_buffer_mut()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        if let Ok(mtime) = meta.modified() {
+            let dur = mtime
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default();
+            buf.modtime_sec = Some(dur.as_secs() as i64);
+            buf.modtime_nsec = Some(dur.subsec_nanos() as i32);
+            buf.modtime_size = Some(meta.len() as i64);
         }
-        Err(_) => {}
     }
     Ok(Value::NIL)
 }
@@ -4481,17 +4475,18 @@ pub(crate) fn builtin_copy_file(eval: &mut Context, args: Vec<Value>) -> EvalRes
     #[cfg(unix)]
     if dest_exists {
         use std::os::unix::fs::MetadataExt;
-        if let Ok(to_meta) = fs::metadata(&to_path) {
-            if from_meta.dev() == to_meta.dev() && from_meta.ino() == to_meta.ino() {
-                return Err(get_file_errno_data(
-                    &std::io::Error::from_raw_os_error(0),
-                    "Input and output files are the same",
-                    vec![
-                        Value::heap_string(from.clone()),
-                        Value::heap_string(to.clone()),
-                    ],
-                ));
-            }
+        if let Ok(to_meta) = fs::metadata(&to_path)
+            && from_meta.dev() == to_meta.dev()
+            && from_meta.ino() == to_meta.ino()
+        {
+            return Err(get_file_errno_data(
+                &std::io::Error::from_raw_os_error(0),
+                "Input and output files are the same",
+                vec![
+                    Value::heap_string(from.clone()),
+                    Value::heap_string(to.clone()),
+                ],
+            ));
         }
     }
     #[cfg(not(unix))]
@@ -4677,10 +4672,11 @@ fn find_file_name_handler_lisp_with_values(
     // Compute the inhibit list lazily — only consulted when operation
     // matches inhibit-file-name-operation.
     let mut inhibited: Option<Value> = None;
-    if let Some(inh_op) = inhibit_operation {
-        if !inh_op.is_nil() && super::value::eq_value(&inh_op, &operation) {
-            inhibited = inhibit_handlers;
-        }
+    if let Some(inh_op) = inhibit_operation
+        && !inh_op.is_nil()
+        && super::value::eq_value(&inh_op, &operation)
+    {
+        inhibited = inhibit_handlers;
     }
 
     // Walk the alist exactly like GNU's loop, picking the entry with
@@ -5926,16 +5922,16 @@ pub(crate) fn builtin_insert_file_contents(
         let _ = eval.buffers.set_buffer_modified_flag(current_id, false);
         // Store file modification time (GNU: insert-file-contents stores
         // current_buffer->modtime = mtime; current_buffer->modtime_size = st_size).
-        if let Ok(meta) = std::fs::metadata(lisp_file_name_to_path_buf(&resolved)) {
-            if let Ok(mtime) = meta.modified() {
-                let dur = mtime
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default();
-                if let Some(buf) = eval.buffers.get_mut(current_id) {
-                    buf.modtime_sec = Some(dur.as_secs() as i64);
-                    buf.modtime_nsec = Some(dur.subsec_nanos() as i32);
-                    buf.modtime_size = Some(meta.len() as i64);
-                }
+        if let Ok(meta) = std::fs::metadata(lisp_file_name_to_path_buf(&resolved))
+            && let Ok(mtime) = meta.modified()
+        {
+            let dur = mtime
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default();
+            if let Some(buf) = eval.buffers.get_mut(current_id) {
+                buf.modtime_sec = Some(dur.as_secs() as i64);
+                buf.modtime_nsec = Some(dur.subsec_nanos() as i32);
+                buf.modtime_size = Some(meta.len() as i64);
             }
         }
         if empty_undo_list_p {
@@ -5971,12 +5967,11 @@ fn resolve_write_coding_system(
     }
 
     // 2. Check buffer-file-coding-system (buffer-local)
-    if let Some(buf) = buffers.get(buffer_id) {
-        if let Some(val) = buf.get_buffer_local("buffer-file-coding-system") {
-            if let Some(name) = coding_system_value_to_name(&val) {
-                return name;
-            }
-        }
+    if let Some(buf) = buffers.get(buffer_id)
+        && let Some(val) = buf.get_buffer_local("buffer-file-coding-system")
+        && let Some(name) = coding_system_value_to_name(&val)
+    {
+        return name;
     }
 
     // 3. Default
@@ -6067,16 +6062,16 @@ pub(crate) fn builtin_write_region(
         }
         return eval.funcall_general(handler, call_args);
     }
-    if handler.is_nil() {
-        if let Some(visit_arg) = args.get(4).and_then(|value| value.as_lisp_string()) {
-            let visit_handler = find_file_name_handler_lisp_for_eval(eval, visit_arg, op);
-            if !visit_handler.is_nil() {
-                let mut call_args = Vec::with_capacity(args.len() + 1);
-                call_args.push(op);
-                call_args.extend_from_slice(&args);
-                call_args[3] = Value::heap_string(resolved.clone());
-                return eval.funcall_general(visit_handler, call_args);
-            }
+    if handler.is_nil()
+        && let Some(visit_arg) = args.get(4).and_then(|value| value.as_lisp_string())
+    {
+        let visit_handler = find_file_name_handler_lisp_for_eval(eval, visit_arg, op);
+        if !visit_handler.is_nil() {
+            let mut call_args = Vec::with_capacity(args.len() + 1);
+            call_args.push(op);
+            call_args.extend_from_slice(&args);
+            call_args[3] = Value::heap_string(resolved.clone());
+            return eval.funcall_general(visit_handler, call_args);
         }
     }
 
@@ -6191,12 +6186,12 @@ pub(crate) fn builtin_write_region(
             .buffers
             .set_buffer_file_name(current_id, Value::heap_string(visit_path));
         let _ = eval.buffers.set_buffer_modified_flag(current_id, false);
-        if let Some((sec, nsec, size)) = visiting_modtime {
-            if let Some(buf) = eval.buffers.get_mut(current_id) {
-                buf.modtime_sec = Some(sec);
-                buf.modtime_nsec = Some(nsec);
-                buf.modtime_size = Some(size);
-            }
+        if let Some((sec, nsec, size)) = visiting_modtime
+            && let Some(buf) = eval.buffers.get_mut(current_id)
+        {
+            buf.modtime_sec = Some(sec);
+            buf.modtime_nsec = Some(nsec);
+            buf.modtime_size = Some(size);
         }
     }
 
@@ -6228,14 +6223,13 @@ pub(crate) fn builtin_find_file_noselect(
 
     // Check if there's already a buffer visiting this file
     for buf_id in eval.buffers.buffer_list() {
-        if let Some(buf) = eval.buffers.get(buf_id) {
-            if buf
+        if let Some(buf) = eval.buffers.get(buf_id)
+            && buf
                 .file_name_value()
                 .as_lisp_string()
                 .is_some_and(|name| name == &abs_path)
-            {
-                return Ok(Value::make_buffer(buf_id));
-            }
+        {
+            return Ok(Value::make_buffer(buf_id));
         }
     }
 
@@ -6376,11 +6370,11 @@ pub(crate) fn builtin_make_auto_save_file_name(
             let handler = find_file_name_handler_lisp_for_eval(eval, file_name, op);
             if !handler.is_nil() {
                 let result = eval.funcall_general(handler, vec![op])?;
-                if result.is_string() {
-                    if let Some(buf) = eval.buffers.get_mut(current_id) {
-                        buf.set_buffer_local("buffer-auto-save-file-name", result);
-                        buf.set_auto_save_file_name_value(result);
-                    }
+                if result.is_string()
+                    && let Some(buf) = eval.buffers.get_mut(current_id)
+                {
+                    buf.set_buffer_local("buffer-auto-save-file-name", result);
+                    buf.set_auto_save_file_name_value(result);
                 }
                 return Ok(result);
             }
@@ -6450,12 +6444,11 @@ pub(crate) fn builtin_do_auto_save(
 
             // Check buffer-saved-size: if negative, auto-save is disabled for
             // this buffer
-            if let Some(saved_size_val) = buf.get_buffer_local("buffer-saved-size") {
-                if let Some(n) = saved_size_val.as_fixnum() {
-                    if n < 0 {
-                        continue;
-                    }
-                }
+            if let Some(saved_size_val) = buf.get_buffer_local("buffer-saved-size")
+                && let Some(n) = saved_size_val.as_fixnum()
+                && n < 0
+            {
+                continue;
             }
 
             // Buffer must be modified since last auto-save

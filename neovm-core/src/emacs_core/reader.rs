@@ -408,25 +408,21 @@ fn restore_minibuffer_window_in_state(
     saved: ActiveMinibufferWindowState,
 ) {
     if let Some(frame) = frames.get_mut(saved.frame_id) {
-        if let Some(window) = frame.find_window_mut(saved.minibuffer_window_id) {
-            if let Some(prev_buffer_id) = saved.previous_minibuffer_buffer {
-                window.set_buffer(prev_buffer_id);
-                crate::window::window_markers::create_window_markers(
-                    buffers,
-                    window,
-                    prev_buffer_id,
-                );
-                crate::window::window_markers::set_window_start_with_marker(
-                    buffers,
-                    window,
-                    saved.previous_minibuffer_window_start,
-                );
-                crate::window::window_markers::set_window_point_with_marker(
-                    buffers,
-                    window,
-                    saved.previous_minibuffer_point,
-                );
-            }
+        if let Some(window) = frame.find_window_mut(saved.minibuffer_window_id)
+            && let Some(prev_buffer_id) = saved.previous_minibuffer_buffer
+        {
+            window.set_buffer(prev_buffer_id);
+            crate::window::window_markers::create_window_markers(buffers, window, prev_buffer_id);
+            crate::window::window_markers::set_window_start_with_marker(
+                buffers,
+                window,
+                saved.previous_minibuffer_window_start,
+            );
+            crate::window::window_markers::set_window_point_with_marker(
+                buffers,
+                window,
+                saved.previous_minibuffer_point,
+            );
         }
         let _ = frame.select_window(saved.previous_selected_window);
     }
@@ -1175,6 +1171,7 @@ pub(crate) fn builtin_read_from_minibuffer_in_runtime(
 /// loop for the actual recursive edit. This helper mirrors that shape: it
 /// performs buffer/window setup and final result handling in shared runtime
 /// state, and delegates only the recursive edit itself to the callback.
+#[allow(clippy::too_many_arguments)] // mirrors GNU read_minibuf's split runtime state
 pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
     obarray: &mut super::symbol::Obarray,
     buffers: &mut crate::buffer::BufferManager,

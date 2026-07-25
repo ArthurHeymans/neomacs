@@ -452,17 +452,17 @@ fn subr_arity_from_registry(ctx: &super::eval::Context, sym_id: SymId) -> Value 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn subr_arity_from_value(subr: Value) -> Option<Value> {
     // Try global table first (new path)
-    if let Some(sym_id) = subr.as_subr_id() {
-        if let Some(entry) = super::eval::lookup_global_subr_entry(sym_id) {
-            if entry.dispatch_kind == SubrDispatchKind::SpecialForm {
-                return Some(arity_unevalled(special_form_min_arity_from_entry(&entry)));
-            }
-            if entry.min_args > 0 || entry.max_args.is_some() {
-                return Some(arity_cons(
-                    entry.min_args as usize,
-                    entry.max_args.map(|m| m as usize),
-                ));
-            }
+    if let Some(sym_id) = subr.as_subr_id()
+        && let Some(entry) = super::eval::lookup_global_subr_entry(sym_id)
+    {
+        if entry.dispatch_kind == SubrDispatchKind::SpecialForm {
+            return Some(arity_unevalled(special_form_min_arity_from_entry(&entry)));
+        }
+        if entry.min_args > 0 || entry.max_args.is_some() {
+            return Some(arity_cons(
+                entry.min_args as usize,
+                entry.max_args.map(|m| m as usize),
+            ));
         }
     }
     // Old heap path fallback
@@ -548,10 +548,10 @@ pub(crate) fn builtin_special_form_p(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn subr_dispatch_kind_from_value(value: &Value) -> Option<SubrDispatchKind> {
     // New path: look up from global table
-    if let Some(sym_id) = value.as_subr_id() {
-        if let Some(entry) = super::eval::lookup_global_subr_entry(sym_id) {
-            return Some(entry.dispatch_kind);
-        }
+    if let Some(sym_id) = value.as_subr_id()
+        && let Some(entry) = super::eval::lookup_global_subr_entry(sym_id)
+    {
+        return Some(entry.dispatch_kind);
     }
     // Old heap path fallback
     if !matches!(value.kind(), ValueKind::Veclike(VecLikeType::Subr)) {

@@ -67,7 +67,7 @@ fn parse_sound_spec(sound: Value) -> Result<SoundSpec, Flow> {
         ));
     }
 
-    if (elements.len() - 1) % 2 != 0 {
+    if !(elements.len() - 1).is_multiple_of(2) {
         return Err(signal(LispCondition::MalformedKeywordArgList, vec![]));
     }
 

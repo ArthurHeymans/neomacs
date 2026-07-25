@@ -11,7 +11,7 @@
 //! Entry types:
 //! - `(BEG . END)` — insertion (1-indexed positions)
 //! - `(TEXT . POS)` — deletion (TEXT is string, POS is 1-indexed,
-//!    negative if point was at end of deleted region)
+//!   negative if point was at end of deleted region)
 //! - `POS` (integer) — cursor position (1-indexed)
 //! - `(t . MODTIME)` — first-change marker
 //! - `nil` — undo boundary

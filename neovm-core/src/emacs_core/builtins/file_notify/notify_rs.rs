@@ -3,22 +3,12 @@ use crate::emacs_core::error::Flow;
 use crate::emacs_core::value::Value;
 use notify::Watcher;
 
+#[derive(Default)]
 pub(super) struct NotifyRsInotifyBackend {
     watcher: Option<notify::RecommendedWatcher>,
     _rx: Option<std::sync::mpsc::Receiver<Result<notify::Event, notify::Error>>>,
     watches: Vec<FileWatch>,
     next_id: i64,
-}
-
-impl Default for NotifyRsInotifyBackend {
-    fn default() -> Self {
-        Self {
-            watcher: None,
-            _rx: None,
-            watches: Vec::new(),
-            next_id: 0,
-        }
-    }
 }
 
 impl NotifyRsInotifyBackend {

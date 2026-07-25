@@ -389,7 +389,7 @@ impl RenderApp {
             .frame_windows
             .windows
             .keys()
-            .map(|key| native_window_id(key))
+            .map(&native_window_id)
             .collect();
         self.frame_coordinator
             .prune_windows(|id| id == LOOP_WINDOW || live.contains(&id));

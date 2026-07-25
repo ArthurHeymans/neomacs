@@ -103,6 +103,9 @@ struct FontsetRegistry {
 }
 
 impl FontsetRegistry {
+    // Fontset names are canonical Lisp strings owned by this registry; their
+    // GC-aware representation is the required equality key.
+    #[allow(clippy::mutable_key_type)]
     fn with_defaults() -> Self {
         let mut alias_to_name = HashMap::new();
         let default_alias = fontset_name_lisp_string(DEFAULT_FONTSET_ALIAS);
@@ -207,13 +210,13 @@ impl FontsetRegistry {
         };
 
         let mut entries = data.matching_entries_for_char(code);
-        if entries.is_empty() && *name != fontset_name_lisp_string(DEFAULT_FONTSET_NAME) {
-            if let Some(default) = self
+        if entries.is_empty()
+            && *name != fontset_name_lisp_string(DEFAULT_FONTSET_NAME)
+            && let Some(default) = self
                 .fontsets
                 .get(&fontset_name_lisp_string(DEFAULT_FONTSET_NAME))
-            {
-                entries = default.matching_entries_for_char(code);
-            }
+        {
+            entries = default.matching_entries_for_char(code);
         }
         entries
     }
@@ -514,6 +517,7 @@ pub(crate) fn snapshot_fontset_registry() -> FontsetRegistrySnapshot {
         })
 }
 
+#[allow(clippy::mutable_key_type)] // reconstructs maps keyed by canonical Lisp strings
 pub(crate) fn restore_fontset_registry(snapshot: FontsetRegistrySnapshot) {
     let alias_to_name = snapshot.alias_to_name.into_iter().collect();
     let fontsets = snapshot
@@ -995,7 +999,7 @@ fn font_encoding_repertory(value: &Value) -> Option<FontRepertory> {
     match value.kind() {
         ValueKind::Symbol(id) => {
             let name = resolve_sym(id);
-            charset_exists(name).then(|| FontRepertory::Charset(id))
+            charset_exists(name).then_some(FontRepertory::Charset(id))
         }
         ValueKind::Cons => {
             let _pair_car = value.cons_car();

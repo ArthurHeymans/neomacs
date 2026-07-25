@@ -289,15 +289,15 @@ fn primitive_undo_inner(
                 (ValueKind::String, ValueKind::Fixnum(pos1)) => {
                     let apos1 =
                         UndoLispPosition::absolute_from_signed_deletion(pos1).to_lisp_char_pos();
-                    if let Some(buf) = ctx.buffers.get(buf_id) {
-                        if !lisp_char_position_is_visible(buf, apos1) {
-                            return Err(signal(
-                                "error",
-                                vec![Value::string(
-                                    "Changes to be undone are outside visible portion of buffer",
-                                )],
-                            ));
-                        }
+                    if let Some(buf) = ctx.buffers.get(buf_id)
+                        && !lisp_char_position_is_visible(buf, apos1)
+                    {
+                        return Err(signal(
+                            "error",
+                            vec![Value::string(
+                                "Changes to be undone are outside visible portion of buffer",
+                            )],
+                        ));
                     }
 
                     let mut valid_marker_adjustments = Vec::new();

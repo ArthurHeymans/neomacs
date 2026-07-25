@@ -154,16 +154,17 @@ fn current_buffer_in_manager(buffers: &BufferManager) -> Result<&crate::buffer::
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn dynamic_or_global_symbol_value(eval: &super::eval::Context, name: &str) -> Option<Value> {
     let name_id = intern(name);
-    if eval.lexical_binding() && !eval.obarray.is_special(name) {
-        if let Some(v) = lexenv_lookup(eval.lexenv, name_id) {
-            return Some(v);
-        }
+    if eval.lexical_binding()
+        && !eval.obarray.is_special(name)
+        && let Some(v) = lexenv_lookup(eval.lexenv, name_id)
+    {
+        return Some(v);
     }
 
-    if let Some(buf) = eval.buffers.current_buffer() {
-        if let Some(v) = buf.get_buffer_local(name) {
-            return Some(v);
-        }
+    if let Some(buf) = eval.buffers.current_buffer()
+        && let Some(v) = buf.get_buffer_local(name)
+    {
+        return Some(v);
     }
 
     eval.obarray.symbol_value(name).cloned()

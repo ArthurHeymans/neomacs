@@ -945,10 +945,8 @@ fn error_arg_lisp(
     value: &Value,
     quote_strings: bool,
 ) -> crate::heap_types::LispString {
-    if !quote_strings {
-        if let Some(ls) = value.as_lisp_string() {
-            return ls.clone();
-        }
+    if !quote_strings && let Some(ls) = value.as_lisp_string() {
+        return ls.clone();
     }
     let printed = super::error::print_value_with_eval(eval, value);
     let multibyte = printed.chars().any(|c| c as u32 > 0xFF);

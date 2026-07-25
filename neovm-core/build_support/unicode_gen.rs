@@ -138,10 +138,11 @@ fn generate_charscript(blocks: &Path, emoji_data: &Path) -> String {
             "    (#x{} #x{} {})",
             entry.start, entry.end, entry.alias
         );
-        if let Some(name) = &entry.name {
-            if !entry.alias.contains('-') && entry.alias != name.to_ascii_lowercase() {
-                let _ = write!(out, " ; {name}");
-            }
+        if let Some(name) = &entry.name
+            && !entry.alias.contains('-')
+            && entry.alias != name.to_ascii_lowercase()
+        {
+            let _ = write!(out, " ; {name}");
         }
         out.push('\n');
     }
@@ -190,15 +191,16 @@ fn push_block_range(
         return;
     };
 
-    if let Some(last) = ranges.last_mut() {
-        if last.alias == alias && parse_hex(&start) == parse_hex(&last.end).saturating_add(1) {
-            last.end = end;
-            last.name = Some(match last.name.take() {
-                Some(prev) => format!("{prev}, {name}"),
-                None => name,
-            });
-            return;
-        }
+    if let Some(last) = ranges.last_mut()
+        && last.alias == alias
+        && parse_hex(&start) == parse_hex(&last.end).saturating_add(1)
+    {
+        last.end = end;
+        last.name = Some(match last.name.take() {
+            Some(prev) => format!("{prev}, {name}"),
+            None => name,
+        });
+        return;
     }
 
     ranges.push(ScriptRange {

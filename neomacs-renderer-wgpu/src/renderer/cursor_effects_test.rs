@@ -381,7 +381,7 @@ fn test_cursor_magnetism_expired_entries_pruned() {
 
     std::thread::sleep(std::time::Duration::from_millis(5));
 
-    let (verts, _) = emit_cursor_magnetism(&ctx, &mut entries);
+    let (_verts, _) = emit_cursor_magnetism(&ctx, &mut entries);
 
     // Old entry should be pruned, new one added (cursor jumped from 50,50 to 200,100)
     assert_eq!(entries.len(), 1);
@@ -671,7 +671,6 @@ fn test_cursor_glow_layer_count_calculation() {
 
     let fgb = FrameGlyphBuffer::default();
     let anim_cursor = Some(make_animated_cursor(100.0, 100.0, 10.0, 20.0, 1));
-    let ctx = make_ctx(&config, &fgb, &anim_cursor, true);
     let cursor_pulse_start = std::time::Instant::now();
 
     // Test different radius values

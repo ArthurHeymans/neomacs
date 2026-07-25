@@ -996,9 +996,10 @@ impl CodingSystemManager {
             .aliases
             .iter()
             .any(|(alias, target)| *alias == symbol || *target == symbol)
-            || self.alias_order.iter().any(|(base, aliases)| {
-                *base == symbol || aliases.iter().any(|alias| *alias == symbol)
-            })
+            || self
+                .alias_order
+                .iter()
+                .any(|(base, aliases)| *base == symbol || aliases.contains(&symbol))
             || self.priority.contains(&symbol)
             || self.keyboard_coding == symbol
             || self.terminal_coding == symbol
@@ -1020,10 +1021,10 @@ impl CodingSystemManager {
         // must NOT have its EOL overridden by detection: GNU only rewrites the
         // EOL when eol_type is a vector (undecided). Otherwise reading a CRLF
         // file with an explicit `unix` coding would wrongly strip the CR.
-        if let Some(info) = self.get(normalized) {
-            if info.eol_type.specified_index().is_some() {
-                return canonical_runtime_name(self, normalized);
-            }
+        if let Some(info) = self.get(normalized)
+            && info.eol_type.specified_index().is_some()
+        {
+            return canonical_runtime_name(self, normalized);
         }
 
         let eol = match eol_suffix {
@@ -1391,10 +1392,10 @@ pub(crate) fn builtin_coding_system_get(mgr: &CodingSystemManager, args: Vec<Val
         };
     }
 
-    if let Some(int_key) = args[1].as_int() {
-        if let Some(value) = info.int_properties.get(&int_key) {
-            return Ok(*value);
-        }
+    if let Some(int_key) = args[1].as_int()
+        && let Some(value) = info.int_properties.get(&int_key)
+    {
+        return Ok(*value);
     }
 
     Err(signal(
@@ -2021,12 +2022,12 @@ pub(crate) fn coding_inherit_eol_type_unix(
     if EolType::from_suffix(&resolved_name).is_some() {
         return coding_system;
     }
-    if let Some(bucket) = runtime_bucket_name(mgr, &resolved_name) {
-        if let Some(info) = mgr.get(&bucket) {
-            // EOL fixed by the coding-system definition -> unchanged.
-            if info.eol_type.specified_index().is_some() {
-                return coding_system;
-            }
+    if let Some(bucket) = runtime_bucket_name(mgr, &resolved_name)
+        && let Some(info) = mgr.get(&bucket)
+    {
+        // EOL fixed by the coding-system definition -> unchanged.
+        if info.eol_type.specified_index().is_some() {
+            return coding_system;
         }
     }
     // Undecided EOL -> inherit system (unix) EOL == AREF (eol_type, 0).
@@ -2198,7 +2199,7 @@ pub(crate) fn builtin_coding_system_change_text_conversion(
         ValueKind::Nil => Some(0),
         ValueKind::String => None,
         _ => match args[0].as_symbol_name() {
-            Some(name) if name == "nil" => Some(0),
+            Some("nil") => Some(0),
             Some(name) => {
                 if let Some(resolved) = resolve_runtime_name(mgr, name) {
                     if let Some(eol) = EolType::from_suffix(&resolved) {
@@ -2251,7 +2252,7 @@ pub(crate) fn builtin_coding_system_change_text_conversion(
 pub(crate) fn builtin_coding_system_p(mgr: &CodingSystemManager, args: Vec<Value>) -> EvalResult {
     expect_args("coding-system-p", &args, 1)?;
     let known = match args[0].as_symbol_name() {
-        Some(name) if name == "nil" => true,
+        Some("nil") => true,
         Some(name) => is_known_or_derived_coding_system(mgr, name),
         None => false,
     };
@@ -2360,7 +2361,7 @@ fn scan_unencodable_positions(
         byte += len;
         let ch = i64::from(code);
         let is_ascii = code < 0x80;
-        if !(is_ascii && ascii_compatible) && !char_encodable_in_charset_list(ch, charset_list) {
+        if !(char_encodable_in_charset_list(ch, charset_list) || is_ascii && ascii_compatible) {
             positions.push(base_pos + char_index);
             if positions.len() >= limit {
                 break;
@@ -3027,10 +3028,10 @@ fn coding_cat_name(cat: usize) -> Option<&'static str> {
 pub(crate) fn coding_category_priority_list(mgr: &CodingSystemManager) -> Vec<SymId> {
     let mut order: Vec<usize> = Vec::with_capacity(CODING_CAT_MAX);
     for &sym in &mgr.priority {
-        if let Some(cat) = coding_category_of(mgr, resolve_sym(sym)).and_then(coding_cat_index) {
-            if !order.contains(&cat) {
-                order.push(cat);
-            }
+        if let Some(cat) = coding_category_of(mgr, resolve_sym(sym)).and_then(coding_cat_index)
+            && !order.contains(&cat)
+        {
+            order.push(cat);
         }
     }
     insert_unbound_categories(&mut order);
@@ -4027,7 +4028,7 @@ pub(crate) fn builtin_detect_coding_string(
             vec![Value::symbol("stringp"), args[0]],
         ));
     };
-    let bytes = crate::encoding::lisp_string_coding_source_bytes(&s);
+    let bytes = crate::encoding::lisp_string_coding_source_bytes(s);
     let src_chars = s.schars();
     let multibytep = s.is_multibyte();
     let highest = args.get(1).is_some_and(|v| v.is_truthy());
@@ -4135,14 +4136,13 @@ pub(crate) fn builtin_set_keyboard_coding_system(
     if !is_known_or_derived_coding_system(mgr, &name) {
         return Err(signal(LispCondition::CodingSystemError, vec![args[0]]));
     }
-    let normalization_input = if matches!(EolType::from_suffix(&name), Some(EolType::Unix)) {
-        name.clone()
-    } else if name == "emacs-internal" {
-        name.clone()
-    } else {
-        canonical_runtime_name(mgr, &name)
-            .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?
-    };
+    let normalization_input =
+        if matches!(EolType::from_suffix(&name), Some(EolType::Unix)) || name == "emacs-internal" {
+            name.clone()
+        } else {
+            canonical_runtime_name(mgr, &name)
+                .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?
+        };
     let base = strip_eol_suffix(&normalization_input);
     if matches!(base, "utf-8-auto" | "prefer-utf-8") {
         return Err(signal(
@@ -4299,8 +4299,8 @@ pub(crate) fn builtin_coding_system_priority_list(
 /// Strip -unix, -dos, or -mac suffix from a coding system name.
 fn strip_eol_suffix(name: &str) -> &str {
     for suffix in &["-unix", "-dos", "-mac"] {
-        if name.ends_with(suffix) {
-            return &name[..name.len() - suffix.len()];
+        if let Some(base) = name.strip_suffix(suffix) {
+            return base;
         }
     }
     name

@@ -131,6 +131,9 @@ thread_local! {
     /// compiled at that loop header, `None` when it is ineligible/uncompilable (a
     /// negative cache, so a hot loop that can't OSR is probed only once). Same
     /// thread/scope as COMPILED; cleared alongside it (heap-identity + `clear`).
+    // The nested shape is private and directly documents positive/negative OSR
+    // cache entries plus their entry depth.
+    #[allow(clippy::type_complexity)]
     static OSR_CACHE: RefCell<HashMap<(u64, usize), Option<(Rc<CompiledLeaf>, usize)>>> =
         RefCell::new(HashMap::new());
 }
@@ -412,10 +415,8 @@ pub(crate) fn collect_jit_reloc_gc_roots(roots: &mut Vec<Value>) {
     // OSR leaves also bake heap-constant reloc vectors — root them too, else a GC
     // between an OSR compile and its next run could free the leaf's constants.
     OSR_CACHE.with(|c| {
-        for slot in c.borrow().values() {
-            if let Some((leaf, _)) = slot {
-                roots.extend_from_slice(leaf.reloc_values());
-            }
+        for (leaf, _) in c.borrow().values().flatten() {
+            roots.extend_from_slice(leaf.reloc_values());
         }
     });
 }

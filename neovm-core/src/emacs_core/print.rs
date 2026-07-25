@@ -267,7 +267,7 @@ fn is_print_circle_candidate(value: &Value, print_gensym: bool) -> bool {
             // neomacs builds bool-vectors as tagged plain vectors, so filter
             // them out explicitly here. Non-empty vectors only.
             !super::chartable::is_bool_vector(value)
-                && value.as_vector_data().map_or(false, |v| !v.is_empty())
+                && value.as_vector_data().is_some_and(|v| !v.is_empty())
         }
         ValueKind::Veclike(VecLikeType::Record) => true,
         ValueKind::Veclike(VecLikeType::HashTable) => true,
@@ -659,10 +659,12 @@ pub(crate) fn preprocess_print_number_table(
     print_continuous_numbering: bool,
 ) {
     reset_print_number_index();
-    let mut options = PrintOptions::default();
-    options.print_circle = true;
-    options.print_gensym = print_gensym;
-    options.print_continuous_numbering = print_continuous_numbering;
+    let options = PrintOptions {
+        print_circle: true,
+        print_gensym,
+        print_continuous_numbering,
+        ..PrintOptions::default()
+    };
     // GNU's `print--preprocess` leaves the transient `t` status entries in the
     // table (the printer simply ignores non-fixnum entries), so don't strip
     // them here.
@@ -817,27 +819,27 @@ fn write_value_stateful_inner(value: &Value, out: &mut String, state: &mut Print
             None => {}
         }
 
-        if !printed_number_table_prefix && let Some(ref mut circle) = state.circle {
-            if let Some(key) = object_identity_key(value) {
-                if let Some(label) = circle.number_table.get_mut(&key) {
-                    if *label < 0 {
-                        // First occurrence: emit #N= prefix
-                        write!(out, "#{}=", -(*label)).unwrap();
-                        *label = -(*label); // flip to positive
-                    } else if *label > 0 {
-                        // Subsequent: emit #N# and return
-                        write!(out, "#{}#", *label).unwrap();
-                        return;
-                    }
-                    // label == 0: not shared, fall through to normal print
-                }
+        if !printed_number_table_prefix
+            && let Some(ref mut circle) = state.circle
+            && let Some(key) = object_identity_key(value)
+            && let Some(label) = circle.number_table.get_mut(&key)
+        {
+            if *label < 0 {
+                // First occurrence: emit #N= prefix
+                write!(out, "#{}=", -(*label)).unwrap();
+                *label = -(*label); // flip to positive
+            } else if *label > 0 {
+                // Subsequent: emit #N# and return
+                write!(out, "#{}#", *label).unwrap();
+                return;
             }
+            // label == 0: not shared, fall through to normal print
         }
     }
 
     match value.kind() {
         ValueKind::Nil => out.push_str("nil"),
-        ValueKind::T => out.push_str("t"),
+        ValueKind::T => out.push('t'),
         ValueKind::Fixnum(v) => {
             if !(state.options.print_integers_as_characters
                 && try_format_integer_as_character(v, !state.options.print_noescape, &mut |c| {
@@ -865,11 +867,11 @@ fn write_value_stateful_inner(value: &Value, out: &mut String, state: &mut Print
         ValueKind::Cons => {
             with_default_cycle_guard(value, out, state, |out, state| {
                 // Level check for containers
-                if let Some(level) = state.options.print_level {
-                    if state.depth >= level {
-                        out.push_str("...");
-                        return;
-                    }
+                if let Some(level) = state.options.print_level
+                    && state.depth >= level
+                {
+                    out.push_str("...");
+                    return;
                 }
                 // Try shorthand (quote, function, backquote, etc.)
                 if let Some(shorthand) = write_list_shorthand_stateful(value, state) {
@@ -928,14 +930,14 @@ fn write_value_stateful_inner(value: &Value, out: &mut String, state: &mut Print
                     state.depth += 1;
                     out.push_str("#^[");
                     for (idx, item) in slots.iter().enumerate() {
-                        if let Some(length) = state.options.print_length {
-                            if idx as i64 >= length {
-                                if idx > 0 {
-                                    out.push(' ');
-                                }
-                                out.push_str("...");
-                                break;
+                        if let Some(length) = state.options.print_length
+                            && idx as i64 >= length
+                        {
+                            if idx > 0 {
+                                out.push(' ');
                             }
+                            out.push_str("...");
+                            break;
                         }
                         if idx > 0 {
                             out.push(' ');
@@ -970,14 +972,14 @@ fn write_value_stateful_inner(value: &Value, out: &mut String, state: &mut Print
                 out.push('[');
                 let items = value.as_vector_data().unwrap().clone();
                 for (idx, item) in items.iter().enumerate() {
-                    if let Some(length) = state.options.print_length {
-                        if idx as i64 >= length {
-                            if idx > 0 {
-                                out.push(' ');
-                            }
-                            out.push_str("...");
-                            break;
+                    if let Some(length) = state.options.print_length
+                        && idx as i64 >= length
+                    {
+                        if idx > 0 {
+                            out.push(' ');
                         }
+                        out.push_str("...");
+                        break;
                     }
                     if idx > 0 {
                         out.push(' ');
@@ -994,14 +996,14 @@ fn write_value_stateful_inner(value: &Value, out: &mut String, state: &mut Print
                 out.push_str("#s(");
                 let items = value.as_record_data().unwrap().clone();
                 for (idx, item) in items.iter().enumerate() {
-                    if let Some(length) = state.options.print_length {
-                        if idx as i64 >= length {
-                            if idx > 0 {
-                                out.push(' ');
-                            }
-                            out.push_str("...");
-                            break;
+                    if let Some(length) = state.options.print_length
+                        && idx as i64 >= length
+                    {
+                        if idx > 0 {
+                            out.push(' ');
                         }
+                        out.push_str("...");
+                        break;
                     }
                     if idx > 0 {
                         out.push(' ');
@@ -1194,14 +1196,14 @@ fn write_bytecode_literal_stateful(value: &Value, out: &mut String, state: &mut 
             state.depth += 1;
             out.push_str("#[");
             for (idx, item) in slots.iter().enumerate() {
-                if let Some(length) = state.options.print_length {
-                    if idx as i64 >= length {
-                        if idx > 0 {
-                            out.push(' ');
-                        }
-                        out.push_str("...");
-                        break;
+                if let Some(length) = state.options.print_length
+                    && idx as i64 >= length
+                {
+                    if idx > 0 {
+                        out.push(' ');
                     }
+                    out.push_str("...");
+                    break;
                 }
                 if idx > 0 {
                     out.push(' ');
@@ -1483,14 +1485,14 @@ fn write_hash_table_stateful(value: &Value, out: &mut String, state: &mut PrintS
         let mut count: i64 = 0;
         for key in table.live_hash_keys_in_slot_order() {
             if let Some(val) = table.data.get(key) {
-                if let Some(length) = state.options.print_length {
-                    if count >= length {
-                        if !first {
-                            out.push(' ');
-                        }
-                        out.push_str("...");
-                        break;
+                if let Some(length) = state.options.print_length
+                    && count >= length
+                {
+                    if !first {
+                        out.push(' ');
                     }
+                    out.push_str("...");
+                    break;
                 }
                 if !first {
                     out.push(' ');
@@ -1709,8 +1711,10 @@ fn write_lisp_propertized_string_stateful(
 pub fn print_value_with_buffers(value: &Value, buffers: &crate::buffer::BufferManager) -> String {
     // String result -> escape unibyte high bytes, consistent with `print_value`
     // (GNU `prin1-to-string` into a multibyte buffer); see `print_value`.
-    let mut options = PrintOptions::default();
-    options.print_escape_nonascii = true;
+    let options = PrintOptions {
+        print_escape_nonascii: true,
+        ..PrintOptions::default()
+    };
     print_value_with_buffers_and_options(value, buffers, options)
 }
 
@@ -1732,8 +1736,10 @@ pub fn print_value(value: &Value) -> String {
     // lossily becomes U+FFFD). The byte sink `print_value_bytes` deliberately stays
     // raw -- it mirrors `prin1' to stdout / a buffer, where the destination governs
     // the encoding.
-    let mut options = PrintOptions::default();
-    options.print_escape_nonascii = true;
+    let options = PrintOptions {
+        print_escape_nonascii: true,
+        ..PrintOptions::default()
+    };
     print_value_with_options(value, options)
 }
 
@@ -2232,10 +2238,11 @@ fn emacs_decimal_number_consumes_all(bytes: &[u8]) -> bool {
 
         if pos > exponent_digits_start {
             has_exponent = true;
-        } else if exponent_sign_is_plus && bytes.get(pos..pos + 3) == Some(b"INF") {
-            pos += 3;
-            has_exponent = true;
-        } else if exponent_sign_is_plus && bytes.get(pos..pos + 3) == Some(b"NaN") {
+        } else if exponent_sign_is_plus
+            && bytes
+                .get(pos..pos + 3)
+                .is_some_and(|suffix| suffix == b"INF" || suffix == b"NaN")
+        {
             pos += 3;
             has_exponent = true;
         } else {
@@ -2355,11 +2362,7 @@ fn format_float_printf(precision: usize, spec: u8, f: f64) -> Option<String> {
                 &fix_form
             };
             let trimmed = chosen.trim_end_matches('0');
-            let trimmed = if trimmed.ends_with('.') {
-                &trimmed[..trimmed.len() - 1]
-            } else {
-                trimmed
-            };
+            let trimmed = trimmed.strip_suffix('.').unwrap_or(trimmed);
             Some(trimmed.to_string())
         }
         _ => None,
@@ -2412,11 +2415,11 @@ fn format_float_dtoastr(f: f64) -> String {
         // %g also trims trailing zeros.
         let s = format!("{:.prec$e}", f, prec = prec - 1);
         // Parse back and check round-trip
-        if let Ok(parsed) = s.parse::<f64>() {
-            if parsed.to_bits() == f.to_bits() {
-                // Convert from Rust's scientific notation to %g-style output
-                return rust_sci_to_emacs_g(f, &s, prec);
-            }
+        if let Ok(parsed) = s.parse::<f64>()
+            && parsed.to_bits() == f.to_bits()
+        {
+            // Convert from Rust's scientific notation to %g-style output
+            return rust_sci_to_emacs_g(f, &s, prec);
         }
     }
     // Fallback: maximum precision
@@ -2652,7 +2655,7 @@ fn append_bool_vector_bytes(value: &Value, nbits: usize, out: &mut Vec<u8>) {
         _ => return,
     };
     // items[0] = tag, items[1] = size, items[2..] = individual bit values
-    let nbytes = (nbits + 7) / 8;
+    let nbytes = nbits.div_ceil(8);
 
     out.extend_from_slice(b"#&");
     out.extend_from_slice(nbits.to_string().as_bytes());

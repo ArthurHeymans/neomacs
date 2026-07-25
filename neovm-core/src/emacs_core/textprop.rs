@@ -1636,7 +1636,7 @@ fn improper_list_tail(list: Value) -> Value {
     while tail.is_cons() {
         tail = tail.cons_cdr();
         step += 1;
-        if step % 2 == 0 {
+        if step.is_multiple_of(2) {
             if tortoise.is_cons() {
                 tortoise = tortoise.cons_cdr();
             }
@@ -1694,9 +1694,7 @@ pub(crate) fn builtin_add_face_text_property(
     verify_property_change_read_only(eval, &args, 4)?;
     let change =
         buffer_property_range_for_args(eval, &args, 4)?.and_then(|(buf_id, byte_range)| {
-            let Some(buf) = eval.buffers.get(buf_id) else {
-                return None;
-            };
+            let buf = eval.buffers.get(buf_id)?;
             let new_face = args[2];
             (!buf.text_props_range_has_all_properties_in_emacs_byte_range(
                 byte_range,
@@ -2162,33 +2160,28 @@ pub(crate) fn builtin_next_single_property_change_in_state(
             lookup_string_text_property(obarray, buffers, &table, char_pos.get(), prop);
         let str_len = s.schars();
         let mut cursor = char_pos;
-        loop {
-            match table.next_interval_boundary_after_char_pos(cursor) {
-                Some(next) => {
-                    let next = next.get();
-                    if let Some(lim) = limit_pos {
-                        if next as i64 >= lim {
-                            return Ok(match limit_val {
-                                Some(lv) => Value::fixnum(lv),
-                                None => Value::NIL,
-                            });
-                        }
-                    }
-                    if next >= str_len {
-                        break;
-                    }
-                    let new_val = lookup_string_text_property(obarray, buffers, &table, next, prop);
-                    let changed = !eq_value(&current_val, &new_val);
-                    if changed {
-                        return Ok(Value::fixnum(string_char_to_elisp_pos(
-                            s,
-                            string_char_pos(next),
-                        )));
-                    }
-                    cursor = string_char_pos(next);
-                }
-                None => break,
+        while let Some(next) = table.next_interval_boundary_after_char_pos(cursor) {
+            let next = next.get();
+            if let Some(lim) = limit_pos
+                && next as i64 >= lim
+            {
+                return Ok(match limit_val {
+                    Some(lv) => Value::fixnum(lv),
+                    None => Value::NIL,
+                });
             }
+            if next >= str_len {
+                break;
+            }
+            let new_val = lookup_string_text_property(obarray, buffers, &table, next, prop);
+            let changed = !eq_value(&current_val, &new_val);
+            if changed {
+                return Ok(Value::fixnum(string_char_to_elisp_pos(
+                    s,
+                    string_char_pos(next),
+                )));
+            }
+            cursor = string_char_pos(next);
         }
         return Ok(match limit_val {
             Some(lv) => Value::fixnum(lv),
@@ -2215,29 +2208,24 @@ pub(crate) fn builtin_next_single_property_change_in_state(
     let buf_end = buf.accessible_emacs_byte_region().end();
     let mut cursor = byte_pos;
 
-    loop {
-        match buf.text_props_next_interval_boundary_after_emacs_byte_pos(cursor) {
-            Some(next) => {
-                if let Some(lim) = limit_pos {
-                    if byte_to_elisp_pos(buf, next) >= lim {
-                        return Ok(match limit_val {
-                            Some(lv) => Value::fixnum(lv),
-                            None => Value::NIL,
-                        });
-                    }
-                }
-                if next >= buf_end {
-                    break;
-                }
-                let new_val = lookup_buffer_text_property(obarray, buffers, buf, next.get(), prop);
-                let changed = !eq_value(&current_val, &new_val);
-                if changed {
-                    return Ok(Value::fixnum(byte_to_elisp_pos(buf, next)));
-                }
-                cursor = next;
-            }
-            None => break,
+    while let Some(next) = buf.text_props_next_interval_boundary_after_emacs_byte_pos(cursor) {
+        if let Some(lim) = limit_pos
+            && byte_to_elisp_pos(buf, next) >= lim
+        {
+            return Ok(match limit_val {
+                Some(lv) => Value::fixnum(lv),
+                None => Value::NIL,
+            });
         }
+        if next >= buf_end {
+            break;
+        }
+        let new_val = lookup_buffer_text_property(obarray, buffers, buf, next.get(), prop);
+        let changed = !eq_value(&current_val, &new_val);
+        if changed {
+            return Ok(Value::fixnum(byte_to_elisp_pos(buf, next)));
+        }
+        cursor = next;
     }
 
     Ok(match limit_val {
@@ -2302,35 +2290,29 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
         let current_val =
             lookup_string_text_property(obarray, buffers, &table, ref_char.get(), prop);
         let mut cursor = char_pos;
-        loop {
-            match table.previous_interval_boundary_before_char_pos(cursor) {
-                Some(prev) => {
-                    if let Some(lim) = limit_pos {
-                        if (prev.get() as i64) <= lim {
-                            return Ok(match limit_val {
-                                Some(lv) => Value::fixnum(lv),
-                                None => Value::NIL,
-                            });
-                        }
-                    }
-                    let check = prev.saturating_sub_len(CharLen::new(1));
-                    let new_val =
-                        lookup_string_text_property(obarray, buffers, &table, check.get(), prop);
-                    let changed = !eq_value(&current_val, &new_val);
-                    if changed {
-                        return Ok(Value::fixnum(string_char_to_elisp_pos(s, prev)));
-                    }
-                    if prev == CharPos0::ZERO {
-                        break;
-                    }
-                    cursor = if prev < cursor {
-                        prev
-                    } else {
-                        prev.saturating_sub_len(CharLen::new(1))
-                    };
-                }
-                None => break,
+        while let Some(prev) = table.previous_interval_boundary_before_char_pos(cursor) {
+            if let Some(lim) = limit_pos
+                && (prev.get() as i64) <= lim
+            {
+                return Ok(match limit_val {
+                    Some(lv) => Value::fixnum(lv),
+                    None => Value::NIL,
+                });
             }
+            let check = prev.saturating_sub_len(CharLen::new(1));
+            let new_val = lookup_string_text_property(obarray, buffers, &table, check.get(), prop);
+            let changed = !eq_value(&current_val, &new_val);
+            if changed {
+                return Ok(Value::fixnum(string_char_to_elisp_pos(s, prev)));
+            }
+            if prev == CharPos0::ZERO {
+                break;
+            }
+            cursor = if prev < cursor {
+                prev
+            } else {
+                prev.saturating_sub_len(CharLen::new(1))
+            };
         }
         return Ok(match limit_val {
             Some(lv) => Value::fixnum(lv),
@@ -2357,34 +2339,29 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
     let current_val = lookup_buffer_text_property(obarray, buffers, buf, ref_byte.get(), prop);
     let mut cursor = byte_pos;
 
-    loop {
-        match buf.text_props_previous_interval_boundary_before_emacs_byte_pos(cursor) {
-            Some(prev) => {
-                if let Some(lim) = limit_pos {
-                    if byte_to_elisp_pos(buf, prev) <= lim {
-                        return Ok(match limit_val {
-                            Some(lv) => Value::fixnum(lv),
-                            None => Value::NIL,
-                        });
-                    }
-                }
-                let check = emacs_byte_pos_of_preceding_char(buf, prev);
-                let new_val = lookup_buffer_text_property(obarray, buffers, buf, check.get(), prop);
-                let changed = !eq_value(&current_val, &new_val);
-                if changed {
-                    return Ok(Value::fixnum(byte_to_elisp_pos(buf, prev)));
-                }
-                if prev == EmacsBytePos::ZERO {
-                    break;
-                }
-                cursor = if prev < cursor {
-                    prev
-                } else {
-                    emacs_byte_pos_of_preceding_char(buf, prev)
-                };
-            }
-            None => break,
+    while let Some(prev) = buf.text_props_previous_interval_boundary_before_emacs_byte_pos(cursor) {
+        if let Some(lim) = limit_pos
+            && byte_to_elisp_pos(buf, prev) <= lim
+        {
+            return Ok(match limit_val {
+                Some(lv) => Value::fixnum(lv),
+                None => Value::NIL,
+            });
         }
+        let check = emacs_byte_pos_of_preceding_char(buf, prev);
+        let new_val = lookup_buffer_text_property(obarray, buffers, buf, check.get(), prop);
+        let changed = !eq_value(&current_val, &new_val);
+        if changed {
+            return Ok(Value::fixnum(byte_to_elisp_pos(buf, prev)));
+        }
+        if prev == EmacsBytePos::ZERO {
+            break;
+        }
+        cursor = if prev < cursor {
+            prev
+        } else {
+            emacs_byte_pos_of_preceding_char(buf, prev)
+        };
     }
 
     Ok(match limit_val {
@@ -2434,10 +2411,10 @@ pub(crate) fn builtin_next_property_change_in_buffers(
         return match table.next_property_change_after_char_pos(char_pos) {
             Some(next) => {
                 let next = next.get();
-                if let Some(lim) = limit_pos {
-                    if (next as i64) >= lim {
-                        return Ok(limit_val.unwrap_or(Value::NIL));
-                    }
+                if let Some(lim) = limit_pos
+                    && (next as i64) >= lim
+                {
+                    return Ok(limit_val.unwrap_or(Value::NIL));
                 }
                 // If the change is at or past the end of the string, treat as no change
                 if next >= str_char_len {
@@ -2477,10 +2454,10 @@ pub(crate) fn builtin_next_property_change_in_buffers(
 
     match buf.text_props_next_change_after_emacs_byte_pos(byte_pos) {
         Some(next) => {
-            if let Some(lim) = limit_pos {
-                if byte_to_elisp_pos(buf, next) >= lim {
-                    return Ok(limit_val.unwrap_or(Value::NIL));
-                }
+            if let Some(lim) = limit_pos
+                && byte_to_elisp_pos(buf, next) >= lim
+            {
+                return Ok(limit_val.unwrap_or(Value::NIL));
             }
             // If the change is at or past buffer end, treat as no change
             if next >= buf_end {
@@ -2963,23 +2940,23 @@ pub(crate) fn builtin_overlay_put_in_buffers(
             })
             .unwrap()?
     };
-    if let Some(buf_id) = resolve_overlay_buffer_id(overlay) {
-        if changed {
-            if let Some(buf) = buffers.get_mut(buf_id) {
-                buf.increment_overlay_modified_tick();
-            }
-            let evaporate = args[1].is_symbol_named("evaporate") && val.is_truthy();
-            let is_empty = buffers
-                .get(buf_id)
-                .and_then(|buf| {
-                    let start = buf.overlays.overlay_start_emacs_byte_pos(overlay)?;
-                    let end = buf.overlays.overlay_end_emacs_byte_pos(overlay)?;
-                    Some(start == end)
-                })
-                .unwrap_or(false);
-            if evaporate && is_empty {
-                let _ = buffers.delete_buffer_overlay(buf_id, overlay);
-            }
+    if let Some(buf_id) = resolve_overlay_buffer_id(overlay)
+        && changed
+    {
+        if let Some(buf) = buffers.get_mut(buf_id) {
+            buf.increment_overlay_modified_tick();
+        }
+        let evaporate = args[1].is_symbol_named("evaporate") && val.is_truthy();
+        let is_empty = buffers
+            .get(buf_id)
+            .and_then(|buf| {
+                let start = buf.overlays.overlay_start_emacs_byte_pos(overlay)?;
+                let end = buf.overlays.overlay_end_emacs_byte_pos(overlay)?;
+                Some(start == end)
+            })
+            .unwrap_or(false);
+        if evaporate && is_empty {
+            let _ = buffers.delete_buffer_overlay(buf_id, overlay);
         }
     }
     Ok(val)
@@ -3173,10 +3150,9 @@ pub(crate) fn builtin_move_overlay_in_buffers(
     } else {
         if let Some(old_buf_id) = old_buf_id
             && let Some(buf) = buffers.get_mut(old_buf_id)
+            && buf.overlays.detach_overlay(overlay)
         {
-            if buf.overlays.detach_overlay(overlay) {
-                buf.increment_overlay_modified_tick();
-            }
+            buf.increment_overlay_modified_tick();
         }
 
         let new_buf = buffers
@@ -3195,10 +3171,9 @@ pub(crate) fn builtin_move_overlay_in_buffers(
                 .overlays
                 .overlay_get_named(overlay, Value::symbol("evaporate"))
                 .is_some_and(|value| value.is_truthy())
+            && new_buf.overlays.delete_overlay(overlay)
         {
-            if new_buf.overlays.delete_overlay(overlay) {
-                new_buf.increment_overlay_modified_tick();
-            }
+            new_buf.increment_overlay_modified_tick();
         }
         Ok(args[0])
     }

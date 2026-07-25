@@ -644,13 +644,14 @@ fn expect_optional_frame_designator_in_state(
     frames: &FrameManager,
     value: Option<&Value>,
 ) -> Result<(), Flow> {
-    if let Some(frame) = value {
-        if !frame.is_nil() && !live_frame_designator_in_state(frames, frame) {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("frame-live-p"), *frame],
-            ));
-        }
+    if let Some(frame) = value
+        && !frame.is_nil()
+        && !live_frame_designator_in_state(frames, frame)
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("frame-live-p"), *frame],
+        ));
     }
     Ok(())
 }
@@ -1293,7 +1294,7 @@ fn font_parse_fcname_keyval(elems: &mut Vec<Value>, key: &str, val: &str) {
         "foundry" | "family" | "adstyle" | "lang" | "script" => {
             font_parse_set(elems, key, Value::symbol(val));
         }
-        "registry" => font_parse_set(elems, "registry", Value::symbol(&val.to_ascii_lowercase())),
+        "registry" => font_parse_set(elems, "registry", Value::symbol(val.to_ascii_lowercase())),
         "dpi" => {
             if let Ok(n) = val.parse::<i64>() {
                 font_parse_set(elems, "dpi", Value::fixnum(n));
@@ -1430,12 +1431,13 @@ fn font_parse_fcname_plain(elems: &mut Vec<Value>, name: &str) -> bool {
         while i > 0 && bytes[i - 1].is_ascii_digit() {
             i -= 1;
         }
-        if i < len && (i == 0 || bytes[i - 1] == b' ') {
-            if let Ok(f) = name[i..].parse::<f64>() {
-                size = Some(f);
-                // Drop the size (and a preceding space) from the family scan.
-                p = if i > 0 { i - 1 } else { i };
-            }
+        if i < len
+            && (i == 0 || bytes[i - 1] == b' ')
+            && let Ok(f) = name[i..].parse::<f64>()
+        {
+            size = Some(f);
+            // Drop the size (and a preceding space) from the family scan.
+            p = if i > 0 { i - 1 } else { i };
         }
     }
 
@@ -1515,7 +1517,7 @@ fn font_parse_fcname_plain(elems: &mut Vec<Value>, name: &str) -> bool {
         font_parse_set(
             elems,
             "family",
-            Value::symbol(&unescape_fcname(&name[..family_end])),
+            Value::symbol(unescape_fcname(&name[..family_end])),
         );
     }
     if let Some(f) = size {
@@ -1607,7 +1609,7 @@ fn font_parse_xlfd(elems: &mut Vec<Value>, name: &str) -> bool {
         font_parse_set(
             elems,
             "registry",
-            Value::symbol(&combined.to_ascii_lowercase()),
+            Value::symbol(combined.to_ascii_lowercase()),
         );
     }
 
@@ -1702,17 +1704,17 @@ pub(crate) fn builtin_font_face_attributes(args: Vec<Value>) -> EvalResult {
     let mut plist: Vec<Value> = Vec::with_capacity(10);
 
     // :family (symbol name -> string).
-    if let Some(family) = font_vector_get_flexible(&elems, "family") {
-        if !family.is_nil() {
-            let family_str = match family.kind() {
-                ValueKind::Symbol(id) => Value::string(resolve_sym(id).to_owned()),
-                ValueKind::String => family,
-                _ => Value::NIL,
-            };
-            if !family_str.is_nil() {
-                plist.push(Value::keyword("family"));
-                plist.push(family_str);
-            }
+    if let Some(family) = font_vector_get_flexible(&elems, "family")
+        && !family.is_nil()
+    {
+        let family_str = match family.kind() {
+            ValueKind::Symbol(id) => Value::string(resolve_sym(id).to_owned()),
+            ValueKind::String => family,
+            _ => Value::NIL,
+        };
+        if !family_str.is_nil() {
+            plist.push(Value::keyword("family"));
+            plist.push(family_str);
         }
     }
 
@@ -1747,16 +1749,16 @@ pub(crate) fn builtin_font_face_attributes(args: Vec<Value>) -> EvalResult {
     // storage path keeps the alias verbatim (matching `font-get`), so the
     // canonicalization happens here, at the face-read boundary.
     for key in ["weight", "slant", "width"] {
-        if let Some(val) = font_vector_get_flexible(&elems, key) {
-            if !val.is_nil() {
-                let canonical = val
-                    .as_symbol_name()
-                    .and_then(|name| font_style_canonical_for_face(key, name))
-                    .map(Value::symbol)
-                    .unwrap_or(val);
-                plist.push(Value::keyword(key));
-                plist.push(canonical);
-            }
+        if let Some(val) = font_vector_get_flexible(&elems, key)
+            && !val.is_nil()
+        {
+            let canonical = val
+                .as_symbol_name()
+                .and_then(|name| font_style_canonical_for_face(key, name))
+                .map(Value::symbol)
+                .unwrap_or(val);
+            plist.push(Value::keyword(key));
+            plist.push(canonical);
         }
     }
 
@@ -2078,7 +2080,7 @@ pub(crate) fn builtin_font_xlfd_name(args: Vec<Value>) -> EvalResult {
         ValueKind::Veclike(VecLikeType::Vector) => {
             let elems = args[0].as_vector_data().unwrap().clone();
             if is_font_object(&args[0])
-                && font_vector_get_flexible(&elems, "name").map_or(false, |v| v.is_string())
+                && font_vector_get_flexible(&elems, "name").is_some_and(|v| v.is_string())
             {
                 let font_name = font_vector_get_flexible(&elems, "name")
                     .unwrap()
@@ -2468,7 +2470,7 @@ fn build_font_object_with_pixel_size(face: &RuntimeFace, pixel_size: Option<i64>
     }
 
     let font_object = Value::vector(elems);
-    let xlfd = builtin_font_xlfd_name(vec![font_object]).unwrap_or_else(|_| Value::NIL);
+    let xlfd = builtin_font_xlfd_name(vec![font_object]).unwrap_or(Value::NIL);
     if font_object.is_vector() {
         let mut items = font_object
             .as_vector_data()
@@ -2876,7 +2878,7 @@ fn otf_capability_lisp(eval: &mut super::eval::Context, file: &str) -> Value {
 fn font_value_otf_capability(eval: &mut super::eval::Context, font_like: &Value) -> Value {
     let Some(file) = font_like
         .as_vector_data()
-        .and_then(|elems| font_vector_get_flexible(&elems, "file"))
+        .and_then(|elems| font_vector_get_flexible(elems, "file"))
         .filter(|value| value.is_string())
         .and_then(|value| value.as_utf8_str().map(|s| s.to_owned()))
     else {
@@ -2998,62 +3000,62 @@ pub(crate) fn builtin_font_at(eval: &mut super::eval::Context, args: Vec<Value>)
         )
     };
 
-    if let Some(string_value) = args.get(2) {
-        if !string_value.is_nil() {
-            if !string_value.is_string() {
+    if let Some(string_value) = args.get(2)
+        && !string_value.is_nil()
+    {
+        if !string_value.is_string() {
+            return Err(signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("stringp"), *string_value],
+            ));
+        };
+        let pos = match args[0].kind() {
+            ValueKind::Fixnum(n) => n,
+            _other => {
                 return Err(signal(
                     LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("stringp"), *string_value],
-                ));
-            };
-            let pos = match args[0].kind() {
-                ValueKind::Fixnum(n) => n,
-                _other => {
-                    return Err(signal(
-                        LispCondition::WrongTypeArgument,
-                        vec![Value::symbol("fixnump"), args[0]],
-                    ));
-                }
-            };
-            let string = string_value
-                .as_lisp_string()
-                .expect("string object must carry LispString payload");
-            let char_len = string.schars() as i64;
-            if !(0 <= pos && pos < char_len) {
-                return Err(signal(
-                    LispCondition::ArgsOutOfRange,
-                    vec![*string_value, Value::fixnum(pos)],
+                    vec![Value::symbol("fixnump"), args[0]],
                 ));
             }
-            if !has_window_system {
-                return Ok(Value::NIL);
-            }
-            let face_table = runtime_face_table_from_frame_lisp_faces(eval, frame_id, true);
-            let char_pos = usize::try_from(pos).expect("validated non-negative string position");
-            let bytepos = if string.is_multibyte() {
-                crate::emacs_core::emacs_char::char_to_byte_pos(string.as_bytes(), char_pos)
-            } else {
-                char_pos
-            };
-            let face = resolved_face_at_string_char_pos(
-                eval,
-                &face_table,
-                *string_value,
-                CharPos0::new(char_pos),
-            );
-            let code = if string.is_multibyte() {
-                crate::emacs_core::emacs_char::string_char(&string.as_bytes()[bytepos..]).0
-            } else {
-                string.as_bytes()[bytepos] as u32
-            };
-            let Some(character) = char::from_u32(code) else {
-                return Ok(build_font_object(&face));
-            };
-            if let Some(matched) = resolve_font_match(eval, frame_id, character, &face) {
-                return Ok(build_font_object_for_match(&face, &matched));
-            }
-            return Ok(build_font_object(&face));
+        };
+        let string = string_value
+            .as_lisp_string()
+            .expect("string object must carry LispString payload");
+        let char_len = string.schars() as i64;
+        if !(0 <= pos && pos < char_len) {
+            return Err(signal(
+                LispCondition::ArgsOutOfRange,
+                vec![*string_value, Value::fixnum(pos)],
+            ));
         }
+        if !has_window_system {
+            return Ok(Value::NIL);
+        }
+        let face_table = runtime_face_table_from_frame_lisp_faces(eval, frame_id, true);
+        let char_pos = usize::try_from(pos).expect("validated non-negative string position");
+        let bytepos = if string.is_multibyte() {
+            crate::emacs_core::emacs_char::char_to_byte_pos(string.as_bytes(), char_pos)
+        } else {
+            char_pos
+        };
+        let face = resolved_face_at_string_char_pos(
+            eval,
+            &face_table,
+            *string_value,
+            CharPos0::new(char_pos),
+        );
+        let code = if string.is_multibyte() {
+            crate::emacs_core::emacs_char::string_char(&string.as_bytes()[bytepos..]).0
+        } else {
+            string.as_bytes()[bytepos] as u32
+        };
+        let Some(character) = char::from_u32(code) else {
+            return Ok(build_font_object(&face));
+        };
+        if let Some(matched) = resolve_font_match(eval, frame_id, character, &face) {
+            return Ok(build_font_object_for_match(&face, &matched));
+        }
+        return Ok(build_font_object(&face));
     }
 
     let current_buffer_id = eval
@@ -3707,10 +3709,10 @@ fn valid_face_underline_value(value: Value) -> bool {
             return false;
         }
         if key.is_symbol_named(":style")
-            && !val
+            && val
                 .as_symbol_name()
                 .and_then(UnderlineStyle::from_symbol)
-                .is_some()
+                .is_none()
         {
             return false;
         }
@@ -3767,10 +3769,10 @@ fn valid_face_box_value(value: Value) -> bool {
             }
         } else if key.is_symbol_named(":style") {
             if !val.is_nil()
-                && !val
+                && val
                     .as_symbol_name()
                     .and_then(BoxStyle::from_symbol)
-                    .is_some()
+                    .is_none()
             {
                 return false;
             }
@@ -3791,17 +3793,17 @@ struct FaceAttrState {
 thread_local! {
     static CREATED_LISP_FACES: RefCell<HashSet<SymId>> = RefCell::new(HashSet::new());
     static CREATED_FACE_IDS: RefCell<HashMap<SymId, i64>> = RefCell::new(HashMap::new());
-    static NEXT_CREATED_FACE_ID: RefCell<i64> = RefCell::new(FIRST_DYNAMIC_FACE_ID);
+    static NEXT_CREATED_FACE_ID: RefCell<i64> = const { RefCell::new(FIRST_DYNAMIC_FACE_ID) };
     static FACE_ATTR_STATE: RefCell<FaceAttrState> = RefCell::new(FaceAttrState::default());
     /// Generation counter bumped whenever the defined-face set
     /// (`CREATED_LISP_FACES`) changes.  Keys `FACE_NAME_LIST_CACHE`.
-    static FACE_SET_GENERATION: Cell<u64> = Cell::new(0);
+    static FACE_SET_GENERATION: Cell<u64> = const { Cell::new(0) };
     /// Cached sorted face-name list, valid while `FACE_SET_GENERATION` is
     /// unchanged.  Doom calls `face-list` and seeds face tables hundreds of
     /// times during startup with an unchanging face set; recomputing the sort
     /// (with a per-comparison `face_id_for_name`) each time dominated the face
     /// path in the startup profile.
-    static FACE_NAME_LIST_CACHE: RefCell<Option<(u64, Rc<[String]>)>> = RefCell::new(None);
+    static FACE_NAME_LIST_CACHE: RefCell<Option<(u64, Rc<[String]>)>> = const { RefCell::new(None) };
 }
 
 /// Invalidate the cached face-name list after the defined-face set changes.
@@ -3849,7 +3851,7 @@ pub(crate) fn restore_created_faces_from_table(face_names: &[String]) {
     CREATED_LISP_FACES.with(|slot| {
         let mut set = slot.borrow_mut();
         for name in face_names {
-            if !is_known_lisp_face_name(&name) {
+            if !is_known_lisp_face_name(name) {
                 set.insert(face_symbol_id(name));
             }
         }
@@ -4729,7 +4731,7 @@ fn default_face_attribute_value(attr: LFaceAttr) -> Value {
 }
 
 fn is_reset_like_face_attr_value(value: &Value) -> bool {
-    value.as_symbol_id().map_or(false, |id| {
+    value.as_symbol_id().is_some_and(|id| {
         let s = resolve_sym(id);
         s == "unspecified" || s == ":ignore-defface" || s == "reset"
     })
@@ -5052,7 +5054,7 @@ fn normalize_face_attr_for_set_with_eval(
                                 Value::fixnum(10),
                                 Value::NIL,
                             );
-                            if !test.as_int().is_some_and(|n| n > 0) {
+                            if test.as_int().is_none_or(|n| n <= 0) {
                                 return Err(signal(
                                     "error",
                                     vec![
@@ -5226,28 +5228,28 @@ pub(crate) fn builtin_internal_lisp_face_p(
     // identical to the old form while the common hit case allocates nothing.
     let key = face_lookup_key(&args[0]);
 
-    if let Some(frame) = args.get(1) {
-        if !frame.is_nil() {
-            if !live_frame_designator_in_state(&eval.frames, frame) {
-                return Err(signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("frame-live-p"), *frame],
-                ));
-            }
-            let frame_id = frame_id_from_designator(frame)
-                .expect("live frame designator should decode to frame id");
-            if let Some(vector) =
-                key.and_then(|k| lookup_frame_lisp_face_vector_by_symbol(eval, frame_id, k))
-            {
-                return Ok(vector);
-            }
-            return Ok(match known_face_name(&args[0]) {
-                Some(face_name) => {
-                    lookup_frame_lisp_face_vector(eval, frame_id, &face_name).unwrap_or(Value::NIL)
-                }
-                None => Value::NIL,
-            });
+    if let Some(frame) = args.get(1)
+        && !frame.is_nil()
+    {
+        if !live_frame_designator_in_state(&eval.frames, frame) {
+            return Err(signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("frame-live-p"), *frame],
+            ));
         }
+        let frame_id = frame_id_from_designator(frame)
+            .expect("live frame designator should decode to frame id");
+        if let Some(vector) =
+            key.and_then(|k| lookup_frame_lisp_face_vector_by_symbol(eval, frame_id, k))
+        {
+            return Ok(vector);
+        }
+        return Ok(match known_face_name(&args[0]) {
+            Some(face_name) => {
+                lookup_frame_lisp_face_vector(eval, frame_id, &face_name).unwrap_or(Value::NIL)
+            }
+            None => Value::NIL,
+        });
     }
 
     // Null-frame (or omitted-frame) global path.
@@ -5271,13 +5273,14 @@ pub(crate) fn builtin_internal_make_lisp_face(
     expect_min_args("internal-make-lisp-face", &args, 1)?;
     expect_max_args("internal-make-lisp-face", &args, 2)?;
     let face_name = require_symbol_face_name(&args[0])?;
-    if let Some(frame) = args.get(1) {
-        if !frame.is_nil() && !live_frame_designator_in_state(&eval.frames, frame) {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("frame-live-p"), *frame],
-            ));
-        }
+    if let Some(frame) = args.get(1)
+        && !frame.is_nil()
+        && !live_frame_designator_in_state(&eval.frames, frame)
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("frame-live-p"), *frame],
+        ));
     }
     mark_created_lisp_face(&face_name);
     ensure_lisp_face_id_property(eval, &face_name)?;
@@ -5555,23 +5558,23 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
                 sync_live_default_face_font_state(eval, frame_id);
             }
 
-            if let Some(frame_id) = live_frame_id {
-                if face_name == "default" {
-                    let frame_param = match attr_name_str {
-                        ":foreground" => Some(FrameParam::ForegroundColor),
-                        ":background" => Some(FrameParam::BackgroundColor),
-                        _ => None,
-                    };
-                    if let Some(param) = frame_param {
-                        if let Some(frame) = eval.frames.get_mut(frame_id) {
-                            frame.set_known_parameter(param, public_effective_value);
-                        }
-                        if attr_name_str == ":background"
-                            && let Some(function) =
-                                eval.obarray().symbol_function("frame-set-background-mode")
-                        {
-                            let _ = eval.apply(function, vec![Value::make_frame(frame_id.0)])?;
-                        }
+            if let Some(frame_id) = live_frame_id
+                && face_name == "default"
+            {
+                let frame_param = match attr_name_str {
+                    ":foreground" => Some(FrameParam::ForegroundColor),
+                    ":background" => Some(FrameParam::BackgroundColor),
+                    _ => None,
+                };
+                if let Some(param) = frame_param {
+                    if let Some(frame) = eval.frames.get_mut(frame_id) {
+                        frame.set_known_parameter(param, public_effective_value);
+                    }
+                    if attr_name_str == ":background"
+                        && let Some(function) =
+                            eval.obarray().symbol_function("frame-set-background-mode")
+                    {
+                        let _ = eval.apply(function, vec![Value::make_frame(frame_id.0)])?;
                     }
                 }
             }
@@ -5842,12 +5845,10 @@ pub(crate) fn builtin_internal_get_lisp_face_attribute(
                 | LFaceAttr::Width
                 | LFaceAttr::Height
         )
+        && let Some(frame_id) = frame_id
+        && let Some(fallback) = live_frame_font_attribute_fallback(eval, frame_id, attr_name)
     {
-        if let Some(frame_id) = frame_id {
-            if let Some(fallback) = live_frame_font_attribute_fallback(eval, frame_id, attr_name) {
-                return Ok(fallback);
-            }
-        }
+        return Ok(fallback);
     }
 
     let lisp_value = frame_id
@@ -5967,7 +5968,7 @@ pub(crate) fn builtin_face_attribute_relative_p(args: Vec<Value>) -> EvalResult 
     let value_is_relative_reset = args[1]
         .as_symbol_id()
         .or_else(|| args[1].as_keyword_id())
-        .map_or(false, |id_| {
+        .is_some_and(|id_| {
             matches!(
                 resolve_sym(id_),
                 "unspecified" | ":ignore-defface" | "ignore-defface"
@@ -6013,7 +6014,7 @@ fn merge_face_attribute_impl(eval: Option<&mut super::eval::Context>, args: &[Va
     let value1_is_relative_reset = args[1]
         .as_symbol_id()
         .or_else(|| args[1].as_keyword_id())
-        .map_or(false, |id_| {
+        .is_some_and(|id_| {
             matches!(
                 resolve_sym(id_),
                 "unspecified" | ":ignore-defface" | "ignore-defface"
@@ -6026,9 +6027,7 @@ fn merge_face_attribute_impl(eval: Option<&mut super::eval::Context>, args: &[Va
     let height_attr = args[0]
         .as_symbol_id()
         .or_else(|| args[0].as_keyword_id())
-        .map_or(false, |id_| {
-            matches!(resolve_sym(id_), "height" | ":height")
-        });
+        .is_some_and(|id_| matches!(resolve_sym(id_), "height" | ":height"));
     if height_attr {
         return merge_face_height_value(eval, args[1], args[2], args[1]);
     }
@@ -6059,13 +6058,14 @@ fn expect_color_string(value: &Value) -> Result<String, Flow> {
 }
 
 fn expect_optional_color_frame_arg(args: &[Value], idx: usize) -> Result<(), Flow> {
-    if let Some(frame) = args.get(idx) {
-        if !frame.is_nil() && !frame.is_frame() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("framep"), *frame],
-            ));
-        }
+    if let Some(frame) = args.get(idx)
+        && !frame.is_nil()
+        && !frame.is_frame()
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("framep"), *frame],
+        ));
     }
     Ok(())
 }
@@ -6276,13 +6276,14 @@ pub(crate) fn builtin_color_supported_p(args: Vec<Value>) -> EvalResult {
 }
 
 fn expect_optional_color_distance_frame_arg(args: &[Value], idx: usize) -> Result<(), Flow> {
-    if let Some(frame) = args.get(idx) {
-        if !frame.is_nil() && !frame.is_frame() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("frame-live-p"), *frame],
-            ));
-        }
+    if let Some(frame) = args.get(idx)
+        && !frame.is_nil()
+        && !frame.is_frame()
+    {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("frame-live-p"), *frame],
+        ));
     }
     Ok(())
 }
@@ -6488,10 +6489,10 @@ fn color_device_designator_p(value: &Value) -> bool {
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_optional_color_device_arg(args: &[Value], idx: usize) -> Result<(), Flow> {
-    if let Some(value) = args.get(idx) {
-        if !color_device_designator_p(value) {
-            return Err(invalid_get_device_terminal_error(value));
-        }
+    if let Some(value) = args.get(idx)
+        && !color_device_designator_p(value)
+    {
+        return Err(invalid_get_device_terminal_error(value));
     }
     Ok(())
 }
@@ -6542,7 +6543,7 @@ pub(crate) fn builtin_face_font(eval: &mut super::eval::Context, args: Vec<Value
     expect_min_args("face-font", &args, 1)?;
     expect_max_args("face-font", &args, 3)?;
 
-    let defaults_frame = args.get(1).map_or(false, |v| v.is_t());
+    let defaults_frame = args.get(1).is_some_and(|v| v.is_t());
     if defaults_frame {
         let face_name = resolve_face_name_for_domain(&args[0], true)?;
         let mut styles = Vec::new();
@@ -6607,10 +6608,10 @@ pub(crate) fn builtin_face_font(eval: &mut super::eval::Context, args: Vec<Value
             }
             ValueKind::Nil => Err(signal("error", vec![Value::string("Invalid face")])),
             ValueKind::T | ValueKind::Symbol(_) => {
-                if let Some(name) = symbol_name_for_face_value(&args[0]) {
-                    if face_exists_for_domain(&name, false) {
-                        return Ok(Value::NIL);
-                    }
+                if let Some(name) = symbol_name_for_face_value(&args[0])
+                    && face_exists_for_domain(&name, false)
+                {
+                    return Ok(Value::NIL);
                 }
                 Err(signal(
                     "error",

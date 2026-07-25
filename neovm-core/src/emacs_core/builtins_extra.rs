@@ -656,11 +656,11 @@ pub(crate) fn builtin_user_full_name(
     ctx.eval_symbol_by_id(super::intern::intern("user-full-name"))
 }
 
-/// `(system-name)` -> string.
 // `fixnump` and `bignump` are not Rust subrs: GNU defines them in
 // `lisp/subr.el` and so must we, otherwise `(subrp (symbol-function
 // 'fixnump))` returns the wrong value.
 
+/// `(system-name)` -> string.
 /// GNU editfns.c:1283 — the zero-argument function observes the same
 /// Lisp-owned runtime identity used by `frame-title-format`.
 pub(crate) fn builtin_system_name(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {

@@ -369,7 +369,7 @@ fn seq_default_match(left: &Value, right: &Value) -> bool {
         return true;
     }
     match (left.kind(), right.kind()) {
-        (ValueKind::Fixnum(a), ValueKind::Fixnum(b)) => (a as i64) == b,
+        (ValueKind::Fixnum(a), ValueKind::Fixnum(b)) => a == b,
         _ => false,
     }
 }
@@ -690,7 +690,7 @@ pub(crate) fn builtin_seq_empty_p(args: Vec<Value>) -> EvalResult {
                 .is_empty(),
         )),
         ValueKind::Veclike(VecLikeType::Vector) => Ok(Value::bool_val(
-            args[0].as_vector_data().unwrap().len() == 0,
+            args[0].as_vector_data().unwrap().is_empty(),
         )),
         _ => Err(signal(
             LispCondition::WrongTypeArgument,

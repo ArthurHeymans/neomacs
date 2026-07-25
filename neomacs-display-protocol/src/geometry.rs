@@ -102,7 +102,6 @@ pub struct GeometryPoint<Space, Unit> {
 }
 
 impl<Space, Unit: GeometryUnit> GeometryPoint<Space, Unit> {
-    #[must_use]
     pub fn try_from_units(x: Unit, y: Unit) -> Result<Self, GeometryError> {
         if !x.valid_coordinate() || !y.valid_coordinate() {
             return Err(GeometryError::InvalidGeometry);
@@ -380,7 +379,6 @@ impl<Space> GeometryRect<Space, LogicalPixels> {
         self.size.height()
     }
 
-    #[must_use]
     pub fn try_intersection(self, other: Self) -> Result<Option<Self>, GeometryError> {
         let left = self.x().max(other.x());
         let top = self.y().max(other.y());

@@ -253,10 +253,10 @@ fn composition_assign_id(key: &Value, relative_p: bool) -> i64 {
     let codes = composition_key_codes(key);
     COMPOSITION_REGISTRY.with(|reg| {
         let mut reg = reg.borrow_mut();
-        if let Some(codes) = &codes {
-            if let Some(&id) = reg.dedup.get(codes) {
-                return id;
-            }
+        if let Some(codes) = &codes
+            && let Some(&id) = reg.dedup.get(codes)
+        {
+            return id;
         }
         let id = reg.next_id;
         reg.next_id += 1;
@@ -350,7 +350,7 @@ fn composition_items_display_text(items: &[Value], relative_p: bool) -> Option<S
     let glyphs: Vec<Value> = if relative_p {
         items.to_vec()
     } else {
-        if items.len() % 2 == 0 {
+        if items.len().is_multiple_of(2) {
             return None;
         }
         items.iter().step_by(2).copied().collect()
@@ -562,7 +562,7 @@ fn composition_rule_based_width(key: &Value) -> i64 {
     if codes.is_empty() {
         return 0;
     }
-    let glyph_len = (codes.len() + 1) / 2;
+    let glyph_len = codes.len().div_ceil(2);
     let mut leftmost = 0.0_f64;
     let ch0 = codes[0];
     let mut rightmost = if ch0 != b'\t' as i64 {
@@ -608,9 +608,7 @@ fn composition_rule_based_width(key: &Value) -> i64 {
 /// return -1 (an invalid composition), in which case `Ffind_composition_internal`
 /// reports only `(FROM TO)`.
 fn composition_get_id_width(components: Value, key: &Value) -> Option<i64> {
-    let Some(items) = key.as_vector_data() else {
-        return None;
-    };
+    let items = key.as_vector_data()?;
     let rule_based = !composition_relative_p(components);
     // GNU `get_composition_id` validates COMPONENTS that are vectors or lists.
     // A glyph-string (a vector whose first element is itself a vector) takes a

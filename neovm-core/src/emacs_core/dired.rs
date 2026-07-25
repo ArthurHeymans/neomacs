@@ -824,6 +824,7 @@ fn get_completion_ignore_case(obarray: &super::symbol::Obarray) -> bool {
 /// - If there is at least one non-excludable match, all excludable matches are
 ///   dropped. If ALL matches are excludable, they are all kept (the "includeall"
 ///   fallback).
+///
 /// Byte-faithful suffix test. Extension syntax is ASCII, so ASCII case-folding
 /// matches GNU's completion-ignore-case behavior; eight-bit bytes never fold.
 fn byte_suffix_matches(base: &[u8], ext: &[u8], ignore_case: bool) -> bool {
@@ -1012,13 +1013,13 @@ pub(crate) fn finish_file_name_completion_with_callable_predicate(
     file: LispString,
     completions: Vec<LispString>,
     ignore_case: bool,
-    mut predicate_call: impl FnMut(Value) -> Result<Value, Flow>,
+    predicate_call: impl FnMut(Value) -> Result<Value, Flow>,
 ) -> EvalResult {
     let completions = filter_completions_by_callable_predicate(
         use_absolute_path,
         &directory,
         completions,
-        |predicate_arg| predicate_call(predicate_arg),
+        predicate_call,
     )?;
     Ok(resolve_file_name_completion(
         &file,

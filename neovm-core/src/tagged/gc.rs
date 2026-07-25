@@ -3286,6 +3286,12 @@ pub struct TaggedHeap {
     last_remembered_seed_roots: usize,
 }
 
+impl Default for TaggedHeap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TaggedHeap {
     pub fn new() -> Self {
         Self {
@@ -4304,7 +4310,7 @@ impl TaggedHeap {
         let mut boxed = Vec::new();
         Self::note_boxed_list_layout(self.all_objects, &mut boxed);
         Self::note_boxed_list_layout(self.tenured_objects, &mut boxed);
-        boxed.sort_by(|left, right| right.known_bytes.cmp(&left.known_bytes));
+        boxed.sort_by_key(|layout| std::cmp::Reverse(layout.known_bytes));
 
         let page_backing_bytes = cons
             .pages
@@ -5119,10 +5125,12 @@ impl TaggedHeap {
     /// live `BufferText`. The vec is consumed and cleared by
     /// `unchain_dead_markers` so successive cycles must re-install.
     ///
-    /// SAFETY: each slot must point to a valid `*mut MarkerObj` living
-    /// inside a live `BufferText`'s storage and must remain valid for
-    /// the duration of the GC cycle. The caller must hold exclusive
-    /// access to the heap and the buffer manager during the cycle.
+    /// # Safety
+    ///
+    /// Each slot must point to a valid `*mut MarkerObj` living inside a live
+    /// `BufferText`'s storage and must remain valid for the duration of the GC
+    /// cycle. The caller must hold exclusive access to the heap and the buffer
+    /// manager during the cycle.
     pub unsafe fn set_marker_chain_head_slots(&mut self, slots: Vec<*mut *mut MarkerObj>) {
         self.marker_chain_head_slots = slots;
     }
@@ -5789,14 +5797,14 @@ impl TaggedHeap {
                     }
                 }
             }
-        } else if owner.is_string() {
-            if let Some(ptr) = owner.as_string_ptr() {
-                let intervals = unsafe { (*(ptr as *const StringObj)).data.intervals() };
-                if !intervals.is_empty() {
-                    intervals.for_each_root(|root| {
-                        self.mark_or_push_child(root, origin);
-                    });
-                }
+        } else if owner.is_string()
+            && let Some(ptr) = owner.as_string_ptr()
+        {
+            let intervals = unsafe { (*ptr).data.intervals() };
+            if !intervals.is_empty() {
+                intervals.for_each_root(|root| {
+                    self.mark_or_push_child(root, origin);
+                });
             }
         }
         // Floats have no heap children.
@@ -8659,22 +8667,19 @@ impl TaggedHeap {
                     if (*current).tenured || (*current).is_marked_at(parity) {
                         total_marked += 1;
                         // Verify the object's internal data is sane
-                        match (*current).kind {
-                            HeapObjectKind::String => {
-                                let ptr = current as *const StringObj;
-                                let s = &(*ptr).data;
-                                // Check string data pointer is reasonable
-                                let str_ptr = s.as_bytes().as_ptr() as usize;
-                                if str_ptr != 0 && str_ptr < 0x1000 {
-                                    tracing::error!(
-                                        "GC VERIFY: marked StringObj at {:p} has \
-                                         corrupt data pointer {:#x}",
-                                        current,
-                                        str_ptr
-                                    );
-                                }
+                        if (*current).kind == HeapObjectKind::String {
+                            let ptr = current as *const StringObj;
+                            let s = &(*ptr).data;
+                            // Check string data pointer is reasonable
+                            let str_ptr = s.as_bytes().as_ptr() as usize;
+                            if str_ptr != 0 && str_ptr < 0x1000 {
+                                tracing::error!(
+                                    "GC VERIFY: marked StringObj at {:p} has \
+                                     corrupt data pointer {:#x}",
+                                    current,
+                                    str_ptr
+                                );
                             }
-                            _ => {}
                         }
                     }
                     current = (*current).next;

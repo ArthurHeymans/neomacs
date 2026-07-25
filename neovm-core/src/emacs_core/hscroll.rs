@@ -470,24 +470,24 @@ pub(crate) fn update_auto_hscroll_before_redisplay(ctx: &mut Context) {
         // moved since the last pass, un-suspend. Record the new old point
         // unconditionally (GNU's `Fset_marker (w->old_pointm, ...)`).
         let effective_suspend = snap.suspend_auto_hscroll && snap.point_lisp == snap.old_point_lisp;
-        if snap.suspend_auto_hscroll != effective_suspend || snap.old_point_lisp != snap.point_lisp
+        if (snap.suspend_auto_hscroll != effective_suspend
+            || snap.old_point_lisp != snap.point_lisp)
+            && let Some(frame) = ctx.frames.get_mut(snap.frame_id)
         {
-            if let Some(frame) = ctx.frames.get_mut(snap.frame_id) {
-                let window = frame.root_window.find_mut(snap.window_id).or_else(|| {
-                    frame
-                        .minibuffer_leaf
-                        .as_mut()
-                        .filter(|m| m.id() == snap.window_id)
-                });
-                if let Some(Window::Leaf {
-                    old_point,
-                    suspend_auto_hscroll,
-                    ..
-                }) = window
-                {
-                    *suspend_auto_hscroll = effective_suspend;
-                    *old_point = snap.point_lisp.max(crate::buffer::LispCharPos1::ONE);
-                }
+            let window = frame.root_window.find_mut(snap.window_id).or_else(|| {
+                frame
+                    .minibuffer_leaf
+                    .as_mut()
+                    .filter(|m| m.id() == snap.window_id)
+            });
+            if let Some(Window::Leaf {
+                old_point,
+                suspend_auto_hscroll,
+                ..
+            }) = window
+            {
+                *suspend_auto_hscroll = effective_suspend;
+                *old_point = snap.point_lisp.max(crate::buffer::LispCharPos1::ONE);
             }
         }
 

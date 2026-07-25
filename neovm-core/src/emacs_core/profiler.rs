@@ -184,6 +184,7 @@ fn fixnum_count(count: u64) -> i64 {
     count.min(Value::MOST_POSITIVE_FIXNUM as u64) as i64
 }
 
+#[derive(Default)]
 pub(crate) struct ProfilerState {
     cpu_log: Option<ProfilerLog>,
     cpu_running: bool,
@@ -200,22 +201,6 @@ pub(crate) struct ProfilerState {
     memory_last_allocated: u64,
 }
 
-impl Default for ProfilerState {
-    fn default() -> Self {
-        Self {
-            cpu_log: None,
-            cpu_running: false,
-            cpu_diagnostics_owned: false,
-            cpu_interval_ns: 0,
-            cpu_last_ns: 0,
-            cpu_remainder_ns: 0,
-            memory_log: None,
-            memory_running: false,
-            memory_last_allocated: 0,
-        }
-    }
-}
-
 impl ProfilerState {
     #[inline]
     pub(crate) fn is_active(&self) -> bool {
@@ -223,14 +208,16 @@ impl ProfilerState {
     }
 
     fn max_active_depth(&self) -> usize {
-        let cpu = self
-            .cpu_running
-            .then(|| self.cpu_log.as_ref().map_or(0, |log| log.depth))
-            .unwrap_or(0);
-        let memory = self
-            .memory_running
-            .then(|| self.memory_log.as_ref().map_or(0, |log| log.depth))
-            .unwrap_or(0);
+        let cpu = if self.cpu_running {
+            self.cpu_log.as_ref().map_or(0, |log| log.depth)
+        } else {
+            0
+        };
+        let memory = if self.memory_running {
+            self.memory_log.as_ref().map_or(0, |log| log.depth)
+        } else {
+            0
+        };
         cpu.max(memory)
     }
 

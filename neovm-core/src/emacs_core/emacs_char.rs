@@ -224,9 +224,9 @@ pub fn char_resolve_modifier_mask(mut c: i64) -> i64 {
             c &= !0o177 & !(CHAR_CTL as i64);
         } else if low == b'?' as i64 {
             c = 0o177 | (c & !0o177 & !(CHAR_CTL as i64));
-        } else if (c & 0o137) >= 0o101 && (c & 0o137) <= 0o132 {
-            c &= 0o37 | (!0o177 & !(CHAR_CTL as i64));
-        } else if (c & 0o177) >= 0o100 && (c & 0o177) <= 0o137 {
+        } else if (c & 0o137) >= 0o101 && (c & 0o137) <= 0o132
+            || (c & 0o177) >= 0o100 && (c & 0o177) <= 0o137
+        {
             c &= 0o37 | (!0o177 & !(CHAR_CTL as i64));
         }
     }
@@ -485,7 +485,7 @@ pub fn char_valid_p(c: i64) -> bool {
 /// Mirrors GNU `SINGLE_BYTE_CHAR_P`.
 #[inline]
 pub fn single_byte_char_p(c: i64) -> bool {
-    0 <= c && c < 0x100
+    (0..0x100).contains(&c)
 }
 
 /// True iff `byte` starts a non-ASCII multibyte form (`(byte & 0xC0) == 0xC0`).

@@ -94,8 +94,9 @@ impl DumpByteData {
 // Value
 // ---------------------------------------------------------------------------
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub enum DumpValue {
+    #[default]
     Nil,
     True,
     Int(i64),
@@ -128,12 +129,6 @@ pub enum DumpValue {
     /// binding (mirrors GNU storing `(sym . Qunbound)` for
     /// `make-local-variable` on a void symbol, `data.c:2285-2289`).
     Unbound,
-}
-
-impl Default for DumpValue {
-    fn default() -> Self {
-        Self::Nil
-    }
 }
 
 // ---------------------------------------------------------------------------

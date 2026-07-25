@@ -711,6 +711,9 @@ struct SymbolChunks {
     /// is in flight in that chunk. Only ever bumped while a concurrent mark is
     /// active (Stage 1b); zero cost otherwise. The GC reads it with the standard
     /// seqlock protocol (retry while odd / changed).
+    // Each counter must keep a stable address while the Vec spine grows; the
+    // per-element box is the concurrency invariant, not redundant storage.
+    #[allow(clippy::vec_box)]
     seqs: Vec<Box<std::sync::atomic::AtomicU32>>,
     /// Logical slot count; grows to a chunk boundary as chunks are appended.
     len: usize,
@@ -1694,10 +1697,10 @@ impl Obarray {
     ) -> *mut LispBufferLocalValue {
         let target = self.resolve_alias_for_write(id);
         // Check existing state before mutating.
-        if let Some(existing) = self.slot(target) {
-            if existing.flags.redirect() == SymbolRedirect::Localized {
-                return unsafe { existing.val.blv };
-            }
+        if let Some(existing) = self.slot(target)
+            && existing.flags.redirect() == SymbolRedirect::Localized
+        {
+            return unsafe { existing.val.blv };
         }
         // Build defcell = (sym . default). The same cons doubles as
         // valcell until per-buffer bindings are swapped in.
@@ -1737,11 +1740,11 @@ impl Obarray {
     /// helper so the LOCALIZED tests can flip it directly.
     pub fn set_blv_local_if_set(&mut self, id: SymId, local_if_set: bool) {
         let target = self.resolve_alias_for_write(id);
-        if let Some(sym) = self.slot(target) {
-            if sym.flags.redirect() == SymbolRedirect::Localized {
-                let blv = unsafe { &mut *sym.val.blv };
-                blv.local_if_set = local_if_set;
-            }
+        if let Some(sym) = self.slot(target)
+            && sym.flags.redirect() == SymbolRedirect::Localized
+        {
+            let blv = unsafe { &mut *sym.val.blv };
+            blv.local_if_set = local_if_set;
         }
     }
 
@@ -1978,6 +1981,7 @@ impl Obarray {
     /// `current_buffer_slots` is the current buffer's
     /// `Buffer::slots` array (or `None` if there's no current
     /// buffer — Forwarded reads then return the forwarder's default).
+    #[allow(clippy::too_many_arguments)] // keeps independently borrowed symbol/buffer state allocation-free
     pub fn find_symbol_value_in_buffer(
         &mut self,
         id: SymId,
@@ -2053,12 +2057,11 @@ impl Obarray {
                             // BUFFER_SLOT_COUNT.
                             if flags_idx >= 0 {
                                 let bit_set = (current_buffer_local_flags >> (off as u32)) & 1 != 0;
-                                if bit_set {
-                                    if let Some(slots) = current_buffer_slots
-                                        && off < slots.len()
-                                    {
-                                        return Some(slots[off]);
-                                    }
+                                if bit_set
+                                    && let Some(slots) = current_buffer_slots
+                                    && off < slots.len()
+                                {
+                                    return Some(slots[off]);
                                 }
                                 // Fall through to defaults.
                                 if let Some(defaults) = buffer_defaults
@@ -2415,13 +2418,13 @@ impl Obarray {
     /// Remove function cell without marking as explicitly unbound, by identity.
     pub fn clear_function_silent_id(&mut self, id: SymId) {
         let mut redefined = false;
-        if let Some(sym) = self.slot_mut(id) {
-            if !sym.function.is_nil() {
-                // SATB: retain the function cell's pre-image during a concurrent mark.
-                crate::tagged::gc::note_root_overwrite(sym.function);
-                store_value_atomic(&mut sym.function, Value::NIL);
-                redefined = true;
-            }
+        if let Some(sym) = self.slot_mut(id)
+            && !sym.function.is_nil()
+        {
+            // SATB: retain the function cell's pre-image during a concurrent mark.
+            crate::tagged::gc::note_root_overwrite(sym.function);
+            store_value_atomic(&mut sym.function, Value::NIL);
+            redefined = true;
         }
         if redefined {
             self.note_function_redefined(id);
@@ -2442,22 +2445,22 @@ impl Obarray {
         // store with the per-chunk seqlock, armed only during a concurrent mark.
         // Created BEFORE the &mut slot borrow (holds a raw ptr, no borrow).
         let _seq_guard = self.seqlock_guard(target);
-        if let Some(sym) = self.slot_mut(target) {
-            if sym.flags.trapped_write() != SymbolTrappedWrite::NoWrite {
-                // SATB: retain the old plain value during a concurrent mark before
-                // clobbering to UNBOUND. Only the Plainval arm holds a heap value;
-                // a Localized blv stays reachable via the BLV pool root.
-                if sym.flags.redirect() == SymbolRedirect::Plainval {
-                    crate::tagged::gc::note_root_overwrite(unsafe { sym.val.plain });
-                }
-                // Plainval / UNBOUND is the "no value" state, matching
-                // GNU where makunbound sets val.value = Qunbound.
-                sym.flags.set_redirect(SymbolRedirect::Plainval);
-                sym.val = SymbolVal {
-                    plain: Value::UNBOUND,
-                };
-                self.value_epoch = self.value_epoch.wrapping_add(1);
+        if let Some(sym) = self.slot_mut(target)
+            && sym.flags.trapped_write() != SymbolTrappedWrite::NoWrite
+        {
+            // SATB: retain the old plain value during a concurrent mark before
+            // clobbering to UNBOUND. Only the Plainval arm holds a heap value;
+            // a Localized blv stays reachable via the BLV pool root.
+            if sym.flags.redirect() == SymbolRedirect::Plainval {
+                crate::tagged::gc::note_root_overwrite(unsafe { sym.val.plain });
             }
+            // Plainval / UNBOUND is the "no value" state, matching
+            // GNU where makunbound sets val.value = Qunbound.
+            sym.flags.set_redirect(SymbolRedirect::Plainval);
+            sym.val = SymbolVal {
+                plain: Value::UNBOUND,
+            };
+            self.value_epoch = self.value_epoch.wrapping_add(1);
         }
     }
 

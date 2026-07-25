@@ -991,12 +991,12 @@ pub fn inline_pure_single_block_callees(
         };
         for blk in &mut m.blocks {
             for inst in &mut blk.insts {
-                map_op_operands(&mut inst.op, |v| resolve(v));
+                map_op_operands(&mut inst.op, &resolve);
                 for pv in inst.pre_stack.iter_mut() {
                     *pv = resolve(*pv);
                 }
             }
-            map_term_operands(&mut blk.term, |v| resolve(v));
+            map_term_operands(&mut blk.term, &resolve);
         }
     }
 
@@ -1068,10 +1068,10 @@ pub(crate) fn cons_scalar_repl_targets(m: &MirFunction) -> Vec<Option<(MirValue,
     }
     let mut out = vec![None; n];
     for (i, cc) in cons_of.iter().enumerate() {
-        if let Some(cc) = cc {
-            if !escapes[i] {
-                out[i] = Some(*cc);
-            }
+        if let Some(cc) = cc
+            && !escapes[i]
+        {
+            out[i] = Some(*cc);
         }
     }
     out

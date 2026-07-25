@@ -97,7 +97,7 @@ impl WgpuRenderer {
                 ..
             } = glyph
             {
-                let effective_clip = clip_rect.clone();
+                let effective_clip = *clip_rect;
                 let (
                     draw_x,
                     draw_y,

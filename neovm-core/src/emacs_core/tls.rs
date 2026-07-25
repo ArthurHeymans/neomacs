@@ -143,16 +143,12 @@ pub(crate) fn gnutls_peer_status_to_value(status: &TlsPeerStatus) -> Value {
     if !status.warnings.is_empty() {
         entries.push(Value::keyword(":warnings"));
         entries.push(Value::list(
-            status
-                .warnings
-                .iter()
-                .map(|warning| Value::keyword(warning))
-                .collect(),
+            status.warnings.iter().map(Value::keyword).collect(),
         ));
     }
 
     if !status.certificates.is_empty() {
-        let certificates = Value::list(status.certificates.iter().copied().collect());
+        let certificates = Value::list(status.certificates.to_vec());
         entries.push(Value::keyword(":certificates"));
         entries.push(certificates);
         entries.push(Value::keyword(":certificate"));

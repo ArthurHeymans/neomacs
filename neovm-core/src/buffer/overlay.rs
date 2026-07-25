@@ -149,19 +149,20 @@ impl Itree {
         OVERLAYS_AT_NODE_VISITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         // If left child's max_end > pos, it might contain covering intervals
-        if let Some(left) = n.left.as_ref() {
-            if left.max_end > pos {
-                Self::overlays_at_node(&n.left, pos, out);
-            }
+        if let Some(left) = n.left.as_ref()
+            && left.max_end > pos
+        {
+            Self::overlays_at_node(&n.left, pos, out);
         }
         // Check current node
         if n.start() <= pos && pos < n.end() {
             out.push(n.overlay);
         }
-        if let Some(right) = n.right.as_ref() {
-            if n.start() <= pos && right.max_end > pos {
-                Self::overlays_at_node(&n.right, pos, out);
-            }
+        if let Some(right) = n.right.as_ref()
+            && n.start() <= pos
+            && right.max_end > pos
+        {
+            Self::overlays_at_node(&n.right, pos, out);
         }
     }
 
@@ -281,10 +282,10 @@ impl Itree {
     }
 
     fn attach_rightmost(node: &mut Box<ItreeNode>, child: Box<ItreeNode>) {
-        if node.right.is_none() {
-            node.right = Some(child);
+        if let Some(right) = node.right.as_mut() {
+            Self::attach_rightmost(right, child);
         } else {
-            Self::attach_rightmost(node.right.as_mut().unwrap(), child);
+            node.right = Some(child);
         }
         node.update_max_end();
     }
@@ -488,16 +489,12 @@ impl OverlayList {
     }
 
     pub fn overlay_start_emacs_byte_pos(&self, overlay: Value) -> Option<EmacsBytePos> {
-        if overlay_live_buffer(overlay).is_none() {
-            return None;
-        }
+        overlay_live_buffer(overlay)?;
         overlay_range(overlay).map(EmacsByteRange::start)
     }
 
     pub fn overlay_end_emacs_byte_pos(&self, overlay: Value) -> Option<EmacsBytePos> {
-        if overlay_live_buffer(overlay).is_none() {
-            return None;
-        }
+        overlay_live_buffer(overlay)?;
         overlay_range(overlay).map(EmacsByteRange::end)
     }
 
@@ -674,8 +671,8 @@ impl OverlayList {
                 return false;
             }
             let range = overlay_data_range(data);
-            !(range.start() == pos && data.front_advance)
-                && !(range.end() == pos && !data.rear_advance)
+            !(range.start() == pos && data.front_advance
+                || range.end() == pos && !data.rear_advance)
                 && range.start() <= pos
                 && pos <= range.end()
         })

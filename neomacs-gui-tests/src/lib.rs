@@ -546,9 +546,7 @@ fn start_xvfb() -> io::Result<DisplaySession> {
             Err(err) => last_err = Some(err),
         }
     }
-    Err(last_err.unwrap_or_else(|| {
-        io::Error::new(io::ErrorKind::Other, "no Xvfb display candidate worked")
-    }))
+    Err(last_err.unwrap_or_else(|| io::Error::other("no Xvfb display candidate worked")))
 }
 
 fn start_xvfb_on(display_number: u32) -> io::Result<DisplaySession> {
@@ -778,9 +776,7 @@ fn failure_reason(
     match (status, exit_code, png_bytes) {
         (GuiRunStatus::Passed, _, _) => None,
         (GuiRunStatus::TimedOut, _, _) => Some("GUI command timed out".to_string()),
-        (GuiRunStatus::Failed, Some(code), None) if code == 0 => {
-            Some("PNG artifact was not generated".to_string())
-        }
+        (GuiRunStatus::Failed, Some(0), None) => Some("PNG artifact was not generated".to_string()),
         (GuiRunStatus::Failed, Some(code), _) => {
             Some(format!("GUI command exited with status {code}"))
         }

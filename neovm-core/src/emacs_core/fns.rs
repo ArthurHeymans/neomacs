@@ -573,11 +573,11 @@ impl ValidatedBufferLispRegion {
         start_arg: &Value,
         end_arg: &Value,
     ) -> Result<Self, Flow> {
-        Ok(Self {
+        Self {
             start: normalize_optional_lisp_region_position(start_raw, default_start)?,
             end: normalize_optional_lisp_region_position(end_raw, default_end)?,
         }
-        .validate_bounds(default_start, default_end, start_arg, end_arg)?)
+        .validate_bounds(default_start, default_end, start_arg, end_arg)
     }
 
     fn validate_bounds(
@@ -700,8 +700,8 @@ pub(crate) fn builtin_base64_encode_region(
 ) -> EvalResult {
     expect_range_args("base64-encode-region", &args, 2, 3)?;
     let (buffer_id, byte_range) =
-        normalize_current_buffer_region_bounds_in_manager(&mut eval.buffers, &args[0], &args[1])?;
-    let raw = read_buffer_region_bytes_in_manager(&mut eval.buffers, buffer_id, byte_range)?;
+        normalize_current_buffer_region_bounds_in_manager(&eval.buffers, &args[0], &args[1])?;
+    let raw = read_buffer_region_bytes_in_manager(&eval.buffers, buffer_id, byte_range)?;
     let target_multibyte = eval
         .buffers
         .get(buffer_id)
@@ -726,8 +726,8 @@ pub(crate) fn builtin_base64url_encode_region(
 ) -> EvalResult {
     expect_range_args("base64url-encode-region", &args, 2, 3)?;
     let (buffer_id, byte_range) =
-        normalize_current_buffer_region_bounds_in_manager(&mut eval.buffers, &args[0], &args[1])?;
-    let raw = read_buffer_region_bytes_in_manager(&mut eval.buffers, buffer_id, byte_range)?;
+        normalize_current_buffer_region_bounds_in_manager(&eval.buffers, &args[0], &args[1])?;
+    let raw = read_buffer_region_bytes_in_manager(&eval.buffers, buffer_id, byte_range)?;
     let target_multibyte = eval
         .buffers
         .get(buffer_id)
@@ -752,8 +752,8 @@ pub(crate) fn builtin_base64_decode_region(
 ) -> EvalResult {
     expect_range_args("base64-decode-region", &args, 2, 4)?;
     let (buffer_id, byte_range) =
-        normalize_current_buffer_region_bounds_in_manager(&mut eval.buffers, &args[0], &args[1])?;
-    let source = read_buffer_region_bytes_in_manager(&mut eval.buffers, buffer_id, byte_range)?;
+        normalize_current_buffer_region_bounds_in_manager(&eval.buffers, &args[0], &args[1])?;
+    let source = read_buffer_region_bytes_in_manager(&eval.buffers, buffer_id, byte_range)?;
     let use_url = args.get(2).is_some_and(|v| v.is_truthy());
     let noerror = args.get(3).is_some_and(|v| v.is_truthy());
     let table = if use_url {
@@ -1295,39 +1295,34 @@ pub(crate) fn builtin_widget_put(args: Vec<Value>) -> EvalResult {
     if widget.is_cons() {
         let mut cursor = {
             let _cell_car = widget.cons_car();
-            let cell_cdr = widget.cons_cdr();
-            cell_cdr
+
+            widget.cons_cdr()
         };
-        loop {
-            match cursor.kind() {
-                ValueKind::Cons => {
-                    let key = {
-                        let cell_car = cursor.cons_car();
-                        let _cell_cdr = cursor.cons_cdr();
-                        cell_car
-                    };
-                    if equal_value(&key, property, 0) {
-                        // Found the key cons. The *next* cons cell
-                        // holds the value (plist layout: KEY VAL KEY
-                        // VAL ...). Mutate that next cell's car, NOT
-                        // the current key cell — overwriting the key
-                        // would break the plist structure.
-                        let next = cursor.cons_cdr();
-                        if next.is_cons() {
-                            next.set_car(*value);
-                            return Ok(*value);
-                        }
-                        break;
-                    }
-                    // Skip value, move to next key
-                    let after_key = cursor.cons_cdr();
-                    if after_key.is_cons() {
-                        cursor = after_key.cons_cdr();
-                    } else {
-                        break;
-                    }
+        while let ValueKind::Cons = cursor.kind() {
+            let key = {
+                let cell_car = cursor.cons_car();
+                let _cell_cdr = cursor.cons_cdr();
+                cell_car
+            };
+            if equal_value(&key, property, 0) {
+                // Found the key cons. The *next* cons cell
+                // holds the value (plist layout: KEY VAL KEY
+                // VAL ...). Mutate that next cell's car, NOT
+                // the current key cell — overwriting the key
+                // would break the plist structure.
+                let next = cursor.cons_cdr();
+                if next.is_cons() {
+                    next.set_car(*value);
+                    return Ok(*value);
                 }
-                _ => break,
+                break;
+            }
+            // Skip value, move to next key
+            let after_key = cursor.cons_cdr();
+            if after_key.is_cons() {
+                cursor = after_key.cons_cdr();
+            } else {
+                break;
             }
         }
 

@@ -145,6 +145,8 @@ struct JumpPatch {
     source_byte: usize,
 }
 
+// Pass one intentionally returns its three coupled decode artifacts together.
+#[allow(clippy::type_complexity)]
 fn decode_pass1(
     bytecodes: &[u8],
     _constants: &mut Vec<Value>,
@@ -600,10 +602,10 @@ fn fetch2(bytecodes: &[u8], pos: &mut usize, byte_offset: usize) -> Result<u16, 
 fn add_or_find_symbol(constants: &mut Vec<Value>, name: &str) -> u16 {
     let sym = Value::symbol(name);
     for (i, c) in constants.iter().enumerate() {
-        if let (Some(a), Some(b)) = (c.as_symbol_id(), sym.as_symbol_id()) {
-            if a == b {
-                return i as u16;
-            }
+        if let (Some(a), Some(b)) = (c.as_symbol_id(), sym.as_symbol_id())
+            && a == b
+        {
+            return i as u16;
         }
     }
     let idx = constants.len() as u16;
@@ -615,7 +617,7 @@ fn add_or_find_symbol(constants: &mut Vec<Value>, name: &str) -> u16 {
 fn buffer_op_info(byte: u8) -> (&'static str, u8) {
     match byte {
         96 => ("point", 0),
-        97 => return ("%%obsolete-mark", 0), // obsolete
+        97 => ("%%obsolete-mark", 0), // obsolete
         98 => ("goto-char", 1),
         99 => ("insert", 1),
         100 => ("point-max", 0),
@@ -625,7 +627,7 @@ fn buffer_op_info(byte: u8) -> (&'static str, u8) {
         104 => ("preceding-char", 0),
         105 => ("current-column", 0),
         106 => ("indent-to", 1),
-        107 => return ("%%obsolete-scan-buffer", 0), // obsolete
+        107 => ("%%obsolete-scan-buffer", 0), // obsolete
         108 => ("eolp", 0),
         109 => ("eobp", 0),
         110 => ("bolp", 0),
@@ -633,8 +635,8 @@ fn buffer_op_info(byte: u8) -> (&'static str, u8) {
         112 => ("current-buffer", 0),
         113 => ("set-buffer", 1),
         114 => unreachable!("byte 114 handled as SaveCurrentBuffer"),
-        115 => return ("%%obsolete-interactive-p", 0), // obsolete
-        116 => return ("%%obsolete-forward-char", 0),  // obsolete
+        115 => ("%%obsolete-interactive-p", 0), // obsolete
+        116 => ("%%obsolete-forward-char", 0),  // obsolete
         117 => ("forward-char", 1),
         118 => ("forward-word", 1),
         119 => ("skip-chars-forward", 2),

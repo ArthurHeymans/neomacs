@@ -198,10 +198,10 @@ const ORACLE_FROZEN_TIME: &str = "@2026-06-15 12:00:00";
 /// deterministic without it, so a missing library is a hard, clearly-explained
 /// error rather than a silently flaky pass.
 fn libfaketime_so_path() -> String {
-    if let Ok(explicit) = std::env::var("NEOVM_LIBFAKETIME_SO") {
-        if !explicit.is_empty() {
-            return explicit;
-        }
+    if let Ok(explicit) = std::env::var("NEOVM_LIBFAKETIME_SO")
+        && !explicit.is_empty()
+    {
+        return explicit;
     }
     if let Some(path) = std::env::var_os("PATH") {
         for dir in std::env::split_paths(&path) {

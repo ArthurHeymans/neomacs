@@ -306,6 +306,9 @@ impl AutoloadManager {
     pub(crate) fn dump_entries(&self) -> &HashMap<SymId, AutoloadEntry> {
         &self.entries
     }
+    // `AfterLoadKey` stores Lisp strings whose interior mutability is managed
+    // by the non-moving GC; pdump must expose the map without changing its key.
+    #[allow(clippy::mutable_key_type)]
     pub(crate) fn dump_after_load(&self) -> &HashMap<AfterLoadKey, Vec<Value>> {
         &self.after_load
     }
@@ -318,6 +321,7 @@ impl AutoloadManager {
     pub(crate) fn dump_obsolete_variables(&self) -> &HashMap<SymId, ObsoleteInfo> {
         &self.obsolete_variables
     }
+    #[allow(clippy::mutable_key_type)] // restores the same GC-aware Lisp key representation
     pub(crate) fn from_dump(
         entries: HashMap<SymId, AutoloadEntry>,
         after_load: HashMap<AfterLoadKey, Vec<Value>>,
@@ -400,9 +404,9 @@ pub(crate) fn plan_autoload_do_load_in_state(
     // autoload's TYPE field (5th element) is `t` or `macro`.
     // This matches GNU Emacs eval.c:Fautoload_do_load.
     let macro_only = args.get(2).copied().unwrap_or(Value::NIL);
-    if macro_only.as_symbol_name().map_or(false, |s| s == "macro") {
+    if macro_only.as_symbol_name() == Some("macro") {
         let kind = items.get(4).copied().unwrap_or(Value::NIL);
-        let is_macro_type = kind.is_t() || kind.as_symbol_name().map_or(false, |s| s == "macro");
+        let is_macro_type = kind.is_t() || (kind.as_symbol_name() == Some("macro"));
         if !is_macro_type {
             return Ok(AutoloadDoLoadPlan::Return(*fundef));
         }
@@ -414,12 +418,11 @@ pub(crate) fn plan_autoload_do_load_in_state(
         None
     };
 
-    if let Some(name) = funname {
-        if let Some(override_value) =
+    if let Some(name) = funname
+        && let Some(override_value) =
             super::eval::compiler_function_override_in_obarray(obarray, name)
-        {
-            return Ok(AutoloadDoLoadPlan::Return(override_value));
-        }
+    {
+        return Ok(AutoloadDoLoadPlan::Return(override_value));
     }
 
     Ok(AutoloadDoLoadPlan::Load { file, funname })
@@ -440,32 +443,32 @@ pub(crate) fn finish_autoload_do_load_in_state(
     funname: Option<SymId>,
     original_autoload: Option<&Value>,
 ) -> EvalResult {
-    if let Some(name) = funname {
-        if let Some(func) = obarray.symbol_function_id(name) {
-            // GNU Emacs: if function is still the same autoload form after
-            // loading, signal "Autoloading file failed to define function".
-            // GNU Emacs eval.c: if (!NILP (Fequal (fun, fundef)))
-            // Only error if the function cell is STILL the SAME autoload
-            // form (by identity, not by content, to avoid stale reference).
-            // A different autoload (re-registered by eval-after-load
-            // callbacks) is fine — the function was redefined.
-            if let Some(orig) = original_autoload {
-                let same_identity = match (func.kind(), orig.kind()) {
-                    (ValueKind::Cons, ValueKind::Cons) => func.bits() == orig.bits(),
-                    _ => false,
-                };
-                if same_identity {
-                    return Err(signal(
-                        "error",
-                        vec![Value::string(format!(
-                            "Autoloading failed to define function {}",
-                            resolve_sym(name)
-                        ))],
-                    ));
-                }
+    if let Some(name) = funname
+        && let Some(func) = obarray.symbol_function_id(name)
+    {
+        // GNU Emacs: if function is still the same autoload form after
+        // loading, signal "Autoloading file failed to define function".
+        // GNU Emacs eval.c: if (!NILP (Fequal (fun, fundef)))
+        // Only error if the function cell is STILL the SAME autoload
+        // form (by identity, not by content, to avoid stale reference).
+        // A different autoload (re-registered by eval-after-load
+        // callbacks) is fine — the function was redefined.
+        if let Some(orig) = original_autoload {
+            let same_identity = match (func.kind(), orig.kind()) {
+                (ValueKind::Cons, ValueKind::Cons) => func.bits() == orig.bits(),
+                _ => false,
+            };
+            if same_identity {
+                return Err(signal(
+                    "error",
+                    vec![Value::string(format!(
+                        "Autoloading failed to define function {}",
+                        resolve_sym(name)
+                    ))],
+                ));
             }
-            return Ok(obarray.indirect_function_id(name).unwrap_or(func));
         }
+        return Ok(obarray.indirect_function_id(name).unwrap_or(func));
     }
     Ok(Value::NIL)
 }
@@ -576,10 +579,10 @@ pub(crate) fn register_autoload_in_state(
     // GNU Emacs eval.c:Fautoload — "If function is defined and not as an
     // autoload, don't override."  If the symbol already has a real (non-
     // autoload) function definition, return nil without touching it.
-    if let Some(current) = obarray.symbol_function_id(name) {
-        if !is_autoload_value(&current) {
-            return Ok(Value::NIL);
-        }
+    if let Some(current) = obarray.symbol_function_id(name)
+        && !is_autoload_value(&current)
+    {
+        return Ok(Value::NIL);
     }
 
     let file_val = args[1];
@@ -673,16 +676,13 @@ pub(crate) fn builtin_symbol_file(eval: &mut super::eval::Context, args: Vec<Val
         return Ok(Value::heap_string(entry.file.clone()));
     }
 
-    if let Some(fndef) = eval.obarray.symbol_function(resolve_sym(symbol_name)) {
-        if is_autoload_value(&fndef) {
-            if let Some(items) = list_to_vec(&fndef) {
-                if let Some(v) = items.get(1) {
-                    if v.is_string() {
-                        return Ok(*v);
-                    }
-                }
-            }
-        }
+    if let Some(fndef) = eval.obarray.symbol_function(resolve_sym(symbol_name))
+        && is_autoload_value(&fndef)
+        && let Some(items) = list_to_vec(&fndef)
+        && let Some(v) = items.get(1)
+        && v.is_string()
+    {
+        return Ok(*v);
     }
 
     Ok(Value::NIL)
@@ -692,8 +692,6 @@ pub(crate) fn builtin_symbol_file(eval: &mut super::eval::Context, args: Vec<Val
 // Special form handlers (called from eval.rs try_special_form dispatch)
 // ---------------------------------------------------------------------------
 
-/// `(autoload FUNCTION FILE &optional DOCSTRING INTERACTIVE TYPE)`
-///
 // ---------------------------------------------------------------------------
 // GcTrace
 // ---------------------------------------------------------------------------

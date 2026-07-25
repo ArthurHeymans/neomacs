@@ -1,3 +1,5 @@
+// The public `buffer::buffer` path is established across the evaluator.
+#[allow(clippy::module_inception)]
 pub mod buffer;
 pub(crate) mod buffer_text;
 mod edit_transaction;

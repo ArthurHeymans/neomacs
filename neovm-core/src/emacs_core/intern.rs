@@ -497,7 +497,7 @@ impl SymbolRegistry {
         let derived_flags;
         let canonical = match canonical {
             Some(flags) if flags.len() == symbol_names.len() => flags,
-            Some(flags) if flags.is_empty() => {
+            Some([]) => {
                 derived_flags = derive_legacy_canonical_flags_from_names(names, symbol_names)?;
                 &derived_flags
             }
@@ -623,6 +623,9 @@ impl SymbolRegistry {
     }
 }
 
+// Dumped Lisp strings are immutable for this pass; their GC-aware interior
+// mutability does not invalidate the temporary content-keyed map.
+#[allow(clippy::mutable_key_type)]
 fn derive_legacy_canonical_flags_from_names(
     names: &[LispString],
     symbol_names: &[u32],
@@ -765,12 +768,11 @@ pub(crate) fn is_keyword_id(id: SymId) -> bool {
 #[inline]
 pub fn resolve_sym_metadata(id: SymId) -> (&'static str, bool) {
     ensure_thread_local_cache_epoch_current();
-    if let Some(is_canonical) = thread_local_is_canonical(id) {
-        if is_canonical {
-            if let Some(name) = thread_local_resolve(id) {
-                return (name, true);
-            }
-        }
+    if let Some(is_canonical) = thread_local_is_canonical(id)
+        && is_canonical
+        && let Some(name) = thread_local_resolve(id)
+    {
+        return (name, true);
     }
     let registry = global_symbol_registry().read();
     let name_value = registry.resolve_lisp_string(id);
@@ -828,12 +830,11 @@ pub(crate) fn canonical_symbol_for_name(id: NameId) -> Option<SymId> {
 #[inline]
 pub fn resolve_sym(id: SymId) -> &'static str {
     ensure_thread_local_cache_epoch_current();
-    if let Some(is_canonical) = thread_local_is_canonical(id) {
-        if is_canonical {
-            if let Some(s) = thread_local_resolve(id) {
-                return s;
-            }
-        }
+    if let Some(is_canonical) = thread_local_is_canonical(id)
+        && is_canonical
+        && let Some(s) = thread_local_resolve(id)
+    {
+        return s;
     }
     let registry = global_symbol_registry().read();
     let name_value = registry.resolve_lisp_string(id);

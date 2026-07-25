@@ -321,13 +321,12 @@ pub fn parse_single_key(token: &str) -> Result<KeyEvent, String> {
         "insert" => Ok(mk_func("insert")),
         other => {
             // Check for function keys: f1 .. f20
-            if let Some(stripped) = other.strip_prefix('f') {
-                if let Ok(n) = stripped.parse::<u32>() {
-                    if (1..=20).contains(&n) {
-                        let fkey = format!("f{}", n);
-                        return Ok(mk_func(&fkey));
-                    }
-                }
+            if let Some(stripped) = other.strip_prefix('f')
+                && let Ok(n) = stripped.parse::<u32>()
+                && (1..=20).contains(&n)
+            {
+                let fkey = format!("f{}", n);
+                return Ok(mk_func(&fkey));
             }
 
             // Single character
@@ -827,49 +826,21 @@ fn lookup_in_keymap_level_impl(
         // GNU keymap.c:441-450: nil in char-table means unbound;
         // Qt means explicitly nil binding.
         if is_char_table(&entry_car) {
-            if let Some(code) = event.as_fixnum() {
-                if (code & KEY_CHAR_MOD_MASK) == 0 {
-                    let base = code & KEY_CHAR_CODE_MASK;
-                    if base >= 0 && base <= 0x3FFFFF {
-                        let result = builtin_char_table_range(vec![entry_car, *event], None)
-                            .unwrap_or(Value::NIL);
-                        if !result.is_nil() {
-                            // Qt in char-table means explicitly nil binding
-                            // (shadows parent), matching GNU keymap.c:455-459
-                            let val = if result == Value::T {
-                                Value::NIL
-                            } else {
-                                result
-                            };
-                            let val = maybe_resolve_keyelt(val, resolve_keyelt);
-                            if val.is_nil() {
-                                nil_binding_found = true;
-                            } else if is_list_keymap(&val) {
-                                prefix_binding =
-                                    Some(accumulate_prefix_keymap(prefix_binding, val));
-                            } else if prefix_binding.is_some() {
-                                break;
-                            } else {
-                                return Some(val);
-                            }
-                        }
-                        // nil in char-table means unbound — fall through
-                    }
-                }
-            }
-            cursor = entry_cdr;
-            continue;
-        }
-
-        // Vector element in keymap spine: maps char codes 0..len to
-        // bindings by index. Matches GNU keymap.c:431-434.
-        if entry_car.is_vector() {
-            if let Some(code) = event.as_fixnum() {
-                if code >= 0 {
-                    let idx = code as usize;
-                    let items = entry_car.as_vector_data().unwrap();
-                    if idx < items.len() {
-                        let val = items[idx];
+            if let Some(code) = event.as_fixnum()
+                && (code & KEY_CHAR_MOD_MASK) == 0
+            {
+                let base = code & KEY_CHAR_CODE_MASK;
+                if (0..=0x3FFFFF).contains(&base) {
+                    let result = builtin_char_table_range(vec![entry_car, *event], None)
+                        .unwrap_or(Value::NIL);
+                    if !result.is_nil() {
+                        // Qt in char-table means explicitly nil binding
+                        // (shadows parent), matching GNU keymap.c:455-459
+                        let val = if result == Value::T {
+                            Value::NIL
+                        } else {
+                            result
+                        };
                         let val = maybe_resolve_keyelt(val, resolve_keyelt);
                         if val.is_nil() {
                             nil_binding_found = true;
@@ -880,6 +851,33 @@ fn lookup_in_keymap_level_impl(
                         } else {
                             return Some(val);
                         }
+                    }
+                    // nil in char-table means unbound — fall through
+                }
+            }
+            cursor = entry_cdr;
+            continue;
+        }
+
+        // Vector element in keymap spine: maps char codes 0..len to
+        // bindings by index. Matches GNU keymap.c:431-434.
+        if entry_car.is_vector() {
+            if let Some(code) = event.as_fixnum()
+                && code >= 0
+            {
+                let idx = code as usize;
+                let items = entry_car.as_vector_data().unwrap();
+                if idx < items.len() {
+                    let val = items[idx];
+                    let val = maybe_resolve_keyelt(val, resolve_keyelt);
+                    if val.is_nil() {
+                        nil_binding_found = true;
+                    } else if is_list_keymap(&val) {
+                        prefix_binding = Some(accumulate_prefix_keymap(prefix_binding, val));
+                    } else if prefix_binding.is_some() {
+                        break;
+                    } else {
+                        return Some(val);
                     }
                 }
             }
@@ -1092,13 +1090,9 @@ pub(crate) fn expand_meta_prefix_char_events_in_obarray(
     obarray: &Obarray,
     events: &[Value],
 ) -> Option<Vec<Value>> {
-    let meta_prefix = match obarray
+    let meta_prefix = obarray
         .symbol_value("meta-prefix-char")
-        .and_then(|v| v.as_fixnum())
-    {
-        Some(code) => code,
-        None => return None,
-    };
+        .and_then(|v| v.as_fixnum())?;
 
     let mut changed = false;
     let mut expanded = Vec::with_capacity(events.len() + 1);
@@ -1382,7 +1376,7 @@ fn store_in_keymap(keymap: Value, event: Value, def: Value, remove: bool) {
                 let mods = code & KEY_CHAR_MOD_MASK;
                 if mods == 0 {
                     let base = code & KEY_CHAR_CODE_MASK;
-                    if base >= 0 && base <= 0x3FFFFF {
+                    if (0..=0x3FFFFF).contains(&base) {
                         let store_val = keymap_char_table_store_value(def, remove);
                         let _ =
                             builtin_set_char_table_range(vec![entry_car, event, store_val], None);
@@ -1414,17 +1408,16 @@ fn store_in_keymap(keymap: Value, event: Value, def: Value, remove: bool) {
                 if updated {
                     return;
                 }
-            } else if let Some((from, to)) = keymap_character_range(&event) {
-                if let Some(vec_data) = entry_car.as_vector_data() {
-                    if from < vec_data.len() as i64 {
-                        let last = to.min(vec_data.len() as i64 - 1);
-                        for code in from..=last {
-                            entry_car.set_vector_slot(code as usize, def);
-                        }
-                        if to == last {
-                            return;
-                        }
-                    }
+            } else if let Some((from, to)) = keymap_character_range(&event)
+                && let Some(vec_data) = entry_car.as_vector_data()
+                && from < vec_data.len() as i64
+            {
+                let last = to.min(vec_data.len() as i64 - 1);
+                for code in from..=last {
+                    entry_car.set_vector_slot(code as usize, def);
+                }
+                if to == last {
+                    return;
                 }
             }
             // GNU keymap.c:803: vector found, advance insertion_point
@@ -1812,26 +1805,25 @@ pub(crate) fn collect_minor_mode_maps_in_state(
         buffers,
         buffer_id,
         "emulation-mode-map-alists",
-    ) {
-        if let Some(emulation_entries) = list_to_vec(&emulation_raw) {
-            for entry in emulation_entries {
-                let alist_value = match entry.as_symbol_name() {
-                    Some(name) => dynamic_buffer_or_global_symbol_value_in_state(
-                        obarray, dynamic, buffers, buffer_id, name,
-                    )
-                    .unwrap_or(Value::NIL),
-                    None => entry,
-                };
-                collect_maps_from_alist_in_state(
-                    obarray,
-                    dynamic,
-                    buffers,
-                    buffer_id,
-                    &alist_value,
-                    None,
-                    &mut maps,
-                );
-            }
+    ) && let Some(emulation_entries) = list_to_vec(&emulation_raw)
+    {
+        for entry in emulation_entries {
+            let alist_value = match entry.as_symbol_name() {
+                Some(name) => dynamic_buffer_or_global_symbol_value_in_state(
+                    obarray, dynamic, buffers, buffer_id, name,
+                )
+                .unwrap_or(Value::NIL),
+                None => entry,
+            };
+            collect_maps_from_alist_in_state(
+                obarray,
+                dynamic,
+                buffers,
+                buffer_id,
+                &alist_value,
+                None,
+                &mut maps,
+            );
         }
     }
 
@@ -1932,26 +1924,25 @@ pub(crate) fn collect_minor_mode_map_entries_in_state(
         buffers,
         buffer_id,
         "emulation-mode-map-alists",
-    ) {
-        if let Some(emulation_entries) = list_to_vec(&emulation_raw) {
-            for entry in emulation_entries {
-                let alist_value = match entry.as_symbol_name() {
-                    Some(name) => dynamic_buffer_or_global_symbol_value_in_state(
-                        obarray, dynamic, buffers, buffer_id, name,
-                    )
-                    .unwrap_or(Value::NIL),
-                    None => entry,
-                };
-                collect_map_entries_from_alist_in_state(
-                    obarray,
-                    dynamic,
-                    buffers,
-                    buffer_id,
-                    &alist_value,
-                    None,
-                    &mut maps,
-                );
-            }
+    ) && let Some(emulation_entries) = list_to_vec(&emulation_raw)
+    {
+        for entry in emulation_entries {
+            let alist_value = match entry.as_symbol_name() {
+                Some(name) => dynamic_buffer_or_global_symbol_value_in_state(
+                    obarray, dynamic, buffers, buffer_id, name,
+                )
+                .unwrap_or(Value::NIL),
+                None => entry,
+            };
+            collect_map_entries_from_alist_in_state(
+                obarray,
+                dynamic,
+                buffers,
+                buffer_id,
+                &alist_value,
+                None,
+                &mut maps,
+            );
         }
     }
 
@@ -2194,6 +2185,7 @@ fn position_keymap(
     Ok(maybe_keymap_in_obarray(obarray, &property).unwrap_or(Value::NIL))
 }
 
+#[allow(clippy::too_many_arguments)] // explicit keymap layers preserve GNU precedence ordering
 fn current_active_maps_from_parts(
     obarray: &Obarray,
     frames: &crate::window::FrameManager,
@@ -2951,18 +2943,18 @@ pub fn emacs_event_to_key_event(event: &Value) -> Option<KeyEvent> {
             }
             // If single char, return Char event
             let mut chars = rest.chars();
-            if let Some(ch) = chars.next() {
-                if chars.next().is_none() {
-                    return Some(KeyEvent::Char {
-                        code: ch,
-                        ctrl,
-                        meta,
-                        shift,
-                        super_,
-                        hyper,
-                        alt,
-                    });
-                }
+            if let Some(ch) = chars.next()
+                && chars.next().is_none()
+            {
+                return Some(KeyEvent::Char {
+                    code: ch,
+                    ctrl,
+                    meta,
+                    shift,
+                    super_,
+                    hyper,
+                    alt,
+                });
             }
             // Otherwise it's a function key
             Some(KeyEvent::Function {

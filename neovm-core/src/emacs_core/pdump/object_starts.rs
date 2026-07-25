@@ -146,8 +146,9 @@ fn write_object_span(
     Ok(())
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub(crate) enum LoadedObjectSpan {
+    #[default]
     None,
     Unmapped,
     Cons(DumpConsSpan),
@@ -166,12 +167,6 @@ pub(crate) enum LoadedObjectSpan {
         object: DumpVecLikeSpan,
         slots: Option<DumpSlotSpan>,
     },
-}
-
-impl Default for LoadedObjectSpan {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 /// Load-side object span lookup.
