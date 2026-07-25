@@ -620,7 +620,6 @@ impl DisplayPropertyReplacementAppendRequest {
     ) -> Option<Self> {
         let item = DisplayPropertyReplacementSourceResolveRequest::from_typed_replacement(
             descriptor.classification(),
-            descriptor.value(),
             descriptor.anchor_charpos(),
             source_text,
             active_face_state,

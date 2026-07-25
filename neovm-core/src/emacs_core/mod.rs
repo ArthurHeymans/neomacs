@@ -39,6 +39,7 @@ pub mod dbus;
 pub mod debug;
 pub mod dired;
 pub mod display;
+pub mod display_spec;
 pub mod dispnew;
 pub mod doc;
 pub mod dynamic_module;

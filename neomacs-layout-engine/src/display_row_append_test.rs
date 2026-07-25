@@ -9686,14 +9686,12 @@ fn display_replacement_string_append_item_measures_source_text_from_active_face(
 
 fn test_display_property_replacement_resolve_context<'a>(
     classification: &'a DisplayPropertyClassification,
-    value: Value,
     active_face: &'a DisplayRowActiveFaceState,
     font_metrics: &'a mut Option<FontMetricsService>,
     params: &'a WindowParams,
 ) -> DisplayPropertyReplacementSourceResolveRequest<'a, 'static> {
     DisplayPropertyReplacementSourceResolveRequest::from_typed_replacement(
         classification,
-        value,
         CharPos0::new(4),
         b"x",
         active_face,
@@ -9716,7 +9714,6 @@ fn display_property_replacement_append_item_resolves_string_replacement() {
 
     let item = test_display_property_replacement_resolve_context(
         &classification,
-        value,
         &active_face,
         &mut font_metrics,
         &params,
@@ -9748,7 +9745,6 @@ fn display_property_replacement_append_item_resolves_stretch_replacement() {
 
     let item = test_display_property_replacement_resolve_context(
         &classification,
-        value,
         &active_face,
         &mut font_metrics,
         &params,
@@ -9777,13 +9773,13 @@ fn display_property_replacement_append_item_resolves_media_replacement() {
         Some(DisplayReplacementProperty::Media(
             DisplayMediaReplacementProperty::Xwidget(media),
         )),
+        Value::NIL,
         Default::default(),
     );
     let params = test_display_space_window_params();
 
     let item = test_display_property_replacement_resolve_context(
         &classification,
-        Value::NIL,
         &active_face,
         &mut font_metrics,
         &params,
@@ -9811,7 +9807,6 @@ fn display_property_replacement_append_item_names_cursor_policy() {
     let params = test_display_space_window_params();
     let string = test_display_property_replacement_resolve_context(
         &classification,
-        value,
         &active_face,
         &mut font_metrics,
         &params,

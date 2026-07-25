@@ -2064,7 +2064,6 @@ impl DisplayPropertyReplacementSourceItem {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_display_property_parts(
         display_property: &DisplayPropertyClassification,
-        value: Value,
         anchor_charpos: CharPos0,
         current_x: f32,
         content_x: f32,
@@ -2072,6 +2071,10 @@ impl DisplayPropertyReplacementSourceItem {
         metrics: DisplayRowFallbackMetrics,
         inputs: DisplayPropertyReplacementSourceInputs,
     ) -> Option<Self> {
+        // The Lisp payload comes from the SPEC that produced the replacement, not
+        // from the whole `display` value: for `["X"]`, `("X")` or
+        // `(when t . "X")` those are different objects.
+        let value = display_property.replacement_spec();
         match display_property.replacement()? {
             DisplayReplacementProperty::String => {
                 DisplayReplacementStringSourceItem::display_property_string(
@@ -2720,7 +2723,7 @@ impl DisplayPropertySourcePlan {
         match DisplayPropertySourceReplacement::resolve(
             context,
             self.value,
-            self.classification.replacement(),
+            &self.classification,
             face,
         ) {
             DisplayPropertySourceReplacement::String(value) => {
@@ -2784,11 +2787,15 @@ impl DisplayPropertySourceReplacement {
     fn resolve(
         context: &mut DisplaySourceContext<'_>,
         display_prop: Value,
-        replacement: Option<&DisplayReplacementProperty>,
+        classification: &DisplayPropertyClassification,
         face: RenderFaceRef,
     ) -> Self {
-        match replacement {
-            Some(DisplayReplacementProperty::String) => Self::String(display_prop),
+        // Typed arms take their Lisp payload from the SPEC that produced the
+        // replacement (`["X"]` and `("X")` are not the string they replace with);
+        // only the untyped fallback below still probes the whole `display` value.
+        let spec = classification.replacement_spec();
+        match classification.replacement() {
+            Some(DisplayReplacementProperty::String) => Self::String(spec),
             Some(DisplayReplacementProperty::Stretch(stretch)) => {
                 Self::Item(DisplayItemKind::Stretch(stretch.clone()))
             }
@@ -2806,7 +2813,7 @@ impl DisplayPropertySourceReplacement {
                 .map(DisplayItemKind::MediaReplacement)
                 .or_else(|| {
                     context
-                        .resolve_display_media_replacement(display_prop, face)
+                        .resolve_display_media_replacement(spec, face)
                         .filter(|media| replacement.accepts_media_replacement(media))
                         .map(DisplayItemKind::MediaReplacement)
                 })

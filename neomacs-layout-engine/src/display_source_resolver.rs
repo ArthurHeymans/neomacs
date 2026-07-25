@@ -418,7 +418,6 @@ impl DisplayReplacementMediaSourceItem {
 
 pub(crate) struct DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
     display_property: &'a DisplayPropertyClassification,
-    replacement_value: Value,
     anchor_charpos: CharPos0,
     source_text: &'source [u8],
     active_face_state: &'a DisplayRowActiveFaceState,
@@ -433,7 +432,6 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_typed_replacement(
         display_property: &'a DisplayPropertyClassification,
-        replacement_value: Value,
         anchor_charpos: CharPos0,
         source_text: &'source [u8],
         active_face_state: &'a DisplayRowActiveFaceState,
@@ -445,7 +443,6 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
     ) -> Self {
         Self {
             display_property,
-            replacement_value,
             anchor_charpos,
             source_text,
             active_face_state,
@@ -463,7 +460,9 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
 
     pub(crate) fn resolve(self) -> Option<DisplayPropertyReplacementSourceItem> {
         let display_property = self.display_property;
-        let replacement_value = self.replacement_value;
+        // The payload of the replacement is the SPEC that produced it, not the
+        // whole `display` value -- see `DisplayPropertyClassification`.
+        let replacement_value = display_property.replacement_spec();
         let anchor_charpos = self.anchor_charpos;
         let source_text = self.source_text;
         let face_metrics = self.face_metrics();
@@ -508,7 +507,6 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
         };
         DisplayPropertyReplacementSourceItem::from_display_property_parts(
             display_property,
-            replacement_value,
             anchor_charpos,
             self.current_x,
             self.content_x,

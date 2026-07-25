@@ -465,14 +465,18 @@ fn display_property_source_replacement_resolves_direct_media_item() {
         height: 12.0,
     });
     let mut context = DisplaySourceContext::empty();
-    let replacement_property = crate::display_property::DisplayReplacementProperty::Media(
-        crate::display_property::DisplayMediaReplacementProperty::Xwidget(media),
+    let classification = crate::display_property::DisplayPropertyClassification::new_for_test(
+        Some(crate::display_property::DisplayReplacementProperty::Media(
+            crate::display_property::DisplayMediaReplacementProperty::Xwidget(media),
+        )),
+        Value::NIL,
+        Default::default(),
     );
 
     let replacement = DisplayPropertySourceReplacement::resolve(
         &mut context,
         Value::NIL,
-        Some(&replacement_property),
+        &classification,
         RenderFaceRef::FaceId(FaceId::new(7)),
     );
 

@@ -436,3 +436,106 @@ fn margin_display_spec_is_a_suppressing_replacement_not_inline_text() {
         Some(DisplayReplacementProperty::Margin)
     );
 }
+
+#[test]
+fn a_vector_display_value_classifies_its_elements_like_gnu() {
+    // GNU `handle_display_spec' iterates a VECTOR of specs (`VECTORP (spec)').
+    // This classifier had no vector arm, so `'display ["VEC"]' rendered the
+    // original text; GNU renders VEC.
+    let _eval = Context::new();
+    let classified = classify_display_property(Value::vector(vec![
+        Value::list(vec![Value::symbol("raise"), Value::make_float(0.2)]),
+        Value::string("VEC"),
+    ]));
+    assert_eq!(
+        classified.replacement().cloned(),
+        Some(DisplayReplacementProperty::String)
+    );
+    // The payload is the ELEMENT, not the vector: a consumer reading the whole
+    // `display' value would try to display the vector as a string.
+    assert_eq!(classified.replacement_spec().as_utf8_str(), Some("VEC"));
+}
+
+#[test]
+fn a_list_wrapped_string_spec_carries_the_string_not_the_list() {
+    // `("LIST")' is a LIST OF SPECS whose single element replaces the text.
+    let _eval = Context::new();
+    let classified = classify_display_property(Value::list(vec![Value::string("LIST")]));
+    assert_eq!(
+        classified.replacement().cloned(),
+        Some(DisplayReplacementProperty::String)
+    );
+    assert_eq!(classified.replacement_spec().as_utf8_str(), Some("LIST"));
+}
+
+#[test]
+fn a_when_spec_replaces_with_its_inner_spec_like_gnu() {
+    // `(when FORM . SPEC)': GNU continues its single-spec arms on SPEC. Verified
+    // against GNU 31: `(when t . "DOTTED")' replaces, `(when t "LISTED")' -- whose
+    // SPEC is the LIST `("LISTED")' -- does not.
+    let _eval = Context::new();
+    let dotted = classify_display_property(Value::cons(
+        Value::symbol("when"),
+        Value::cons(Value::symbol("t"), Value::string("DOTTED")),
+    ));
+    assert_eq!(
+        dotted.replacement().cloned(),
+        Some(DisplayReplacementProperty::String)
+    );
+    assert_eq!(dotted.replacement_spec().as_utf8_str(), Some("DOTTED"));
+
+    let listed = classify_display_property(Value::list(vec![
+        Value::symbol("when"),
+        Value::symbol("t"),
+        Value::string("LISTED"),
+    ]));
+    assert!(listed.replacement().is_none());
+
+    // A nil condition disables the spec.
+    let disabled = classify_display_property(Value::cons(
+        Value::symbol("when"),
+        Value::cons(Value::NIL, Value::string("HIDDEN")),
+    ));
+    assert!(disabled.replacement().is_none());
+}
+
+#[test]
+fn a_margin_spec_gnu_cannot_display_leaves_the_text_alone() {
+    // Verified against GNU 31: `((margin bogus-area) "BADMARGIN")' displays the
+    // covered text unchanged, because GNU's `location' stays unbound and the whole
+    // cons then fails its `valid_p' test. Same for a valid area whose CONTENT is
+    // not displayable.
+    let _eval = Context::new();
+    assert!(
+        classify_display_property(Value::list(vec![
+            Value::list(vec![Value::symbol("margin"), Value::symbol("bogus-area")]),
+            Value::string("BADMARGIN"),
+        ]))
+        .replacement()
+        .is_none()
+    );
+    assert!(
+        classify_display_property(Value::list(vec![
+            Value::list(vec![Value::symbol("margin"), Value::NIL]),
+            Value::fixnum(42),
+        ]))
+        .replacement()
+        .is_none()
+    );
+}
+
+#[test]
+fn disable_eval_classifies_the_wrapped_spec() {
+    // `(disable-eval SPEC)' from enriched.el: GNU strips the wrapper and handles
+    // SPEC (refusing to evaluate inside it).
+    let _eval = Context::new();
+    let classified = classify_display_property(Value::list(vec![
+        Value::symbol("disable-eval"),
+        Value::string("INNER"),
+    ]));
+    assert_eq!(
+        classified.replacement().cloned(),
+        Some(DisplayReplacementProperty::String)
+    );
+    assert_eq!(classified.replacement_spec().as_utf8_str(), Some("INNER"));
+}

@@ -4,22 +4,51 @@ use crate::display_item::{
     DisplayXwidgetItem,
 };
 use crate::display_spec::{
-    DisplayFringeLayout, DisplaySpaceKey, DisplaySpecHead, is_display_fringe_spec,
-    is_display_margin_spec, is_display_space_spec, is_display_spec_list,
-    parse_display_fringe_layout, parse_display_surface_layout, parse_display_xwidget_layout,
+    DisplayFringeLayout, DisplaySpaceKey, parse_display_fringe_layout,
+    parse_display_surface_layout, parse_display_xwidget_layout,
 };
 use neovm_core::emacs_core::Value;
+use neovm_core::emacs_core::display_spec::{
+    DisplayMediaSpecKind, DisplayPropertySpecs, DisplaySpecKind, display_spec_kind,
+    display_spec_margin_value, display_spec_when_parts,
+};
 use neovm_core::emacs_core::value::list_to_vec;
+use std::ops::ControlFlow;
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayPropertyClassification {
     replacement: Option<DisplayReplacementProperty>,
+    /// The single spec that produced `replacement` — GNU's `spec` argument to
+    /// `handle_single_display_spec`, NOT the whole `display` value.
+    ///
+    /// They differ whenever the property is a list or vector of specs, or a
+    /// `(when FORM . SPEC)` wrapper. Consumers that need the Lisp payload (the
+    /// string to display, the image spec to resolve) must read it from HERE: they
+    /// used to re-derive it from the top-level value, so a list-wrapped
+    /// `("REPLACEMENT")` classified as a string replacement and then tried to
+    /// display the LIST as that string, rendering the original text instead.
+    replacement_spec: Value,
     modifiers: DisplayTextPropertyModifiers,
+}
+
+impl Default for DisplayPropertyClassification {
+    fn default() -> Self {
+        Self {
+            replacement: None,
+            replacement_spec: Value::NIL,
+            modifiers: DisplayTextPropertyModifiers::default(),
+        }
+    }
 }
 
 impl DisplayPropertyClassification {
     pub(crate) fn replacement(&self) -> Option<&DisplayReplacementProperty> {
         self.replacement.as_ref()
+    }
+
+    /// The spec that produced the replacement — see [`Self::replacement_spec`].
+    pub(crate) fn replacement_spec(&self) -> Value {
+        self.replacement_spec
     }
 
     pub(crate) fn modifiers(&self) -> DisplayTextPropertyModifiers {
@@ -29,10 +58,12 @@ impl DisplayPropertyClassification {
     #[cfg(test)]
     pub(crate) fn new_for_test(
         replacement: Option<DisplayReplacementProperty>,
+        replacement_spec: Value,
         modifiers: DisplayTextPropertyModifiers,
     ) -> Self {
         Self {
             replacement,
+            replacement_spec,
             modifiers,
         }
     }
@@ -119,16 +150,31 @@ pub(crate) type DisplayTextPropertyModifiers = DisplayItemLayout;
 /// Classify a `display` property value into a typed replacement + text-property
 /// modifiers.
 ///
-/// Mirrors GNU `handle_display_spec` (src/xdisp.c): when the value is a LIST OF
-/// DISPLAY SPECS (a cons whose car is not a recognized single-spec head and not
-/// nil — e.g. diff-hl's list-wrapped `((left-fringe BITMAP FACE))`), iterate the
-/// elements and classify each as its own single spec, accumulating the result.
-/// Otherwise classify the value as a single spec directly.
+/// The SHAPE of the value (single spec / list of specs / vector of specs, minus a
+/// `(disable-eval …)` wrapper) is decoded by `neovm_core`'s
+/// [`DisplayPropertySpecs`] — GNU `handle_display_spec` — so this crate and the
+/// interpreter cannot disagree about it. They did: this classifier had no VECTOR
+/// arm, so `(put-text-property … 'display ["REPLACEMENT"])` rendered nothing.
+///
+/// GNU keeps the LAST element whose `handle_single_display_spec` reported a
+/// replacement (`replacing = rv`) and merges non-replacement modifiers
+/// (`raise`/`height`) from every element; both are reproduced here.
 pub(crate) fn classify_display_property(value: Value) -> DisplayPropertyClassification {
-    if is_display_spec_list(&value) {
-        return classify_display_spec_list(value);
+    let mut result = DisplayPropertyClassification::default();
+    DisplayPropertySpecs::of(value).for_each(|spec| {
+        let element = classify_single_display_spec(spec);
+        if element.replacement.is_some() {
+            result.replacement = element.replacement;
+            result.replacement_spec = element.replacement_spec;
+        }
+        merge_modifiers(&mut result.modifiers, element.modifiers);
+        ControlFlow::Continue(())
+    });
+    // GNU suppresses inline modifiers once a replacement claims the text.
+    if result.replacement.is_some() {
+        result.modifiers = DisplayTextPropertyModifiers::default();
     }
-    classify_single_display_spec(value)
+    result
 }
 
 /// GNU ignores replacing display specs inside strings that themselves came from
@@ -136,66 +182,65 @@ pub(crate) fn classify_display_property(value: Value) -> DisplayPropertyClassifi
 pub(crate) fn classify_display_property_modifiers_only(
     value: Value,
 ) -> DisplayTextPropertyModifiers {
-    if is_display_spec_list(&value) {
-        return classify_display_spec_list_modifiers_only(value);
-    }
-    classify_single_display_spec(value).modifiers
-}
-
-/// Iterate a list of display specs (GNU `handle_display_spec`'s cons loop),
-/// classifying each element as a single spec. GNU keeps the LAST element whose
-/// `handle_single_display_spec` reported a replacement (`replacing = rv`); we
-/// match that by letting a later element's replacement override an earlier one,
-/// while merging non-replacement modifiers (`raise`/`height`) from every element.
-fn classify_display_spec_list(value: Value) -> DisplayPropertyClassification {
-    let Some(items) = list_to_vec(&value) else {
-        return DisplayPropertyClassification::default();
-    };
-    let mut replacement = None;
     let mut modifiers = DisplayTextPropertyModifiers::default();
-    for item in items {
-        let element = classify_single_display_spec(item);
-        if let Some(element_replacement) = element.replacement {
-            replacement = Some(element_replacement);
-        }
-        merge_modifiers(&mut modifiers, element.modifiers);
-    }
-    // GNU suppresses inline modifiers once a replacement claims the text.
-    if replacement.is_some() {
-        modifiers = DisplayTextPropertyModifiers::default();
-    }
-    DisplayPropertyClassification {
-        replacement,
-        modifiers,
-    }
-}
-
-fn classify_display_spec_list_modifiers_only(value: Value) -> DisplayTextPropertyModifiers {
-    let Some(items) = list_to_vec(&value) else {
-        return DisplayTextPropertyModifiers::default();
-    };
-    let mut modifiers = DisplayTextPropertyModifiers::default();
-    for item in items {
-        merge_modifiers(&mut modifiers, classify_single_display_spec(item).modifiers);
-    }
+    DisplayPropertySpecs::of(value).for_each(|spec| {
+        merge_modifiers(&mut modifiers, classify_single_display_spec(spec).modifiers);
+        ControlFlow::Continue(())
+    });
     modifiers
 }
 
+/// Classify ONE display spec, matching GNU `handle_single_display_spec`'s arms.
+///
+/// The head taxonomy is `neovm_core`'s [`display_spec_kind`], so the arms are
+/// exhaustive: a spec kind this crate forgets to render is a compile error rather
+/// than a display property that silently does nothing.
 fn classify_single_display_spec(value: Value) -> DisplayPropertyClassification {
-    let replacement = if value.is_string() {
-        Some(DisplayReplacementProperty::String)
-    } else if is_display_space_spec(&value) {
-        parse_display_space(value).map(DisplayReplacementProperty::Stretch)
-    } else if DisplaySpecHead::Image.is_head_of(&value) {
-        Some(DisplayReplacementProperty::Media(
+    let kind = display_spec_kind(value);
+
+    // `(when FORM . SPEC)`: GNU continues its SINGLE-spec arms on SPEC (it does
+    // not re-enter `handle_display_spec`, so SPEC is never a list of specs), with
+    // FORM evaluated. Resolved structurally here — the text is being displayed, so
+    // the condition held — matching GNU's own `single_display_spec_string_p`.
+    if matches!(kind, DisplaySpecKind::When) {
+        return match display_spec_when_parts(value) {
+            Some((form, spec)) if !form.is_nil() => classify_single_display_spec(spec),
+            _ => DisplayPropertyClassification::default(),
+        };
+    }
+
+    let replacement = match kind {
+        DisplaySpecKind::Text => Some(DisplayReplacementProperty::String),
+        DisplaySpecKind::Space => {
+            parse_display_space(value).map(DisplayReplacementProperty::Stretch)
+        }
+        DisplaySpecKind::Image => Some(DisplayReplacementProperty::Media(
             DisplayMediaReplacementProperty::Image,
-        ))
-    } else if DisplaySpecHead::Video.is_head_of(&value) {
-        Some(DisplayReplacementProperty::Media(
-            DisplayMediaReplacementProperty::Video,
-        ))
-    } else if DisplaySpecHead::Xwidget.is_head_of(&value) {
-        parse_display_xwidget_layout(&value).map(|layout| {
+        )),
+        DisplaySpecKind::Media(DisplayMediaSpecKind::Video) => Some(
+            DisplayReplacementProperty::Media(DisplayMediaReplacementProperty::Video),
+        ),
+        DisplaySpecKind::Media(DisplayMediaSpecKind::Webkit) => Some(
+            DisplayReplacementProperty::Media(DisplayMediaReplacementProperty::Webkit),
+        ),
+        DisplaySpecKind::Media(DisplayMediaSpecKind::Surface) => {
+            // `:id` form resolves directly; the declarative `:shader` form is a
+            // marker resolved through the display host (like Video).
+            parse_display_surface_layout(&value)
+                .map(|layout| {
+                    DisplayReplacementProperty::Media(DisplayMediaReplacementProperty::Surface(
+                        DisplayMediaReplacement::surface(DisplaySurfaceItem {
+                            surface_id: layout.surface_id.min(i32::MAX as u32) as i32,
+                            width: layout.width,
+                            height: layout.height,
+                        }),
+                    ))
+                })
+                .or(Some(DisplayReplacementProperty::Media(
+                    DisplayMediaReplacementProperty::SurfaceSource,
+                )))
+        }
+        DisplaySpecKind::Xwidget => parse_display_xwidget_layout(&value).map(|layout| {
             DisplayReplacementProperty::Media(DisplayMediaReplacementProperty::Xwidget(
                 DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
                     xwidget_id: layout.xwidget_id.min(i32::MAX as u32) as i32,
@@ -203,33 +248,27 @@ fn classify_single_display_spec(value: Value) -> DisplayPropertyClassification {
                     height: layout.height,
                 }),
             ))
-        })
-    } else if DisplaySpecHead::Webkit.is_head_of(&value) {
-        Some(DisplayReplacementProperty::Media(
-            DisplayMediaReplacementProperty::Webkit,
-        ))
-    } else if DisplaySpecHead::Surface.is_head_of(&value) {
-        // `:id` form resolves directly; the declarative `:shader` form is a
-        // marker resolved through the display host (like Video).
-        parse_display_surface_layout(&value)
-            .map(|layout| {
-                DisplayReplacementProperty::Media(DisplayMediaReplacementProperty::Surface(
-                    DisplayMediaReplacement::surface(DisplaySurfaceItem {
-                        surface_id: layout.surface_id.min(i32::MAX as u32) as i32,
-                        width: layout.width,
-                        height: layout.height,
-                    }),
-                ))
-            })
-            .or(Some(DisplayReplacementProperty::Media(
-                DisplayMediaReplacementProperty::SurfaceSource,
-            )))
-    } else if is_display_fringe_spec(&value) {
-        parse_display_fringe_layout(&value).map(DisplayReplacementProperty::Fringe)
-    } else if is_display_margin_spec(&value) {
-        Some(DisplayReplacementProperty::Margin)
-    } else {
-        None
+        }),
+        DisplaySpecKind::LeftFringe | DisplaySpecKind::RightFringe => {
+            parse_display_fringe_layout(&value).map(DisplayReplacementProperty::Fringe)
+        }
+        // `((margin AREA) VALUE)`: the covered text is replaced only when VALUE is
+        // itself something GNU can display (`valid_p` after stripping the margin
+        // prefix). An AREA GNU rejects, or a VALUE that is neither string, image,
+        // `(space …)` nor xwidget, leaves the text alone.
+        DisplaySpecKind::Margin => display_spec_margin_value(value)
+            .filter(|inner| classify_single_display_spec(*inner).replacement.is_some())
+            .map(|_| DisplayReplacementProperty::Margin),
+        // Modifiers and specs with no display effect: handled below.
+        DisplaySpecKind::Height
+        | DisplaySpecKind::SpaceWidth
+        | DisplaySpecKind::MinWidth
+        | DisplaySpecKind::Slice
+        | DisplaySpecKind::Raise
+        | DisplaySpecKind::KeywordPlist
+        | DisplaySpecKind::Other => None,
+        // Handled above, before the replacement match.
+        DisplaySpecKind::When => None,
     };
 
     let modifiers = if replacement.is_some() {
@@ -245,6 +284,7 @@ fn classify_single_display_spec(value: Value) -> DisplayPropertyClassification {
 
     DisplayPropertyClassification {
         replacement,
+        replacement_spec: value,
         modifiers,
     }
 }

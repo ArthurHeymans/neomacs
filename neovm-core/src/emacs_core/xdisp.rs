@@ -16,6 +16,7 @@
 //! - `long-line-optimizations-p` — check if long-line optimizations are enabled
 
 use super::chartable::{make_char_table_value, make_char_table_with_extra_slots};
+use super::display_spec;
 use super::error::{EvalResult, Flow, signal};
 use super::hook_runtime;
 use super::intern::intern;
@@ -28,6 +29,7 @@ use crate::emacs_core::error::LispCondition;
 use crate::window::{
     DisplayRowSnapshot, FrameId, FrameManager, Window, WindowDisplaySnapshot, WindowId,
 };
+use std::ops::ControlFlow;
 use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
@@ -3112,135 +3114,42 @@ pub(crate) fn text_prop_means_invisible(prop: Value, invisibility_spec: Value) -
 /// matching GNU's own `single_display_spec_string_p` shortcut (the text was
 /// already displayed, so the condition was non-nil).
 pub(crate) fn display_prop_replacing_p(spec: Value, frame_window_p: bool) -> bool {
-    // `(disable-eval SPEC)` (enriched.el) — classify the wrapped spec.
-    let mut spec = spec;
-    if spec.is_cons() && spec.cons_car().is_symbol_named("disable-eval") {
-        let rest = spec.cons_cdr();
-        spec = if rest.is_cons() {
-            rest.cons_car()
-        } else {
-            Value::NIL
-        };
-    }
-
-    // A vector is a list of specs: replacing if any element replaces.
-    if let Some(items) = spec.as_vector_data() {
-        return items
-            .iter()
-            .any(|item| display_single_spec_replacing_p(*item, frame_window_p));
-    }
-
-    // A cons whose head is not a known single-spec keyword (and not a
-    // `(margin …)` head) is a list of specs; otherwise it is one spec.
-    if spec.is_cons() && display_spec_head_starts_list(spec.cons_car()) {
-        let mut cursor = spec;
-        while cursor.is_cons() {
-            if display_single_spec_replacing_p(cursor.cons_car(), frame_window_p) {
-                return true;
-            }
-            cursor = cursor.cons_cdr();
+    let mut replacing = false;
+    // The shape decode (single spec / list of specs / vector of specs, minus a
+    // `(disable-eval …)` wrapper) lives in ONE place -- see `display_spec`.
+    display_spec::DisplayPropertySpecs::of(spec).for_each(|single| {
+        if display_single_spec_replacing_p(single, frame_window_p) {
+            replacing = true;
+            return ControlFlow::Break(());
         }
-        return false;
-    }
-
-    display_single_spec_replacing_p(spec, frame_window_p)
-}
-
-/// Whether `car` (the head of a `display` cons) marks the cons as a *list of
-/// specs* rather than a single spec: it is not one of GNU's single-spec keyword
-/// heads, not a `(margin …)` head, and not nil.
-fn display_spec_head_starts_list(car: Value) -> bool {
-    if car.is_nil() {
-        return false;
-    }
-    if car.is_cons() && car.cons_car().is_symbol_named("margin") {
-        return false;
-    }
-    const SINGLE_SPEC_HEADS: &[&str] = &[
-        "image",
-        // `video`/`webkit`/`surface` are neomacs media-replacement extensions,
-        // classified as single specs like `image` (GNU has no such heads).
-        "video",
-        "webkit",
-        "surface",
-        "xwidget",
-        "space",
-        "when",
-        "slice",
-        "space-width",
-        "height",
-        "raise",
-        "left-fringe",
-        "right-fringe",
-        "min-width",
-    ];
-    !SINGLE_SPEC_HEADS
-        .iter()
-        .any(|name| car.is_symbol_named(name))
+        ControlFlow::Continue(())
+    });
+    replacing
 }
 
 /// Replacing-determination for a *single* `display` spec, mirroring the
-/// `it == NULL` paths of GNU `xdisp.c:handle_single_display_spec`.
+/// `it == NULL` paths of GNU `xdisp.c:handle_single_display_spec`. The head
+/// taxonomy comes from [`display_spec::display_spec_kind`], so this reads as the
+/// decision alone.
 fn display_single_spec_replacing_p(spec: Value, frame_window_p: bool) -> bool {
-    let mut spec = spec;
-
-    // `(when FORM . VALUE)`: a nil FORM disables the spec; otherwise continue
-    // with VALUE (the cdr after FORM). Resolved structurally — see the note on
-    // `display_prop_replacing_p`.
-    if spec.is_cons() && spec.cons_car().is_symbol_named("when") {
-        let rest = spec.cons_cdr();
-        if !rest.is_cons() || rest.cons_car().is_nil() {
-            return false;
-        }
-        spec = rest.cons_cdr();
+    match display_spec::display_spec_kind(spec).replaces_text(frame_window_p) {
+        Some(replacing) => replacing,
+        // `(when FORM . VALUE)`: a nil FORM disables the spec; otherwise the
+        // decision is VALUE's. Resolved structurally rather than evaluated -- see
+        // the note on `display_prop_replacing_p`.
+        None => match display_spec::display_spec_when_parts(spec) {
+            // GNU continues with its SINGLE-spec arms on VALUE -- it does not
+            // re-enter `handle_display_spec` -- so `(when t . SPEC)` never treats
+            // SPEC as a list of specs.
+            Some((form, value)) => {
+                !form.is_nil() && display_single_spec_replacing_p(value, frame_window_p)
+            }
+            // `((margin AREA) VALUE)`: replacing iff VALUE is itself replacing
+            // (typically a string). An AREA GNU rejects displays nothing.
+            None => display_spec::display_spec_margin_value(spec)
+                .is_some_and(|value| display_single_spec_replacing_p(value, frame_window_p)),
+        },
     }
-
-    // A bare string replaces the text.
-    if spec.is_string() {
-        return true;
-    }
-
-    if spec.is_cons() {
-        let car = spec.cons_car();
-        // `(space …)` (stretch) and fringe bitmaps replace the text.
-        if car.is_symbol_named("space")
-            || car.is_symbol_named("left-fringe")
-            || car.is_symbol_named("right-fringe")
-        {
-            return true;
-        }
-        // Media specs replace the text only on a window (GUI) frame.
-        if car.is_symbol_named("image")
-            || car.is_symbol_named("xwidget")
-            || car.is_symbol_named("video")
-            || car.is_symbol_named("webkit")
-            || car.is_symbol_named("surface")
-        {
-            return frame_window_p;
-        }
-        // Text-modifying specs are never replacing.
-        if car.is_symbol_named("height")
-            || car.is_symbol_named("raise")
-            || car.is_symbol_named("slice")
-            || car.is_symbol_named("space-width")
-            || car.is_symbol_named("min-width")
-        {
-            return false;
-        }
-        // `((margin LOCATION) VALUE)`: replacing iff VALUE is itself replacing
-        // (typically a string).
-        if car.is_cons() && car.cons_car().is_symbol_named("margin") {
-            let after = spec.cons_cdr();
-            let value = if after.is_cons() {
-                after.cons_car()
-            } else {
-                Value::NIL
-            };
-            return display_single_spec_replacing_p(value, frame_window_p);
-        }
-    }
-
-    false
 }
 
 pub(crate) fn invisible_status_for_value(
