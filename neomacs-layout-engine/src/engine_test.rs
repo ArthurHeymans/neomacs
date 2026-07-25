@@ -17871,6 +17871,148 @@ fn cursor_only_reused_multiface_body_face_ids_are_registered_in_frame_faces() {
     );
 }
 
+/// REGRESSION (tab-line jitter, 2026-07-25): replay plans are gathered for all
+/// windows before any window is rendered, but their retained face ids used to be
+/// reserved one window at a time during rendering.  The left window could then
+/// allocate a fresh chrome face id which the right window subsequently imported
+/// as one of its retained body faces, overwriting the face behind the already
+/// emitted left tab-line glyph.  The matrix still contained a valid integer id,
+/// so checking only for missing face ids could not detect this corruption.
+#[test]
+fn cursor_only_two_windows_keep_fresh_tab_line_face_out_of_later_retained_body_namespace() {
+    let mut eval = Context::new();
+    let left = eval.buffer_manager().current_buffer().expect("buf").id();
+    let right = eval
+        .buffer_manager_mut()
+        .create_buffer("*right-face-replay*");
+
+    {
+        let left_buffer = eval.buffer_manager_mut().get_mut(left).expect("left");
+        left_buffer.insert(&"left body\n".repeat(30));
+        left_buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
+        left_buffer.set_buffer_local(
+            "tab-line-format",
+            Value::string_with_text_properties(
+                "\u{e632}",
+                vec![StringTextPropertyRun {
+                    start: 0,
+                    end: 1,
+                    plist: Value::list(vec![
+                        Value::symbol("face"),
+                        Value::list(vec![
+                            Value::keyword("family"),
+                            Value::string("Symbols Nerd Font Mono"),
+                            Value::keyword("foreground"),
+                            Value::string("#672d58"),
+                        ]),
+                    ]),
+                }],
+            ),
+        );
+    }
+    {
+        let right_buffer = eval.buffer_manager_mut().get_mut(right).expect("right");
+        right_buffer.insert(&"right body\n".repeat(30));
+        right_buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
+        right_buffer.set_buffer_local("tab-line-format", Value::string("RIGHT"));
+        assert!(right_buffer.put_text_property(
+            1,
+            6,
+            Value::symbol("face"),
+            Value::list(vec![Value::keyword("foreground"), Value::string("#46ade7"),]),
+        ));
+    }
+
+    let frame =
+        eval.frame_manager_mut()
+            .create_frame("two-window-tab-line-face-replay", 800, 600, left);
+    realize_test_gui_frame(&mut eval, frame);
+    let left_window = eval
+        .frame_manager()
+        .get(frame)
+        .expect("frame")
+        .selected_window;
+    eval.frame_manager_mut()
+        .split_window(
+            frame,
+            left_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            right,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split");
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame); // warm retained rows + faces
+    let expected_icon_face = {
+        let state = engine
+            .last_frame_display_state
+            .as_ref()
+            .expect("warm display state");
+        let left_entry = state
+            .window_matrices
+            .iter()
+            .find(|entry| entry.window_id.get() == left_window.0 as i64)
+            .expect("warm left window matrix");
+        let left_tab_line = left_entry
+            .matrix
+            .rows
+            .iter()
+            .find(|row| row.enabled && row.role == GlyphRowRole::TabLine)
+            .expect("warm left tab-line");
+        let icon = left_tab_line.glyphs[GlyphArea::Text.index()]
+            .iter()
+            .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '\u{e632}' }))
+            .expect("warm left tab-line icon");
+        state
+            .faces
+            .get(&icon.face_id)
+            .expect("warm tab-line icon face must resolve")
+            .clone()
+    };
+
+    engine.layout_frame_rust(&mut eval, frame); // both windows cursor-only
+    assert_eq!(
+        engine.last_layout_stats().cursor_only_windows,
+        2,
+        "the regression requires both windows to import retained faces"
+    );
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let left_entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == left_window.0 as i64)
+        .expect("left window matrix");
+    let left_tab_line = left_entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::TabLine)
+        .expect("left tab-line");
+    let icon = left_tab_line.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '\u{e632}' }))
+        .expect("left tab-line icon");
+    let resolved_icon_face = state
+        .faces
+        .get(&icon.face_id)
+        .expect("tab-line icon face must resolve");
+
+    let mut expected_icon_face = expected_icon_face;
+    expected_icon_face.id = resolved_icon_face.id;
+    assert_eq!(
+        resolved_icon_face, &expected_icon_face,
+        "a later window's retained body face overwrote the fresh left tab-line face \
+         id {}; resolved face={resolved_icon_face:?}",
+        icon.face_id,
+    );
+}
+
 /// The face-id collision fix re-registers a reused window's faces, which UNBLOCKS
 /// reuse of a fully-unchanged NON-selected window: a redisplay where nothing
 /// changed must reuse BOTH windows via cursor-only (no-change), not just the

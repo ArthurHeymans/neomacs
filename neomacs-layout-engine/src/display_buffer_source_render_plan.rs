@@ -38,7 +38,6 @@ use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
 };
 use neomacs_display_protocol::glyph_matrix::{FaceFillItem, GlyphArea};
-use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::buffer::BufferId;
 use neovm_core::window::{FrameId, WindowId};
@@ -563,26 +562,10 @@ impl BufferSourceOutputSetup {
                 .collect();
 
             let (mut output, evaluator) = output.into_parts();
-            // Re-register the reused rows' faces under their prior-frame face_ids:
-            // this frame's faces table was rebuilt from scratch and lacks them, so
-            // without this the reused glyphs resolve to the wrong/missing face at
-            // render. Reserve their id range so the chrome re-walk (which shares
-            // `face_ids`, reset to SENTINEL) allocates NON-colliding ids. Must run
-            // before `face_ids` is borrowed by the chrome render services below.
-            // (Face-id collision audit fix.)
-            let mut max_reused_face_id: Option<FaceId> = None;
-            for (id, face) in &replay.faces {
-                output.builder().install_output_frame_state(
-                    crate::display_output_install_request::OutputFrameStateInstallRequest::face(
-                        *id,
-                        face.clone(),
-                    ),
-                );
-                max_reused_face_id = Some(max_reused_face_id.map_or(*id, |m| m.max(*id)));
-            }
-            if let Some(max) = max_reused_face_id {
-                face_ids.reserve_after(max);
-            }
+            // Phase A admitted every replaying window's retained faces and
+            // reserved their complete frame-wide ID range before any fresh face
+            // allocation. This window can now install rows without mutating the
+            // namespace behind glyphs emitted by an earlier sibling.
             let mut render_services =
                 ChromeRowRenderServices::new(font_metrics, face_resolver, &mut face_ids);
 
@@ -718,15 +701,8 @@ impl BufferSourceOutputSetup {
         // (shifted) above them, splice the snapshots, re-decorate the cursor, and
         // re-walk chrome. Byte-identical to a full rebuild of the scrolled window.
         if let Some(scroll) = scroll {
-            // Reserve the reused rows' prior-frame face_id range BEFORE the partial
-            // walk + chrome allocate from `face_ids` (reset to SENTINEL), so their
-            // fresh ids do not collide with the reused glyphs' ids. The faces
-            // themselves are re-registered after into_parts below. (Face-id
-            // collision audit fix; the reused rows carry prior-frame face_ids that
-            // this frame's freshly-built faces table otherwise lacks.)
-            if let Some(max) = scroll.faces.keys().copied().max() {
-                face_ids.reserve_after(max);
-            }
+            // Phase A already admitted the frame-wide retained face namespace
+            // before this partial walk can mint IDs.
             let (mut output_emitter, _post_loop) = walk_setup.begin_render_body_and_tail(
                 self.begin_request,
                 &mut output,
@@ -747,17 +723,6 @@ impl BufferSourceOutputSetup {
                 buf_access,
             );
             let (mut output, evaluator) = output.into_parts();
-            // Re-register the reused rows' faces under their prior-frame face_ids
-            // (the id range was reserved above, so these do not collide with the
-            // walk/chrome allocations). (Face-id collision audit fix.)
-            for (id, face) in &scroll.faces {
-                output.builder().install_output_frame_state(
-                    crate::display_output_install_request::OutputFrameStateInstallRequest::face(
-                        *id,
-                        face.clone(),
-                    ),
-                );
-            }
             let mut render_services =
                 ChromeRowRenderServices::new(font_metrics, face_resolver, &mut face_ids);
 

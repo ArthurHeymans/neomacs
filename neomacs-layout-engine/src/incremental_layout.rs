@@ -280,12 +280,11 @@ pub struct RetainedWindowMatrix {
     /// Kept separately from the integer window snapshot so unchanged cursor-only
     /// replay preserves subpixel geometry and explicit display-string placement.
     pub presented_cursor: Option<PhysCursor>,
-    /// Resolved `Face` for every `face_id` this window's retained rows reference.
-    /// Face ids are allocated per-frame from a counter reset to SENTINEL each
-    /// frame, and the frame faces table is rebuilt from scratch; a fast path that
-    /// installs these rows verbatim must RE-REGISTER these faces into the new
-    /// frame's table (and reserve their id range against the chrome re-walk), or
-    /// the reused glyphs resolve to the wrong/missing face at render time.
+    /// Resolved `Face` for every `face_id` this window's retained BODY rows
+    /// reference. Face ids are allocated per-frame from a counter reset to
+    /// SENTINEL each frame, and the frame faces table is rebuilt from scratch;
+    /// before any fresh allocation, Phase A admits every replaying window's
+    /// retained faces into one frame-wide namespace.
     pub faces: std::collections::HashMap<FaceId, Face>,
 }
 
@@ -320,9 +319,9 @@ pub struct CursorOnlyReplay {
     /// is unchanged. This preserves explicit display-string `cursor` placement;
     /// reconstructing from buffer point would lose that semantic override.
     pub retained_cursor: Option<PhysCursor>,
-    /// Resolved faces for the reused rows' (prior-frame) face_ids, re-registered
-    /// into the current frame's faces table before the rows are installed. See
-    /// [`RetainedWindowMatrix::faces`].
+    /// Resolved faces for the reused rows' prior-frame IDs. Phase A admits these
+    /// together with every other replaying window's faces before fresh frame
+    /// allocations begin. See [`RetainedWindowMatrix::faces`].
     pub faces: std::collections::HashMap<FaceId, Face>,
 }
 
@@ -368,9 +367,9 @@ pub struct ScrollReplay {
     /// `reused_rows`. When false (scroll, above-only edit) the walk runs to the
     /// window bottom as usual.
     pub bound_walk: bool,
-    /// Resolved faces for the reused rows' (prior-frame) face_ids, re-registered
-    /// into the current frame's faces table before the rows are installed. See
-    /// [`RetainedWindowMatrix::faces`].
+    /// Resolved faces for the reused rows' prior-frame IDs. Phase A admits these
+    /// together with every other replaying window's faces before fresh frame
+    /// allocations begin. See [`RetainedWindowMatrix::faces`].
     pub faces: std::collections::HashMap<FaceId, Face>,
 }
 

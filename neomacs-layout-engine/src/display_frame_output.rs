@@ -138,6 +138,24 @@ impl FrameOutputOwner {
         );
     }
 
+    pub(crate) fn install_retained_faces(
+        &mut self,
+        faces: impl IntoIterator<
+            Item = (
+                neomacs_display_protocol::types::FaceId,
+                neomacs_display_protocol::face::Face,
+            ),
+        >,
+    ) {
+        for (face_id, face) in faces {
+            self.builder.install_output_frame_state(
+                crate::display_output_install_request::OutputFrameStateInstallRequest::face(
+                    face_id, face,
+                ),
+            );
+        }
+    }
+
     pub(crate) fn render_frame_tab_bar_row(
         &mut self,
         request: FrameTabBarDisplayRowRequest<'_>,

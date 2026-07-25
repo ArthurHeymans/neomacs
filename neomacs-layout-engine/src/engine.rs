@@ -7,11 +7,11 @@
 #[cfg(test)]
 use super::display_status_line::eval_status_line_format;
 use super::display_status_line::{
-    ChromeRowRenderServices, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRequest,
-    ResizeMiniWindowsMode, ScratchGcRootScope, TabBarPresentedPointerPlan, build_tab_bar_display,
-    gnu_tab_bar_pointer_appearance_style, max_mini_window_lines_from_value,
-    tab_bar_effective_mouse_faces, tab_bar_image_relief_styles, tab_bar_pointer_slot_plan,
-    tab_bar_presented_pointer_plan,
+    BuiltTabBar, ChromeRowRenderServices, FrameTabBarDisplayRowRender,
+    FrameTabBarDisplayRowRequest, ResizeMiniWindowsMode, ScratchGcRootScope,
+    TabBarPresentedPointerPlan, build_tab_bar_display, gnu_tab_bar_pointer_appearance_style,
+    max_mini_window_lines_from_value, tab_bar_effective_mouse_faces, tab_bar_image_relief_styles,
+    tab_bar_pointer_slot_plan, tab_bar_presented_pointer_plan,
 };
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{
@@ -317,6 +317,79 @@ pub struct LayoutEngine {
     /// Instrumentation from the most recent `layout_frame_rust` pass: the
     /// relaid-row-count gate metric (spec §7). Reset per frame.
     layout_stats: LayoutStats,
+}
+
+/// One window's incremental-layout decision, gathered before the frame admits
+/// any retained face IDs or allocates any fresh ones.
+///
+/// Keeping the alternatives in one type makes the face namespace a property of
+/// the frame plan, rather than an ordering side effect of whichever window
+/// happens to render first.
+struct IncrementalWindowPlan {
+    cursor_only: Option<CursorOnlyReplay>,
+    scroll: Option<ScrollReplay>,
+    is_edit: bool,
+}
+
+impl IncrementalWindowPlan {
+    fn retained_faces(
+        &self,
+    ) -> Option<&std::collections::HashMap<FaceId, neomacs_display_protocol::face::Face>> {
+        self.cursor_only
+            .as_ref()
+            .map(|replay| &replay.faces)
+            .or_else(|| self.scroll.as_ref().map(|replay| &replay.faces))
+    }
+
+    fn disable_reuse(&mut self) {
+        self.cursor_only = None;
+        self.scroll = None;
+        self.is_edit = false;
+    }
+}
+
+/// Attempt-scoped admission batch for prior-frame faces referenced by rows that
+/// will be replayed verbatim.
+///
+/// GNU's realized face cache is frame-wide.  NeoMacs rebuilds its protocol face
+/// table per attempt, so retained IDs must enter that single namespace
+/// atomically, before tab-bar, window body, or window chrome can allocate a new
+/// dynamic ID.  Per-window admission is unsound: a later window can otherwise
+/// overwrite a fresh face already emitted by an earlier window.
+#[derive(Default)]
+struct FrameRetainedFaceNamespace {
+    faces: std::collections::HashMap<FaceId, neomacs_display_protocol::face::Face>,
+}
+
+impl FrameRetainedFaceNamespace {
+    fn gather(plans: &[IncrementalWindowPlan]) -> Result<Self, FaceId> {
+        let mut namespace = Self::default();
+        for (id, face) in plans
+            .iter()
+            .filter_map(IncrementalWindowPlan::retained_faces)
+            .flat_map(|faces| faces.iter())
+        {
+            match namespace.faces.entry(*id) {
+                std::collections::hash_map::Entry::Vacant(slot) => {
+                    slot.insert(face.clone());
+                }
+                std::collections::hash_map::Entry::Occupied(slot) if slot.get() != face => {
+                    return Err(*id);
+                }
+                std::collections::hash_map::Entry::Occupied(_) => {}
+            }
+        }
+        Ok(namespace)
+    }
+
+    fn admit(self, frame_output: &mut FrameOutputOwner, frame_face_id_counter: &mut u32) {
+        let mut face_ids = FrameFaceIdAllocator::new(*frame_face_id_counter);
+        if let Some(max_retained_id) = self.faces.keys().copied().max() {
+            face_ids.reserve_after(max_retained_id);
+        }
+        face_ids.finish_into(frame_face_id_counter);
+        frame_output.install_retained_faces(self.faces);
+    }
 }
 
 impl Default for LayoutEngine {
@@ -743,45 +816,17 @@ impl LayoutEngine {
                     default_metrics,
                 ));
 
+            // Preserve the historical redisplay ordering: tab-bar Lisp is
+            // evaluated before incremental window classification because an
+            // arbitrary `:eval` form may mutate display inputs. Keep its
+            // resulting strings rooted while Phase A admits retained faces;
+            // shaping waits until after admission so it cannot allocate an ID
+            // that a replaying window later imports.
             let tab_bar_height = frame_params.tab_bar_height;
-            if tab_bar_height > 0.0
-                && let Some(actual_tab_bar_height) = self.render_frame_tab_bar_rust(
-                    evaluator,
-                    frame_id.0 as i64,
-                    &face_resolver,
-                    &frame_params,
-                    tab_bar_height,
-                    presentation_id,
-                )
-                && actual_tab_bar_height != tab_bar_height
-            {
-                let request = FrameRelayoutRequest::FrameTabBar {
-                    assumed_height: tab_bar_height,
-                    measured_height: actual_tab_bar_height,
-                };
-                if !Self::accept_frame_relayout_request(
-                    &mut layout_coordinator,
-                    evaluator,
-                    presentation_id,
-                    request,
-                ) {
-                    return;
-                }
-                if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
-                    frame.tab_bar_height = actual_tab_bar_height.max(1.0) as u32;
-                    frame.sync_window_area_bounds();
-                }
-                continue;
-            }
-
-            tracing::debug!(
-                "layout_frame_rust: {}x{} char={}x{} windows={}",
-                frame_params.width,
-                frame_params.height,
-                frame_params.char_width,
-                frame_params.char_height,
-                window_params_list.len()
-            );
+            let tab_bar_gc_roots = ScratchGcRootScope::new();
+            let built_tab_bar = (tab_bar_height > 0.0)
+                .then(|| build_tab_bar_display(evaluator, frame_id.0, &tab_bar_gc_roots))
+                .flatten();
 
             let main_area_bottom = window_params_list
                 .iter()
@@ -823,47 +868,100 @@ impl LayoutEngine {
 
             // --- Phase A (single-threaded gather, spec §4.5) ---
             //
-            // Classify each window's incremental fast path UP FRONT, before any
-            // window is laid out — reading the previous frame's retained matrices
-            // (untouched until this frame's commit) + the evaluator. This is also
-            // the multi-window-same-buffer ordering guarantee (every window of a
-            // buffer is classified before any reset), and the seam the
-            // (feature-flagged) window parallelism builds on: Phase B below
-            // positions windows from these plans. Today Phase B is single-threaded
-            // and the output is identical to building each plan inline.
-            let window_plans: Vec<(Option<CursorOnlyReplay>, Option<ScrollReplay>, bool)> =
-                window_params_list
-                    .iter()
-                    .zip(&window_layout_inputs)
-                    .map(|(params, (_, layout_box))| {
-                        let cursor_only =
-                            self.build_cursor_only_replay(params, *layout_box, evaluator);
-                        let mut is_edit = false;
-                        let scroll = if cursor_only.is_none() {
-                            if let Some(scroll) =
-                                self.build_scroll_replay(params, *layout_box, evaluator)
-                            {
-                                Some(scroll)
-                            } else if let Some(edit) =
-                                self.build_edit_replay(params, *layout_box, evaluator)
-                            {
-                                is_edit = true;
-                                Some(edit)
-                            } else {
-                                None
-                            }
+            // Classify every incremental fast path before ANY dynamic face is
+            // allocated for this attempt. This is both the multi-window
+            // same-buffer ordering guarantee and the ownership boundary for the
+            // frame-wide face namespace below.
+            let mut window_plans: Vec<IncrementalWindowPlan> = window_params_list
+                .iter()
+                .zip(&window_layout_inputs)
+                .map(|(params, (_, layout_box))| {
+                    let cursor_only = self.build_cursor_only_replay(params, *layout_box, evaluator);
+                    let mut is_edit = false;
+                    let scroll = if cursor_only.is_none() {
+                        if let Some(scroll) =
+                            self.build_scroll_replay(params, *layout_box, evaluator)
+                        {
+                            Some(scroll)
+                        } else if let Some(edit) =
+                            self.build_edit_replay(params, *layout_box, evaluator)
+                        {
+                            is_edit = true;
+                            Some(edit)
                         } else {
                             None
-                        };
-                        (cursor_only, scroll, is_edit)
-                    })
-                    .collect();
+                        }
+                    } else {
+                        None
+                    };
+                    IncrementalWindowPlan {
+                        cursor_only,
+                        scroll,
+                        is_edit,
+                    }
+                })
+                .collect();
+
+            // Admit all prior-frame faces as one batch before the tab bar or any
+            // window can mint fresh IDs. If retained snapshots ever disagree
+            // about an ID, the safe recovery is a full rebuild of every window,
+            // not an arbitrary last-writer-wins face.
+            match FrameRetainedFaceNamespace::gather(&window_plans) {
+                Ok(namespace) => {
+                    namespace.admit(&mut self.frame_output, &mut self.frame_face_id_counter)
+                }
+                Err(conflicting_face_id) => {
+                    tracing::warn!(
+                        face_id = conflicting_face_id.get(),
+                        "discarding incremental frame plans with conflicting retained faces"
+                    );
+                    for plan in &mut window_plans {
+                        plan.disable_reuse();
+                    }
+                }
+            }
+
+            if let Some(tab_bar) = built_tab_bar
+                && let Some(actual_tab_bar_height) = self.render_frame_tab_bar_rust(
+                    evaluator,
+                    &face_resolver,
+                    &frame_params,
+                    tab_bar_height,
+                    presentation_id,
+                    tab_bar,
+                )
+                && actual_tab_bar_height != tab_bar_height
+            {
+                let request = FrameRelayoutRequest::FrameTabBar {
+                    assumed_height: tab_bar_height,
+                    measured_height: actual_tab_bar_height,
+                };
+                if !Self::accept_frame_relayout_request(
+                    &mut layout_coordinator,
+                    evaluator,
+                    presentation_id,
+                    request,
+                ) {
+                    return;
+                }
+                if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
+                    frame.tab_bar_height = actual_tab_bar_height.max(1.0) as u32;
+                    frame.sync_window_area_bounds();
+                }
+                continue;
+            }
+
+            tracing::debug!(
+                "layout_frame_rust: {}x{} char={}x{} windows={}",
+                frame_params.width,
+                frame_params.height,
+                frame_params.char_width,
+                frame_params.char_height,
+                window_params_list.len()
+            );
 
             // --- Phase B (per-window layout; single-threaded today) ---
-            for (
-                (params, (cursor_only_replay, scroll_replay, is_edit)),
-                (window_geometry, layout_box),
-            ) in window_params_list
+            for ((params, plan), (window_geometry, layout_box)) in window_params_list
                 .iter()
                 .zip(window_plans)
                 .zip(window_layout_inputs)
@@ -906,9 +1004,9 @@ impl LayoutEngine {
                     &face_resolver,
                     window_geometry.reserve_terminal_right_border_col,
                     MAX_WINDOW_VISIBILITY_RETRIES,
-                    cursor_only_replay,
-                    scroll_replay,
-                    is_edit,
+                    plan.cursor_only,
+                    plan.scroll,
+                    plan.is_edit,
                 );
                 let accepted_layout_box = match window_layout {
                     WindowLayoutOutcome::Stable(layout_box) => {
@@ -1265,14 +1363,15 @@ impl LayoutEngine {
             let presented_cursor = frame_state.phys_cursor.clone();
             let mut retained: std::collections::HashMap<DisplayWindowId, RetainedWindowMatrix> =
                 std::collections::HashMap::new();
-            // Snapshot the resolved Face for every face_id each window's rows
-            // reference, from THIS frame's faces table. The fast paths reuse these
-            // rows verbatim carrying their prior-frame face_ids, but the next
-            // frame's faces table is rebuilt from scratch (counter reset to
-            // SENTINEL, faces cleared), so a replay MUST re-register these
-            // (face_id -> Face) pairs and reserve their id range against the chrome
-            // re-walk — else the reused glyphs resolve to a missing/wrong face at
-            // render (face-id collision audit fix).
+            // Snapshot the resolved Face for every face_id referenced by an
+            // enabled BODY row. Incremental paths reuse only body rows; chrome is
+            // always re-walked. Retaining chrome faces needlessly raises the next
+            // attempt's high-water mark and makes fresh chrome IDs drift forever.
+            //
+            // Before any dynamic face is allocated on the next attempt, Phase A
+            // atomically admits the snapshots of ALL windows selected for replay.
+            // The frame-wide reservation prevents a later window's retained body
+            // face from overwriting an earlier window's freshly emitted chrome.
             let mut window_face_snapshots: std::collections::HashMap<
                 DisplayWindowId,
                 std::collections::HashMap<FaceId, neomacs_display_protocol::face::Face>,
@@ -1282,7 +1381,9 @@ impl LayoutEngine {
                 .map(|entry| {
                     let wid = entry.window_id;
                     let mut faces = std::collections::HashMap::new();
-                    for row in &entry.matrix.rows {
+                    for row in entry.matrix.rows.iter().filter(|row| {
+                        row.enabled && !RetainedWindowMatrix::is_chrome_role(row.role)
+                    }) {
                         for face_id in row.referenced_face_ids() {
                             if let std::collections::hash_map::Entry::Vacant(slot) =
                                 faces.entry(face_id)
@@ -1507,12 +1608,12 @@ impl LayoutEngine {
     ) -> Option<CursorOnlyReplay> {
         // The cursor-only fast path applies to ANY window. The render cursor branch
         // handles both styles (replay.cursor_style is hollow for a non-selected
-        // window), and the reused rows' faces are re-registered + their id range
-        // reserved at render time, so a non-selected window co-resident with a
-        // re-laid window no longer corrupts face resolution (the face-id collision
-        // audit fix). The dominant multi-window win: a non-selected window that did
-        // not change reuses its body verbatim instead of full-rebuilding when
-        // another window is edited.
+        // window). Phase A admits every replaying window's faces into one
+        // frame-wide namespace before rendering, so a non-selected window
+        // co-resident with a re-laid window cannot corrupt face resolution. The
+        // dominant multi-window win: a non-selected window that did not change
+        // reuses its body verbatim instead of full-rebuilding when another window
+        // is edited.
         let window_id = DisplayWindowId::new(params.window_id);
         let prev = self.retained_window_matrices.get(&window_id)?;
         let curr_key = RetainedWindowKey::from_params(params, layout_box, evaluator);
@@ -1900,15 +2001,12 @@ impl LayoutEngine {
     fn render_frame_tab_bar_rust(
         &mut self,
         evaluator: &mut neovm_core::emacs_core::Context,
-        frame_window_id: i64,
         face_resolver: &super::neovm_bridge::FaceResolver,
         frame_params: &FrameParams,
         tab_bar_height: f32,
         presentation_id: u64,
+        tab_bar: BuiltTabBar,
     ) -> Option<f32> {
-        let gc_roots = ScratchGcRootScope::new();
-        let tab_bar = build_tab_bar_display(evaluator, frame_window_id as u64, &gc_roots)?;
-
         let width = frame_params.width;
         let tab_bar_face =
             face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::TabBar);
