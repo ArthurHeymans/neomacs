@@ -1843,12 +1843,64 @@ fn streaming_readevalloop_lisp_source(
                 .last()
                 .expect("load-read cursor present during readevalloop")
                 .pos;
-            let read_result = read_source
+            // GNU `readevalloop` reads every top-level form through
+            // `load-read-function` when it is non-nil:
+            //     else if (! NILP (Vload_read_function))
+            //       val = calln (Vload_read_function, readcharfun);   (lread.c:2317)
+            // Edebug installs itself exactly there (`add-function :around
+            // load-read-function #'edebug--read`) to instrument definitions AS
+            // they are read, so a loader that never calls the hook makes
+            // `edebug-all-defs` silently do nothing.
+            //
+            // The hook must be the SOLE reader of the form: reading internally
+            // first and then calling it re-reads the same text and desynchronizes
+            // the shared cursor. Keeping the internal reader while the hook is
+            // still the default `read` symbol is observably identical (calling the
+            // builtin on this stream yields this form) and leaves the bootstrap
+            // path off the Lisp call route.
+            // GNU `readevalloop` skips whitespace and comments and breaks on EOF
+            // BEFORE invoking the reader, so the read function is called exactly
+            // once per form (lread.c). Probing here keeps that call count: the
+            // probe never consumes -- the cursor advances only from the reader
+            // chosen below.
+            let probe = read_source
                 .read_one_with_shorthands(pos, &eval.obarray, shorthands)
                 .map_err(|e| read_error_for_load(path, e))?;
-
-            let Some((form, next_pos)) = read_result else {
+            let Some((probed_form, probed_next)) = probe else {
                 break;
+            };
+            // Then read the form through `load-read-function` when it is non-nil:
+            //     else if (! NILP (Vload_read_function))
+            //       val = calln (Vload_read_function, readcharfun);   (lread.c:2317)
+            // Edebug installs itself exactly there (`add-function :around
+            // load-read-function #'edebug--read`) to instrument definitions AS they
+            // are read, so a loader that never calls the hook leaves
+            // `edebug-all-defs` silently doing nothing. The hook reads from the
+            // shared cursor, so ITS advance is the next position -- the probe's is
+            // discarded. Staying on the internal reader while the hook is still the
+            // default `read` symbol is observably identical and keeps the bootstrap
+            // path off the Lisp call route.
+            let read_hook = eval
+                .obarray
+                .symbol_value("load-read-function")
+                .copied()
+                .filter(|hook| !hook.is_nil() && !hook.is_symbol_named("read"));
+            let (form, next_pos) = match read_hook {
+                Some(hook) => {
+                    let hooked = eval
+                        .funcall_general(
+                            hook,
+                            vec![Value::symbol(super::eval::LOAD_READ_STREAM_SYMBOL)],
+                        )
+                        .map_err(map_flow)?;
+                    let advanced = eval
+                        .load_read_cursors
+                        .last()
+                        .map(|cursor| cursor.pos)
+                        .unwrap_or(probed_next);
+                    (hooked, advanced)
+                }
+                None => (probed_form, probed_next),
             };
             eval.obarray_mut().materialize_read_symbols(form);
 

@@ -14004,3 +14004,54 @@ fn require_skips_an_extensionless_file_shadowing_the_feature() {
     .expect("load should still find something");
     assert_eq!(found, bin.join("shadowed"));
 }
+
+#[test]
+fn load_reads_each_form_through_load_read_function() {
+    // GNU `readevalloop` reads every top-level form through
+    // `load-read-function` when it is non-nil:
+    //     else if (! NILP (Vload_read_function))
+    //       val = calln (Vload_read_function, readcharfun);   (src/lread.c:2317)
+    //
+    // Edebug hooks exactly that (`add-function :around load-read-function
+    // #'edebug--read`) to instrument definitions as they are read, so a loader
+    // that ignores the hook leaves `edebug-all-defs` silently doing nothing while
+    // the explicit `C-u C-M-x` path still works. Verified against GNU 31: a
+    // two-form file calls the hook twice; neomacs called it zero times.
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let file = dir.path().join("hooked.el");
+    std::fs::write(&file, "(setq lrf-one 1)\n(setq lrf-two 2)\n").expect("write file");
+
+    eval.eval_str(
+        "(progn (defvar lrf-calls 0)
+                (defun lrf-counting-read (&optional stream)
+                  ;; The hook is a dynamic binding, so nested loads legitimately
+                  ;; go through it too (GNU behaves the same); count only reads of
+                  ;; the file under test.
+                  (when (and load-file-name
+                             (string-suffix-p \"hooked.el\" load-file-name))
+                    (setq lrf-calls (1+ lrf-calls)))
+                  (read stream)))",
+    )
+    .expect("define the counting reader");
+
+    let form = format!(
+        "(let ((load-read-function #'lrf-counting-read)) (load {:?} nil t))",
+        file.to_str().expect("utf8 path")
+    );
+    eval.eval_str(&form).expect("load with the hook installed");
+
+    assert_eq!(
+        eval.eval_str("lrf-calls").expect("lrf-calls").to_string(),
+        "2",
+        "`load' must read each form through `load-read-function' (GNU readevalloop)"
+    );
+    for (var, want) in [("lrf-one", "1"), ("lrf-two", "2")] {
+        assert_eq!(
+            eval.eval_str(var).expect("loaded variable").to_string(),
+            want,
+            "the forms the hook returned must still be evaluated"
+        );
+    }
+}
