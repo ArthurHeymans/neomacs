@@ -8405,6 +8405,22 @@ pub(crate) fn builtin_internal_default_process_filter(
         return Ok(Value::NIL);
     }
 
+    // GNU `read_process_output_before_insert` (src/process.c) makes the PROCESS
+    // buffer current before touching anything: `Fset_buffer (p->buffer)`. Every
+    // check the insertion then runs -- above all the read-only barf in
+    // `prepare_to_modify_buffer` -- therefore tests the buffer being written, not
+    // whatever buffer happened to be current when output arrived.
+    //
+    // Without it, a filter called while an unrelated read-only buffer is current
+    // signals `buffer-read-only' for THAT buffer: magit-blame calls this filter
+    // with the blamed (read-only) source buffer current, so every blame chunk
+    // errored and no blame information ever appeared (neomacs#192).
+    //
+    // GNU does not restore the current buffer here either; its caller
+    // (`read_process_output`) unwinds it, which
+    // `run_async_process_callback_preserving_state` mirrors.
+    eval.buffers.set_current(buf_id);
+
     // Get mark position or end of buffer (ZV in GNU terms).
     let insert_pos = process_mark_insert_emacs_byte_pos(&eval.buffers, buf_id, mark);
 

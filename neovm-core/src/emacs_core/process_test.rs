@@ -7756,3 +7756,64 @@ fn adaptive_read_buffering_updates_delay_with_gnu_thresholds() {
     assert_eq!(process.read_output_delay, Duration::ZERO);
     assert!(!process.read_output_skip);
 }
+
+#[test]
+fn internal_default_process_filter_inserts_while_another_buffer_is_read_only() {
+    // neomacs#192 (magit-blame shows nothing): magit's blame filter calls
+    // `internal-default-process-filter' while the BLAMED buffer is current and
+    // read-only (`magit-blame-mode' makes it so), and the blame output belongs to
+    // magit's own process buffer. GNU inserts it: `read_process_output_before_insert'
+    // (src/process.c) does `Fset_buffer (p->buffer)' FIRST, so the read-only barf
+    // in `prepare_to_modify_buffer' tests the process buffer, not whatever buffer
+    // happened to be current. neomacs tested the current buffer and signalled
+    // `buffer-read-only', once per chunk, so no blame chunk was ever parsed.
+    //
+    // Verified against GNU 31 in batch: the insert succeeds and returns "chunk".
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let process_buffer = ev.buffers.create_buffer("*proc-filter-ro*");
+    let pid = ev.processes.create_process(
+        "proc-filter-ro".into(),
+        Value::make_buffer(process_buffer),
+        "prog".into(),
+        vec![],
+    );
+    ev.processes
+        .sync_process_mark(&mut ev.buffers, pid)
+        .expect("sync process mark");
+
+    // A different, read-only buffer is current -- the blamed source file.
+    let blamed = ev.buffers.create_buffer("blamed.c");
+    ev.buffers.set_current(blamed);
+    if let Some(buffer) = ev.buffers.get_mut(blamed) {
+        buffer.set_read_only_value(true);
+    }
+
+    builtin_internal_default_process_filter(
+        &mut ev,
+        vec![Value::make_process(pid), Value::string("chunk")],
+    )
+    .expect("process output must be inserted despite the read-only current buffer");
+
+    assert_eq!(
+        ev.buffers
+            .get(process_buffer)
+            .expect("process buffer")
+            .buffer_substring_lisp_string_range(crate::buffer::EmacsByteRange::from_usize(0, 5))
+            .as_bytes(),
+        b"chunk"
+    );
+    // GNU leaves the process buffer current (only `read_process_output''s unwind
+    // restores it), which is what a Lisp caller observes.
+    assert_eq!(
+        ev.buffers.current_buffer().map(|buffer| buffer.id),
+        Some(process_buffer)
+    );
+    // The read-only buffer is untouched, and still read-only.
+    assert!(
+        ev.buffers
+            .get(blamed)
+            .expect("blamed buffer")
+            .get_read_only()
+    );
+}
