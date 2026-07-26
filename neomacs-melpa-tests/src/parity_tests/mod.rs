@@ -7,6 +7,7 @@ mod f;
 mod frozen_packages;
 mod general;
 mod git_commit;
+mod goto_chg;
 mod harness_contract;
 mod live_melpa;
 mod magit;
