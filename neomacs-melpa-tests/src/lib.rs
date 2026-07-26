@@ -199,6 +199,9 @@ pub const AC_SLY_MELPA_PIN: (&str, &str) = ("ac-sly", "20170728.1027");
 /// corpus.
 pub const ACADEMIC_PHRASES_MELPA_PIN: (&str, &str) = ("academic-phrases", "20180723.1021");
 
+/// The exact Accent package selected by the comprehensive API parity corpus.
+pub const ACCENT_MELPA_PIN: (&str, &str) = ("accent", "20250210.906");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
