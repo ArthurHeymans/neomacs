@@ -1,3 +1,4 @@
+mod bind_key;
 mod compat;
 mod dash;
 mod f;

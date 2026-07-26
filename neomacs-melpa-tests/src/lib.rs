@@ -48,6 +48,10 @@ const GNU_ELPA_ARCHIVE: PackageArchiveSpec = PackageArchiveSpec {
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
 
+/// The exact Bind-Key release selected from GNU ELPA by the comprehensive API
+/// parity corpus.
+pub const BIND_KEY_GNU_ELPA_PIN: (&str, &str) = ("bind-key", "2.4.1");
+
 /// The exact Compat release selected from GNU ELPA by the comprehensive API
 /// parity corpus.
 pub const COMPAT_GNU_ELPA_PIN: (&str, &str) = ("compat", "31.0.0.2");
