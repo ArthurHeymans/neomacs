@@ -189,6 +189,9 @@ pub const AC_RTAGS_MELPA_PIN: (&str, &str) = ("ac-rtags", "20191222.920");
 /// The exact ac-skk package selected by the comprehensive API parity corpus.
 pub const AC_SKK_MELPA_PIN: (&str, &str) = ("ac-skk", "20141230.119");
 
+/// The exact ac-slime package selected by the comprehensive API parity corpus.
+pub const AC_SLIME_MELPA_PIN: (&str, &str) = ("ac-slime", "20171027.2100");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
