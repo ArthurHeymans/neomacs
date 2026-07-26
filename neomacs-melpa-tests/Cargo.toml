@@ -14,3 +14,6 @@ neomacs-test-oracle.workspace = true
 fs4.workspace = true
 tempfile.workspace = true
 wait-timeout.workspace = true
+
+[dev-dependencies]
+expect-test.workspace = true

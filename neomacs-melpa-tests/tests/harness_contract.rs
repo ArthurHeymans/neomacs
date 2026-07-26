@@ -4,8 +4,8 @@ use std::process::Command;
 use std::time::Duration;
 
 use neomacs_melpa_tests::{
-    ElispOracleReport, EmacsRuntime, ErtScenario, MelpaSandbox, PackageScenario, PackageSource,
-    ScenarioPhase, prepare_cached_melpa_package, prepare_shared_package_source, run_elisp_oracle,
+    EmacsRuntime, ErtScenario, MelpaSandbox, PackageScenario, PackageSource, ScenarioPhase,
+    prepare_cached_melpa_package, prepare_shared_package_source, run_elisp_oracle,
     run_ert_scenario, run_oracle_scenario, run_scenario, workspace_root,
 };
 use neomacs_test_oracle::EvalOutcome;
@@ -221,31 +221,6 @@ esac
         EvalOutcome::Value("(:dash direct)".to_string())
     );
     assert_eq!(report.neomacs, report.gnu_emacs);
-}
-
-#[test]
-fn strict_oracle_rejects_matching_but_unexpected_outcomes() {
-    let value_report = ElispOracleReport {
-        neomacs: EvalOutcome::Value("(actual value)".to_string()),
-        gnu_emacs: EvalOutcome::Value("(actual value)".to_string()),
-    };
-    let value_error = value_report
-        .require_value("strict-value", "(expected value)")
-        .expect_err("a matching but unexpected value must fail");
-    assert!(value_error.contains("strict-value"));
-    assert!(value_error.contains("expected `OK (expected value)`"));
-    assert!(value_error.contains("got `OK (actual value)`"));
-
-    let signal_report = ElispOracleReport {
-        neomacs: EvalOutcome::Signal("(wrong-type-argument stringp 42)".to_string()),
-        gnu_emacs: EvalOutcome::Signal("(wrong-type-argument stringp 42)".to_string()),
-    };
-    let signal_error = signal_report
-        .require_signal("strict-signal", "(args-out-of-range 42 0 1)")
-        .expect_err("a matching but unexpected signal must fail");
-    assert!(signal_error.contains("strict-signal"));
-    assert!(signal_error.contains("expected `ERR (args-out-of-range 42 0 1)`"));
-    assert!(signal_error.contains("got `ERR (wrong-type-argument stringp 42)`"));
 }
 
 #[cfg(unix)]

@@ -23,17 +23,19 @@ phase-specific failures.
 - `live_melpa.rs` hard-codes package names and versions, downloads one complete
   dependency transaction below `./tmp`, then gives that same local transaction
   to GNU Emacs and Neomacs. No third-party package payload is tracked by Git.
-- `dash_parity.rs` uses ordinary Rust `#[test]` functions for 32 focused Dash
-  parity cases. Together they exercise the pinned package's public functions,
-  macros, compatibility aliases, edge values, and representative signals. The
-  package is installed once into a validated, locked cache below `./tmp`; each
-  test then evaluates the same form in isolated GNU Emacs and Neomacs
-  processes. Every case pins the complete normalized GNU Emacs value or signal,
-  so matching-but-unexpected editor results are failures too.
-- `s_parity.rs` uses 18 ordinary Rust `#[test]` functions to exercise all 92
+- `dash_parity.rs` and its modules use 97 ordinary Rust `#[test]` functions.
+  Each case isolates one API family and covers normal, empty, boundary,
+  mutation, evaluation-count, or signal behavior. Together they exercise the
+  pinned package's public functions, macros, and compatibility aliases.
+- `s_parity.rs` uses 48 ordinary Rust `#[test]` functions to exercise all 92
   public `s` functions, macros, and compatibility aliases, plus its public
-  lexical-format variable, boundary values, and representative signals. It
-  reuses Dash's validated-cache mechanism and strict, pinned-outcome oracle.
+  lexical-format variable, boundary values, Unicode behavior, evaluation
+  semantics, and representative signals.
+- Both corpora install each package once into a validated, locked cache below
+  `./tmp`, then evaluate each form in isolated GNU Emacs and Neomacs processes.
+  Inline `expect-test` snapshots pin the complete normalized `OK` value or
+  `ERR` signal after differential equality succeeds, so matching-but-unexpected
+  editor results are failures too.
 - `upstream_package_ert.rs` runs grouped contracts from GNU Emacs's
   `test/lisp/emacs-lisp/package-tests.el` through a structured ERT adapter.
   The EOL and asynchronous-refresh groups remain explicit ignored tests until
@@ -99,6 +101,22 @@ cargo nextest run -p neomacs-melpa-tests \
   -E 'binary_id(neomacs-melpa-tests::s_parity)' \
   --no-fail-fast
 ```
+
+After intentionally updating a package pin or accepted GNU Emacs behavior,
+refresh inline snapshots through the same differential oracle:
+
+```sh
+TMPDIR="$PWD/tmp" \
+NEOMACS_BIN="$PWD/target/release/neomacs" \
+UPDATE_EXPECT=1 \
+cargo nextest run -p neomacs-melpa-tests \
+  --run-ignored only \
+  -E 'binary_id(neomacs-melpa-tests::dash_parity)' \
+  --no-fail-fast
+```
+
+Review every snapshot diff before committing it. Divergent GNU Emacs and
+Neomacs outcomes fail before `expect-test` can update the snapshot.
 
 When MELPA publishes a new version, update only the hard-coded version next to
 the package name in `DASH_MELPA_PIN`, `S_MELPA_PIN`, or the relevant package

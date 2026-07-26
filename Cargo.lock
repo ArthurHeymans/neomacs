@@ -3497,6 +3497,7 @@ dependencies = [
 name = "neomacs-melpa-tests"
 version = "0.0.14"
 dependencies = [
+ "expect-test",
  "fs4",
  "neomacs-test-oracle",
  "tempfile",
