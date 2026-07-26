@@ -11,6 +11,7 @@ mod abyss_theme;
 mod ac_alchemist;
 mod ac_c_headers;
 mod ac_capf;
+mod ac_clang;
 mod async_package;
 mod at_package;
 mod bind_key;
