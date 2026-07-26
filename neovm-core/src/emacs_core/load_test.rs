@@ -14055,3 +14055,48 @@ fn load_reads_each_form_through_load_read_function() {
         );
     }
 }
+
+#[test]
+fn load_path_search_suffixes_match_gnu_per_operating_system() {
+    // Test 1 for neomacs#193: `require` searches through
+    // `default_load_suffixes`, and on darwin that list must carry BOTH module
+    // suffixes with the secondary first -- GNU conses MODULES_SECONDARY_SUFFIX
+    // last, so `.so` is searched before `.dylib` and a module built as
+    // `NAME.so` wins. Taking the OS by name keeps darwin testable from here.
+    let as_strings = |os: &str| -> Vec<String> {
+        super::default_load_suffixes_for_os(os)
+            .into_iter()
+            .map(|suffix| String::from_utf8(suffix).expect("utf8 suffix"))
+            .collect()
+    };
+    assert_eq!(as_strings("macos"), vec![".so", ".dylib", ".elc", ".el"]);
+    assert_eq!(as_strings("linux"), vec![".so", ".elc", ".el"]);
+    assert_eq!(as_strings("windows"), vec![".dll", ".elc", ".el"]);
+}
+
+#[test]
+fn load_path_search_suffixes_equal_the_lisp_load_suffixes() {
+    // Test 2 for neomacs#193: the Rust-side search list and the Lisp
+    // `load-suffixes` answer the same question, so they must not drift. They did:
+    // the Lisp variable gained darwin's secondary `.so` while the search list
+    // still derived from `std::env::consts::DLL_SUFFIX`, leaving `require`
+    // broken on macOS while `locate-file` and `load` worked.
+    //
+    // GNU cannot drift here -- `openp` takes its suffixes from
+    // `Fget_load_suffixes()`, built from the one `Vload_suffixes`.
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    let lisp = eval
+        .eval_str("(mapconcat #'identity load-suffixes \" \")")
+        .expect("load-suffixes");
+    let rust = super::default_load_suffixes()
+        .into_iter()
+        .map(|suffix| String::from_utf8(suffix).expect("utf8 suffix"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert_eq!(
+        lisp.as_utf8_str().expect("string"),
+        rust.as_str(),
+        "the load-path search list must be exactly `load-suffixes`"
+    );
+}

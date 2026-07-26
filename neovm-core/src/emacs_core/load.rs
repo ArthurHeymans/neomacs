@@ -754,12 +754,27 @@ fn strict_load_suffix_list(
         })
 }
 
+/// The suffixes a load-path search appends, for one platform.
+///
+/// This is the same list the Lisp `load-suffixes` carries (see
+/// `lread::load_suffixes_startup_values_for_os`), and it MUST stay that list:
+/// `locate-file` and `load` consult the Lisp variable while `require` searches
+/// through here, so a platform difference between the two silently breaks
+/// `require` only. That is exactly how neomacs#193 survived its first fix --
+/// `std::env::consts::DLL_SUFFIX` names darwin's PRIMARY suffix (`.dylib`) and
+/// knows nothing of its secondary `.so`, so `(require 'vterm-module)` could not
+/// find `vterm-module.so` even though `locate-file` and `load` both could.
+///
+/// Takes the OS by name so every platform's list is testable from any host.
+pub(crate) fn default_load_suffixes_for_os(os: &str) -> Vec<Vec<u8>> {
+    super::lread::load_suffixes_startup_values_for_os(os)
+        .into_iter()
+        .map(|suffix| suffix.as_bytes().to_vec())
+        .collect()
+}
+
 fn default_load_suffixes() -> Vec<Vec<u8>> {
-    vec![
-        std::env::consts::DLL_SUFFIX.as_bytes().to_vec(),
-        b".elc".to_vec(),
-        b".el".to_vec(),
-    ]
+    default_load_suffixes_for_os(std::env::consts::OS)
 }
 
 fn pick_suffixed(base: &Path, prefer_newer: bool, suffixes: &[Vec<u8>]) -> Option<PathBuf> {

@@ -62,7 +62,18 @@ jobs:
               (unless (equal dynamic-library-suffixes (list ".dylib" ".so"))
                 (error "dynamic-library-suffixes should list both suffixes"))
               (unless (equal (locate-file "fake-module" (list dir) (get-load-suffixes)) built)
-                (error "a module built as .so must be found on darwin")))'
+                (error "a module built as .so must be found on darwin"))
+              ;; The call the reporter actually makes (neomacs#193): `require`
+              ;; searches its own suffix list, so assert THAT, not just
+              ;; `locate-file`. A real module cannot be dlopened here, so failing
+              ;; to LOAD is fine -- failing to FIND it is the bug.
+              (add-to-list (quote load-path) dir)
+              (let ((found nil))
+                (condition-case err (require (quote fake-module) nil t)
+                  (error (setq found t)))
+                (princ (format "require-reached-the-file=%S\n" found))
+                (unless found
+                  (error "`require' must find a module built as NAME.so on darwin"))))'
 
       - name: GUI smoke (launch, frame snapshot, PNG readback)
         run: |
