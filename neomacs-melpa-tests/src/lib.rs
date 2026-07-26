@@ -91,6 +91,10 @@ pub const ABGABEN_MELPA_PIN: (&str, &str) = ("abgaben", "20171119.646");
 /// The exact abl-mode package selected by the comprehensive API parity corpus.
 pub const ABL_MODE_MELPA_PIN: (&str, &str) = ("abl-mode", "20240423.1214");
 
+/// The exact abridge-diff package selected by the comprehensive API parity
+/// corpus.
+pub const ABRIDGE_DIFF_MELPA_PIN: (&str, &str) = ("abridge-diff", "20230307.2159");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
