@@ -18,6 +18,7 @@ mod package_vc;
 mod projectile;
 mod s;
 mod transient;
+mod two_bit;
 mod upstream_package_ert;
 mod use_package;
 mod which_key;

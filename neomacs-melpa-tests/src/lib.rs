@@ -60,6 +60,9 @@ pub const ZERO_X_C_MELPA_PIN: (&str, &str) = ("0xc", "20201025.2105");
 /// The exact 2048-game package selected by the comprehensive API parity corpus.
 pub const GAME_2048_MELPA_PIN: (&str, &str) = ("2048-game", "20230809.356");
 
+/// The exact 2bit package selected by the comprehensive API parity corpus.
+pub const TWO_BIT_MELPA_PIN: (&str, &str) = ("2bit", "20200926.1418");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
