@@ -231,6 +231,48 @@ impl TextPositionBounds {
         }
     }
 
+    /// Whether every character between the two bracketing anchors occupies a
+    /// single byte.
+    ///
+    /// GNU's `CONSIDER` (marker.c) checks exactly this each time the brackets
+    /// narrow: "If at any point we can tell that the space between those two
+    /// best approximations is all single-byte, we interpolate the result
+    /// immediately." Equal char and byte spans can only happen when every
+    /// character in between is one byte, so a position inside the span
+    /// converts by ARITHMETIC and needs no scan.
+    ///
+    /// This matters far beyond the whole-buffer `SCHARS == SBYTES` fast path.
+    /// Real Emacs sources are multibyte for the sake of a handful of characters
+    /// -- curly quotes in docstrings -- so the global check fails while nearly
+    /// every local span is still pure ASCII.
+    const fn span_is_single_byte(self) -> bool {
+        let chars = self.above.char_pos().get() - self.below.char_pos().get();
+        let bytes = self.above.emacs_byte_pos().get() - self.below.emacs_byte_pos().get();
+        chars == bytes
+    }
+
+    /// The byte position of `target` by interpolation, when the bracketing
+    /// span is all single-byte (see [`Self::span_is_single_byte`]).
+    pub fn interpolate_char(self, target: CharPos0) -> Option<EmacsBytePos> {
+        if !self.span_is_single_byte() {
+            return None;
+        }
+        let offset = target.get() - self.below.char_pos().get();
+        Some(EmacsBytePos::new(
+            self.below.emacs_byte_pos().get() + offset,
+        ))
+    }
+
+    /// The char position of `target` by interpolation, when the bracketing
+    /// span is all single-byte (see [`Self::span_is_single_byte`]).
+    pub fn interpolate_byte(self, target: EmacsBytePos) -> Option<CharPos0> {
+        if !self.span_is_single_byte() {
+            return None;
+        }
+        let offset = target.get() - self.below.emacs_byte_pos().get();
+        Some(CharPos0::new(self.below.char_pos().get() + offset))
+    }
+
     pub fn char_below_distance(self, target: CharPos0) -> CharLen {
         target.saturating_offset_from(self.below.char_pos())
     }

@@ -2112,6 +2112,18 @@ impl BufferText {
         Self::ensure_position_anchor_cache_current(&storage, content_epoch);
         let bounds = Self::char_position_bounds(&storage, target);
 
+        // GNU marker.c CONSIDER: an all-single-byte bracket converts by
+        // arithmetic. Worth checking before every scan -- a source file is
+        // multibyte for a handful of curly quotes, so the whole-buffer fast
+        // path above misses while nearly every local span still qualifies.
+        if let Some(result) = bounds.interpolate_char(target) {
+            storage.pos_cache.set(PositionCache {
+                epoch: content_epoch,
+                anchor: TextPositionAnchor::new(target, result),
+            });
+            return result;
+        }
+
         let nearest_anchor = bounds.nearest_char_anchor(target);
         let result = if nearest_anchor.char_pos() <= target {
             scan_forward(&storage.backend, nearest_anchor, target)
@@ -2170,6 +2182,18 @@ impl BufferText {
 
         Self::ensure_position_anchor_cache_current(&storage, content_epoch);
         let bounds = Self::byte_position_bounds(&storage, target);
+
+        // GNU marker.c CONSIDER, mirrored from the char->byte direction: an
+        // all-single-byte bracket converts by arithmetic, no scan. The target
+        // is necessarily a character boundary inside such a span, so this
+        // cannot seed the bogus mid-character anchor guarded against below.
+        if let Some(result) = bounds.interpolate_byte(target) {
+            storage.pos_cache.set(PositionCache {
+                epoch: content_epoch,
+                anchor: TextPositionAnchor::new(result, target),
+            });
+            return result;
+        }
 
         let nearest_anchor = bounds.nearest_byte_anchor(target);
         let result = if nearest_anchor.emacs_byte_pos() <= target {
