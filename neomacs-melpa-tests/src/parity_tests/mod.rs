@@ -48,6 +48,7 @@ mod ace_link;
 mod ace_mc;
 mod ace_pinyin;
 mod ace_popup_menu;
+mod ace_window;
 mod async_package;
 mod at_package;
 mod bind_key;
