@@ -7,6 +7,7 @@ mod abgaben;
 mod abl_mode;
 mod abridge_diff;
 mod abs_mode;
+mod abyss_theme;
 mod async_package;
 mod at_package;
 mod bind_key;

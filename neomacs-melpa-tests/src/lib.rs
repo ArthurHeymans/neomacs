@@ -98,6 +98,10 @@ pub const ABRIDGE_DIFF_MELPA_PIN: (&str, &str) = ("abridge-diff", "20230307.2159
 /// The exact abs-mode package selected by the comprehensive API parity corpus.
 pub const ABS_MODE_MELPA_PIN: (&str, &str) = ("abs-mode", "20260415.813");
 
+/// The exact abyss-theme package selected by the comprehensive API parity
+/// corpus.
+pub const ABYSS_THEME_MELPA_PIN: (&str, &str) = ("abyss-theme", "20260125.1959");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
