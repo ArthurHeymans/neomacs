@@ -21705,3 +21705,66 @@ fn render_uncaught_signal_backtrace_lists_live_frames_innermost_first() {
     let truncated = ev.render_uncaught_signal_backtrace(1);
     assert!(truncated.contains("..."), "truncation marker: {truncated}");
 }
+
+// ---------------------------------------------------------------------------
+// Redisplay skip: a change that lands DURING the paint must still be painted
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_buffer_change_during_redisplay_is_not_recorded_as_already_displayed() {
+    // Found driving vterm in the GUI: after a burst of terminal output the
+    // buffer held the complete text while the window kept showing the previous
+    // frame, and every later redisplay logged "skipped: visible state
+    // unchanged" -- for as long as nothing else forced a repaint.
+    //
+    // The skip compares the CURRENT visible state against the last one, so the
+    // recorded value must be what was actually PAINTED. Re-reading the state
+    // after the paint records changes the paint never showed -- a process
+    // filter running inside the layout pass is exactly that case -- and every
+    // later comparison then matches, so the change is never drawn.
+    //
+    // GNU cannot lose an update this way: `redisplay_internal` compares each
+    // window's `last_modified` against `BUF_MODIFF (b)`, and `last_modified` is
+    // assigned from the buffer state the window was laid out FROM
+    // (src/xdisp.c:18269), never from the state after the fact.
+    let mut ev = Context::new();
+    let buffer_id = ev.buffers.create_buffer("*redisplay-race*");
+    assert!(ev.buffers.switch_current(buffer_id));
+    let frame_id = ev.frames.create_frame("F1", 80, 25, buffer_id);
+    ev.frames.select_frame(frame_id);
+
+    // A "process filter" that appends to the displayed buffer while the frame
+    // is being laid out.
+    let painted = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+    let painted_in_cb = painted.clone();
+    ev.redisplay_fn = Some(Box::new(move |ev: &mut Context| {
+        let current = ev.buffers.current_buffer_id().expect("current buffer");
+        painted_in_cb
+            .borrow_mut()
+            .push(ev.buffers.get(current).expect("buffer").buffer_string());
+        // Output arrives mid-paint: it is NOT part of the frame just drawn.
+        ev.buffers.insert_lisp_string_into_buffer(
+            current,
+            &crate::heap_types::LispString::from_utf8("late output\n"),
+        );
+    }));
+
+    ev.redisplay();
+    let after_first = painted.borrow().len();
+    assert_eq!(after_first, 1, "first redisplay should paint");
+
+    // The text inserted during the paint was never on screen, so the next
+    // redisplay must run rather than conclude nothing changed.
+    ev.redisplay();
+    assert_eq!(
+        painted.borrow().len(),
+        2,
+        "a change that landed during the paint must still be painted; \
+         it was recorded as already displayed and the frame went stale"
+    );
+    assert!(
+        painted.borrow()[1].contains("late output"),
+        "the second paint should see the text inserted during the first: {:?}",
+        painted.borrow()[1]
+    );
+}
