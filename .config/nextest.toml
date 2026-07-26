@@ -69,12 +69,11 @@ threads-required = "num-test-threads"
 filter = 'package(neovm-oracle-tests)'
 slow-timeout = { period = "60s", terminate-after = 1 }
 
-# Package ecosystem tests launch full editor subprocesses.  Keep archive
-# refresh/install scenarios serialized so they do not duplicate downloads or
-# contend over byte compilation.  The live canary has its own per-process
-# timeout in the harness; Nextest's watchdog remains slightly wider so the
-# harness can emit phase-specific diagnostics first.
+# Package ecosystem tests launch full editor subprocesses. Package-cache
+# preparation uses a cross-process lock, so these tests can use the profile's
+# normal parallel scheduling. The live canary has its own per-process timeout
+# in the harness; Nextest's watchdog remains slightly wider so the harness can
+# emit phase-specific diagnostics first.
 [[profile.default.overrides]]
 filter = 'package(neomacs-melpa-tests)'
-threads-required = "num-test-threads"
 slow-timeout = { period = "960s", terminate-after = 1 }

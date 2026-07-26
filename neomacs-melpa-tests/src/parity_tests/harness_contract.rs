@@ -225,18 +225,23 @@ esac
 
 #[cfg(unix)]
 #[test]
-fn cached_melpa_package_is_validated_once_below_workspace_tmp() {
+fn concurrent_cached_melpa_package_preparation_downloads_once_below_workspace_tmp() {
     use std::os::unix::fs::PermissionsExt;
 
     let fixture = MelpaSandbox::new("cached-package-contract").expect("create fixture sandbox");
     let invocation_log = fixture.root().join("cache-invocations");
     let runtime_script = fixture.root().join("cache-emacs");
-    let version = format!("0.0.{}", std::process::id());
+    let cache_nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system clock is after the Unix epoch")
+        .as_nanos();
+    let version = format!("0.0.{}-{cache_nonce}", std::process::id());
     fs::write(
         &runtime_script,
         format!(
             r##"#!/bin/sh
 printf '%s\n' invoke >> '{}'
+sleep 1
 package_dir="$HOME/.emacs.d/elpa/neomacs-cache-contract-$CACHE_CONTRACT_VERSION"
 mkdir -p "$package_dir"
 : > "$package_dir/neomacs-cache-contract-pkg.el"
@@ -251,12 +256,25 @@ printf '%s\n' 'NEOMACS-MELPA-PACKAGE-CACHE:ready'
     let runtime = EmacsRuntime::new("fake-cache", runtime_script)
         .with_env("CACHE_CONTRACT_VERSION", &version);
 
-    let first =
-        prepare_cached_melpa_package(&runtime, ("neomacs-cache-contract", version.as_str()))
-            .expect("prepare cached package");
-    let second =
-        prepare_cached_melpa_package(&runtime, ("neomacs-cache-contract", version.as_str()))
-            .expect("reuse validated cached package");
+    let barrier = std::sync::Barrier::new(3);
+    let package = ("neomacs-cache-contract", version.as_str());
+    let (first, second) = std::thread::scope(|scope| {
+        let first = scope.spawn(|| {
+            barrier.wait();
+            prepare_cached_melpa_package(&runtime, package)
+                .expect("prepare cached package concurrently")
+        });
+        let second = scope.spawn(|| {
+            barrier.wait();
+            prepare_cached_melpa_package(&runtime, package)
+                .expect("reuse concurrently prepared cached package")
+        });
+        barrier.wait();
+        (
+            first.join().expect("join first cache caller"),
+            second.join().expect("join second cache caller"),
+        )
+    });
 
     assert_eq!(first, second);
     assert!(first.starts_with(workspace_root().join("tmp/melpa/package-cache")));
