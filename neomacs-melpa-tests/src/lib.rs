@@ -85,6 +85,9 @@ pub const AAS_MELPA_PIN: (&str, &str) = ("aas", "20230303.2214");
 /// The exact abc-mode package selected by the comprehensive API parity corpus.
 pub const ABC_MODE_MELPA_PIN: (&str, &str) = ("abc-mode", "20220713.1359");
 
+/// The exact Abgaben package selected by the comprehensive API parity corpus.
+pub const ABGABEN_MELPA_PIN: (&str, &str) = ("abgaben", "20171119.646");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
