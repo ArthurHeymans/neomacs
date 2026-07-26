@@ -36,6 +36,7 @@ mod ac_rtags;
 mod ac_skk;
 mod ac_slime;
 mod ac_sly;
+mod academic_phrases;
 mod async_package;
 mod at_package;
 mod bind_key;
