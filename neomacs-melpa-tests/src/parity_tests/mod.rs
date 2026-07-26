@@ -35,6 +35,7 @@ mod ac_racer;
 mod ac_rtags;
 mod ac_skk;
 mod ac_slime;
+mod ac_sly;
 mod async_package;
 mod at_package;
 mod bind_key;
