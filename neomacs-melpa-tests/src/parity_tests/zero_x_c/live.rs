@@ -1,0 +1,137 @@
+use expect_test::expect;
+
+use super::{assert_zero_x_c_live_parity, assert_zero_x_c_live_signal_parity};
+
+#[test]
+fn zero_x_c_live_defaults_match_the_pinned_library() {
+    let elisp_form = r##"(list
+               0xc-live-display-bases
+               0xc-live-input-bases
+               (featurep '0xc)
+               (featurep '0xc-live))"##;
+    let expect = expect!["OK ((16 10 8 2) (16 10 8 2) t t)"];
+
+    assert_zero_x_c_live_parity(elisp_form, expect);
+}
+
+#[test]
+fn zero_x_c_live_table_rows_cover_ambiguous_and_prefixed_inputs() {
+    let elisp_form = r##"(let ((0xc-max-base 16)
+                     (0xc-live-display-bases
+                      '(16 10 8 2))
+                     (0xc-live-input-bases
+                      '(16 10 8 2)))
+               (list
+                (0xc-live--table-rows "10")
+                (0xc-live--table-rows
+                 "0xff")
+                (0xc-live--table-rows
+                 "8:17")))"##;
+    let expect = expect![[
+        r#"OK ((("Input" "Base 16" "Base 10" "Base 8" "Base 2") ("0x10" "10" "16" "20" "10000") ("0d10" "A" "10" "12" "1010") ("0o10" "8" "8" "10" "1000") ("0b10" "2" "2" "2" "10")) (("Input" "Base 16" "Base 10" "Base 8" "Base 2") ("0xff" "FF" "255" "377" "11111111")) (("Input" "Base 16" "Base 10" "Base 8" "Base 2") ("0o17" "F" "15" "17" "1111")))"#
+    ]];
+
+    assert_zero_x_c_live_parity(elisp_form, expect);
+}
+
+#[test]
+fn zero_x_c_live_table_rows_signal_when_configured_input_bases_filter_to_empty() {
+    let elisp_form = r##"(let ((0xc-max-base 36)
+                     (0xc-clamp-ten nil)
+                     (0xc-clamp-hex nil)
+                     (0xc-live-display-bases
+                      '(10 16))
+                     (0xc-live-input-bases
+                      '(2 8)))
+               (0xc-live--table-rows
+                "z"))"##;
+    let expect = expect!["ERR (wrong-type-argument sequencep 36)"];
+
+    assert_zero_x_c_live_signal_parity(elisp_form, expect);
+}
+
+#[test]
+fn zero_x_c_live_display_formats_columns_and_renders_errors() {
+    let elisp_form = r##"(let (success failure)
+               (unwind-protect
+                   (progn
+                     (0xc-live--display "0xff")
+                     (setq success
+                           (with-current-buffer
+                               "*0xc Live Conversion*"
+                             (buffer-string)))
+                     (0xc-live--display
+                      "not$a$number")
+                     (setq failure
+                           (with-current-buffer
+                               "*0xc Live Conversion*"
+                             (buffer-string)))
+                     (list success failure))
+                 (when
+                     (get-buffer
+                      "*0xc Live Conversion*")
+                   (kill-buffer
+                    "*0xc Live Conversion*"))))"##;
+    let expect = expect![[
+        r#"OK ("Input  Base 16  Base 10  Base 8  Base 2    \n0xff   FF       255      377     11111111  \n" "0xc-live: (error Not a number)")"#
+    ]];
+
+    assert_zero_x_c_live_parity(elisp_form, expect);
+}
+
+#[test]
+fn zero_x_c_live_maybe_number_at_point_filters_words_by_parser_rules() {
+    let elisp_form = r##"(list
+               (with-temp-buffer
+                 (insert "value 1234 here")
+                 (goto-char 9)
+                 (0xc-live--maybe-number-at-point))
+               (with-temp-buffer
+                 (insert "value word here")
+                 (goto-char 9)
+                 (0xc-live--maybe-number-at-point))
+               (with-temp-buffer
+                 (0xc-live--maybe-number-at-point)))"##;
+    let expect = expect![[r#"OK ("1234" "word" "")"#]];
+
+    assert_zero_x_c_live_parity(elisp_form, expect);
+}
+
+#[test]
+fn zero_x_c_live_convert_installs_a_local_change_hook_around_read_string() {
+    let elisp_form = r##"(let ((original-hook
+                      minibuffer-setup-hook)
+                     observed)
+               (cl-letf (((symbol-function
+                           '0xc-live--maybe-number-at-point)
+                          (lambda () "101"))
+                         ((symbol-function 'read-string)
+                          (lambda
+                              (prompt
+                               &optional initial
+                               history
+                               default
+                               inherit)
+                            (setq observed
+                                  (list
+                                   prompt
+                                   initial
+                                   history
+                                   default
+                                   inherit
+                                   (-
+                                    (length
+                                     minibuffer-setup-hook)
+                                    (length
+                                     original-hook))))
+                            "result")))
+                 (list
+                  (0xc-live-convert)
+                  observed
+                  (equal
+                   minibuffer-setup-hook
+                   original-hook))))"##;
+    let expect = expect![[r#"OK ("result" ("Number: " nil nil "101" nil 1) t)"#]];
+
+    assert_zero_x_c_live_parity(elisp_form, expect);
+}

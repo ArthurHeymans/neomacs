@@ -22,4 +22,5 @@ mod use_package;
 mod which_key;
 mod with_editor;
 mod zero_b_layout;
+mod zero_x_c;
 mod zero_x_zero;
