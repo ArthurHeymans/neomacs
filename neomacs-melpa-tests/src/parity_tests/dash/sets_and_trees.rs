@@ -49,6 +49,55 @@ fn dash_frequencies_count_equal_values_in_first_seen_order() {
 }
 
 #[test]
+fn dash_large_set_operations_match_hash_optimized_order_and_identity_semantics() {
+    let elisp_form = r##"(let* ((left
+                         (append
+                          (number-sequence 0 39)
+                          '(5 5 20)))
+                        (right
+                         (append
+                          (number-sequence 20 59)
+                          '(20 39))))
+                   (list
+                    (let ((items (-distinct left)))
+                      (list
+                       (length items)
+                       (car items)
+                       (-last-item items)))
+                    (let ((items (-union left right)))
+                      (list
+                       (length items)
+                       (car items)
+                       (-last-item items)))
+                    (let ((items (-intersection left right)))
+                      (list
+                       (length items)
+                       (car items)
+                       (-last-item items)))
+                    (let ((items (-difference left right)))
+                      (list
+                       (length items)
+                       (car items)
+                       (-last-item items)))
+                    (let ((frequencies (-frequencies left)))
+                      (list
+                       (length frequencies)
+                       (cdr (assq 5 frequencies))
+                       (cdr (assq 20 frequencies))
+                       (car frequencies)
+                       (-last-item frequencies)))
+                    (let ((-compare-fn #'eq)
+                          (same (string ?a)))
+                      (-frequencies
+                       (list same (string ?a) same)))))"##;
+    let expect = expect![[
+        r#"OK ((40 0 39) (60 0 59) (20 20 39) (20 0 19) (40 3 2 (0 . 1) (39 . 1)) (("a" . 2) ("a" . 1)))"#
+    ]];
+
+    assert_dash_parity(elisp_form, expect);
+}
+
+#[test]
 fn dash_powerset_inits_and_tails_include_empty_boundaries() {
     let elisp_form = r##"(list
               (-powerset '(a b c))
@@ -361,6 +410,88 @@ fn dash_const_cut_not_orfn_and_andfn_compose_predicates_and_arguments() {
               (funcall (-orfn) 'a)
               (funcall (-andfn) 'a))"##;
     let expect = expect!["OK (fixed (1 2 3 4) t nil t nil t nil nil t)"];
+
+    assert_dash_parity(elisp_form, expect);
+}
+
+#[test]
+fn dash_predicate_combinators_preserve_truthy_values_and_short_circuit_order() {
+    let elisp_form = r##"(list
+              (let (events)
+                (let ((value
+                       (funcall
+                        (-orfn
+                         (lambda (_)
+                           (push 'first events)
+                           nil)
+                         (lambda (_)
+                           (push 'second events)
+                           'winner)
+                         (lambda (_)
+                           (push 'never events)
+                           'wrong))
+                        'argument)))
+                  (list value (nreverse events))))
+              (let (events)
+                (let ((value
+                       (funcall
+                        (-andfn
+                         (lambda (_)
+                           (push 'first events)
+                           'keep-going)
+                         (lambda (_)
+                           (push 'second events)
+                           nil)
+                         (lambda (_)
+                           (push 'never events)
+                           'wrong))
+                        'argument)))
+                  (list value (nreverse events))))
+              (let (events)
+                (let ((value
+                       (funcall
+                        (-andfn
+                         (lambda (_)
+                           (push 'first events)
+                           'intermediate)
+                         (lambda (_)
+                           (push 'second events)
+                           'final))
+                        'argument)))
+                  (list value (nreverse events)))))"##;
+    let expect =
+        expect!["OK ((winner (first second)) (nil (first second)) (final (first second)))"];
+
+    assert_dash_parity(elisp_form, expect);
+}
+
+#[test]
+fn dash_fixfn_distinguishes_convergence_from_custom_and_default_halts() {
+    let elisp_form = r##"(list
+              (funcall
+               (-fixfn
+                (lambda (number)
+                  (min 3 (1+ number))))
+               0)
+              (funcall
+               (-fixfn
+                #'1+
+                #'=
+                (lambda (number)
+                  (and (>= number 3) 'budget)))
+               0)
+              (let ((-fixfn-max-iterations 3))
+                (funcall (-fixfn #'1+) 0))
+              (let ((calls 0))
+                (list
+                 (funcall
+                  (-fixfn
+                   (lambda (value)
+                     (setq calls (1+ calls))
+                     value))
+                  'stable)
+                 calls)))"##;
+    let expect = expect!["OK (3 (halted . budget) (halted . t) (stable 1))"];
 
     assert_dash_parity(elisp_form, expect);
 }

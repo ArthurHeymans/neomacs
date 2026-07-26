@@ -458,6 +458,26 @@ fn s_replace_literal_regexp_and_multiple_rules_are_exact() {
 }
 
 #[test]
+fn s_replace_all_is_single_pass_case_sensitive_and_matches_longest_keys() {
+    let elisp_form = r##"(list
+              (s-replace-all
+               '(("lib" . "test") ("test" . "lib"))
+               "lib/test.js")
+              (s-replace-all
+               '(("FOO" . "bar") ("FLOO" . "bah"))
+               "FOO BLOO foo")
+              (s-replace-all
+               '(("cat" . "short") ("cater" . "long"))
+               "cater cat")
+              (s-replace-all
+               '(("." . "dot") ("$" . "dollar"))
+               ".$."))"##;
+    let expect = expect![[r#"OK ("test/lib.js" "bar BLOO foo" "long short" "dotdollardot")"#]];
+
+    assert_s_parity(elisp_form, expect);
+}
+
+#[test]
 fn s_case_conversion_handles_ascii_unicode_and_empty_strings() {
     let elisp_form = r##"(list
               (s-downcase "MiXeD Ä")
@@ -519,6 +539,16 @@ fn s_reverse_counts_characters_and_preserves_multibyte_strings() {
 }
 
 #[test]
+fn s_reverse_keeps_multiple_combining_marks_attached_to_their_base_character() {
+    let elisp_form = r##"(list
+              (s-reverse "résumé")
+              (s-reverse "Ęyǫgwędę́hte⁷"))"##;
+    let expect = expect![[r#"OK ("émusér" "⁷ethę́dęwgǫyĘ")"#]];
+
+    assert_s_parity(elisp_form, expect);
+}
+
+#[test]
 fn s_match_strings_all_returns_full_and_capture_groups() {
     let elisp_form = r##"(list
               (s-match-strings-all
@@ -561,6 +591,23 @@ fn s_match_honors_start_and_restores_existing_match_data() {
                   (s-match "\\([0-9]+\\)" "a12b")
                   (equal before (match-data)))))"##;
     let expect = expect![[r#"OK (("ab-42" "ab" "42") ("two" "two") nil ("") t)"#]];
+
+    assert_s_parity(elisp_form, expect);
+}
+
+#[test]
+fn s_match_distinguishes_trailing_and_intermediate_unmatched_capture_groups() {
+    let elisp_form = r##"(list
+              (s-match
+               "^\\(abc\\)\\(def\\)?"
+               "abc")
+              (s-match
+               "^\\(abc\\)\\(def\\)?\\(ghi\\)"
+               "abcghi")
+              (s-match "abc" "abcdefabc" 2)
+              (s-match-strings-all "\\<" "foo bar baz"))"##;
+    let expect =
+        expect![[r#"OK (("abc" "abc") ("abcghi" "abc" nil "ghi") ("abc") (("") ("") ("")))"#]];
 
     assert_s_parity(elisp_form, expect);
 }
@@ -681,6 +728,63 @@ fn s_format_supports_hash_alist_vector_object_lambda_and_extra_values() {
     let expect = expect![[
         r#"OK ("Hello Ada" "Ada:Lisp" "two/zero/one" "Hello Ada" "KEY" "key!" "literal")"#
     ]];
+
+    assert_s_parity(elisp_form, expect);
+}
+
+#[test]
+fn s_format_callbacks_observe_and_restore_the_callers_match_data() {
+    let elisp_form = r##"(progn
+              (string-match "\\(outer\\)" "outer")
+              (let ((before (match-data))
+                    calls)
+                (list
+                 (s-format
+                  "${key}-$0"
+                  (lambda (key)
+                    (push
+                     (list key (match-string 1 "outer"))
+                     calls)
+                    (if (stringp key) "value" "zero")))
+                 (nreverse calls)
+                 (equal before (match-data)))))"##;
+    let expect = expect![[r#"OK ("value-zero" (("key" "outer") (0 "outer")) t)"#]];
+
+    assert_s_parity(elisp_form, expect);
+}
+
+#[test]
+fn s_split_restores_the_callers_match_data() {
+    let elisp_form = r##"(progn
+              (string-match "\\(outer\\)" "outer")
+              (let ((before (match-data)))
+                (s-split "," "a,b")
+                (equal before (match-data))))"##;
+    let expect = expect!["OK t"];
+
+    assert_s_parity(elisp_form, expect);
+}
+
+#[test]
+fn s_reverse_restores_the_callers_match_data() {
+    let elisp_form = r##"(progn
+              (string-match "\\(outer\\)" "outer")
+              (let ((before (match-data)))
+                (s-reverse "å中")
+                (equal before (match-data))))"##;
+    let expect = expect!["OK t"];
+
+    assert_s_parity(elisp_form, expect);
+}
+
+#[test]
+fn s_match_strings_all_restores_the_callers_match_data() {
+    let elisp_form = r##"(progn
+              (string-match "\\(outer\\)" "outer")
+              (let ((before (match-data)))
+                (s-match-strings-all "[0-9]" "a1b2")
+                (equal before (match-data))))"##;
+    let expect = expect!["OK t"];
 
     assert_s_parity(elisp_form, expect);
 }

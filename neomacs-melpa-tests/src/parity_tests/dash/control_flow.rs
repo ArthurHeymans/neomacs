@@ -108,6 +108,75 @@ fn dash_let_destructures_plists_alists_and_hash_tables() {
 }
 
 #[test]
+fn dash_let_parallel_and_sequential_bindings_evaluate_sources_once() {
+    let elisp_form = r##"(let ((outer 'outer)
+                    events)
+                (list
+                 (-let ((outer
+                         (progn
+                           (push 'parallel-first events)
+                           'inner))
+                        (seen
+                         (progn
+                           (push 'parallel-second events)
+                           outer)))
+                   (list outer seen (nreverse events)))
+                 (progn
+                   (setq events nil)
+                   (-let* ((outer
+                            (progn
+                              (push 'sequential-first events)
+                              'inner))
+                           (seen
+                            (progn
+                              (push 'sequential-second events)
+                              outer)))
+                     (list outer seen (nreverse events))))
+                 (let ((evaluations 0))
+                   (-let (((left right)
+                           (progn
+                             (setq evaluations (1+ evaluations))
+                             '(1 2))))
+                     (list left right evaluations)))))"##;
+    let expect = expect![
+        "OK ((inner outer (parallel-first parallel-second)) (inner inner (sequential-first sequential-second)) (1 2 1))"
+    ];
+
+    assert_dash_parity(elisp_form, expect);
+}
+
+#[test]
+fn dash_key_value_destructuring_derives_names_and_handles_optional_hashes() {
+    let elisp_form = r##"(list
+              (-let (((&plist :foo :bar)
+                      '(:foo 1 :bar 2)))
+                (list foo bar))
+              (-let (((_ &keys :foo :bar)
+                      '(ignored :foo 3 :bar 4)))
+                (list foo bar))
+              (let ((table (make-hash-table)))
+                (puthash :foo 5 table)
+                (puthash :bar 6 table)
+                (-let (((&hash :foo :bar) table))
+                  (list foo bar)))
+              (-let (((&hash :foo (&hash? :bar))
+                      (make-hash-table)))
+                bar)
+              (let* ((table (make-hash-table :test #'equal))
+                     (evaluations 0))
+                (puthash 'a nil table)
+                (-let (((&hash? 'a)
+                        (progn
+                          (setq evaluations (1+ evaluations))
+                          (push 3 (gethash 'a table))
+                          table)))
+                  (list a evaluations))))"##;
+    let expect = expect!["OK ((1 2) (3 4) (5 6) nil ((3) 1))"];
+
+    assert_dash_parity(elisp_form, expect);
+}
+
+#[test]
 fn dash_lambda_and_setq_apply_destructuring_at_call_and_assignment_time() {
     let elisp_form = r##"(list
               (mapcar
@@ -199,6 +268,16 @@ fn dash_public_configuration_variables_have_the_expected_defaults() {
 fn dash_short_vector_destructuring_signals_exact_type_data() {
     let elisp_form = r##"(-let ([a b c] [1 2]) (list a b c))"##;
     let expect = expect!["ERR (wrong-type-argument arrayp nil)"];
+
+    assert_dash_signal_parity(elisp_form, expect);
+}
+
+#[test]
+fn dash_invalid_derived_key_pattern_signals_exact_error_data() {
+    let elisp_form = r##"(eval '(-let (((&plist foo :bar) '(:foo value))) foo) t)"##;
+    let expect = expect![[
+        r#"ERR (error "-let: found key ‘foo’ in kv destructuring but its pattern ‘:bar’ is invalid and can not be derived from the key")"#
+    ]];
 
     assert_dash_signal_parity(elisp_form, expect);
 }

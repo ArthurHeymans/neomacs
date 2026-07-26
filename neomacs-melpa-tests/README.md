@@ -23,11 +23,11 @@ phase-specific failures.
 - `live_melpa.rs` hard-codes package names and versions, downloads one complete
   dependency transaction below `./tmp`, then gives that same local transaction
   to GNU Emacs and Neomacs. No third-party package payload is tracked by Git.
-- `src/parity_tests/dash/` uses 97 ordinary Rust `#[test]` functions.
+- `src/parity_tests/dash/` uses 103 ordinary Rust `#[test]` functions.
   Each case isolates one API family and covers normal, empty, boundary,
   mutation, evaluation-count, or signal behavior. Together they exercise the
   pinned package's public functions, macros, and compatibility aliases.
-- `src/parity_tests/s/` uses 48 ordinary Rust `#[test]` functions to exercise all 92
+- `src/parity_tests/s/` uses 55 ordinary Rust `#[test]` functions to exercise all 92
   public `s` functions, macros, and compatibility aliases, plus its public
   lexical-format variable, boundary values, Unicode behavior, evaluation
   semantics, and representative signals.
