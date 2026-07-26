@@ -236,6 +236,10 @@ pub const ACE_MC_MELPA_PIN: (&str, &str) = ("ace-mc", "20190206.749");
 /// corpus.
 pub const ACE_PINYIN_MELPA_PIN: (&str, &str) = ("ace-pinyin", "20210827.355");
 
+/// The exact ace-popup-menu package selected by the comprehensive API parity
+/// corpus.
+pub const ACE_POPUP_MENU_MELPA_PIN: (&str, &str) = ("ace-popup-menu", "20230606.1445");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
