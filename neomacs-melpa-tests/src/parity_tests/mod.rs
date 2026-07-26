@@ -33,6 +33,7 @@ mod ac_php;
 mod ac_php_core;
 mod ac_racer;
 mod ac_rtags;
+mod ac_skk;
 mod async_package;
 mod at_package;
 mod bind_key;
