@@ -23,6 +23,7 @@ mod ac_html;
 mod ac_html_angular;
 mod ac_html_bootstrap;
 mod ac_html_csswatcher;
+mod ac_inf_ruby;
 mod async_package;
 mod at_package;
 mod bind_key;

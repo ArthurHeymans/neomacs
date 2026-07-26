@@ -153,6 +153,10 @@ pub const AC_HTML_BOOTSTRAP_MELPA_PIN: (&str, &str) = ("ac-html-bootstrap", "201
 /// parity corpus.
 pub const AC_HTML_CSSWATCHER_MELPA_PIN: (&str, &str) = ("ac-html-csswatcher", "20151208.2113");
 
+/// The exact ac-inf-ruby package selected by the comprehensive API parity
+/// corpus.
+pub const AC_INF_RUBY_MELPA_PIN: (&str, &str) = ("ac-inf-ruby", "20131115.1150");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
