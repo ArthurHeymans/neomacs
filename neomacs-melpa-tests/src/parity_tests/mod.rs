@@ -2,6 +2,7 @@ mod async_package;
 mod bind_key;
 mod compat;
 mod dash;
+mod evil;
 mod f;
 mod frozen_packages;
 mod general;

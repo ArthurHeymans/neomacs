@@ -52,6 +52,9 @@ pub const ASYNC_GNU_ELPA_PIN: (&str, &str) = ("async", "1.9.9");
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
 
+/// The exact Evil package selected by the comprehensive API parity corpus.
+pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
+
 /// The exact Bind-Key release selected from GNU ELPA by the comprehensive API
 /// parity corpus.
 pub const BIND_KEY_GNU_ELPA_PIN: (&str, &str) = ("bind-key", "2.4.1");
