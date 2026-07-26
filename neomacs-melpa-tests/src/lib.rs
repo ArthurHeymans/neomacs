@@ -72,6 +72,10 @@ pub const AT_MELPA_PIN: (&str, &str) = ("@", "20240923.1318");
 /// The exact a package selected by the comprehensive API parity corpus.
 pub const A_MELPA_PIN: (&str, &str) = ("a", "20210929.1510");
 
+/// The exact aa-edit-mode package selected by the comprehensive API parity
+/// corpus.
+pub const AA_EDIT_MODE_MELPA_PIN: (&str, &str) = ("aa-edit-mode", "20170119.320");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
