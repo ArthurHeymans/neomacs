@@ -141,6 +141,10 @@ pub const AC_HELM_MELPA_PIN: (&str, &str) = ("ac-helm", "20160319.233");
 /// The exact ac-html package selected by the comprehensive API parity corpus.
 pub const AC_HTML_MELPA_PIN: (&str, &str) = ("ac-html", "20151005.731");
 
+/// The exact ac-html-angular package selected by the comprehensive API parity
+/// corpus.
+pub const AC_HTML_ANGULAR_MELPA_PIN: (&str, &str) = ("ac-html-angular", "20151225.719");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

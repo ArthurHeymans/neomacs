@@ -20,6 +20,7 @@ mod ac_geiser;
 mod ac_haskell_process;
 mod ac_helm;
 mod ac_html;
+mod ac_html_angular;
 mod async_package;
 mod at_package;
 mod bind_key;
