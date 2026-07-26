@@ -149,6 +149,10 @@ pub const AC_HTML_ANGULAR_MELPA_PIN: (&str, &str) = ("ac-html-angular", "2015122
 /// parity corpus.
 pub const AC_HTML_BOOTSTRAP_MELPA_PIN: (&str, &str) = ("ac-html-bootstrap", "20160302.1701");
 
+/// The exact ac-html-csswatcher package selected by the comprehensive API
+/// parity corpus.
+pub const AC_HTML_CSSWATCHER_MELPA_PIN: (&str, &str) = ("ac-html-csswatcher", "20151208.2113");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

@@ -22,6 +22,7 @@ mod ac_helm;
 mod ac_html;
 mod ac_html_angular;
 mod ac_html_bootstrap;
+mod ac_html_csswatcher;
 mod async_package;
 mod at_package;
 mod bind_key;
