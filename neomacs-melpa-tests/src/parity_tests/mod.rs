@@ -14,6 +14,7 @@ mod ac_capf;
 mod ac_clang;
 mod ac_dcd;
 mod ac_emmet;
+mod ac_emoji;
 mod async_package;
 mod at_package;
 mod bind_key;
