@@ -17,6 +17,30 @@ use crate::buffer::{
     Buffer, BufferManager, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, LispCharPos1,
 };
 
+/// The `syntax-table` property symbol, interned once.
+///
+/// GNU refers to this as the static `Qsyntax_table`. neomacs was rebuilding it
+/// with `Value::symbol("syntax-table")` at every use, which hashes a 12-byte
+/// name and walks the obarray -- on paths that run per property run, and in one
+/// case per character. `intern` shows at 2.31% of an org editing profile, where
+/// fontification creates many short property runs and so refills the run cache
+/// constantly.
+///
+/// Caches the `SymId` rather than the `Value`, matching `cached_symbol_id!` in
+/// eval.rs: an id is a plain index, so it cannot be invalidated by GC the way a
+/// cached pointer could.
+#[inline(always)]
+fn syntax_table_prop_symbol() -> Value {
+    use std::sync::OnceLock;
+    static SYMBOL: OnceLock<crate::emacs_core::intern::SymId> = OnceLock::new();
+    let id = if let Some(id) = SYMBOL.get() {
+        *id
+    } else {
+        *SYMBOL.get_or_init(|| crate::emacs_core::intern::intern("syntax-table"))
+    };
+    Value::symbol(id)
+}
+
 #[inline]
 fn buffer_byte_to_char_pos(buf: &Buffer, byte_pos: EmacsBytePos) -> usize {
     buf.emacs_byte_pos_to_char_pos_clamped(byte_pos).get()
@@ -2807,7 +2831,7 @@ impl SyntaxPropRange {
             {
                 let (fresh, _, _) = buf.get_property_run_at_char_pos(
                     offset_char_pos(CharPos0::ZERO, pos),
-                    Value::symbol("syntax-table"),
+                    syntax_table_prop_symbol(),
                 );
                 debug_assert!(
                     value == fresh,
@@ -2829,7 +2853,7 @@ impl SyntaxPropRange {
     fn refill_run(&self, buf: &Buffer, pos: usize) -> Option<Value> {
         let char_pos = offset_char_pos(CharPos0::ZERO, pos);
         let (value, start, end) =
-            buf.get_property_run_at_char_pos(char_pos, Value::symbol("syntax-table"));
+            buf.get_property_run_at_char_pos(char_pos, syntax_table_prop_symbol());
         self.run_start.set(start.get());
         self.run_end.set(end.get());
         self.run_value.set(value);
@@ -2854,7 +2878,7 @@ fn effective_syntax_entry_for_char_at_byte(
 ) -> SyntaxEntry {
     if honor_properties
         && let Some(prop) =
-            buf.text_props_get_property_at_emacs_byte_pos(byte_pos, Value::symbol("syntax-table"))
+            buf.text_props_get_property_at_emacs_byte_pos(byte_pos, syntax_table_prop_symbol())
         && let Some(entry) = syntax_entry_from_syntax_property(prop, ch)
     {
         return entry;
@@ -3102,10 +3126,7 @@ pub(crate) fn builtin_syntax_table_in_buffers(
     if !args.is_empty() {
         return Err(signal(
             LispCondition::WrongNumberOfArguments,
-            vec![
-                Value::symbol("syntax-table"),
-                Value::fixnum(args.len() as i64),
-            ],
+            vec![syntax_table_prop_symbol(), Value::fixnum(args.len() as i64)],
         ));
     }
     current_buffer_syntax_table_object_in_buffers(buffers)
@@ -4635,7 +4656,7 @@ impl ParseCommentState {
                 style,
                 nestable: true,
             } => (Value::fixnum(comment_depth), style.to_parse_state_value()),
-            Self::Fence => (Value::T, Value::symbol("syntax-table")),
+            Self::Fence => (Value::T, syntax_table_prop_symbol()),
         }
     }
 }
