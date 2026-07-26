@@ -2660,22 +2660,13 @@ fn syntax_entry_from_syntax_property(prop: Value, ch: char) -> Option<SyntaxEntr
     }
 }
 
-/// Per-scan cache of the `syntax-table` text-property run, mirroring GNU
-/// `syntax.c` `gl_state` (`b_property`/`e_property` plus the current value).
-/// A scan reads the property once per char, but it is almost always nil over
-/// long runs, so caching the `[start, end)` char range turns a per-char
-/// interval lookup (and its byte->char) into a plain range check, refetching
-/// only when the scan leaves the run.  Indexed by char position so a
-/// char-indexed scan needs no conversion at all on a hit.  Created fresh per
-/// scan, so it never observes a mid-scan property edit (syntax-propertize runs
-/// before the scan).
-/// Count of syntax entries actually DECODED from the char-table, so a test can
-/// assert the ASCII memo holds: a scan over N ASCII characters must decode a
-/// bounded number of entries, not one per character stepped.
-///
-/// Counts every decode, not just memo misses -- counting misses alone would
-/// read zero both when the memo works perfectly and when it never materializes.
-/// Mirrors the position-conversion scan counter in `emacs_char`.
+// Count of syntax entries actually DECODED from the char-table, so a test can
+// assert the ASCII memo holds: a scan over N ASCII characters must decode a
+// bounded number of entries, not one per character stepped.
+//
+// Counts every decode, not just memo misses -- counting misses alone would
+// read zero both when the memo works perfectly and when it never materializes.
+// Mirrors the position-conversion scan counter in `emacs_char`.
 #[cfg(test)]
 thread_local! {
     static SYNTAX_TABLE_DECODES: Cell<usize> = const { Cell::new(0) };
@@ -2699,6 +2690,15 @@ pub(crate) fn syntax_table_decodes_for_test() -> usize {
     SYNTAX_TABLE_DECODES.with(Cell::get)
 }
 
+/// Per-scan cache of the `syntax-table` text-property run, mirroring GNU
+/// `syntax.c` `gl_state` (`b_property`/`e_property` plus the current value).
+/// A scan reads the property once per char, but it is almost always nil over
+/// long runs, so caching the `[start, end)` char range turns a per-char
+/// interval lookup (and its byte->char) into a plain range check, refetching
+/// only when the scan leaves the run.  Indexed by char position so a
+/// char-indexed scan needs no conversion at all on a hit.  Created fresh per
+/// scan, so it never observes a mid-scan property edit (syntax-propertize runs
+/// before the scan).
 struct SyntaxPropRange {
     /// Run over which the `syntax-table` property is known constant, held as
     /// separate `Cell`s rather than one `RefCell<Option<..>>`.
@@ -5420,107 +5420,6 @@ pub(crate) fn builtin_parse_partial_sexp(
         .buffers
         .goto_buffer_emacs_byte_pos(current_id, stop_byte);
     Ok(state)
-}
-
-/// `(syntax-ppss &optional POS)` — parser state at POS.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_syntax_ppss(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    if args.len() > 1 {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![
-                Value::symbol("syntax-ppss"),
-                Value::fixnum(args.len() as i64),
-            ],
-        ));
-    }
-
-    let current_id = eval
-        .buffers
-        .current_buffer_id()
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let buf = eval
-        .buffers
-        .get(current_id)
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let table = SyntaxTable::for_buffer(buf);
-
-    let pos = if args.is_empty() || args[0].is_nil() {
-        buf.point_lisp_char_pos().as_i64()
-    } else {
-        match args[0].kind() {
-            ValueKind::Fixnum(n) => n,
-            _other => {
-                return Err(signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("number-or-marker-p"), args[0]],
-                ));
-            }
-        }
-    };
-
-    let honor_properties = parse_sexp_lookup_properties_enabled(eval);
-    let modified_tick = buf.modified_tick();
-    let old = eval.syntax_ppss_last.and_then(|last| {
-        (last.buffer_id == current_id
-            && last.modified_tick == modified_tick
-            && last.pos <= pos
-            && last.pos >= buf.accessible_char_region().start_lisp().as_i64())
-        .then_some((last.pos, last.state))
-    });
-    let (from, oldstate) = old
-        .map(|(old_pos, state)| (old_pos, Some(state)))
-        .unwrap_or((1, None));
-
-    let state = parse_state_from_range_with_options(
-        buf,
-        &table,
-        from,
-        pos,
-        None,
-        false,
-        oldstate.as_ref(),
-        CommentStopMode::None,
-        honor_properties,
-    )
-    .0;
-
-    eval.syntax_ppss_last = Some(super::eval::SyntaxPpssLast {
-        buffer_id: current_id,
-        pos,
-        modified_tick,
-        state,
-    });
-
-    Ok(state)
-}
-
-/// `(syntax-ppss-flush-cache POS &rest _IGNORED)` — flush parser-state cache.
-///
-/// NeoVM currently computes parser state directly, so this is a no-op that
-/// enforces Emacs-compatible arity/type behavior.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_syntax_ppss_flush_cache(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    if args.is_empty() {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol("syntax-ppss-flush-cache"), Value::fixnum(0)],
-        ));
-    }
-
-    match args[0].kind() {
-        ValueKind::Fixnum(_) => {
-            eval.syntax_ppss_last = None;
-            Ok(Value::NIL)
-        }
-        _other => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("number-or-marker-p"), args[0]],
-        )),
-    }
 }
 
 fn lisp_pos_to_byte(buf: &Buffer, pos: LispCharPos1) -> EmacsBytePos {

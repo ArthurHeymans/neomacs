@@ -1942,44 +1942,6 @@ fn modify_syntax_entry_at_descriptor_inherits_parent_or_default() {
 }
 
 #[test]
-fn syntax_ppss_flush_cache_contract() {
-    crate::test_utils::init_test_tracing();
-    let mut eval = crate::emacs_core::eval::Context::new();
-
-    assert_eq!(
-        builtin_syntax_ppss_flush_cache(&mut eval, vec![Value::fixnum(1)]).unwrap(),
-        Value::NIL
-    );
-    assert_eq!(
-        builtin_syntax_ppss_flush_cache(
-            &mut eval,
-            vec![Value::fixnum(1), Value::symbol("ignored"), Value::fixnum(3)],
-        )
-        .unwrap(),
-        Value::NIL
-    );
-
-    match builtin_syntax_ppss_flush_cache(&mut eval, vec![]) {
-        Err(crate::emacs_core::error::Flow::Signal(sig)) => {
-            assert_eq!(sig.symbol_name(), "wrong-number-of-arguments");
-            assert_eq!(
-                sig.data.first(),
-                Some(&Value::symbol("syntax-ppss-flush-cache"))
-            );
-        }
-        other => panic!("expected wrong-number-of-arguments signal, got {other:?}"),
-    }
-
-    match builtin_syntax_ppss_flush_cache(&mut eval, vec![Value::NIL]) {
-        Err(crate::emacs_core::error::Flow::Signal(sig)) => {
-            assert_eq!(sig.symbol_name(), "wrong-type-argument");
-            assert_eq!(sig.data.first(), Some(&Value::symbol("number-or-marker-p")));
-        }
-        other => panic!("expected wrong-type-argument signal, got {other:?}"),
-    }
-}
-
-#[test]
 fn scan_lists_basic_and_backward_nil() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
@@ -2449,38 +2411,6 @@ fn parse_partial_sexp_preserves_gnu_negative_depth_state() {
 }
 
 #[test]
-fn syntax_ppss_baseline_shape() {
-    crate::test_utils::init_test_tracing();
-    let mut eval = crate::emacs_core::eval::Context::new();
-    {
-        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
-            buf.point_min_emacs_byte_pos().get(),
-            buf.point_max_emacs_byte_pos().get(),
-        ));
-        buf.insert("(a)");
-    }
-
-    let state = builtin_syntax_ppss(&mut eval, vec![Value::fixnum(3)]).unwrap();
-    assert_eq!(
-        state,
-        Value::list(vec![
-            Value::fixnum(1),
-            Value::fixnum(1),
-            Value::fixnum(2),
-            Value::NIL,
-            Value::NIL,
-            Value::NIL,
-            Value::fixnum(0),
-            Value::NIL,
-            Value::NIL,
-            Value::list(vec![Value::fixnum(1)]),
-            Value::NIL,
-        ])
-    );
-}
-
-#[test]
 fn parse_partial_sexp_enters_single_char_line_comment_state() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
@@ -2506,38 +2436,6 @@ fn parse_partial_sexp_enters_single_char_line_comment_state() {
             Value::NIL,
             Value::NIL,
             Value::T,
-            Value::NIL,
-            Value::fixnum(0),
-            Value::NIL,
-            Value::fixnum(1),
-            Value::NIL,
-            Value::NIL,
-        ])
-    );
-}
-
-#[test]
-fn syntax_ppss_reports_string_state_and_start_position() {
-    crate::test_utils::init_test_tracing();
-    let mut eval = crate::emacs_core::eval::Context::new();
-    {
-        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
-        buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
-            buf.point_min_emacs_byte_pos().get(),
-            buf.point_max_emacs_byte_pos().get(),
-        ));
-        buf.insert("\"ab");
-    }
-
-    let state = builtin_syntax_ppss(&mut eval, vec![Value::fixnum(2)]).unwrap();
-    assert_eq!(
-        state,
-        Value::list(vec![
-            Value::fixnum(0),
-            Value::NIL,
-            Value::NIL,
-            Value::fixnum('"' as i64),
-            Value::NIL,
             Value::NIL,
             Value::fixnum(0),
             Value::NIL,

@@ -198,15 +198,6 @@ struct RedisplaySignature {
     frame: Option<RedisplayFrameSignature>,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct SyntaxPpssLast {
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(crate) buffer_id: BufferId,
-    pub(crate) pos: i64,
-    pub(crate) modified_tick: i64,
-    pub(crate) state: Value,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RedisplayFrameSignature {
     id: u64,
@@ -2122,7 +2113,6 @@ pub struct Context {
     /// `parse-partial-sexp`.  Fields 2 and 6 of the returned state are
     /// intentionally cache-dependent, so keeping the last state is part of
     /// matching the observable behavior of repeated `syntax-ppss` calls.
-    pub(crate) syntax_ppss_last: Option<SyntaxPpssLast>,
     /// Canonical Lisp object returned by `standard-category-table`.
     ///
     /// Like `standard_syntax_table`, this is mirrored into thread-local state
@@ -5719,7 +5709,6 @@ impl Context {
             active_variable_watchers: HashSet::new(),
             standard_syntax_table,
             syntax_code_objects,
-            syntax_ppss_last: None,
             standard_category_table,
             current_local_map: Value::NIL,
             registers: RegisterManager::new(),
@@ -5910,7 +5899,6 @@ impl Context {
             active_variable_watchers: HashSet::new(),
             standard_syntax_table,
             syntax_code_objects,
-            syntax_ppss_last: None,
             standard_category_table,
             current_local_map,
             registers,
@@ -6173,11 +6161,6 @@ impl Context {
         }
         if self.syntax_code_objects.is_heap_object() {
             visit(self.syntax_code_objects);
-        }
-        if let Some(last) = self.syntax_ppss_last
-            && last.state.is_heap_object()
-        {
-            visit(last.state);
         }
         if self.standard_category_table.is_heap_object() {
             visit(self.standard_category_table);
