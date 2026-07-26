@@ -14,4 +14,5 @@ mod projectile;
 mod s;
 mod transient;
 mod upstream_package_ert;
+mod use_package;
 mod with_editor;

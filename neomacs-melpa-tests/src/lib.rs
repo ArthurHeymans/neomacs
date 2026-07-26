@@ -82,6 +82,10 @@ pub const S_MELPA_PIN: (&str, &str) = ("s", "20220902.1511");
 /// corpus.
 pub const TRANSIENT_MELPA_PIN: (&str, &str) = ("transient", "20260725.1105");
 
+/// The exact Use-Package release selected from GNU ELPA by the comprehensive
+/// API parity corpus.
+pub const USE_PACKAGE_GNU_ELPA_PIN: (&str, &str) = ("use-package", "2.4.6");
+
 /// The exact With-Editor package selected by the comprehensive API parity
 /// corpus.
 pub const WITH_EDITOR_MELPA_PIN: (&str, &str) = ("with-editor", "20260701.1252");
