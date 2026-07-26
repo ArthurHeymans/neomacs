@@ -38,6 +38,7 @@ mod ac_slime;
 mod ac_sly;
 mod academic_phrases;
 mod accent;
+mod ace_flyspell;
 mod async_package;
 mod at_package;
 mod bind_key;
