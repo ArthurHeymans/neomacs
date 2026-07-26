@@ -4,6 +4,7 @@ mod compat;
 mod dash;
 mod f;
 mod frozen_packages;
+mod general;
 mod git_commit;
 mod harness_contract;
 mod live_melpa;

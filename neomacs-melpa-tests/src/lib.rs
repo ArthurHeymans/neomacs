@@ -67,6 +67,9 @@ pub const F_MELPA_PIN: (&str, &str) = ("f", "20241003.1131");
 /// comprehensive API parity corpus.
 pub const GIT_COMMIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
 
+/// The exact General package selected by the comprehensive API parity corpus.
+pub const GENERAL_MELPA_PIN: (&str, &str) = ("general", "20250612.2309");
+
 /// The exact Magit package selected by the comprehensive API parity corpus.
 pub const MAGIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
 
