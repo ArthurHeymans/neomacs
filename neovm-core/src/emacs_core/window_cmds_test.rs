@@ -2062,6 +2062,28 @@ fn select_window_works() {
 }
 
 #[test]
+fn select_window_selects_a_live_child_windows_owning_frame() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one_with_frame(
+        "(let* ((parent (selected-frame))
+                (child (make-frame
+                        (list (cons 'parent-frame parent)
+                              '(minibuffer . nil))))
+                (window (frame-root-window child)))
+           (select-frame parent)
+           (prog1
+               (list (window-live-p window)
+                     (eq (select-window window t) window)
+                     (eq (selected-window) window)
+                     (eq (selected-frame) child)
+                     (eq (frame-selected-window child) window))
+             (select-frame parent)
+             (delete-frame child t)))",
+    );
+    assert_eq!(result, "OK (t t t t t)");
+}
+
+#[test]
 fn select_window_accepts_minibuffer_window_and_switches_current_buffer() {
     crate::test_utils::init_test_tracing();
     let results = eval_with_frame(

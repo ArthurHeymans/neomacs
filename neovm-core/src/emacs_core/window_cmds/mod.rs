@@ -4356,21 +4356,36 @@ pub(crate) fn builtin_select_window(
             vec![Value::symbol("window-live-p"), args[0]],
         ));
     }
-    let (record_selection, run_buffer_list_hook) = {
+    let (record_selection, run_buffer_list_hook, frame_changed) = {
         let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
-        let fid = ensure_selected_frame_id_in_state(frames, buffers);
+        let selected_fid = ensure_selected_frame_id_in_state(frames, buffers);
+        // GNU `select_window' derives WINDOW_FRAME and selects that frame when
+        // it differs.  Posframe/transient relies on this for child-frame roots.
+        let fid = frames.find_window_frame_id(wid).ok_or_else(|| {
+            signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("window-live-p"), args[0]],
+            )
+        })?;
         let record_selection = args.get(1).is_none_or(|v| v.is_nil());
-        remember_selected_window_point_in_state(frames, buffers, fid);
+        remember_selected_window_point_in_state(frames, buffers, selected_fid);
         {
             let frame = frames
                 .get_mut(fid)
-                .ok_or_else(|| signal("error", vec![Value::string("No selected frame")]))?;
+                .ok_or_else(|| signal("error", vec![Value::string("No window frame")]))?;
             if !frame.select_window(wid) {
                 return Err(signal(
                     LispCondition::WrongTypeArgument,
                     vec![Value::symbol("window-live-p"), args[0]],
                 ));
             }
+        }
+        let frame_changed = fid != selected_fid;
+        if frame_changed && !frames.select_frame(fid) {
+            return Err(signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("window-live-p"), args[0]],
+            ));
         }
         if record_selection {
             let _ = frames.note_window_selected(wid);
@@ -4392,8 +4407,11 @@ pub(crate) fn builtin_select_window(
         let run_buffer_list_hook = record_selection
             && selected_window_buffer_state_in_frame(frames, fid)
                 .is_some_and(|(_, buffer_id)| !buffers.buffer_hooks_inhibited(buffer_id));
-        (record_selection, run_buffer_list_hook)
+        (record_selection, run_buffer_list_hook, frame_changed)
     };
+    if frame_changed {
+        eval.sync_keyboard_terminal_owner();
+    }
     if record_selection && run_buffer_list_hook {
         super::builtins::run_buffer_list_update_hook(eval)?;
     }
