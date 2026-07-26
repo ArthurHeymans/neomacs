@@ -245,7 +245,7 @@ sleep 1
 package_dir="$HOME/.emacs.d/elpa/neomacs-cache-contract-$CACHE_CONTRACT_VERSION"
 mkdir -p "$package_dir"
 : > "$package_dir/neomacs-cache-contract-pkg.el"
-printf '%s\n' 'NEOMACS-MELPA-PACKAGE-CACHE:ready'
+printf '%s\n' 'NEOMACS-PACKAGE-CACHE:ready'
 "##,
             invocation_log.display()
         ),

@@ -1,11 +1,15 @@
+mod compat;
 mod dash;
 mod f;
 mod frozen_packages;
 mod harness_contract;
 mod live_melpa;
 mod magit;
+mod magit_section;
 mod package_lifecycle;
 mod package_vc;
 mod projectile;
 mod s;
+mod transient;
 mod upstream_package_ert;
+mod with_editor;

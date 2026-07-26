@@ -22,15 +22,45 @@ const OUTCOME_MARKER: &str = "NEOMACS-MELPA-OUTCOME:";
 const INSTALLED_MARKER: &str = "NEOMACS-MELPA-INSTALLED:";
 const DEFAULT_PROCESS_TIMEOUT: Duration = Duration::from_secs(300);
 
+#[derive(Clone, Copy)]
+struct PackageArchiveSpec {
+    cache_directory: &'static str,
+    label: &'static str,
+    name: &'static str,
+    url: &'static str,
+}
+
+const MELPA_ARCHIVE: PackageArchiveSpec = PackageArchiveSpec {
+    cache_directory: "package-cache",
+    label: "MELPA",
+    name: "melpa",
+    url: "https://melpa.org/packages/",
+};
+
+const GNU_ELPA_ARCHIVE: PackageArchiveSpec = PackageArchiveSpec {
+    cache_directory: "package-cache-gnu-elpa",
+    label: "GNU ELPA",
+    name: "gnu",
+    url: "https://elpa.gnu.org/packages/",
+};
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
+
+/// The exact Compat release selected from GNU ELPA by the comprehensive API
+/// parity corpus.
+pub const COMPAT_GNU_ELPA_PIN: (&str, &str) = ("compat", "31.0.0.2");
 
 /// The exact f package selected by the comprehensive API parity corpus.
 pub const F_MELPA_PIN: (&str, &str) = ("f", "20241003.1131");
 
 /// The exact Magit package selected by the comprehensive API parity corpus.
 pub const MAGIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
+
+/// The exact magit-section package selected by the comprehensive API parity
+/// corpus.
+pub const MAGIT_SECTION_MELPA_PIN: (&str, &str) = ("magit-section", "20260722.2131");
 
 /// The exact Projectile package selected by the comprehensive API parity
 /// corpus.
@@ -39,6 +69,14 @@ pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260725.1657");
 /// The exact s package selected by the live lifecycle and comprehensive API
 /// parity corpora.
 pub const S_MELPA_PIN: (&str, &str) = ("s", "20220902.1511");
+
+/// The exact Transient package selected by the comprehensive API parity
+/// corpus.
+pub const TRANSIENT_MELPA_PIN: (&str, &str) = ("transient", "20260725.1105");
+
+/// The exact With-Editor package selected by the comprehensive API parity
+/// corpus.
+pub const WITH_EDITOR_MELPA_PIN: (&str, &str) = ("with-editor", "20260701.1252");
 
 /// Resolve the checkout used by a normal Cargo run or an extracted Nextest
 /// archive.
@@ -569,8 +607,8 @@ pub struct ElispOracleReport {
     pub gnu_emacs: EvalOutcome,
 }
 
-/// Differential oracle for one exact MELPA package cached below `./tmp`.
-pub struct CachedMelpaOracle {
+/// Differential oracle for one exact package cached below `./tmp`.
+pub struct CachedPackageOracle {
     package_name: String,
     package_user_dir: PathBuf,
     source_file: PathBuf,
@@ -578,18 +616,32 @@ pub struct CachedMelpaOracle {
     timeout: Duration,
 }
 
-impl CachedMelpaOracle {
+/// MELPA-focused name retained for package-specific parity modules.
+pub type CachedMelpaOracle = CachedPackageOracle;
+
+impl CachedPackageOracle {
     /// Prepare the pinned package and select the Elisp source file to load.
     pub fn new(package: (&str, &str), source_file_name: &str) -> Result<Self, String> {
-        let mut components = Path::new(source_file_name).components();
-        if !matches!(components.next(), Some(std::path::Component::Normal(_)))
-            || components.next().is_some()
-        {
-            return Err(format!(
-                "cached MELPA source must be one file name, got `{source_file_name}`"
-            ));
-        }
+        validate_cached_source_file_name(MELPA_ARCHIVE.label, source_file_name)?;
         let package_dir = prepare_cached_melpa_package(&EmacsRuntime::gnu_emacs(), package)?;
+        Self::from_package_dir(package, source_file_name, package_dir)
+    }
+
+    /// Prepare one pinned GNU ELPA package and select its Elisp source file.
+    pub fn new_from_gnu_elpa(
+        package: (&str, &str),
+        source_file_name: &str,
+    ) -> Result<Self, String> {
+        validate_cached_source_file_name(GNU_ELPA_ARCHIVE.label, source_file_name)?;
+        let package_dir = prepare_cached_gnu_elpa_package(&EmacsRuntime::gnu_emacs(), package)?;
+        Self::from_package_dir(package, source_file_name, package_dir)
+    }
+
+    fn from_package_dir(
+        package: (&str, &str),
+        source_file_name: &str,
+        package_dir: PathBuf,
+    ) -> Result<Self, String> {
         let source_file = package_dir.join(source_file_name);
         if !source_file.is_file() {
             return Err(format!(
@@ -640,28 +692,28 @@ impl CachedMelpaOracle {
     ) -> Result<ElispOracleReport, String> {
         let neomacs = EmacsRuntime::neomacs()
             .with_env(
-                "NEOMACS_MELPA_PACKAGE_USER_DIR",
+                "NEOMACS_PACKAGE_USER_DIR",
                 self.package_user_dir.as_os_str(),
             )
-            .with_env("NEOMACS_MELPA_PACKAGE_SOURCE", self.source_file.as_os_str())
+            .with_env("NEOMACS_PACKAGE_SOURCE", self.source_file.as_os_str())
             .with_timeout(self.timeout);
         let gnu_emacs = EmacsRuntime::gnu_emacs()
             .with_env(
-                "NEOMACS_MELPA_PACKAGE_USER_DIR",
+                "NEOMACS_PACKAGE_USER_DIR",
                 self.package_user_dir.as_os_str(),
             )
-            .with_env("NEOMACS_MELPA_PACKAGE_SOURCE", self.source_file.as_os_str())
+            .with_env("NEOMACS_PACKAGE_SOURCE", self.source_file.as_os_str())
             .with_timeout(self.timeout);
         let setup = format!(
             r##"(progn
                    (require 'package)
                    (setq package-user-dir
-                         (getenv "NEOMACS_MELPA_PACKAGE_USER_DIR")
+                         (getenv "NEOMACS_PACKAGE_USER_DIR")
                          load-suffixes '(".el"))
                    (package-initialize)
                    {}
                    (load
-                    (getenv "NEOMACS_MELPA_PACKAGE_SOURCE")
+                    (getenv "NEOMACS_PACKAGE_SOURCE")
                     nil t t))"##,
             self.prelude
         );
@@ -675,6 +727,21 @@ impl CachedMelpaOracle {
         }
         Ok(report)
     }
+}
+
+fn validate_cached_source_file_name(
+    archive_label: &str,
+    source_file_name: &str,
+) -> Result<(), String> {
+    let mut components = Path::new(source_file_name).components();
+    if !matches!(components.next(), Some(std::path::Component::Normal(_)))
+        || components.next().is_some()
+    {
+        return Err(format!(
+            "cached {archive_label} source must be one file name, got `{source_file_name}`"
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -862,6 +929,24 @@ pub fn prepare_cached_melpa_package(
     gnu_emacs: &EmacsRuntime,
     package: (&str, &str),
 ) -> Result<PathBuf, String> {
+    prepare_cached_package(gnu_emacs, package, MELPA_ARCHIVE)
+}
+
+/// Install one exact GNU ELPA package into a validated, cross-process cache.
+///
+/// Like the MELPA cache, this remains a workspace-local runtime artifact.
+pub fn prepare_cached_gnu_elpa_package(
+    gnu_emacs: &EmacsRuntime,
+    package: (&str, &str),
+) -> Result<PathBuf, String> {
+    prepare_cached_package(gnu_emacs, package, GNU_ELPA_ARCHIVE)
+}
+
+fn prepare_cached_package(
+    gnu_emacs: &EmacsRuntime,
+    package: (&str, &str),
+    archive: PackageArchiveSpec,
+) -> Result<PathBuf, String> {
     let (name, version) = package;
     if name.is_empty()
         || version.is_empty()
@@ -873,12 +958,14 @@ pub fn prepare_cached_melpa_package(
         })
     {
         return Err(format!(
-            "cached MELPA package must have a safe hard-coded name and version, got `{name}` `{version}`"
+            "cached {} package must have a safe hard-coded name and version, got `{name}` `{version}`",
+            archive.label
         ));
     }
 
     let root = workspace_root()
-        .join("tmp/melpa/package-cache")
+        .join("tmp/melpa")
+        .join(archive.cache_directory)
         .join(name)
         .join(version);
     fs::create_dir_all(&root).map_err(|error| {
@@ -949,6 +1036,8 @@ pub fn prepare_cached_melpa_package(
 
     let name_string = elisp_string(name);
     let version_string = elisp_string(version);
+    let archive_name_string = elisp_string(archive.name);
+    let archive_url_string = elisp_string(archive.url);
     let form = format!(
         r##"(progn
                (require 'package)
@@ -956,7 +1045,9 @@ pub fn prepare_cached_melpa_package(
                      (expand-file-name ".emacs.d/elpa" (getenv "HOME"))
                      package-check-signature nil
                      package-archives
-                     '(("melpa" . "https://melpa.org/packages/")))
+                     (list
+                      (cons {archive_name_string}
+                            {archive_url_string})))
                (package-refresh-contents)
                (let* ((package-name {name_string})
                       (expected-version {version_string})
@@ -969,7 +1060,8 @@ pub fn prepare_cached_melpa_package(
                             (package-version-join
                              (package-desc-version description)))))
                  (unless description
-                   (error "Package is absent from MELPA: %s" package-name))
+                   (error "Package is absent from selected archive: %s"
+                          package-name))
                  (unless (equal archive-version expected-version)
                    (error
                     "Package version changed: %s expected %s, current %s"
@@ -997,7 +1089,7 @@ pub fn prepare_cached_melpa_package(
                      (error
                       "Installed package descriptor is unreadable: %s"
                       descriptor))))
-               (princ "NEOMACS-MELPA-PACKAGE-CACHE:ready"))"##
+               (princ "NEOMACS-PACKAGE-CACHE:ready"))"##
     );
     let mut command = gnu_emacs.command();
     configure_process_environment(&mut command, &root, &home, &tmp);
@@ -1023,11 +1115,12 @@ pub fn prepare_cached_melpa_package(
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     if !output.status.success()
-        || !stdout.contains("NEOMACS-MELPA-PACKAGE-CACHE:ready")
+        || !stdout.contains("NEOMACS-PACKAGE-CACHE:ready")
         || !descriptor.is_file()
     {
         return Err(format!(
-            "failed to prepare cached MELPA package {name} {version} below {}\nstatus: {:?}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+            "failed to prepare cached {} package {name} {version} below {}\nstatus: {:?}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+            archive.label,
             root.display(),
             output.status.code()
         ));
