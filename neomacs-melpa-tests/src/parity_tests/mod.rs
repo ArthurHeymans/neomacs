@@ -30,6 +30,7 @@ mod ac_math;
 mod ac_mozc;
 mod ac_octave;
 mod ac_php;
+mod ac_php_core;
 mod async_package;
 mod at_package;
 mod bind_key;

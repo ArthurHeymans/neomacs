@@ -176,6 +176,10 @@ pub const AC_OCTAVE_MELPA_PIN: (&str, &str) = ("ac-octave", "20180406.334");
 /// The exact ac-php package selected by the comprehensive API parity corpus.
 pub const AC_PHP_MELPA_PIN: (&str, &str) = ("ac-php", "20240328.1036");
 
+/// The exact ac-php-core package selected by the comprehensive API parity
+/// corpus.
+pub const AC_PHP_CORE_MELPA_PIN: (&str, &str) = ("ac-php-core", "20260210.846");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
