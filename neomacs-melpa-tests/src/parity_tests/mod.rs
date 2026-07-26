@@ -2,6 +2,7 @@ mod compat;
 mod dash;
 mod f;
 mod frozen_packages;
+mod git_commit;
 mod harness_contract;
 mod live_melpa;
 mod magit;

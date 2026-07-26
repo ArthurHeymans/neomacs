@@ -1,0 +1,185 @@
+use expect_test::expect;
+
+use super::assert_git_commit_parity;
+
+#[test]
+fn git_commit_buffer_message_removes_comments_scissors_and_normalizes_blank_edges() {
+    let elisp_form = r##"(list
+               (with-temp-buffer
+                 (setq-local comment-start "#")
+                 (insert "\n\nSummary\n\nBody\n# status\nignored\n")
+                 (git-commit-buffer-message))
+               (with-temp-buffer
+                 (setq-local comment-start "#")
+                 (insert "Summary\n\nBody\n# ------------------------ >8 ------------------------\ndiff --git a/a b/a\n")
+                 (git-commit-buffer-message))
+               (with-temp-buffer
+                 (setq-local comment-start "#")
+                 (insert "Summary without newline")
+                 (git-commit-buffer-message)))"##;
+    let expect = expect![[
+        r#"OK ("\nSummary\n\nBody\nignored\n" "Summary\n\nBody\n" "Summary without newline\n")"#
+    ]];
+
+    assert_git_commit_parity(elisp_form, expect);
+}
+
+#[test]
+fn git_commit_buffer_message_rejects_whitespace_and_comment_only_buffers() {
+    let elisp_form = r##"(list
+               (with-temp-buffer
+                 (setq-local comment-start "#")
+                 (insert " \t\n\r\n")
+                 (git-commit-buffer-message))
+               (with-temp-buffer
+                 (setq-local comment-start "#")
+                 (insert "# first\n# second\n")
+                 (git-commit-buffer-message))
+               (with-temp-buffer
+                 (setq-local comment-start "#")
+                 (insert "\n# comment\n \t\n")
+                 (git-commit-buffer-message)))"##;
+    let expect = expect![[r#"OK (nil nil nil)"#]];
+
+    assert_git_commit_parity(elisp_form, expect);
+}
+
+#[test]
+fn git_commit_ensure_comment_gap_only_expands_an_initial_empty_comment_boundary() {
+    let elisp_form = r##"(mapcar
+               (lambda (text)
+                 (with-temp-buffer
+                   (setq-local comment-start "#")
+                   (insert text)
+                   (git-commit-ensure-comment-gap)
+                   (buffer-string)))
+               '("\n# instructions\n"
+                 "\n\n# instructions\n"
+                 "summary\n# instructions\n"
+                 "# instructions\n"))"##;
+    let expect = expect![[
+        r##"OK ("\n\n# instructions\n" "\n\n# instructions\n" "summary\n# instructions\n" "# instructions\n")"##
+    ]];
+
+    assert_git_commit_parity(elisp_form, expect);
+}
+
+#[test]
+fn git_commit_save_message_deduplicates_and_moves_the_latest_message_to_the_front() {
+    let elisp_form = r##"(with-temp-buffer
+               (setq-local comment-start "#")
+               (setq-local log-edit-comment-ring (make-ring 4))
+               (let ((git-commit-use-local-message-ring nil))
+                 (dolist (text '("one\n" "two\n" "one\n" "# only\n"))
+                   (erase-buffer)
+                   (insert text)
+                   (git-commit-save-message))
+                 (list
+                  (ring-length log-edit-comment-ring)
+                  (ring-elements log-edit-comment-ring))))"##;
+    let expect = expect![[r#"OK (2 ("one\n" "two\n"))"#]];
+
+    assert_git_commit_parity(elisp_form, expect);
+}
+
+#[test]
+fn git_commit_previous_and_next_message_preserve_instruction_comments() {
+    let elisp_form = r##"(with-temp-buffer
+               (setq-local comment-start "#")
+               (setq-local log-edit-comment-ring (make-ring 5))
+               (setq-local log-edit-comment-ring-index nil)
+               (ring-insert log-edit-comment-ring "older\n")
+               (ring-insert log-edit-comment-ring "newer\n")
+               (insert "draft\n# instructions\n")
+               (git-commit-prev-message 1)
+               (let ((previous (buffer-string))
+                     (previous-index log-edit-comment-ring-index))
+                 (git-commit-next-message 1)
+                 (list
+                  previous
+                  previous-index
+                  (buffer-string)
+                  log-edit-comment-ring-index
+                  (ring-elements log-edit-comment-ring))))"##;
+    let expect = expect![[
+        r##"OK ("newer\n\n# instructions\n" 1 "draft\n\n# instructions\n" 0 ("draft\n" "newer\n" "older\n"))"##
+    ]];
+
+    assert_git_commit_parity(elisp_form, expect);
+}
+
+#[test]
+fn git_commit_summary_regexp_captures_limit_overflow_and_nonempty_second_line() {
+    let elisp_form = r##"(let ((comment-start "#")
+                    (git-commit-need-summary-line t)
+                    (git-commit-summary-max-length 5))
+               (mapcar
+                (lambda (text)
+                  (save-match-data
+                    (string-match (git-commit-summary-regexp) text)
+                    (list
+                     (match-string 1 text)
+                     (match-string 2 text)
+                     (match-string 3 text))))
+                '("# comment\nabcdef\nbody\n"
+                  "\nshort\n\nbody\n"
+                  "\n# comment\n\n\n")))"##;
+    let expect = expect![[r#"OK (("abcde" "f" "body") ("short" "" nil) ("" "" nil))"#]];
+
+    assert_git_commit_parity(elisp_form, expect);
+}
+
+#[test]
+fn git_commit_style_checks_short_circuit_prompts_and_honor_force() {
+    let elisp_form = r##"(let ((comment-start "#")
+                    (git-commit-need-summary-line t)
+                    (git-commit-summary-max-length 5)
+                    (git-commit-style-convention-checks
+                     '(overlong-summary-line non-empty-second-line)))
+               (cl-labels
+                   ((check
+                     (text answers force)
+                     (with-temp-buffer
+                       (insert text)
+                       (let (prompts)
+                         (cl-letf
+                             (((symbol-function 'y-or-n-p)
+                               (lambda (prompt)
+                                 (push prompt prompts)
+                                 (pop answers))))
+                           (list
+                            (git-commit-check-style-conventions force)
+                            (nreverse prompts)))))))
+                 (list
+                  (check "short\n\nbody\n" nil nil)
+                  (check "abcdef\nbody\n" '(nil t) nil)
+                  (check "abcdef\nbody\n" '(t nil) nil)
+                  (check "abcdef\nbody\n" nil t))))"##;
+    let expect = expect![[
+        r#"OK ((t nil) (nil ("Summary line is too long.  Commit anyway? ")) (nil ("Summary line is too long.  Commit anyway? " "Second line is not empty.  Commit anyway? ")) (t nil))"#
+    ]];
+
+    assert_git_commit_parity(elisp_form, expect);
+}
+
+#[test]
+fn git_commit_cancel_message_reports_whether_the_message_was_saved() {
+    let elisp_form = r##"(let (messages)
+               (cl-letf (((symbol-function 'message)
+                          (lambda (format-string &rest arguments)
+                            (let ((text
+                                   (apply #'format format-string arguments)))
+                              (push text messages)
+                              text))))
+                 (let ((with-editor-pre-cancel-hook nil))
+                   (git-commit-cancel-message))
+                 (let ((with-editor-pre-cancel-hook
+                        '(git-commit-save-message)))
+                   (git-commit-cancel-message))
+                 (nreverse messages)))"##;
+    let expect = expect![[
+        r#"OK ("Commit canceled" "Commit canceled.  Message saved to `log-edit-comment-ring'")"#
+    ]];
+
+    assert_git_commit_parity(elisp_form, expect);
+}

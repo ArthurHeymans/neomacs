@@ -55,6 +55,10 @@ pub const COMPAT_GNU_ELPA_PIN: (&str, &str) = ("compat", "31.0.0.2");
 /// The exact f package selected by the comprehensive API parity corpus.
 pub const F_MELPA_PIN: (&str, &str) = ("f", "20241003.1131");
 
+/// The exact Magit package containing the Git-Commit source selected by the
+/// comprehensive API parity corpus.
+pub const GIT_COMMIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
+
 /// The exact Magit package selected by the comprehensive API parity corpus.
 pub const MAGIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
 
