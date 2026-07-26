@@ -157,6 +157,10 @@ pub const AC_HTML_CSSWATCHER_MELPA_PIN: (&str, &str) = ("ac-html-csswatcher", "2
 /// corpus.
 pub const AC_INF_RUBY_MELPA_PIN: (&str, &str) = ("ac-inf-ruby", "20131115.1150");
 
+/// The exact ac-ispell package selected by the comprehensive API parity
+/// corpus.
+pub const AC_ISPELL_MELPA_PIN: (&str, &str) = ("ac-ispell", "20151101.226");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
