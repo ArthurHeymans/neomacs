@@ -60,7 +60,8 @@ mkdir -p ./tmp
 TMPDIR="$PWD/tmp" cargo xtask fresh-build --release
 ```
 
-Run deterministic tests:
+Run the default suite. The pinned Dash and `s` parity corpora prepare their
+package caches below `./tmp` on the first run:
 
 ```sh
 TMPDIR="$PWD/tmp" \
@@ -86,7 +87,6 @@ Run every comprehensive Dash parity test:
 TMPDIR="$PWD/tmp" \
 NEOMACS_BIN="$PWD/target/release/neomacs" \
 cargo nextest run -p neomacs-melpa-tests \
-  --run-ignored only \
   -E 'binary_id(neomacs-melpa-tests::dash_parity)' \
   --no-fail-fast
 ```
@@ -97,7 +97,6 @@ Run every comprehensive `s` parity test:
 TMPDIR="$PWD/tmp" \
 NEOMACS_BIN="$PWD/target/release/neomacs" \
 cargo nextest run -p neomacs-melpa-tests \
-  --run-ignored only \
   -E 'binary_id(neomacs-melpa-tests::s_parity)' \
   --no-fail-fast
 ```
@@ -110,7 +109,6 @@ TMPDIR="$PWD/tmp" \
 NEOMACS_BIN="$PWD/target/release/neomacs" \
 UPDATE_EXPECT=1 \
 cargo nextest run -p neomacs-melpa-tests \
-  --run-ignored only \
   -E 'binary_id(neomacs-melpa-tests::dash_parity)' \
   --no-fail-fast
 ```

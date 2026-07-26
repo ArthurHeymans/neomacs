@@ -3,7 +3,6 @@ use expect_test::expect;
 use super::{assert_dash_parity, assert_dash_signal_parity};
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_distinct_and_uniq_preserve_first_occurrence_order() {
     let elisp_form = r##"(list
               (-distinct '(a b a c b))
@@ -18,7 +17,6 @@ fn dash_distinct_and_uniq_preserve_first_occurrence_order() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_union_intersection_and_difference_honor_custom_comparison() {
     let elisp_form = r##"(list
               (-union '(a b c) '(b c d))
@@ -38,7 +36,6 @@ fn dash_union_intersection_and_difference_honor_custom_comparison() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_frequencies_count_equal_values_in_first_seen_order() {
     let elisp_form = r##"(list
               (-frequencies '(a b a c b a))
@@ -52,7 +49,6 @@ fn dash_frequencies_count_equal_values_in_first_seen_order() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_powerset_inits_and_tails_include_empty_boundaries() {
     let elisp_form = r##"(list
               (-powerset '(a b c))
@@ -69,7 +65,6 @@ fn dash_powerset_inits_and_tails_include_empty_boundaries() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_permutations_cover_unique_and_duplicate_items() {
     let elisp_form = r##"(list
               (-permutations '(a b c))
@@ -84,7 +79,6 @@ fn dash_permutations_cover_unique_and_duplicate_items() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_common_prefix_and_suffix_compare_multiple_lists() {
     let elisp_form = r##"(list
               (-common-prefix '(a b c) '(a b d) '(a b))
@@ -101,7 +95,6 @@ fn dash_common_prefix_and_suffix_compare_multiple_lists() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_contains_and_same_items_predicates_honor_multiplicity_and_aliases() {
     let elisp_form = r##"(list
               (-contains? '(a b c) 'b)
@@ -118,7 +111,6 @@ fn dash_contains_and_same_items_predicates_honor_multiplicity_and_aliases() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_prefix_suffix_and_infix_predicates_cover_aliases_and_empty_patterns() {
     let elisp_form = r##"(list
               (-is-prefix? '(a b) '(a b c))
@@ -139,7 +131,6 @@ fn dash_prefix_suffix_and_infix_predicates_cover_aliases_and_empty_patterns() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_sort_list_and_repeat_cover_order_empty_and_count_boundaries() {
     let elisp_form = r##"(list
               (-sort #'< '(3 1 2))
@@ -156,7 +147,6 @@ fn dash_sort_list_and_repeat_cover_order_empty_and_count_boundaries() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_sum_product_and_running_aggregates_define_empty_identities() {
     let elisp_form = r##"(list
               (-sum '(1 2 3 4))
@@ -172,7 +162,6 @@ fn dash_sum_product_and_running_aggregates_define_empty_identities() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_running_sum_rejects_an_empty_list() {
     let elisp_form = r##"(-running-sum nil)"##;
     let expect = expect!["ERR (wrong-type-argument consp nil)"];
@@ -181,7 +170,6 @@ fn dash_running_sum_rejects_an_empty_list() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_running_product_rejects_an_empty_list() {
     let elisp_form = r##"(-running-product nil)"##;
     let expect = expect!["ERR (wrong-type-argument consp nil)"];
@@ -190,7 +178,6 @@ fn dash_running_product_rejects_an_empty_list() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_min_max_and_comparator_variants_select_extreme_items() {
     let elisp_form = r##"(list
               (-max '(3 1 4 2))
@@ -215,7 +202,6 @@ fn dash_min_max_and_comparator_variants_select_extreme_items() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_iota_generates_requested_arithmetic_progressions() {
     let elisp_form = r##"(list
               (-iota 5)
@@ -229,7 +215,6 @@ fn dash_iota_generates_requested_arithmetic_progressions() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_cons_pair_and_value_conversion_distinguish_pairs_from_lists() {
     let elisp_form = r##"(list
               (-cons-pair? '(a . b))
@@ -246,7 +231,6 @@ fn dash_cons_pair_and_value_conversion_distinguish_pairs_from_lists() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_tree_map_variants_transform_only_leaf_values() {
     let elisp_form = r##"(list
               (-tree-map #'1+ '(1 (2 3) 4))
@@ -261,7 +245,6 @@ fn dash_tree_map_variants_transform_only_leaf_values() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_tree_mapreduce_variants_fold_transformed_leaves() {
     let elisp_form = r##"(list
               (-tree-mapreduce #'1+ #'+ '(1 (2 3) 4))
@@ -277,7 +260,6 @@ fn dash_tree_mapreduce_variants_fold_transformed_leaves() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_tree_reduce_variants_fold_existing_leaf_values() {
     let elisp_form = r##"(list
               (-tree-reduce #'+ '(1 (2 3) 4))
@@ -292,7 +274,6 @@ fn dash_tree_reduce_variants_fold_existing_leaf_values() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_tree_map_nodes_changes_matching_subtrees_without_descending_into_them() {
     let elisp_form = r##"(list
               (-tree-map-nodes #'numberp #'1+ '(1 (2 3) 4))
@@ -305,7 +286,6 @@ fn dash_tree_map_nodes_changes_matching_subtrees_without_descending_into_them() 
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_tree_seq_and_clone_preserve_tree_order_and_deep_independence() {
     let elisp_form = r##"(list
               (-tree-seq #'listp #'identity '(1 (2 3)))
@@ -323,7 +303,6 @@ fn dash_tree_seq_and_clone_preserve_tree_order_and_deep_independence() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_fix_and_unfold_generate_values_until_stable_or_finished() {
     let elisp_form = r##"(list
               (-fix (lambda (items) (-distinct items)) '(a b a b))
@@ -341,7 +320,6 @@ fn dash_fix_and_unfold_generate_values_until_stable_or_finished() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_partial_rpartial_juxt_and_compose_build_reusable_functions() {
     let elisp_form = r##"(list
               (funcall (-partial #'+ 10) 1 2)
@@ -356,7 +334,6 @@ fn dash_partial_rpartial_juxt_and_compose_build_reusable_functions() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_applify_on_flip_and_rotate_args_adapt_calling_conventions() {
     let elisp_form = r##"(list
               (funcall (-applify #'+) '(1 2 3))
@@ -371,7 +348,6 @@ fn dash_applify_on_flip_and_rotate_args_adapt_calling_conventions() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_const_cut_not_orfn_and_andfn_compose_predicates_and_arguments() {
     let elisp_form = r##"(list
               (funcall (-const 'fixed) 1 2 3)
@@ -390,7 +366,6 @@ fn dash_const_cut_not_orfn_and_andfn_compose_predicates_and_arguments() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_iteratefn_counter_fixfn_and_prodfn_keep_independent_state() {
     let elisp_form = r##"(list
               (funcall (-iteratefn #'1+ 4) 10)
@@ -419,7 +394,6 @@ fn dash_iteratefn_counter_fixfn_and_prodfn_keep_independent_state() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_iota_rejects_a_negative_count() {
     let elisp_form = r##"(-iota -1)"##;
     let expect = expect!["ERR (wrong-type-argument natnump -1)"];
@@ -428,7 +402,6 @@ fn dash_iota_rejects_a_negative_count() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_max_rejects_an_empty_list() {
     let elisp_form = r##"(-max nil)"##;
     let expect = expect!["ERR (wrong-number-of-arguments #<subr max> 0)"];

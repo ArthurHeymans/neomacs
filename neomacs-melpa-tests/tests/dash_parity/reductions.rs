@@ -3,7 +3,6 @@ use expect_test::expect;
 use super::{assert_dash_parity, assert_dash_signal_parity};
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_reduce_from_variants_fold_left_from_an_explicit_seed() {
     let elisp_form = r##"(list
               (-reduce-from #'+ 10 '(1 2 3))
@@ -17,7 +16,6 @@ fn dash_reduce_from_variants_fold_left_from_an_explicit_seed() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_reduce_variants_use_the_first_item_as_the_left_seed() {
     let elisp_form = r##"(list
               (-reduce #'- '(10 2 1))
@@ -31,7 +29,6 @@ fn dash_reduce_variants_use_the_first_item_as_the_left_seed() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_reduce_right_variants_associate_from_the_end() {
     let elisp_form = r##"(list
               (-reduce-r #'- '(10 2 1))
@@ -45,7 +42,6 @@ fn dash_reduce_right_variants_associate_from_the_end() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_reduce_right_from_variants_use_an_explicit_terminal_seed() {
     let elisp_form = r##"(list
               (-reduce-r-from #'- 5 '(10 2 1))
@@ -58,7 +54,6 @@ fn dash_reduce_right_from_variants_use_an_explicit_terminal_seed() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_reductions_variants_return_each_left_intermediate_value() {
     let elisp_form = r##"(list
               (-reductions-from #'+ 0 '(1 2 3))
@@ -73,7 +68,6 @@ fn dash_reductions_variants_return_each_left_intermediate_value() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_reductions_right_variants_return_each_right_intermediate_value() {
     let elisp_form = r##"(list
               (-reductions-r #'- '(10 2 1))
@@ -88,7 +82,6 @@ fn dash_reductions_right_variants_return_each_right_intermediate_value() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_filter_select_remove_and_reject_aliases_partition_by_truth() {
     let elisp_form = r##"(list
               (-filter #'cl-evenp '(1 2 3 4))
@@ -107,7 +100,6 @@ fn dash_filter_select_remove_and_reject_aliases_partition_by_truth() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_remove_first_and_reject_first_drop_only_the_first_match() {
     let elisp_form = r##"(list
               (-remove-first #'cl-evenp '(1 2 4 3))
@@ -122,7 +114,6 @@ fn dash_remove_first_and_reject_first_drop_only_the_first_match() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_remove_last_and_reject_last_drop_only_the_last_match() {
     let elisp_form = r##"(list
               (-remove-last #'cl-evenp '(1 2 4 3))
@@ -137,7 +128,6 @@ fn dash_remove_last_and_reject_last_drop_only_the_last_match() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_keep_non_nil_remove_item_and_count_cover_sparse_results() {
     let elisp_form = r##"(list
               (-remove-item 'x '(a x b x))
@@ -156,7 +146,6 @@ fn dash_keep_non_nil_remove_item_and_count_cover_sparse_results() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_first_find_some_and_any_aliases_return_the_first_matching_result() {
     let elisp_form = r##"(list
               (-first #'cl-evenp '(1 2 4))
@@ -177,7 +166,6 @@ fn dash_first_find_some_and_any_aliases_return_the_first_matching_result() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_last_and_positional_item_accessors_cover_short_and_empty_lists() {
     let elisp_form = r##"(list
               (-last #'cl-evenp '(1 2 3 4 5))
@@ -198,7 +186,6 @@ fn dash_last_and_positional_item_accessors_cover_short_and_empty_lists() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_any_alias_family_normalizes_truthy_values_to_booleans() {
     let elisp_form = r##"(list
               (-any? #'cl-evenp '(1 3 4))
@@ -217,7 +204,6 @@ fn dash_any_alias_family_normalizes_truthy_values_to_booleans() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_all_alias_family_treats_empty_lists_as_vacuously_true() {
     let elisp_form = r##"(list
               (-all? #'numberp '(1 2 3))
@@ -236,7 +222,6 @@ fn dash_all_alias_family_treats_empty_lists_as_vacuously_true() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_every_variants_return_the_last_truthy_result_and_short_circuit() {
     let elisp_form = r##"(list
               (-every
@@ -260,7 +245,6 @@ fn dash_every_variants_return_the_last_truthy_result_and_short_circuit() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_none_and_only_some_aliases_cover_zero_some_and_all_matches() {
     let elisp_form = r##"(list
               (-none? #'null '(a b c))
@@ -281,7 +265,6 @@ fn dash_none_and_only_some_aliases_cover_zero_some_and_all_matches() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_reduce_empty_with_a_binary_function_signals_exact_arity_data() {
     let elisp_form = r##"(-reduce #'cons nil)"##;
     let expect = expect!["ERR (wrong-number-of-arguments #<subr cons> 0)"];

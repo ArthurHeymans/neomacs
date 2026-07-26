@@ -33,7 +33,6 @@ fn assert_s_signal_parity(form: &str, expected: Expect) {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_trim_variants_preserve_non_boundary_content() {
     let elisp_form = r##"(list
               (s-trim-left " \t\nleft  ")
@@ -51,7 +50,6 @@ fn s_trim_variants_preserve_non_boundary_content() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_collapse_whitespace_normalizes_runs() {
     let elisp_form = r##"(list
               (s-collapse-whitespace "a \t\n b\r\nc")
@@ -65,7 +63,6 @@ fn s_collapse_whitespace_normalizes_runs() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_unindent_handles_default_and_custom_markers() {
     let elisp_form = r##"(list
               (s-unindent "  |one\n\t|two")
@@ -79,7 +76,6 @@ fn s_unindent_handles_default_and_custom_markers() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_split_controls_null_fields() {
     let elisp_form = r##"(list
               (s-split "," "a,,b," nil)
@@ -94,7 +90,6 @@ fn s_split_controls_null_fields() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_split_up_to_honors_limit_and_null_policy() {
     let elisp_form = r##"(list
               (s-split-up-to ":" "a:b:c:d" 2)
@@ -109,7 +104,6 @@ fn s_split_up_to_honors_limit_and_null_policy() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_lines_recognizes_common_line_endings() {
     let elisp_form = r##"(list
               (s-lines "a\r\nb\nc\rd")
@@ -123,7 +117,6 @@ fn s_lines_recognizes_common_line_endings() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_join_and_concat_preserve_order() {
     let elisp_form = r##"(list
               (s-join "::" '("a" "b" "c"))
@@ -138,7 +131,6 @@ fn s_join_and_concat_preserve_order() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_prepend_and_append_handle_empty_and_unicode_strings() {
     let elisp_form = r##"(list
               (s-prepend "pre-" "value")
@@ -153,7 +145,6 @@ fn s_prepend_and_append_handle_empty_and_unicode_strings() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_splice_supports_positive_negative_and_boundary_indices() {
     let elisp_form = r##"(list
               (s-splice "X" 0 "abcd")
@@ -168,7 +159,6 @@ fn s_splice_supports_positive_negative_and_boundary_indices() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_repeat_handles_zero_negative_and_unicode_counts() {
     let elisp_form = r##"(list
               (s-repeat 0 "ab")
@@ -182,7 +172,6 @@ fn s_repeat_handles_zero_negative_and_unicode_counts() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_chop_prefix_variants_remove_only_matching_prefixes() {
     let elisp_form = r##"(list
               (s-chop-prefix "pre-" "pre-value")
@@ -198,7 +187,6 @@ fn s_chop_prefix_variants_remove_only_matching_prefixes() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_chop_suffix_variants_remove_only_matching_suffixes() {
     let elisp_form = r##"(list
               (s-chop-suffix ".el" "s.el")
@@ -214,7 +202,6 @@ fn s_chop_suffix_variants_remove_only_matching_suffixes() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_shared_edges_cover_equal_disjoint_empty_and_unicode_strings() {
     let elisp_form = r##"(list
               (s-shared-start "prefix-one" "prefix-two")
@@ -232,7 +219,6 @@ fn s_shared_edges_cover_equal_disjoint_empty_and_unicode_strings() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_chomp_removes_one_line_ending() {
     let elisp_form = r##"(list
               (s-chomp "line\n")
@@ -247,7 +233,6 @@ fn s_chomp_removes_one_line_ending() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_truncate_respects_width_and_ellipsis() {
     let elisp_form = r##"(list
               (s-truncate 8 "abcdefghijk")
@@ -262,7 +247,6 @@ fn s_truncate_respects_width_and_ellipsis() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_word_wrap_handles_words_boundaries_and_existing_newlines() {
     let elisp_form = r##"(list
               (s-word-wrap 8 "one two three four")
@@ -278,7 +262,6 @@ fn s_word_wrap_handles_words_boundaries_and_existing_newlines() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_center_handles_padding_short_width_and_odd_remainders() {
     let elisp_form = r##"(list
               (s-center 8 "mid")
@@ -292,7 +275,6 @@ fn s_center_handles_padding_short_width_and_odd_remainders() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_padding_handles_growth_noop_and_multichar_padding() {
     let elisp_form = r##"(list
               (s-pad-left 6 "0" "42")
@@ -309,7 +291,6 @@ fn s_padding_handles_growth_noop_and_multichar_padding() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_left_and_right_clamp_lengths_and_count_characters() {
     let elisp_form = r##"(list
               (s-left 3 "abcdef")
@@ -327,7 +308,6 @@ fn s_left_and_right_clamp_lengths_and_count_characters() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_chop_left_and_right_clamp_lengths_and_count_characters() {
     let elisp_form = r##"(list
               (s-chop-left 2 "abcdef")
@@ -344,7 +324,6 @@ fn s_chop_left_and_right_clamp_lengths_and_count_characters() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_affix_predicates_cover_case_empty_and_aliases() {
     let elisp_form = r##"(list
               (s-starts-with? "init" "init.el")
@@ -365,7 +344,6 @@ fn s_affix_predicates_cover_case_empty_and_aliases() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_contains_equals_and_less_predicates_cover_true_false_and_aliases() {
     let elisp_form = r##"(list
               (s-contains? "it." "init.el")
@@ -384,7 +362,6 @@ fn s_contains_equals_and_less_predicates_cover_true_false_and_aliases() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_matches_and_index_of_preserve_search_boundaries() {
     let elisp_form = r##"(list
               (s-matches? "[0-9]+" "a12b")
@@ -401,7 +378,6 @@ fn s_matches_and_index_of_preserve_search_boundaries() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_blank_present_and_presence_distinguish_nil_empty_and_whitespace() {
     let elisp_form = r##"(list
               (s-blank? nil)
@@ -425,7 +401,6 @@ fn s_blank_present_and_presence_distinguish_nil_empty_and_whitespace() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_case_predicates_cover_cased_uncased_empty_and_alias_values() {
     let elisp_form = r##"(list
               (s-lowercase? "lower 123")
@@ -450,7 +425,6 @@ fn s_case_predicates_cover_cased_uncased_empty_and_alias_values() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_numeric_predicate_requires_ascii_digits_only() {
     let elisp_form = r##"(list
               (s-numeric? "012345")
@@ -465,7 +439,6 @@ fn s_numeric_predicate_requires_ascii_digits_only() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_replace_literal_regexp_and_multiple_rules_are_exact() {
     let elisp_form = r##"(list
               (s-replace "." "/" "one.two.three")
@@ -485,7 +458,6 @@ fn s_replace_literal_regexp_and_multiple_rules_are_exact() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_case_conversion_handles_ascii_unicode_and_empty_strings() {
     let elisp_form = r##"(list
               (s-downcase "MiXeD Ä")
@@ -504,7 +476,6 @@ fn s_case_conversion_handles_ascii_unicode_and_empty_strings() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_with_threads_values_and_evaluates_the_source_once() {
     let elisp_form = r##"(list
               (s-with "  hello  "
@@ -534,7 +505,6 @@ fn s_with_threads_values_and_evaluates_the_source_once() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_reverse_counts_characters_and_preserves_multibyte_strings() {
     let elisp_form = r##"(list
               (s-reverse "abcdef")
@@ -549,7 +519,6 @@ fn s_reverse_counts_characters_and_preserves_multibyte_strings() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_match_strings_all_returns_full_and_capture_groups() {
     let elisp_form = r##"(list
               (s-match-strings-all
@@ -565,7 +534,6 @@ fn s_match_strings_all_returns_full_and_capture_groups() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_matched_positions_all_tracks_depth_and_non_overlapping_matches() {
     let elisp_form = r##"(list
               (s-matched-positions-all "ana" "bananas")
@@ -581,7 +549,6 @@ fn s_matched_positions_all_tracks_depth_and_non_overlapping_matches() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_match_honors_start_and_restores_existing_match_data() {
     let elisp_form = r##"(list
               (s-match "\\([a-z]+\\)-\\([0-9]+\\)" "id-ab-42!")
@@ -599,7 +566,6 @@ fn s_match_honors_start_and_restores_existing_match_data() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_slice_at_exposes_each_regexp_boundary() {
     let elisp_form = r##"(list
               (s-slice-at "[A-Z]" "lowerCamelHTTP")
@@ -615,7 +581,6 @@ fn s_slice_at_exposes_each_regexp_boundary() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_split_words_handles_case_separators_digits_unicode_and_empty_input() {
     let elisp_form = r##"(list
               (s-split-words "lowerCamelHTTP2Value")
@@ -632,7 +597,6 @@ fn s_split_words_handles_case_separators_digits_unicode_and_empty_input() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_camel_and_snake_case_transform_word_boundaries() {
     let elisp_form = r##"(list
               (s-lower-camel-case "HTTP response code")
@@ -650,7 +614,6 @@ fn s_camel_and_snake_case_transform_word_boundaries() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_word_separator_styles_preserve_word_order() {
     let elisp_form = r##"(list
               (s-dashed-words "HTTPResponseCode")
@@ -668,7 +631,6 @@ fn s_word_separator_styles_preserve_word_order() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_capitalized_words_rejects_empty_input() {
     let elisp_form = r##"(s-capitalized-words "")"##;
     let expect = expect!["ERR (wrong-type-argument char-or-string-p nil)"];
@@ -677,7 +639,6 @@ fn s_capitalized_words_rejects_empty_input() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_word_initials_handles_spaces_separators_and_empty_input() {
     let elisp_form = r##"(list
               (s-word-initials "Hyper Text Markup Language")
@@ -691,7 +652,6 @@ fn s_word_initials_handles_spaces_separators_and_empty_input() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_format_supports_hash_alist_vector_object_lambda_and_extra_values() {
     let elisp_form = r##"(progn
               (require 'eieio)
@@ -726,7 +686,6 @@ fn s_format_supports_hash_alist_vector_object_lambda_and_extra_values() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_lex_format_uses_lexical_values_and_lisp_printing_policy() {
     let elisp_form = r##"(list
               (let ((name "Ada")
@@ -749,7 +708,6 @@ fn s_lex_format_uses_lexical_values_and_lisp_printing_policy() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_count_matches_distinguishes_overlapping_and_non_overlapping_ranges() {
     let elisp_form = r##"(list
               (s-count-matches "ana" "bananana")
@@ -766,7 +724,6 @@ fn s_count_matches_distinguishes_overlapping_and_non_overlapping_ranges() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_wrap_uses_symmetric_or_distinct_delimiters() {
     let elisp_form = r##"(list
               (s-wrap "value" "*")
@@ -780,7 +737,6 @@ fn s_wrap_uses_symmetric_or_distinct_delimiters() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_trim_rejects_nil() {
     let elisp_form = r##"(s-trim nil)"##;
     let expect = expect!["ERR (wrong-type-argument stringp nil)"];
@@ -789,7 +745,6 @@ fn s_trim_rejects_nil() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_splice_rejects_an_out_of_range_index() {
     let elisp_form = r##"(s-splice "X" 99 "abc")"##;
     let expect = expect![[r#"ERR (args-out-of-range "abc" 99 3)"#]];
@@ -798,7 +753,6 @@ fn s_splice_rejects_an_out_of_range_index() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_left_rejects_a_non_numeric_length() {
     let elisp_form = r##"(s-left 'two "abc")"##;
     let expect = expect!["ERR (wrong-type-argument number-or-marker-p two)"];
@@ -807,7 +761,6 @@ fn s_left_rejects_a_non_numeric_length() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_format_reports_the_unresolved_placeholder() {
     let elisp_form = r##"(s-format "Hello ${missing}" (lambda (_key) nil))"##;
     let expect = expect![[r#"ERR (s-format-resolve . "${missing}")"#]];
@@ -816,7 +769,6 @@ fn s_format_reports_the_unresolved_placeholder() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned s below ./tmp"]
 fn s_repeat_rejects_a_non_numeric_count() {
     let elisp_form = r##"(s-repeat 'three "x")"##;
     let expect = expect!["ERR (wrong-type-argument number-or-marker-p three)"];

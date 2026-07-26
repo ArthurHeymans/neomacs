@@ -3,7 +3,6 @@ use expect_test::expect;
 use super::{assert_dash_parity, assert_dash_signal_parity};
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_thread_first_last_and_placeholder_macros_place_values_exactly() {
     let elisp_form = r##"(list
               (-> 5 1+ (* 2))
@@ -20,7 +19,6 @@ fn dash_thread_first_last_and_placeholder_macros_place_values_exactly() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_some_threading_short_circuits_nil_and_evaluates_the_source_once() {
     let elisp_form = r##"(list
               (-some-> 5 1+ (* 2))
@@ -49,7 +47,6 @@ fn dash_some_threading_short_circuits_nil_and_evaluates_the_source_once() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_doto_variants_return_the_original_object_after_side_effects() {
     let elisp_form = r##"(list
               (let ((value (list 1)))
@@ -72,7 +69,6 @@ fn dash_doto_variants_return_the_original_object_after_side_effects() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_let_destructures_lists_vectors_and_rest_patterns() {
     let elisp_form = r##"(list
               (-let (((a b . rest) '(1 2 3 4)))
@@ -92,7 +88,6 @@ fn dash_let_destructures_lists_vectors_and_rest_patterns() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_let_destructures_plists_alists_and_hash_tables() {
     let elisp_form = r##"(list
               (-let (((&plist :name name :age age)
@@ -113,7 +108,6 @@ fn dash_let_destructures_plists_alists_and_hash_tables() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_lambda_and_setq_apply_destructuring_at_call_and_assignment_time() {
     let elisp_form = r##"(list
               (mapcar
@@ -132,7 +126,6 @@ fn dash_lambda_and_setq_apply_destructuring_at_call_and_assignment_time() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_if_let_variants_select_branches_and_bind_destructured_values() {
     let elisp_form = r##"(list
               (-if-let (value 3) (* value 2) 'missing)
@@ -155,7 +148,6 @@ fn dash_if_let_variants_select_branches_and_bind_destructured_values() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_when_let_variants_run_only_for_successful_bindings() {
     let elisp_form = r##"(list
               (-when-let (value 3) (* value 2))
@@ -170,7 +162,6 @@ fn dash_when_let_variants_run_only_for_successful_bindings() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_fontification_modes_register_info_and_unload_cleanly() {
     let elisp_form = r##"(list
               (with-temp-buffer
@@ -193,7 +184,6 @@ fn dash_fontification_modes_register_info_and_unload_cleanly() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_public_configuration_variables_have_the_expected_defaults() {
     let elisp_form = r##"(list
               -compare-fn
@@ -206,7 +196,6 @@ fn dash_public_configuration_variables_have_the_expected_defaults() {
 }
 
 #[test]
-#[ignore = "live MELPA parity corpus: downloads pinned Dash below ./tmp"]
 fn dash_short_vector_destructuring_signals_exact_type_data() {
     let elisp_form = r##"(-let ([a b c] [1 2]) (list a b c))"##;
     let expect = expect!["ERR (wrong-type-argument arrayp nil)"];
