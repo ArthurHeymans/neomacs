@@ -1,0 +1,120 @@
+use expect_test::expect;
+
+use super::assert_projectile_parity;
+
+#[test]
+fn projectile_version_and_platform_helpers_are_stable() {
+    let elisp_form = r##"(list
+              (projectile-version)
+              (projectile-unixy-system-p)
+              (projectile-parent "/alpha/beta/gamma/")
+              (projectile-default-project-name "/alpha/beta/")
+              (projectile-uniquify-dirname-transform "/alpha/beta/"))"##;
+    let expect = expect![[r#"OK ("3.3.0-snapshot" t "/alpha/beta" "beta" "/alpha/beta/")"#]];
+
+    assert_projectile_parity(elisp_form, expect);
+}
+
+#[test]
+fn projectile_path_pattern_normalization_partitions_rooted_entries() {
+    let elisp_form = r##"(list
+              (projectile-normalise-paths
+               '("plain" "/rooted" "/nested/path" "" "/"))
+              (projectile-normalise-patterns
+               '("plain" "/rooted" "/nested/path" "" "/"))
+              (projectile--directory-ancestors "src/foo/bar.el")
+              (projectile--directory-ancestors "top.el")
+              (projectile--wildcard-p "*.el")
+              (projectile--wildcard-p "plain.el"))"##;
+    let expect =
+        expect![[r#"OK (("rooted" "nested/path" "") ("plain" "") ("src/" "src/foo/") nil 0 nil)"#]];
+
+    assert_projectile_parity(elisp_form, expect);
+}
+
+#[test]
+fn projectile_glob_and_ignore_pattern_translation_handles_gitignore_shapes() {
+    let elisp_form = r##"(let ((samples
+                    '("foo.el" "src/foo.el" "build/" "build/x.o"
+                      "src/generated/x.c" "src/keep/x.c")))
+               (mapcar
+                (lambda (pattern)
+                  (let ((regexp
+                         (projectile--ignore-pattern-to-regexp pattern)))
+                    (cons pattern
+                          (mapcar
+                           (lambda (sample)
+                             (and (string-match-p regexp sample) t))
+                           samples))))
+                '("*.el" "build/" "/build/" "src/generated/**"
+                  "src/?eep/*.c")))"##;
+    let expect = expect![[
+        r#"OK (("*.el" t t nil nil nil nil) ("build/" nil nil t t nil nil) ("/build/" nil nil t t nil nil) ("src/generated/**" nil nil nil nil t nil) ("src/?eep/*.c" nil nil nil nil nil t))"#
+    ]];
+
+    assert_projectile_parity(elisp_form, expect);
+}
+
+#[test]
+fn projectile_dirconfig_parser_preserves_keep_ignore_ensure_and_legacy_entries() {
+    let elisp_form = r##"(let* ((projectile-dirconfig-comment-prefix ?#)
+                    (config
+                     (projectile--parse-dirconfig-string
+                      " + src\n+tests/\n-build/\n!build/keep.txt\n# comment\nlegacy\n  \n")))
+               (list
+                (projectile-dirconfig-keep config)
+                (projectile-dirconfig-ignore config)
+                (projectile-dirconfig-ensure config)
+                (projectile-dirconfig-prefixless-ignore config)
+                (projectile--dirconfig-classify-line " \t+ lib ")
+                (projectile--dirconfig-classify-line "  # note")
+                (projectile--dirconfig-classify-line "")))"##;
+    let expect = expect![[
+        r#"OK (("src/" "tests/") ("build/" "legacy") ("build/keep.txt") ("legacy") (:keep . "lib") (:comment) nil)"#
+    ]];
+
+    assert_projectile_parity(elisp_form, expect);
+}
+
+#[test]
+fn projectile_project_type_registration_and_updates_preserve_attributes() {
+    let elisp_form = r##"(let ((projectile-project-types nil)
+                    (projectile-project-root-files nil)
+                    (projectile-project-root-files-bottom-up '(".git")))
+               (projectile-register-project-type
+                'demo
+                '((:any "demo.toml" "demo.json") "src")
+                :test-suffix "_spec"
+                :src-dir "src/"
+                :test-dir "test/")
+               (projectile-update-project-type
+                'demo
+                :test-prefix "test_"
+                :compile "make all")
+               (list
+                (projectile-project-type-attribute 'demo 'project-file)
+                (projectile-project-type-attribute 'demo 'test-suffix)
+                (projectile-project-type-attribute 'demo 'test-prefix)
+                (projectile-project-type-attribute 'demo 'compile-command)
+                projectile-project-root-files
+                projectile-project-root-files-bottom-up))"##;
+    let expect = expect![[
+        r#"OK (("demo.toml" "demo.json") "_spec" "test_" "make all" ("demo.json" "demo.toml") (".git"))"#
+    ]];
+
+    assert_projectile_parity(elisp_form, expect);
+}
+
+#[test]
+fn projectile_combine_plists_uses_rightmost_values_including_nil() {
+    let elisp_form = r##"(list
+              (projectile--combine-plists
+               '(:foo "first" :bar "bar")
+               '(:foo "second" :baz "baz")
+               '(:bar nil))
+              (projectile--combine-plists nil '(:x 1))
+              (projectile--combine-plists '(:x 1) nil))"##;
+    let expect = expect![[r#"OK ((:foo "second" :bar nil :baz "baz") (:x 1) (:x 1))"#]];
+
+    assert_projectile_parity(elisp_form, expect);
+}

@@ -1,8 +1,11 @@
 mod dash;
+mod f;
 mod frozen_packages;
 mod harness_contract;
 mod live_melpa;
+mod magit;
 mod package_lifecycle;
 mod package_vc;
+mod projectile;
 mod s;
 mod upstream_package_ert;

@@ -26,6 +26,16 @@ const DEFAULT_PROCESS_TIMEOUT: Duration = Duration::from_secs(300);
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
 
+/// The exact f package selected by the comprehensive API parity corpus.
+pub const F_MELPA_PIN: (&str, &str) = ("f", "20241003.1131");
+
+/// The exact Magit package selected by the comprehensive API parity corpus.
+pub const MAGIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
+
+/// The exact Projectile package selected by the comprehensive API parity
+/// corpus.
+pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260725.1657");
+
 /// The exact s package selected by the live lifecycle and comprehensive API
 /// parity corpora.
 pub const S_MELPA_PIN: (&str, &str) = ("s", "20220902.1511");
@@ -562,6 +572,7 @@ pub struct ElispOracleReport {
 /// Differential oracle for one exact MELPA package cached below `./tmp`.
 pub struct CachedMelpaOracle {
     package_name: String,
+    package_user_dir: PathBuf,
     source_file: PathBuf,
     prelude: String,
     timeout: Duration,
@@ -587,8 +598,13 @@ impl CachedMelpaOracle {
                 package_dir.display()
             ));
         }
+        let package_user_dir = package_dir
+            .parent()
+            .expect("cached package directory is below an ELPA directory")
+            .to_path_buf();
         Ok(Self {
             package_name: package.0.to_string(),
+            package_user_dir,
             source_file,
             prelude: String::new(),
             timeout: DEFAULT_PROCESS_TIMEOUT,
@@ -623,13 +639,26 @@ impl CachedMelpaOracle {
         expect_value: bool,
     ) -> Result<ElispOracleReport, String> {
         let neomacs = EmacsRuntime::neomacs()
+            .with_env(
+                "NEOMACS_MELPA_PACKAGE_USER_DIR",
+                self.package_user_dir.as_os_str(),
+            )
             .with_env("NEOMACS_MELPA_PACKAGE_SOURCE", self.source_file.as_os_str())
             .with_timeout(self.timeout);
         let gnu_emacs = EmacsRuntime::gnu_emacs()
+            .with_env(
+                "NEOMACS_MELPA_PACKAGE_USER_DIR",
+                self.package_user_dir.as_os_str(),
+            )
             .with_env("NEOMACS_MELPA_PACKAGE_SOURCE", self.source_file.as_os_str())
             .with_timeout(self.timeout);
         let setup = format!(
             r##"(progn
+                   (require 'package)
+                   (setq package-user-dir
+                         (getenv "NEOMACS_MELPA_PACKAGE_USER_DIR")
+                         load-suffixes '(".el"))
+                   (package-initialize)
                    {}
                    (load
                     (getenv "NEOMACS_MELPA_PACKAGE_SOURCE")
