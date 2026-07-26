@@ -2,6 +2,7 @@ mod a;
 mod aa_edit_mode;
 mod aangit;
 mod aas;
+mod abc_mode;
 mod async_package;
 mod at_package;
 mod bind_key;
