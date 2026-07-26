@@ -1,5 +1,6 @@
 mod a;
 mod aa_edit_mode;
+mod aangit;
 mod async_package;
 mod at_package;
 mod bind_key;
