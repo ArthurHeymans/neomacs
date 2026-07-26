@@ -21,6 +21,7 @@ mod ac_haskell_process;
 mod ac_helm;
 mod ac_html;
 mod ac_html_angular;
+mod ac_html_bootstrap;
 mod async_package;
 mod at_package;
 mod bind_key;
