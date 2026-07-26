@@ -45,6 +45,7 @@ mod ace_jump_helm_line;
 mod ace_jump_mode;
 mod ace_jump_zap;
 mod ace_link;
+mod ace_mc;
 mod async_package;
 mod at_package;
 mod bind_key;
