@@ -93,6 +93,9 @@ pub const TRANSIENT_MELPA_PIN: (&str, &str) = ("transient", "20260725.1105");
 /// API parity corpus.
 pub const USE_PACKAGE_GNU_ELPA_PIN: (&str, &str) = ("use-package", "2.4.6");
 
+/// The exact Which-Key package selected by the comprehensive API parity corpus.
+pub const WHICH_KEY_MELPA_PIN: (&str, &str) = ("which-key", "20240620.2145");
+
 /// The exact With-Editor package selected by the comprehensive API parity
 /// corpus.
 pub const WITH_EDITOR_MELPA_PIN: (&str, &str) = ("with-editor", "20260701.1252");

@@ -17,4 +17,5 @@ mod s;
 mod transient;
 mod upstream_package_ert;
 mod use_package;
+mod which_key;
 mod with_editor;
