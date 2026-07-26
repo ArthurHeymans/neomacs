@@ -2087,3 +2087,30 @@ fn find_id_sequential_finger_never_disagrees_with_fresh_descent() {
         }
     }
 }
+
+#[test]
+fn a_default_constructed_tree_reports_no_memo() {
+    // The property that MemoGeneration exists to hold: a tree that has cached
+    // nothing must not report a memo as valid, no matter how it was built.
+    //
+    // This is the bug that shipped when IntervalTree derived Default --
+    // cache_gen == 0 == the starting version, so the memo read as populated
+    // while cache_id pointed at a node that did not exist. It stayed invisible
+    // until a lookup arm other than the containment check consulted it.
+    // Asserting it directly means a future field addition cannot reintroduce
+    // it silently.
+    for (label, tree) in [
+        ("Default::default", IntervalTree::default()),
+        ("IntervalTree::new", IntervalTree::new()),
+        ("clone of empty", IntervalTree::new().clone()),
+    ] {
+        assert_eq!(
+            tree.cache_gen.get(),
+            MemoGeneration::EMPTY,
+            "{label} published a memo generation before caching anything"
+        );
+        // And the lookup path must survive being asked, on an empty tree, for
+        // the exact position the finger arm keys on.
+        assert_eq!(tree.find_id(char_pos(0)), None, "{label}");
+    }
+}

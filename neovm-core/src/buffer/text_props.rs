@@ -529,7 +529,7 @@ impl IntervalRun {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct IntervalTree {
     root: Option<IntervalId>,
     nodes: Vec<IntervalNode>,
@@ -553,33 +553,48 @@ struct IntervalTree {
     /// cannot tear. `find_id_uncached` (test-only) plus a randomized differential
     /// test prove the memo never disagrees with a fresh descent.
     version: AtomicU64,
-    cache_gen: AtomicU64,
+    cache_gen: MemoGeneration,
     cache_start: AtomicUsize,
     cache_end: AtomicUsize,
     cache_id: AtomicUsize,
 }
 
-impl Default for IntervalTree {
-    /// Hand-written rather than derived so the EMPTY-MEMO SENTINEL holds on
-    /// every construction path.
-    ///
-    /// `#[derive(Default)]` gave `cache_gen == 0`, which equals the starting
-    /// `version` -- so a brand-new tree reported its memo as valid while
-    /// `cache_id` still pointed at a node that did not exist. The containment
-    /// check masked that (`0 <= pos && pos < 0` is never true), but the
-    /// sequential finger's `pos == cache_end` arm IS satisfied at position 0,
-    /// and indexed an empty node vec. `Clone` already used `u64::MAX` here; the
-    /// derive was the odd one out.
+/// Generation tag pairing a memo with the tree version it was computed for.
+///
+/// A newtype with its own `Default` so that "no memo yet" is the value a
+/// container gets for free. `IntervalTree` previously derived `Default`, which
+/// produced `cache_gen == 0` -- equal to the starting `version` -- so a
+/// brand-new tree reported its memo VALID while `cache_id` still pointed at a
+/// node that did not exist. The containment check masked it (`0 <= pos && pos
+/// < 0` never holds) until the sequential finger's `pos == cache_end` arm,
+/// which IS satisfied at position 0, indexed an empty node vec.
+///
+/// Encoding the empty state here rather than in a hand-written `Default` means
+/// the derive is correct again: adding a field cannot silently reintroduce the
+/// bug, and every construction path gets the sentinel without having to know
+/// about it.
+#[derive(Debug)]
+struct MemoGeneration(AtomicU64);
+
+impl MemoGeneration {
+    /// No memo has been stored. Distinct from every real version, which start
+    /// at 0 and only increment.
+    const EMPTY: u64 = u64::MAX;
+
+    #[inline]
+    fn get(&self) -> u64 {
+        self.0.load(Ordering::Relaxed)
+    }
+
+    #[inline]
+    fn set(&self, version: u64) {
+        self.0.store(version, Ordering::Relaxed);
+    }
+}
+
+impl Default for MemoGeneration {
     fn default() -> Self {
-        Self {
-            root: None,
-            nodes: Vec::new(),
-            version: AtomicU64::new(0),
-            cache_gen: AtomicU64::new(u64::MAX),
-            cache_start: AtomicUsize::new(0),
-            cache_end: AtomicUsize::new(0),
-            cache_id: AtomicUsize::new(0),
-        }
+        Self(AtomicU64::new(Self::EMPTY))
     }
 }
 
@@ -590,7 +605,7 @@ impl Clone for IntervalTree {
             root: self.root,
             nodes: self.nodes.clone(),
             version: AtomicU64::new(0),
-            cache_gen: AtomicU64::new(u64::MAX),
+            cache_gen: MemoGeneration::default(),
             cache_start: AtomicUsize::new(0),
             cache_end: AtomicUsize::new(0),
             cache_id: AtomicUsize::new(0),
@@ -1521,7 +1536,7 @@ impl IntervalTree {
         // that lands inside the previously located interval, at the same tree
         // version, returns without re-descending.
         let version = self.version.load(Ordering::Relaxed);
-        if self.cache_gen.load(Ordering::Relaxed) == version {
+        if self.cache_gen.get() == version {
             let start = CharPos0::new(self.cache_start.load(Ordering::Relaxed));
             let end = CharPos0::new(self.cache_end.load(Ordering::Relaxed));
             if start <= pos && pos < end {
@@ -1551,7 +1566,7 @@ impl IntervalTree {
                         self.cache_start.store(start.get(), Ordering::Relaxed);
                         self.cache_end.store(next_end.get(), Ordering::Relaxed);
                         self.cache_id.store(next.0, Ordering::Relaxed);
-                        self.cache_gen.store(version, Ordering::Relaxed);
+                        self.cache_gen.set(version);
                         return Some((start, next));
                     }
                     id = next;
@@ -1573,7 +1588,7 @@ impl IntervalTree {
                 self.cache_start.store(node_start.get(), Ordering::Relaxed);
                 self.cache_end.store(node_end.get(), Ordering::Relaxed);
                 self.cache_id.store(id.0, Ordering::Relaxed);
-                self.cache_gen.store(version, Ordering::Relaxed);
+                self.cache_gen.set(version);
                 return Some((node_start, id));
             } else {
                 base = node_start.add_len(node_len);
