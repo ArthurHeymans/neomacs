@@ -1,3 +1,4 @@
+mod async_package;
 mod bind_key;
 mod compat;
 mod dash;
