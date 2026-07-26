@@ -40,6 +40,30 @@ jobs:
       - name: Run fresh build
         run: cargo xtask fresh-build --release
 
+      - name: Dynamic module suffixes (#193)
+        run: |
+          set -euo pipefail
+          # GNU on darwin: MODULES_SUFFIX=.dylib with MODULES_SECONDARY_SUFFIX=.so,
+          # so `load' must both FIND and dlopen a module built as `NAME.so'
+          # (emacs-libvterm writes exactly that). Assert the Lisp-visible
+          # contract, then prove a `.so' is actually located through
+          # `get-load-suffixes'.
+          ./target/release/neomacs -Q --batch --eval '
+            (let* ((dir (make-temp-file "neomacs-module-suffix" t))
+                   (built (expand-file-name "fake-module.so" dir)))
+              (with-temp-file built (insert "not a real module"))
+              (princ (format "module-file-suffix=%S\nload-suffixes=%S\ndynamic-library-suffixes=%S\nlocated=%S\n"
+                             module-file-suffix load-suffixes dynamic-library-suffixes
+                             (locate-file "fake-module" (list dir) (get-load-suffixes))))
+              (unless (equal module-file-suffix ".dylib")
+                (error "module-file-suffix should be .dylib on darwin"))
+              (unless (equal load-suffixes (list ".so" ".dylib" ".elc" ".el"))
+                (error "load-suffixes should carry the secondary .so first"))
+              (unless (equal dynamic-library-suffixes (list ".dylib" ".so"))
+                (error "dynamic-library-suffixes should list both suffixes"))
+              (unless (equal (locate-file "fake-module" (list dir) (get-load-suffixes)) built)
+                (error "a module built as .so must be found on darwin")))'
+
       - name: GUI smoke (launch, frame snapshot, PNG readback)
         run: |
           set -x

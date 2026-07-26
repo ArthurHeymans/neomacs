@@ -1597,3 +1597,123 @@ fn read_non_nil_coding_system_validates_prompt_type_and_arity() {
                     == vec![Value::symbol("read-non-nil-coding-system"), Value::fixnum(2)]
     ));
 }
+
+// ---------------------------------------------------------------------------
+// Dynamic-module suffixes (neomacs#193)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn module_suffixes_match_gnu_configure_per_operating_system() {
+    // GNU configure.ac:
+    //   case $opsys in
+    //     cygwin|mingw32) DYNAMIC_LIB_SUFFIX=".dll" ;;
+    //     darwin)         DYNAMIC_LIB_SUFFIX=".dylib" ;;
+    //     *)              DYNAMIC_LIB_SUFFIX=".so" ;;
+    //   esac
+    //   case "${opsys}" in
+    //     darwin) DYNAMIC_LIB_SECONDARY_SUFFIX='.so' ;;
+    //     *)      DYNAMIC_LIB_SECONDARY_SUFFIX='' ;;
+    //   esac
+    //
+    // macOS is the only platform with a SECONDARY suffix, and that is what
+    // vterm needs: its build writes `vterm-module.so` even there (#193).
+    assert_eq!(
+        module_suffixes_for_os("macos"),
+        ModuleSuffixes {
+            primary: ".dylib",
+            secondary: Some(".so"),
+        }
+    );
+    assert_eq!(
+        module_suffixes_for_os("windows"),
+        ModuleSuffixes {
+            primary: ".dll",
+            secondary: None,
+        }
+    );
+    for os in ["linux", "freebsd", "openbsd", "netbsd", "android"] {
+        assert_eq!(
+            module_suffixes_for_os(os),
+            ModuleSuffixes {
+                primary: ".so",
+                secondary: None,
+            },
+            "{os} should use the default suffix"
+        );
+    }
+}
+
+#[test]
+fn load_suffixes_put_the_secondary_module_suffix_first_like_gnu() {
+    // GNU seeds `load-suffixes' as (".elc" ".el"), conses MODULES_SUFFIX, then
+    // conses MODULES_SECONDARY_SUFFIX -- so on darwin the secondary lands FIRST.
+    // Verified against GNU 31 on linux: (".so" ".elc" ".el").
+    assert_eq!(
+        load_suffixes_startup_values_for_os("macos"),
+        vec![".so", ".dylib", ".elc", ".el"]
+    );
+    assert_eq!(
+        load_suffixes_startup_values_for_os("linux"),
+        vec![".so", ".elc", ".el"]
+    );
+    assert_eq!(
+        load_suffixes_startup_values_for_os("windows"),
+        vec![".dll", ".elc", ".el"]
+    );
+}
+
+#[test]
+fn dynamic_library_suffixes_always_carry_the_secondary_slot_like_gnu() {
+    // GNU conses DYNAMIC_LIB_SECONDARY_SUFFIX unconditionally, so the empty
+    // secondary shows up as "": verified against GNU 31 on linux, which reports
+    // (".so" "").
+    assert_eq!(
+        dynamic_library_suffixes_for_os("macos"),
+        vec![".dylib", ".so"]
+    );
+    assert_eq!(dynamic_library_suffixes_for_os("linux"), vec![".so", ""]);
+    assert_eq!(dynamic_library_suffixes_for_os("windows"), vec![".dll", ""]);
+}
+
+#[test]
+fn a_secondary_suffixed_file_is_still_a_module_on_darwin() {
+    // GNU `load' decides between Lisp and a module with
+    //   suffix_p (found, MODULES_SUFFIX) || suffix_p (found, MODULES_SECONDARY_SUFFIX)
+    // (src/lread.c).  Testing only the primary suffix means a `vterm-module.so'
+    // found on macOS would be read as Lisp instead of dlopen'd.
+    assert!(path_has_module_suffix_for_os(
+        "/tmp/vterm-module.dylib",
+        "macos"
+    ));
+    assert!(path_has_module_suffix_for_os(
+        "/tmp/vterm-module.so",
+        "macos"
+    ));
+    assert!(!path_has_module_suffix_for_os("/tmp/vterm.el", "macos"));
+
+    assert!(path_has_module_suffix_for_os("/tmp/mod.so", "linux"));
+    // A `.dylib' is not a module on GNU/Linux: it is not in that platform's
+    // suffix set at all.
+    assert!(!path_has_module_suffix_for_os("/tmp/mod.dylib", "linux"));
+    assert!(path_has_module_suffix_for_os("C:\\mod.dll", "windows"));
+}
+
+#[test]
+fn the_running_platform_uses_its_own_suffixes() {
+    // The compile-time answer must agree with the table above for THIS build,
+    // which is what the macOS CI runner checks.
+    let expected = module_suffixes_for_os(std::env::consts::OS);
+    assert_eq!(module_file_suffix(), expected.primary);
+    assert_eq!(module_suffixes().secondary, expected.secondary);
+
+    #[cfg(target_os = "macos")]
+    {
+        assert_eq!(module_file_suffix(), ".dylib");
+        assert_eq!(module_suffixes().secondary, Some(".so"));
+    }
+    #[cfg(target_os = "linux")]
+    {
+        assert_eq!(module_file_suffix(), ".so");
+        assert_eq!(module_suffixes().secondary, None);
+    }
+}

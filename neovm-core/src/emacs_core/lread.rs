@@ -790,14 +790,97 @@ pub(crate) fn builtin_get_load_suffixes(
     ))
 }
 
-pub(crate) fn module_file_suffix() -> &'static str {
-    if cfg!(target_os = "macos") {
-        ".dylib"
-    } else if cfg!(target_os = "windows") {
-        ".dll"
-    } else {
-        ".so"
+/// The dynamic-module file suffixes of one platform.
+///
+/// GNU decides these at configure time (configure.ac) and every user reads the
+/// same two macros:
+///
+/// ```text
+/// case $opsys in
+///   cygwin|mingw32) DYNAMIC_LIB_SUFFIX=".dll" ;;
+///   darwin)         DYNAMIC_LIB_SUFFIX=".dylib" ;;
+///   *)              DYNAMIC_LIB_SUFFIX=".so" ;;
+/// esac
+/// case "${opsys}" in
+///   darwin) DYNAMIC_LIB_SECONDARY_SUFFIX='.so' ;;
+///   *)      DYNAMIC_LIB_SECONDARY_SUFFIX='' ;;
+/// esac
+/// ```
+///
+/// macOS is the only platform with a SECONDARY suffix, and dropping it is not
+/// cosmetic: module builds there routinely emit `.so` (emacs-libvterm writes
+/// `vterm-module.so`), so without it `load` neither finds the file nor
+/// recognises it as a module (neomacs#193).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct ModuleSuffixes {
+    /// GNU `MODULES_SUFFIX`, also the value of `module-file-suffix`.
+    pub(crate) primary: &'static str,
+    /// GNU `MODULES_SECONDARY_SUFFIX`, absent on every platform but darwin.
+    pub(crate) secondary: Option<&'static str>,
+}
+
+/// GNU's configure-time `case $opsys`, as a function of the OS so every platform
+/// can be tested from any host (`std::env::consts::OS` naming).
+pub(crate) fn module_suffixes_for_os(os: &str) -> ModuleSuffixes {
+    match os {
+        "macos" | "ios" => ModuleSuffixes {
+            primary: ".dylib",
+            secondary: Some(".so"),
+        },
+        "windows" => ModuleSuffixes {
+            primary: ".dll",
+            secondary: None,
+        },
+        _ => ModuleSuffixes {
+            primary: ".so",
+            secondary: None,
+        },
     }
+}
+
+/// The suffixes of the platform this build runs on.
+pub(crate) fn module_suffixes() -> ModuleSuffixes {
+    module_suffixes_for_os(std::env::consts::OS)
+}
+
+pub(crate) fn module_file_suffix() -> &'static str {
+    module_suffixes().primary
+}
+
+/// The startup value of `load-suffixes` for an OS.
+///
+/// GNU (syms_of_lread) starts from `(".elc" ".el")`, conses `MODULES_SUFFIX` and
+/// then `MODULES_SECONDARY_SUFFIX`, so on darwin the secondary suffix is tried
+/// FIRST: `(".so" ".dylib" ".elc" ".el")`.
+pub(crate) fn load_suffixes_startup_values_for_os(os: &str) -> Vec<&'static str> {
+    let suffixes = module_suffixes_for_os(os);
+    let mut values = Vec::with_capacity(4);
+    values.extend(suffixes.secondary);
+    values.push(suffixes.primary);
+    values.push(".elc");
+    values.push(".el");
+    values
+}
+
+/// The startup value of `dynamic-library-suffixes` for an OS.
+///
+/// GNU conses the secondary suffix unconditionally, so a platform without one
+/// still reports an empty string in the list (GNU 31 on GNU/Linux: `(".so" "")`).
+pub(crate) fn dynamic_library_suffixes_for_os(os: &str) -> Vec<&'static str> {
+    let suffixes = module_suffixes_for_os(os);
+    vec![suffixes.primary, suffixes.secondary.unwrap_or("")]
+}
+
+/// Whether `path` names a dynamic module on `os` -- GNU's
+/// `suffix_p (found, MODULES_SUFFIX) || suffix_p (found, MODULES_SECONDARY_SUFFIX)`
+/// (src/lread.c), which decides whether `load` dlopens the file or reads it as
+/// Lisp.
+pub(crate) fn path_has_module_suffix_for_os(path: &str, os: &str) -> bool {
+    let suffixes = module_suffixes_for_os(os);
+    path.ends_with(suffixes.primary)
+        || suffixes
+            .secondary
+            .is_some_and(|secondary| path.ends_with(secondary))
 }
 
 /// `(locate-file FILENAME PATH &optional SUFFIXES PREDICATE)`

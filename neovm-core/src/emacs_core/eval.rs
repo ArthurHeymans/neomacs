@@ -3965,23 +3965,32 @@ impl Context {
             "fontset-alias-alist",
             super::builtins::symbols::fontset_alias_alist_startup_value(),
         );
-        let module_suffix = super::lread::module_file_suffix();
-        // GNU Emacs with module support includes the module suffix before
-        // compiled and source Lisp suffixes.
+        // GNU Emacs with module support includes the module suffixes before
+        // compiled and source Lisp suffixes, secondary suffix first -- on darwin
+        // `(".so" ".dylib" ".elc" ".el")`, see `load_suffixes_startup_values_for_os`.
         obarray.set_symbol_value(
             "load-suffixes",
-            Value::list(vec![
-                Value::string(module_suffix),
-                Value::string(".elc"),
-                Value::string(".el"),
-            ]),
+            Value::list(
+                super::lread::load_suffixes_startup_values_for_os(std::env::consts::OS)
+                    .into_iter()
+                    .map(Value::string)
+                    .collect(),
+            ),
         );
         obarray.make_special("load-suffixes");
-        obarray.set_symbol_value("module-file-suffix", Value::make_string(module_suffix));
+        obarray.set_symbol_value(
+            "module-file-suffix",
+            Value::make_string(super::lread::module_file_suffix()),
+        );
         obarray.make_special("module-file-suffix");
         obarray.set_symbol_value(
             "dynamic-library-suffixes",
-            Value::list(vec![Value::string(std::env::consts::DLL_SUFFIX)]),
+            Value::list(
+                super::lread::dynamic_library_suffixes_for_os(std::env::consts::OS)
+                    .into_iter()
+                    .map(Value::string)
+                    .collect(),
+            ),
         );
         obarray.make_special("dynamic-library-suffixes");
         obarray.set_symbol_value("dynamic-library-alist", Value::NIL);

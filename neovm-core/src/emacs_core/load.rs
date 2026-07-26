@@ -628,10 +628,12 @@ fn unsupported_compiled_suffixed_paths(base: &Path) -> [PathBuf; 1] {
     [append_load_suffix(base, b".elc.gz")]
 }
 
+/// GNU `load`'s `is_module` test: the primary module suffix OR the platform's
+/// secondary one (`.so` on darwin), src/lread.c. Testing only the primary made a
+/// `vterm-module.so` found on macOS get read as Lisp instead of dlopen'd
+/// (neomacs#193).
 fn is_module_path(path: &Path) -> bool {
-    path.as_os_str()
-        .as_encoded_bytes()
-        .ends_with(std::env::consts::DLL_SUFFIX.as_bytes())
+    super::lread::path_has_module_suffix_for_os(&path.to_string_lossy(), std::env::consts::OS)
 }
 
 /// GNU Emacs tries dynamic modules before .elc and .el when modules are
