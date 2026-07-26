@@ -69,6 +69,9 @@ pub const SEVEN_FIFTY_WORDS_MELPA_PIN: (&str, &str) = ("750words", "20220625.140
 /// The exact @ package selected by the comprehensive API parity corpus.
 pub const AT_MELPA_PIN: (&str, &str) = ("@", "20240923.1318");
 
+/// The exact a package selected by the comprehensive API parity corpus.
+pub const A_MELPA_PIN: (&str, &str) = ("a", "20210929.1510");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
