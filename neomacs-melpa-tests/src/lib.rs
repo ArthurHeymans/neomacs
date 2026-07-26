@@ -180,6 +180,9 @@ pub const AC_PHP_MELPA_PIN: (&str, &str) = ("ac-php", "20240328.1036");
 /// corpus.
 pub const AC_PHP_CORE_MELPA_PIN: (&str, &str) = ("ac-php-core", "20260210.846");
 
+/// The exact ac-racer package selected by the comprehensive API parity corpus.
+pub const AC_RACER_MELPA_PIN: (&str, &str) = ("ac-racer", "20170114.809");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
