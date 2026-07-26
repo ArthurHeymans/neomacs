@@ -17,6 +17,7 @@ mod package_lifecycle;
 mod package_vc;
 mod projectile;
 mod s;
+mod seven_fifty_words;
 mod transient;
 mod two_bit;
 mod upstream_package_ert;
