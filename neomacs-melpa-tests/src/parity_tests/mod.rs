@@ -6,6 +6,7 @@ mod abc_mode;
 mod abgaben;
 mod abl_mode;
 mod abridge_diff;
+mod abs_mode;
 mod async_package;
 mod at_package;
 mod bind_key;
