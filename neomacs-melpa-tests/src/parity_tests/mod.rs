@@ -9,6 +9,7 @@ mod abridge_diff;
 mod abs_mode;
 mod abyss_theme;
 mod ac_alchemist;
+mod ac_c_headers;
 mod async_package;
 mod at_package;
 mod bind_key;
