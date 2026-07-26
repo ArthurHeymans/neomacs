@@ -21,3 +21,4 @@ mod upstream_package_ert;
 mod use_package;
 mod which_key;
 mod with_editor;
+mod zero_b_layout;
