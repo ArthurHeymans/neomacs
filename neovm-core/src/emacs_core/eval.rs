@@ -7675,6 +7675,7 @@ impl Context {
     }
 
     pub(crate) fn invalidate_redisplay(&mut self) {
+        tracing::debug!(target: "neomacs::redisplay_sig", "invalidate_redisplay");
         self.redisplay_generation = self.redisplay_generation.wrapping_add(1);
         self.last_redisplay_signature = None;
     }
@@ -7761,6 +7762,35 @@ impl Context {
         // otherwise unchanged: the message text can be identical while the
         // mini-window is still grown from a previous longer message and needs
         // to shrink back to fit. Don't skip while the request is pending.
+        if tracing::enabled!(target: "neomacs::redisplay_sig", tracing::Level::DEBUG) {
+            let captured: Vec<String> = before_signature
+                .frame
+                .as_ref()
+                .map(|frame| {
+                    frame
+                        .windows
+                        .iter()
+                        .map(|window| match &window.buffer {
+                            Some(buffer) => format!(
+                                "w{}:b{}:tick{}:chars{}:total{}",
+                                window.id,
+                                buffer.id,
+                                buffer.modified_tick,
+                                buffer.chars_modified_tick,
+                                buffer.total_chars.get()
+                            ),
+                            None => format!("w{}:b{}:NO-BUFFER-SIG", window.id, window.buffer_id),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            tracing::debug!(
+                target: "neomacs::redisplay_sig",
+                "signature windows=[{}] last_is_some={}",
+                captured.join(" "),
+                self.last_redisplay_signature.is_some()
+            );
+        }
         if !force
             && !self.echo_area_resize_exact_pending
             && self.last_redisplay_signature.as_ref() == Some(&before_signature)
