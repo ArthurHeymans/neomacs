@@ -244,6 +244,10 @@ pub const ACE_POPUP_MENU_MELPA_PIN: (&str, &str) = ("ace-popup-menu", "20230606.
 /// corpus.
 pub const ACE_WINDOW_MELPA_PIN: (&str, &str) = ("ace-window", "20220911.358");
 
+/// The exact achievements package selected by the comprehensive API parity
+/// corpus.
+pub const ACHIEVEMENTS_MELPA_PIN: (&str, &str) = ("achievements", "20240703.318");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
