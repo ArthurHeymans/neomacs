@@ -831,10 +831,60 @@ fn expand_tilde_path_buf(path: &LispString) -> PathBuf {
     }
 }
 
+/// Which candidates a load-path search may accept — GNU `Fload`'s NOSUFFIX and
+/// MUST-SUFFIX arguments, which are mutually exclusive and so belong in one
+/// value rather than two booleans (`false, false` at a call site said nothing,
+/// and `require` silently got the wrong one).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LoadSuffixRequirement {
+    /// GNU NOSUFFIX = t: exactly the name given, no suffix appended.
+    ExactNameOnly,
+    /// GNU MUST-SUFFIX = t: only suffixed candidates, so an extensionless file
+    /// can never match — what `Frequire` passes when it was given no FILENAME
+    /// (src/fns.c), and what keeps a `bin/org-capture` shell script from
+    /// shadowing `org-capture.el` (neomacs#…, Doom).
+    SuffixRequired,
+    /// GNU's default: each directory tries the suffixes in order and then the
+    /// bare name.
+    BareNameAllowed,
+}
+
+impl LoadSuffixRequirement {
+    /// GNU `Frequire`: MUST-SUFFIX is t exactly when no FILENAME was supplied.
+    pub fn for_require(filename_given: bool) -> Self {
+        if filename_given {
+            Self::BareNameAllowed
+        } else {
+            Self::SuffixRequired
+        }
+    }
+}
+
 /// Search for a file in the load path.
 #[tracing::instrument(level = "debug", ret)]
 pub fn find_file_in_load_path(name: &str, load_path: &[LispString]) -> Option<PathBuf> {
-    find_file_in_load_path_with_flags(name, load_path, false, false, false)
+    find_file_in_load_path_with_requirement(
+        name,
+        load_path,
+        LoadSuffixRequirement::BareNameAllowed,
+        false,
+    )
+}
+
+/// Search `load-path` for NAME under an explicit suffix policy.
+pub fn find_file_in_load_path_with_requirement(
+    name: &str,
+    load_path: &[LispString],
+    requirement: LoadSuffixRequirement,
+    prefer_newer: bool,
+) -> Option<PathBuf> {
+    find_file_in_load_path_with_flags(
+        name,
+        load_path,
+        matches!(requirement, LoadSuffixRequirement::ExactNameOnly),
+        matches!(requirement, LoadSuffixRequirement::SuffixRequired),
+        prefer_newer,
+    )
 }
 
 /// Search for a file in load-path with `load` optional suffix flags.

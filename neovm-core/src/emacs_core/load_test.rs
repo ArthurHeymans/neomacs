@@ -13951,3 +13951,56 @@ fn alloc_class_profile_replay_nadvice() {
         alloc_probe::report()
     );
 }
+
+#[test]
+fn require_skips_an_extensionless_file_shadowing_the_feature() {
+    // Doom keeps shell scripts in `~/.config/emacs/bin` -- among them
+    // `org-capture`, with no extension -- and that directory can precede org's
+    // own on `load-path`. `(require 'org-capture)` picked the SCRIPT and tried to
+    // read `#!/usr/bin/env sh` as Lisp:
+    //   "Read error in ~/.config/emacs/bin/org-capture: # at position 21"
+    //
+    // GNU cannot: `Frequire` calls `Fload` with MUST-SUFFIX = t whenever no
+    // FILENAME was given (src/fns.c), and with must_suffix `openp` never puts the
+    // empty suffix in its list, so an extensionless candidate is invisible no
+    // matter which directory it sits in. Verified against GNU 31: it loads the
+    // `.el` from the later directory.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let bin = dir.path().join("bin");
+    let lisp = dir.path().join("lisp");
+    std::fs::create_dir_all(&bin).expect("bin dir");
+    std::fs::create_dir_all(&lisp).expect("lisp dir");
+    std::fs::write(bin.join("shadowed"), "#!/usr/bin/env sh\necho hi\n").expect("script");
+    std::fs::write(lisp.join("shadowed.el"), "(provide 'shadowed)\n").expect("lisp file");
+
+    let load_path = [
+        crate::heap_types::LispString::from_utf8(bin.to_str().expect("utf8 bin")),
+        crate::heap_types::LispString::from_utf8(lisp.to_str().expect("utf8 lisp")),
+    ];
+
+    // What `require` must do: suffixed candidates only.
+    let found = super::find_file_in_load_path_with_requirement(
+        "shadowed",
+        &load_path,
+        super::LoadSuffixRequirement::SuffixRequired,
+        false,
+    )
+    .expect("require should find the .el in the later directory");
+    assert_eq!(
+        found,
+        lisp.join("shadowed.el"),
+        "an extensionless file must never satisfy `require`"
+    );
+
+    // Plain `load` keeps GNU's fallback: suffixed first, then the bare name, so
+    // the script in the FIRST directory does win there (GNU `openp` iterates
+    // directories outermost).
+    let found = super::find_file_in_load_path_with_requirement(
+        "shadowed",
+        &load_path,
+        super::LoadSuffixRequirement::BareNameAllowed,
+        false,
+    )
+    .expect("load should still find something");
+    assert_eq!(found, bin.join("shadowed"));
+}

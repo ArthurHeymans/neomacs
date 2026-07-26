@@ -2455,6 +2455,8 @@ pub(crate) fn plan_require_in_state(
         ));
     }
 
+    // GNU keys MUST-SUFFIX off whether a FILENAME was supplied, not off its value.
+    let filename_given = matches!(&filename, Some(value) if !value.is_nil());
     let filename = match filename {
         Some(v) if v.is_nil() => name.clone(),
         Some(v) if v.is_string() => v
@@ -2472,7 +2474,17 @@ pub(crate) fn plan_require_in_state(
     let filename = super::load::expand_tilde(&filename);
 
     let load_path = super::load::get_load_path(obarray);
-    match super::load::find_file_in_load_path(&filename, &load_path) {
+    // GNU `Frequire` loads with MUST-SUFFIX = t unless the caller passed an
+    // explicit FILENAME (src/fns.c), so a `require`d feature is never satisfied
+    // by an extensionless file — e.g. Doom's `bin/org-capture` shell script,
+    // which otherwise shadowed org's `org-capture.el` and was read as Lisp.
+    let requirement = super::load::LoadSuffixRequirement::for_require(filename_given);
+    match super::load::find_file_in_load_path_with_requirement(
+        &filename,
+        &load_path,
+        requirement,
+        false,
+    ) {
         Some(path) => Ok(RequirePlan::Load { sym_id, name, path }),
         None => {
             if noerror.is_some_and(|value| value.is_truthy()) {
