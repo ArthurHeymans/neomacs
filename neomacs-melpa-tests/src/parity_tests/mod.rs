@@ -28,6 +28,7 @@ mod ac_ispell;
 mod ac_js2;
 mod ac_math;
 mod ac_mozc;
+mod ac_octave;
 mod async_package;
 mod at_package;
 mod bind_key;

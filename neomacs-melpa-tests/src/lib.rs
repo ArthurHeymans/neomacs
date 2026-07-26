@@ -170,6 +170,9 @@ pub const AC_MATH_MELPA_PIN: (&str, &str) = ("ac-math", "20141116.2127");
 /// The exact ac-mozc package selected by the comprehensive API parity corpus.
 pub const AC_MOZC_MELPA_PIN: (&str, &str) = ("ac-mozc", "20150227.1619");
 
+/// The exact ac-octave package selected by the comprehensive API parity corpus.
+pub const AC_OCTAVE_MELPA_PIN: (&str, &str) = ("ac-octave", "20180406.334");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
