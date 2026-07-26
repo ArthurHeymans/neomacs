@@ -41,6 +41,7 @@ mod accent;
 mod ace_flyspell;
 mod ace_isearch;
 mod ace_jump_buffer;
+mod ace_jump_helm_line;
 mod async_package;
 mod at_package;
 mod bind_key;

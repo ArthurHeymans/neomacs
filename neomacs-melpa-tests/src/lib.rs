@@ -214,6 +214,10 @@ pub const ACE_ISEARCH_MELPA_PIN: (&str, &str) = ("ace-isearch", "20220809.1748")
 /// corpus.
 pub const ACE_JUMP_BUFFER_MELPA_PIN: (&str, &str) = ("ace-jump-buffer", "20171031.1550");
 
+/// The exact Ace Jump Helm Line package selected by the comprehensive API
+/// parity corpus.
+pub const ACE_JUMP_HELM_LINE_MELPA_PIN: (&str, &str) = ("ace-jump-helm-line", "20160918.1836");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
