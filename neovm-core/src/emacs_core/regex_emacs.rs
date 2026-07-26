@@ -367,9 +367,21 @@ pub(crate) struct LiteralPrefilter {
 
 #[derive(Clone, Debug)]
 pub struct CaseTranslation {
-    byte: [u32; 256],
+    /// Translations for codes 0..256, filled ON DEMAND when backed by a
+    /// char-table (see [`CaseTranslation::from_char_table`]).
+    /// [`CASE_TRANSLATION_UNFILLED`] marks a slot not yet computed.
+    byte: [std::cell::Cell<u32>; 256],
     table: Option<crate::emacs_core::value::Value>,
 }
+
+/// Sentinel for a `CaseTranslation::byte` slot that has not been computed.
+///
+/// Safe as a sentinel because a translation is always a valid character code
+/// (`<= MAX_CHAR`), which `u32::MAX` is not. Named rather than a bare literal
+/// because the array is otherwise indistinguishable from a filled one -- the
+/// same class of mistake as the derived `Default` that let `IntervalTree`
+/// report an empty memo as valid.
+const CASE_TRANSLATION_UNFILLED: u32 = u32::MAX;
 
 impl CaseTranslation {
     pub(crate) fn standard() -> Self {
@@ -387,19 +399,47 @@ impl CaseTranslation {
                 byte
             };
         }
-        let byte = STANDARD_BYTE.with(|b| *b);
+        let byte = STANDARD_BYTE.with(|b| std::array::from_fn(|i| std::cell::Cell::new(b[i])));
         Self { byte, table: None }
     }
 
+    /// A translation backed by a buffer's case-canon char-table.
+    ///
+    /// Slots are filled ON DEMAND. Eagerly translating all 256 codes here cost
+    /// 256 `ct_lookup` calls per construction, and `buffer_search_translation`
+    /// builds one of these on EVERY case-folded `looking_at` /
+    /// `re-search-forward` -- which font-lock issues thousands of times, each
+    /// typically examining a handful of characters. A profile put
+    /// `ct_lookup` at 4.29% of a font-lock scroll with this its largest
+    /// single consumer.
+    ///
+    /// Filling on demand is strictly less work at every match length (k
+    /// distinct codes examined costs k lookups, never 256) and is exactly as
+    /// sound as the eager fill: the memo lives and dies with this instance, so
+    /// it cannot outlive the table the way an identity-keyed cache could.
+    /// `standard()` above already applied the same lesson to the constant
+    /// table; this path was simply missed.
     pub(crate) fn from_char_table(table: crate::emacs_core::value::Value) -> Self {
-        let mut byte = [0u32; 256];
-        for i in 0..=255i64 {
-            byte[i as usize] = crate::emacs_core::chartable::translate_char(&table, i) as u32;
-        }
         Self {
-            byte,
+            byte: std::array::from_fn(|_| std::cell::Cell::new(CASE_TRANSLATION_UNFILLED)),
             table: Some(table),
         }
+    }
+
+    /// Translation for a code below 256, computing and memoizing it on a miss.
+    #[inline]
+    fn byte_slot(&self, c: usize) -> Option<u32> {
+        let slot = self.byte.get(c)?;
+        let cached = slot.get();
+        if cached != CASE_TRANSLATION_UNFILLED {
+            return Some(cached);
+        }
+        let translated = match self.table {
+            Some(table) => crate::emacs_core::chartable::translate_char(&table, c as i64) as u32,
+            None => Self::canonicalize_char(c as u32),
+        };
+        slot.set(translated);
+        Some(translated)
     }
 
     pub(crate) fn cache_key(&self) -> usize {
@@ -407,7 +447,7 @@ impl CaseTranslation {
     }
 
     pub(crate) fn translate(&self, c: u32) -> u32 {
-        if let Some(translated) = self.byte.get(c as usize).copied() {
+        if let Some(translated) = self.byte_slot(c as usize) {
             return translated;
         }
         if let Some(table) = self.table {
@@ -417,7 +457,7 @@ impl CaseTranslation {
     }
 
     fn translate_byte(&self, c: u8) -> u8 {
-        self.byte[c as usize] as u8
+        self.byte_slot(c as usize).unwrap_or(c as u32) as u8
     }
 
     fn canonicalize_char(c: u32) -> u32 {

@@ -575,6 +575,25 @@ fn syntax_code_object(code: usize) -> Option<Value> {
 ///
 /// Process-global on purpose: caches are thread-local, so a bump from
 /// another thread can only over-invalidate, never serve a stale entry.
+///
+/// ★ DO NOT key a general syntax-value cache on this epoch. ★
+///
+/// It is bumped from the `modify-syntax-entry` chokepoints ONLY
+/// (`SyntaxTable::modify_syntax_entry` and `modify_syntax_entry_in_buffers`).
+/// A syntax table is an ordinary char-table, so Lisp can mutate one straight
+/// through `aset`, `set-char-table-range`, or `set-char-table-parent` without
+/// ever reaching those, and the epoch will NOT move. That is deliberate and
+/// GNU-faithful -- GNU calls `clear_regexp_cache` from `Fmodify_syntax_entry`
+/// alone, so its regexp cache has exactly the same blind spot -- and it is
+/// sound for the one contract above, where a missed invalidation costs a stale
+/// COMPILED REGEXP.
+///
+/// It is NOT sound for a cache of syntax classes or entries, where the same
+/// miss serves a WRONG SYNTAX CLASS and silently misparses the buffer. The
+/// ASCII memo on `SyntaxPropRange` avoids this by living for a single scan --
+/// the table-immutability window the property-run cache already assumes --
+/// rather than trusting this epoch across calls. Anything longer-lived needs
+/// its own invalidation, or these bump sites need widening first.
 static SYNTAX_TABLE_MUTATION_EPOCH: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(0);
 
