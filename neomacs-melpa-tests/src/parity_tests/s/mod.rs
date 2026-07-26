@@ -1,7 +1,7 @@
 use std::time::Duration;
 
+use crate::{CachedMelpaOracle, S_MELPA_PIN};
 use expect_test::{Expect, expect};
-use neomacs_melpa_tests::{CachedMelpaOracle, S_MELPA_PIN};
 
 const S_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 

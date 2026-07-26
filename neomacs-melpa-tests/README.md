@@ -23,11 +23,11 @@ phase-specific failures.
 - `live_melpa.rs` hard-codes package names and versions, downloads one complete
   dependency transaction below `./tmp`, then gives that same local transaction
   to GNU Emacs and Neomacs. No third-party package payload is tracked by Git.
-- `dash_parity.rs` and its modules use 97 ordinary Rust `#[test]` functions.
+- `src/parity_tests/dash/` uses 97 ordinary Rust `#[test]` functions.
   Each case isolates one API family and covers normal, empty, boundary,
   mutation, evaluation-count, or signal behavior. Together they exercise the
   pinned package's public functions, macros, and compatibility aliases.
-- `s_parity.rs` uses 48 ordinary Rust `#[test]` functions to exercise all 92
+- `src/parity_tests/s/` uses 48 ordinary Rust `#[test]` functions to exercise all 92
   public `s` functions, macros, and compatibility aliases, plus its public
   lexical-format variable, boundary values, Unicode behavior, evaluation
   semantics, and representative signals.
@@ -48,6 +48,8 @@ phase-specific failures.
 - `package_vc.rs` installs from a workspace-local Git repository, restarts,
   upgrades to a new commit, restarts again, deletes the package, and verifies
   that deletion survives one more restart. It never contacts a remote host.
+All Rust tests are library unit-test modules loaded from the
+`src/parity_tests/` tree; this crate has no Cargo integration-test targets.
 The GNU package-resource contracts are required CI checks. The current MELPA
 oracle runs on scheduled and explicitly dispatched CI workflows.
 
@@ -77,7 +79,7 @@ TMPDIR="$PWD/tmp" \
 NEOMACS_BIN="$PWD/target/release/neomacs" \
 cargo nextest run -p neomacs-melpa-tests \
   --run-ignored only \
-  -E 'test(=live_melpa_ecosystem_installs_and_survives_restart)' \
+  -E 'test(=parity_tests::live_melpa::live_melpa_ecosystem_installs_and_survives_restart)' \
   --no-fail-fast
 ```
 
@@ -87,7 +89,7 @@ Run every comprehensive Dash parity test:
 TMPDIR="$PWD/tmp" \
 NEOMACS_BIN="$PWD/target/release/neomacs" \
 cargo nextest run -p neomacs-melpa-tests \
-  -E 'binary_id(neomacs-melpa-tests::dash_parity)' \
+  -E 'test(~parity_tests::dash::)' \
   --no-fail-fast
 ```
 
@@ -97,7 +99,7 @@ Run every comprehensive `s` parity test:
 TMPDIR="$PWD/tmp" \
 NEOMACS_BIN="$PWD/target/release/neomacs" \
 cargo nextest run -p neomacs-melpa-tests \
-  -E 'binary_id(neomacs-melpa-tests::s_parity)' \
+  -E 'test(~parity_tests::s::)' \
   --no-fail-fast
 ```
 
@@ -109,7 +111,7 @@ TMPDIR="$PWD/tmp" \
 NEOMACS_BIN="$PWD/target/release/neomacs" \
 UPDATE_EXPECT=1 \
 cargo nextest run -p neomacs-melpa-tests \
-  -E 'binary_id(neomacs-melpa-tests::dash_parity)' \
+  -E 'test(~parity_tests::dash::)' \
   --no-fail-fast
 ```
 

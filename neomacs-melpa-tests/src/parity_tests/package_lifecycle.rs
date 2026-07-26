@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use neomacs_melpa_tests::{
+use crate::{
     EmacsRuntime, ErtScenario, PackageScenario, PackageSource, run_delete_and_probe_scenario,
     run_ert_scenario, run_quickstart_scenario, workspace_root,
 };

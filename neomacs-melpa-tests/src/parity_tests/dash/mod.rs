@@ -1,17 +1,12 @@
 use std::time::Duration;
 
+use crate::{CachedMelpaOracle, DASH_MELPA_PIN};
 use expect_test::Expect;
-use neomacs_melpa_tests::{CachedMelpaOracle, DASH_MELPA_PIN};
 
-#[path = "dash_parity/control_flow.rs"]
 mod control_flow;
-#[path = "dash_parity/reductions.rs"]
 mod reductions;
-#[path = "dash_parity/sequences.rs"]
 mod sequences;
-#[path = "dash_parity/sets_and_trees.rs"]
 mod sets_and_trees;
-#[path = "dash_parity/traversal.rs"]
 mod traversal;
 
 const DASH_TEST_TIMEOUT: Duration = Duration::from_secs(120);

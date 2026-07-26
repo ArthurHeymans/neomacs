@@ -3,7 +3,7 @@ use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
-use neomacs_melpa_tests::{
+use crate::{
     EmacsRuntime, ErtScenario, MelpaSandbox, PackageScenario, PackageSource, ScenarioPhase,
     prepare_cached_melpa_package, prepare_shared_package_source, run_elisp_oracle,
     run_ert_scenario, run_oracle_scenario, run_scenario, workspace_root,

@@ -1890,3 +1890,6 @@ pub fn neomacs_binary() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|| workspace_root().join("target/release/neomacs"))
 }
+
+#[cfg(test)]
+mod parity_tests;

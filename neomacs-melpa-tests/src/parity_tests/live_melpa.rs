@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use neomacs_melpa_tests::{
+use crate::{
     DASH_MELPA_PIN, EmacsRuntime, PackageScenario, S_MELPA_PIN, prepare_shared_package_source,
     run_oracle_scenario, workspace_root,
 };

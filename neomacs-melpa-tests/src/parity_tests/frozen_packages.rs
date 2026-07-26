@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use neomacs_melpa_tests::{
+use crate::{
     EmacsRuntime, PackageScenario, PackageSource, run_oracle_scenario, run_scenario, workspace_root,
 };
 use neomacs_test_oracle::EvalOutcome;
@@ -84,7 +84,7 @@ fn oracle_normalizes_each_editors_sandbox_paths_in_signals() {
 
 #[test]
 fn oracle_preserves_small_integer_values() {
-    let report = neomacs_melpa_tests::run_elisp_oracle(
+    let report = crate::run_elisp_oracle(
         &neomacs_runtime(),
         &EmacsRuntime::gnu_emacs().with_timeout(Duration::from_secs(120)),
         "small-integer-outcome",

@@ -1,7 +1,7 @@
 use std::time::Duration;
 use std::{process::Command, time::Instant};
 
-use neomacs_melpa_tests::{EmacsRuntime, ErtReport, ErtScenario, run_ert_scenario, workspace_root};
+use crate::{EmacsRuntime, ErtReport, ErtScenario, run_ert_scenario, workspace_root};
 
 fn run_group(name: &str, tests: &[&str]) -> ErtReport {
     run_group_with_skip_policy(name, tests, false)

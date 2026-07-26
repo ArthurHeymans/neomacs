@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use neomacs_melpa_tests::{EmacsRuntime, run_package_vc_lifecycle};
+use crate::{EmacsRuntime, run_package_vc_lifecycle};
 
 #[test]
 fn offline_package_vc_lifecycle_survives_restarts() {
