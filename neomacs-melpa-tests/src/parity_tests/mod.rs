@@ -40,6 +40,7 @@ mod academic_phrases;
 mod accent;
 mod ace_flyspell;
 mod ace_isearch;
+mod ace_jump_buffer;
 mod async_package;
 mod at_package;
 mod bind_key;
