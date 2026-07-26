@@ -12,6 +12,7 @@ mod ac_alchemist;
 mod ac_c_headers;
 mod ac_capf;
 mod ac_clang;
+mod ac_dcd;
 mod async_package;
 mod at_package;
 mod bind_key;

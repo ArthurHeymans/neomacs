@@ -116,6 +116,9 @@ pub const AC_CAPF_MELPA_PIN: (&str, &str) = ("ac-capf", "20151101.217");
 /// The exact ac-clang package selected by the comprehensive API parity corpus.
 pub const AC_CLANG_MELPA_PIN: (&str, &str) = ("ac-clang", "20180710.546");
 
+/// The exact ac-dcd package selected by the comprehensive API parity corpus.
+pub const AC_DCD_MELPA_PIN: (&str, &str) = ("ac-dcd", "20250925.946");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
