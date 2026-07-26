@@ -17,6 +17,7 @@ mod ac_emmet;
 mod ac_emoji;
 mod ac_etags;
 mod ac_geiser;
+mod ac_haskell_process;
 mod async_package;
 mod at_package;
 mod bind_key;

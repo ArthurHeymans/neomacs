@@ -131,6 +131,10 @@ pub const AC_ETAGS_MELPA_PIN: (&str, &str) = ("ac-etags", "20161001.1507");
 /// The exact ac-geiser package selected by the comprehensive API parity corpus.
 pub const AC_GEISER_MELPA_PIN: (&str, &str) = ("ac-geiser", "20200318.824");
 
+/// The exact ac-haskell-process package selected by the comprehensive API
+/// parity corpus.
+pub const AC_HASKELL_PROCESS_MELPA_PIN: (&str, &str) = ("ac-haskell-process", "20150423.1402");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
