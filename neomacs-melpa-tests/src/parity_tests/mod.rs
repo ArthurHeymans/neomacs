@@ -16,6 +16,7 @@ mod ac_dcd;
 mod ac_emmet;
 mod ac_emoji;
 mod ac_etags;
+mod ac_geiser;
 mod async_package;
 mod at_package;
 mod bind_key;
