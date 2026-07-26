@@ -2676,7 +2676,29 @@ pub(crate) fn syntax_table_decodes_for_test() -> usize {
 }
 
 struct SyntaxPropRange {
-    cache: RefCell<Option<(usize, usize, Option<Value>)>>,
+    /// Run over which the `syntax-table` property is known constant, held as
+    /// separate `Cell`s rather than one `RefCell<Option<..>>`.
+    ///
+    /// This is consulted PER CHARACTER whenever `parse-sexp-lookup-properties`
+    /// is on, which elisp-mode sets, so it sits under
+    /// `effective_syntax_entry_for_abs_char` -- 11.11% of self time on a
+    /// per-keystroke profile. GNU's equivalent is two compares on globals,
+    /// inlined (`syntax.h`):
+    ///
+    ///     if (parse_sexp_lookup_properties && charpos >= gl_state.e_property)
+    ///       update_syntax_table_forward (charpos, gl_state.object);
+    ///
+    /// A `RefCell` cannot match that: every hit paid a borrow-flag load,
+    /// increment and decrement on top of the comparison. Plain `Cell`s make the
+    /// in-run case two integer compares plus one `Copy` load, with no borrow
+    /// bookkeeping -- `Value` and `Option<Value>` are both `Copy`.
+    ///
+    /// `run_start == run_end == 0` is the natural empty state (no `pos`
+    /// satisfies `start <= pos && pos < end`), so no reserved sentinel value is
+    /// needed. Mirrors GNU's `gl_state.b_property` / `e_property`.
+    run_start: Cell<usize>,
+    run_end: Cell<usize>,
+    run_value: Cell<Option<Value>>,
     /// Lazily-filled memo of the 128 ASCII syntax entries for the table this
     /// scan runs under (GNU `SYNTAX_ENTRY` on the char-table's `ascii` slot,
     /// minus the per-char cons decode).
@@ -2734,7 +2756,9 @@ struct SyntaxPropRange {
 impl SyntaxPropRange {
     fn new() -> Self {
         Self {
-            cache: RefCell::new(None),
+            run_start: Cell::new(0),
+            run_end: Cell::new(0),
+            run_value: Cell::new(None),
             ascii: std::array::from_fn(|_| Cell::new(None)),
             ascii_table: Cell::new(0),
         }
@@ -2772,29 +2796,43 @@ impl SyntaxPropRange {
     /// cached run when possible.  In debug builds every cache hit is validated
     /// against a fresh interval lookup, the same safety net the byte<->char
     /// cache uses.
+    #[inline]
     fn syntax_table_prop_at_char(&self, buf: &Buffer, pos: usize) -> Option<Value> {
-        let char_pos = offset_char_pos(CharPos0::ZERO, pos);
-        {
-            let cache = self.cache.borrow();
-            if let Some((start, end, ref value)) = *cache
-                && start <= pos
-                && pos < end
+        // In-run fast path: two integer compares, as in GNU's
+        // UPDATE_SYNTAX_TABLE_FORWARD. Kept free of any borrow bookkeeping
+        // because this runs once per character scanned.
+        if pos >= self.run_start.get() && pos < self.run_end.get() {
+            let value = self.run_value.get();
+            #[cfg(debug_assertions)]
             {
-                #[cfg(debug_assertions)]
-                {
-                    let (fresh, _, _) =
-                        buf.get_property_run_at_char_pos(char_pos, Value::symbol("syntax-table"));
-                    debug_assert!(
-                        *value == fresh,
-                        "SyntaxPropRange stale syntax-table at char {pos} in [{start}, {end})"
-                    );
-                }
-                return *value;
+                let (fresh, _, _) = buf.get_property_run_at_char_pos(
+                    offset_char_pos(CharPos0::ZERO, pos),
+                    Value::symbol("syntax-table"),
+                );
+                debug_assert!(
+                    value == fresh,
+                    "SyntaxPropRange stale syntax-table at char {pos} in [{}, {})",
+                    self.run_start.get(),
+                    self.run_end.get()
+                );
             }
+            return value;
         }
+        self.refill_run(buf, pos)
+    }
+
+    /// Locate the run containing `pos` and cache it.
+    ///
+    /// Outlined so the per-character fast path above stays small enough to
+    /// inline into the scan loop.
+    #[inline(never)]
+    fn refill_run(&self, buf: &Buffer, pos: usize) -> Option<Value> {
+        let char_pos = offset_char_pos(CharPos0::ZERO, pos);
         let (value, start, end) =
             buf.get_property_run_at_char_pos(char_pos, Value::symbol("syntax-table"));
-        self.cache.replace(Some((start.get(), end.get(), value)));
+        self.run_start.set(start.get());
+        self.run_end.set(end.get());
+        self.run_value.set(value);
         value
     }
 }
