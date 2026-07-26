@@ -251,6 +251,10 @@ pub const ACHIEVEMENTS_MELPA_PIN: (&str, &str) = ("achievements", "20240703.318"
 /// The exact ack-menu package selected by the comprehensive API parity corpus.
 pub const ACK_MENU_MELPA_PIN: (&str, &str) = ("ack-menu", "20150504.2022");
 
+/// The exact acme-theme package selected by the comprehensive API parity
+/// corpus.
+pub const ACME_THEME_MELPA_PIN: (&str, &str) = ("acme-theme", "20210430.302");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

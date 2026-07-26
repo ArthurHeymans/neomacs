@@ -51,6 +51,7 @@ mod ace_popup_menu;
 mod ace_window;
 mod achievements;
 mod ack_menu;
+mod acme_theme;
 mod async_package;
 mod at_package;
 mod bind_key;
