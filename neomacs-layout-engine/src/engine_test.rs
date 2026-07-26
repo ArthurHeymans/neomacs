@@ -6244,6 +6244,95 @@ fn layout_frame_rust_renders_invisible_ellipsis_through_row_builder() {
 }
 
 #[test]
+fn buffer_remapped_default_gets_distinct_face_for_leading_invisible_ellipsis() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("hidden visible");
+        buf.set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("default"),
+                Value::list(vec![
+                    Value::keyword("family"),
+                    Value::string("Noto Sans CJK SC"),
+                ]),
+                Value::symbol("default"),
+            ])]),
+        );
+        buf.set_buffer_local(
+            "buffer-invisibility-spec",
+            Value::list(vec![Value::cons(Value::symbol("folded"), Value::T)]),
+        );
+        assert!(buf.put_text_property(
+            0,
+            "hidden".len(),
+            Value::symbol("invisible"),
+            Value::symbol("folded"),
+        ));
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-remapped-default-leading-invisible",
+        640,
+        160,
+        buf_id,
+    );
+    realize_test_gui_frame(&mut eval, frame_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("text row");
+    let ellipsis_face_ids = text_row.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .filter_map(|glyph| {
+            matches!(glyph.glyph_type, GlyphType::Char { ch: '.' }).then_some(glyph.face_id)
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+
+    assert_eq!(
+        ellipsis_face_ids.len(),
+        1,
+        "one remapped default face should own the leading ellipsis"
+    );
+    let ellipsis_face_id = *ellipsis_face_ids.first().expect("ellipsis face");
+    assert_ne!(
+        ellipsis_face_id,
+        FaceId::from(neomacs_display_protocol::face::BasicFaceId::Default),
+        "GNU lookup_basic_face gives a buffer-remapped default its realized face id"
+    );
+    assert_eq!(
+        state.faces[&ellipsis_face_id].font_family,
+        "Noto Sans CJK SC"
+    );
+}
+
+#[test]
 fn implemented_text_backends_match_layout_frame_multiline_overlay_output() {
     let baseline = multiline_overlay_backend_layout_trace(BufferTextBackendKind::GapBuffer);
     let rows = trace_text_rows(&baseline);

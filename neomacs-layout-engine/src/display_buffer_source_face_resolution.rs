@@ -18,7 +18,6 @@ use crate::display_source_resolver::{
 };
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
-use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::emacs_core::eval::DisplayHost;
@@ -29,6 +28,7 @@ pub(crate) struct BufferSourceFaceResolutionContext<'a, B: LayoutBufferView> {
     face_resolver: &'a FaceResolver,
     measurement_policy: DisplayRowMeasurementPolicy,
     default_resolved: &'a ResolvedFace,
+    default_face_id: FaceId,
     default_face_metrics: DisplayRowFallbackMetrics,
     window_metrics: DisplayRowFallbackMetrics,
     window_system: bool,
@@ -76,6 +76,7 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
         face_resolver: &'a FaceResolver,
         measurement_policy: DisplayRowMeasurementPolicy,
         default_resolved: &'a ResolvedFace,
+        default_face_id: FaceId,
         default_face_metrics: DisplayRowFallbackMetrics,
         window_metrics: DisplayRowFallbackMetrics,
         window_system: bool,
@@ -86,6 +87,7 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
             face_resolver,
             measurement_policy,
             default_resolved,
+            default_face_id,
             default_face_metrics,
             window_metrics,
             window_system,
@@ -177,7 +179,7 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
         DisplaySourceResolveParams::new(
             DisplaySourceFaceBasis::new(
                 self.face_resolver,
-                FaceId::from(BasicFaceId::Default),
+                self.default_face_id,
                 self.default_resolved,
                 self.default_face_metrics,
             ),

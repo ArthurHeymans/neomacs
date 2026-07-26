@@ -21,9 +21,11 @@ use crate::display_row_geometry::{DisplayRowLimit, DisplayRowVisibilityLimit};
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row_walk_state::FaceScanCheckpoint;
+use crate::display_source_resolver::same_resolved_face;
 use crate::display_status_line::{ChromeRowRenderServices, WindowChromeRowsRenderRequest};
 use crate::display_text_window_row_lifecycle::{TextWindowBeginRequest, TextWindowFinishState};
 use crate::font_metrics::FontMetricsService;
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::hit_test::HitRow;
 use crate::incremental_layout::{CursorOnlyReplay, ScrollReplay};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess};
@@ -33,11 +35,12 @@ use crate::window_output::{
     TextWindowCursor, TextWindowOutputTarget, TextWindowRedisplayPositions, WindowOutputEmitter,
     publish_text_window_cursor, record_text_window_display_range, render_window_chrome_rows,
 };
+use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
 };
 use neomacs_display_protocol::glyph_matrix::{FaceFillItem, GlyphArea};
-use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
+use neomacs_display_protocol::types::{Color, DisplayWindowId, FaceId, Rect};
 use neovm_core::buffer::BufferId;
 use neovm_core::window::{FrameId, WindowId};
 
@@ -341,6 +344,24 @@ impl BufferSourceDefaultFacePlan {
         &self.face
     }
 
+    /// Reserve the effective display identity of this buffer's default face.
+    ///
+    /// The basic `default` face owns the canonical frame ID only while buffer
+    /// face remapping leaves its realized rendering unchanged. A remapped
+    /// default is a distinct realized face and must receive a dynamic ID before
+    /// any leading synthetic glyph can publish it.
+    pub(crate) fn reserve_effective_face_id(
+        &self,
+        face_resolver: &FaceResolver,
+        face_ids: &mut FrameFaceAttempt,
+    ) -> FaceId {
+        if same_resolved_face(&self.face, face_resolver.default_face()) {
+            BasicFaceId::Default.into()
+        } else {
+            face_ids.reserve_dynamic_face()
+        }
+    }
+
     pub(crate) fn char_width(&self) -> f32 {
         self.metrics.char_width()
     }
@@ -421,6 +442,7 @@ impl BufferSourceOutputSetup {
         let (mut output, font_metrics, face_resolver, mut face_ids, window_snapshots) =
             state.into_parts();
         let retry_checkpoint = output.capture_retry_checkpoint();
+        let default_face_id = default_face.reserve_effective_face_id(face_resolver, &mut face_ids);
 
         let has_overlays = !buffer.layout_overlays().is_empty();
         let face_resolution = BufferSourceFaceResolutionContext::new(
@@ -428,6 +450,7 @@ impl BufferSourceOutputSetup {
             face_resolver,
             default_face.measurement_policy(),
             default_face.face(),
+            default_face_id,
             default_face.metrics(),
             window_metrics,
             window_system,
@@ -681,7 +704,7 @@ impl BufferSourceOutputSetup {
         );
         let mut face_scan = FaceScanCheckpoint::initial();
         let default_measured_face = default_face.measurement_policy().measured_face(
-            neomacs_display_protocol::face::BasicFaceId::Default.into(),
+            default_face_id,
             default_face.face(),
             None,
             default_face.char_width(),
