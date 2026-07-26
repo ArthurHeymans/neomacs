@@ -110,6 +110,9 @@ pub const AC_ALCHEMIST_MELPA_PIN: (&str, &str) = ("ac-alchemist", "20150908.656"
 /// corpus.
 pub const AC_C_HEADERS_MELPA_PIN: (&str, &str) = ("ac-c-headers", "20200816.1007");
 
+/// The exact ac-capf package selected by the comprehensive API parity corpus.
+pub const AC_CAPF_MELPA_PIN: (&str, &str) = ("ac-capf", "20151101.217");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
