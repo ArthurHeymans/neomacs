@@ -164,6 +164,9 @@ pub const AC_ISPELL_MELPA_PIN: (&str, &str) = ("ac-ispell", "20151101.226");
 /// The exact ac-js2 package selected by the comprehensive API parity corpus.
 pub const AC_JS2_MELPA_PIN: (&str, &str) = ("ac-js2", "20190101.933");
 
+/// The exact ac-math package selected by the comprehensive API parity corpus.
+pub const AC_MATH_MELPA_PIN: (&str, &str) = ("ac-math", "20141116.2127");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

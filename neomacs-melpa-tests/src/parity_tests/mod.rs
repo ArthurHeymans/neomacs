@@ -26,6 +26,7 @@ mod ac_html_csswatcher;
 mod ac_inf_ruby;
 mod ac_ispell;
 mod ac_js2;
+mod ac_math;
 mod async_package;
 mod at_package;
 mod bind_key;
