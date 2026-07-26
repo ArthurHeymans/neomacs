@@ -43,6 +43,7 @@ mod ace_isearch;
 mod ace_jump_buffer;
 mod ace_jump_helm_line;
 mod ace_jump_mode;
+mod ace_jump_zap;
 mod async_package;
 mod at_package;
 mod bind_key;
