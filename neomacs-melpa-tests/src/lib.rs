@@ -51,6 +51,9 @@ pub const ASYNC_GNU_ELPA_PIN: (&str, &str) = ("async", "1.9.9");
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 
+/// The exact 0x0 package selected by the comprehensive API parity corpus.
+pub const ZERO_X_ZERO_MELPA_PIN: (&str, &str) = ("0x0", "20230823.2214");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
