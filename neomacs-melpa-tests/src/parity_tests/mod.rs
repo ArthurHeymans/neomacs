@@ -18,6 +18,7 @@ mod ac_emoji;
 mod ac_etags;
 mod ac_geiser;
 mod ac_haskell_process;
+mod ac_helm;
 mod async_package;
 mod at_package;
 mod bind_key;
