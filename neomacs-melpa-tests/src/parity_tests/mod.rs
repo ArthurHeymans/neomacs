@@ -71,6 +71,7 @@ mod affe;
 mod afterglow;
 mod afternoon_theme;
 mod ag;
+mod agenix;
 mod async_package;
 mod at_package;
 mod bind_key;
