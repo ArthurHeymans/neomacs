@@ -358,6 +358,9 @@ pub const AGITJO_MELPA_PIN: (&str, &str) = ("agitjo", "20260523.2048");
 /// The exact agtags package selected by the comprehensive API parity corpus.
 pub const AGTAGS_MELPA_PIN: (&str, &str) = ("agtags", "20250523.1654");
 
+/// The exact ah package selected by the comprehensive API parity corpus.
+pub const AH_MELPA_PIN: (&str, &str) = ("ah", "20220730.1058");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

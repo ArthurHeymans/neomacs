@@ -81,6 +81,7 @@ mod aggressive_fill_paragraph;
 mod aggressive_indent;
 mod agitjo;
 mod agtags;
+mod ah;
 mod async_package;
 mod at_package;
 mod bind_key;
