@@ -477,6 +477,12 @@ pub const ALL_THE_ICONS_IBUFFER_MELPA_PIN: (&str, &str) =
 /// parity corpus.
 pub const ALL_THE_ICONS_IVY_MELPA_PIN: (&str, &str) = ("all-the-icons-ivy", "20190508.1803");
 
+/// The exact all-the-icons-ivy-rich package selected by the comprehensive API
+/// parity corpus. MELPA built this archive from upstream commit
+/// `c098cc85123a401b0ab8f2afd3a25853e61d7d28`.
+pub const ALL_THE_ICONS_IVY_RICH_MELPA_PIN: (&str, &str) =
+    ("all-the-icons-ivy-rich", "20230420.1234");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
