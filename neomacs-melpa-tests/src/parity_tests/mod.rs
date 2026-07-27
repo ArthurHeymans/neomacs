@@ -146,6 +146,7 @@ mod annalist;
 mod annotate;
 mod annotate_depth;
 mod annotation;
+mod annoying_arrows_mode;
 mod async_package;
 mod at_package;
 mod bind_key;

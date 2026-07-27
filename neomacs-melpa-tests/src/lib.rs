@@ -623,6 +623,10 @@ pub const ANNOTATE_DEPTH_MELPA_PIN: (&str, &str) = ("annotate-depth", "20160520.
 /// `213db6e50bb89c1b0b2832eab4c6caafb137eb6d`.
 pub const ANNOTATION_MELPA_PIN: (&str, &str) = ("annotation", "20250805.1029");
 
+/// The exact annoying-arrows-mode package selected by the comprehensive API
+/// parity corpus.
+pub const ANNOYING_ARROWS_MODE_MELPA_PIN: (&str, &str) = ("annoying-arrows-mode", "20161024.646");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
