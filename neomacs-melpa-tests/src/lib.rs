@@ -686,6 +686,11 @@ pub const APDL_MODE_MELPA_PIN: (&str, &str) = ("apdl-mode", "20250508.908");
 /// workflow parity corpus.
 pub const APIWRAP_MELPA_PIN: (&str, &str) = ("apiwrap", "20180602.2231");
 
+/// The exact app-monochrome-themes package selected by the comprehensive
+/// theme-definition and lifecycle parity corpus.
+pub const APP_MONOCHROME_THEMES_MELPA_PIN: (&str, &str) =
+    ("app-monochrome-themes", "20250710.2315");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
