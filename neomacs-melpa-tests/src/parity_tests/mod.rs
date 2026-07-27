@@ -89,6 +89,7 @@ mod ai_code;
 mod aider;
 mod aidermacs;
 mod aidev_mode;
+mod aiken_mode;
 mod async_package;
 mod at_package;
 mod bind_key;

@@ -384,6 +384,10 @@ pub const AIDERMACS_MELPA_PIN: (&str, &str) = ("aidermacs", "20260726.839");
 /// corpus.
 pub const AIDEV_MODE_MELPA_PIN: (&str, &str) = ("aidev-mode", "20250318.2144");
 
+/// The exact aiken-mode package selected by the comprehensive API parity
+/// corpus.
+pub const AIKEN_MODE_MELPA_PIN: (&str, &str) = ("aiken-mode", "20230920.1210");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
@@ -1001,6 +1005,28 @@ impl CachedPackageOracle {
         Self::from_package_dir(package, source_file_name, package_dir)
     }
 
+    /// Prepare an exact package from an immutable MELPA payload URL.
+    ///
+    /// This is for packages whose historical payload remains available even
+    /// though the package has been removed from the current MELPA catalog.
+    /// GNU Emacs verifies the payload digest and installs it through
+    /// `package-install-file`; package contents remain below `./tmp`.
+    pub fn new_from_frozen_melpa_archive(
+        package: (&str, &str),
+        source_file_name: &str,
+        archive_url: &str,
+        sha256: &str,
+    ) -> Result<Self, String> {
+        validate_cached_source_file_name(MELPA_ARCHIVE.label, source_file_name)?;
+        let package_dir = prepare_cached_frozen_melpa_package(
+            &EmacsRuntime::gnu_emacs(),
+            package,
+            archive_url,
+            sha256,
+        )?;
+        Self::from_package_dir(package, source_file_name, package_dir)
+    }
+
     fn from_package_dir(
         package: (&str, &str),
         source_file_name: &str,
@@ -1304,6 +1330,215 @@ pub fn prepare_cached_gnu_elpa_package(
     package: (&str, &str),
 ) -> Result<PathBuf, String> {
     prepare_cached_package(gnu_emacs, package, GNU_ELPA_ARCHIVE)
+}
+
+/// Install one immutable historical MELPA payload into a validated cache.
+///
+/// The payload is downloaded and retained only below `./tmp`, verified by its
+/// hard-coded SHA-256 digest, and installed by GNU Emacs's package manager.
+pub fn prepare_cached_frozen_melpa_package(
+    gnu_emacs: &EmacsRuntime,
+    package: (&str, &str),
+    archive_url: &str,
+    sha256: &str,
+) -> Result<PathBuf, String> {
+    let (name, version) = package;
+    let expected_url = format!("https://melpa.org/packages/{name}-{version}.tar");
+    if name.is_empty()
+        || version.is_empty()
+        || !name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '@'))
+        || !version.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '+')
+        })
+        || archive_url != expected_url
+        || sha256.len() != 64
+        || !sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(format!(
+            "cached frozen MELPA package requires a safe exact pin, canonical payload URL, and SHA-256 digest, got `{name}` `{version}` `{archive_url}` `{sha256}`"
+        ));
+    }
+
+    let root = workspace_root()
+        .join("tmp/melpa/package-cache-frozen-melpa")
+        .join(name)
+        .join(version);
+    fs::create_dir_all(&root).map_err(|error| {
+        format!(
+            "failed to create frozen MELPA cache root {}: {error}",
+            root.display()
+        )
+    })?;
+    let lock_path = root.join("prepare.lock");
+    let lock = fs::OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .truncate(false)
+        .open(&lock_path)
+        .map_err(|error| {
+            format!(
+                "failed to open frozen MELPA cache lock {}: {error}",
+                lock_path.display()
+            )
+        })?;
+    fs4::FileExt::lock(&lock).map_err(|error| {
+        format!(
+            "failed to lock frozen MELPA cache {}: {error}",
+            root.display()
+        )
+    })?;
+
+    let home = root.join("home");
+    let tmp = root.join("tmp");
+    let package_dir = home.join(".emacs.d/elpa").join(format!("{name}-{version}"));
+    let descriptor = package_dir.join(format!("{name}-pkg.el"));
+    let ready_marker = root.join("ready");
+    let expected_marker = format!("{name}\t{version}\t{sha256}\n");
+    let cache_is_ready = descriptor.is_file()
+        && fs::read_to_string(&ready_marker).is_ok_and(|contents| contents == expected_marker);
+    if cache_is_ready {
+        return Ok(package_dir);
+    }
+
+    if home.exists() {
+        fs::remove_dir_all(&home).map_err(|error| {
+            format!(
+                "failed to remove incomplete frozen MELPA cache {}: {error}",
+                home.display()
+            )
+        })?;
+    }
+    if ready_marker.exists() {
+        fs::remove_file(&ready_marker).map_err(|error| {
+            format!(
+                "failed to remove invalid frozen MELPA marker {}: {error}",
+                ready_marker.display()
+            )
+        })?;
+    }
+    for directory in [
+        home.join(".emacs.d"),
+        tmp.clone(),
+        root.join("xdg/config"),
+        root.join("xdg/cache"),
+        root.join("xdg/data"),
+        root.join("xdg/state"),
+    ] {
+        fs::create_dir_all(&directory).map_err(|error| {
+            format!(
+                "failed to create frozen MELPA cache directory {}: {error}",
+                directory.display()
+            )
+        })?;
+    }
+
+    let archive_file = tmp.join(format!("{name}-{version}.tar"));
+    let form = format!(
+        r##"(progn
+               (require 'package)
+               (require 'url)
+               (setq package-user-dir
+                     (expand-file-name ".emacs.d/elpa" (getenv "HOME"))
+                     package-check-signature nil)
+               (let ((archive-file {})
+                     (archive-url {})
+                     (expected-sha256 {})
+                     (package-name {})
+                     (expected-version {}))
+                 (url-copy-file archive-url archive-file t)
+                 (let ((actual-sha256
+                        (with-temp-buffer
+                          (set-buffer-multibyte nil)
+                          (insert-file-contents-literally archive-file)
+                          (secure-hash 'sha256 (current-buffer)))))
+                   (unless (equal actual-sha256 expected-sha256)
+                     (error
+                      "Frozen MELPA payload digest changed: expected %s, got %s"
+                      expected-sha256 actual-sha256)))
+                 (package-install-file archive-file)
+                 (package-initialize)
+                 (let* ((package-symbol (intern package-name))
+                        (installed
+                         (cadr (assq package-symbol package-alist)))
+                        (installed-version
+                         (and installed
+                              (package-version-join
+                               (package-desc-version installed))))
+                        (directory
+                         (and installed (package-desc-dir installed)))
+                        (descriptor
+                         (and directory
+                              (expand-file-name
+                               (concat package-name "-pkg.el")
+                               directory))))
+                   (unless (equal installed-version expected-version)
+                     (error
+                      "Installed frozen package mismatch: %s expected %s, got %s"
+                      package-name expected-version installed-version))
+                   (unless (and descriptor (file-readable-p descriptor))
+                     (error
+                      "Installed frozen package descriptor is unreadable: %s"
+                      descriptor))))
+               (princ "NEOMACS-FROZEN-MELPA-CACHE:ready"))"##,
+        elisp_string(&archive_file.to_string_lossy()),
+        elisp_string(archive_url),
+        elisp_string(sha256),
+        elisp_string(name),
+        elisp_string(version),
+    );
+    let mut command = gnu_emacs.command();
+    configure_process_environment(&mut command, &root, &home, &tmp);
+    command.args(["--batch", "--quick", "--eval", &form]);
+    let output =
+        output_with_timeout(&mut command, gnu_emacs.timeout).map_err(|error| match error {
+            CommandError::Launch(error) => format!(
+                "failed to launch {} for frozen MELPA package `{name}` in {}: {error}",
+                gnu_emacs.name,
+                root.display()
+            ),
+            CommandError::TimedOut => format!(
+                "{} frozen MELPA package `{name}` timed out after {:?} in {}",
+                gnu_emacs.name,
+                gnu_emacs.timeout,
+                root.display()
+            ),
+            CommandError::Capture(error) => format!(
+                "failed to capture {} frozen MELPA package `{name}` output: {error}",
+                gnu_emacs.name
+            ),
+        })?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success()
+        || !stdout.contains("NEOMACS-FROZEN-MELPA-CACHE:ready")
+        || !descriptor.is_file()
+    {
+        return Err(format!(
+            "failed to prepare frozen MELPA package {name} {version} below {}\nstatus: {:?}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+            root.display(),
+            output.status.code()
+        ));
+    }
+
+    let marker_tmp = root.join(format!("ready.{}.tmp", std::process::id()));
+    fs::write(&marker_tmp, &expected_marker).map_err(|error| {
+        format!(
+            "failed to write frozen MELPA cache marker {}: {error}",
+            marker_tmp.display()
+        )
+    })?;
+    fs::rename(&marker_tmp, &ready_marker).map_err(|error| {
+        format!(
+            "failed to publish frozen MELPA cache marker {}: {error}",
+            ready_marker.display()
+        )
+    })?;
+    Ok(package_dir)
 }
 
 /// Build one exact Tree-sitter grammar into a cross-process cache below
