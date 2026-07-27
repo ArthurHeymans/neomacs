@@ -269,6 +269,9 @@ pub const ACTIONSCRIPT_MODE_MELPA_PIN: (&str, &str) = ("actionscript-mode", "201
 /// parity corpus.
 pub const ACTIVITY_WATCH_MODE_MELPA_PIN: (&str, &str) = ("activity-watch-mode", "20260311.835");
 
+/// The exact acton-mode package selected by the comprehensive API parity corpus.
+pub const ACTON_MODE_MELPA_PIN: (&str, &str) = ("acton-mode", "20250113.1059");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
