@@ -114,6 +114,16 @@ pub(crate) mod vm_profile {
 
     thread_local! {
         static OP_COUNTS: RefCell<HashMap<String, u64>> = RefCell::new(HashMap::new());
+        /// Adjacent executed-opcode PAIRS, and the previous op's name.
+        ///
+        /// Single-op frequencies say which arms are hot; they do not say which
+        /// FUSIONS are worth writing. A superinstruction (the existing
+        /// `Dup`/`StackRef`/`Lss`/`GotoIfNil` arm is one) removes a dispatch
+        /// only for the pair it matches, so the pair distribution is what
+        /// justifies adding another.
+        static OP_PAIR_COUNTS: RefCell<HashMap<(String, String), u64>> =
+            RefCell::new(HashMap::new());
+        static PREV_OP: RefCell<Option<String>> = const { RefCell::new(None) };
         static SUBR_COUNTS: RefCell<HashMap<SymId, u64>> = RefCell::new(HashMap::new());
         /// (callee SymId, ENTRY_* tag) -> count of bytecode call-ops that
         /// dispatched that callee through that op. Populated at the run_loop
@@ -178,6 +188,20 @@ pub(crate) mod vm_profile {
                 m.insert(name.to_string(), 1);
             }
         });
+        PREV_OP.with(|prev| {
+            let mut prev = prev.borrow_mut();
+            if let Some(prev_name) = prev.as_deref() {
+                OP_PAIR_COUNTS.with(|c| {
+                    let mut m = c.borrow_mut();
+                    if let Some(v) = m.get_mut(&(prev_name.to_string(), name.to_string())) {
+                        *v += 1;
+                    } else {
+                        m.insert((prev_name.to_string(), name.to_string()), 1);
+                    }
+                });
+            }
+            *prev = Some(name.to_string());
+        });
     }
 
     /// Record one `Op::Call` execution: its CK_* resolution kind plus the
@@ -208,6 +232,8 @@ pub(crate) mod vm_profile {
     /// Clear the histograms (call before a measured workload).
     pub(crate) fn reset() {
         OP_COUNTS.with(|c| c.borrow_mut().clear());
+        OP_PAIR_COUNTS.with(|c| c.borrow_mut().clear());
+        PREV_OP.with(|c| *c.borrow_mut() = None);
         SUBR_COUNTS.with(|c| c.borrow_mut().clear());
         ENTRY_COUNTS.with(|c| c.borrow_mut().clear());
         CALL_KIND_COUNTS.with(|c| *c.borrow_mut() = [0; CK_COUNT]);
@@ -232,6 +258,21 @@ pub(crate) mod vm_profile {
         for (name, count) in &rows {
             let pct = 100.0 * *count as f64 / total.max(1) as f64;
             let _ = writeln!(out, "  {name:<16} {count:>12}  {pct:5.2}%");
+        }
+
+        // Adjacent pairs: which superinstruction would actually pay.
+        let mut pair_rows: Vec<((String, String), u64)> =
+            OP_PAIR_COUNTS.with(|c| c.borrow().iter().map(|(k, v)| (k.clone(), *v)).collect());
+        pair_rows.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        let pair_total: u64 = pair_rows.iter().map(|r| r.1).sum();
+        let _ = writeln!(
+            out,
+            "=== OP-PAIRS [{label}]: {pair_total} transitions, {} distinct ===",
+            pair_rows.len()
+        );
+        for ((a, b), count) in pair_rows.iter().take(25) {
+            let pct = 100.0 * *count as f64 / pair_total.max(1) as f64;
+            let _ = writeln!(out, "  {a:<16} -> {b:<16} {count:>12}  {pct:5.2}%");
         }
 
         let entry: HashMap<(u32, u8), u64> = ENTRY_COUNTS.with(|c| c.borrow().clone());
