@@ -9,6 +9,7 @@ use crate::emacs_core::symbol::Obarray;
 use crate::heap_types::LispString;
 use crate::window::Frame;
 pub use neomacs_display_protocol::ImageRealization as ResolvedImageRealization;
+pub use neomacs_display_protocol::{AxisSize, ImageSizeSpec};
 
 /// A finite, non-negative image scale stored by bits so image requests remain
 /// exact cache keys.
@@ -163,8 +164,9 @@ pub enum ImageResolveSource {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ImageResolveRequest {
     pub source: ImageResolveSource,
-    pub max_width: u32,
-    pub max_height: u32,
+    /// GNU's `compute_image_size` inputs. Resolved after decoding, once the
+    /// native size is known.
+    pub size: ImageSizeSpec,
     pub fg_color: u32,
     pub bg_color: u32,
     pub realization: ResolvedImageRealization,

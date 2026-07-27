@@ -17,8 +17,8 @@ use super::value::*;
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::image_catalog::{
-    ImageResolveRequest, ImageResolveSource, ImageScaleEnvironment, ImageScalePolicy,
-    image_scale_environment, numeric_image_scale,
+    AxisSize, ImageResolveRequest, ImageResolveSource, ImageScaleEnvironment, ImageScalePolicy,
+    ImageSizeSpec, image_scale_environment, numeric_image_scale,
 };
 use crate::window::FRAME_ID_BASE;
 use strum::{EnumString, IntoStaticStr};
@@ -368,8 +368,10 @@ pub(crate) fn image_resolve_request_from_spec(
     }
 
     let mut source = None;
-    let mut max_width = 0u32;
-    let mut max_height = 0u32;
+    // GNU keeps these four apart: `:width`/`:height` are targets that override
+    // their `:max-` counterpart, `:max-width`/`:max-height` are clamps.
+    let (mut width, mut max_width) = (None, None);
+    let (mut height, mut max_height) = (None, None);
     let mut scale = ImageScalePolicy::Default;
 
     let mut i = 1usize;
@@ -387,11 +389,11 @@ pub(crate) fn image_resolve_request_from_spec(
                     .as_lisp_string()
                     .map(|data| ImageResolveSource::Data(data.as_bytes().to_vec()));
             }
-            Some(ImageSpecKey::Width | ImageSpecKey::MaxWidth) => {
-                max_width = parse_image_dimension(value).unwrap_or(max_width);
-            }
-            Some(ImageSpecKey::Height | ImageSpecKey::MaxHeight) => {
-                max_height = parse_image_dimension(value).unwrap_or(max_height);
+            Some(ImageSpecKey::Width) => width = parse_image_dimension(value).or(width),
+            Some(ImageSpecKey::MaxWidth) => max_width = parse_image_dimension(value).or(max_width),
+            Some(ImageSpecKey::Height) => height = parse_image_dimension(value).or(height),
+            Some(ImageSpecKey::MaxHeight) => {
+                max_height = parse_image_dimension(value).or(max_height)
             }
             Some(ImageSpecKey::Scale) if value.is_symbol_named("default") => {
                 scale = ImageScalePolicy::Default;
@@ -408,8 +410,12 @@ pub(crate) fn image_resolve_request_from_spec(
 
     Some(ImageResolveRequest {
         source: source?,
-        max_width,
-        max_height,
+        // GNU looks each key up independently, so precedence is by key rather
+        // than by plist order.
+        size: ImageSizeSpec::new(
+            AxisSize::resolve(width, max_width),
+            AxisSize::resolve(height, max_height),
+        ),
         fg_color: 0,
         bg_color: 0,
         realization: environment.resolve(scale),

@@ -12,7 +12,7 @@ static char * test[] = {
 "X  X",
 "XXXX"
 };"#;
-    let result = decode_xpm_data(xpm, 0, 0);
+    let result = decode_xpm_data(xpm);
     assert!(result.is_some());
     let (w, h, rgba) = result.unwrap();
     assert_eq!(w, 4);
@@ -85,7 +85,7 @@ static char * test[] = {
 "..##",
 "##.."
 };"###;
-    let result = decode_xpm_data(xpm, 0, 0);
+    let result = decode_xpm_data(xpm);
     assert!(result.is_some());
     let (w, h, rgba) = result.unwrap();
     assert_eq!(w, 2);

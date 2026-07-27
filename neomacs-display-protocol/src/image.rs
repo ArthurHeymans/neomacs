@@ -70,53 +70,93 @@ impl Default for ImageRealization {
     }
 }
 
+/// What a spec asks for along one axis.
+///
+/// GNU resolves `:width` vs `:max-width` by precedence — ":width overrides
+/// :max-width" (src/image.c:2767) — which means the two can never both apply.
+/// Making that a sum type retires the bug this replaces: the old code kept one
+/// `max_width` field that BOTH keys wrote into, so a target silently became a
+/// clamp and the aspect ratio was computed against the wrong number.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum AxisSize {
+    /// Nothing requested: the native extent, scaled.
+    #[default]
+    Native,
+    /// `:width` / `:height` — an exact target, itself multiplied by the scale.
+    Exact(u32),
+    /// `:max-width` / `:max-height` — an upper bound; the other axis follows to
+    /// preserve the aspect ratio.
+    AtMost(u32),
+}
+
+impl AxisSize {
+    /// Apply GNU's precedence once, at construction: a target wins over a clamp.
+    #[must_use]
+    pub fn resolve(target: Option<u32>, at_most: Option<u32>) -> Self {
+        match (target, at_most) {
+            (Some(target), _) => Self::Exact(target),
+            (None, Some(at_most)) => Self::AtMost(at_most),
+            (None, None) => Self::Native,
+        }
+    }
+
+    fn target(self, scale: f64) -> Option<u32> {
+        match self {
+            // GNU scales the target too (src/image.c:2766).
+            Self::Exact(size) => Some(scale_size(size, 1, scale)),
+            _ => None,
+        }
+    }
+
+    /// The extent this axis pins, if any. `Native` pins nothing — the answer
+    /// is not knowable until the image is decoded.
+    #[must_use]
+    pub fn pinned(self) -> Option<u32> {
+        match self {
+            Self::Exact(size) | Self::AtMost(size) => Some(size),
+            Self::Native => None,
+        }
+    }
+
+    fn at_most(self) -> Option<u32> {
+        match self {
+            Self::AtMost(size) => Some(size),
+            _ => None,
+        }
+    }
+}
+
 /// How large an image should be drawn, as asked for by its spec.
 ///
-/// This is GNU's `compute_image_size` input set (src/image.c:2750). The four
-/// keys are NOT interchangeable, which is easy to get wrong:
-///
-/// - `:width` / `:height` are TARGETS. They are themselves multiplied by the
-///   scale, and each one overrides its `:max-` counterpart.
-/// - `:max-width` / `:max-height` are CLAMPS, applied only after the target (or
-///   the scaled native size) is known, and always preserving the aspect ratio.
-///
-/// Collapsing `:width` into `:max-width` loses both the target semantics and
-/// the aspect ratio — it is what made `(image-size '(image :max-width 20 ...))`
-/// answer `(20 . 4096)` where GNU answers `(20 . 10)`.
-///
-/// The size cannot be resolved until the native size is known, i.e. after
-/// decoding, so this travels to the decoder rather than being applied up front.
+/// This is GNU's `compute_image_size` input set (src/image.c:2750). The size
+/// cannot be resolved until the native size is known, i.e. after decoding, so
+/// this travels to the decoder rather than being applied up front.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct ImageSizeSpec {
-    width: Option<u32>,
-    height: Option<u32>,
-    max_width: Option<u32>,
-    max_height: Option<u32>,
+    width: AxisSize,
+    height: AxisSize,
 }
 
 impl ImageSizeSpec {
     #[must_use]
-    pub fn with_width(mut self, width: Option<u32>) -> Self {
-        self.width = width;
-        self
+    pub fn new(width: AxisSize, height: AxisSize) -> Self {
+        Self { width, height }
     }
 
+    /// Size to reserve for an image that has not been decoded yet.
+    ///
+    /// `None` when neither axis is pinned: the native size is the answer then,
+    /// and it is not known until decoding finishes.
     #[must_use]
-    pub fn with_height(mut self, height: Option<u32>) -> Self {
-        self.height = height;
-        self
-    }
-
-    #[must_use]
-    pub fn with_max_width(mut self, max_width: Option<u32>) -> Self {
-        self.max_width = max_width;
-        self
-    }
-
-    #[must_use]
-    pub fn with_max_height(mut self, max_height: Option<u32>) -> Self {
-        self.max_height = max_height;
-        self
+    pub fn placeholder_extent(self) -> Option<(u32, u32)> {
+        match (self.width.pinned(), self.height.pinned()) {
+            (Some(width), Some(height)) => Some((width, height)),
+            // One axis pinned: the other follows the native aspect ratio, which
+            // is still unknown, so fall back to a square of the known extent.
+            (Some(width), None) => Some((width, width)),
+            (None, Some(height)) => Some((height, height)),
+            (None, None) => None,
+        }
     }
 
     /// The size a `native_width` x `native_height` image should be drawn at.
@@ -127,18 +167,7 @@ impl ImageSizeSpec {
         let native_width = native_width.max(1);
         let native_height = native_height.max(1);
 
-        // ":width overrides :max-width" and likewise for height
-        // (src/image.c:2767, 2777).
-        let (target_width, max_width) = match self.width {
-            Some(width) => (Some(scale_size(width, 1, scale)), None),
-            None => (None, self.max_width),
-        };
-        let (target_height, max_height) = match self.height {
-            Some(height) => (Some(scale_size(height, 1, scale)), None),
-            None => (None, self.max_height),
-        };
-
-        let (mut width, mut height) = match (target_width, target_height) {
+        let (mut width, mut height) = match (self.width.target(scale), self.height.target(scale)) {
             // Both given: GNU skips the aspect-preserving work entirely.
             (Some(width), Some(height)) => return (width.max(1), height.max(1)),
             (Some(width), None) => (width, ratio(width, native_width, native_height)),
@@ -150,11 +179,11 @@ impl ImageSizeSpec {
         };
 
         // Clamps, each preserving the aspect ratio (src/image.c:2798-2810).
-        if let Some(max) = max_width.filter(|max| *max < width) {
+        if let Some(max) = self.width.at_most().filter(|max| *max < width) {
             width = max;
             height = ratio(width, native_width, native_height);
         }
-        if let Some(max) = max_height.filter(|max| *max < height) {
+        if let Some(max) = self.height.at_most().filter(|max| *max < height) {
             height = max;
             width = ratio(height, native_height, native_width);
         }
@@ -163,8 +192,7 @@ impl ImageSizeSpec {
     }
 }
 
-/// GNU `scale_image_size` (src/image.c:2700): `size * divisor_reciprocal`,
-/// expressed as `size * multiplier / divisor` with saturating conversion.
+/// GNU `scale_image_size` (src/image.c:2700): `size * multiplier / divisor`.
 fn scale_size(size: u32, divisor: u32, multiplier: f64) -> u32 {
     let scaled = f64::from(size) * multiplier / f64::from(divisor.max(1));
     if scaled.is_finite() && scaled >= 1.0 {
@@ -181,7 +209,7 @@ fn ratio(size: u32, from: u32, to: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{ImageRealization, ImageSizeSpec};
+    use super::{AxisSize, ImageRealization, ImageSizeSpec};
 
     /// Every expectation below was measured from GNU Emacs 31 on a 40x20 PNG
     /// with `image-scaling-factor` pinned to 1, so the numbers are observed
@@ -206,7 +234,10 @@ mod tests {
     fn width_is_a_target_and_keeps_the_aspect_ratio() {
         // GNU: `:width 80` => (80 . 40) — the height follows from the ratio.
         assert_eq!(
-            desired(ImageSizeSpec::default().with_width(Some(80)), 1.0),
+            desired(
+                ImageSizeSpec::new(AxisSize::Exact(80), AxisSize::Native),
+                1.0
+            ),
             (80, 40)
         );
     }
@@ -215,7 +246,10 @@ mod tests {
     fn height_is_a_target_and_keeps_the_aspect_ratio() {
         // GNU: `:height 40` => (80 . 40).
         assert_eq!(
-            desired(ImageSizeSpec::default().with_height(Some(40)), 1.0),
+            desired(
+                ImageSizeSpec::new(AxisSize::Native, AxisSize::Exact(40)),
+                1.0
+            ),
             (80, 40)
         );
     }
@@ -224,7 +258,10 @@ mod tests {
     fn max_width_clamps_and_keeps_the_aspect_ratio() {
         // GNU: `:max-width 20` => (20 . 10), NOT (20 . <unbounded>).
         assert_eq!(
-            desired(ImageSizeSpec::default().with_max_width(Some(20)), 1.0),
+            desired(
+                ImageSizeSpec::new(AxisSize::AtMost(20), AxisSize::Native),
+                1.0
+            ),
             (20, 10)
         );
     }
@@ -236,9 +273,8 @@ mod tests {
         // made neomacs answer (20 . 4096).
         assert_eq!(
             desired(
-                ImageSizeSpec::default()
-                    .with_width(Some(80))
-                    .with_max_width(Some(20)),
+                // GNU precedence resolved at construction: the target wins.
+                ImageSizeSpec::new(AxisSize::resolve(Some(80), Some(20)), AxisSize::Native),
                 1.0
             ),
             (80, 40)
@@ -249,9 +285,7 @@ mod tests {
     fn explicit_width_and_height_skip_the_aspect_computation() {
         assert_eq!(
             desired(
-                ImageSizeSpec::default()
-                    .with_width(Some(11))
-                    .with_height(Some(99)),
+                ImageSizeSpec::new(AxisSize::Exact(11), AxisSize::Exact(99)),
                 1.0
             ),
             (11, 99)
@@ -262,7 +296,10 @@ mod tests {
     fn targets_are_themselves_scaled() {
         // GNU multiplies :width/:height by the scale (src/image.c:2766).
         assert_eq!(
-            desired(ImageSizeSpec::default().with_width(Some(40)), 2.0),
+            desired(
+                ImageSizeSpec::new(AxisSize::Exact(40), AxisSize::Native),
+                2.0
+            ),
             (80, 40)
         );
     }

@@ -9,7 +9,7 @@ fn test_basic_xbm() {
                    0xff, 0x00 };\n";
     let fg = [255, 255, 255, 255]; // white
     let bg = [0, 0, 0, 255]; // black
-    let result = decode_xbm_data(xbm, fg, bg, 0, 0);
+    let result = decode_xbm_data(xbm, fg, bg);
     assert!(result.is_some());
     let (w, h, rgba) = result.unwrap();
     assert_eq!(w, 8);
@@ -41,7 +41,7 @@ fn test_lsb_first() {
                  static unsigned char t_bits[] = { 0x05 };\n";
     let fg = [255, 0, 0, 255]; // red
     let bg = [0, 0, 255, 255]; // blue
-    let result = decode_xbm_data(xbm, fg, bg, 0, 0);
+    let result = decode_xbm_data(xbm, fg, bg);
     assert!(result.is_some());
     let (w, h, rgba) = result.unwrap();
     assert_eq!(w, 4);
@@ -73,7 +73,7 @@ fn test_custom_colors() {
                  static unsigned char t_bits[] = { 0x01 };\n";
     let fg = [0, 255, 0, 255]; // green foreground
     let bg = [128, 128, 128, 255]; // gray background
-    let result = decode_xbm_data(xbm, fg, bg, 0, 0);
+    let result = decode_xbm_data(xbm, fg, bg);
     assert!(result.is_some());
     let (_, _, rgba) = result.unwrap();
     assert_eq!(&rgba[0..4], &fg); // bit 0 set -> green

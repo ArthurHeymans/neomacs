@@ -6,23 +6,15 @@ use std::collections::HashMap;
 use std::path::Path;
 
 /// Decode XPM image from in-memory data, returning (width, height, rgba_pixels).
-pub fn decode_xpm_data(
-    data: &[u8],
-    max_width: u32,
-    max_height: u32,
-) -> Option<(u32, u32, Vec<u8>)> {
+pub fn decode_xpm_data(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     let strings = extract_strings(data)?;
-    decode_from_strings(&strings, max_width, max_height)
+    decode_from_strings(&strings)
 }
 
 /// Decode XPM image from a file path.
-pub fn decode_xpm_file(
-    path: &Path,
-    max_width: u32,
-    max_height: u32,
-) -> Option<(u32, u32, Vec<u8>)> {
+pub fn decode_xpm_file(path: &Path) -> Option<(u32, u32, Vec<u8>)> {
     let data = std::fs::read(path).ok()?;
-    decode_xpm_data(&data, max_width, max_height)
+    decode_xpm_data(&data)
 }
 
 /// Query XPM dimensions without full decode (header only).
@@ -125,11 +117,7 @@ fn trim_bytes(b: &[u8]) -> &[u8] {
     &b[start..end]
 }
 
-fn decode_from_strings(
-    strings: &[&[u8]],
-    max_width: u32,
-    max_height: u32,
-) -> Option<(u32, u32, Vec<u8>)> {
+fn decode_from_strings(strings: &[&[u8]]) -> Option<(u32, u32, Vec<u8>)> {
     if strings.is_empty() {
         return None;
     }
@@ -192,28 +180,7 @@ fn decode_from_strings(
     let width = header.width;
     let height = header.height;
 
-    // Apply size constraints if needed
-    let mw = if max_width > 0 { max_width } else { 4096 };
-    let mh = if max_height > 0 { max_height } else { 4096 };
-    if width > mw || height > mh {
-        let img = image::RgbaImage::from_raw(width, height, rgba)?;
-        let mut nw = width;
-        let mut nh = height;
-        if nw > mw {
-            nh = (nh as f64 * mw as f64 / nw as f64) as u32;
-            nw = mw;
-        }
-        if nh > mh {
-            nw = (nw as f64 * mh as f64 / nh as f64) as u32;
-            nh = mh;
-        }
-        nw = nw.max(1);
-        nh = nh.max(1);
-        let resized = image::imageops::resize(&img, nw, nh, image::imageops::FilterType::Lanczos3);
-        Some((nw, nh, resized.into_raw()))
-    } else {
-        Some((width, height, rgba))
-    }
+    Some((width, height, rgba))
 }
 
 /// Parse a color definition from the rest of a color line (after the pixel key).

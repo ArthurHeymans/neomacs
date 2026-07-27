@@ -623,8 +623,10 @@ fn render_command_image_load_file() {
     let cmd = RenderCommand::Asset(AssetCommand::ImageLoadFile {
         id: 1,
         path: "/home/user/photo.png".to_string(),
-        max_width: 1024,
-        max_height: 768,
+        size: neomacs_display_protocol::ImageSizeSpec::new(
+            neomacs_display_protocol::AxisSize::AtMost(1024),
+            neomacs_display_protocol::AxisSize::AtMost(768),
+        ),
         realization: neomacs_display_protocol::ImageRealization::default(),
         fg_color: 0,
         bg_color: 0,
@@ -633,16 +635,20 @@ fn render_command_image_load_file() {
         RenderCommand::Asset(AssetCommand::ImageLoadFile {
             id,
             path,
-            max_width,
-            max_height,
+            size,
             realization,
             fg_color,
             bg_color,
         }) => {
             assert_eq!(id, 1);
             assert_eq!(path, "/home/user/photo.png");
-            assert_eq!(max_width, 1024);
-            assert_eq!(max_height, 768);
+            assert_eq!(
+                size,
+                neomacs_display_protocol::ImageSizeSpec::new(
+                    neomacs_display_protocol::AxisSize::AtMost(1024),
+                    neomacs_display_protocol::AxisSize::AtMost(768),
+                )
+            );
             assert_eq!(
                 realization,
                 neomacs_display_protocol::ImageRealization::default()

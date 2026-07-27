@@ -13,7 +13,8 @@ use std::time::{Duration, Instant};
 use neomacs_display_runtime::render_thread::{ImageDecodeTerminal, SharedImageMetadata};
 use neomacs_display_runtime::thread_comm::{AssetCommand, RenderCommand};
 use neovm_core::emacs_core::image_catalog::{
-    ImageCatalog, ImageLookup, ImageResolveRequest, ImageResolveSource, PendingImage, ReadyImage,
+    AxisSize, ImageCatalog, ImageLookup, ImageResolveRequest, ImageResolveSource, ImageSizeSpec,
+    PendingImage, ReadyImage,
 };
 use neovm_core::heap_types::LispString;
 
@@ -155,8 +156,7 @@ impl ImageCatalog for AsyncImageCatalog {
         let normalized_source = normalize_image_file_request_with_home(
             ImageResolveRequest {
                 source: source.clone(),
-                max_width: 0,
-                max_height: 0,
+                size: Default::default(),
                 fg_color: 0,
                 bg_color: 0,
                 realization: Default::default(),
@@ -316,8 +316,7 @@ fn image_load_command(request: &ImageResolveRequest, image_id: u32) -> RenderCom
         ImageResolveSource::File(path) => RenderCommand::Asset(AssetCommand::ImageLoadFile {
             id: image_id,
             path: path.as_utf8_str().unwrap_or_default().to_owned(),
-            max_width: request.max_width,
-            max_height: request.max_height,
+            size: request.size,
             realization: request.realization,
             fg_color: request.fg_color,
             bg_color: request.bg_color,
@@ -325,8 +324,7 @@ fn image_load_command(request: &ImageResolveRequest, image_id: u32) -> RenderCom
         ImageResolveSource::Data(data) => RenderCommand::Asset(AssetCommand::ImageLoadData {
             id: image_id,
             data: data.clone(),
-            max_width: request.max_width,
-            max_height: request.max_height,
+            size: request.size,
             realization: request.realization,
             fg_color: request.fg_color,
             bg_color: request.bg_color,
@@ -335,12 +333,7 @@ fn image_load_command(request: &ImageResolveRequest, image_id: u32) -> RenderCom
 }
 
 fn placeholder_image_dimensions(request: &ImageResolveRequest) -> (u32, u32) {
-    let (width, height) = match (request.max_width.max(1), request.max_height.max(1)) {
-        (width, height) if request.max_width > 0 && request.max_height > 0 => (width, height),
-        (width, _) if request.max_width > 0 => (width, width),
-        (_, height) if request.max_height > 0 => (height, height),
-        _ => (1, 1),
-    };
+    let (width, height) = request.size.placeholder_extent().unwrap_or((1, 1));
     (
         request.realization.layout_dimension(width),
         request.realization.layout_dimension(height),
@@ -405,8 +398,7 @@ mod tests {
     fn file_request(path: &str) -> ImageResolveRequest {
         ImageResolveRequest {
             source: ImageResolveSource::File(LispString::from_utf8(path)),
-            max_width: 24,
-            max_height: 24,
+            size: ImageSizeSpec::new(AxisSize::AtMost(24), AxisSize::AtMost(24)),
             fg_color: 0,
             bg_color: 0,
             realization: Default::default(),
@@ -449,7 +441,8 @@ mod tests {
         let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
         let catalog = AsyncImageCatalog::new(cmd_tx, None, metadata);
         let mut request = file_request("/tmp/icon.svg");
-        request.max_width = 0;
+        // Neither axis pinned: the placeholder falls back to the realization.
+        request.size = ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(24));
         request.realization = ImageScaleEnvironment::new(7.2, 1.75, ImageDefaultScale::Auto)
             .resolve(ImageScalePolicy::Default);
 

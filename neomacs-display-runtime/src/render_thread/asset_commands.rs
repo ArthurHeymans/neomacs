@@ -41,26 +41,18 @@ impl RenderApp {
             AssetCommand::ImageLoadFile {
                 id,
                 path,
-                max_width,
-                max_height,
+                size,
                 realization,
                 fg_color,
                 bg_color,
             } => {
                 clear_image_terminal(&self.image_metadata, id);
-                tracing::info!(
-                    "Loading image {}: {} (max {}x{})",
-                    id,
-                    path,
-                    max_width,
-                    max_height
-                );
+                tracing::info!("Loading image {}: {} (size {:?})", id, path, size);
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.load_image_file_with_id(
                         id,
                         &path,
-                        max_width,
-                        max_height,
+                        size,
                         realization,
                         fg_color,
                         bg_color,
@@ -72,26 +64,23 @@ impl RenderApp {
             AssetCommand::ImageLoadData {
                 id,
                 data,
-                max_width,
-                max_height,
+                size,
                 realization,
                 fg_color,
                 bg_color,
             } => {
                 clear_image_terminal(&self.image_metadata, id);
                 tracing::info!(
-                    "Loading image data {}: {} bytes (max {}x{})",
+                    "Loading image data {}: {} bytes (size {:?})",
                     id,
                     data.len(),
-                    max_width,
-                    max_height
+                    size
                 );
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.load_image_data_with_id(
                         id,
                         &data,
-                        max_width,
-                        max_height,
+                        size,
                         realization,
                         fg_color,
                         bg_color,

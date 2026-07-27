@@ -1,8 +1,8 @@
 use super::*;
 use crate::emacs_core::eval::{DisplayHost, GuiFrameHostRequest};
 use crate::emacs_core::image_catalog::{
-    ImageCatalog, ImageLookup, ImageResolveRequest, ImageResolveSource, PendingImage, ReadyImage,
-    ResolvedImageMetadata,
+    AxisSize, ImageCatalog, ImageLookup, ImageResolveRequest, ImageResolveSource, ImageSizeSpec,
+    PendingImage, ReadyImage, ResolvedImageMetadata,
 };
 use crate::emacs_core::value::list_to_vec;
 use std::sync::{Arc, Mutex};
@@ -1367,6 +1367,9 @@ fn image_size_uses_display_host_resolution_in_gui_context() {
 
     let requests = requests.lock().expect("image requests lock");
     assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0].max_width, 40);
-    assert_eq!(requests[0].max_height, 30);
+    assert_eq!(
+        requests[0].size,
+        ImageSizeSpec::new(AxisSize::AtMost(40), AxisSize::AtMost(30)),
+        ":max-width/:max-height stay CLAMPS; only :width/:height are targets"
+    );
 }

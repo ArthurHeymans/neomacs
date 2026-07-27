@@ -44,7 +44,8 @@ use neovm_core::emacs_core::eval::{
     SurfaceChannelKind, SurfaceResolveRequest, VideoResolveRequest, WebKitResolveRequest,
 };
 use neovm_core::emacs_core::image_catalog::{
-    ImageCatalog, ImageLookup, ImageResolveRequest, PendingImage, ReadyImage,
+    AxisSize, ImageCatalog, ImageLookup, ImageResolveRequest, ImageSizeSpec, PendingImage,
+    ReadyImage,
 };
 use neovm_core::emacs_core::load::{
     apply_runtime_startup_state, create_bootstrap_evaluator_cached_with_features,
@@ -9358,8 +9359,10 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
 
     let requests = requests.lock().expect("requests lock");
     assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0].max_width, 32);
-    assert_eq!(requests[0].max_height, 24);
+    assert_eq!(
+        requests[0].size,
+        ImageSizeSpec::new(AxisSize::AtMost(32), AxisSize::AtMost(24))
+    );
     assert_eq!(requests[0].fg_color, 0x112233);
     assert_eq!(requests[0].bg_color, 0xff0000);
 }
@@ -16450,9 +16453,8 @@ fn layout_frame_rust_installs_frame_tab_bar_image_media() {
         "expected at least one tab-bar image realization request"
     );
     assert!(
-        requests
-            .iter()
-            .all(|request| request.max_width == 32 && request.max_height == 24),
+        requests.iter().all(|request| request.size
+            == ImageSizeSpec::new(AxisSize::AtMost(32), AxisSize::AtMost(24))),
         "unexpected image realization requests: {requests:?}"
     );
 }

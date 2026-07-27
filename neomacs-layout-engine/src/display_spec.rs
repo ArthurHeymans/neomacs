@@ -12,8 +12,8 @@ use neovm_core::emacs_core::eval::{
 };
 use neovm_core::emacs_core::image::ImageSpecKey;
 use neovm_core::emacs_core::image_catalog::{
-    ImageResolveRequest, ImageResolveSource, ImageScaleEnvironment, ImageScalePolicy,
-    numeric_image_scale,
+    AxisSize, ImageResolveRequest, ImageResolveSource, ImageScaleEnvironment, ImageScalePolicy,
+    ImageSizeSpec, numeric_image_scale,
 };
 use neovm_core::emacs_core::value::{ValueKind, list_to_vec};
 use neovm_core::face::Color as LispColor;
@@ -206,8 +206,9 @@ pub(crate) fn parse_display_image_layout(
     }
 
     let mut source = None;
-    let mut max_width = 0u32;
-    let mut max_height = 0u32;
+    // Kept apart per GNU: `:width`/`:height` are targets, `:max-*` are clamps.
+    let (mut width, mut max_width) = (None, None);
+    let (mut height, mut max_height) = (None, None);
     let mut scale = ImageScalePolicy::Default;
     let mut ascent = DisplayImageAscentPolicy::default();
     let mut margin = DisplayImageMargin::default();
@@ -229,11 +230,11 @@ pub(crate) fn parse_display_image_layout(
                     .as_lisp_string()
                     .map(|data| ImageResolveSource::Data(data.as_bytes().to_vec()));
             }
-            Some(ImageSpecKey::Width | ImageSpecKey::MaxWidth) => {
-                max_width = parse_image_dimension(value).unwrap_or(max_width);
-            }
-            Some(ImageSpecKey::Height | ImageSpecKey::MaxHeight) => {
-                max_height = parse_image_dimension(value).unwrap_or(max_height);
+            Some(ImageSpecKey::Width) => width = parse_image_dimension(value).or(width),
+            Some(ImageSpecKey::MaxWidth) => max_width = parse_image_dimension(value).or(max_width),
+            Some(ImageSpecKey::Height) => height = parse_image_dimension(value).or(height),
+            Some(ImageSpecKey::MaxHeight) => {
+                max_height = parse_image_dimension(value).or(max_height)
             }
             Some(ImageSpecKey::Scale) => {
                 scale = parse_image_scale(value).unwrap_or(scale);
@@ -260,8 +261,10 @@ pub(crate) fn parse_display_image_layout(
     Some(DisplayImageLayout {
         request: ImageResolveRequest {
             source: source?,
-            max_width,
-            max_height,
+            size: ImageSizeSpec::new(
+                AxisSize::resolve(width, max_width),
+                AxisSize::resolve(height, max_height),
+            ),
             fg_color,
             bg_color,
             realization: Default::default(),

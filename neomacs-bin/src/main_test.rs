@@ -35,6 +35,7 @@ use neovm_core::emacs_core::eval::{
     PopupMenuEntry, PopupMenuRequest, VideoResolveRequest, VideoResolveSource,
     WebKitResolveRequest, WebKitResolveSource,
 };
+use neovm_core::emacs_core::image_catalog::{AxisSize, ImageSizeSpec};
 use neovm_core::emacs_core::image_catalog::{
     ImageCatalog, ImageLookup, ImageResolveRequest, ImageResolveSource, ResolvedImageMetadata,
 };
@@ -942,8 +943,7 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
         source: ImageResolveSource::File(LispString::from_utf8(
             image_path.to_str().expect("utf8 path"),
         )),
-        max_width: 50,
-        max_height: 50,
+        size: ImageSizeSpec::new(AxisSize::AtMost(50), AxisSize::AtMost(50)),
         fg_color: 0,
         bg_color: 0,
         realization: Default::default(),
@@ -961,14 +961,13 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
     };
     assert_eq!(image.placement().width(), 50);
     assert_eq!(image.placement().height(), 50);
-    assert!(matches!(
-        cmd_rx.try_recv().expect("queued image load"),
-        RenderCommand::Asset(AssetCommand::ImageLoadFile {
-            max_width: 50,
-            max_height: 50,
-            ..
-        })
-    ));
+    match cmd_rx.try_recv().expect("queued image load") {
+        RenderCommand::Asset(AssetCommand::ImageLoadFile { size, .. }) => assert_eq!(
+            size,
+            ImageSizeSpec::new(AxisSize::AtMost(50), AxisSize::AtMost(50))
+        ),
+        other => panic!("expected ImageLoadFile, got {other:?}"),
+    }
     assert_eq!(
         ImageCatalog::lookup(&host.image_catalog, request.clone()),
         ImageLookup::Pending(image.clone()),
@@ -1037,8 +1036,7 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
     };
     let request = ImageResolveRequest {
         source: ImageResolveSource::Data(vec![0x89, b'P', b'N', b'G']),
-        max_width: 24,
-        max_height: 24,
+        size: ImageSizeSpec::new(AxisSize::AtMost(24), AxisSize::AtMost(24)),
         fg_color: 0,
         bg_color: 0,
         realization: Default::default(),
@@ -1076,8 +1074,7 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
             &host.image_catalog,
             ImageResolveRequest {
                 source: ImageResolveSource::Data(vec![0x89, b'P', b'N', b'G']),
-                max_width: 24,
-                max_height: 24,
+                size: ImageSizeSpec::new(AxisSize::AtMost(24), AxisSize::AtMost(24)),
                 fg_color: 0,
                 bg_color: 0,
                 realization: Default::default(),
@@ -1113,8 +1110,7 @@ fn primary_image_catalog_does_not_wait_for_renderer_metadata_lock() {
     };
     let request = ImageResolveRequest {
         source: ImageResolveSource::Data(vec![0x89, b'P', b'N', b'G']),
-        max_width: 18,
-        max_height: 18,
+        size: ImageSizeSpec::new(AxisSize::AtMost(18), AxisSize::AtMost(18)),
         fg_color: 0,
         bg_color: 0,
         realization: Default::default(),
@@ -1177,8 +1173,7 @@ fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
     };
     let request = ImageResolveRequest {
         source: ImageResolveSource::File(LispString::from_utf8("~/Pictures/Pik.png")),
-        max_width: 0,
-        max_height: 24,
+        size: ImageSizeSpec::new(AxisSize::AtMost(0), AxisSize::AtMost(24)),
         fg_color: 0,
         bg_color: 0,
         realization: Default::default(),
@@ -1264,8 +1259,7 @@ fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptl
     };
     let request = ImageResolveRequest {
         source: ImageResolveSource::Data(vec![0xde, 0xad]),
-        max_width: 0,
-        max_height: 0,
+        size: ImageSizeSpec::new(AxisSize::AtMost(0), AxisSize::AtMost(0)),
         fg_color: 0,
         bg_color: 0,
         realization: Default::default(),

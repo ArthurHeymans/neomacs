@@ -4,7 +4,7 @@ use super::super::image_cache::ImageCache;
 #[cfg(any(feature = "video", feature = "wpe-webkit"))]
 use super::super::vertex::GlyphVertex;
 use super::WgpuRenderer;
-use neomacs_display_protocol::ImageRealization;
+use neomacs_display_protocol::{ImageRealization, ImageSizeSpec};
 
 impl WgpuRenderer {
     /// Load image from file path (async - returns immediately)
@@ -12,20 +12,14 @@ impl WgpuRenderer {
     pub fn load_image_file(
         &mut self,
         path: &str,
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
         fg_color: u32,
         bg_color: u32,
     ) -> u32 {
         let raster_scale = self.scale_factor;
-        self.caches.image.load_file(
-            path,
-            max_width,
-            max_height,
-            fg_color,
-            bg_color,
-            raster_scale,
-        )
+        self.caches
+            .image
+            .load_file(path, size, fg_color, bg_color, raster_scale)
     }
 
     /// Load image from file path with a pre-allocated ID (for threaded mode)
@@ -33,41 +27,28 @@ impl WgpuRenderer {
         &mut self,
         id: u32,
         path: &str,
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
         realization: ImageRealization,
         fg_color: u32,
         bg_color: u32,
     ) {
-        self.caches.image.load_file_with_id(
-            id,
-            path,
-            max_width,
-            max_height,
-            realization,
-            fg_color,
-            bg_color,
-        )
+        self.caches
+            .image
+            .load_file_with_id(id, path, size, realization, fg_color, bg_color)
     }
 
     /// Load image from data (async - returns immediately)
     pub fn load_image_data(
         &mut self,
         data: &[u8],
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
         fg_color: u32,
         bg_color: u32,
     ) -> u32 {
         let raster_scale = self.scale_factor;
-        self.caches.image.load_data(
-            data,
-            max_width,
-            max_height,
-            fg_color,
-            bg_color,
-            raster_scale,
-        )
+        self.caches
+            .image
+            .load_data(data, size, fg_color, bg_color, raster_scale)
     }
 
     /// Load image from data with pre-allocated ID (for threaded mode)
@@ -75,35 +56,28 @@ impl WgpuRenderer {
         &mut self,
         id: u32,
         data: &[u8],
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
         realization: ImageRealization,
         fg_color: u32,
         bg_color: u32,
     ) {
-        self.caches.image.load_data_with_id(
-            id,
-            data,
-            max_width,
-            max_height,
-            realization,
-            fg_color,
-            bg_color,
-        )
+        self.caches
+            .image
+            .load_data_with_id(id, data, size, realization, fg_color, bg_color)
     }
 
     /// Load image from raw ARGB32 pixel data
     pub fn load_image_argb32(&mut self, data: &[u8], width: u32, height: u32, stride: u32) -> u32 {
         self.caches
             .image
-            .load_raw_argb32(data, width, height, stride, 0, 0)
+            .load_raw_argb32(data, width, height, stride, ImageSizeSpec::default())
     }
 
     /// Load image from raw RGB24 pixel data
     pub fn load_image_rgb24(&mut self, data: &[u8], width: u32, height: u32, stride: u32) -> u32 {
         self.caches
             .image
-            .load_raw_rgb24(data, width, height, stride, 0, 0)
+            .load_raw_rgb24(data, width, height, stride, ImageSizeSpec::default())
     }
 
     /// Load image from raw ARGB32 pixel data with pre-allocated ID (for threaded mode)

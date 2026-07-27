@@ -6,7 +6,7 @@
 //! - GPU texture upload when ready
 //! - LRU cache with memory limits
 
-use neomacs_display_protocol::ImageRealization;
+use neomacs_display_protocol::{ImageRealization, ImageSizeSpec};
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::fs::File;
@@ -23,25 +23,16 @@ use crate::external_buffer::DmaBufBuffer;
 /// Maximum texture dimension (width or height)
 const MAX_TEXTURE_SIZE: u32 = 4096;
 
-/// Constrain dimensions to the renderer's limits while preserving aspect ratio.
-pub(crate) fn constrain_dimensions(
-    width: u32,
-    height: u32,
-    max_width: u32,
-    max_height: u32,
-) -> (u32, u32) {
+/// Clamp to the renderer's texture limit, preserving aspect ratio.
+///
+/// This is a GPU constraint only — GNU's `:max-width`/`:max-height` are applied
+/// by `ImageSizeSpec::desired`, which knows the native size and so can keep the
+/// aspect ratio against the right numbers.
+pub(crate) fn constrain_dimensions(width: u32, height: u32) -> (u32, u32) {
     let mut width = width;
     let mut height = height;
-    let width_limit = if max_width > 0 {
-        max_width.min(MAX_TEXTURE_SIZE)
-    } else {
-        MAX_TEXTURE_SIZE
-    };
-    let height_limit = if max_height > 0 {
-        max_height.min(MAX_TEXTURE_SIZE)
-    } else {
-        MAX_TEXTURE_SIZE
-    };
+    let width_limit = MAX_TEXTURE_SIZE;
+    let height_limit = MAX_TEXTURE_SIZE;
 
     if width > width_limit {
         height = (f64::from(height) * f64::from(width_limit) / f64::from(width)) as u32;
@@ -129,17 +120,22 @@ impl DecodedPixels {
         Self::raster(width, height, rgba)
     }
 
-    /// Apply one resolved realization to bitmap pixels after format-specific
-    /// decoding.  SVG performs the same realization while painting vectors,
-    /// so every codec publishes identical logical/raster semantics.
-    fn realize_bitmap(self, realization: ImageRealization) -> Option<Self> {
-        let layout_width = realization.layout_dimension(self.layout_width);
-        let layout_height = realization.layout_dimension(self.layout_height);
+    /// Resolve the spec's requested size against the decoded native size, then
+    /// realize to texture pixels.
+    ///
+    /// This is where GNU's `compute_image_size` lands: the size cannot be known
+    /// before decoding, so `:width`/`:height`/`:max-*` are applied here rather
+    /// than as a bounding box handed to the decoder. With `AxisSize::Native` on
+    /// both axes this reduces to `layout_dimension`, the previous behavior.
+    fn realize_bitmap(self, size: ImageSizeSpec, realization: ImageRealization) -> Option<Self> {
+        let (layout_width, layout_height) = size.desired(
+            self.layout_width,
+            self.layout_height,
+            f64::from(realization.layout_scale()),
+        );
         let (raster_width, raster_height) = constrain_dimensions(
             realization.raster_dimension(layout_width),
             realization.raster_dimension(layout_height),
-            0,
-            0,
         );
         let rgba = if raster_width == self.raster_width && raster_height == self.raster_height {
             self.rgba
@@ -289,8 +285,7 @@ fn lru_victim(entries: impl Iterator<Item = (u32, u64)>) -> Option<u32> {
 struct DecodeRequest {
     load: ImageLoadToken,
     source: ImageSource,
-    max_width: u32,
-    max_height: u32,
+    size: ImageSizeSpec,
     /// Semantic and device geometry resolved by evaluator/layout.
     realization: ImageRealization,
     /// Foreground color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.
@@ -433,8 +428,7 @@ impl ImageCache {
                     let DecodeRequest {
                         load,
                         source,
-                        max_width,
-                        max_height,
+                        size,
                         realization,
                         fg_color,
                         bg_color,
@@ -445,29 +439,25 @@ impl ImageCache {
                             #[cfg(test)]
                             ImageSource::Panic => panic!("injected decoder panic"),
                             ImageSource::File(path) => {
-                                Self::decode_file(&path, max_width, max_height, fg_bg, realization)
+                                Self::decode_file(&path, size, fg_bg, realization)
                             }
                             ImageSource::Data(data) => {
-                                Self::decode_data(&data, max_width, max_height, fg_bg, realization)
+                                Self::decode_data(&data, size, fg_bg, realization)
                             }
                             ImageSource::RawArgb32 {
                                 data,
                                 width,
                                 height,
                                 stride,
-                            } => Self::convert_argb32_to_rgba(
-                                &data, width, height, stride, max_width, max_height,
-                            )
-                            .map(DecodedPixels::from_raster_tuple),
+                            } => Self::convert_argb32_to_rgba(&data, width, height, stride, size)
+                                .map(DecodedPixels::from_raster_tuple),
                             ImageSource::RawRgb24 {
                                 data,
                                 width,
                                 height,
                                 stride,
-                            } => Self::convert_rgb24_to_rgba(
-                                &data, width, height, stride, max_width, max_height,
-                            )
-                            .map(DecodedPixels::from_raster_tuple),
+                            } => Self::convert_rgb24_to_rgba(&data, width, height, stride, size)
+                                .map(DecodedPixels::from_raster_tuple),
                         }
                     }));
 
@@ -512,97 +502,82 @@ impl ImageCache {
     /// Decode image file with size constraints
     fn decode_file(
         path: &str,
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
         fg_bg: (u32, u32),
         realization: ImageRealization,
     ) -> Option<DecodedPixels> {
         if let Ok(img) = image::open(path) {
-            return Self::process_image(img, max_width, max_height)?.realize_bitmap(realization);
+            return Self::process_image(img)?.realize_bitmap(size, realization);
         }
         // Fallback: try XPM
-        if let Some(result) = crate::xpm::decode_xpm_file(Path::new(path), max_width, max_height) {
-            return DecodedPixels::from_raster_tuple(result).realize_bitmap(realization);
+        if let Some(result) = crate::xpm::decode_xpm_file(Path::new(path)) {
+            return DecodedPixels::from_raster_tuple(result).realize_bitmap(size, realization);
         }
         // Fallback: try XBM
         let fg = Self::argb_to_rgba(fg_bg.0, [255, 255, 255, 255]);
         let bg = Self::argb_to_rgba(fg_bg.1, [0, 0, 0, 255]);
-        if let Some(result) =
-            crate::xbm::decode_xbm_file(Path::new(path), fg, bg, max_width, max_height)
-        {
-            return DecodedPixels::from_raster_tuple(result).realize_bitmap(realization);
+        if let Some(result) = crate::xbm::decode_xbm_file(Path::new(path), fg, bg) {
+            return DecodedPixels::from_raster_tuple(result).realize_bitmap(size, realization);
         }
         // Fallback: try SVG via the shared vector backend.
         let data = std::fs::read(path).ok()?;
-        Self::decode_svg_data(&data, max_width, max_height, realization)
+        Self::decode_svg_data(&data, size, realization)
     }
 
     /// Decode image data with size constraints
     fn decode_data(
         data: &[u8],
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
         fg_bg: (u32, u32),
         realization: ImageRealization,
     ) -> Option<DecodedPixels> {
         if let Ok(img) = image::load_from_memory(data) {
-            return Self::process_image(img, max_width, max_height)?.realize_bitmap(realization);
+            return Self::process_image(img)?.realize_bitmap(size, realization);
         }
         // Fallback: try XPM
-        if let Some(result) = crate::xpm::decode_xpm_data(data, max_width, max_height) {
-            return DecodedPixels::from_raster_tuple(result).realize_bitmap(realization);
+        if let Some(result) = crate::xpm::decode_xpm_data(data) {
+            return DecodedPixels::from_raster_tuple(result).realize_bitmap(size, realization);
         }
         // Fallback: try XBM
         let fg = Self::argb_to_rgba(fg_bg.0, [255, 255, 255, 255]);
         let bg = Self::argb_to_rgba(fg_bg.1, [0, 0, 0, 255]);
-        if let Some(result) = crate::xbm::decode_xbm_data(data, fg, bg, max_width, max_height) {
-            return DecodedPixels::from_raster_tuple(result).realize_bitmap(realization);
+        if let Some(result) = crate::xbm::decode_xbm_data(data, fg, bg) {
+            return DecodedPixels::from_raster_tuple(result).realize_bitmap(size, realization);
         }
         // Fallback: try SVG via the shared vector backend.
-        Self::decode_svg_data(data, max_width, max_height, realization)
+        Self::decode_svg_data(data, size, realization)
     }
 
     #[cfg(test)]
     fn decode_data_with_metadata(
         data: &[u8],
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
         fg_bg: (u32, u32),
     ) -> Option<DecodedImage> {
-        Self::decode_data_with_metadata_at_scale(data, max_width, max_height, fg_bg, 1.0)
+        Self::decode_data_with_metadata_at_scale(data, size, fg_bg, 1.0)
     }
 
     #[cfg(test)]
     fn decode_data_with_metadata_at_scale(
         data: &[u8],
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
         fg_bg: (u32, u32),
         raster_scale: f32,
     ) -> Option<DecodedImage> {
-        Self::decode_data_with_metadata_at_realization(
-            data,
-            max_width,
-            max_height,
-            fg_bg,
-            1.0,
-            raster_scale,
-        )
+        Self::decode_data_with_metadata_at_realization(data, size, fg_bg, 1.0, raster_scale)
     }
 
     #[cfg(test)]
     fn decode_data_with_metadata_at_realization(
         data: &[u8],
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
         fg_bg: (u32, u32),
         layout_scale: f32,
         device_scale: f32,
     ) -> Option<DecodedImage> {
         let pixels = Self::decode_data(
             data,
-            max_width,
-            max_height,
+            size,
             fg_bg,
             ImageRealization::new(layout_scale, device_scale),
         )?;
@@ -686,11 +661,10 @@ impl ImageCache {
     /// Decode SVG data through the platform SVG backend, returning RGBA pixels.
     fn decode_svg_data(
         data: &[u8],
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
         realization: ImageRealization,
     ) -> Option<DecodedPixels> {
-        let decoded = crate::svg::decode(data, max_width, max_height, realization)?;
+        let decoded = crate::svg::decode(data, size, realization)?;
         Some(DecodedPixels {
             layout_width: decoded.layout_width,
             layout_height: decoded.layout_height,
@@ -701,60 +675,22 @@ impl ImageCache {
     }
 
     /// Process decoded image: resize if needed, convert to RGBA
-    fn process_image(
-        img: image::DynamicImage,
-        max_width: u32,
-        max_height: u32,
-    ) -> Option<DecodedPixels> {
-        let (mut width, mut height) = (img.width(), img.height());
-
-        // Apply max constraints
-        let mw = if max_width > 0 {
-            max_width
-        } else {
-            MAX_TEXTURE_SIZE
-        };
-        let mh = if max_height > 0 {
-            max_height
-        } else {
-            MAX_TEXTURE_SIZE
-        };
-
-        // Scale down if needed (preserve aspect ratio)
-        if width > mw || height > mh {
-            let ratio = (width as f64 / height as f64).min(mw as f64 / mh as f64);
-            if width > mw {
-                width = mw;
-                height = (mw as f64 / ratio) as u32;
-            }
-            if height > mh {
-                height = mh;
-                width = (mh as f64 * ratio) as u32;
-            }
-        }
-
-        // Resize if dimensions changed
-        let img = if width != img.width() || height != img.height() {
-            img.resize_exact(width, height, image::imageops::FilterType::Lanczos3)
-        } else {
-            img
-        };
-
-        // Convert to RGBA
+    /// Decode to NATIVE pixels. Sizing happens in `realize_bitmap`, which is
+    /// the only place that knows both the native size and the requested one.
+    fn process_image(img: image::DynamicImage) -> Option<DecodedPixels> {
         let rgba = img.to_rgba8();
-        Some(DecodedPixels::raster(width, height, rgba.into_raw()))
+        Some(DecodedPixels::raster(
+            rgba.width(),
+            rgba.height(),
+            rgba.into_raw(),
+        ))
     }
-
-    /// Convert ARGB32 raw pixel data to RGBA
-    /// Input format: A,R,G,B byte order (4 bytes per pixel)
-    /// Output format: R,G,B,A byte order (4 bytes per pixel)
     fn convert_argb32_to_rgba(
         data: &[u8],
         width: u32,
         height: u32,
         stride: u32,
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
     ) -> Option<(u32, u32, Vec<u8>)> {
         let bytes_per_pixel = 4u32;
         let expected_min_size = (height.saturating_sub(1)) * stride + width * bytes_per_pixel;
@@ -789,7 +725,7 @@ impl ImageCache {
         }
 
         // Apply size constraints if needed
-        let (cw, ch) = constrain_dimensions(width, height, max_width, max_height);
+        let (cw, ch) = constrain_dimensions(width, height);
         if cw != width || ch != height {
             // Need to resize - use image crate
             let img = image::RgbaImage::from_raw(width, height, rgba)?;
@@ -809,8 +745,7 @@ impl ImageCache {
         width: u32,
         height: u32,
         stride: u32,
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
     ) -> Option<(u32, u32, Vec<u8>)> {
         let bytes_per_pixel = 3u32;
         let expected_min_size = (height.saturating_sub(1)) * stride + width * bytes_per_pixel;
@@ -844,7 +779,7 @@ impl ImageCache {
         }
 
         // Apply size constraints if needed
-        let (cw, ch) = constrain_dimensions(width, height, max_width, max_height);
+        let (cw, ch) = constrain_dimensions(width, height);
         if cw != width || ch != height {
             // Need to resize - use image crate
             let img = image::RgbaImage::from_raw(width, height, rgba)?;
@@ -937,8 +872,7 @@ impl ImageCache {
     pub fn load_file(
         &mut self,
         path: &str,
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
         fg_color: u32,
         bg_color: u32,
         raster_scale: f32,
@@ -947,8 +881,7 @@ impl ImageCache {
         self.load_file_with_id(
             id,
             path,
-            max_width,
-            max_height,
+            size,
             ImageRealization::new(1.0, raster_scale),
             fg_color,
             bg_color,
@@ -961,8 +894,7 @@ impl ImageCache {
         &mut self,
         id: u32,
         data: &[u8],
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
         realization: ImageRealization,
         fg_color: u32,
         bg_color: u32,
@@ -970,7 +902,7 @@ impl ImageCache {
         let load = self.begin_load(id);
         // Query dimensions for the pending-image placeholder.
         if let Some(dims) = Self::query_data_dimensions(data) {
-            let (w, h) = constrain_dimensions(dims.width, dims.height, max_width, max_height);
+            let (w, h) = constrain_dimensions(dims.width, dims.height);
             self.pending_dimensions.insert(
                 id,
                 ImageDimensions {
@@ -985,8 +917,7 @@ impl ImageCache {
         let _ = self.decode_tx.send(DecodeRequest {
             load,
             source: ImageSource::Data(data.to_vec()),
-            max_width,
-            max_height,
+            size,
             realization,
             fg_color,
             bg_color,
@@ -999,8 +930,7 @@ impl ImageCache {
         &mut self,
         id: u32,
         path: &str,
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
         realization: ImageRealization,
         fg_color: u32,
         bg_color: u32,
@@ -1009,7 +939,7 @@ impl ImageCache {
         // Query dimensions for the pending-image placeholder.
         if let Some(dims) = Self::query_file_dimensions(path) {
             // Apply max constraints to dimensions
-            let (w, h) = constrain_dimensions(dims.width, dims.height, max_width, max_height);
+            let (w, h) = constrain_dimensions(dims.width, dims.height);
             self.pending_dimensions.insert(
                 id,
                 ImageDimensions {
@@ -1024,8 +954,7 @@ impl ImageCache {
         let _ = self.decode_tx.send(DecodeRequest {
             load,
             source: ImageSource::File(path.to_string()),
-            max_width,
-            max_height,
+            size,
             realization,
             fg_color,
             bg_color,
@@ -1042,8 +971,7 @@ impl ImageCache {
     pub fn load_data(
         &mut self,
         data: &[u8],
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
         fg_color: u32,
         bg_color: u32,
         raster_scale: f32,
@@ -1053,7 +981,7 @@ impl ImageCache {
 
         // Query dimensions for the pending-image placeholder.
         if let Some(dims) = Self::query_data_dimensions(data) {
-            let (w, h) = constrain_dimensions(dims.width, dims.height, max_width, max_height);
+            let (w, h) = constrain_dimensions(dims.width, dims.height);
             self.pending_dimensions.insert(
                 id,
                 ImageDimensions {
@@ -1068,8 +996,7 @@ impl ImageCache {
         let _ = self.decode_tx.send(DecodeRequest {
             load,
             source: ImageSource::Data(data.to_vec()),
-            max_width,
-            max_height,
+            size,
             realization: ImageRealization::new(1.0, raster_scale),
             fg_color,
             bg_color,
@@ -1087,14 +1014,13 @@ impl ImageCache {
         width: u32,
         height: u32,
         stride: u32,
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
     ) -> u32 {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let load = self.begin_load(id);
 
         // Store pending dimensions immediately (we know the exact size)
-        let (w, h) = constrain_dimensions(width, height, max_width, max_height);
+        let (w, h) = constrain_dimensions(width, height);
         self.pending_dimensions.insert(
             id,
             ImageDimensions {
@@ -1113,8 +1039,7 @@ impl ImageCache {
                 height,
                 stride,
             },
-            max_width,
-            max_height,
+            size,
             realization: ImageRealization::default(),
             fg_color: 0,
             bg_color: 0,
@@ -1132,14 +1057,13 @@ impl ImageCache {
         width: u32,
         height: u32,
         stride: u32,
-        max_width: u32,
-        max_height: u32,
+        size: ImageSizeSpec,
     ) -> u32 {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let load = self.begin_load(id);
 
         // Store pending dimensions immediately (we know the exact size)
-        let (w, h) = constrain_dimensions(width, height, max_width, max_height);
+        let (w, h) = constrain_dimensions(width, height);
         self.pending_dimensions.insert(
             id,
             ImageDimensions {
@@ -1158,8 +1082,7 @@ impl ImageCache {
                 height,
                 stride,
             },
-            max_width,
-            max_height,
+            size,
             realization: ImageRealization::default(),
             fg_color: 0,
             bg_color: 0,
@@ -1189,8 +1112,7 @@ impl ImageCache {
                 height,
                 stride,
             },
-            max_width: 0,
-            max_height: 0,
+            size: ImageSizeSpec::default(),
             realization: ImageRealization::default(),
             fg_color: 0,
             bg_color: 0,
@@ -1218,8 +1140,7 @@ impl ImageCache {
                 height,
                 stride,
             },
-            max_width: 0,
-            max_height: 0,
+            size: ImageSizeSpec::default(),
             realization: ImageRealization::default(),
             fg_color: 0,
             bg_color: 0,

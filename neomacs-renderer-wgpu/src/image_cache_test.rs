@@ -1,4 +1,5 @@
 use super::*;
+use neomacs_display_protocol::{AxisSize, ImageSizeSpec};
 use std::io::Cursor;
 
 #[test]
@@ -62,8 +63,7 @@ fn decoder_worker_survives_a_panicking_request() {
         .send(DecodeRequest {
             load: panicking,
             source: ImageSource::Panic,
-            max_width: 0,
-            max_height: 0,
+            size: Default::default(),
             realization: ImageRealization::new(1.0, 1.0),
             fg_color: 0,
             bg_color: 0,
@@ -73,8 +73,7 @@ fn decoder_worker_survives_a_panicking_request() {
         .send(DecodeRequest {
             load: following,
             source: ImageSource::Data(png_bytes(vec![0x12, 0x34, 0x56, 0xff], 1, 1)),
-            max_width: 0,
-            max_height: 0,
+            size: Default::default(),
             realization: ImageRealization::new(1.0, 1.0),
             fg_color: 0,
             bg_color: 0,
@@ -114,7 +113,8 @@ fn encoded_image_bytes(format: image::ImageFormat) -> Vec<u8> {
 #[test]
 fn decoded_opaque_png_reports_gnu_corner_background_without_lisp_background() {
     let data = png_bytes([0x12, 0x34, 0x56, 0xff].repeat(4), 2, 2);
-    let decoded = ImageCache::decode_data_with_metadata(&data, 0, 0, (0, 0)).unwrap();
+    let decoded =
+        ImageCache::decode_data_with_metadata(&data, ImageSizeSpec::default(), (0, 0)).unwrap();
 
     assert_eq!(decoded.metadata.width, 2);
     assert_eq!(decoded.metadata.height, 2);
@@ -125,7 +125,9 @@ fn decoded_opaque_png_reports_gnu_corner_background_without_lisp_background() {
 #[test]
 fn decoded_transparent_png_stays_transparent_with_explicit_lisp_background() {
     let data = png_bytes([0x12, 0x34, 0x56, 0x00].repeat(4), 2, 2);
-    let decoded = ImageCache::decode_data_with_metadata(&data, 0, 0, (0, 0xff_aa_bb_cc)).unwrap();
+    let decoded =
+        ImageCache::decode_data_with_metadata(&data, ImageSizeSpec::default(), (0, 0xff_aa_bb_cc))
+            .unwrap();
 
     assert!(decoded.metadata.background_transparent);
     assert_ne!(decoded.metadata.background, 0xaa_bb_cc);
@@ -135,7 +137,8 @@ fn decoded_transparent_png_stays_transparent_with_explicit_lisp_background() {
 fn decoded_partial_alpha_png_corners_are_gnu_draw_not_transparent_mask() {
     for alpha in [1, 254] {
         let data = png_bytes([0x12, 0x34, 0x56, alpha].repeat(4), 2, 2);
-        let decoded = ImageCache::decode_data_with_metadata(&data, 0, 0, (0, 0)).unwrap();
+        let decoded =
+            ImageCache::decode_data_with_metadata(&data, ImageSizeSpec::default(), (0, 0)).unwrap();
 
         assert!(
             !decoded.metadata.background_transparent,
@@ -152,7 +155,7 @@ fn decoded_corner_mask_tie_uses_gnu_first_corner_winner() {
             .flat_map(|alpha| [0x12, 0x34, 0x56, alpha])
             .collect();
         let data = png_bytes(pixels, 2, 2);
-        ImageCache::decode_data_with_metadata(&data, 0, 0, (0, 0))
+        ImageCache::decode_data_with_metadata(&data, ImageSizeSpec::default(), (0, 0))
             .unwrap()
             .metadata
     };
@@ -164,7 +167,12 @@ fn decoded_corner_mask_tie_uses_gnu_first_corner_winner() {
 #[test]
 fn decoded_transparent_svg_stays_transparent_with_explicit_lisp_background() {
     let data = br##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="1" y="1" width="2" height="2" fill="#123456"/></svg>"##;
-    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0xff_aa_bb_cc)).unwrap();
+    let decoded = ImageCache::decode_data_with_metadata(
+        data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        (0, 0xff_aa_bb_cc),
+    )
+    .unwrap();
 
     assert!(decoded.metadata.background_transparent);
     assert_ne!(decoded.metadata.background, 0xaa_bb_cc);
@@ -180,7 +188,12 @@ fn decoded_dimensionless_svg_uses_gnu_visible_geometry() {
     let dimensions = ImageCache::query_data_dimensions(data).unwrap();
     assert_eq!((dimensions.width, dimensions.height), (80, 40));
 
-    let decoded = ImageCache::decode_data_with_metadata(data, 0, 24, (0, 0)).unwrap();
+    let decoded = ImageCache::decode_data_with_metadata(
+        data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(24)),
+        (0, 0),
+    )
+    .unwrap();
 
     assert_eq!((decoded.metadata.width, decoded.metadata.height), (48, 24));
 }
@@ -215,7 +228,12 @@ fn decoded_dimensionless_svg_scales_document_coordinates_to_requested_size() {
         <rect y="36" width="80" height="4" fill="#ff0000"/>
     </svg>"##;
 
-    let decoded = ImageCache::decode_data_with_metadata(data, 0, 20, (0, 0)).unwrap();
+    let decoded = ImageCache::decode_data_with_metadata(
+        data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(20)),
+        (0, 0),
+    )
+    .unwrap();
 
     assert_eq!((decoded.raster_width, decoded.raster_height), (40, 20));
     let bottom_left = ((decoded.raster_height - 1) * decoded.raster_width * 4) as usize;
@@ -233,7 +251,9 @@ fn oversized_svg_input_is_rejected_before_parsing() {
     data.extend_from_slice(b"</svg>");
 
     assert!(ImageCache::query_data_dimensions(&data).is_none());
-    assert!(ImageCache::decode_data_with_metadata(&data, 0, 0, (0, 0)).is_none());
+    assert!(
+        ImageCache::decode_data_with_metadata(&data, ImageSizeSpec::default(), (0, 0)).is_none()
+    );
 }
 
 #[test]
@@ -253,7 +273,14 @@ fn svgz_expanding_past_the_svg_input_limit_is_rejected() {
     );
 
     assert!(ImageCache::query_data_dimensions(&compressed).is_none());
-    assert!(ImageCache::decode_data_with_metadata(&compressed, 0, 0, (0, 0)).is_none());
+    assert!(
+        ImageCache::decode_data_with_metadata(
+            &compressed,
+            ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+            (0, 0)
+        )
+        .is_none()
+    );
 }
 
 #[test]
@@ -275,7 +302,12 @@ fn svg_single_explicit_dimension_uses_view_box_aspect_ratio() {
     let dimensions = ImageCache::query_data_dimensions(data).unwrap();
     assert_eq!((dimensions.width, dimensions.height), (200, 100));
 
-    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    let decoded = ImageCache::decode_data_with_metadata(
+        data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        (0, 0),
+    )
+    .unwrap();
     assert_eq!((decoded.raster_width, decoded.raster_height), (200, 100));
     assert_eq!(&decoded.data[0..4], &[0x12, 0x34, 0x56, 0xff]);
     assert_eq!(
@@ -318,7 +350,7 @@ fn svg_rejects_empty_malformed_and_invalid_dimension_documents() {
         b"\xff\xfe\xfd".as_slice(),
     ] {
         assert!(ImageCache::query_data_dimensions(data).is_none());
-        assert!(ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).is_none());
+        assert!(ImageCache::decode_data_with_metadata(data, ImageSizeSpec::new(AxisSize::Native, AxisSize::Native), (0, 0)).is_none());
     }
 }
 
@@ -329,7 +361,12 @@ fn recursive_svg_references_fail_closed_without_panicking() {
         <use href="#recursive"/>
     </svg>"##;
 
-    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    let decoded = ImageCache::decode_data_with_metadata(
+        data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        (0, 0),
+    )
+    .unwrap();
     assert!(decoded.data.chunks_exact(4).all(|pixel| pixel[3] == 0));
 }
 
@@ -468,7 +505,12 @@ fn dimensionless_svg_fallback_includes_markers_and_rasterization_applies_clippin
     assert_eq!((marker.width, marker.height), (20, 10));
     assert_eq!((clipped.width, clipped.height), (20, 20));
 
-    let clipped = ImageCache::decode_data_with_metadata(clipped_data, 0, 0, (0, 0)).unwrap();
+    let clipped = ImageCache::decode_data_with_metadata(
+        clipped_data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        (0, 0),
+    )
+    .unwrap();
     let inside = ((5 * clipped.raster_width + 5) * 4) as usize;
     let outside = ((15 * clipped.raster_width + 15) * 4) as usize;
     assert_eq!(&clipped.data[inside..inside + 4], &[0x12, 0x34, 0x56, 0xff]);
@@ -486,7 +528,12 @@ fn svg_masks_gradients_and_inline_css_survive_rasterization() {
         <rect class="paint" width="2" height="1" color="#123456" mask="url(#half)"/>
     </svg>"##;
 
-    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    let decoded = ImageCache::decode_data_with_metadata(
+        data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        (0, 0),
+    )
+    .unwrap();
     assert!(decoded.data[3].abs_diff(128) <= 1);
     assert!(decoded.data[7].abs_diff(128) <= 1);
     assert_ne!(&decoded.data[..3], &decoded.data[4..7]);
@@ -500,7 +547,12 @@ fn svg_group_transforms_are_applied_before_rasterization() {
         </g>
     </svg>"##;
 
-    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    let decoded = ImageCache::decode_data_with_metadata(
+        data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        (0, 0),
+    )
+    .unwrap();
     assert_eq!(&decoded.data[0..4], &[0, 0, 0, 0]);
     let translated_pixel = (5 * 4) as usize;
     assert_eq!(
@@ -515,7 +567,12 @@ fn svg_does_not_load_images_relative_to_the_process_working_directory() {
         <image href="neomacs-display-runtime/assets/window-icon.svg" width="4" height="4"/>
     </svg>"#;
 
-    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    let decoded = ImageCache::decode_data_with_metadata(
+        data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        (0, 0),
+    )
+    .unwrap();
     assert!(decoded.data.chunks_exact(4).all(|pixel| pixel[3] == 0));
 }
 
@@ -525,7 +582,12 @@ fn svg_keeps_embedded_data_images_enabled() {
         <image width="1" height="1" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%221%22%20height%3D%221%22%3E%3Crect%20width%3D%221%22%20height%3D%221%22%20fill%3D%22%23ff0000%22%2F%3E%3C%2Fsvg%3E"/>
     </svg>"#;
 
-    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    let decoded = ImageCache::decode_data_with_metadata(
+        data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        (0, 0),
+    )
+    .unwrap();
     assert_eq!(&decoded.data, &[0xff, 0x00, 0x00, 0xff]);
 }
 
@@ -535,7 +597,12 @@ fn nested_svg_cannot_escape_the_external_resource_policy() {
         <image width="1" height="1" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%221%22%20height%3D%221%22%3E%3Cimage%20href%3D%22neomacs-display-runtime%2Fassets%2Fwindow-icon.svg%22%20width%3D%221%22%20height%3D%221%22%2F%3E%3C%2Fsvg%3E"/>
     </svg>"#;
 
-    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    let decoded = ImageCache::decode_data_with_metadata(
+        data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        (0, 0),
+    )
+    .unwrap();
     assert!(decoded.data.chunks_exact(4).all(|pixel| pixel[3] == 0));
 }
 
@@ -586,7 +653,12 @@ fn svg_text_uses_the_shared_system_font_database() {
         <text x="1" y="18" font-family="sans-serif" font-size="18" fill="#123456">SVG</text>
     </svg>"##;
 
-    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    let decoded = ImageCache::decode_data_with_metadata(
+        data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        (0, 0),
+    )
+    .unwrap();
     assert!(decoded.data.chunks_exact(4).any(|pixel| pixel[3] != 0));
 }
 
@@ -596,7 +668,12 @@ fn semitransparent_svg_pixels_are_returned_as_straight_rgba() {
         <rect width="1" height="1" fill="#804020" fill-opacity="0.5"/>
     </svg>"##;
 
-    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    let decoded = ImageCache::decode_data_with_metadata(
+        data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        (0, 0),
+    )
+    .unwrap();
     assert_eq!(decoded.data[3], 0x80);
     for (actual, expected) in decoded.data[..3].iter().zip([0x80_u8, 0x40, 0x20]) {
         assert!(
@@ -614,8 +691,7 @@ fn hidpi_svg_keeps_logical_layout_extent_and_uses_device_pixel_raster_extent() {
 
     let decoded = crate::svg::decode(
         data,
-        0,
-        24,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(24)),
         neomacs_display_protocol::ImageRealization::new(1.0, 1.75),
     )
     .expect("SVG decode");
@@ -636,14 +712,17 @@ fn resolved_auto_scale_controls_both_svg_layout_and_raster_extents() {
 
     let decoded = crate::svg::decode(
         data,
-        0,
-        24,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(24)),
         neomacs_display_protocol::ImageRealization::new(1.3 / 1.75, 1.75),
     )
     .expect("SVG decode");
 
-    assert_eq!((decoded.layout_width, decoded.layout_height), (36, 18));
-    assert_eq!((decoded.raster_width, decoded.raster_height), (63, 32));
+    // The natural 80x40 scales to 59x30, which exceeds `:max-height 24`, so the
+    // clamp wins: height 24, width follows the NATIVE ratio (24 * 80/40 = 48).
+    // GNU does not scale `:max-*` — only `:width`/`:height` targets are scaled
+    // (src/image.c:2771-2779) — so the scale is overridden here, not compounded.
+    assert_eq!((decoded.layout_width, decoded.layout_height), (48, 24));
+    assert_eq!((decoded.raster_width, decoded.raster_height), (84, 42));
 }
 
 #[test]
@@ -652,8 +731,7 @@ fn resolved_auto_scale_controls_bitmap_layout_and_raster_extents() {
 
     let decoded = ImageCache::decode_data_with_metadata_at_realization(
         &data,
-        0,
-        24,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(24)),
         (0, 0),
         1.3 / 1.75,
         1.75,
@@ -670,8 +748,13 @@ fn hidpi_svg_decode_metadata_stays_logical_while_texture_pixels_are_physical() {
         <text x="2" y="20">HiDPI</text>
     </svg>"##;
 
-    let decoded = ImageCache::decode_data_with_metadata_at_scale(data, 0, 24, (0, 0), 1.75)
-        .expect("SVG decode");
+    let decoded = ImageCache::decode_data_with_metadata_at_scale(
+        data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(24)),
+        (0, 0),
+        1.75,
+    )
+    .expect("SVG decode");
 
     assert_eq!((decoded.metadata.width, decoded.metadata.height), (48, 24));
     assert_eq!((decoded.raster_width, decoded.raster_height), (84, 42));
@@ -693,8 +776,18 @@ static char *icon[] = {
 "xx",
 "xx"};"#;
 
-    let transparent = ImageCache::decode_data_with_metadata(transparent, 0, 0, (0, 0)).unwrap();
-    let opaque = ImageCache::decode_data_with_metadata(opaque, 0, 0, (0, 0)).unwrap();
+    let transparent = ImageCache::decode_data_with_metadata(
+        transparent,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        (0, 0),
+    )
+    .unwrap();
+    let opaque = ImageCache::decode_data_with_metadata(
+        opaque,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        (0, 0),
+    )
+    .unwrap();
     assert!(transparent.metadata.background_transparent);
     assert!(!opaque.metadata.background_transparent);
     assert_eq!(opaque.metadata.background, 0x12_34_56);
@@ -716,7 +809,8 @@ fn test_convert_argb32_to_rgba_basic() {
         0, 0, 0, 0, // Pixel (1,1): A=0, R=0, G=0, B=0 (transparent)
     ];
 
-    let result = ImageCache::convert_argb32_to_rgba(&data, width, height, stride, 0, 0);
+    let result =
+        ImageCache::convert_argb32_to_rgba(&data, width, height, stride, ImageSizeSpec::default());
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();
@@ -752,7 +846,8 @@ fn test_convert_argb32_with_stride_padding() {
         0, 0, 0, 0, // Padding (ignored)
     ];
 
-    let result = ImageCache::convert_argb32_to_rgba(&data, width, height, stride, 0, 0);
+    let result =
+        ImageCache::convert_argb32_to_rgba(&data, width, height, stride, ImageSizeSpec::default());
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();
@@ -770,7 +865,7 @@ fn test_convert_argb32_with_stride_padding() {
 fn test_convert_argb32_invalid_data_size() {
     // Data too small for 2x2 image
     let data: Vec<u8> = vec![255, 100, 150, 200]; // Only 1 pixel
-    let result = ImageCache::convert_argb32_to_rgba(&data, 2, 2, 8, 0, 0);
+    let result = ImageCache::convert_argb32_to_rgba(&data, 2, 2, 8, ImageSizeSpec::default());
     assert!(result.is_none());
 }
 
@@ -790,7 +885,8 @@ fn test_convert_rgb24_to_rgba_basic() {
         0, 0, 0, // Pixel (1,1): R=0, G=0, B=0 (black)
     ];
 
-    let result = ImageCache::convert_rgb24_to_rgba(&data, width, height, stride, 0, 0);
+    let result =
+        ImageCache::convert_rgb24_to_rgba(&data, width, height, stride, ImageSizeSpec::default());
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();
@@ -822,7 +918,8 @@ fn test_convert_rgb24_with_stride_padding() {
         0, 0, // Padding (ignored)
     ];
 
-    let result = ImageCache::convert_rgb24_to_rgba(&data, width, height, stride, 0, 0);
+    let result =
+        ImageCache::convert_rgb24_to_rgba(&data, width, height, stride, ImageSizeSpec::default());
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();
@@ -840,38 +937,33 @@ fn test_convert_rgb24_with_stride_padding() {
 fn test_convert_rgb24_invalid_data_size() {
     // Data too small for 2x2 image
     let data: Vec<u8> = vec![100, 150, 200]; // Only 1 pixel
-    let result = ImageCache::convert_rgb24_to_rgba(&data, 2, 2, 6, 0, 0);
+    let result = ImageCache::convert_rgb24_to_rgba(&data, 2, 2, 6, ImageSizeSpec::default());
     assert!(result.is_none());
 }
 
 #[test]
-fn test_constrain_dimensions() {
-    // No constraints (uses MAX_TEXTURE_SIZE internally)
-    assert_eq!(constrain_dimensions(100, 100, 0, 0), (100, 100));
+fn constrain_dimensions_only_enforces_the_texture_limit() {
+    // `:max-width` / `:max-height` moved to `ImageSizeSpec::desired`, which
+    // knows the native size and so can keep the aspect ratio against the right
+    // numbers. What remains here is purely the GPU's 4096 texture ceiling.
+    assert_eq!(constrain_dimensions(100, 100), (100, 100));
+    assert_eq!(constrain_dimensions(4096, 4096), (4096, 4096));
 
-    // Width constrained
-    assert_eq!(constrain_dimensions(200, 100, 100, 0), (100, 50));
+    // Over the limit on one axis: the other follows to keep the ratio.
+    assert_eq!(constrain_dimensions(8192, 4096), (4096, 2048));
+    assert_eq!(constrain_dimensions(4096, 8192), (2048, 4096));
 
-    // Height constrained
-    assert_eq!(constrain_dimensions(100, 200, 0, 100), (50, 100));
-
-    // Both constrained, width is limiting factor
-    assert_eq!(constrain_dimensions(400, 200, 100, 100), (100, 50));
-
-    // Both constrained, height is limiting factor
-    assert_eq!(constrain_dimensions(200, 400, 100, 100), (50, 100));
-
-    // Minimum 1x1 - very narrow image
-    let (w, h) = constrain_dimensions(1, 1000, 10, 100);
-    assert_eq!(w, 1);
-    assert_eq!(h, 100); // Height is constrained to 100, width stays 1 (min)
+    // Never degenerate to zero.
+    let (width, height) = constrain_dimensions(1, 8192);
+    assert_eq!(width, 1);
+    assert_eq!(height, 4096);
 }
 
 #[test]
 fn test_convert_argb32_single_pixel() {
     // Single pixel image - edge case
     let data: Vec<u8> = vec![255, 128, 64, 32]; // A=255, R=128, G=64, B=32
-    let result = ImageCache::convert_argb32_to_rgba(&data, 1, 1, 4, 0, 0);
+    let result = ImageCache::convert_argb32_to_rgba(&data, 1, 1, 4, ImageSizeSpec::default());
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();
@@ -884,7 +976,7 @@ fn test_convert_argb32_single_pixel() {
 fn test_convert_rgb24_single_pixel() {
     // Single pixel image - edge case
     let data: Vec<u8> = vec![128, 64, 32]; // R=128, G=64, B=32
-    let result = ImageCache::convert_rgb24_to_rgba(&data, 1, 1, 3, 0, 0);
+    let result = ImageCache::convert_rgb24_to_rgba(&data, 1, 1, 3, ImageSizeSpec::default());
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();

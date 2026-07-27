@@ -3,6 +3,7 @@
 use super::{PopupMenuState, RenderApp, TooltipState};
 use crate::thread_comm::{ConfigCommand, ToolBarItem, UiCommand};
 use neomacs_display_protocol::ToolBarImageSource;
+use neomacs_display_protocol::{AxisSize, ImageSizeSpec};
 
 impl RenderApp {
     pub(super) fn ensure_toolbar_icon_textures(&mut self, items: &[ToolBarItem], icon_size: u32) {
@@ -22,9 +23,12 @@ impl RenderApp {
             };
 
             let id = match image {
-                ToolBarImageSource::File { path } => {
-                    renderer.load_image_file(path, icon_size, icon_size, 0, 0)
-                }
+                ToolBarImageSource::File { path } => renderer.load_image_file(
+                    path,
+                    ImageSizeSpec::new(AxisSize::AtMost(icon_size), AxisSize::AtMost(icon_size)),
+                    0,
+                    0,
+                ),
             };
             self.toolbar.icon_textures.insert(key, id);
             tracing::debug!(

@@ -6,17 +6,11 @@
 /// Decode XBM image from in-memory data, returning (width, height, rgba_pixels).
 ///
 /// `fg` and `bg` are RGBA colors for set (1) and unset (0) bits respectively.
-pub fn decode_xbm_data(
-    data: &[u8],
-    fg: [u8; 4],
-    bg: [u8; 4],
-    max_width: u32,
-    max_height: u32,
-) -> Option<(u32, u32, Vec<u8>)> {
+pub fn decode_xbm_data(data: &[u8], fg: [u8; 4], bg: [u8; 4]) -> Option<(u32, u32, Vec<u8>)> {
     let text = std::str::from_utf8(data).ok()?;
     let (width, height, bits) = parse_xbm(text)?;
     let rgba = render_xbm(width, height, &bits, fg, bg);
-    constrain_and_return(width, height, rgba, max_width, max_height)
+    constrain_and_return(width, height, rgba)
 }
 
 /// Decode XBM image from a file path.
@@ -24,11 +18,9 @@ pub fn decode_xbm_file(
     path: &std::path::Path,
     fg: [u8; 4],
     bg: [u8; 4],
-    max_width: u32,
-    max_height: u32,
 ) -> Option<(u32, u32, Vec<u8>)> {
     let data = std::fs::read(path).ok()?;
-    decode_xbm_data(&data, fg, bg, max_width, max_height)
+    decode_xbm_data(&data, fg, bg)
 }
 
 /// Query XBM dimensions without full decode (header only).
@@ -142,35 +134,9 @@ fn render_xbm(width: u32, height: u32, bits: &[u8], fg: [u8; 4], bg: [u8; 4]) ->
     rgba
 }
 
-/// Apply size constraints and return.
-fn constrain_and_return(
-    width: u32,
-    height: u32,
-    rgba: Vec<u8>,
-    max_width: u32,
-    max_height: u32,
-) -> Option<(u32, u32, Vec<u8>)> {
-    let mw = if max_width > 0 { max_width } else { 4096 };
-    let mh = if max_height > 0 { max_height } else { 4096 };
-    if width > mw || height > mh {
-        let img = image::RgbaImage::from_raw(width, height, rgba)?;
-        let mut nw = width;
-        let mut nh = height;
-        if nw > mw {
-            nh = (nh as f64 * mw as f64 / nw as f64) as u32;
-            nw = mw;
-        }
-        if nh > mh {
-            nw = (nw as f64 * mh as f64 / nh as f64) as u32;
-            nh = mh;
-        }
-        nw = nw.max(1);
-        nh = nh.max(1);
-        let resized = image::imageops::resize(&img, nw, nh, image::imageops::FilterType::Lanczos3);
-        Some((nw, nh, resized.into_raw()))
-    } else {
-        Some((width, height, rgba))
-    }
+/// XBM decodes at its native size; `ImageSizeSpec::desired` sizes it later.
+fn constrain_and_return(width: u32, height: u32, rgba: Vec<u8>) -> Option<(u32, u32, Vec<u8>)> {
+    Some((width, height, rgba))
 }
 
 #[cfg(test)]

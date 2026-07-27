@@ -13,7 +13,7 @@ use std::str::FromStr;
 use std::sync::{Arc, OnceLock};
 
 use crate::image_cache::constrain_dimensions;
-use neomacs_display_protocol::ImageRealization;
+use neomacs_display_protocol::{ImageRealization, ImageSizeSpec};
 
 pub(crate) struct DecodedSvg {
     /// Size consumed by redisplay in logical Emacs pixels.
@@ -62,39 +62,33 @@ fn query_dimensions_inner(data: &[u8]) -> Option<(u32, u32)> {
 
 pub(crate) fn decode(
     data: &[u8],
-    max_width: u32,
-    max_height: u32,
+    size: ImageSizeSpec,
     realization: ImageRealization,
 ) -> Option<DecodedSvg> {
-    catch_unwind(AssertUnwindSafe(|| {
-        decode_inner(data, max_width, max_height, realization)
-    }))
-    .ok()
-    .flatten()
+    catch_unwind(AssertUnwindSafe(|| decode_inner(data, size, realization)))
+        .ok()
+        .flatten()
 }
 
 fn decode_inner(
     data: &[u8],
-    max_width: u32,
-    max_height: u32,
+    size: ImageSizeSpec,
     realization: ImageRealization,
 ) -> Option<DecodedSvg> {
     let loaded = load(data)?;
-    let (base_width, base_height) = constrain_dimensions(
+    // A vector document rasterizes straight to the requested size, so GNU's
+    // `compute_image_size` is applied against its natural extent here rather
+    // than by resampling afterwards.
+    let (layout_width, layout_height) = size.desired(
         loaded.natural_width.ceil() as u32,
         loaded.natural_height.ceil() as u32,
-        max_width,
-        max_height,
+        f64::from(realization.layout_scale()),
     );
-    let layout_width = realization.layout_dimension(base_width);
-    let layout_height = realization.layout_dimension(base_height);
     // Match GNU `scale_image_size`: ceil so fractional device scales never
     // discard a partial SVG pixel. Constrain once more to the GPU limit.
     let (raster_width, raster_height) = constrain_dimensions(
         realization.raster_dimension(layout_width),
         realization.raster_dimension(layout_height),
-        0,
-        0,
     );
     let raster_bytes = (raster_width as usize)
         .checked_mul(raster_height as usize)?
