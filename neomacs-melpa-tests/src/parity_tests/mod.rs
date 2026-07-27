@@ -71,6 +71,7 @@ mod affe;
 mod afterglow;
 mod afternoon_theme;
 mod ag;
+mod agda_editor_tactics;
 mod agenix;
 mod async_package;
 mod at_package;

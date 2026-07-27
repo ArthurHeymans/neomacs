@@ -321,6 +321,10 @@ pub const AFTERNOON_THEME_MELPA_PIN: (&str, &str) = ("afternoon-theme", "2014010
 /// The exact ag package selected by the comprehensive API parity corpus.
 pub const AG_MELPA_PIN: (&str, &str) = ("ag", "20201031.2202");
 
+/// The exact agda-editor-tactics package selected by the comprehensive API
+/// parity corpus.
+pub const AGDA_EDITOR_TACTICS_MELPA_PIN: (&str, &str) = ("agda-editor-tactics", "20211024.2357");
+
 /// The exact agenix package selected by the comprehensive API parity corpus.
 pub const AGENIX_MELPA_PIN: (&str, &str) = ("agenix", "20250209.551");
 
