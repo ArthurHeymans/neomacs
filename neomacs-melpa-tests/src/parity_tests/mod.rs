@@ -96,6 +96,7 @@ mod airplay;
 mod alabaster_themes;
 mod alan_mode;
 mod alarm_clock;
+mod alchemist;
 mod async_package;
 mod at_package;
 mod bind_key;
