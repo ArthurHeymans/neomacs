@@ -865,6 +865,10 @@ pub const ASTUTE_MELPA_PIN: (&str, &str) = ("astute", "20241015.444");
 /// `04ff2941f08c4b731fe6a18ee1697436d1ca1cc0`.
 pub const ASTYLE_MELPA_PIN: (&str, &str) = ("astyle", "20200328.616");
 
+/// The exact ASX package selected by the comprehensive search, DOM,
+/// request, navigation, and Org rendering parity corpus.
+pub const ASX_MELPA_PIN: (&str, &str) = ("asx", "20191024.1100");
+
 /// The exact async-await package selected by the comprehensive Promise,
 /// generator, macro-expansion, and asynchronous-workflow parity corpus. MELPA
 /// built this archive from upstream commit

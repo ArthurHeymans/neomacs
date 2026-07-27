@@ -198,6 +198,7 @@ mod ast_grep;
 mod astro_ts_mode;
 mod astute;
 mod astyle;
+mod asx;
 mod async_await;
 mod async_backup;
 mod async_melpa;
