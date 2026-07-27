@@ -72,7 +72,7 @@ fn adoc_mode_flat_and_nested_imenu_indexes_cover_heading_hierarchy_and_setext_to
             (font-lock-ensure)
             (normalise (adoc-imenu-create-index))))))"##;
     let expect = expect![[
-        r#"OK ((("Document" . 1) ("First" . 20) ("Child A" . 29) ("Child B" . 41) ("Grandchild" . 53) ("Second" . 69)) (("Document" (nil . 1) ("First" (nil . 20) ("Child A" . 29) ("Child B" (nil . 41) ("Grandchild" . 53)))) ("Second" . 69)) (("Document" . 1) ("First" . 20) ("Child A" . 29) ("Child B" . 41) ("Grandchild" . 53) ("Second" . 69) ("Setext" . 79)))"#
+        r#"OK ((("Document" . 1) ("First" . 20) ("Child A" . 29) ("Child B" . 41) ("Grandchild" . 53) ("Second" . 69)) (("Document" (nil . 1) ("First" (nil . 20) ("Child A" . 29) ("Child B" (nil . 41) ("Grandchild" . 53))) ("Second" . 69))) (("Document" . 1) ("First" . 20) ("Child A" . 29) ("Child B" . 41) ("Grandchild" . 53) ("Second" . 69) ("Setext" . 79)))"#
     ]];
     assert_adoc_mode_parity(elisp_form, expect);
 }

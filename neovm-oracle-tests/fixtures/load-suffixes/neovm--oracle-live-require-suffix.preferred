@@ -1,0 +1,6 @@
+;;; neovm--oracle-live-require-suffix.preferred --- Oracle fixture -*- lexical-binding: t; -*-
+
+(setq neovm--oracle-live-require-suffix-result 'preferred)
+(provide 'neovm--oracle-live-require-suffix)
+
+;;; neovm--oracle-live-require-suffix.preferred ends here

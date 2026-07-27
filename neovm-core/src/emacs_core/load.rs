@@ -57,7 +57,7 @@ fn load_path_lisp_string(path: &Path) -> LispString {
     super::fileio::path_to_lisp_file_name(path)
 }
 
-fn load_path_buf(value: &LispString) -> PathBuf {
+pub(crate) fn load_path_buf(value: &LispString) -> PathBuf {
     super::fileio::lisp_file_name_to_path_buf(value)
 }
 
@@ -713,9 +713,9 @@ impl LoadSuffixPlan {
             .collect()
     }
 
-    fn search_suffixes(&self, must_suffix: bool) -> Vec<Vec<u8>> {
+    fn search_suffixes(&self, include_representation_fallbacks: bool) -> Vec<Vec<u8>> {
         let mut suffixes = self.required.clone();
-        if !must_suffix {
+        if include_representation_fallbacks {
             suffixes.extend(self.representations.iter().cloned());
         }
         suffixes
@@ -873,6 +873,34 @@ impl LoadSuffixRequirement {
             Self::SuffixRequired
         }
     }
+
+    fn candidates(
+        self,
+        obarray: &super::symbol::Obarray,
+        file: &LispString,
+    ) -> Result<LoadCandidates, Flow> {
+        if self == Self::ExactNameOnly {
+            // GNU Fload does not even inspect the suffix variables when
+            // NOSUFFIX is non-nil.  Besides avoiding needless work, keeping
+            // this as a distinct typed state preserves GNU's error ordering
+            // when a dynamically bound suffix variable is malformed.
+            return Ok(LoadCandidates::ExactName);
+        }
+
+        let suffix_required = self == Self::SuffixRequired && effective_must_suffix(file, true);
+        let suffixes = LoadSuffixPlan::from_obarray(obarray)?.search_suffixes(!suffix_required);
+        Ok(LoadCandidates::AppendSuffixes(suffixes))
+    }
+}
+
+/// Fully resolved candidate policy for one load-path lookup.
+///
+/// `ExactName` is intentionally not represented by an empty suffix list:
+/// exact loads bypass live suffix-variable validation, whereas an ordinary
+/// suffix search can legitimately produce an empty list.
+enum LoadCandidates {
+    ExactName,
+    AppendSuffixes(Vec<Vec<u8>>),
 }
 
 /// Search for a file in the load path.
@@ -925,6 +953,36 @@ pub fn find_file_in_load_path_with_flags(
     }
     find_lisp_file_in_load_path_with_flags(&name, load_path, no_suffix, prefer_newer, &suffixes)
         .map(|found| load_path_buf(&found))
+}
+
+/// Resolve FILE against the evaluator's live load state.
+///
+/// This is the single runtime seam used by both `load` and `require`.
+/// Keeping suffix variables, representation suffixes, `load-prefer-newer`,
+/// and the exact-vs-suffixed policy together prevents callers from silently
+/// falling back to the process-startup defaults.
+pub(crate) fn resolve_load_path_file_in_state(
+    obarray: &super::symbol::Obarray,
+    file: &LispString,
+    requirement: LoadSuffixRequirement,
+) -> Result<Option<LispString>, Flow> {
+    let candidates = requirement.candidates(obarray, file)?;
+    let (exact_name_only, suffixes) = match candidates {
+        LoadCandidates::ExactName => (true, Vec::new()),
+        LoadCandidates::AppendSuffixes(suffixes) => (false, suffixes),
+    };
+    let prefer_newer = obarray
+        .symbol_value("load-prefer-newer")
+        .is_some_and(|value| value.is_truthy());
+    let load_path = get_load_path(obarray);
+
+    Ok(find_lisp_file_in_load_path_with_flags(
+        file,
+        &load_path,
+        exact_name_only,
+        prefer_newer,
+        &suffixes,
+    ))
 }
 
 fn find_lisp_file_in_load_path_with_flags(
@@ -1017,31 +1075,15 @@ pub(crate) fn plan_load_in_state(
     };
     let file = super::fileio::substitute_in_file_name_lisp(&file);
     let noerror = noerror.is_some_and(|v| v.is_truthy());
-    let nosuffix = nosuffix.is_some_and(|v| v.is_truthy());
-    let must_suffix =
-        effective_must_suffix(&file, must_suffix.is_some_and(|value| value.is_truthy()));
-    let prefer_newer = obarray
-        .symbol_value("load-prefer-newer")
-        .is_some_and(|v| v.is_truthy());
-
-    let load_path = get_load_path(obarray);
-    // GNU Fload (src/lread.c): NOSUFFIX bypasses suffix-variable evaluation
-    // entirely.  Otherwise the searched suffixes come from the LIVE
-    // `load-suffixes` x `load-file-rep-suffixes` cross product
-    // (Fget_load_suffixes), so a dynamic `(let ((load-suffixes '(".el"))) ...)`
-    // binding steers resolution.
-    let suffixes = if nosuffix {
-        Vec::new()
+    let requirement = if nosuffix.is_some_and(|value| value.is_truthy()) {
+        LoadSuffixRequirement::ExactNameOnly
+    } else if must_suffix.is_some_and(|value| value.is_truthy()) {
+        LoadSuffixRequirement::SuffixRequired
     } else {
-        LoadSuffixPlan::from_obarray(obarray)?.search_suffixes(must_suffix)
+        LoadSuffixRequirement::BareNameAllowed
     };
-    match find_lisp_file_in_load_path_with_flags(
-        &file,
-        &load_path,
-        nosuffix,
-        prefer_newer,
-        &suffixes,
-    ) {
+
+    match resolve_load_path_file_in_state(obarray, &file, requirement)? {
         Some(found) => Ok(LoadPlan::Load {
             requested: file,
             found,

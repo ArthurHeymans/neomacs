@@ -1413,6 +1413,61 @@ pub(crate) fn builtin_match_data(eval: &mut super::eval::Context, args: Vec<Valu
     builtin_match_data_with_state(Some(&mut eval.buffers), &eval.match_data, &args)
 }
 
+/// A marker-backed snapshot produced by GNU-compatible `(match-data)`.
+///
+/// Keep this private newtype instead of passing a bare `Value` through native
+/// unwind code: only a snapshot captured here may be restored with reseating.
+/// Buffer positions are markers, so the saved ranges continue to track edits
+/// made while the protected operation runs.
+#[derive(Clone, Copy)]
+struct SavedMatchData(Value);
+
+impl SavedMatchData {
+    fn capture(eval: &mut super::eval::Context) -> Result<Self, Flow> {
+        builtin_match_data(eval, Vec::new()).map(Self)
+    }
+
+    fn root(self, eval: &mut super::eval::Context) {
+        eval.push_specpdl_root(self.0);
+    }
+
+    fn restore(self, eval: &mut super::eval::Context) -> EvalResult {
+        builtin_set_match_data(eval, vec![self.0, Value::T])
+    }
+}
+
+/// Run native evaluator work with GNU `record_unwind_save_match_data`
+/// semantics.
+///
+/// This is the Rust-side equivalent of GNU `search.c` saving `(match-data)` on
+/// the unwind stack and restoring it with `(set-match-data SAVED t)`.  The
+/// closure boundary makes restoration unavoidable on both `Ok` and `Flow`
+/// exits, while the rooted [`SavedMatchData`] keeps its marker list alive
+/// across arbitrary Lisp execution and GC.
+pub(crate) fn with_preserved_match_data<T>(
+    eval: &mut super::eval::Context,
+    operation: impl FnOnce(&mut super::eval::Context) -> Result<T, Flow>,
+) -> Result<T, Flow> {
+    let roots = eval.save_specpdl_roots();
+    let saved = match SavedMatchData::capture(eval) {
+        Ok(saved) => saved,
+        Err(flow) => {
+            eval.restore_specpdl_roots(roots);
+            return Err(flow);
+        }
+    };
+    saved.root(eval);
+
+    let operation_result = operation(eval);
+    let restore_result = saved.restore(eval);
+    eval.restore_specpdl_roots(roots);
+
+    match operation_result {
+        Err(flow) => Err(flow),
+        Ok(value) => restore_result.map(|_| value),
+    }
+}
+
 pub(crate) fn builtin_set_match_data_with_state(
     buffers: &mut crate::buffer::BufferManager,
     match_data: &mut Option<super::regex::MatchData>,

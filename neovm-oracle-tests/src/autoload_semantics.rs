@@ -7,6 +7,11 @@
 
 use crate::common::assert_oracle_parity;
 use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
+use std::path::PathBuf;
+
+fn autoload_fixture_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/autoload")
+}
 
 #[test]
 fn oracle_autoloadp_uses_interned_autoload_car_safe_semantics() {
@@ -141,4 +146,64 @@ fn oracle_autoload_do_load_macro_only_requires_literal_macro_symbol() {
 
     let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 12 43)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
+}
+
+#[test]
+fn oracle_autoload_from_loaded_source_preserves_buffer_match_data() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (autoload 'neovm--autoload-match-data-probe "autoload-match-data-probe")
+  (with-temp-buffer
+    (insert "aa target zz")
+    (goto-char (point-min))
+    (re-search-forward "\\(target\\)")
+    (let ((before (list (match-beginning 0) (match-end 0)
+                        (match-beginning 1) (match-end 1))))
+      (list (neovm--autoload-match-data-probe)
+            before
+            (list (match-beginning 0) (match-end 0)
+                  (match-beginning 1) (match-end 1))))))
+"#;
+
+    let expect = expect_test::expect![r#""OK (autoload-loaded (4 10 4 10) (4 10 4 10))""#];
+    crate::common::assert_oracle_parity_with_load_root_expect(
+        form,
+        &[],
+        &autoload_fixture_root(),
+        expect,
+    );
+}
+
+#[test]
+fn oracle_autoload_load_error_restores_buffer_match_data() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (autoload 'neovm--autoload-match-data-error-probe
+            "autoload-match-data-error-probe")
+  (with-temp-buffer
+    (insert "aa target zz")
+    (goto-char (point-min))
+    (re-search-forward "\\(target\\)")
+    (let ((before (list (match-beginning 0) (match-end 0)
+                        (match-beginning 1) (match-end 1))))
+      (list
+       (condition-case err
+           (neovm--autoload-match-data-error-probe)
+         (error (car err)))
+       before
+       (list (match-beginning 0) (match-end 0)
+             (match-beginning 1) (match-end 1))))))
+"#;
+
+    let expect = expect_test::expect![r#""OK (error (4 10 4 10) (4 10 4 10))""#];
+    crate::common::assert_oracle_parity_with_load_root_expect(
+        form,
+        &[],
+        &autoload_fixture_root(),
+        expect,
+    );
 }

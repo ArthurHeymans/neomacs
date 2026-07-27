@@ -1,0 +1,6 @@
+;;; neovm--oracle-live-require-suffix.fallback --- Oracle fixture -*- lexical-binding: t; -*-
+
+(setq neovm--oracle-live-require-suffix-result 'fallback)
+(provide 'neovm--oracle-live-require-suffix)
+
+;;; neovm--oracle-live-require-suffix.fallback ends here

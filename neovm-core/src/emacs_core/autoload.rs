@@ -473,6 +473,39 @@ pub(crate) fn finish_autoload_do_load_in_state(
     Ok(Value::NIL)
 }
 
+/// Execute the stateful half of GNU `autoload-do-load`.
+///
+/// Every evaluator adapter funnels through this boundary so autoloading cannot
+/// accidentally become a plain `load`.  GNU's `load_with_autoload_queue`
+/// preserves match data around path resolution and file loading, then checks
+/// the resulting function cell after that state has been restored.
+fn execute_autoload_load(
+    eval: &mut super::eval::Context,
+    file: &LispString,
+    funname: Option<SymId>,
+    original_fundef: Option<Value>,
+) -> EvalResult {
+    let roots = eval.save_specpdl_roots();
+    if let Some(fundef) = original_fundef {
+        eval.push_specpdl_root(fundef);
+    }
+
+    let load_result = super::builtins::search::with_preserved_match_data(eval, |eval| {
+        let path = resolve_autoload_load_path(&eval.obarray, file)?;
+        // GNU eval.c:Fautoload_do_load calls load_with_autoload_queue with
+        // NOMESSAGE=t: autoloading is an implicit consequence of calling a
+        // function, not an explicit user request to load a file.
+        eval.load_file_internal_with_flags(&path, false, true)
+    });
+    let result = match load_result {
+        Ok(_) => finish_autoload_do_load_in_state(&eval.obarray, funname, original_fundef.as_ref()),
+        Err(flow) => Err(flow),
+    };
+
+    eval.restore_specpdl_roots(roots);
+    result
+}
+
 pub(crate) fn builtin_autoload_do_load(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -481,21 +514,7 @@ pub(crate) fn builtin_autoload_do_load(
     match plan_autoload_do_load_in_state(&eval.obarray, &args)? {
         AutoloadDoLoadPlan::Return(value) => Ok(value),
         AutoloadDoLoadPlan::Load { file, funname } => {
-            let roots = eval.save_specpdl_roots();
-            if let Some(fundef) = original_fundef {
-                eval.push_specpdl_root(fundef);
-            }
-            let result = (|| -> EvalResult {
-                let path = resolve_autoload_load_path(&eval.obarray, &file)?;
-                // GNU eval.c:Fautoload_do_load calls
-                // load_with_autoload_queue with NOMESSAGE=t: autoloading is
-                // an implicit consequence of calling a function, not an
-                // explicit user request to load a file.
-                eval.load_file_internal_with_flags(&path, false, true)?;
-                finish_autoload_do_load_in_state(&eval.obarray, funname, original_fundef.as_ref())
-            })();
-            eval.restore_specpdl_roots(roots);
-            result
+            execute_autoload_load(eval, &file, funname, original_fundef)
         }
     }
 }
@@ -510,15 +529,7 @@ pub(crate) fn builtin_autoload_do_load_3(
     match plan_autoload_do_load_in_state(&eval.obarray, &args)? {
         AutoloadDoLoadPlan::Return(value) => Ok(value),
         AutoloadDoLoadPlan::Load { file, funname } => {
-            let roots = eval.save_specpdl_roots();
-            eval.push_specpdl_root(fundef);
-            let result = (|| -> EvalResult {
-                let path = resolve_autoload_load_path(&eval.obarray, &file)?;
-                eval.load_file_internal_with_flags(&path, false, true)?;
-                finish_autoload_do_load_in_state(&eval.obarray, funname, Some(&fundef))
-            })();
-            eval.restore_specpdl_roots(roots);
-            result
+            execute_autoload_load(eval, &file, funname, Some(fundef))
         }
     }
 }
@@ -531,15 +542,7 @@ pub(crate) fn builtin_autoload_do_load_in_vm_runtime(
     match plan_autoload_do_load_in_state(&shared.obarray, args)? {
         AutoloadDoLoadPlan::Return(value) => Ok(value),
         AutoloadDoLoadPlan::Load { file, funname } => {
-            let path = resolve_autoload_load_path(&shared.obarray, &file)?;
-            let roots = shared.save_specpdl_roots();
-            if let Some(fundef) = original_fundef {
-                shared.push_specpdl_root(fundef);
-            }
-            let load_result = shared.load_file_internal_with_flags(&path, false, true);
-            shared.restore_specpdl_roots(roots);
-            load_result?;
-            finish_autoload_do_load_in_state(&shared.obarray, funname, original_fundef.as_ref())
+            execute_autoload_load(shared, &file, funname, original_fundef)
         }
     }
 }

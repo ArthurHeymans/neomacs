@@ -2476,26 +2476,23 @@ pub(crate) fn plan_require_in_state(
     };
     let filename = super::load::expand_tilde(&filename);
 
-    let load_path = super::load::get_load_path(obarray);
     // GNU `Frequire` loads with MUST-SUFFIX = t unless the caller passed an
     // explicit FILENAME (src/fns.c), so a `require`d feature is never satisfied
     // by an extensionless file — e.g. Doom's `bin/org-capture` shell script,
     // which otherwise shadowed org's `org-capture.el` and was read as Lisp.
     let requirement = super::load::LoadSuffixRequirement::for_require(filename_given);
-    match super::load::find_file_in_load_path_with_requirement(
-        &filename,
-        &load_path,
-        requirement,
-        false,
-    ) {
-        Some(path) => Ok(RequirePlan::Load { sym_id, name, path }),
+    let filename = crate::heap_types::LispString::from_utf8(&filename);
+    match super::load::resolve_load_path_file_in_state(obarray, &filename, requirement)? {
+        Some(path) => Ok(RequirePlan::Load {
+            sym_id,
+            name,
+            path: super::load::load_path_buf(&path),
+        }),
         None => {
             if noerror.is_some_and(|value| value.is_truthy()) {
                 return Ok(RequirePlan::Return(Value::NIL));
             }
-            Err(super::load::cannot_open_load_file_signal(
-                &crate::heap_types::LispString::from_utf8(&filename),
-            ))
+            Err(super::load::cannot_open_load_file_signal(&filename))
         }
     }
 }
