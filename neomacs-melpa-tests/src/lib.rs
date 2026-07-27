@@ -488,6 +488,10 @@ pub const ALL_THE_ICONS_IVY_RICH_MELPA_PIN: (&str, &str) =
 pub const ALL_THE_ICONS_NERD_FONTS_MELPA_PIN: (&str, &str) =
     ("all-the-icons-nerd-fonts", "20260614.1246");
 
+/// The exact almost-mono-themes package selected by the comprehensive API
+/// parity corpus.
+pub const ALMOST_MONO_THEMES_MELPA_PIN: (&str, &str) = ("almost-mono-themes", "20250722.1957");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
