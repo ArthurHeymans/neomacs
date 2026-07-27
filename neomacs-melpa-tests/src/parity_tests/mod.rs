@@ -128,6 +128,7 @@ mod amsreftex;
 mod amx;
 mod anaconda_mode;
 mod anakondo;
+mod anaphora;
 mod async_package;
 mod at_package;
 mod bind_key;
