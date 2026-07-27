@@ -161,6 +161,7 @@ mod anzu;
 mod aozora_view;
 mod apache_mode;
 mod apdl_mode;
+mod apib_mode;
 mod apiwrap;
 mod app_monochrome_themes;
 mod async_package;
