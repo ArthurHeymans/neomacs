@@ -524,6 +524,12 @@ fn run_pgo_training(options: &FreshBuildOptions) -> Result<PathBuf> {
     if !options.dry_run {
         let _ = std::fs::remove_dir_all(&raw_dir);
         std::fs::create_dir_all(&raw_dir)?;
+        // Same stale-artifact hazard as the optimized pass below: the
+        // instrumented build's RUSTFLAGS is also constant across runs.
+        let stale = default_bin_dir(&gen_options.repo_root, &gen_options.profile);
+        if stale.exists() {
+            std::fs::remove_dir_all(&stale)?;
+        }
     }
     println!("+ PGO pass 1/2: instrumented build");
     run_fresh_build_inner(
@@ -584,6 +590,19 @@ fn llvm_profdata_path() -> Result<PathBuf> {
 fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
     if options.profile.consumes_pgo() {
         let merged = run_pgo_training(options)?;
+        // Cargo cannot see that the profile CONTENTS changed: RUSTFLAGS is
+        // byte-identical between runs (`-Cprofile-use=<same path>`), so its
+        // fingerprint matches and it happily reuses objects compiled against
+        // the PREVIOUS profile. With LTO on, mixing them fails at link time
+        // with "failed to load bitcode of module ...". Dropping the output
+        // directory is the honest fix -- a changed profile invalidates every
+        // object anyway, so there is nothing to salvage.
+        if !options.dry_run {
+            let stale = default_bin_dir(&options.repo_root, &options.profile);
+            if stale.exists() {
+                std::fs::remove_dir_all(&stale)?;
+            }
+        }
         println!("+ PGO pass 2/2: optimized build using {}", merged.display());
         return run_fresh_build_inner(
             options,

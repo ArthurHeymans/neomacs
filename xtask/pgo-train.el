@@ -86,6 +86,70 @@ the reader, macro expansion and the compiler rather than redisplay."
               (byte-compile-file copy))))
       (delete-directory dir t))))
 
+
+(defun nm-pgo--search-pass (file iters)
+  "Regexp and literal search, plus replace -- the search engine and its
+case-translation tables, which fontification alone barely touches."
+  (let ((buf (find-file-noselect file)))
+    (with-current-buffer buf
+      (dotimes (_ iters)
+        (goto-char (point-min))
+        (while (re-search-forward "(defun \\([a-z-]+\\)" nil t)
+          (match-string 1))
+        (goto-char (point-min))
+        (while (search-forward "let" nil t))
+        (let ((case-fold-search t))
+          (goto-char (point-min))
+          (while (re-search-forward "[A-Z][a-z]+" nil t))))
+      (set-buffer-modified-p nil)
+      (kill-buffer buf))))
+
+(defun nm-pgo--text-pass ()
+  "Buffer mutation: insert/delete/kill/yank/undo and markers -- the edit
+primitives every command goes through, distinct from fontification."
+  (let ((buf (get-buffer-create "*pgo-text*")))
+    (with-current-buffer buf
+      (erase-buffer)
+      (buffer-enable-undo)
+      (dotimes (i 400)
+        (insert (format "line %d with some words to move around\n" i)))
+      (dotimes (_ 30)
+        (goto-char (point-min))
+        (kill-line 5) (goto-char (point-max)) (yank)
+        (goto-char (point-min))
+        (forward-word 20) (set-mark (point)) (forward-word 10)
+        (upcase-region (region-beginning) (region-end))
+        (undo-boundary))
+      (dotimes (_ 10) (ignore-errors (undo)))
+      (kill-buffer buf))))
+
+(defun nm-pgo--mode-pass (files)
+  "Fontify buffers in OTHER major modes. Without this, every mode a user
+opens that is not elisp or org is laid out as cold code."
+  (dolist (f files)
+    (when (file-readable-p f)
+      (let ((buf (find-file-noselect f)))
+        (with-current-buffer buf
+          (ignore-errors (normal-mode))
+          (ignore-errors
+            (font-lock-set-defaults)
+            (font-lock-fontify-region (point-min) (min (point-max) 60000)))
+          (set-buffer-modified-p nil))
+        (kill-buffer buf)))))
+
+(defun nm-pgo--lisp-data-pass ()
+  "Reader, printer, sorting, hash tables and string formatting -- the
+general-purpose Lisp machinery under every command."
+  (let ((data nil))
+    (dotimes (i 2000)
+      (push (cons (format "key-%d" i) (list i (* i i) (number-to-string i))) data))
+    (setq data (sort data (lambda (a b) (string< (car a) (car b)))))
+    (let ((h (make-hash-table :test #'equal)))
+      (dolist (d data) (puthash (car d) (cdr d) h))
+      (dolist (d data) (gethash (car d) h)))
+    (dotimes (_ 20)
+      (car (read-from-string (prin1-to-string data))))))
+
 (let* ((root (or (getenv "NEOMACS_RUNTIME_ROOT") default-directory))
        (el (expand-file-name "lisp/emacs-lisp/cl-macs.el" root))
        (bc (mapcar (lambda (n) (expand-file-name (concat "lisp/emacs-lisp/" n) root))
@@ -95,4 +159,16 @@ the reader, macro expansion and the compiler rather than redisplay."
   (ignore-errors (require 'org))
   (ignore-errors (nm-pgo--org-pass 40))
   (nm-pgo--byte-compile-pass bc)
+  ;; Breadth matters as much as depth: PGO PESSIMISES what it does not see,
+  ;; and an editor's surface is enormous. Measured consequence of training on
+  ;; fontification alone: the interactive edit loop came out +2%. These passes
+  ;; keep the other common subsystems from being laid out as cold code.
+  (ignore-errors (nm-pgo--search-pass el 3))
+  (ignore-errors (nm-pgo--text-pass))
+  (ignore-errors (nm-pgo--lisp-data-pass))
+  (ignore-errors
+    (nm-pgo--mode-pass
+     (mapcar (lambda (n) (expand-file-name n root))
+             '("lisp/progmodes/python.el" "lisp/progmodes/cc-mode.el"
+               "lisp/dired.el" "lisp/net/tramp.el"))))
   (message "pgo-train: done"))
