@@ -578,6 +578,10 @@ pub const ANGRY_POLICE_CAPTAIN_MELPA_PIN: (&str, &str) = ("angry-police-captain"
 /// corpus.
 pub const ANGULAR_MODE_MELPA_PIN: (&str, &str) = ("angular-mode", "20151201.2127");
 
+/// The exact angular-snippets package selected by the comprehensive API
+/// parity corpus.
+pub const ANGULAR_SNIPPETS_MELPA_PIN: (&str, &str) = ("angular-snippets", "20140514.523");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
@@ -620,6 +624,10 @@ pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260725.1657");
 /// The exact s package selected by the live lifecycle and comprehensive API
 /// parity corpora.
 pub const S_MELPA_PIN: (&str, &str) = ("s", "20220902.1511");
+
+/// The exact Yasnippet package selected as angular-snippets' manually
+/// documented runtime dependency.
+pub const YASNIPPET_MELPA_PIN: (&str, &str) = ("yasnippet", "20250602.1342");
 
 /// The exact Transient package selected by the comprehensive API parity
 /// corpus.
@@ -1169,6 +1177,7 @@ pub struct ElispOracleReport {
 pub struct CachedPackageOracle {
     package_name: String,
     package_user_dir: PathBuf,
+    package_directory_list: Vec<PathBuf>,
     source_file: PathBuf,
     prelude: String,
     timeout: Duration,
@@ -1261,6 +1270,7 @@ impl CachedPackageOracle {
         Ok(Self {
             package_name: package.0.to_string(),
             package_user_dir,
+            package_directory_list: Vec::new(),
             source_file,
             prelude: String::new(),
             timeout: DEFAULT_PROCESS_TIMEOUT,
@@ -1271,6 +1281,20 @@ impl CachedPackageOracle {
     pub fn with_prelude(mut self, prelude: impl Into<String>) -> Self {
         self.prelude = prelude.into();
         self
+    }
+
+    /// Make another exact package cache visible as a system-wide package
+    /// directory while loading the package under test.
+    pub fn with_melpa_dependency(mut self, package: (&str, &str)) -> Result<Self, String> {
+        let package_dir = prepare_cached_melpa_package(&EmacsRuntime::gnu_emacs(), package)?;
+        let package_directory = package_dir
+            .parent()
+            .expect("cached package directory is below an ELPA directory")
+            .to_path_buf();
+        if !self.package_directory_list.contains(&package_directory) {
+            self.package_directory_list.push(package_directory);
+        }
+        Ok(self)
     }
 
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
@@ -1308,11 +1332,19 @@ impl CachedPackageOracle {
             )
             .with_env("NEOMACS_PACKAGE_SOURCE", self.source_file.as_os_str())
             .with_timeout(self.timeout);
+        let package_directory_list = self
+            .package_directory_list
+            .iter()
+            .map(|directory| elisp_string(&directory.to_string_lossy()))
+            .collect::<Vec<_>>()
+            .join(" ");
         let setup = format!(
             r##"(progn
                    (require 'package)
                    (setq package-user-dir
                          (getenv "NEOMACS_PACKAGE_USER_DIR")
+                         package-directory-list
+                         (list {package_directory_list})
                          load-suffixes '(".el"))
                    (package-initialize)
                    {}

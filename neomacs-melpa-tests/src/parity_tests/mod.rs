@@ -135,6 +135,7 @@ mod android_env;
 mod android_mode;
 mod angry_police_captain;
 mod angular_mode;
+mod angular_snippets;
 mod async_package;
 mod at_package;
 mod bind_key;
