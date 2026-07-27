@@ -1,0 +1,261 @@
+use expect_test::expect;
+
+use super::assert_arduino_mode_parity;
+
+#[test]
+fn realistic_sketch_enters_arduino_mode_and_fontifies_language_semantics() {
+    let elisp_form = r##"(with-temp-buffer
+                    (insert
+                     "const unsigned long interval = 1000;\n"
+                     "void setup() {\n"
+                     "  pinMode(LED_BUILTIN, OUTPUT);\n"
+                     "  Serial.begin(9600);\n"
+                     "}\n"
+                     "void loop() {\n"
+                     "  if (digitalRead(2) == HIGH) {\n"
+                     "    digitalWrite(LED_BUILTIN, LOW);\n"
+                     "  }\n"
+                     "}\n")
+                    (arduino-mode)
+                    (font-lock-ensure)
+                    (let ((face-at
+                           (lambda (token)
+                             (goto-char (point-min))
+                             (search-forward token)
+                             (get-text-property
+                              (match-beginning 0) 'face))))
+                      (list
+                       major-mode mode-name
+                       (funcall face-at "const")
+                       (funcall face-at "unsigned")
+                       (funcall face-at "setup")
+                       (funcall face-at "pinMode")
+                       (funcall face-at "LED_BUILTIN")
+                       (funcall face-at "Serial")
+                       (funcall face-at "if")
+                       (funcall face-at "digitalWrite"))))"##;
+    let expect = expect![[
+        r#"OK (arduino-mode "arduino/*l" font-lock-type-face font-lock-type-face font-lock-type-face font-lock-keyword-face font-lock-constant-face font-lock-keyword-face font-lock-type-face font-lock-keyword-face)"#
+    ]];
+    assert_arduino_mode_parity(elisp_form, expect);
+}
+
+#[test]
+fn practical_sketch_indentation_comments_and_cc_mode_state_match() {
+    let elisp_form = r##"(with-temp-buffer
+                    (insert
+                     "void setup(){\n"
+                     "pinMode(LED_BUILTIN,OUTPUT);\n"
+                     "if(digitalRead(2)==HIGH){\n"
+                     "digitalWrite(LED_BUILTIN,LOW);\n"
+                     "}\n"
+                     "}\n")
+                    (arduino-mode)
+                    (indent-region (point-min) (point-max))
+                    (list
+                     (buffer-string)
+                     c-basic-offset tab-width
+                     comment-start comment-end
+                     (eq
+                      (keymap-parent (current-local-map))
+                      c-mode-base-map)
+                     (derived-mode-p 'c-mode)))"##;
+    let expect = expect![[
+        r#"OK ("void setup(){\n\11pinMode(LED_BUILTIN,OUTPUT);\n\11if(digitalRead(2)==HIGH){\n\11\11digitalWrite(LED_BUILTIN,LOW);\n\11}\n}\n" 2 2 "/* " " */" t c-mode)"#
+    ]];
+    assert_arduino_mode_parity(elisp_form, expect);
+}
+
+#[test]
+fn syntax_table_parses_comments_strings_and_braces_like_real_arduino_code() {
+    let elisp_form = r##"(with-temp-buffer
+                    (insert
+                     "void loop() {\n"
+                     "  // braces { in comment }\n"
+                     "  Serial.println(\"value // not comment\");\n"
+                     "  /* block comment */\n"
+                     "}\n")
+                    (arduino-mode)
+                    (let (states)
+                      (dolist
+                          (needle
+                           '("braces"
+                             "value"
+                             "block"
+                             "Serial"
+                             "}"))
+                        (goto-char (point-min))
+                        (search-forward needle)
+                        (let ((state
+                               (syntax-ppss
+                                (match-beginning 0))))
+                          (push
+                           (list
+                            needle
+                            (nth 3 state)
+                            (nth 4 state)
+                            (nth 0 state))
+                           states)))
+                      (nreverse states)))"##;
+    let expect = expect![[
+        r#"OK (("braces" nil t 1) ("value" 34 nil 2) ("block" nil t 1) ("Serial" nil nil 1) ("}" nil t 1))"#
+    ]];
+    assert_arduino_mode_parity(elisp_form, expect);
+}
+
+#[test]
+fn language_tables_cover_representative_types_constants_functions_and_primary_objects() {
+    let elisp_form = r##"(list
+                    (mapcar
+                     (lambda (word)
+                       (cons
+                        word
+                        (not
+                         (null
+                          (member
+                           word
+                           (c-lang-const
+                            c-primitive-type-kwds arduino))))))
+                     '("boolean" "unsigned long"
+                       "setup" "PROGMEM" "class"))
+                    (mapcar
+                     (lambda (word)
+                       (cons
+                        word
+                        (not
+                         (null
+                          (member
+                           word
+                           (c-lang-const
+                            c-constant-kwds arduino))))))
+                     '("HIGH" "INPUT_PULLUP"
+                       "LED_BUILTIN" "nullptr"))
+                    (mapcar
+                     (lambda (word)
+                       (cons
+                        word
+                        (not
+                         (null
+                          (member
+                           word
+                           (c-lang-const
+                            c-simple-stmt-kwds arduino))))))
+                     '("digitalWrite" "pulseInLong"
+                       "isHexadecimalDigit"
+                       "releaseAll" "malloc"))
+                    (mapcar
+                     (lambda (word)
+                       (cons
+                        word
+                        (not
+                         (null
+                          (member
+                           word
+                           (c-lang-const
+                            c-primary-expr-kwds arduino))))))
+                     '("Serial" "Keyboard" "Mouse" "Wire")))"##;
+    let expect = expect![[
+        r#"OK ((("boolean" . t) ("unsigned long" . t) ("setup" . t) ("PROGMEM" . t) ("class")) (("HIGH" . t) ("INPUT_PULLUP" . t) ("LED_BUILTIN" . t) ("nullptr" . t)) (("digitalWrite" . t) ("pulseInLong" . t) ("isHexadecimalDigit" . t) ("releaseAll" . t) ("malloc")) (("Serial" . t) ("Keyboard" . t) ("Mouse" . t) ("Wire")))"#
+    ]];
+    assert_arduino_mode_parity(elisp_form, expect);
+}
+
+#[test]
+fn mode_activation_calls_optional_flycheck_setup_only_when_available() {
+    let elisp_form = r##"(list
+                    (let (events)
+                      (cl-letf
+                          (((symbol-function 'flycheck-mode)
+                            (lambda () nil))
+                           ((symbol-function
+                             'flycheck-arduino-setup)
+                            (lambda ()
+                              (push :setup events))))
+                        (with-temp-buffer
+                          (arduino-mode)
+                          (list
+                           (nreverse events)
+                           major-mode))))
+                    (let (events)
+                      (when
+                          (fboundp 'flycheck-mode)
+                        (fmakunbound 'flycheck-mode))
+                      (cl-letf
+                          (((symbol-function
+                             'flycheck-arduino-setup)
+                            (lambda ()
+                              (push :setup events))))
+                        (with-temp-buffer
+                          (arduino-mode)
+                          (list
+                           events major-mode)))))"##;
+    let expect = expect!["OK (((:setup) arduino-mode) (nil arduino-mode))"];
+    assert_arduino_mode_parity(elisp_form, expect);
+}
+
+#[test]
+fn new_sketch_uses_expanded_arduino_home_as_the_visit_directory() {
+    let elisp_form = r##"(let* ((root
+                          (make-temp-file
+                           "arduino-mode-home-" t))
+                         (arduino-mode-home root)
+                         visited)
+                    (unwind-protect
+                        (cl-letf
+                            (((symbol-function 'find-file)
+                              (lambda (filename &rest _args)
+                                (setq visited
+                                      (list
+                                       filename
+                                       default-directory))
+                                :visited)))
+                          (list
+                           (arduino-sketch-new
+                            "Blink/Blink.ino")
+                           (car visited)
+                           (file-equal-p
+                            (cadr visited)
+                            root)))
+                      (delete-directory root t)))"##;
+    let expect = expect![[r#"OK (:visited "Blink/Blink.ino" t)"#]];
+    assert_arduino_mode_parity(elisp_form, expect);
+}
+
+#[test]
+fn include_path_generator_creates_real_default_content_then_visits_existing_file() {
+    let elisp_form = r##"(let* ((root
+                          (make-temp-file
+                           "arduino-include-path-" t))
+                         (arduino-mode-home root)
+                         (target
+                          (expand-file-name
+                           ".clang_complete" root))
+                         first-result second-result visited)
+                    (unwind-protect
+                        (progn
+                          (setq first-result
+                                (arduino-generate-include-path-file))
+                          (let ((first-content
+                                 (with-temp-buffer
+                                   (insert-file-contents target)
+                                   (buffer-string))))
+                            (cl-letf
+                                (((symbol-function 'y-or-n-p)
+                                  (lambda (_prompt) t))
+                                 ((symbol-function 'find-file)
+                                  (lambda (filename &rest _args)
+                                    (setq visited filename)
+                                    :editing)))
+                              (setq second-result
+                                    (arduino-generate-include-path-file)))
+                            (list
+                             first-result first-content
+                             second-result
+                             (file-name-nondirectory visited)
+                             (file-exists-p target))))
+                      (delete-directory root t)))"##;
+    let expect = expect![[
+        r#"OK (nil "-I/home/stardiviner/Arduino/libraries/" :editing ".clang_complete" t)"#
+    ]];
+    assert_arduino_mode_parity(elisp_form, expect);
+}
