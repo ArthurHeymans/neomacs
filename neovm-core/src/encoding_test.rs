@@ -1181,6 +1181,50 @@ fn register_test_jis() -> crate::emacs_core::intern::SymId {
     crate::emacs_core::intern::intern("test-jis")
 }
 
+#[test]
+fn undecided_decode_uses_the_shared_iso_2022_detector() {
+    crate::test_utils::init_test_tracing();
+    register_test_jis();
+    let mut eval = crate::emacs_core::Context::new();
+    crate::emacs_core::coding::builtin_define_coding_system_internal(
+        &mut eval.coding_systems,
+        vec![
+            Value::symbol("iso-2022-7bit"),
+            Value::char('J'),
+            Value::symbol("iso-2022"),
+            Value::symbol("iso-2022"),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::fixnum('?' as i64),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::vector(vec![
+                Value::symbol("ascii"),
+                Value::NIL,
+                Value::NIL,
+                Value::NIL,
+            ]),
+            Value::cons(Value::fixnum(0), Value::fixnum(0)),
+            Value::NIL,
+            Value::fixnum(
+                (crate::emacs_core::coding::IsoFlag::SevenBits as u32
+                    | crate::emacs_core::coding::IsoFlag::Designation as u32)
+                    .into(),
+            ),
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(
+        detect_undecided_coding(&eval.coding_systems, b"\x1b$B$3$s\x1b(B", false,),
+        Some(crate::emacs_core::intern::intern("iso-2022-7bit"))
+    );
+}
+
 fn charset_prop(charset: &str) -> Value {
     Value::list(vec![Value::symbol("charset"), Value::symbol(charset)])
 }

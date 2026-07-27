@@ -1521,6 +1521,32 @@ fn coding_region_destination(
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CodingDirection {
+    Encode,
+    Decode,
+}
+
+impl CodingDirection {
+    fn string_function_name(self) -> &'static str {
+        match self {
+            Self::Encode => "encode-coding-string",
+            Self::Decode => "decode-coding-string",
+        }
+    }
+
+    fn region_function_name(self) -> &'static str {
+        match self {
+            Self::Encode => "encode-coding-region",
+            Self::Decode => "decode-coding-region",
+        }
+    }
+
+    fn is_encode(self) -> bool {
+        matches!(self, Self::Encode)
+    }
+}
+
 /// Convert the text of a buffer region through the same context-aware codec
 /// the string functions use, so `encode-coding-region` / `decode-coding-region`
 /// support every coding system `encode-coding-string` / `decode-coding-string`
@@ -1534,7 +1560,7 @@ fn transformed_region_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     source: crate::heap_types::LispString,
     coding: &str,
-    encode: bool,
+    direction: CodingDirection,
 ) -> Result<Value, crate::emacs_core::error::Flow> {
     // Destination nil => the codec returns the converted string (GNU
     // `code_convert_string` with dst_object == t).  We carry the result back
@@ -1548,7 +1574,7 @@ fn transformed_region_string_in_context(
             Value::NIL,
             Value::NIL,
         ],
-        encode,
+        direction,
     )
 }
 
@@ -3091,50 +3117,21 @@ fn decode_via_iso2022(
 
 /// Resolve `undecided` / `prefer-utf-8` to a concrete coding system by
 /// inspecting the byte pattern, mirroring GNU's `detect_coding`: walk the
-/// detection categories in priority order and return the first that accepts the
-/// bytes. The categories beyond raw-text are not auto-detected.
-fn detect_undecided_coding(bytes: &[u8], prefer_utf_8: bool) -> &'static str {
-    let mut eight_bit = false;
-    let mut null_byte = false;
-    let mut saw_iso_escape = false;
-    for &c in bytes {
-        if c >= 0x80 {
-            eight_bit = true;
-        } else if c == 0x1B || c == 0x0E || c == 0x0F {
-            saw_iso_escape = true; // ESC / SO / SI -> ISO-2022 candidate
-        } else if c == 0 {
-            null_byte = true;
-        }
-    }
+/// configured detection categories in priority order and return the first
+/// defined coding system whose category accepts the bytes.
+fn detect_undecided_coding(
+    coding_systems: &crate::emacs_core::coding::CodingSystemManager,
+    bytes: &[u8],
+    prefer_utf_8: bool,
+) -> Option<crate::emacs_core::intern::SymId> {
     let valid_utf8_multibyte =
         std::str::from_utf8(bytes).is_ok() && bytes.iter().any(|&b| b >= 0x80);
-    // prefer-utf-8 raises the UTF-8 category to the top.
+    // `prefer-utf-8` raises UTF-8 ahead of the configured category priority.
     if prefer_utf_8 && valid_utf8_multibyte {
-        return "utf-8";
+        return Some(intern("utf-8"));
     }
-    // Pure ASCII (no high byte, no NUL, no escapes): UTF-8 handles it.
-    if !eight_bit && !null_byte && !saw_iso_escape {
-        return "utf-8";
-    }
-    // Category walk in GNU priority order: utf-8, iso-2022, charset(latin-1).
-    if valid_utf8_multibyte {
-        return "utf-8";
-    }
-    if saw_iso_escape {
-        return "iso-2022-7bit";
-    }
-    // charset category is bound to iso-latin-1; it accepts when every high byte
-    // is a valid Latin-1 graphic (>= 0xA0). 0x80-0x9F would need the
-    // latin-extra-code-table; treat them as non-Latin-1 here.
-    if eight_bit && bytes.iter().all(|&b| !(0x80..0xA0).contains(&b)) {
-        return "iso-latin-1";
-    }
-    // NUL or otherwise undetectable -> raw passthrough.
-    if null_byte {
-        "no-conversion"
-    } else {
-        "raw-text"
-    }
+
+    crate::emacs_core::coding::detect_highest_coding_system_for_unibyte_bytes(coding_systems, bytes)
 }
 
 /// Re-attach an explicit (concrete) eol_type to a detected base coding system,
@@ -3143,6 +3140,7 @@ fn detect_undecided_coding(bytes: &[u8], prefer_utf_8: bool) -> &'static str {
 /// `decode_eol`).  An undecided eol leaves the name untouched.
 fn apply_explicit_eol_suffix(base: &str, eol: crate::emacs_core::coding::EolType) -> String {
     use crate::emacs_core::coding::EolType;
+    let base = coding_system_base(base);
     // `no-conversion` is byte-faithful (raw-text-unix); GNU keeps it whole and
     // never appends a DOS/MAC subsidiary, so leave it alone.
     if matches!(eol, EolType::Undecided) || base == "no-conversion" {
@@ -3154,13 +3152,10 @@ fn apply_explicit_eol_suffix(base: &str, eol: crate::emacs_core::coding::EolType
 fn builtin_coding_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     mut args: Vec<Value>,
-    encode: bool,
+    direction: CodingDirection,
 ) -> EvalResult {
-    let name = if encode {
-        "encode-coding-string"
-    } else {
-        "decode-coding-string"
-    };
+    let name = direction.string_function_name();
+    let encode = direction.is_encode();
     expect_min_args(name, &args, 2)?;
     if args.len() > 4 {
         return Err(signal(
@@ -3187,8 +3182,15 @@ fn builtin_coding_string_in_context(
             && let Some(src) = args[0].as_lisp_string()
         {
             let bytes = lisp_string_coding_source_bytes(src);
-            let detected = detect_undecided_coding(&bytes, base == "prefer-utf-8");
-            coding = apply_explicit_eol_suffix(detected, coding_name_eol(&coding));
+            let detected =
+                detect_undecided_coding(&ctx.coding_systems, &bytes, base == "prefer-utf-8")
+                    .ok_or_else(|| {
+                        signal(
+                            LispCondition::CodingSystemError,
+                            vec![Value::symbol(&coding)],
+                        )
+                    })?;
+            coding = apply_explicit_eol_suffix(resolve_sym(detected), coding_name_eol(&coding));
             // Rewrite the coding argument too, so the fallback decode path
             // (which re-reads args[1]) uses the detected system rather than the
             // original `undecided`/`prefer-utf-8`.
@@ -3398,14 +3400,55 @@ pub(crate) fn builtin_encode_coding_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_coding_string_in_context(ctx, args, true)
+    builtin_coding_string_in_context(ctx, args, CodingDirection::Encode)
 }
 
 pub(crate) fn builtin_decode_coding_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_coding_string_in_context(ctx, args, false)
+    builtin_coding_string_in_context(ctx, args, CodingDirection::Decode)
+}
+
+/// A file decode result whose coding-system selection remains an interned
+/// protocol value until the file-I/O boundary needs its Lisp name.
+pub(crate) struct DecodedFileBytes {
+    pub(crate) text: crate::heap_types::LispString,
+    pub(crate) coding_system: crate::emacs_core::intern::SymId,
+}
+
+/// Decode raw file bytes through the complete context-aware coding engine.
+///
+/// File I/O must use this seam rather than the context-free `decode_bytes`
+/// family switch: ISO-2022, EUC, Shift-JIS, charset codings, and conversion
+/// hooks depend on coding-system definitions stored in the current evaluator.
+/// Encapsulate GNU's `last-coding-system-used` protocol here and return the
+/// concrete interned coding-system symbol together with the decoded text, so
+/// file-I/O callers cannot accidentally report the unresolved input alias.
+pub(crate) fn decode_file_bytes_in_context(
+    ctx: &mut crate::emacs_core::eval::Context,
+    bytes: &[u8],
+    coding: &str,
+) -> Result<DecodedFileBytes, crate::emacs_core::error::Flow> {
+    let source = Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes.to_vec()));
+    let decoded = builtin_coding_string_in_context(
+        ctx,
+        vec![source, Value::symbol(coding)],
+        CodingDirection::Decode,
+    )?;
+    let text = decoded
+        .as_lisp_string()
+        .expect("decode-coding-string must return a Lisp string")
+        .clone();
+    let coding_system = ctx
+        .visible_variable_value_or_nil("last-coding-system-used")
+        .as_symbol_id()
+        .filter(|&symbol| symbol != intern("nil"))
+        .expect("a successful context-aware decode records its concrete coding system");
+    Ok(DecodedFileBytes {
+        text,
+        coding_system,
+    })
 }
 
 /// Reconcile a coding result string with the multibyteness of the buffer it is
@@ -3456,13 +3499,9 @@ fn coding_result_for_buffer_multibyte(
 fn builtin_coding_region(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
-    encode: bool,
+    direction: CodingDirection,
 ) -> EvalResult {
-    let name = if encode {
-        "encode-coding-region"
-    } else {
-        "decode-coding-region"
-    };
+    let name = direction.region_function_name();
     expect_range_args(name, &args, 3, 4)?;
 
     let coding = context_coding_name(ctx, args[2])?;
@@ -3494,7 +3533,7 @@ fn builtin_coding_region(
         .buffer_substring_lisp_string_range(byte_range);
     let start_byte = byte_range.start().get();
     let end_byte = byte_range.end().get();
-    let result = transformed_region_string_in_context(ctx, source, &coding, encode)?;
+    let result = transformed_region_string_in_context(ctx, source, &coding, direction)?;
     let result_text = result
         .as_lisp_string()
         .ok_or_else(|| {
@@ -3604,14 +3643,14 @@ pub(crate) fn builtin_encode_coding_region(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_coding_region(ctx, args, true)
+    builtin_coding_region(ctx, args, CodingDirection::Encode)
 }
 
 pub(crate) fn builtin_decode_coding_region(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_coding_region(ctx, args, false)
+    builtin_coding_region(ctx, args, CodingDirection::Decode)
 }
 
 /// `(char-width CHAR)` -> integer without a current display table.

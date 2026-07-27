@@ -5362,11 +5362,6 @@ impl DecodedFileContents {
         Self { text, coding }
     }
 
-    fn from_decoded_multibyte_bytes(bytes: &[u8], coding: String) -> Self {
-        let text = crate::encoding::decode_bytes_to_lisp_string(bytes, &coding);
-        Self::from_lisp_string(text, coding)
-    }
-
     fn text(&self) -> &LispString {
         &self.text
     }
@@ -5414,125 +5409,43 @@ fn detected_default_eol_suffix(bytes: &[u8]) -> &'static str {
     }
 }
 
-fn coding_base_name(coding: &str) -> &str {
-    coding
-        .strip_suffix("-unix")
-        .or_else(|| coding.strip_suffix("-dos"))
-        .or_else(|| coding.strip_suffix("-mac"))
-        .unwrap_or(coding)
-}
-
-fn is_utf8_like_source_coding(coding: &str) -> bool {
-    matches!(
-        coding_base_name(coding),
-        "utf-8" | "utf-8-emacs" | "utf-8-with-signature"
-    )
-}
-
 fn has_utf8_signature(bytes: &[u8]) -> bool {
     bytes.starts_with(&[0xEF, 0xBB, 0xBF])
 }
 
 fn decode_insert_file_contents(
-    coding_systems: &crate::emacs_core::coding::CodingSystemManager,
+    eval: &mut crate::emacs_core::eval::Context,
     bytes: &[u8],
     multibyte: bool,
-    source_load_context: bool,
     coding_system_for_read: Option<&str>,
 ) -> Result<DecodedFileContents, Flow> {
-    let Some(coding) =
-        coding_system_for_read.filter(|coding| !coding.is_empty() && *coding != "nil")
-    else {
-        let eol_suffix = detected_default_eol_suffix(bytes);
-        if multibyte && has_utf8_signature(bytes) {
-            let coding = format!("utf-8-with-signature{eol_suffix}");
-            return Ok(DecodedFileContents::from_decoded_multibyte_bytes(
-                bytes, coding,
-            ));
-        }
-
-        if source_load_context && multibyte {
-            let coding = format!("utf-8-emacs{eol_suffix}");
-            return Ok(DecodedFileContents::from_decoded_multibyte_bytes(
-                bytes, coding,
-            ));
-        }
-
-        if !multibyte {
-            return Ok(DecodedFileContents::from_lisp_string(
-                LispString::from_unibyte(bytes.to_vec()),
-                "no-conversion".to_string(),
-            ));
-        }
-
-        if bytes.is_ascii() {
-            let coding = format!("undecided{eol_suffix}");
-            return Ok(DecodedFileContents::from_decoded_multibyte_bytes(
-                bytes, coding,
-            ));
-        }
-        if std::str::from_utf8(bytes).is_ok() {
-            let coding = format!("utf-8{eol_suffix}");
-            return Ok(DecodedFileContents::from_decoded_multibyte_bytes(
-                bytes, coding,
-            ));
-        }
-
-        let eol_suffix = detected_default_eol_suffix(bytes);
-        let coding = format!("utf-8-emacs{eol_suffix}");
-        return Ok(DecodedFileContents::from_decoded_multibyte_bytes(
-            bytes, coding,
+    if !multibyte {
+        return Ok(DecodedFileContents::from_lisp_string(
+            LispString::from_unibyte(bytes.to_vec()),
+            "no-conversion".to_string(),
         ));
-    };
+    }
 
     let eol_suffix = detected_default_eol_suffix(bytes);
-    let coding = coding_systems
-        .canonical_name_for_detected_eol(coding, eol_suffix)
-        .unwrap_or_else(|| coding.to_string());
+    let coding =
+        match coding_system_for_read.filter(|coding| !coding.is_empty() && *coding != "nil") {
+            Some(coding) => eval
+                .coding_systems
+                .canonical_name_for_detected_eol(coding, eol_suffix)
+                .unwrap_or_else(|| coding.to_string()),
+            // A bare test context does not load the Lisp BOM recognizer used by
+            // `set-auto-coding-function`; keep the same observable fallback.
+            None if has_utf8_signature(bytes) => format!("utf-8-with-signature{eol_suffix}"),
+            // GNU uses the ordinary undecided category engine here, including
+            // while `load-with-code-conversion` binds set-auto-coding-for-load.
+            None => format!("undecided{eol_suffix}"),
+        };
 
-    if source_load_context && multibyte && is_utf8_like_source_coding(&coding) {
-        return Ok(DecodedFileContents::from_decoded_multibyte_bytes(
-            bytes, coding,
-        ));
-    }
-
-    if !multibyte {
-        // Inserting into a UNIBYTE buffer stores the file bytes RAW: GNU
-        // `insert-file-contents` suppresses charset decoding for a unibyte
-        // destination (only EOL conversion applies), keeping the original file
-        // bytes and attaching no `charset` text-property.  E.g. reading latin-1
-        // "café" yields bytes (99 97 102 233); reading utf-8 "café" yields the
-        // undecoded (99 97 102 195 169) — NOT the re-encoded decoded chars.
-        let raw = crate::encoding::decode_eol_text(bytes, &coding);
-        return Ok(DecodedFileContents::from_lisp_string(
-            LispString::from_unibyte(raw),
-            coding,
-        ));
-    }
-
-    let decoded = crate::encoding::builtin_decode_coding_string_with_known(
-        vec![
-            Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes.to_vec())),
-            Value::symbol(&coding),
-        ],
-        |name| coding_systems.is_known_or_derived(name),
-    )?;
-
-    match decoded.kind() {
-        ValueKind::String => Ok(DecodedFileContents::from_lisp_string(
-            decoded
-                .as_lisp_string()
-                .expect("ValueKind::String must carry LispString")
-                .clone(),
-            coding,
-        )),
-        other => Err(signal(
-            "error",
-            vec![Value::string(format!(
-                "decode-coding-string returned non-string: {other:?}"
-            ))],
-        )),
-    }
+    let decoded = crate::encoding::decode_file_bytes_in_context(eval, bytes, &coding)?;
+    Ok(DecodedFileContents::from_lisp_string(
+        decoded.text,
+        resolve_sym(decoded.coding_system).to_owned(),
+    ))
 }
 
 fn decide_auto_coding_for_insert_file_contents(
@@ -5728,10 +5641,6 @@ pub(crate) fn builtin_insert_file_contents(
             .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes())),
         _ => None,
     };
-    let source_load_context = eval
-        .visible_variable_value_or_nil("set-auto-coding-for-load")
-        .is_truthy();
-
     // GNU `Finsert_file_contents` runs `Fexpand_file_name` on the filename
     // first (dispatching the expand-file-name magic handler) before looking up
     // the insert-file-contents handler.
@@ -5876,10 +5785,9 @@ pub(crate) fn builtin_insert_file_contents(
         None
     };
     let contents = decode_insert_file_contents(
-        &eval.coding_systems,
+        eval,
         slice,
         multibyte,
-        source_load_context,
         coding_system_for_read
             .as_deref()
             .or(auto_coding_system.as_deref()),

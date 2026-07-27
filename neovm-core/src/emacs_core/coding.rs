@@ -3761,6 +3761,25 @@ fn detect_coding_systems(
     apply_detected_eol(mgr, detected, bytes, highest)
 }
 
+/// Select GNU's highest-priority coding system for raw file bytes.
+///
+/// Keep undecided decoding and the public `detect-coding-*` builtins on the
+/// same category engine.  Returning an `Option<SymId>` makes both parts of the
+/// protocol explicit: a selected coding system is an interned symbol, while
+/// `None` represents GNU's `nil` result when the manager has no defined system
+/// for any accepting category.
+pub(crate) fn detect_highest_coding_system_for_unibyte_bytes(
+    mgr: &CodingSystemManager,
+    bytes: &[u8],
+) -> Option<SymId> {
+    let detected = detect_coding_systems(mgr, bytes, bytes.len(), false, true);
+    (!detected.is_nil()).then(|| {
+        detected
+            .as_symbol_id()
+            .expect("a non-nil coding-system detection result is a symbol")
+    })
+}
+
 /// GNU `EOL_SEEN_*` summary of the line terminators found in DATA.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum DetectedEol {
