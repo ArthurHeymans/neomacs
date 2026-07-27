@@ -258,6 +258,9 @@ pub const ACME_THEME_MELPA_PIN: (&str, &str) = ("acme-theme", "20210430.302");
 /// The exact acp package selected by the comprehensive API parity corpus.
 pub const ACP_MELPA_PIN: (&str, &str) = ("acp", "20260719.342");
 
+/// The exact act-mode package selected by the comprehensive API parity corpus.
+pub const ACT_MODE_MELPA_PIN: (&str, &str) = ("act-mode", "20240718.39");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
