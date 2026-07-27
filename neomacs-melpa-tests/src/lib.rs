@@ -707,6 +707,11 @@ pub const APP_MONOCHROME_THEMES_MELPA_PIN: (&str, &str) =
 /// editing and diagnostics parity corpus.
 pub const APPARMOR_MODE_MELPA_PIN: (&str, &str) = ("apparmor-mode", "20260515.454");
 
+/// The exact Apple Container TRAMP package selected by the comprehensive API
+/// parity corpus.
+pub const APPLE_CONTAINER_TRAMP_MELPA_PIN: (&str, &str) =
+    ("apple-container-tramp", "20260504.1350");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

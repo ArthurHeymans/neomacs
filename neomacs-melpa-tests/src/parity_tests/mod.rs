@@ -167,6 +167,7 @@ mod apib_mode;
 mod apiwrap;
 mod app_monochrome_themes;
 mod apparmor_mode;
+mod apple_container_tramp;
 mod async_package;
 mod at_package;
 mod bind_key;
