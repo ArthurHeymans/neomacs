@@ -899,6 +899,12 @@ pub const ASYNC_HTTP_QUEUE_MELPA_PIN: (&str, &str) = ("async-http-queue", "20260
 /// `eeafcce7f960305666b2a51aec55cc6333f6af1b`.
 pub const ASYNC_JOB_QUEUE_MELPA_PIN: (&str, &str) = ("async-job-queue", "20230427.2122");
 
+/// The exact async-status package selected by the comprehensive filesystem,
+/// indicator-item, rendering, and progress-lifecycle parity corpus. MELPA
+/// built this archive from upstream commit
+/// `d2f5becc9850c26aa71fb581f9fc389eac740f52`.
+pub const ASYNC_STATUS_MELPA_PIN: (&str, &str) = ("async-status", "20230821.204");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

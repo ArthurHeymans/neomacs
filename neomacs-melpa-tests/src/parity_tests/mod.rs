@@ -206,6 +206,7 @@ mod async_http_queue;
 mod async_job_queue;
 mod async_melpa;
 mod async_package;
+mod async_status;
 mod at_package;
 mod bind_key;
 mod compat;
