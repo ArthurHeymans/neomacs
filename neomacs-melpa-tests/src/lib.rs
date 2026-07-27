@@ -712,6 +712,10 @@ pub const APPARMOR_MODE_MELPA_PIN: (&str, &str) = ("apparmor-mode", "20260515.45
 pub const APPLE_CONTAINER_TRAMP_MELPA_PIN: (&str, &str) =
     ("apple-container-tramp", "20260504.1350");
 
+/// The exact AppleScript Mode package selected by the comprehensive editing
+/// and execution parity corpus.
+pub const APPLESCRIPT_MODE_MELPA_PIN: (&str, &str) = ("applescript-mode", "20210802.1715");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
