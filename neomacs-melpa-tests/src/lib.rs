@@ -675,6 +675,9 @@ pub const ANZU_MELPA_PIN: (&str, &str) = ("anzu", "20240929.201");
 /// `b0390616d19e45f15f9a2f5d5688274831e721fd`.
 pub const AOZORA_VIEW_MELPA_PIN: (&str, &str) = ("aozora-view", "20140310.1317");
 
+/// The exact APDL Mode package selected by the comprehensive API parity corpus.
+pub const APDL_MODE_MELPA_PIN: (&str, &str) = ("apdl-mode", "20250508.908");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
