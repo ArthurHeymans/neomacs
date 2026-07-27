@@ -455,6 +455,11 @@ pub const ALL_EXT_MELPA_PIN: (&str, &str) = ("all-ext", "20200315.1443");
 /// corpus.
 pub const ALL_THE_ICONS_MELPA_PIN: (&str, &str) = ("all-the-icons", "20250527.927");
 
+/// The exact all-the-icons-completion package selected by the comprehensive
+/// API parity corpus.
+pub const ALL_THE_ICONS_COMPLETION_MELPA_PIN: (&str, &str) =
+    ("all-the-icons-completion", "20240128.2048");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
