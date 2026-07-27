@@ -836,6 +836,10 @@ pub const ASN1_MODE_MELPA_PIN: (&str, &str) = ("asn1-mode", "20170729.226");
 /// `cadeb24a5d8261fad4bdfdc09e7d571cc395a6ca`.
 pub const ASSESS_MELPA_PIN: (&str, &str) = ("assess", "20240303.1454");
 
+/// The exact Astute package selected by the comprehensive typography,
+/// font-lock, customization, and minor-mode lifecycle parity corpus.
+pub const ASTUTE_MELPA_PIN: (&str, &str) = ("astute", "20241015.444");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
