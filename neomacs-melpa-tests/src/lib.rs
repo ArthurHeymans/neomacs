@@ -666,6 +666,10 @@ pub const ANYBAR_MELPA_PIN: (&str, &str) = ("anybar", "20160816.1421");
 /// The exact Anyins package selected by the comprehensive API parity corpus.
 pub const ANYINS_MELPA_PIN: (&str, &str) = ("anyins", "20131229.1041");
 
+/// The exact anzu package selected by the comprehensive search and replace
+/// parity corpus.
+pub const ANZU_MELPA_PIN: (&str, &str) = ("anzu", "20240929.201");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
