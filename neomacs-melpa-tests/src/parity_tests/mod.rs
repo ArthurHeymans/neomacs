@@ -120,6 +120,7 @@ mod amaranth_dark_theme;
 mod amber_glow_theme;
 mod amd_mode;
 mod ameba;
+mod ample_regexps;
 mod async_package;
 mod at_package;
 mod bind_key;
