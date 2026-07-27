@@ -162,6 +162,7 @@ mod aozora_view;
 mod apache_mode;
 mod apdl_mode;
 mod apel;
+mod apheleia;
 mod apib_mode;
 mod apiwrap;
 mod app_monochrome_themes;

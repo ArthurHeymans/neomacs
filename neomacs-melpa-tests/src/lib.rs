@@ -687,6 +687,10 @@ pub const APDL_MODE_MELPA_PIN: (&str, &str) = ("apdl-mode", "20250508.908");
 /// `1b043cfea58ea146356c237a5286ead69e97417b`.
 pub const APEL_MELPA_PIN: (&str, &str) = ("apel", "20250608.1806");
 
+/// The exact Apheleia package selected by the comprehensive formatting parity
+/// corpus.
+pub const APHELEIA_MELPA_PIN: (&str, &str) = ("apheleia", "20260619.1935");
+
 /// The exact APIB Mode package selected by the comprehensive API parity corpus.
 pub const APIB_MODE_MELPA_PIN: (&str, &str) = ("apib-mode", "20200101.1017");
 
