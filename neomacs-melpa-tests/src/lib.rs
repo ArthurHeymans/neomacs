@@ -56,6 +56,13 @@ const GNU_ELPA_ARCHIVE: PackageArchiveSpec = PackageArchiveSpec {
 /// parity corpus.
 pub const ASYNC_GNU_ELPA_PIN: (&str, &str) = ("async", "1.9.9");
 
+/// The exact current MELPA Async package selected by the comprehensive
+/// serialization, process, byte-compilation, Dired, package, and mail workflow
+/// parity corpus. This remains distinct from `ASYNC_GNU_ELPA_PIN`.
+/// MELPA built this archive from upstream commit
+/// `5faab28916603bb324d9faba057021ce028ca847`.
+pub const ASYNC_MELPA_PIN: (&str, &str) = ("async", "20260318.1803");
+
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 
