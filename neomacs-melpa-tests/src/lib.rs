@@ -339,6 +339,10 @@ pub const AGENIX_MELPA_PIN: (&str, &str) = ("agenix", "20250209.551");
 /// corpus.
 pub const AGENT_RECALL_MELPA_PIN: (&str, &str) = ("agent-recall", "20260710.1707");
 
+/// The exact agent-shell package selected by the comprehensive API parity
+/// corpus.
+pub const AGENT_SHELL_MELPA_PIN: (&str, &str) = ("agent-shell", "20260724.1019");
+
 /// The exact aggressive-fill-paragraph package selected by the comprehensive
 /// API parity corpus.
 pub const AGGRESSIVE_FILL_PARAGRAPH_MELPA_PIN: (&str, &str) =
