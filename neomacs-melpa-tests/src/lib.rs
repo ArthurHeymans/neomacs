@@ -565,6 +565,11 @@ pub const ANCIENT_THEME_MELPA_PIN: (&str, &str) = ("ancient-theme", "20260322.18
 /// corpus.
 pub const ANDROID_ENV_MELPA_PIN: (&str, &str) = ("android-env", "20220810.1449");
 
+/// The exact android-mode package selected by the comprehensive API parity
+/// corpus. MELPA built this archive from upstream commit
+/// `67f7c0d7d37605efc7f055b76d731556861c3eb9`.
+pub const ANDROID_MODE_MELPA_PIN: (&str, &str) = ("android-mode", "20250106.1022");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

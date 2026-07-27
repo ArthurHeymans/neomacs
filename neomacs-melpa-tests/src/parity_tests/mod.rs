@@ -132,6 +132,7 @@ mod anaphora;
 mod ancient_one_dark_theme;
 mod ancient_theme;
 mod android_env;
+mod android_mode;
 mod async_package;
 mod at_package;
 mod bind_key;
