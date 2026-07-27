@@ -537,6 +537,9 @@ pub const AMREAD_MODE_MELPA_PIN: (&str, &str) = ("amread-mode", "20240903.1534")
 /// The exact amsreftex package selected by the comprehensive API parity corpus.
 pub const AMSREFTEX_MELPA_PIN: (&str, &str) = ("amsreftex", "20240512.1746");
 
+/// The exact amx package selected by the comprehensive API parity corpus.
+pub const AMX_MELPA_PIN: (&str, &str) = ("amx", "20230413.1210");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
