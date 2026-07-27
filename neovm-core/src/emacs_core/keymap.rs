@@ -754,10 +754,6 @@ pub fn list_keymap_lookup_one_unresolved(keymap: &Value, event: &Value) -> Value
     list_keymap_access_unresolved(keymap, event, false, false)
 }
 
-pub(crate) fn list_keymap_lookup_one_unresolved_t_ok(keymap: &Value, event: &Value) -> Value {
-    list_keymap_access_unresolved(keymap, event, false, true)
-}
-
 /// Look up a single event in a keymap without following the parent chain.
 ///
 /// This mirrors GNU Emacs `access_keymap` with `noinherit=true`.
