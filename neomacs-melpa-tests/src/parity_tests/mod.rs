@@ -83,6 +83,7 @@ mod agitjo;
 mod agtags;
 mod ah;
 mod ahg;
+mod ahk_mode;
 mod async_package;
 mod at_package;
 mod bind_key;

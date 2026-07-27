@@ -364,6 +364,9 @@ pub const AH_MELPA_PIN: (&str, &str) = ("ah", "20220730.1058");
 /// The exact aHg package selected by the comprehensive API parity corpus.
 pub const AHG_MELPA_PIN: (&str, &str) = ("ahg", "20241113.748");
 
+/// The exact ahk-mode package selected by the comprehensive API parity corpus.
+pub const AHK_MODE_MELPA_PIN: (&str, &str) = ("ahk-mode", "20200412.1832");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
