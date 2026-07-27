@@ -746,6 +746,10 @@ pub const ARCHIVE_PHAR_MELPA_PIN: (&str, &str) = ("archive-phar", "20221009.2129
 /// filesystem workflow parity corpus.
 pub const ARCHIVE_REGION_MELPA_PIN: (&str, &str) = ("archive-region", "20200316.1425");
 
+/// The exact arduino-cli-mode package selected by the comprehensive API parity
+/// corpus.
+pub const ARDUINO_CLI_MODE_MELPA_PIN: (&str, &str) = ("arduino-cli-mode", "20260628.2219");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
