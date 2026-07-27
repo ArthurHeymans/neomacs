@@ -780,6 +780,10 @@ pub const ARJEN_GREY_THEME_MELPA_PIN: (&str, &str) = ("arjen-grey-theme", "20170
 /// navigation, and process-lifecycle parity corpus.
 pub const ARIADNE_MELPA_PIN: (&str, &str) = ("ariadne", "20131117.1711");
 
+/// The exact Art Bollocks Mode package selected by the comprehensive
+/// highlighting, search, and readability-metrics parity corpus.
+pub const ARTBOLLOCKS_MODE_MELPA_PIN: (&str, &str) = ("artbollocks-mode", "20251211.1624");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
