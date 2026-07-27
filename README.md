@@ -36,7 +36,8 @@ Emacs is a 40-year-old C codebase that hasn't kept up with modern hardware or so
   - **GPU utilization** — everything runs on CPU while your GPU sits idle
 - **Elisp performance** — no inline caching, stop-the-world GC, dynamic dispatch overhead. Even with native-comp (AOT), Elisp lacks runtime JIT optimization, speculative inlining, and concurrent GC — leaving significant performance on the table
 - **Large files and long lines** — a single gap buffer holds the entire file, and per-line work (redisplay, bidi, syntax, font-lock) scales with line length. A minified one-liner or a hundred-MB log still stalls the editor despite the mitigations added in Emacs 29 (`long-line-threshold`, locked narrowing, `so-long`), because the data structure never changed — the ecosystem's answer is to avoid the problem (`so-long`, VLF) rather than fix it
-- **Unsafe C codebase** — ~300,000 lines of unsafe C with manual memory management, monolithic architecture (runtime and editor entangled), single-threaded design that prevents real concurrency
+- **Everything blocks the UI** — Elisp runs on a single thread, so one slow call freezes the entire editor
+- **Unsafe C codebase** — ~300,000 lines of unsafe C with manual memory management, monolithic architecture (runtime and editor entangled)
 
 ## The Solution
 
