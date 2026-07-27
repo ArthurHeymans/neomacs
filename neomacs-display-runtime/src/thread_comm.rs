@@ -269,6 +269,9 @@ pub enum WindowCommand {
         frame: FrameRef,
         mode: WindowFullscreenMode,
     },
+    /// Show or hide the window manager's title bar and border -- the
+    /// `undecorated` frame parameter.
+    SetWindowDecorations { decorated: bool },
     /// Minimize/iconify the window
     SetWindowMinimized { minimized: bool },
     /// Set window position

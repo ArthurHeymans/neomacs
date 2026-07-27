@@ -8571,9 +8571,26 @@ pub(crate) fn builtin_modify_frame_parameters(
                             }
                         }
                         FrameParamKey::Known(FrameParam::Undecorated) => {
+                            // Store first, apply second: GNU records a frame
+                            // parameter whether or not the backend honours it
+                            // (`frame_parms[]`, src/frame.c), so `frame-parameter'
+                            // reads back what Lisp set even where nothing can act
+                            // on it. Storing WITHOUT applying was the whole bug --
+                            // `undecorated' round-tripped through Lisp while the
+                            // window manager never heard about it (neomacs#197).
+                            let undecorated = pair_cdr.is_truthy();
                             if let Some(frame) = eval.frames.get_mut(fid) {
-                                frame.undecorated = pair_cdr.is_truthy();
+                                frame.undecorated = undecorated;
                                 frame.set_known_parameter(FrameParam::Undecorated, pair_cdr);
+                            }
+                            let is_top_level_gui = eval.frames.get(fid).is_some_and(|frame| {
+                                frame.effective_window_system().is_some()
+                                    && frame.parent_frame.as_frame_id().is_none()
+                            });
+                            if is_top_level_gui && let Some(host) = eval.display_host.as_mut() {
+                                host.set_gui_frame_undecorated(fid, undecorated).map_err(
+                                    |message| signal("error", vec![Value::string(message)]),
+                                )?;
                             }
                         }
                         FrameParamKey::Known(FrameParam::NoAcceptFocus) => {

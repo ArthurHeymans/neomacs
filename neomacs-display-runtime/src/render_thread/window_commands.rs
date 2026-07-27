@@ -29,6 +29,15 @@ impl RenderApp {
 
     pub(super) fn handle_window(&mut self, cmd: WindowCommand) {
         match cmd {
+            WindowCommand::SetWindowDecorations { decorated } => {
+                if let Some(window) = self
+                    .frame_windows
+                    .primary_window()
+                    .and_then(|ws| ws.window())
+                {
+                    window.set_decorations(decorated);
+                }
+            }
             WindowCommand::SetMouseCursor { cursor_type } => {
                 if let Some(window) = self
                     .frame_windows

@@ -1467,6 +1467,19 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         Ok(())
     }
 
+    fn set_gui_frame_undecorated(
+        &mut self,
+        _frame_id: neovm_core::window::FrameId,
+        undecorated: bool,
+    ) -> Result<(), String> {
+        self.send_render_command(
+            RenderCommand::Window(WindowCommand::SetWindowDecorations {
+                decorated: !undecorated,
+            }),
+            "failed to update GUI frame decorations",
+        )
+    }
+
     fn set_gui_frame_title(
         &mut self,
         frame_id: neovm_core::window::FrameId,

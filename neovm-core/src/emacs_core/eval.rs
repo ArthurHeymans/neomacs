@@ -1631,6 +1631,19 @@ pub trait DisplayHost {
     ) -> Result<(), String> {
         Ok(())
     }
+    /// Apply the `undecorated` frame parameter to the platform window.
+    ///
+    /// GNU dispatches each frame parameter to a backend setter through
+    /// `frame_parms[]` (src/frame.c); a parameter the backend cannot honour is
+    /// still STORED, so `frame-parameter` reads back what Lisp set. Keep that
+    /// split: the caller records the value regardless of what this returns.
+    fn set_gui_frame_undecorated(
+        &mut self,
+        _frame_id: crate::window::FrameId,
+        _undecorated: bool,
+    ) -> Result<(), String> {
+        Ok(())
+    }
     fn opening_gui_frame_pending(&self) -> bool {
         false
     }
