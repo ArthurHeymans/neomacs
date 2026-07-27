@@ -176,6 +176,7 @@ mod aqi;
 mod arch_packer;
 mod archive_phar;
 mod archive_region;
+mod archive_rpm;
 mod arduino_cli_mode;
 mod async_package;
 mod at_package;
