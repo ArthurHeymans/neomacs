@@ -145,6 +145,7 @@ mod anki_vocabulary;
 mod annalist;
 mod annotate;
 mod annotate_depth;
+mod annotation;
 mod async_package;
 mod at_package;
 mod bind_key;
