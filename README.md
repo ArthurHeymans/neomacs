@@ -1,3 +1,10 @@
+"I started Neomacs because I love Emacs, I respect Emacs, and I want to evolve the legendary Emacs into the ultimate modern powerhouse." — *Eval Exec*
+
+<p align="center">
+  <i>✨ "While other editors can save your files, only Emacs can save your soul." ✨</i>
+</p>
+
+
 <p align="center">
   <img src="assets/banner.svg" alt="NEOMACS banner"/>
 </p>
@@ -8,9 +15,6 @@
   Built for 100% compatibility with the Emacs ecosystem you already have — your config, your packages, your muscle memory.
 </p>
 
-<p align="center">
-  <i>✨ "While other editors can save your files, only Emacs can save your soul." ✨</i>
-</p>
 
 <p align="center">
   <a href="https://github.com/eval-exec/neomacs/actions/workflows/ci.yml"><img src="https://github.com/eval-exec/neomacs/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
