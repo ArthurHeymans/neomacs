@@ -562,6 +562,17 @@ impl CodingSystemManager {
             'U',
             EolType::Mac,
         ));
+        for (name, eol) in [
+            ("utf-8-with-signature", EolType::Undecided),
+            ("utf-8-with-signature-unix", EolType::Unix),
+            ("utf-8-with-signature-dos", EolType::Dos),
+            ("utf-8-with-signature-mac", EolType::Mac),
+        ] {
+            let mut info = CodingSystemInfo::new(name, "utf-8", 'U', eol);
+            info.charset_list = vec![intern("unicode")];
+            info.properties.insert(intern(":bom"), Value::T);
+            mgr.register(info);
+        }
         mgr.register(CodingSystemInfo::new(
             "iso-latin-1",
             "charset",
@@ -1406,7 +1417,9 @@ pub(crate) fn builtin_coding_system_get(mgr: &CodingSystemManager, args: Vec<Val
 
 fn coding_category_for_base(base: &str) -> &'static str {
     match base {
-        "utf-8" | "utf-8-emacs" | "utf-8-auto" | "emacs-internal" => "coding-category-utf-8",
+        "utf-8" | "utf-8-emacs" | "emacs-internal" => "coding-category-utf-8",
+        "utf-8-auto" => "coding-category-utf-8-auto",
+        "utf-8-with-signature" => "coding-category-utf-8-sig",
         // `chinese-iso-8bit` is `:coding-type iso-2022` with G1 = chinese-gb2312
         // (a dimension-2 charset), so GNU classifies it as `coding-category-iso-8-2`
         // (coding.c `setup_coding_system`), NOT charset.  Keeping it under charset
@@ -1431,9 +1444,9 @@ fn coding_category_for_base(base: &str) -> &'static str {
 
 fn coding_docstring_for_base(base: &str) -> Option<&'static str> {
     match base {
-        "utf-8" | "utf-8-emacs" | "utf-8-auto" | "emacs-internal" => {
-            Some("UTF-8 (no signature (BOM))")
-        }
+        "utf-8" | "utf-8-emacs" | "emacs-internal" => Some("UTF-8 (no signature (BOM))"),
+        "utf-8-auto" => Some("UTF-8 (auto-detect signature (BOM))"),
+        "utf-8-with-signature" => Some("UTF-8 (with signature (BOM))"),
         "latin-1" | "iso-8859-1" | "iso-latin-1" => {
             Some("ISO 2022 based 8-bit encoding for Latin-1 (MIME:ISO-8859-1).")
         }
@@ -1461,7 +1474,7 @@ fn coding_docstring_for_base(base: &str) -> Option<&'static str> {
 
 fn coding_charset_list_for_base(base: &str) -> Option<Vec<Value>> {
     match base {
-        "utf-8" | "utf-8-emacs" | "utf-8-auto" | "emacs-internal" => {
+        "utf-8" | "utf-8-emacs" | "utf-8-auto" | "utf-8-with-signature" | "emacs-internal" => {
             Some(vec![Value::symbol("unicode")])
         }
         "latin-1" | "iso-8859-1" | "iso-latin-1" => Some(vec![Value::symbol("iso-8859-1")]),
@@ -4351,7 +4364,12 @@ fn display_base_name(base: &str) -> &str {
 
 fn coding_type_for_base(base: &str) -> Option<&'static str> {
     match base {
-        "utf-8" | "mule-utf-8" | "utf-8-auto" | "emacs-internal" | "utf-8-emacs" => Some("utf-8"),
+        "utf-8"
+        | "mule-utf-8"
+        | "utf-8-auto"
+        | "utf-8-with-signature"
+        | "emacs-internal"
+        | "utf-8-emacs" => Some("utf-8"),
         "latin-1" | "iso-8859-1" | "iso-latin-1" | "latin-5" | "iso-8859-9" | "iso-latin-5"
         | "latin-0" | "latin-9" | "iso-8859-15" | "iso-latin-9" | "ascii" | "us-ascii"
         | "big5-hkscs" | "cn-big5-hkscs" | "chinese-big5-hkscs" => Some("charset"),
@@ -4370,9 +4388,12 @@ fn coding_type_for_base(base: &str) -> Option<&'static str> {
 
 fn default_mnemonic_for_base(base: &str) -> Option<i64> {
     match base {
-        "utf-8" | "mule-utf-8" | "utf-8-auto" | "emacs-internal" | "utf-8-emacs" => {
-            Some('U' as i64)
-        }
+        "utf-8"
+        | "mule-utf-8"
+        | "utf-8-auto"
+        | "utf-8-with-signature"
+        | "emacs-internal"
+        | "utf-8-emacs" => Some('U' as i64),
         "latin-1" | "iso-8859-1" | "iso-latin-1" => Some('1' as i64),
         "latin-5" | "iso-8859-9" | "iso-latin-5" => Some('9' as i64),
         "latin-0" | "latin-9" | "iso-8859-15" | "iso-latin-9" => Some('0' as i64),
@@ -4455,6 +4476,7 @@ fn derive_coding_for_eol(base: &str, eol: i64) -> Option<String> {
         "gb18030" | "chinese-gb18030" => format!("chinese-gb18030{suffix}"),
         "mule-utf-8" | "utf-8" => format!("utf-8{suffix}"),
         "utf-8-auto" => format!("utf-8-auto{suffix}"),
+        "utf-8-with-signature" => format!("utf-8-with-signature{suffix}"),
         "prefer-utf-8" => format!("prefer-utf-8{suffix}"),
         "undecided" => format!("undecided{suffix}"),
         "raw-text" => format!("raw-text{suffix}"),
