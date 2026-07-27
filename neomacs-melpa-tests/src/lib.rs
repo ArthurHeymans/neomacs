@@ -634,6 +634,10 @@ pub const ANSI_MELPA_PIN: (&str, &str) = ("ansi", "20251118.230");
 /// and vault workflow parity corpus.
 pub const ANSIBLE_MELPA_PIN: (&str, &str) = ("ansible", "20260607.1852");
 
+/// The exact ansible-doc package selected by the comprehensive documentation
+/// workflow parity corpus.
+pub const ANSIBLE_DOC_MELPA_PIN: (&str, &str) = ("ansible-doc", "20160924.824");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
