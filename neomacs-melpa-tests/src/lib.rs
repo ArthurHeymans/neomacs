@@ -820,6 +820,12 @@ pub const ASCII_TABLE_MELPA_PIN: (&str, &str) = ("ascii-table", "20231215.1527")
 /// compiler-option, process, and callback parity corpus.
 pub const ASILEA_MELPA_PIN: (&str, &str) = ("asilea", "20150105.1525");
 
+/// The exact asn1-mode package selected by the comprehensive lexical,
+/// indentation, font-lock, outline, and editing-workflow parity corpus. MELPA
+/// built this archive from upstream commit
+/// `d5d4a8259daf708411699bcea85d322f18beb972`.
+pub const ASN1_MODE_MELPA_PIN: (&str, &str) = ("asn1-mode", "20170729.226");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

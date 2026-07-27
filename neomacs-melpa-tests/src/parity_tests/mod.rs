@@ -191,6 +191,7 @@ mod ascii_table;
 mod asciidoc_mode;
 mod asdf_vm;
 mod asilea;
+mod asn1_mode;
 mod async_package;
 mod at_package;
 mod bind_key;
