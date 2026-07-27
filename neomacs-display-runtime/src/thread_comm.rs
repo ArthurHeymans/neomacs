@@ -8,7 +8,7 @@ use crossbeam_channel::{Receiver, Sender, TrySendError, bounded, unbounded};
 use std::time::Instant;
 
 use neomacs_display_protocol::SealedFramePresentation;
-use neomacs_display_protocol::{ImageRealization, ImageSizeSpec};
+use neomacs_display_protocol::{ImageRealization, ImageRotation, ImageSizeSpec};
 pub use neomacs_display_protocol::{
     MenuBarItem, PopupMenuItem, TabBarItem, ToolBarImageSource, ToolBarItem, ToolBarItemType,
     VisualConfig,
@@ -358,6 +358,7 @@ pub enum AssetCommand {
         id: u32,
         path: String,
         size: ImageSizeSpec,
+        rotation: ImageRotation,
         /// Immutable logical/device geometry captured for this load.
         realization: ImageRealization,
         /// Foreground color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.
@@ -370,6 +371,7 @@ pub enum AssetCommand {
         id: u32,
         data: Vec<u8>,
         size: ImageSizeSpec,
+        rotation: ImageRotation,
         /// Immutable logical/device geometry captured for this load.
         realization: ImageRealization,
         /// Foreground color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.

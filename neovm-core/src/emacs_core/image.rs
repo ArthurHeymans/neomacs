@@ -17,8 +17,8 @@ use super::value::*;
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::image_catalog::{
-    AxisSize, ImageResolveRequest, ImageResolveSource, ImageScaleEnvironment, ImageScalePolicy,
-    ImageSizeSpec, image_scale_environment, numeric_image_scale,
+    AxisSize, ImageResolveRequest, ImageResolveSource, ImageRotation, ImageScaleEnvironment,
+    ImageScalePolicy, ImageSizeSpec, image_scale_environment, numeric_image_scale,
 };
 use crate::window::FRAME_ID_BASE;
 use strum::{EnumString, IntoStaticStr};
@@ -372,6 +372,7 @@ pub(crate) fn image_resolve_request_from_spec(
     // their `:max-` counterpart, `:max-width`/`:max-height` are clamps.
     let (mut width, mut max_width) = (None, None);
     let (mut height, mut max_height) = (None, None);
+    let mut rotation = ImageRotation::None;
     // Absent `:scale` is NOT `:scale default` — see ImageScalePolicy.
     let mut scale = ImageScalePolicy::Unspecified;
 
@@ -389,6 +390,14 @@ pub(crate) fn image_resolve_request_from_spec(
                 source = value
                     .as_lisp_string()
                     .map(|data| ImageResolveSource::Data(data.as_bytes().to_vec()));
+            }
+            Some(ImageSpecKey::Rotation) => {
+                // GNU signals `Invalid image ':rotation' parameter` for a
+                // non-number and leaves the image upright (src/image.c:2921).
+                rotation = value
+                    .as_number_f64()
+                    .map(ImageRotation::from_degrees)
+                    .unwrap_or(ImageRotation::None);
             }
             Some(ImageSpecKey::Width) => width = parse_image_dimension(value).or(width),
             Some(ImageSpecKey::MaxWidth) => max_width = parse_image_dimension(value).or(max_width),
@@ -417,6 +426,7 @@ pub(crate) fn image_resolve_request_from_spec(
             AxisSize::resolve(width, max_width),
             AxisSize::resolve(height, max_height),
         ),
+        rotation,
         fg_color: 0,
         bg_color: 0,
         realization: environment.resolve(scale),
@@ -1115,17 +1125,14 @@ pub enum ImageTransform {
     /// Resize to `:scale` / `:width` / `:height`. Implemented by
     /// `ImageScalePolicy` and `ImageRealization` in the layout engine.
     Scale,
-    /// Rotate by integral multiples of 90 degrees (`:rotation`).
-    #[allow(dead_code)] // GNU's other capability; no rotation in the pipeline yet.
+    /// Rotate by integral multiples of 90 degrees (`:rotation`). Implemented by
+    /// `ImageRotation` in the decode path.
     Rotate90,
 }
 
 impl ImageTransform {
     /// The transforms neomacs performs today, in GNU's report order.
-    ///
-    /// `Rotate90` is absent deliberately: nothing in the image pipeline rotates,
-    /// and claiming it would make callers skip their own rotation fallback.
-    const SUPPORTED: [Self; 1] = [Self::Scale];
+    const SUPPORTED: [Self; 2] = [Self::Scale, Self::Rotate90];
 
     pub fn name(self) -> &'static str {
         self.into()

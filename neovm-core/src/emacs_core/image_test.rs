@@ -1085,8 +1085,8 @@ fn image_transforms_p_reports_the_transforms_neomacs_implements() {
 
     assert_eq!(
         list_to_vec(&result).expect("capability list"),
-        vec![Value::symbol("scale")],
-        "a window-system frame must advertise scale (and only what we implement)"
+        vec![Value::symbol("scale"), Value::symbol("rotate90")],
+        "a window-system frame advertises exactly what the pipeline implements"
     );
 }
 
@@ -1372,4 +1372,21 @@ fn image_size_uses_display_host_resolution_in_gui_context() {
         ImageSizeSpec::new(AxisSize::AtMost(40), AxisSize::AtMost(30)),
         ":max-width/:max-height stay CLAMPS; only :width/:height are targets"
     );
+}
+
+#[test]
+fn image_spec_parse_reduces_rotation_to_a_quarter_turn() {
+    crate::test_utils::init_test_tracing();
+    let spec = Value::list(vec![
+        Value::symbol("image"),
+        Value::keyword("type"),
+        Value::symbol("png"),
+        Value::keyword("file"),
+        Value::string("/tmp/x.png"),
+        Value::keyword("rotation"),
+        Value::fixnum(90),
+    ]);
+    let request = image_resolve_request_from_spec(&spec, ImageScaleEnvironment::default())
+        .expect("valid image spec");
+    assert_eq!(request.rotation, ImageRotation::Quarter);
 }

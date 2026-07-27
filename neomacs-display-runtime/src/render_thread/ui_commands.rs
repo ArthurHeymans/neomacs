@@ -3,7 +3,7 @@
 use super::{PopupMenuState, RenderApp, TooltipState};
 use crate::thread_comm::{ConfigCommand, ToolBarItem, UiCommand};
 use neomacs_display_protocol::ToolBarImageSource;
-use neomacs_display_protocol::{AxisSize, ImageSizeSpec};
+use neomacs_display_protocol::{AxisSize, ImageRotation, ImageSizeSpec};
 
 impl RenderApp {
     pub(super) fn ensure_toolbar_icon_textures(&mut self, items: &[ToolBarItem], icon_size: u32) {
@@ -26,6 +26,7 @@ impl RenderApp {
                 ToolBarImageSource::File { path } => renderer.load_image_file(
                     path,
                     ImageSizeSpec::new(AxisSize::AtMost(icon_size), AxisSize::AtMost(icon_size)),
+                    ImageRotation::None,
                     0,
                     0,
                 ),

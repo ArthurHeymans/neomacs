@@ -12,8 +12,8 @@ use neovm_core::emacs_core::eval::{
 };
 use neovm_core::emacs_core::image::ImageSpecKey;
 use neovm_core::emacs_core::image_catalog::{
-    AxisSize, ImageResolveRequest, ImageResolveSource, ImageScaleEnvironment, ImageScalePolicy,
-    ImageSizeSpec, numeric_image_scale,
+    AxisSize, ImageResolveRequest, ImageResolveSource, ImageRotation, ImageScaleEnvironment,
+    ImageScalePolicy, ImageSizeSpec, numeric_image_scale,
 };
 use neovm_core::emacs_core::value::{ValueKind, list_to_vec};
 use neovm_core::face::Color as LispColor;
@@ -209,6 +209,7 @@ pub(crate) fn parse_display_image_layout(
     // Kept apart per GNU: `:width`/`:height` are targets, `:max-*` are clamps.
     let (mut width, mut max_width) = (None, None);
     let (mut height, mut max_height) = (None, None);
+    let mut rotation = ImageRotation::None;
     // Absent `:scale` is NOT `:scale default` — see ImageScalePolicy.
     let mut scale = ImageScalePolicy::Unspecified;
     let mut ascent = DisplayImageAscentPolicy::default();
@@ -230,6 +231,12 @@ pub(crate) fn parse_display_image_layout(
                 source = value
                     .as_lisp_string()
                     .map(|data| ImageResolveSource::Data(data.as_bytes().to_vec()));
+            }
+            Some(ImageSpecKey::Rotation) => {
+                rotation = value
+                    .as_number_f64()
+                    .map(ImageRotation::from_degrees)
+                    .unwrap_or(ImageRotation::None);
             }
             Some(ImageSpecKey::Width) => width = parse_image_dimension(value).or(width),
             Some(ImageSpecKey::MaxWidth) => max_width = parse_image_dimension(value).or(max_width),
@@ -266,6 +273,7 @@ pub(crate) fn parse_display_image_layout(
                 AxisSize::resolve(width, max_width),
                 AxisSize::resolve(height, max_height),
             ),
+            rotation,
             fg_color,
             bg_color,
             realization: Default::default(),

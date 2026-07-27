@@ -126,6 +126,56 @@ impl AxisSize {
     }
 }
 
+/// A quarter-turn rotation, the only kind native transforms perform.
+///
+/// GNU reduces `:rotation` modulo 360 and then rotates only on an exact
+/// multiple of 90 (src/image.c:2927, 3144-3203); every other angle, and any
+/// non-number, leaves the image upright. Modelling the reduced angle instead of
+/// carrying raw degrees means the decoder cannot be handed an angle it has no
+/// branch for.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum ImageRotation {
+    #[default]
+    None,
+    Quarter,
+    Half,
+    ThreeQuarter,
+}
+
+impl ImageRotation {
+    /// GNU's `compute_image_rotation` followed by its 90-degree dispatch.
+    #[must_use]
+    pub fn from_degrees(degrees: f64) -> Self {
+        if !degrees.is_finite() {
+            return Self::None;
+        }
+        // Emacs `mod` takes the sign of the divisor, so -90 reduces to 270.
+        let reduced = degrees.rem_euclid(360.0);
+        match reduced {
+            r if r == 90.0 => Self::Quarter,
+            r if r == 180.0 => Self::Half,
+            r if r == 270.0 => Self::ThreeQuarter,
+            _ => Self::None,
+        }
+    }
+
+    /// Whether the rotation exchanges width and height (src/image.c:3171).
+    #[must_use]
+    pub fn swaps_axes(self) -> bool {
+        matches!(self, Self::Quarter | Self::ThreeQuarter)
+    }
+
+    /// Apply GNU's axis exchange to an already-sized extent.
+    #[must_use]
+    pub fn orient(self, width: u32, height: u32) -> (u32, u32) {
+        if self.swaps_axes() {
+            (height, width)
+        } else {
+            (width, height)
+        }
+    }
+}
+
 /// How large an image should be drawn, as asked for by its spec.
 ///
 /// This is GNU's `compute_image_size` input set (src/image.c:2750). The size
@@ -209,7 +259,7 @@ fn ratio(size: u32, from: u32, to: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{AxisSize, ImageRealization, ImageSizeSpec};
+    use super::{AxisSize, ImageRealization, ImageRotation, ImageSizeSpec};
 
     /// Every expectation below was measured from GNU Emacs 31 on a 40x20 PNG
     /// with `image-scaling-factor` pinned to 1, so the numbers are observed
@@ -218,6 +268,45 @@ mod tests {
 
     fn desired(spec: ImageSizeSpec, scale: f64) -> (u32, u32) {
         spec.desired(NATIVE.0, NATIVE.1, scale)
+    }
+
+    /// Measured from GNU Emacs 31 on the same 40x20 PNG.
+    #[test]
+    fn rotation_reduces_modulo_360_and_only_turns_on_multiples_of_90() {
+        use ImageRotation as R;
+        for (degrees, expected) in [
+            (0.0, R::None),
+            (90.0, R::Quarter),
+            (180.0, R::Half),
+            (270.0, R::ThreeQuarter),
+            (360.0, R::None),
+            (450.0, R::Quarter),
+            // Emacs `mod` takes the divisor's sign: -90 reduces to 270.
+            (-90.0, R::ThreeQuarter),
+            // Not a multiple of 90: GNU leaves the image upright.
+            (45.0, R::None),
+            (f64::NAN, R::None),
+        ] {
+            assert_eq!(R::from_degrees(degrees), expected, "rotation {degrees}");
+        }
+    }
+
+    #[test]
+    fn quarter_turns_exchange_the_axes() {
+        // GNU: 40x20 with `:rotation 90` reports (20 . 40).
+        assert_eq!(ImageRotation::Quarter.orient(40, 20), (20, 40));
+        assert_eq!(ImageRotation::ThreeQuarter.orient(40, 20), (20, 40));
+        assert_eq!(ImageRotation::Half.orient(40, 20), (40, 20));
+        assert_eq!(ImageRotation::None.orient(40, 20), (40, 20));
+    }
+
+    #[test]
+    fn sizing_happens_before_rotation() {
+        // GNU: `:rotation 90 :width 80` on 40x20 reports (40 . 80) — `:width`
+        // sizes the upright image (80x40), then the turn swaps the axes.
+        let sized = ImageSizeSpec::new(AxisSize::Exact(80), AxisSize::Native).desired(40, 20, 1.0);
+        assert_eq!(sized, (80, 40));
+        assert_eq!(ImageRotation::Quarter.orient(sized.0, sized.1), (40, 80));
     }
 
     #[test]

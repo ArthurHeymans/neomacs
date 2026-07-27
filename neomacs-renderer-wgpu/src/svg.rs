@@ -13,7 +13,7 @@ use std::str::FromStr;
 use std::sync::{Arc, OnceLock};
 
 use crate::image_cache::constrain_dimensions;
-use neomacs_display_protocol::{ImageRealization, ImageSizeSpec};
+use neomacs_display_protocol::{ImageRealization, ImageRotation, ImageSizeSpec};
 
 pub(crate) struct DecodedSvg {
     /// Size consumed by redisplay in logical Emacs pixels.
@@ -63,16 +63,20 @@ fn query_dimensions_inner(data: &[u8]) -> Option<(u32, u32)> {
 pub(crate) fn decode(
     data: &[u8],
     size: ImageSizeSpec,
+    rotation: ImageRotation,
     realization: ImageRealization,
 ) -> Option<DecodedSvg> {
-    catch_unwind(AssertUnwindSafe(|| decode_inner(data, size, realization)))
-        .ok()
-        .flatten()
+    catch_unwind(AssertUnwindSafe(|| {
+        decode_inner(data, size, rotation, realization)
+    }))
+    .ok()
+    .flatten()
 }
 
 fn decode_inner(
     data: &[u8],
     size: ImageSizeSpec,
+    rotation: ImageRotation,
     realization: ImageRealization,
 ) -> Option<DecodedSvg> {
     let loaded = load(data)?;
@@ -110,6 +114,23 @@ fn decode_inner(
     if rgba.len() != raster_bytes {
         return None;
     }
+
+    // Rotate after painting, matching GNU's order (size, then turn).
+    let (rgba, raster_width, raster_height) = match rotation {
+        ImageRotation::None => (rgba, raster_width, raster_height),
+        turn => {
+            let source = image::RgbaImage::from_raw(raster_width, raster_height, rgba)?;
+            let turned = match turn {
+                ImageRotation::Quarter => image::imageops::rotate90(&source),
+                ImageRotation::Half => image::imageops::rotate180(&source),
+                ImageRotation::ThreeQuarter => image::imageops::rotate270(&source),
+                ImageRotation::None => unreachable!("handled above"),
+            };
+            let (width, height) = (turned.width(), turned.height());
+            (turned.into_raw(), width, height)
+        }
+    };
+    let (layout_width, layout_height) = rotation.orient(layout_width, layout_height);
 
     Some(DecodedSvg {
         layout_width,

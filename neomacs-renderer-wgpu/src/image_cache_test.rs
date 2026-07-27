@@ -1,5 +1,5 @@
 use super::*;
-use neomacs_display_protocol::{AxisSize, ImageSizeSpec};
+use neomacs_display_protocol::{AxisSize, ImageRotation, ImageSizeSpec};
 use std::io::Cursor;
 
 #[test]
@@ -64,6 +64,7 @@ fn decoder_worker_survives_a_panicking_request() {
             load: panicking,
             source: ImageSource::Panic,
             size: Default::default(),
+            rotation: Default::default(),
             realization: ImageRealization::new(1.0, 1.0),
             fg_color: 0,
             bg_color: 0,
@@ -74,6 +75,7 @@ fn decoder_worker_survives_a_panicking_request() {
             load: following,
             source: ImageSource::Data(png_bytes(vec![0x12, 0x34, 0x56, 0xff], 1, 1)),
             size: Default::default(),
+            rotation: Default::default(),
             realization: ImageRealization::new(1.0, 1.0),
             fg_color: 0,
             bg_color: 0,
@@ -113,8 +115,13 @@ fn encoded_image_bytes(format: image::ImageFormat) -> Vec<u8> {
 #[test]
 fn decoded_opaque_png_reports_gnu_corner_background_without_lisp_background() {
     let data = png_bytes([0x12, 0x34, 0x56, 0xff].repeat(4), 2, 2);
-    let decoded =
-        ImageCache::decode_data_with_metadata(&data, ImageSizeSpec::default(), (0, 0)).unwrap();
+    let decoded = ImageCache::decode_data_with_metadata(
+        &data,
+        ImageSizeSpec::default(),
+        ImageRotation::None,
+        (0, 0),
+    )
+    .unwrap();
 
     assert_eq!(decoded.metadata.width, 2);
     assert_eq!(decoded.metadata.height, 2);
@@ -125,9 +132,13 @@ fn decoded_opaque_png_reports_gnu_corner_background_without_lisp_background() {
 #[test]
 fn decoded_transparent_png_stays_transparent_with_explicit_lisp_background() {
     let data = png_bytes([0x12, 0x34, 0x56, 0x00].repeat(4), 2, 2);
-    let decoded =
-        ImageCache::decode_data_with_metadata(&data, ImageSizeSpec::default(), (0, 0xff_aa_bb_cc))
-            .unwrap();
+    let decoded = ImageCache::decode_data_with_metadata(
+        &data,
+        ImageSizeSpec::default(),
+        ImageRotation::None,
+        (0, 0xff_aa_bb_cc),
+    )
+    .unwrap();
 
     assert!(decoded.metadata.background_transparent);
     assert_ne!(decoded.metadata.background, 0xaa_bb_cc);
@@ -137,8 +148,13 @@ fn decoded_transparent_png_stays_transparent_with_explicit_lisp_background() {
 fn decoded_partial_alpha_png_corners_are_gnu_draw_not_transparent_mask() {
     for alpha in [1, 254] {
         let data = png_bytes([0x12, 0x34, 0x56, alpha].repeat(4), 2, 2);
-        let decoded =
-            ImageCache::decode_data_with_metadata(&data, ImageSizeSpec::default(), (0, 0)).unwrap();
+        let decoded = ImageCache::decode_data_with_metadata(
+            &data,
+            ImageSizeSpec::default(),
+            ImageRotation::None,
+            (0, 0),
+        )
+        .unwrap();
 
         assert!(
             !decoded.metadata.background_transparent,
@@ -155,9 +171,14 @@ fn decoded_corner_mask_tie_uses_gnu_first_corner_winner() {
             .flat_map(|alpha| [0x12, 0x34, 0x56, alpha])
             .collect();
         let data = png_bytes(pixels, 2, 2);
-        ImageCache::decode_data_with_metadata(&data, ImageSizeSpec::default(), (0, 0))
-            .unwrap()
-            .metadata
+        ImageCache::decode_data_with_metadata(
+            &data,
+            ImageSizeSpec::default(),
+            ImageRotation::None,
+            (0, 0),
+        )
+        .unwrap()
+        .metadata
     };
 
     assert!(!metadata([1, 0, 0, 254]).background_transparent);
@@ -170,6 +191,7 @@ fn decoded_transparent_svg_stays_transparent_with_explicit_lisp_background() {
     let decoded = ImageCache::decode_data_with_metadata(
         data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        ImageRotation::None,
         (0, 0xff_aa_bb_cc),
     )
     .unwrap();
@@ -191,6 +213,7 @@ fn decoded_dimensionless_svg_uses_gnu_visible_geometry() {
     let decoded = ImageCache::decode_data_with_metadata(
         data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(24)),
+        ImageRotation::None,
         (0, 0),
     )
     .unwrap();
@@ -231,6 +254,7 @@ fn decoded_dimensionless_svg_scales_document_coordinates_to_requested_size() {
     let decoded = ImageCache::decode_data_with_metadata(
         data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(20)),
+        ImageRotation::None,
         (0, 0),
     )
     .unwrap();
@@ -252,7 +276,13 @@ fn oversized_svg_input_is_rejected_before_parsing() {
 
     assert!(ImageCache::query_data_dimensions(&data).is_none());
     assert!(
-        ImageCache::decode_data_with_metadata(&data, ImageSizeSpec::default(), (0, 0)).is_none()
+        ImageCache::decode_data_with_metadata(
+            &data,
+            ImageSizeSpec::default(),
+            ImageRotation::None,
+            (0, 0)
+        )
+        .is_none()
     );
 }
 
@@ -277,6 +307,7 @@ fn svgz_expanding_past_the_svg_input_limit_is_rejected() {
         ImageCache::decode_data_with_metadata(
             &compressed,
             ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+            ImageRotation::None,
             (0, 0)
         )
         .is_none()
@@ -305,6 +336,7 @@ fn svg_single_explicit_dimension_uses_view_box_aspect_ratio() {
     let decoded = ImageCache::decode_data_with_metadata(
         data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        ImageRotation::None,
         (0, 0),
     )
     .unwrap();
@@ -350,7 +382,7 @@ fn svg_rejects_empty_malformed_and_invalid_dimension_documents() {
         b"\xff\xfe\xfd".as_slice(),
     ] {
         assert!(ImageCache::query_data_dimensions(data).is_none());
-        assert!(ImageCache::decode_data_with_metadata(data, ImageSizeSpec::new(AxisSize::Native, AxisSize::Native), (0, 0)).is_none());
+        assert!(ImageCache::decode_data_with_metadata(data, ImageSizeSpec::new(AxisSize::Native, AxisSize::Native), ImageRotation::None, (0, 0)).is_none());
     }
 }
 
@@ -364,6 +396,7 @@ fn recursive_svg_references_fail_closed_without_panicking() {
     let decoded = ImageCache::decode_data_with_metadata(
         data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        ImageRotation::None,
         (0, 0),
     )
     .unwrap();
@@ -508,6 +541,7 @@ fn dimensionless_svg_fallback_includes_markers_and_rasterization_applies_clippin
     let clipped = ImageCache::decode_data_with_metadata(
         clipped_data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        ImageRotation::None,
         (0, 0),
     )
     .unwrap();
@@ -531,6 +565,7 @@ fn svg_masks_gradients_and_inline_css_survive_rasterization() {
     let decoded = ImageCache::decode_data_with_metadata(
         data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        ImageRotation::None,
         (0, 0),
     )
     .unwrap();
@@ -550,6 +585,7 @@ fn svg_group_transforms_are_applied_before_rasterization() {
     let decoded = ImageCache::decode_data_with_metadata(
         data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        ImageRotation::None,
         (0, 0),
     )
     .unwrap();
@@ -570,6 +606,7 @@ fn svg_does_not_load_images_relative_to_the_process_working_directory() {
     let decoded = ImageCache::decode_data_with_metadata(
         data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        ImageRotation::None,
         (0, 0),
     )
     .unwrap();
@@ -585,6 +622,7 @@ fn svg_keeps_embedded_data_images_enabled() {
     let decoded = ImageCache::decode_data_with_metadata(
         data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        ImageRotation::None,
         (0, 0),
     )
     .unwrap();
@@ -600,6 +638,7 @@ fn nested_svg_cannot_escape_the_external_resource_policy() {
     let decoded = ImageCache::decode_data_with_metadata(
         data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        ImageRotation::None,
         (0, 0),
     )
     .unwrap();
@@ -656,6 +695,7 @@ fn svg_text_uses_the_shared_system_font_database() {
     let decoded = ImageCache::decode_data_with_metadata(
         data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        ImageRotation::None,
         (0, 0),
     )
     .unwrap();
@@ -671,6 +711,7 @@ fn semitransparent_svg_pixels_are_returned_as_straight_rgba() {
     let decoded = ImageCache::decode_data_with_metadata(
         data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        ImageRotation::None,
         (0, 0),
     )
     .unwrap();
@@ -692,6 +733,7 @@ fn hidpi_svg_keeps_logical_layout_extent_and_uses_device_pixel_raster_extent() {
     let decoded = crate::svg::decode(
         data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(24)),
+        ImageRotation::None,
         neomacs_display_protocol::ImageRealization::new(1.0, 1.75),
     )
     .expect("SVG decode");
@@ -713,6 +755,7 @@ fn resolved_auto_scale_controls_both_svg_layout_and_raster_extents() {
     let decoded = crate::svg::decode(
         data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(24)),
+        ImageRotation::None,
         neomacs_display_protocol::ImageRealization::new(1.3 / 1.75, 1.75),
     )
     .expect("SVG decode");
@@ -732,6 +775,7 @@ fn resolved_auto_scale_controls_bitmap_layout_and_raster_extents() {
     let decoded = ImageCache::decode_data_with_metadata_at_realization(
         &data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(24)),
+        ImageRotation::None,
         (0, 0),
         1.3 / 1.75,
         1.75,
@@ -751,6 +795,7 @@ fn hidpi_svg_decode_metadata_stays_logical_while_texture_pixels_are_physical() {
     let decoded = ImageCache::decode_data_with_metadata_at_scale(
         data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(24)),
+        ImageRotation::None,
         (0, 0),
         1.75,
     )
@@ -779,12 +824,14 @@ static char *icon[] = {
     let transparent = ImageCache::decode_data_with_metadata(
         transparent,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        ImageRotation::None,
         (0, 0),
     )
     .unwrap();
     let opaque = ImageCache::decode_data_with_metadata(
         opaque,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        ImageRotation::None,
         (0, 0),
     )
     .unwrap();
@@ -809,8 +856,14 @@ fn test_convert_argb32_to_rgba_basic() {
         0, 0, 0, 0, // Pixel (1,1): A=0, R=0, G=0, B=0 (transparent)
     ];
 
-    let result =
-        ImageCache::convert_argb32_to_rgba(&data, width, height, stride, ImageSizeSpec::default());
+    let result = ImageCache::convert_argb32_to_rgba(
+        &data,
+        width,
+        height,
+        stride,
+        ImageSizeSpec::default(),
+        ImageRotation::None,
+    );
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();
@@ -846,8 +899,14 @@ fn test_convert_argb32_with_stride_padding() {
         0, 0, 0, 0, // Padding (ignored)
     ];
 
-    let result =
-        ImageCache::convert_argb32_to_rgba(&data, width, height, stride, ImageSizeSpec::default());
+    let result = ImageCache::convert_argb32_to_rgba(
+        &data,
+        width,
+        height,
+        stride,
+        ImageSizeSpec::default(),
+        ImageRotation::None,
+    );
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();
@@ -865,7 +924,14 @@ fn test_convert_argb32_with_stride_padding() {
 fn test_convert_argb32_invalid_data_size() {
     // Data too small for 2x2 image
     let data: Vec<u8> = vec![255, 100, 150, 200]; // Only 1 pixel
-    let result = ImageCache::convert_argb32_to_rgba(&data, 2, 2, 8, ImageSizeSpec::default());
+    let result = ImageCache::convert_argb32_to_rgba(
+        &data,
+        2,
+        2,
+        8,
+        ImageSizeSpec::default(),
+        ImageRotation::None,
+    );
     assert!(result.is_none());
 }
 
@@ -885,8 +951,14 @@ fn test_convert_rgb24_to_rgba_basic() {
         0, 0, 0, // Pixel (1,1): R=0, G=0, B=0 (black)
     ];
 
-    let result =
-        ImageCache::convert_rgb24_to_rgba(&data, width, height, stride, ImageSizeSpec::default());
+    let result = ImageCache::convert_rgb24_to_rgba(
+        &data,
+        width,
+        height,
+        stride,
+        ImageSizeSpec::default(),
+        ImageRotation::None,
+    );
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();
@@ -918,8 +990,14 @@ fn test_convert_rgb24_with_stride_padding() {
         0, 0, // Padding (ignored)
     ];
 
-    let result =
-        ImageCache::convert_rgb24_to_rgba(&data, width, height, stride, ImageSizeSpec::default());
+    let result = ImageCache::convert_rgb24_to_rgba(
+        &data,
+        width,
+        height,
+        stride,
+        ImageSizeSpec::default(),
+        ImageRotation::None,
+    );
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();
@@ -937,7 +1015,14 @@ fn test_convert_rgb24_with_stride_padding() {
 fn test_convert_rgb24_invalid_data_size() {
     // Data too small for 2x2 image
     let data: Vec<u8> = vec![100, 150, 200]; // Only 1 pixel
-    let result = ImageCache::convert_rgb24_to_rgba(&data, 2, 2, 6, ImageSizeSpec::default());
+    let result = ImageCache::convert_rgb24_to_rgba(
+        &data,
+        2,
+        2,
+        6,
+        ImageSizeSpec::default(),
+        ImageRotation::None,
+    );
     assert!(result.is_none());
 }
 
@@ -963,7 +1048,14 @@ fn constrain_dimensions_only_enforces_the_texture_limit() {
 fn test_convert_argb32_single_pixel() {
     // Single pixel image - edge case
     let data: Vec<u8> = vec![255, 128, 64, 32]; // A=255, R=128, G=64, B=32
-    let result = ImageCache::convert_argb32_to_rgba(&data, 1, 1, 4, ImageSizeSpec::default());
+    let result = ImageCache::convert_argb32_to_rgba(
+        &data,
+        1,
+        1,
+        4,
+        ImageSizeSpec::default(),
+        ImageRotation::None,
+    );
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();
@@ -976,7 +1068,14 @@ fn test_convert_argb32_single_pixel() {
 fn test_convert_rgb24_single_pixel() {
     // Single pixel image - edge case
     let data: Vec<u8> = vec![128, 64, 32]; // R=128, G=64, B=32
-    let result = ImageCache::convert_rgb24_to_rgba(&data, 1, 1, 3, ImageSizeSpec::default());
+    let result = ImageCache::convert_rgb24_to_rgba(
+        &data,
+        1,
+        1,
+        3,
+        ImageSizeSpec::default(),
+        ImageRotation::None,
+    );
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();

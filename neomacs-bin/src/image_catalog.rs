@@ -157,6 +157,7 @@ impl ImageCatalog for AsyncImageCatalog {
             ImageResolveRequest {
                 source: source.clone(),
                 size: Default::default(),
+                rotation: Default::default(),
                 fg_color: 0,
                 bg_color: 0,
                 realization: Default::default(),
@@ -317,6 +318,7 @@ fn image_load_command(request: &ImageResolveRequest, image_id: u32) -> RenderCom
             id: image_id,
             path: path.as_utf8_str().unwrap_or_default().to_owned(),
             size: request.size,
+            rotation: request.rotation,
             realization: request.realization,
             fg_color: request.fg_color,
             bg_color: request.bg_color,
@@ -325,6 +327,7 @@ fn image_load_command(request: &ImageResolveRequest, image_id: u32) -> RenderCom
             id: image_id,
             data: data.clone(),
             size: request.size,
+            rotation: request.rotation,
             realization: request.realization,
             fg_color: request.fg_color,
             bg_color: request.bg_color,

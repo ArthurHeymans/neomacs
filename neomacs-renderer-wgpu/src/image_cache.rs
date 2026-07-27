@@ -6,7 +6,7 @@
 //! - GPU texture upload when ready
 //! - LRU cache with memory limits
 
-use neomacs_display_protocol::{ImageRealization, ImageSizeSpec};
+use neomacs_display_protocol::{ImageRealization, ImageRotation, ImageSizeSpec};
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::fs::File;
@@ -127,7 +127,12 @@ impl DecodedPixels {
     /// before decoding, so `:width`/`:height`/`:max-*` are applied here rather
     /// than as a bounding box handed to the decoder. With `AxisSize::Native` on
     /// both axes this reduces to `layout_dimension`, the previous behavior.
-    fn realize_bitmap(self, size: ImageSizeSpec, realization: ImageRealization) -> Option<Self> {
+    fn realize_bitmap(
+        self,
+        size: ImageSizeSpec,
+        rotation: ImageRotation,
+        realization: ImageRealization,
+    ) -> Option<Self> {
         let (layout_width, layout_height) = size.desired(
             self.layout_width,
             self.layout_height,
@@ -150,6 +155,25 @@ impl DecodedPixels {
             )
             .into_raw()
         };
+        // GNU rotates AFTER sizing, so `:width` sizes the upright image and the
+        // turn then exchanges the axes (src/image.c:3169-3201). Quarter turns
+        // are lossless, which is exactly why GNU only offers multiples of 90.
+        let (rgba, raster_width, raster_height) = match rotation {
+            ImageRotation::None => (rgba, raster_width, raster_height),
+            turn => {
+                let source = image::RgbaImage::from_raw(raster_width, raster_height, rgba)?;
+                let turned = match turn {
+                    ImageRotation::Quarter => image::imageops::rotate90(&source),
+                    ImageRotation::Half => image::imageops::rotate180(&source),
+                    ImageRotation::ThreeQuarter => image::imageops::rotate270(&source),
+                    ImageRotation::None => unreachable!("handled above"),
+                };
+                let (width, height) = (turned.width(), turned.height());
+                (turned.into_raw(), width, height)
+            }
+        };
+        let (layout_width, layout_height) = rotation.orient(layout_width, layout_height);
+
         Some(Self {
             layout_width,
             layout_height,
@@ -286,6 +310,7 @@ struct DecodeRequest {
     load: ImageLoadToken,
     source: ImageSource,
     size: ImageSizeSpec,
+    rotation: ImageRotation,
     /// Semantic and device geometry resolved by evaluator/layout.
     realization: ImageRealization,
     /// Foreground color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.
@@ -429,6 +454,7 @@ impl ImageCache {
                         load,
                         source,
                         size,
+                        rotation,
                         realization,
                         fg_color,
                         bg_color,
@@ -439,25 +465,29 @@ impl ImageCache {
                             #[cfg(test)]
                             ImageSource::Panic => panic!("injected decoder panic"),
                             ImageSource::File(path) => {
-                                Self::decode_file(&path, size, fg_bg, realization)
+                                Self::decode_file(&path, size, rotation, fg_bg, realization)
                             }
                             ImageSource::Data(data) => {
-                                Self::decode_data(&data, size, fg_bg, realization)
+                                Self::decode_data(&data, size, rotation, fg_bg, realization)
                             }
                             ImageSource::RawArgb32 {
                                 data,
                                 width,
                                 height,
                                 stride,
-                            } => Self::convert_argb32_to_rgba(&data, width, height, stride, size)
-                                .map(DecodedPixels::from_raster_tuple),
+                            } => Self::convert_argb32_to_rgba(
+                                &data, width, height, stride, size, rotation,
+                            )
+                            .map(DecodedPixels::from_raster_tuple),
                             ImageSource::RawRgb24 {
                                 data,
                                 width,
                                 height,
                                 stride,
-                            } => Self::convert_rgb24_to_rgba(&data, width, height, stride, size)
-                                .map(DecodedPixels::from_raster_tuple),
+                            } => Self::convert_rgb24_to_rgba(
+                                &data, width, height, stride, size, rotation,
+                            )
+                            .map(DecodedPixels::from_raster_tuple),
                         }
                     }));
 
@@ -503,74 +533,102 @@ impl ImageCache {
     fn decode_file(
         path: &str,
         size: ImageSizeSpec,
+        rotation: ImageRotation,
         fg_bg: (u32, u32),
         realization: ImageRealization,
     ) -> Option<DecodedPixels> {
         if let Ok(img) = image::open(path) {
-            return Self::process_image(img)?.realize_bitmap(size, realization);
+            return Self::process_image(img)?.realize_bitmap(size, rotation, realization);
         }
         // Fallback: try XPM
         if let Some(result) = crate::xpm::decode_xpm_file(Path::new(path)) {
-            return DecodedPixels::from_raster_tuple(result).realize_bitmap(size, realization);
+            return DecodedPixels::from_raster_tuple(result).realize_bitmap(
+                size,
+                rotation,
+                realization,
+            );
         }
         // Fallback: try XBM
         let fg = Self::argb_to_rgba(fg_bg.0, [255, 255, 255, 255]);
         let bg = Self::argb_to_rgba(fg_bg.1, [0, 0, 0, 255]);
         if let Some(result) = crate::xbm::decode_xbm_file(Path::new(path), fg, bg) {
-            return DecodedPixels::from_raster_tuple(result).realize_bitmap(size, realization);
+            return DecodedPixels::from_raster_tuple(result).realize_bitmap(
+                size,
+                rotation,
+                realization,
+            );
         }
         // Fallback: try SVG via the shared vector backend.
         let data = std::fs::read(path).ok()?;
-        Self::decode_svg_data(&data, size, realization)
+        Self::decode_svg_data(&data, size, rotation, realization)
     }
 
     /// Decode image data with size constraints
     fn decode_data(
         data: &[u8],
         size: ImageSizeSpec,
+        rotation: ImageRotation,
         fg_bg: (u32, u32),
         realization: ImageRealization,
     ) -> Option<DecodedPixels> {
         if let Ok(img) = image::load_from_memory(data) {
-            return Self::process_image(img)?.realize_bitmap(size, realization);
+            return Self::process_image(img)?.realize_bitmap(size, rotation, realization);
         }
         // Fallback: try XPM
         if let Some(result) = crate::xpm::decode_xpm_data(data) {
-            return DecodedPixels::from_raster_tuple(result).realize_bitmap(size, realization);
+            return DecodedPixels::from_raster_tuple(result).realize_bitmap(
+                size,
+                rotation,
+                realization,
+            );
         }
         // Fallback: try XBM
         let fg = Self::argb_to_rgba(fg_bg.0, [255, 255, 255, 255]);
         let bg = Self::argb_to_rgba(fg_bg.1, [0, 0, 0, 255]);
         if let Some(result) = crate::xbm::decode_xbm_data(data, fg, bg) {
-            return DecodedPixels::from_raster_tuple(result).realize_bitmap(size, realization);
+            return DecodedPixels::from_raster_tuple(result).realize_bitmap(
+                size,
+                rotation,
+                realization,
+            );
         }
         // Fallback: try SVG via the shared vector backend.
-        Self::decode_svg_data(data, size, realization)
+        Self::decode_svg_data(data, size, rotation, realization)
     }
 
     #[cfg(test)]
     fn decode_data_with_metadata(
         data: &[u8],
         size: ImageSizeSpec,
+        rotation: ImageRotation,
         fg_bg: (u32, u32),
     ) -> Option<DecodedImage> {
-        Self::decode_data_with_metadata_at_scale(data, size, fg_bg, 1.0)
+        Self::decode_data_with_metadata_at_scale(data, size, rotation, fg_bg, 1.0)
     }
 
     #[cfg(test)]
     fn decode_data_with_metadata_at_scale(
         data: &[u8],
         size: ImageSizeSpec,
+        rotation: ImageRotation,
         fg_bg: (u32, u32),
         raster_scale: f32,
     ) -> Option<DecodedImage> {
-        Self::decode_data_with_metadata_at_realization(data, size, fg_bg, 1.0, raster_scale)
+        Self::decode_data_with_metadata_at_realization(
+            data,
+            size,
+            rotation,
+            fg_bg,
+            1.0,
+            raster_scale,
+        )
     }
 
     #[cfg(test)]
     fn decode_data_with_metadata_at_realization(
         data: &[u8],
         size: ImageSizeSpec,
+        rotation: ImageRotation,
         fg_bg: (u32, u32),
         layout_scale: f32,
         device_scale: f32,
@@ -578,6 +636,7 @@ impl ImageCache {
         let pixels = Self::decode_data(
             data,
             size,
+            rotation,
             fg_bg,
             ImageRealization::new(layout_scale, device_scale),
         )?;
@@ -662,9 +721,10 @@ impl ImageCache {
     fn decode_svg_data(
         data: &[u8],
         size: ImageSizeSpec,
+        rotation: ImageRotation,
         realization: ImageRealization,
     ) -> Option<DecodedPixels> {
-        let decoded = crate::svg::decode(data, size, realization)?;
+        let decoded = crate::svg::decode(data, size, rotation, realization)?;
         Some(DecodedPixels {
             layout_width: decoded.layout_width,
             layout_height: decoded.layout_height,
@@ -691,6 +751,7 @@ impl ImageCache {
         height: u32,
         stride: u32,
         size: ImageSizeSpec,
+        rotation: ImageRotation,
     ) -> Option<(u32, u32, Vec<u8>)> {
         let bytes_per_pixel = 4u32;
         let expected_min_size = (height.saturating_sub(1)) * stride + width * bytes_per_pixel;
@@ -746,6 +807,7 @@ impl ImageCache {
         height: u32,
         stride: u32,
         size: ImageSizeSpec,
+        rotation: ImageRotation,
     ) -> Option<(u32, u32, Vec<u8>)> {
         let bytes_per_pixel = 3u32;
         let expected_min_size = (height.saturating_sub(1)) * stride + width * bytes_per_pixel;
@@ -873,6 +935,7 @@ impl ImageCache {
         &mut self,
         path: &str,
         size: ImageSizeSpec,
+        rotation: ImageRotation,
         fg_color: u32,
         bg_color: u32,
         raster_scale: f32,
@@ -882,6 +945,7 @@ impl ImageCache {
             id,
             path,
             size,
+            rotation,
             ImageRealization::new(1.0, raster_scale),
             fg_color,
             bg_color,
@@ -895,6 +959,7 @@ impl ImageCache {
         id: u32,
         data: &[u8],
         size: ImageSizeSpec,
+        rotation: ImageRotation,
         realization: ImageRealization,
         fg_color: u32,
         bg_color: u32,
@@ -918,6 +983,7 @@ impl ImageCache {
             load,
             source: ImageSource::Data(data.to_vec()),
             size,
+            rotation,
             realization,
             fg_color,
             bg_color,
@@ -931,6 +997,7 @@ impl ImageCache {
         id: u32,
         path: &str,
         size: ImageSizeSpec,
+        rotation: ImageRotation,
         realization: ImageRealization,
         fg_color: u32,
         bg_color: u32,
@@ -955,6 +1022,7 @@ impl ImageCache {
             load,
             source: ImageSource::File(path.to_string()),
             size,
+            rotation,
             realization,
             fg_color,
             bg_color,
@@ -972,6 +1040,7 @@ impl ImageCache {
         &mut self,
         data: &[u8],
         size: ImageSizeSpec,
+        rotation: ImageRotation,
         fg_color: u32,
         bg_color: u32,
         raster_scale: f32,
@@ -997,6 +1066,7 @@ impl ImageCache {
             load,
             source: ImageSource::Data(data.to_vec()),
             size,
+            rotation,
             realization: ImageRealization::new(1.0, raster_scale),
             fg_color,
             bg_color,
@@ -1015,6 +1085,7 @@ impl ImageCache {
         height: u32,
         stride: u32,
         size: ImageSizeSpec,
+        rotation: ImageRotation,
     ) -> u32 {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let load = self.begin_load(id);
@@ -1040,6 +1111,7 @@ impl ImageCache {
                 stride,
             },
             size,
+            rotation,
             realization: ImageRealization::default(),
             fg_color: 0,
             bg_color: 0,
@@ -1058,6 +1130,7 @@ impl ImageCache {
         height: u32,
         stride: u32,
         size: ImageSizeSpec,
+        rotation: ImageRotation,
     ) -> u32 {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let load = self.begin_load(id);
@@ -1083,6 +1156,7 @@ impl ImageCache {
                 stride,
             },
             size,
+            rotation,
             realization: ImageRealization::default(),
             fg_color: 0,
             bg_color: 0,
@@ -1105,6 +1179,7 @@ impl ImageCache {
             .insert(id, ImageDimensions { width, height });
         self.states.insert(id, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
+            rotation: ImageRotation::None,
             load,
             source: ImageSource::RawArgb32 {
                 data: data.to_vec(),
@@ -1133,6 +1208,7 @@ impl ImageCache {
             .insert(id, ImageDimensions { width, height });
         self.states.insert(id, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
+            rotation: ImageRotation::None,
             load,
             source: ImageSource::RawRgb24 {
                 data: data.to_vec(),
