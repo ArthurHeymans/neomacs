@@ -173,6 +173,7 @@ mod applescript_mode;
 mod apropospriate_theme;
 mod apt_sources_list;
 mod aqi;
+mod arch_packer;
 mod archive_phar;
 mod async_package;
 mod at_package;
