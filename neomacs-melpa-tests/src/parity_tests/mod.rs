@@ -198,6 +198,7 @@ mod ast_grep;
 mod astro_ts_mode;
 mod astute;
 mod astyle;
+mod async_backup;
 mod async_package;
 mod at_package;
 mod bind_key;

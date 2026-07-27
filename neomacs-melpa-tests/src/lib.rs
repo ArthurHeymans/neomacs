@@ -858,6 +858,12 @@ pub const ASTUTE_MELPA_PIN: (&str, &str) = ("astute", "20241015.444");
 /// `04ff2941f08c4b731fe6a18ee1697436d1ca1cc0`.
 pub const ASTYLE_MELPA_PIN: (&str, &str) = ("astyle", "20200328.616");
 
+/// The exact async-backup package selected by the comprehensive path,
+/// predicate, process, save-hook, and backup-lifecycle parity corpus. MELPA
+/// built this archive from upstream commit
+/// `d07a7bd4a5c3332a8a585680d67925385c595927`.
+pub const ASYNC_BACKUP_MELPA_PIN: (&str, &str) = ("async-backup", "20230412.1534");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
