@@ -153,6 +153,7 @@ mod ansible_doc;
 mod ansible_vault;
 mod ansilove;
 mod ant;
+mod anti_zenburn_theme;
 mod async_package;
 mod at_package;
 mod bind_key;

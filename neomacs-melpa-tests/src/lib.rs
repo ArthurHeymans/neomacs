@@ -650,6 +650,10 @@ pub const ANSILOVE_MELPA_PIN: (&str, &str) = ("ansilove", "20250105.1853");
 /// corpus.
 pub const ANT_MELPA_PIN: (&str, &str) = ("ant", "20160211.1543");
 
+/// The exact Anti-Zenburn Theme package selected by the comprehensive theme
+/// parity corpus.
+pub const ANTI_ZENBURN_THEME_MELPA_PIN: (&str, &str) = ("anti-zenburn-theme", "20180712.1838");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
