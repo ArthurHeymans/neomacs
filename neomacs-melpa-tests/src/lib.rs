@@ -272,6 +272,10 @@ pub const ACTIVITY_WATCH_MODE_MELPA_PIN: (&str, &str) = ("activity-watch-mode", 
 /// The exact acton-mode package selected by the comprehensive API parity corpus.
 pub const ACTON_MODE_MELPA_PIN: (&str, &str) = ("acton-mode", "20250113.1059");
 
+/// The exact ada-ts-mode package selected by the comprehensive API parity
+/// corpus.
+pub const ADA_TS_MODE_MELPA_PIN: (&str, &str) = ("ada-ts-mode", "20260627.1553");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
@@ -1192,6 +1196,236 @@ pub fn prepare_cached_gnu_elpa_package(
     package: (&str, &str),
 ) -> Result<PathBuf, String> {
     prepare_cached_package(gnu_emacs, package, GNU_ELPA_ARCHIVE)
+}
+
+/// Build one exact Tree-sitter grammar into a cross-process cache below
+/// `<workspace>/tmp/melpa/tree-sitter-grammar-cache`.
+///
+/// GNU Emacs performs the build through its native grammar installer so the
+/// compiler and shared-library conventions match the host platform. The
+/// returned directory can be added to `treesit-extra-load-path` for both
+/// editor adapters.
+pub fn prepare_cached_tree_sitter_grammar(
+    gnu_emacs: &EmacsRuntime,
+    language: &str,
+    repository: &str,
+    revision: &str,
+) -> Result<PathBuf, String> {
+    if language.is_empty()
+        || !language
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+        || !repository.starts_with("https://github.com/")
+        || revision.len() != 40
+        || !revision
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        return Err(format!(
+            "cached Tree-sitter grammar requires a safe language, GitHub repository, and full revision, got `{language}` `{repository}` `{revision}`"
+        ));
+    }
+
+    let root = workspace_root()
+        .join("tmp/melpa/tree-sitter-grammar-cache")
+        .join(language)
+        .join(revision);
+    fs::create_dir_all(&root).map_err(|error| {
+        format!(
+            "failed to create Tree-sitter grammar cache root {}: {error}",
+            root.display()
+        )
+    })?;
+    let lock_path = root.join("prepare.lock");
+    let lock = fs::OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .truncate(false)
+        .open(&lock_path)
+        .map_err(|error| {
+            format!(
+                "failed to open Tree-sitter grammar cache lock {}: {error}",
+                lock_path.display()
+            )
+        })?;
+    fs4::FileExt::lock(&lock).map_err(|error| {
+        format!(
+            "failed to lock Tree-sitter grammar cache {}: {error}",
+            root.display()
+        )
+    })?;
+
+    let home = root.join("home");
+    let tmp = root.join("tmp");
+    let source = root.join("source");
+    let grammar_dir = home.join(".emacs.d/tree-sitter");
+    let ready_marker = root.join("ready");
+    let expected_marker = format!("{language}\t{repository}\t{revision}\n");
+    let cache_is_ready = grammar_library_exists(&grammar_dir, language)
+        && fs::read_to_string(&ready_marker).is_ok_and(|contents| contents == expected_marker);
+    if cache_is_ready {
+        return Ok(grammar_dir);
+    }
+
+    for directory in [&home, &tmp, &source] {
+        if directory.exists() {
+            fs::remove_dir_all(directory).map_err(|error| {
+                format!(
+                    "failed to remove incomplete Tree-sitter grammar cache {}: {error}",
+                    directory.display()
+                )
+            })?;
+        }
+    }
+    if ready_marker.exists() {
+        fs::remove_file(&ready_marker).map_err(|error| {
+            format!(
+                "failed to remove invalid Tree-sitter grammar marker {}: {error}",
+                ready_marker.display()
+            )
+        })?;
+    }
+    for directory in [
+        home.join(".emacs.d"),
+        tmp.clone(),
+        root.join("xdg/config"),
+        root.join("xdg/cache"),
+        root.join("xdg/data"),
+        root.join("xdg/state"),
+    ] {
+        fs::create_dir_all(&directory).map_err(|error| {
+            format!(
+                "failed to create Tree-sitter grammar cache directory {}: {error}",
+                directory.display()
+            )
+        })?;
+    }
+
+    let source_arg = source.to_string_lossy().into_owned();
+    let run_git = |arguments: &[&str]| -> Result<(), String> {
+        let mut command = Command::new("git");
+        configure_process_environment(&mut command, &root, &home, &tmp);
+        command.args(arguments);
+        let output =
+            output_with_timeout(&mut command, gnu_emacs.timeout).map_err(|error| match error {
+                CommandError::Launch(error) => format!(
+                    "failed to launch git for cached Tree-sitter grammar `{language}`: {error}"
+                ),
+                CommandError::TimedOut => format!(
+                    "git timed out while preparing cached Tree-sitter grammar `{language}`"
+                ),
+                CommandError::Capture(error) => format!(
+                    "failed to capture git output for cached Tree-sitter grammar `{language}`: {error}"
+                ),
+            })?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(format!(
+                "git failed while preparing cached Tree-sitter grammar `{language}`\nstatus: {:?}\nstdout:\n{}\nstderr:\n{}",
+                output.status.code(),
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            ))
+        }
+    };
+    run_git(&["init", "--quiet", &source_arg])?;
+    run_git(&["-C", &source_arg, "remote", "add", "origin", repository])?;
+    run_git(&[
+        "-C",
+        &source_arg,
+        "fetch",
+        "--quiet",
+        "--depth",
+        "1",
+        "origin",
+        revision,
+    ])?;
+    run_git(&[
+        "-C",
+        &source_arg,
+        "checkout",
+        "--quiet",
+        "--detach",
+        "FETCH_HEAD",
+    ])?;
+
+    let language_symbol = language;
+    let source_string = elisp_string(&source_arg);
+    let form = format!(
+        r##"(progn
+               (require 'treesit)
+               (setq user-emacs-directory
+                     (file-name-as-directory
+                      (expand-file-name ".emacs.d" (getenv "HOME")))
+                     treesit-language-source-alist
+                     '(({language_symbol}
+                        {source_string})))
+               (treesit-install-language-grammar '{language_symbol})
+               (unless (treesit-language-available-p '{language_symbol})
+                 (error "Installed Tree-sitter grammar is unavailable: %s"
+                        '{language_symbol}))
+               (princ "NEOMACS-TREESIT-GRAMMAR-CACHE:ready"))"##
+    );
+    let mut command = gnu_emacs.command();
+    configure_process_environment(&mut command, &root, &home, &tmp);
+    command.args(["--batch", "--quick", "--eval", &form]);
+    let output =
+        output_with_timeout(&mut command, gnu_emacs.timeout).map_err(|error| match error {
+            CommandError::Launch(error) => format!(
+                "failed to launch {} for cached Tree-sitter grammar `{language}` in {}: {error}",
+                gnu_emacs.name,
+                root.display()
+            ),
+            CommandError::TimedOut => format!(
+                "{} cached Tree-sitter grammar `{language}` timed out after {:?} in {}",
+                gnu_emacs.name,
+                gnu_emacs.timeout,
+                root.display()
+            ),
+            CommandError::Capture(error) => format!(
+                "failed to capture {} cached Tree-sitter grammar `{language}` output: {error}",
+                gnu_emacs.name
+            ),
+        })?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success()
+        || !stdout.contains("NEOMACS-TREESIT-GRAMMAR-CACHE:ready")
+        || !grammar_library_exists(&grammar_dir, language)
+    {
+        return Err(format!(
+            "failed to prepare cached Tree-sitter grammar {language} at {revision} below {}\nstatus: {:?}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+            root.display(),
+            output.status.code()
+        ));
+    }
+
+    let marker_tmp = root.join(format!("ready.{}.tmp", std::process::id()));
+    fs::write(&marker_tmp, &expected_marker).map_err(|error| {
+        format!(
+            "failed to write Tree-sitter grammar cache marker {}: {error}",
+            marker_tmp.display()
+        )
+    })?;
+    fs::rename(&marker_tmp, &ready_marker).map_err(|error| {
+        format!(
+            "failed to publish Tree-sitter grammar cache marker {}: {error}",
+            ready_marker.display()
+        )
+    })?;
+    Ok(grammar_dir)
+}
+
+fn grammar_library_exists(grammar_dir: &Path, language: &str) -> bool {
+    let stem = format!("tree-sitter-{language}");
+    fs::read_dir(grammar_dir).is_ok_and(|entries| {
+        entries.filter_map(Result::ok).any(|entry| {
+            entry.file_type().is_ok_and(|file_type| file_type.is_file())
+                && entry.file_name().to_string_lossy().contains(&stem)
+        })
+    })
 }
 
 fn prepare_cached_package(
@@ -2236,7 +2470,7 @@ fn format_installed_packages(installed: &[InstalledPackage]) -> String {
         .join(", ")
 }
 
-fn elisp_string(value: &str) -> String {
+pub(crate) fn elisp_string(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
