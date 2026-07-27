@@ -66,6 +66,7 @@ mod ado_mode;
 mod adoc_mode;
 mod advent_mode;
 mod adwaita_dark_theme;
+mod afternoon_theme;
 mod async_package;
 mod at_package;
 mod bind_key;
