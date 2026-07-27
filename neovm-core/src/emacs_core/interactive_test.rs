@@ -2972,6 +2972,43 @@ fn command_execute_builtin_kill_region_uses_marked_region() {
 }
 
 #[test]
+fn call_interactively_builtin_delete_region_uses_its_registered_region_spec() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        r#"(with-temp-buffer
+             (insert "abcdef")
+             (goto-char 2)
+             (set-mark 5)
+             (call-interactively 'delete-region)
+             (list (interactive-form 'delete-region)
+                   (buffer-string)
+                   (point)))"#,
+    );
+    assert_eq!(results[0], "OK ((interactive \"r\") \"aef\" 2)");
+}
+
+#[test]
+fn registered_builtin_interactive_spec_is_the_command_identity_source() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.defsubr_interactive(
+        "neovm--typed-interactive-registration-test",
+        |_ctx, _args| Ok(Value::NIL),
+        0,
+        Some(0),
+        BuiltinInteractiveSpec::NoArgs,
+    );
+
+    let results = eval_all_with(
+        &mut ev,
+        r#"(list
+             (commandp 'neovm--typed-interactive-registration-test)
+             (interactive-form 'neovm--typed-interactive-registration-test))"#,
+    );
+    assert_eq!(results[0], "OK (t (interactive nil))");
+}
+
+#[test]
 fn call_interactively_builtin_kill_ring_save_uses_marked_region() {
     crate::test_utils::init_test_tracing();
     let results = bootstrap_eval_all(

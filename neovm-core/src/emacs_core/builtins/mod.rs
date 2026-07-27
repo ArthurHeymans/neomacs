@@ -1416,11 +1416,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         ),
     );
     ctx.defsubr("buffer-swap-text", builtin_buffer_swap_text, 1, Some(1));
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "delete-region",
         super::editfns::builtin_delete_region,
         2,
         Some(2),
+        super::interactive::BuiltinInteractiveSpec::String("r"),
     );
     ctx.defsubr(
         "delete-and-extract-region",
@@ -7569,7 +7570,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr("arrayp", |_ctx, args| builtin_arrayp(args), 1, Some(1));
-    ctx.defsubr("ignore", |_ctx, args| builtin_ignore(args), 0, None);
+    ctx.defsubr_interactive(
+        "ignore",
+        |_ctx, args| builtin_ignore(args),
+        0,
+        None,
+        super::interactive::BuiltinInteractiveSpec::NoArgs,
+    );
     ctx.defsubr(
         "cl-type-of",
         |_ctx, args| builtin_cl_type_of(args),

@@ -267,6 +267,7 @@ pub(crate) struct SubrEntry {
     pub(crate) max_args: Option<u16>,
     pub(crate) dispatch_kind: crate::tagged::header::SubrDispatchKind,
     pub(crate) name_id: crate::emacs_core::intern::NameId,
+    pub(crate) interactive_spec: Option<super::interactive::BuiltinInteractiveSpec>,
 }
 
 thread_local! {
@@ -341,6 +342,8 @@ pub(crate) fn subr_entry_from_value(function: Value) -> Option<(SymId, SubrEntry
             max_args: subr.max_args,
             dispatch_kind: subr.dispatch_kind,
             name_id: subr.name,
+            interactive_spec: lookup_global_subr_entry(subr.sym_id)
+                .and_then(|entry| entry.interactive_spec),
         },
     ))
 }
@@ -15895,6 +15898,7 @@ impl Context {
                     max_args,
                     dispatch_kind,
                     name_id,
+                    interactive_spec: None,
                 },
             );
             self.obarray.intern(name);
@@ -15922,6 +15926,28 @@ impl Context {
             crate::tagged::header::SubrFn::Many(func),
             min_args,
             max_args,
+        );
+    }
+
+    /// Register a Rust subr together with its Lisp interactive contract.
+    ///
+    /// This mirrors GNU's `DEFUN(..., intspec, ...)`: callability, arity, and
+    /// interactive argument acquisition are one definition rather than
+    /// independent name-based registries.
+    pub(crate) fn defsubr_interactive(
+        &mut self,
+        name: &str,
+        func: fn(&mut Context, Vec<Value>) -> EvalResult,
+        min_args: u16,
+        max_args: Option<u16>,
+        interactive_spec: super::interactive::BuiltinInteractiveSpec,
+    ) {
+        self.defsubr_with_entry_and_interactive(
+            name,
+            crate::tagged::header::SubrFn::Many(func),
+            min_args,
+            max_args,
+            Some(interactive_spec),
         );
     }
 
@@ -15993,6 +16019,17 @@ impl Context {
         min_args: u16,
         max_args: Option<u16>,
     ) {
+        self.defsubr_with_entry_and_interactive(name, func, min_args, max_args, None);
+    }
+
+    fn defsubr_with_entry_and_interactive(
+        &mut self,
+        name: &str,
+        func: crate::tagged::header::SubrFn,
+        min_args: u16,
+        max_args: Option<u16>,
+        interactive_spec: Option<super::interactive::BuiltinInteractiveSpec>,
+    ) {
         let (min_args, max_args, dispatch_kind) =
             super::subr_info::lookup_compat_subr_metadata(name, min_args, max_args);
         let sym_id = intern(name);
@@ -16007,6 +16044,7 @@ impl Context {
                 max_args,
                 dispatch_kind,
                 name_id,
+                interactive_spec,
             },
         );
 

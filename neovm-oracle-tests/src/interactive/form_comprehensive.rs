@@ -58,6 +58,27 @@ fn oracle_prop_interactive_form_extraction() {
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
+#[test]
+fn oracle_builtin_delete_region_uses_registered_region_interactive_spec() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU editfns.c registers delete-region with intspec "r".  data.c
+    // exposes it through interactive-form, and callint.c expands it into
+    // point and mark rather than invoking the two-argument subr with no args.
+    let form = r#"
+(with-temp-buffer
+  (insert "abcdef")
+  (goto-char 2)
+  (set-mark 5)
+  (call-interactively 'delete-region)
+  (list (interactive-form 'delete-region)
+        (buffer-string)
+        (point)))
+"#;
+    let expect = expect_test::expect![[r#""OK ((interactive \"r\") \"aef\" 2)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
 // ---------------------------------------------------------------------------
 // commandp with various argument types and optional for-call-interactively
 // ---------------------------------------------------------------------------

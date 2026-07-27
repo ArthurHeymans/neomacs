@@ -77,6 +77,26 @@ impl InteractiveSpec {
     }
 }
 
+/// Static interactive metadata attached to a registered Rust subr.
+///
+/// GNU stores this beside arity and the function pointer in `Lisp_Subr`.
+/// Keeping the no-argument and control-string states distinct prevents the
+/// command predicate from drifting away from the argument reader.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BuiltinInteractiveSpec {
+    NoArgs,
+    String(&'static str),
+}
+
+impl BuiltinInteractiveSpec {
+    fn into_interactive_form(self) -> Value {
+        match self {
+            Self::NoArgs => interactive_form_from_spec_value(Value::NIL),
+            Self::String(code) => interactive_form_from_string_spec(code),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // InteractiveRegistry — tracks which functions are interactive commands
 // ---------------------------------------------------------------------------
@@ -226,8 +246,13 @@ pub(crate) fn sync_interactive_registry_for_symbol_definition(
 }
 
 pub(crate) fn builtin_subr_interactive_form(name: &str) -> Option<Value> {
+    if let Some(spec) =
+        super::eval::lookup_global_subr_entry(intern(name)).and_then(|entry| entry.interactive_spec)
+    {
+        return Some(spec.into_interactive_form());
+    }
+
     match name {
-        "ignore" => Some(interactive_form_from_spec_value(Value::NIL)),
         "forward-char"
         | "backward-char"
         | "beginning-of-line"
@@ -1033,7 +1058,9 @@ fn symbol_utf8_name(symbol: SymId) -> Option<&'static str> {
 }
 
 fn builtin_command_symbol(symbol: SymId) -> bool {
-    symbol_utf8_name(symbol).is_some_and(builtin_command_name)
+    super::eval::lookup_global_subr_entry(symbol)
+        .is_some_and(|entry| entry.interactive_spec.is_some())
+        || symbol_utf8_name(symbol).is_some_and(builtin_command_name)
 }
 
 fn command_object_p_in_state(
