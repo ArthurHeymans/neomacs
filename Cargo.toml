@@ -232,6 +232,28 @@ opt-level = 0
 [profile.dev.package.tikv-jemalloc-sys]
 opt-level = 1
 
+# Optimized build driven by a PGO profile. Same codegen settings as release,
+# but cargo gives it its own target/release-pgo directory, so a PGO build never
+# replaces an ordinary release binary (or invalidates its pdump fingerprint).
+# The profile data itself is supplied by RUSTFLAGS, which xtask sets --
+# see `cargo xtask fresh-build --profile release-pgo`.
+[profile.release-pgo]
+inherits = "release"
+
+# PGO build that keeps its symbols, for profiling the configuration actually
+# shipped: PGO changes inlining and block layout, so hotspots measured on a
+# plain release build do not necessarily hold for release-pgo.
+[profile.release-pgo-profiling]
+inherits = "release-pgo"
+debug = true
+strip = "none"
+
+# Instrumented pass of a PGO build. Separate from release-pgo so the
+# counter-collecting binary (which is slow, and useless afterwards) never
+# occupies the directory the optimized one lands in.
+[profile.release-pgo-gen]
+inherits = "release"
+
 [profile.profiling]
 inherits = "release"
 debug = true
