@@ -426,6 +426,10 @@ pub const ALECTRYON_MELPA_PIN: (&str, &str) = ("alectryon", "20260525.2000");
 /// The exact alert package selected by the comprehensive API parity corpus.
 pub const ALERT_MELPA_PIN: (&str, &str) = ("alert", "20260316.2025");
 
+/// The exact alert-termux package selected by the comprehensive API parity
+/// corpus.
+pub const ALERT_TERMUX_MELPA_PIN: (&str, &str) = ("alert-termux", "20181119.951");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

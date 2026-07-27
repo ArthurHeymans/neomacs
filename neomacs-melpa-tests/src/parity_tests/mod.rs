@@ -101,6 +101,7 @@ mod alda_mode;
 mod alect_themes;
 mod alectryon;
 mod alert;
+mod alert_termux;
 mod async_package;
 mod at_package;
 mod bind_key;
