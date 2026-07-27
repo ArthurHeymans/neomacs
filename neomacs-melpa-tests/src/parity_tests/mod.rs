@@ -159,6 +159,7 @@ mod anybar;
 mod anyins;
 mod anzu;
 mod aozora_view;
+mod apache_mode;
 mod apdl_mode;
 mod async_package;
 mod at_package;
