@@ -2616,9 +2616,35 @@ pub(crate) fn builtin_constrain_to_field(
     let escape_from_edge = args.get(2).is_some_and(|value| value.is_truthy());
     let only_in_line = args.get(3).is_some_and(|value| value.is_truthy());
 
-    let old_capture_allowed = if let Some(capture_prop) =
-        args.get(4).filter(|value| !value.is_nil())
-    {
+    // GNU evaluates these probes lazily inside ONE short-circuiting `&&`
+    // (editfns.c `Fconstrain_to_field`): `inhibit-field-text-motion` and
+    // `new_pos == old_pos` are checked first, so a buffer with no field
+    // properties never pays for a single `get-char-property` lookup.
+    //
+    // Computing them eagerly cost ~5x GNU on `line-beginning-position`, which
+    // dired's font-lock calls once per line: 6 property lookups plus 4 `field`
+    // symbol interns on every call, all of them thrown away.
+    let inhibit_field_text_motion =
+        super::misc_eval::dynamic_or_global_symbol_value(eval, "inhibit-field-text-motion")
+            .is_some_and(|value| !value.is_nil());
+
+    let mut constrain = !inhibit_field_text_motion && new_pos != old_pos;
+
+    if constrain {
+        let field = Value::symbol("field");
+        let has_field = |eval: &super::eval::Context, pos: i64| -> Result<bool, Flow> {
+            Ok(
+                !char_property_in_current_buffer(&eval.obarray, &eval.buffers, pos, field)?
+                    .is_nil(),
+            )
+        };
+        constrain = has_field(eval, new_pos)?
+            || has_field(eval, old_pos)?
+            || (new_pos > point_min && has_field(eval, new_pos - 1)?)
+            || (old_pos > point_min && has_field(eval, old_pos - 1)?);
+    }
+
+    if constrain && let Some(capture_prop) = args.get(4).filter(|value| !value.is_nil()) {
         let old_capture = crate::emacs_core::builtins::misc_eval::builtin_get_pos_property_impl(
             &eval.obarray,
             &[],
@@ -2626,7 +2652,7 @@ pub(crate) fn builtin_constrain_to_field(
             &eval.buffers,
             vec![Value::fixnum(old_pos), *capture_prop],
         )?;
-        old_capture.is_nil()
+        constrain = old_capture.is_nil()
             && (old_pos <= point_min
                 || char_property_in_current_buffer(
                     &eval.obarray,
@@ -2641,51 +2667,10 @@ pub(crate) fn builtin_constrain_to_field(
                     old_pos - 1,
                     *capture_prop,
                 )?
-                .is_nil())
-    } else {
-        true
-    };
+                .is_nil());
+    }
 
-    let field_boundaries_present = !char_property_in_current_buffer(
-        &eval.obarray,
-        &eval.buffers,
-        new_pos,
-        Value::symbol("field"),
-    )?
-    .is_nil()
-        || !char_property_in_current_buffer(
-            &eval.obarray,
-            &eval.buffers,
-            old_pos,
-            Value::symbol("field"),
-        )?
-        .is_nil()
-        || (new_pos > point_min
-            && !char_property_in_current_buffer(
-                &eval.obarray,
-                &eval.buffers,
-                new_pos - 1,
-                Value::symbol("field"),
-            )?
-            .is_nil())
-        || (old_pos > point_min
-            && !char_property_in_current_buffer(
-                &eval.obarray,
-                &eval.buffers,
-                old_pos - 1,
-                Value::symbol("field"),
-            )?
-            .is_nil());
-
-    let inhibit_field_text_motion =
-        super::misc_eval::dynamic_or_global_symbol_value(eval, "inhibit-field-text-motion")
-            .is_some_and(|value| !value.is_nil());
-
-    if !inhibit_field_text_motion
-        && new_pos != old_pos
-        && field_boundaries_present
-        && old_capture_allowed
-    {
+    if constrain {
         let forward = new_pos > old_pos;
         let field_bound = if forward {
             expect_int(&builtin_field_end(
