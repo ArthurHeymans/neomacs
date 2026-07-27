@@ -1,0 +1,100 @@
+use std::time::Duration;
+
+use crate::{ASTYLE_MELPA_PIN, CachedMelpaOracle};
+use expect_test::Expect;
+
+mod arguments;
+mod commands;
+mod mode;
+mod registry;
+
+const ASTYLE_TEST_TIMEOUT: Duration = Duration::from_secs(120);
+const ASTYLE_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+(require 'seq)
+
+(defun astyle-test-path (filename)
+  (expand-file-name
+   filename
+   (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
+
+(defun astyle-test-read-file (filename)
+  (with-temp-buffer
+    (insert-file-contents-literally filename)
+    (buffer-string)))
+
+(defun astyle-test-install-formatter ()
+  (let* ((bin-directory
+          (file-name-as-directory
+           (astyle-test-path "bin")))
+         (program
+          (expand-file-name
+           "astyle"
+           bin-directory))
+         (argument-log
+          (astyle-test-path
+           "astyle-arguments.log")))
+    (make-directory bin-directory t)
+    (with-temp-file program
+      (insert
+       "#!/bin/sh\n"
+       "printf '%s\\n' \"$@\" > \"$ASTYLE_TEST_ARG_LOG\"\n"
+       "if [ \"$ASTYLE_TEST_FAIL\" = 1 ]; then\n"
+       "  printf '\\033[31mfixture formatter failed\\033[0m\\n' >&2\n"
+       "  exit 7\n"
+       "fi\n"
+       "sed -e 's/int main(){/int main() {/' "
+       "-e 's/^return 0;$/    return 0;/'\n"))
+    (set-file-modes program #o755)
+    (setq exec-path
+          (cons
+           bin-directory
+           exec-path))
+    (setenv
+     "PATH"
+     (concat
+      bin-directory
+      path-separator
+      (or (getenv "PATH") "")))
+    (setenv
+     "ASTYLE_TEST_ARG_LOG"
+     argument-log)
+    (setenv
+     "ASTYLE_TEST_FAIL"
+     nil)
+    (list program argument-log)))
+
+(defun astyle-test-kill-error-buffer ()
+  (when-let ((buffer
+              (get-buffer
+               "*astyle errors*")))
+    (kill-buffer buffer)))
+"##;
+
+fn astyle_oracle(source_file: &str) -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ASTYLE_MELPA_PIN, source_file)
+        .expect("prepare pinned astyle source below ./tmp")
+        .with_prelude(ASTYLE_TEST_PRELUDE)
+        .with_timeout(ASTYLE_TEST_TIMEOUT)
+}
+
+fn current_test_name() -> String {
+    let thread = std::thread::current();
+    thread.name().unwrap_or("unnamed astyle parity test").into()
+}
+
+fn assert_astyle_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+    let name = current_test_name();
+    let report = astyle_oracle(source_file)
+        .run_value(&name, elisp_form)
+        .unwrap_or_else(|error| panic!("astyle parity case `{name}` failed:\n{error}"));
+    expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+pub(crate) fn assert_astyle_parity(elisp_form: &str, expected: Expect) {
+    assert_astyle_source_parity("astyle.el", elisp_form, expected);
+}
+
+pub(crate) fn assert_astyle_autoload_parity(elisp_form: &str, expected: Expect) {
+    assert_astyle_source_parity("astyle-autoloads.el", elisp_form, expected);
+}

@@ -846,6 +846,12 @@ pub const ASTRO_TS_MODE_MELPA_PIN: (&str, &str) = ("astro-ts-mode", "20260417.10
 /// font-lock, customization, and minor-mode lifecycle parity corpus.
 pub const ASTUTE_MELPA_PIN: (&str, &str) = ("astute", "20241015.444");
 
+/// The exact Astyle package selected by the comprehensive argument selection,
+/// formatter-command, region, buffer, failure, and on-save parity corpus.
+/// MELPA built this archive from upstream commit
+/// `04ff2941f08c4b731fe6a18ee1697436d1ca1cc0`.
+pub const ASTYLE_MELPA_PIN: (&str, &str) = ("astyle", "20200328.616");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
