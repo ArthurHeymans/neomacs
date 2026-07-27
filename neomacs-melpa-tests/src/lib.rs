@@ -473,6 +473,10 @@ pub const ALL_THE_ICONS_GNUS_MELPA_PIN: (&str, &str) = ("all-the-icons-gnus", "2
 pub const ALL_THE_ICONS_IBUFFER_MELPA_PIN: (&str, &str) =
     ("all-the-icons-ibuffer", "20230503.1625");
 
+/// The exact all-the-icons-ivy package selected by the comprehensive API
+/// parity corpus.
+pub const ALL_THE_ICONS_IVY_MELPA_PIN: (&str, &str) = ("all-the-icons-ivy", "20190508.1803");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

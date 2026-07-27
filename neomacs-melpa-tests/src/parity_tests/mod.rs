@@ -110,6 +110,7 @@ mod all_the_icons_completion;
 mod all_the_icons_dired;
 mod all_the_icons_gnus;
 mod all_the_icons_ibuffer;
+mod all_the_icons_ivy;
 mod async_package;
 mod at_package;
 mod bind_key;
