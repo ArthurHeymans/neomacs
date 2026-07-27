@@ -194,6 +194,7 @@ mod asilea;
 mod asm_blox;
 mod asn1_mode;
 mod assess;
+mod astro_ts_mode;
 mod astute;
 mod async_package;
 mod at_package;

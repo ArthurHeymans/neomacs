@@ -836,6 +836,12 @@ pub const ASN1_MODE_MELPA_PIN: (&str, &str) = ("asn1-mode", "20170729.226");
 /// `cadeb24a5d8261fad4bdfdc09e7d571cc395a6ca`.
 pub const ASSESS_MELPA_PIN: (&str, &str) = ("assess", "20240303.1454");
 
+/// The exact astro-ts-mode package selected by the comprehensive mixed-language
+/// Tree-sitter, indentation, font-lock, and editing-workflow parity corpus.
+/// MELPA built this archive from upstream commit
+/// `1d24c9d399dee4cfea6ed9b49d8e08891665e16c`.
+pub const ASTRO_TS_MODE_MELPA_PIN: (&str, &str) = ("astro-ts-mode", "20260417.101");
+
 /// The exact Astute package selected by the comprehensive typography,
 /// font-lock, customization, and minor-mode lifecycle parity corpus.
 pub const ASTUTE_MELPA_PIN: (&str, &str) = ("astute", "20241015.444");
