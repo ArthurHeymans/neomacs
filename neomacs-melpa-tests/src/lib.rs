@@ -297,6 +297,10 @@ pub const ADO_MODE_MELPA_PIN: (&str, &str) = ("ado-mode", "20260210.1431");
 /// The exact adoc-mode package selected by the comprehensive API parity corpus.
 pub const ADOC_MODE_MELPA_PIN: (&str, &str) = ("adoc-mode", "20260612.638");
 
+/// The exact advent-mode package selected by the comprehensive API parity
+/// corpus.
+pub const ADVENT_MODE_MELPA_PIN: (&str, &str) = ("advent-mode", "20260209.1903");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
