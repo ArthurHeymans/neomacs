@@ -798,6 +798,10 @@ pub const ARVIEW_MELPA_PIN: (&str, &str) = ("arview", "20160419.2109");
 /// rendering, navigation, and command-workflow parity corpus.
 pub const ASCII_TABLE_MELPA_PIN: (&str, &str) = ("ascii-table", "20231215.1527");
 
+/// The exact Asilea package selected by the comprehensive annealing,
+/// compiler-option, process, and callback parity corpus.
+pub const ASILEA_MELPA_PIN: (&str, &str) = ("asilea", "20150105.1525");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
