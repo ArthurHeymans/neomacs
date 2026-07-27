@@ -63,6 +63,12 @@ pub const ASYNC_GNU_ELPA_PIN: (&str, &str) = ("async", "1.9.9");
 /// `5faab28916603bb324d9faba057021ce028ca847`.
 pub const ASYNC_MELPA_PIN: (&str, &str) = ("async", "20260318.1803");
 
+/// The exact async1 package selected by the comprehensive callback-chain,
+/// scheduler, parallel aggregation, and timer parity corpus. MELPA built this
+/// archive from upstream commit
+/// `88cccffe14bdd0a61dbb2e33edf8c335706f24dc`.
+pub const ASYNC1_MELPA_PIN: (&str, &str) = ("async1", "20260421.2116");
+
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 

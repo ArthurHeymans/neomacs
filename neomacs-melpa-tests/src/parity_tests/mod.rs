@@ -199,6 +199,7 @@ mod astro_ts_mode;
 mod astute;
 mod astyle;
 mod asx;
+mod async1;
 mod async_await;
 mod async_backup;
 mod async_http_queue;
