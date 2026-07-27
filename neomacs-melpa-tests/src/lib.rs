@@ -325,6 +325,10 @@ pub const AG_MELPA_PIN: (&str, &str) = ("ag", "20201031.2202");
 /// parity corpus.
 pub const AGDA_EDITOR_TACTICS_MELPA_PIN: (&str, &str) = ("agda-editor-tactics", "20211024.2357");
 
+/// The exact agda-lib-mode package selected by the comprehensive API parity
+/// corpus.
+pub const AGDA_LIB_MODE_MELPA_PIN: (&str, &str) = ("agda-lib-mode", "20251013.2307");
+
 /// The exact agenix package selected by the comprehensive API parity corpus.
 pub const AGENIX_MELPA_PIN: (&str, &str) = ("agenix", "20250209.551");
 
