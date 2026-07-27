@@ -91,6 +91,7 @@ mod aidermacs;
 mod aidev_mode;
 mod aiken_mode;
 mod aio;
+mod airline_themes;
 mod async_package;
 mod at_package;
 mod bind_key;
