@@ -308,6 +308,9 @@ pub const ADWAITA_DARK_THEME_MELPA_PIN: (&str, &str) = ("adwaita-dark-theme", "2
 /// The exact AES package selected by the comprehensive API parity corpus.
 pub const AES_MELPA_PIN: (&str, &str) = ("aes", "20211204.2348");
 
+/// The exact Affe package selected by the comprehensive API parity corpus.
+pub const AFFE_MELPA_PIN: (&str, &str) = ("affe", "20260519.1026");
+
 /// The exact Afterglow package selected by the comprehensive API parity corpus.
 pub const AFTERGLOW_MELPA_PIN: (&str, &str) = ("afterglow", "20240312.953");
 

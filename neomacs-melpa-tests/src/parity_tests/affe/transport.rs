@@ -1,0 +1,106 @@
+use expect_test::expect;
+
+use super::assert_affe_parity;
+
+#[test]
+fn affe_send_serializes_symbols_lists_unicode_and_embedded_newlines() {
+    let elisp_form = r##"(let (calls)
+               (cl-letf
+                   (((symbol-function
+                      'process-send-string)
+                     (lambda (process string)
+                       (push (list process string)
+                             calls)
+                       'sent)))
+                 (list
+                  (affe--send 'client
+                              '(search 20 "α" "a\nb"))
+                  (affe--send 'client 'exit)
+                  (nreverse calls))))"##;
+    let expect =
+        expect![[r#"OK (sent sent ((client "(search 20 \"α\" \"a\\nb\")\n") (client "exit\n")))"#]];
+    assert_affe_parity(elisp_form, expect);
+}
+
+#[test]
+fn affe_connect_frames_fragmented_lines_flushes_tail_and_builds_local_socket_process() {
+    let elisp_form = r##"(let (arguments callbacks)
+               (cl-letf
+                   (((symbol-function
+                      'make-network-process)
+                     (lambda (&rest args)
+                       (setq arguments args)
+                       'network-client)))
+                 (let ((result
+                        (affe--connect
+                         "affe-socket"
+                         (lambda (lines)
+                           (push lines callbacks)))))
+                   (let ((filter
+                          (plist-get arguments :filter))
+                         (sentinel
+                          (plist-get arguments
+                                     :sentinel)))
+                     (funcall filter nil "one")
+                     (funcall filter nil
+                              " two\nthree\nfour")
+                     (funcall filter nil "\nfive\n")
+                     (funcall sentinel nil "open")
+                     (funcall filter nil "tail")
+                     (funcall sentinel nil "closed")
+                     (list
+                      result
+                      (plist-get arguments :name)
+                      (plist-get arguments :noquery)
+                      (plist-get arguments :coding)
+                      (plist-get arguments :family)
+                      (file-name-nondirectory
+                       (plist-get arguments
+                                  :service))
+                      (nreverse callbacks))))))"##;
+    let expect = expect![[
+        r#"OK (network-client "affe-socket" t utf-8 local "affe-socket" (("one two" "three") ("four" "five") ("tail")))"#
+    ]];
+    assert_affe_parity(elisp_form, expect);
+}
+
+#[test]
+fn affe_connect_keeps_independent_fragment_state_per_connection() {
+    let elisp_form = r##"(let (processes first second)
+               (cl-letf
+                   (((symbol-function
+                      'make-network-process)
+                     (lambda (&rest arguments)
+                       (push arguments processes)
+                       (length processes))))
+                 (affe--connect
+                  "first"
+                 (lambda (lines)
+                    (push lines first)))
+                 (let ((first-filter
+                        (plist-get (car processes)
+                                   :filter))
+                       (first-sentinel
+                        (plist-get (car processes)
+                                   :sentinel)))
+                   (affe--connect
+                    "second"
+                    (lambda (lines)
+                      (push lines second)))
+                   (let ((second-filter
+                          (plist-get (car processes)
+                                     :filter))
+                         (second-sentinel
+                          (plist-get (car processes)
+                                     :sentinel)))
+                     (funcall first-filter nil "a")
+                     (funcall second-filter nil "b\n")
+                     (funcall first-sentinel nil "closed")
+                     (funcall second-filter nil "c")
+                     (funcall second-sentinel nil "closed")
+                     (list
+                      (nreverse first)
+                      (nreverse second))))))"##;
+    let expect = expect![[r#"OK ((("a")) (("b") ("c")))"#]];
+    assert_affe_parity(elisp_form, expect);
+}

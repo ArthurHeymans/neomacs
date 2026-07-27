@@ -67,6 +67,7 @@ mod adoc_mode;
 mod advent_mode;
 mod adwaita_dark_theme;
 mod aes;
+mod affe;
 mod afterglow;
 mod afternoon_theme;
 mod ag;
