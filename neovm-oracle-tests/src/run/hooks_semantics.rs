@@ -50,6 +50,27 @@ fn oracle_run_hooks_calls_function_value_hook() {
 }
 
 #[test]
+fn oracle_run_hooks_treats_raw_lambda_list_as_one_function() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let expect = expect_test::expect![[r#""OK (t nil 1)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(progn
+  (defvar neovm--test-raw-lambda-hook nil)
+  (defvar neovm--test-raw-lambda-count 0)
+  (setq neovm--test-raw-lambda-hook
+        '(lambda ()
+           (setq neovm--test-raw-lambda-count
+                 (1+ neovm--test-raw-lambda-count))))
+  (list (functionp neovm--test-raw-lambda-hook)
+        (run-hooks 'neovm--test-raw-lambda-hook)
+        neovm--test-raw-lambda-count))"#,
+        expect,
+    );
+    assert_ok_eq("(t nil 1)", &oracle, &neovm);
+}
+
+#[test]
 fn oracle_run_hooks_calls_list_of_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

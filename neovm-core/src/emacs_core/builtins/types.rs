@@ -224,9 +224,9 @@ pub(crate) fn builtin_functionp(eval: &mut super::eval::Context, args: Vec<Value
     builtin_functionp_1(eval, args[0])
 }
 
-pub(crate) fn builtin_functionp_1(eval: &mut super::eval::Context, arg: Value) -> EvalResult {
+pub(crate) fn value_is_function(eval: &super::eval::Context, arg: Value) -> bool {
     let object = eval.unwrap_symbol(arg);
-    let is_function = if let Some(symbol) = match object.kind() {
+    if let Some(symbol) = match object.kind() {
         ValueKind::Nil => Some(intern("nil")),
         ValueKind::T => Some(intern("t")),
         ValueKind::Symbol(id) => Some(id),
@@ -259,8 +259,11 @@ pub(crate) fn builtin_functionp_1(eval: &mut super::eval::Context, arg: Value) -
             }
             _ => false,
         }
-    };
-    Ok(Value::bool_val(is_function))
+    }
+}
+
+pub(crate) fn builtin_functionp_1(eval: &mut super::eval::Context, arg: Value) -> EvalResult {
+    Ok(Value::bool_val(value_is_function(eval, arg)))
 }
 
 pub(crate) fn builtin_hash_table_p(args: Vec<Value>) -> EvalResult {

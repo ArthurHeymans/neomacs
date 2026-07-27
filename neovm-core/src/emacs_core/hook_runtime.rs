@@ -2,7 +2,6 @@ use super::builtins;
 use super::error::{EvalResult, Flow};
 use super::eval::Context;
 use super::intern::{SymId, intern};
-use super::symbol::Obarray;
 use super::value::*;
 use crate::emacs_core::value::ValueKind;
 
@@ -59,27 +58,46 @@ pub(crate) fn hook_value_by_id(ctx: &Context, hook_sym: SymId) -> Option<Value> 
     ctx.visible_runtime_variable_value_by_id_resolved(hook_sym)
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HookValueLayout {
+    Empty,
+    Single,
+    FunctionList,
+}
+
+fn hook_value_layout(ctx: &Context, hook_value: Value) -> HookValueLayout {
+    match hook_value.kind() {
+        ValueKind::Nil => HookValueLayout::Empty,
+        ValueKind::Cons if !builtins::value_is_function(ctx, hook_value) => {
+            HookValueLayout::FunctionList
+        }
+        _ => HookValueLayout::Single,
+    }
+}
+
 fn collect_hook_functions_impl(
-    obarray: &Obarray,
+    ctx: &Context,
     hook_sym: SymId,
     hook_value: Value,
     inherit_global: bool,
     out: &mut Vec<Value>,
 ) {
-    match hook_value.kind() {
-        ValueKind::Nil => {}
-        ValueKind::Cons => {
+    match hook_value_layout(ctx, hook_value) {
+        HookValueLayout::Empty => {}
+        HookValueLayout::Single => out.push(hook_value),
+        HookValueLayout::FunctionList => {
             let mut cursor = hook_value;
             while cursor.is_cons() {
                 let pair_car = cursor.cons_car();
                 let pair_cdr = cursor.cons_cdr();
                 if pair_car.is_t() {
                     if inherit_global {
-                        let global_value = obarray
+                        let global_value = ctx
+                            .obarray
                             .default_value_id(hook_sym)
                             .copied()
                             .unwrap_or(Value::NIL);
-                        collect_hook_functions_impl(obarray, hook_sym, global_value, false, out);
+                        collect_hook_functions_impl(ctx, hook_sym, global_value, false, out);
                     }
                 } else {
                     out.push(pair_car);
@@ -87,7 +105,6 @@ fn collect_hook_functions_impl(
                 cursor = pair_cdr;
             }
         }
-        _value => out.push(hook_value),
     }
 }
 
@@ -98,13 +115,7 @@ pub(crate) fn collect_hook_functions_in_state(
     inherit_global: bool,
 ) -> Vec<Value> {
     let mut functions = Vec::new();
-    collect_hook_functions_impl(
-        &ctx.obarray,
-        hook_sym,
-        hook_value,
-        inherit_global,
-        &mut functions,
-    );
+    collect_hook_functions_impl(ctx, hook_sym, hook_value, inherit_global, &mut functions);
     functions
 }
 
