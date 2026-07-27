@@ -171,6 +171,7 @@ mod apple_container_tramp;
 mod apples_mode;
 mod applescript_mode;
 mod apropospriate_theme;
+mod apt_sources_list;
 mod aqi;
 mod archive_phar;
 mod async_package;
