@@ -261,6 +261,10 @@ pub const ACP_MELPA_PIN: (&str, &str) = ("acp", "20260719.342");
 /// The exact act-mode package selected by the comprehensive API parity corpus.
 pub const ACT_MODE_MELPA_PIN: (&str, &str) = ("act-mode", "20240718.39");
 
+/// The exact actionscript-mode package selected by the comprehensive API parity
+/// corpus.
+pub const ACTIONSCRIPT_MODE_MELPA_PIN: (&str, &str) = ("actionscript-mode", "20180527.1701");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
