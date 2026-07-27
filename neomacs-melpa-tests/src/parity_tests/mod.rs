@@ -180,6 +180,7 @@ mod archive_rpm;
 mod arduino_cli_mode;
 mod arduino_mode;
 mod aria2;
+mod ariadne;
 mod arjen_grey_theme;
 mod async_package;
 mod at_package;
