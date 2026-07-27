@@ -630,6 +630,10 @@ pub const ANNOYING_ARROWS_MODE_MELPA_PIN: (&str, &str) = ("annoying-arrows-mode"
 /// The exact ansi package selected by the comprehensive API parity corpus.
 pub const ANSI_MELPA_PIN: (&str, &str) = ("ansi", "20251118.230");
 
+/// The exact Ansible package selected by the comprehensive playbook editing
+/// and vault workflow parity corpus.
+pub const ANSIBLE_MELPA_PIN: (&str, &str) = ("ansible", "20260607.1852");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

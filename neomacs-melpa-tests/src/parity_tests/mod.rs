@@ -148,6 +148,7 @@ mod annotate_depth;
 mod annotation;
 mod annoying_arrows_mode;
 mod ansi;
+mod ansible;
 mod async_package;
 mod at_package;
 mod bind_key;
