@@ -430,6 +430,10 @@ pub const ALERT_MELPA_PIN: (&str, &str) = ("alert", "20260316.2025");
 /// corpus.
 pub const ALERT_TERMUX_MELPA_PIN: (&str, &str) = ("alert-termux", "20181119.951");
 
+/// The exact alert-toast package selected by the comprehensive API parity
+/// corpus.
+pub const ALERT_TOAST_MELPA_PIN: (&str, &str) = ("alert-toast", "20220312.229");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

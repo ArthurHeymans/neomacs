@@ -102,6 +102,7 @@ mod alect_themes;
 mod alectryon;
 mod alert;
 mod alert_termux;
+mod alert_toast;
 mod async_package;
 mod at_package;
 mod bind_key;
