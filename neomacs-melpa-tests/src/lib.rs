@@ -747,6 +747,11 @@ pub const ARDUINO_MODE_MELPA_PIN: (&str, &str) = ("arduino-mode", "20240527.1603
 /// integration against its real dependency surface.
 pub const ARDUINO_MODE_FLYCHECK_MELPA_PIN: (&str, &str) = ("flycheck", "20260727.1207");
 
+/// The exact arscript-mode package selected by the comprehensive mode,
+/// font-lock, indentation, and editing parity corpus. MELPA built this archive
+/// from upstream commit `797e1d0ef1312e8ff846abd0c6853358041f7691`.
+pub const ARSCRIPT_MODE_MELPA_PIN: (&str, &str) = ("arscript-mode", "20240819.1927");
+
 /// The exact archive-phar package selected by the comprehensive archive
 /// browsing and extraction parity corpus.
 pub const ARCHIVE_PHAR_MELPA_PIN: (&str, &str) = ("archive-phar", "20221009.2129");

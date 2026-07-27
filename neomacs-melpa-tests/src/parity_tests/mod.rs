@@ -182,6 +182,7 @@ mod arduino_mode;
 mod aria2;
 mod ariadne;
 mod arjen_grey_theme;
+mod arscript_mode;
 mod async_package;
 mod at_package;
 mod bind_key;
