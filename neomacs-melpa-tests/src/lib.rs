@@ -865,6 +865,12 @@ pub const ASTUTE_MELPA_PIN: (&str, &str) = ("astute", "20241015.444");
 /// `04ff2941f08c4b731fe6a18ee1697436d1ca1cc0`.
 pub const ASTYLE_MELPA_PIN: (&str, &str) = ("astyle", "20200328.616");
 
+/// The exact async-await package selected by the comprehensive Promise,
+/// generator, macro-expansion, and asynchronous-workflow parity corpus. MELPA
+/// built this archive from upstream commit
+/// `e0d15e8057ed7520100bc50c5552278292ebcb07`.
+pub const ASYNC_AWAIT_MELPA_PIN: (&str, &str) = ("async-await", "20220827.437");
+
 /// The exact async-backup package selected by the comprehensive path,
 /// predicate, process, save-hook, and backup-lifecycle parity corpus. MELPA
 /// built this archive from upstream commit
