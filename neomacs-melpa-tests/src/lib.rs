@@ -600,6 +600,9 @@ pub const ANKI_EDITOR_MELPA_PIN: (&str, &str) = ("anki-editor", "20260714.1156")
 /// corpus.
 pub const ANKI_EDITOR_VIEW_MELPA_PIN: (&str, &str) = ("anki-editor-view", "20230807.806");
 
+/// The exact anki-mode package selected by the comprehensive API parity corpus.
+pub const ANKI_MODE_MELPA_PIN: (&str, &str) = ("anki-mode", "20201223.719");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
