@@ -171,6 +171,7 @@ mod apple_container_tramp;
 mod apples_mode;
 mod applescript_mode;
 mod apropospriate_theme;
+mod aqi;
 mod async_package;
 mod at_package;
 mod bind_key;

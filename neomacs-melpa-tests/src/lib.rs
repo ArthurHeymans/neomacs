@@ -725,6 +725,10 @@ pub const APPLESCRIPT_MODE_MELPA_PIN: (&str, &str) = ("applescript-mode", "20210
 /// definition and lifecycle parity corpus.
 pub const APROPOSPRIATE_THEME_MELPA_PIN: (&str, &str) = ("apropospriate-theme", "20251010.121");
 
+/// The exact AQI package selected by the comprehensive data, cache, request,
+/// and reporting parity corpus.
+pub const AQI_MELPA_PIN: (&str, &str) = ("aqi", "20230530.1204");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
