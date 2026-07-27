@@ -207,3 +207,65 @@ fn oracle_autoload_load_error_restores_buffer_match_data() {
         expect,
     );
 }
+
+#[test]
+fn oracle_require_from_loaded_source_preserves_buffer_match_data() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU fns.c:Frequire routes the load through load_with_autoload_queue,
+    // whose save_match_data_load boundary restores the caller's registers
+    // after arbitrary top-level forms in the required file.
+    let form = r#"
+(with-temp-buffer
+  (insert "aa target zz")
+  (goto-char (point-min))
+  (re-search-forward "\\(target\\)")
+  (let ((before (list (match-beginning 0) (match-end 0)
+                      (match-beginning 1) (match-end 1))))
+    (list (require 'autoload-match-data-probe)
+          before
+          (list (match-beginning 0) (match-end 0)
+                (match-beginning 1) (match-end 1)))))
+"#;
+
+    let expect =
+        expect_test::expect![r#""OK (autoload-match-data-probe (4 10 4 10) (4 10 4 10))""#];
+    crate::common::assert_oracle_parity_with_load_root_expect(
+        form,
+        &[],
+        &autoload_fixture_root(),
+        expect,
+    );
+}
+
+#[test]
+fn oracle_require_load_error_restores_buffer_match_data() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // The same GNU unwind boundary runs when a required file signals.  Match
+    // data is caller state, so a failed dependency load must not leak the
+    // fixture's string-match registers into the error handler.
+    let form = r#"
+(with-temp-buffer
+  (insert "aa target zz")
+  (goto-char (point-min))
+  (re-search-forward "\\(target\\)")
+  (let ((before (list (match-beginning 0) (match-end 0)
+                      (match-beginning 1) (match-end 1))))
+    (list
+     (condition-case err
+         (require 'autoload-match-data-error-probe)
+       (error (car err)))
+     before
+     (list (match-beginning 0) (match-end 0)
+           (match-beginning 1) (match-end 1)))))
+"#;
+
+    let expect = expect_test::expect![r#""OK (error (4 10 4 10) (4 10 4 10))""#];
+    crate::common::assert_oracle_parity_with_load_root_expect(
+        form,
+        &[],
+        &autoload_fixture_root(),
+        expect,
+    );
+}

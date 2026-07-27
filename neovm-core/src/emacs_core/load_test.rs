@@ -8615,6 +8615,76 @@ fn require_expands_tilde_load_path_entries_before_later_directories() {
 }
 
 #[test]
+fn require_preserves_buffer_match_data_on_success_and_error() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempdir().expect("create require match-data fixture dir");
+    fs::write(
+        dir.path().join("vm-require-match-success.el"),
+        "(string-match \"\\\\`required-clobber\\\\'\" \"required-clobber\")\n\
+         (provide 'vm-require-match-success)\n",
+    )
+    .expect("write successful require fixture");
+    fs::write(
+        dir.path().join("vm-require-match-error.el"),
+        "(string-match \"\\\\`required-error-clobber\\\\'\" \"required-error-clobber\")\n\
+         (error \"required fixture failure\")\n",
+    )
+    .expect("write failing require fixture");
+
+    let mut eval = Context::new();
+    eval.set_variable(
+        "load-path",
+        Value::list(vec![Value::string(
+            dir.path().to_string_lossy().to_string(),
+        )]),
+    );
+
+    let success = eval
+        .eval_str(
+            r#"(progn
+                 (erase-buffer)
+                 (insert "aa target zz")
+                 (goto-char (point-min))
+                 (re-search-forward "\\(target\\)")
+                 (require 'vm-require-match-success)
+                 (list (match-beginning 0) (match-end 0)
+                       (match-beginning 1) (match-end 1)))"#,
+        )
+        .expect("successful require should preserve match data");
+    assert_eq!(
+        list_to_vec(&success),
+        Some(vec![
+            Value::fixnum(4),
+            Value::fixnum(10),
+            Value::fixnum(4),
+            Value::fixnum(10),
+        ]),
+    );
+
+    let failure = eval
+        .eval_str(
+            r#"(progn
+                 (goto-char (point-min))
+                 (re-search-forward "\\(target\\)")
+                 (condition-case nil
+                     (require 'vm-require-match-error)
+                   (error nil))
+                 (list (match-beginning 0) (match-end 0)
+                       (match-beginning 1) (match-end 1)))"#,
+        )
+        .expect("failed require should restore match data before its handler");
+    assert_eq!(
+        list_to_vec(&failure),
+        Some(vec![
+            Value::fixnum(4),
+            Value::fixnum(10),
+            Value::fixnum(4),
+            Value::fixnum(10),
+        ]),
+    );
+}
+
+#[test]
 fn find_file_prefers_newer_source_when_enabled() {
     crate::test_utils::init_test_tracing();
     let unique = SystemTime::now()

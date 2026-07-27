@@ -98,6 +98,60 @@ fn oracle_set_marker_nil_detaches() {
 }
 
 #[test]
+fn oracle_match_data_for_killed_buffer_creates_fully_detached_markers() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Fmatch_data calls Fset_marker for buffer matches.  A dead searched
+    // buffer makes set-marker leave each fresh marker pointing nowhere; it
+    // must not retain either the match position or a dead buffer identity.
+    let form = r#"(let ((b (generate-new-buffer " *neovm-dead-match-data*"))
+      data)
+  (with-current-buffer b
+    (insert "abc")
+    (goto-char (point-min))
+    (re-search-forward "\\(abc\\)" nil t))
+  (kill-buffer b)
+  (setq data (match-data))
+  (mapcar
+   (lambda (item)
+     (if (markerp item)
+         (list (marker-position item)
+               (marker-buffer item)
+               (marker-last-position item))
+       item))
+   data))"#;
+
+    let expect =
+        expect_test::expect![[r#""OK ((nil nil 0) (nil nil 0) (nil nil 0) (nil nil 0))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
+#[test]
+fn oracle_save_match_data_coerces_dead_buffer_markers_to_zero() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU set-match-data treats a detached marker as integer zero.  This is
+    // observable when save-match-data snapshots a match whose buffer died,
+    // temporarily changes match data, and restores the snapshot.
+    let form = r#"(let ((b (generate-new-buffer " *neovm-dead-saved-match-data*")))
+  (with-current-buffer b
+    (insert "abc")
+    (goto-char (point-min))
+    (re-search-forward "\\(abc\\)" nil t))
+  (kill-buffer b)
+  (save-match-data
+    (string-match "x" "x"))
+  (list (match-data t)
+        (match-beginning 0)
+        (match-end 0)
+        (match-beginning 1)
+        (match-end 1)))"#;
+
+    let expect = expect_test::expect![[r#""OK ((0 0 0 0) 0 0 0 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
+#[test]
 fn oracle_markerp_on_non_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];

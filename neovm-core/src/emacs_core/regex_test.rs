@@ -1752,10 +1752,16 @@ struct BufferSearchSnapshot<T> {
 }
 
 fn match_data_snapshot(match_data: &Option<MatchData>) -> Option<MatchDataSnapshot> {
-    match_data.as_ref().map(|data| MatchDataSnapshot {
-        groups: data.groups_snapshot(),
-        searched_buffer: data.searched_buffer_id(),
-        searched_string_is_some: data.is_string_match(),
+    match_data.as_ref().map(|data| {
+        let source = data.source();
+        MatchDataSnapshot {
+            groups: data.groups_snapshot(),
+            searched_buffer: match source {
+                MatchDataSource::String => None,
+                MatchDataSource::Buffer(buffer_id) => Some(buffer_id),
+            },
+            searched_string_is_some: source.is_string(),
+        }
     })
 }
 

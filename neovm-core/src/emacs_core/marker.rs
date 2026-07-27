@@ -107,7 +107,10 @@ pub(crate) fn make_registered_buffer_marker(
 ) -> Value {
     let byte_pos = match buffers.get(buffer_id) {
         Some(buffer) => lisp_pos_to_byte(buffer, position),
-        None => EmacsBytePos::ZERO,
+        // A marker cannot be registered in a dead buffer.  Return a truly
+        // detached marker rather than retaining a stale BufferId alongside a
+        // position that marker-position would mistake for a live attachment.
+        None => return make_marker_value(None, None, insertion_type),
     };
     let marker = make_marker_value(Some(buffer_id), Some(position), insertion_type);
     let marker_id = buffers.allocate_marker_id();

@@ -647,7 +647,7 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
     // onto it, so this is O(match) rather than O(buffer).  The whole-buffer copy
     // made a replace loop (query-replace / replace-string) O(n^2).
     let mut replacement_match_data = md.clone();
-    let source = if !replacement_match_data.is_string_match() {
+    let source = if !replacement_match_data.source().is_string() {
         let group0 = md
             .group(0)
             .ok_or_else(|| super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string())?;
@@ -690,7 +690,7 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
         false,
         Some((&buffer_syntax_table, &buffer_case_override)),
     )?;
-    let replace_start = if replacement_match_data.is_string_match() {
+    let replace_start = if replacement_match_data.source().is_string() {
         super::regex::char_pos_to_byte_lisp_string(
             &source,
             replacement_match_data
@@ -701,7 +701,7 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
     } else {
         buffer_start
     };
-    let replace_end = if replacement_match_data.is_string_match() {
+    let replace_end = if replacement_match_data.source().is_string() {
         super::regex::char_pos_to_byte_lisp_string(
             &source,
             replacement_match_data

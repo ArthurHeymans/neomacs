@@ -626,6 +626,47 @@ fn set_match_data_round_trip() {
 }
 
 #[test]
+fn killed_buffer_match_data_uses_detached_markers_and_restores_zero() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let buffer_id = eval.buffers.create_buffer("dead-core-match-data");
+    eval.buffers.set_current(buffer_id);
+    eval.buffers
+        .insert_into_buffer(buffer_id, "abc")
+        .expect("insert test text");
+    eval.buffers
+        .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::ZERO)
+        .expect("rewind point");
+    builtin_re_search_forward(&mut eval, vec![Value::string("\\(abc\\)")])
+        .expect("seed buffer match data");
+    assert!(eval.buffers.kill_buffer(buffer_id));
+
+    let saved = builtin_match_data(&mut eval, vec![]).expect("materialize dead-buffer match data");
+    let items = list_to_vec(&saved).expect("match-data returns a proper list");
+    assert_eq!(items.len(), 4);
+    for marker in &items {
+        let data = marker
+            .as_marker_data()
+            .expect("dead buffer positions materialize as markers");
+        assert_eq!(data.buffer, None);
+        assert_eq!(data.charpos, 0);
+        assert!(!data.last_position_valid);
+    }
+
+    builtin_set_match_data(&mut eval, vec![saved]).expect("detached markers coerce to zero");
+    let restored = builtin_match_data(&mut eval, vec![Value::T]).expect("read restored registers");
+    assert_eq!(
+        list_to_vec(&restored),
+        Some(vec![
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::fixnum(0),
+        ])
+    );
+}
+
+#[test]
 fn set_match_data_reseat_detaches_buffer_markers() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

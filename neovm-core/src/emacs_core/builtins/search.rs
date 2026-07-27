@@ -1,6 +1,10 @@
 use super::*;
-use crate::buffer::{CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, LispCharPos1};
-use crate::emacs_core::regex::{MatchGroup, char_pos_to_byte, char_pos_to_byte_lisp_string};
+use crate::buffer::{
+    BufferId, CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, LispCharPos1,
+};
+use crate::emacs_core::regex::{
+    MatchDataSource, MatchGroup, char_pos_to_byte, char_pos_to_byte_lisp_string,
+};
 use crate::emacs_core::value::ValueKind;
 
 /// Map a regex front-end error string to its Lisp signal.  Compile
@@ -1254,8 +1258,40 @@ pub(crate) fn builtin_match_end(eval: &mut super::eval::Context, args: Vec<Value
     builtin_match_end_with_state(&eval.match_data, &args)
 }
 
+/// How buffer provenance should materialize in a `(match-data)` result.
+///
+/// GNU retains the searched buffer object after it dies, but a marker cannot
+/// attach to that dead buffer.  Keeping those states distinct prevents a
+/// marker from carrying the contradictory combination of a dead buffer ID and
+/// a live-looking position.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MatchDataMaterializationSource {
+    String,
+    LiveBuffer(BufferId),
+    DeadBuffer(BufferId),
+}
+
+impl MatchDataMaterializationSource {
+    fn classify(md: &super::regex::MatchData, buffers: &crate::buffer::BufferManager) -> Self {
+        match md.source() {
+            MatchDataSource::String => Self::String,
+            MatchDataSource::Buffer(buffer_id) if buffers.get(buffer_id).is_some() => {
+                Self::LiveBuffer(buffer_id)
+            }
+            MatchDataSource::Buffer(buffer_id) => Self::DeadBuffer(buffer_id),
+        }
+    }
+
+    fn buffer_id(self) -> Option<BufferId> {
+        match self {
+            Self::String => None,
+            Self::LiveBuffer(buffer_id) | Self::DeadBuffer(buffer_id) => Some(buffer_id),
+        }
+    }
+}
+
 pub(crate) fn builtin_match_data_with_state(
-    mut buffers: Option<&mut crate::buffer::BufferManager>,
+    buffers: &mut crate::buffer::BufferManager,
     match_data: &Option<super::regex::MatchData>,
     args: &[Value],
 ) -> EvalResult {
@@ -1270,17 +1306,15 @@ pub(crate) fn builtin_match_data_with_state(
     }
 
     let reuse = args.get(1).copied().unwrap_or(Value::NIL);
-    if args.get(2).is_some_and(|arg| arg.is_truthy())
-        && let Some(bufs) = buffers.as_deref_mut()
-    {
-        reseat_match_data_markers(bufs, reuse, None);
+    if args.get(2).is_some_and(|arg| arg.is_truthy()) {
+        reseat_match_data_markers(buffers, reuse, None);
     }
 
     let Some(md) = match_data else {
         return Ok(Value::NIL);
     };
     let integers = args.first().is_some_and(|arg| arg.is_truthy());
-    let searched_buffer_id = md.searched_buffer_id();
+    let source = MatchDataMaterializationSource::classify(md, buffers);
 
     // Emacs trims trailing unmatched groups from match-data output.
     let mut trailing = md.group_count();
@@ -1293,51 +1327,44 @@ pub(crate) fn builtin_match_data_with_state(
         let grp = md.group(group_index);
         match grp {
             Some(group) => {
-                let start = group.start();
-                let end = group.end();
-                if md.is_string_match() {
-                    flat.push(Value::fixnum(start as i64));
-                    flat.push(Value::fixnum(end as i64));
-                    continue;
-                }
-
-                let buffer_positions = if searched_buffer_id.is_some() {
-                    Some((start as i64, end as i64))
-                } else {
-                    None
-                };
-
-                if integers {
-                    if let Some((start_pos, end_pos)) = buffer_positions {
-                        flat.push(Value::fixnum(start_pos));
-                        flat.push(Value::fixnum(end_pos));
-                    } else {
-                        flat.push(Value::fixnum(start as i64));
-                        flat.push(Value::fixnum(end as i64));
+                let start = group.start() as i64;
+                let end = group.end() as i64;
+                match source {
+                    MatchDataMaterializationSource::String
+                    | MatchDataMaterializationSource::LiveBuffer(_)
+                    | MatchDataMaterializationSource::DeadBuffer(_)
+                        if integers =>
+                    {
+                        flat.push(Value::fixnum(start));
+                        flat.push(Value::fixnum(end));
                     }
-                    continue;
+                    MatchDataMaterializationSource::String => {
+                        flat.push(Value::fixnum(start));
+                        flat.push(Value::fixnum(end));
+                    }
+                    MatchDataMaterializationSource::LiveBuffer(buffer_id) => {
+                        flat.push(super::marker::make_registered_buffer_marker(
+                            buffers,
+                            buffer_id,
+                            LispCharPos1::new(start),
+                            false,
+                        ));
+                        flat.push(super::marker::make_registered_buffer_marker(
+                            buffers,
+                            buffer_id,
+                            LispCharPos1::new(end),
+                            false,
+                        ));
+                    }
+                    MatchDataMaterializationSource::DeadBuffer(_) => {
+                        // GNU Fmatch_data creates fresh markers and asks
+                        // Fset_marker to attach them to last_thing_searched.
+                        // A dead buffer makes Fset_marker leave them fully
+                        // detached, with no saved last position.
+                        flat.push(super::marker::make_marker_value(None, None, false));
+                        flat.push(super::marker::make_marker_value(None, None, false));
+                    }
                 }
-
-                if let (Some((start_pos, end_pos)), Some(bufs), Some(buffer_id)) =
-                    (buffer_positions, buffers.as_deref_mut(), searched_buffer_id)
-                {
-                    flat.push(super::marker::make_registered_buffer_marker(
-                        bufs,
-                        buffer_id,
-                        LispCharPos1::new(start_pos),
-                        false,
-                    ));
-                    flat.push(super::marker::make_registered_buffer_marker(
-                        bufs,
-                        buffer_id,
-                        LispCharPos1::new(end_pos),
-                        false,
-                    ));
-                    continue;
-                }
-
-                flat.push(Value::fixnum(start as i64));
-                flat.push(Value::fixnum(end as i64));
             }
             None => {
                 flat.push(Value::NIL);
@@ -1346,10 +1373,7 @@ pub(crate) fn builtin_match_data_with_state(
         }
     }
 
-    if integers
-        && !md.is_string_match()
-        && let Some(buffer_id) = searched_buffer_id
-    {
+    if integers && let Some(buffer_id) = source.buffer_id() {
         flat.push(Value::make_buffer(buffer_id));
     }
     Ok(store_match_data_in_reuse(reuse, &flat))
@@ -1377,31 +1401,53 @@ fn store_match_data_in_reuse(reuse: Value, data: &[Value]) -> Value {
     reuse
 }
 
-fn match_data_item_buffer_id_in_manager(
-    buffers: &crate::buffer::BufferManager,
-    value: &Value,
-) -> Option<crate::buffer::BufferId> {
-    if value.is_buffer() {
-        return value.as_buffer_id();
-    }
-    if super::marker::is_marker(value) {
-        return super::marker::marker_logical_fields(value)
-            .and_then(|(buffer_id, _, _)| buffer_id)
-            .filter(|buffer_id| buffers.get(*buffer_id).is_some());
-    }
-    None
+/// A position accepted by GNU `set-match-data`.
+///
+/// Detached markers are not errors here: search.c explicitly coerces them to
+/// integer zero.  Model that case instead of losing it in an
+/// `(i64, Option<BufferId>)` pair.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MatchDataInputPosition {
+    Integer(i64),
+    LiveMarker { position: i64, buffer_id: BufferId },
+    DetachedMarker,
 }
 
-fn expect_match_data_item_in_manager(
+impl MatchDataInputPosition {
+    fn position(self) -> i64 {
+        match self {
+            Self::Integer(position) | Self::LiveMarker { position, .. } => position,
+            Self::DetachedMarker => 0,
+        }
+    }
+
+    fn buffer_id(self) -> Option<BufferId> {
+        match self {
+            Self::LiveMarker { buffer_id, .. } => Some(buffer_id),
+            Self::Integer(_) | Self::DetachedMarker => None,
+        }
+    }
+}
+
+fn expect_match_data_position_in_manager(
     buffers: &crate::buffer::BufferManager,
     value: &Value,
-) -> Result<(i64, Option<crate::buffer::BufferId>), Flow> {
+) -> Result<MatchDataInputPosition, Flow> {
     match value.kind() {
-        ValueKind::Fixnum(n) => Ok((n, None)),
-        _ if super::marker::is_marker(value) => Ok((
-            super::marker::marker_position_as_int_with_buffers(buffers, value)?,
-            match_data_item_buffer_id_in_manager(buffers, value),
-        )),
+        ValueKind::Fixnum(position) => Ok(MatchDataInputPosition::Integer(position)),
+        _ if super::marker::is_marker(value) => {
+            let fields = super::marker::marker_logical_fields(value)
+                .expect("marker predicate guarantees marker fields");
+            match fields {
+                (Some(buffer_id), Some(position), _) if buffers.get(buffer_id).is_some() => {
+                    Ok(MatchDataInputPosition::LiveMarker {
+                        position: position.as_i64(),
+                        buffer_id,
+                    })
+                }
+                _ => Ok(MatchDataInputPosition::DetachedMarker),
+            }
+        }
         _ => Err(signal(
             LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
@@ -1410,7 +1456,7 @@ fn expect_match_data_item_in_manager(
 }
 
 pub(crate) fn builtin_match_data(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    builtin_match_data_with_state(Some(&mut eval.buffers), &eval.match_data, &args)
+    builtin_match_data_with_state(&mut eval.buffers, &eval.match_data, &args)
 }
 
 /// A marker-backed snapshot produced by GNU-compatible `(match-data)`.
@@ -1516,11 +1562,13 @@ pub(crate) fn builtin_set_match_data_with_state(
             continue;
         }
 
-        let (start, start_buffer) = expect_match_data_item_in_manager(buffers, start_v)?;
-        let (end, end_buffer) = expect_match_data_item_in_manager(buffers, end_v)?;
+        let start = expect_match_data_position_in_manager(buffers, start_v)?;
+        let end = expect_match_data_position_in_manager(buffers, end_v)?;
         if searched_buffer.is_none() {
-            searched_buffer = start_buffer.or(end_buffer);
+            searched_buffer = start.buffer_id().or(end.buffer_id());
         }
+        let start = start.position();
+        let end = end.position();
 
         // Emacs treats negative marker positions as an end sentinel and
         // truncates remaining groups.
@@ -1625,7 +1673,7 @@ fn update_match_data_after_buffer_replace(
         return;
     };
 
-    if md.is_string_match() {
+    if md.source().is_string() {
         return;
     }
     let (oldstart, oldend, newend) = replacement.published_match_data_bounds();
@@ -1758,7 +1806,10 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         };
     }
 
-    if md_snapshot.as_ref().is_some_and(|m| m.is_string_match()) {
+    if md_snapshot
+        .as_ref()
+        .is_some_and(|match_data| match_data.source().is_string())
+    {
         return Err(signal(
             LispCondition::ArgsOutOfRange,
             vec![Value::fixnum(0)],
@@ -1916,7 +1967,7 @@ pub(crate) fn builtin_replace_match(
             0usize
         };
         if let Some(ref md) = eval.match_data
-            && !md.is_string_match()
+            && !md.source().is_string()
             && md.group(subexp).is_some()
         {
             let newtext_lisp = expect_lisp_string(&args[0])?;

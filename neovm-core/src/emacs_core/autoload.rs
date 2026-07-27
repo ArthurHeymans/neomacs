@@ -473,6 +473,26 @@ pub(crate) fn finish_autoload_do_load_in_state(
     Ok(Value::NIL)
 }
 
+/// Run an implicit dependency load with GNU's caller-state isolation.
+///
+/// GNU funnels both `autoload-do-load` and `require` through
+/// `load_with_autoload_queue`.  Besides its transactional definition queue,
+/// that boundary calls `save_match_data_load`, so arbitrary searches performed
+/// while reading and evaluating a dependency cannot overwrite the caller's
+/// search registers.  Keep that shared semantic boundary explicit: direct
+/// `(load ...)` is intentionally allowed to change match data, while implicit
+/// loads are not.
+///
+/// Neomacs does not yet model GNU's complete transactional autoload queue.
+/// Centralizing the implicit-load boundary here gives that future state one
+/// home instead of duplicating unwind policy between `require` and autoload.
+pub(crate) fn with_implicit_load_state<T>(
+    eval: &mut super::eval::Context,
+    operation: impl FnOnce(&mut super::eval::Context) -> Result<T, Flow>,
+) -> Result<T, Flow> {
+    super::builtins::search::with_preserved_match_data(eval, operation)
+}
+
 /// Execute the stateful half of GNU `autoload-do-load`.
 ///
 /// Every evaluator adapter funnels through this boundary so autoloading cannot
@@ -490,7 +510,7 @@ fn execute_autoload_load(
         eval.push_specpdl_root(fundef);
     }
 
-    let load_result = super::builtins::search::with_preserved_match_data(eval, |eval| {
+    let load_result = with_implicit_load_state(eval, |eval| {
         let path = resolve_autoload_load_path(&eval.obarray, file)?;
         // GNU eval.c:Fautoload_do_load calls load_with_autoload_queue with
         // NOMESSAGE=t: autoloading is an implicit consequence of calling a

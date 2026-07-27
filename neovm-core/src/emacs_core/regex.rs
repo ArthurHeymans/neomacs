@@ -241,12 +241,23 @@ pub struct MatchData {
     kind: MatchDataKind,
 }
 
+/// Lisp-visible provenance of published match positions.
+///
+/// Keep buffer identity attached to the buffer variant so callers cannot
+/// represent the impossible combination "buffer match with no buffer ID" by
+/// pairing a boolean with an `Option<BufferId>`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::EnumIs)]
+pub(crate) enum MatchDataSource {
+    String,
+    Buffer(BufferId),
+}
+
 /// Published match provenance and coordinates.
 ///
 /// Raw regexp-engine byte registers deliberately have no variant here: every
 /// value that can enter evaluator state is already in Lisp-visible character
 /// coordinates for its source.
-#[derive(Clone, Debug, strum::EnumIs)]
+#[derive(Clone, Debug)]
 enum MatchDataKind {
     /// GNU uses `last_thing_searched = Qt` for string match data.  A searched
     /// string object is available after `string-match`, but not after
@@ -473,10 +484,6 @@ impl MatchData {
         }
     }
 
-    pub(crate) fn is_string_match(&self) -> bool {
-        self.kind.is_string_chars()
-    }
-
     pub(crate) fn searched_string(&self) -> Option<&SearchedString> {
         match &self.kind {
             MatchDataKind::StringChars { searched, .. } => searched.as_ref(),
@@ -484,10 +491,10 @@ impl MatchData {
         }
     }
 
-    pub(crate) fn searched_buffer_id(&self) -> Option<BufferId> {
+    pub(crate) fn source(&self) -> MatchDataSource {
         match self.kind {
-            MatchDataKind::Buffer { id, .. } => Some(id),
-            _ => None,
+            MatchDataKind::StringChars { .. } => MatchDataSource::String,
+            MatchDataKind::Buffer { id, .. } => MatchDataSource::Buffer(id),
         }
     }
 
@@ -643,10 +650,9 @@ impl BufferSearchSuccess {
     }
 
     pub(crate) fn into_parts(self) -> (BufferId, EmacsBytePos, MatchData) {
-        let buffer_id = self
-            .match_data
-            .searched_buffer_id()
-            .expect("buffer search success always carries buffer match data");
+        let MatchDataSource::Buffer(buffer_id) = self.match_data.source() else {
+            unreachable!("buffer search success always carries buffer match data");
+        };
         (buffer_id, self.point, self.match_data)
     }
 }

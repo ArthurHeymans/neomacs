@@ -12523,11 +12523,11 @@ impl Context {
                             len: self.require_stack.len(),
                         });
                         self.require_stack.push(sym_id);
-                        let result = (|| -> EvalResult {
-                            self.load_file_internal(&path)?;
-                            self.refresh_features_from_variable();
-                            finish_require_in_state(&self.features, sym_id, &name, Some(&path))
-                        })();
+                        let result = super::autoload::with_implicit_load_state(self, |eval| {
+                            eval.load_file_internal(&path)?;
+                            eval.refresh_features_from_variable();
+                            finish_require_in_state(&eval.features, sym_id, &name, Some(&path))
+                        });
                         self.unbind_to(spec_entry);
                         if let Err(ref e) = result
                             && !self.flow_has_active_handler(e)
