@@ -582,6 +582,10 @@ pub const ANGULAR_MODE_MELPA_PIN: (&str, &str) = ("angular-mode", "20151201.2127
 /// parity corpus.
 pub const ANGULAR_SNIPPETS_MELPA_PIN: (&str, &str) = ("angular-snippets", "20140514.523");
 
+/// The exact Anju package selected by the comprehensive mouse UI parity
+/// corpus.
+pub const ANJU_MELPA_PIN: (&str, &str) = ("anju", "20260701.2139");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
