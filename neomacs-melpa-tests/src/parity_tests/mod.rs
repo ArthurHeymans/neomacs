@@ -155,6 +155,7 @@ mod ansilove;
 mod ant;
 mod anti_zenburn_theme;
 mod anx_api;
+mod anybar;
 mod async_package;
 mod at_package;
 mod bind_key;
