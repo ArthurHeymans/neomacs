@@ -480,7 +480,7 @@ pub(crate) fn builtin_set_buffer_local_toplevel_value(
 
     let result = (|| {
         builtin_make_local_variable(ctx, vec![args[0]])?;
-        super::eval::set_runtime_binding_in_state(ctx, resolved, args[1]);
+        super::eval::set_runtime_binding_in_state(ctx, resolved, args[1])?;
         Ok(Value::NIL)
     })();
 

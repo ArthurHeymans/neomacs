@@ -34,7 +34,6 @@
 //! of `drafts/symbol-redirect-plan.md`. The descriptor types below
 //! are kept ready for that work.
 
-use super::intern::SymId;
 use super::value::Value;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
@@ -122,9 +121,10 @@ pub struct LispBufferObjFwd {
     /// current buffer?" tests. -1 means "always local everywhere",
     /// matching GNU's `PER_BUFFER_IDX(idx) == -1`.
     pub local_flags_idx: i16,
-    /// Optional Lisp predicate symbol checked on every write. Mirrors
-    /// GNU `store_symval_forwarding`'s predicate path.
-    pub predicate: SymId,
+    /// Closed write predicate checked for live-slot writes. Mirrors GNU
+    /// `enum Lisp_Fwd_Predicate` instead of encoding this finite domain as an
+    /// open-ended Lisp symbol.
+    pub predicate: crate::buffer::buffer::BufferSlotPredicate,
     /// Default value copied into `Buffer::slots[offset]` at buffer
     /// creation. Mirrors GNU `buffer_defaults`.
     pub default: Value,
@@ -155,13 +155,12 @@ pub struct LispKboardObjFwd {
 /// "always-local in every buffer" (e.g. `buffer-file-name`,
 /// `point`); a positive index points at a bit in
 /// `Buffer::local_flags` (currently unused — Phase 8b will wire it).
-/// `predicate` is a Lisp predicate symbol used by
-/// `store_symval_forwarding` (Phase 8b adds the type-check on write).
+/// `predicate` is the closed predicate used by `store_symval_forwarding`.
 /// `default` is the value copied into every fresh buffer's slot.
 pub fn alloc_buffer_objfwd(
     offset: u16,
     local_flags_idx: i16,
-    predicate: super::intern::SymId,
+    predicate: crate::buffer::buffer::BufferSlotPredicate,
     default: Value,
 ) -> &'static LispBufferObjFwd {
     let fwd = Box::new(LispBufferObjFwd {

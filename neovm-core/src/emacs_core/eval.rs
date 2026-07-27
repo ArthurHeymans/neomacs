@@ -5142,15 +5142,10 @@ impl Context {
                         continue;
                     }
                     let id = intern(info.name);
-                    let predicate = if info.predicate.is_empty() {
-                        intern("null")
-                    } else {
-                        intern(info.predicate)
-                    };
                     let fwd = alloc_buffer_objfwd(
                         info.offset.as_u16(),
                         info.local_flags_idx,
-                        predicate,
+                        info.predicate,
                         info.default.to_value(),
                     );
                     obarray.install_buffer_objfwd(id, fwd);
@@ -11161,14 +11156,19 @@ impl Context {
         }
         // Install the new lexenv atomically.
         self.lexenv = new_lexenv;
-        for (sym_id, value) in &dynamic_sym_ids {
-            self.specbind(*sym_id, *value);
-        }
 
         let temp_scope = self.save_eval_temp_roots();
         for (_, value) in lexical_bindings.iter().chain(dynamic_sym_ids.iter()) {
             self.push_eval_temp_root(*value);
         }
+        for (sym_id, value) in &dynamic_sym_ids {
+            if let Err(flow) = self.try_specbind(*sym_id, *value) {
+                self.unbind_to(specpdl_count);
+                self.restore_eval_temp_roots_to_sequence(temp_scope);
+                return Err(flow);
+            }
+        }
+
         let result = self.sf_progn_value(body);
         self.unbind_to(specpdl_count);
         self.restore_eval_temp_roots_to_sequence(temp_scope);
@@ -11267,7 +11267,7 @@ impl Context {
                     let binding = Value::make_cons(lexenv_binding_symbol_value(id), value);
                     self.lexenv = Value::make_cons(binding, self.lexenv);
                 } else {
-                    self.specbind(id, value);
+                    self.try_specbind(id, value)?;
                 }
             }
             if !bindings.is_nil() {
@@ -11899,7 +11899,7 @@ impl Context {
                         let binding = Value::make_cons(lexenv_binding_symbol_value(var_id), value);
                         self.lexenv = Value::make_cons(binding, self.lexenv);
                     } else if bind_var {
-                        self.specbind(var_id, value);
+                        self.try_specbind(var_id, value)?;
                     }
                     let result = self.sf_progn_value(handler.cons_cdr());
                     self.unbind_to(specpdl_count);
@@ -11941,7 +11941,7 @@ impl Context {
                             Value::make_cons(lexenv_binding_symbol_value(var_id), binding_value);
                         self.lexenv = Value::make_cons(binding, self.lexenv);
                     } else if bind_var {
-                        self.specbind(var_id, binding_value);
+                        self.try_specbind(var_id, binding_value)?;
                     }
                     let result = self.sf_progn_value(handler.cons_cdr());
                     self.unbind_to(specpdl_count);
@@ -14733,6 +14733,11 @@ impl Context {
     /// - For buffer-local variables with a local binding: SPECPDL_LET_LOCAL
     /// - For buffer-local variables without local binding: SPECPDL_LET_DEFAULT
     /// - For plain variables: SPECPDL_LET
+    ///
+    /// Internal callers that bind known-valid values can use this infallible
+    /// storage primitive. Lisp evaluator and bytecode entry points must use
+    /// [`Self::try_specbind`] so GNU's live-slot predicates can signal before
+    /// the specpdl is mutated.
     pub(crate) fn specbind(&mut self, sym_id: SymId, value: Value) {
         let resolved =
             builtins::resolve_variable_alias_id_in_obarray(&self.obarray, sym_id).unwrap_or(sym_id);
@@ -14945,6 +14950,36 @@ impl Context {
         }
         self.obarray.set_symbol_value_id(resolved, value);
         self.sync_cached_runtime_binding_by_id(resolved, value);
+    }
+
+    /// GNU-compatible signaling wrapper around [`Self::specbind`].
+    ///
+    /// `specbind` writes an existing live per-buffer slot through
+    /// `set_internal`, which checks its forwarder predicate. A conditional
+    /// slot without a local value instead binds the shared default and
+    /// deliberately bypasses the predicate.
+    pub(crate) fn try_specbind(&mut self, sym_id: SymId, value: Value) -> Result<(), Flow> {
+        let resolved =
+            builtins::resolve_variable_alias_id_in_obarray(&self.obarray, sym_id).unwrap_or(sym_id);
+
+        use crate::emacs_core::symbol::SymbolRedirect;
+        if self
+            .obarray
+            .get_by_id(resolved)
+            .is_some_and(|symbol| symbol.redirect() == SymbolRedirect::Forwarded)
+            && let Some(buffer_id) = self.buffers.current_buffer_id()
+            && let Some(info) = crate::buffer::buffer::lookup_buffer_slot_by_sym_id(resolved)
+        {
+            let has_local = self.buffers.get(buffer_id).is_some_and(|buffer| {
+                info.local_flags_idx < 0 || buffer.slot_local_flag(info.offset)
+            });
+            if has_local {
+                validate_buffer_slot_write(info.predicate, value)?;
+            }
+        }
+
+        self.specbind(sym_id, value);
+        Ok(())
     }
 
     /// Check if a `let` is currently shadowing a buffer-local
@@ -15589,15 +15624,15 @@ pub(crate) fn set_runtime_binding_in_state(
     ctx: &mut Context,
     sym_id: SymId,
     value: Value,
-) -> Option<crate::buffer::BufferId> {
-    let locus = set_runtime_binding(
+) -> Result<Option<crate::buffer::BufferId>, Flow> {
+    let locus = set_runtime_binding_checked(
         &mut ctx.obarray,
         &mut ctx.buffers,
         &ctx.custom,
         ctx.specpdl.as_slice(),
         sym_id,
         value,
-    );
+    )?;
     // Finding 6: the bytecode VM (`assign_var_id`/`assign_var`), the VM's
     // `set-default` shared path, and `custom` all route writes through
     // this entry point. Mark redisplay dirty for display-affecting vars
@@ -15605,7 +15640,7 @@ pub(crate) fn set_runtime_binding_in_state(
     // code repaints without waiting for the next keystroke, exactly like
     // the tree-walk interpreter.
     ctx.mark_redisplay_dirty_if_display_var(sym_id);
-    locus
+    Ok(locus)
 }
 
 fn let_shadows_buffer_binding_p_in_state(
@@ -15732,6 +15767,65 @@ pub(crate) fn set_runtime_binding(
 
     obarray.set_symbol_value_id(sym_id, value);
     None
+}
+
+/// Map the buffer module's typed predicate failure into GNU-compatible Lisp
+/// signal data. Keeping this conversion at the evaluator boundary lets the
+/// buffer storage layer remain independent of non-local control flow.
+pub(crate) fn validate_buffer_slot_write(
+    predicate: crate::buffer::buffer::BufferSlotPredicate,
+    value: Value,
+) -> Result<(), Flow> {
+    use crate::buffer::buffer::BufferSlotPredicateError;
+
+    match predicate.check(value) {
+        Ok(()) => Ok(()),
+        Err(BufferSlotPredicateError::WrongType(predicate_name)) => Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol(predicate_name), value],
+        )),
+        Err(BufferSlotPredicateError::Choice(message))
+        | Err(BufferSlotPredicateError::Range(message)) => Err(signal(
+            LispCondition::Error,
+            vec![Value::string(message), value],
+        )),
+    }
+}
+
+/// Signaling counterpart of [`set_runtime_binding`].
+///
+/// GNU checks a forwarded predicate only when this assignment reaches a live
+/// buffer slot. A `setq` shadowed by a conditional slot's default `let`
+/// targets `buffer_defaults` and therefore remains intentionally unchecked.
+pub(crate) fn set_runtime_binding_checked(
+    obarray: &mut Obarray,
+    buffers: &mut BufferManager,
+    custom: &CustomManager,
+    specpdl: &[SpecBinding],
+    sym_id: SymId,
+    value: Value,
+) -> Result<Option<crate::buffer::BufferId>, Flow> {
+    use crate::emacs_core::symbol::SymbolRedirect;
+
+    if obarray
+        .get_by_id(sym_id)
+        .is_some_and(|symbol| symbol.redirect() == SymbolRedirect::Forwarded)
+        && let Some(current_id) = buffers.current_buffer_id()
+        && let Some(info) = crate::buffer::buffer::lookup_buffer_slot_by_sym_id(sym_id)
+    {
+        let has_local = buffers
+            .get(current_id)
+            .is_some_and(|buffer| info.local_flags_idx < 0 || buffer.slot_local_flag(info.offset));
+        let writes_live_slot =
+            has_local || !let_shadows_buffer_binding_p_in_state(specpdl, buffers, sym_id);
+        if writes_live_slot {
+            validate_buffer_slot_write(info.predicate, value)?;
+        }
+    }
+
+    Ok(set_runtime_binding(
+        obarray, buffers, custom, specpdl, sym_id, value,
+    ))
 }
 
 pub(crate) fn makunbound_runtime_binding_in_state(
@@ -16427,7 +16521,7 @@ impl Context {
             "set",
             &where_value,
         )?;
-        self.set_runtime_binding_by_id(resolved_id, value);
+        self.try_set_runtime_binding_by_id(resolved_id, value)?;
         Ok(value)
     }
 
@@ -16453,6 +16547,26 @@ impl Context {
         self.refresh_gc_runtime_settings_after_change_by_id(sym_id);
         self.mark_redisplay_dirty_if_display_var(sym_id);
         locus
+    }
+
+    pub(crate) fn try_set_runtime_binding_by_id(
+        &mut self,
+        sym_id: SymId,
+        value: Value,
+    ) -> Result<Option<crate::buffer::BufferId>, Flow> {
+        let locus = set_runtime_binding_checked(
+            &mut self.obarray,
+            &mut self.buffers,
+            &self.custom,
+            &self.specpdl,
+            sym_id,
+            value,
+        )?;
+        self.sync_cached_runtime_binding_by_id(sym_id, value);
+        self.sync_keyboard_runtime_binding_by_id(sym_id, value);
+        self.refresh_gc_runtime_settings_after_change_by_id(sym_id);
+        self.mark_redisplay_dirty_if_display_var(sym_id);
+        Ok(locus)
     }
 
     pub(crate) fn makunbound_runtime_binding_by_id(&mut self, sym_id: SymId) {

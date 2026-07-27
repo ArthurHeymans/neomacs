@@ -835,18 +835,33 @@ std::thread_local! {
 }
 
 /// Dynamically bind a variable (`Op::VarBind` semantics: GNU `Bvarbind`,
-/// `specbind(sym, POP)` — infallible, like the interpreter arm). Records the
-/// pre-bind specpdl depth for the matching `unbind`.
+/// `specbind(sym, POP)`). Records the pre-bind specpdl depth for the matching
+/// `unbind`, or stashes the predicate signal and returns [`STATUS_SIGNAL`].
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
 #[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
 #[unsafe(no_mangle)]
-pub extern "C" fn neovm_jit_varbind(ctx: *mut u8, sym: i64, val: i64) {
-    use crate::emacs_core::intern::SymId;
-    let value = Value::from_bits(val as usize);
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    JIT_BIND_STACK.with(|s| s.borrow_mut().push(ctx.specpdl.len()));
-    ctx.specbind(SymId(sym as u32), value);
+pub extern "C" fn neovm_jit_varbind(ctx: *mut u8, sym: i64, val: i64) -> i64 {
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
+        use crate::emacs_core::intern::SymId;
+        let value = Value::from_bits(val as usize);
+        let saved = save_scratch_gc_roots();
+        push_scratch_gc_root(value);
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        let bind_depth = ctx.specpdl.len();
+        let status = match ctx.try_specbind(SymId(sym as u32), value) {
+            Ok(()) => {
+                JIT_BIND_STACK.with(|stack| stack.borrow_mut().push(bind_depth));
+                STATUS_OK
+            }
+            Err(flow) => {
+                stash_pending_flow(flow);
+                STATUS_SIGNAL
+            }
+        };
+        restore_scratch_gc_roots(saved);
+        status
+    })
 }
 
 /// Unbind the `n` most recent JIT-made dynamic bindings (`Op::Unbind`
@@ -5804,11 +5819,12 @@ fn declare_rt_refs<M: Module>(
     sig_varset.returns.push(AbiParam::new(i64t));
     let varref_id = declare(module, "neovm_jit_varref", &sig_varref)?;
     let varset_id = declare(module, "neovm_jit_varset", &sig_varset)?;
-    // (vmctx, sym_id, val) -> ()  — specbind is infallible.
+    // (vmctx, sym_id, val) -> status
     let mut sig_varbind = Signature::new(call_conv);
     sig_varbind.params.push(AbiParam::new(ptr_ty));
     sig_varbind.params.push(AbiParam::new(i64t));
     sig_varbind.params.push(AbiParam::new(i64t));
+    sig_varbind.returns.push(AbiParam::new(i64t));
     // (vmctx, n) -> ()  — unbind_to is infallible.
     let mut sig_unbind = Signature::new(call_conv);
     sig_unbind.params.push(AbiParam::new(ptr_ty));
@@ -7082,9 +7098,10 @@ fn lower_simple_op(
             stack.push(result);
         }
         Op::VarBind(idx) => {
-            // GNU Bvarbind: specbind(sym, POP) — infallible, no status branch.
-            // The shim records the pre-bind specpdl depth; the frame unwind in
-            // CompiledLeaf::call restores the entry base on every exit.
+            // GNU Bvarbind: specbind(sym, POP). A typed per-buffer forwarder can
+            // signal, so branch through the same handler-aware signal target as
+            // VarSet. The shim records a bind depth only after a successful
+            // store.
             let rt = rt.ok_or(CompileError::UnsupportedOp("variable"))?;
             let sym = const_sym_id(constants, *idx)?;
             let val = stack.pop().ok_or(CompileError::StackUnderflow)?;
@@ -7103,10 +7120,18 @@ fn lower_simple_op(
                 emit_residual_roots(fb, rt, stack.as_slice());
                 Some(s)
             };
-            fb.ins().call(rt.refs.varbind, &[vmctx, sym_v, val]);
+            let call = fb.ins().call(rt.refs.varbind, &[vmctx, sym_v, val]);
+            let status = fb.inst_results(call)[0];
             if let Some(s) = saved {
                 fb.ins().call(rt.refs.gc_restore, &[s]);
             }
+            let cont = fb.create_block();
+            let signal =
+                signal_target_for_site(fb, signal_exit, handlers, pending, stack.as_slice());
+            let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+            fb.ins().brif(ok, cont, &[], signal, &[]);
+            fb.switch_to_block(cont);
+            fb.seal_block(cont);
         }
         Op::Unbind(n) => {
             // Unbind the N most recent dynamic bindings — infallible; the

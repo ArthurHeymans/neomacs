@@ -339,6 +339,96 @@ impl SlotDefault {
     }
 }
 
+/// The closed predicate domain accepted by GNU's `DEFVAR_PER_BUFFER`.
+///
+/// GNU stores this as `enum Lisp_Fwd_Predicate`; keeping the same domain as a
+/// Rust enum prevents misspelled predicate names and makes new upstream
+/// variants an explicit exhaustiveness failure instead of a silent no-op.
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum BufferSlotPredicate {
+    Unrestricted,
+    String,
+    Symbol,
+    Integer,
+    Number,
+    Fraction,
+    VerticalScrollBar,
+    OverwriteMode,
+}
+
+/// A predicate failure independent of the evaluator's non-local-control-flow
+/// representation.  The evaluator maps this typed result to GNU-compatible
+/// Lisp signal data at the storage boundary.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum BufferSlotPredicateError {
+    WrongType(&'static str),
+    Choice(&'static str),
+    Range(&'static str),
+}
+
+impl BufferSlotPredicate {
+    /// Check a value before it is stored in a live buffer slot.
+    ///
+    /// GNU's `store_symval_forwarding` bypasses every predicate for nil, even
+    /// predicates such as `stringp` and `integerp` that would reject nil when
+    /// called as ordinary Lisp functions.
+    pub fn check(self, value: Value) -> Result<(), BufferSlotPredicateError> {
+        use BufferSlotPredicateError::{Choice, Range, WrongType};
+
+        if value.is_nil() || self == Self::Unrestricted {
+            return Ok(());
+        }
+
+        match self {
+            Self::Unrestricted => Ok(()),
+            Self::String if value.is_string() => Ok(()),
+            Self::String => Err(WrongType("stringp")),
+            Self::Symbol if value.is_symbol() => Ok(()),
+            Self::Symbol => Err(WrongType("symbolp")),
+            Self::Integer if value.is_integer() => Ok(()),
+            Self::Integer => Err(WrongType("integerp")),
+            Self::Number if value.is_number() => Ok(()),
+            Self::Number => Err(WrongType("numberp")),
+            Self::Fraction if !value.is_number() => Err(WrongType("numberp")),
+            Self::Fraction => {
+                let in_range = match value.kind() {
+                    ValueKind::Fixnum(number) => (0..=1).contains(&number),
+                    ValueKind::Float => (0.0..=1.0).contains(&value.xfloat()),
+                    ValueKind::Veclike(crate::tagged::header::VecLikeType::Bignum) => value
+                        .as_bignum()
+                        .is_some_and(|number| number >= &0 && number <= &1),
+                    _ => unreachable!("numberp was checked above"),
+                };
+                if in_range {
+                    Ok(())
+                } else {
+                    Err(Range("Value should be from 0.0 to 1.0"))
+                }
+            }
+            Self::VerticalScrollBar
+                if value.is_t()
+                    || value.is_symbol_named("left")
+                    || value.is_symbol_named("right") =>
+            {
+                Ok(())
+            }
+            Self::VerticalScrollBar => {
+                Err(Choice("One of nil, t, left or right should be specified"))
+            }
+            Self::OverwriteMode
+                if value.is_symbol_named("overwrite-mode-textual")
+                    || value.is_symbol_named("overwrite-mode-binary") =>
+            {
+                Ok(())
+            }
+            Self::OverwriteMode => Err(Choice(
+                "One of nil, overwrite-mode-textual or overwrite-mode-binary should be specified",
+            )),
+        }
+    }
+}
+
 /// Per-slot metadata. Mirrors a GNU `defvar_per_buffer` entry.
 #[derive(Copy, Clone, Debug)]
 pub struct BufferSlotInfo {
@@ -348,10 +438,9 @@ pub struct BufferSlotInfo {
     pub offset: BufferSlot,
     /// Default value installed into every fresh buffer's slot.
     pub default: SlotDefault,
-    /// Predicate symbol checked by `store_symval_forwarding` on
-    /// write. `""` for "no check" (mirrors GNU's `Qnil` predicate
-    /// slot).
-    pub predicate: &'static str,
+    /// Predicate checked by `store_symval_forwarding` on writes to a live
+    /// buffer slot.
+    pub predicate: BufferSlotPredicate,
     /// Whether `kill-all-local-variables` resets this *always-local*
     /// slot back to its default. Mirrors the explicit reset block at
     /// the top of GNU's `reset_buffer_local_variables`
@@ -409,7 +498,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "buffer-file-name",
         offset: BUFFER_SLOT_FILE_NAME,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "stringp",
+        predicate: BufferSlotPredicate::String,
         reset_on_kill: false,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -419,7 +508,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "buffer-auto-save-file-name",
         offset: BUFFER_SLOT_AUTO_SAVE_FILE_NAME,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "stringp",
+        predicate: BufferSlotPredicate::String,
         reset_on_kill: false,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -429,7 +518,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "buffer-read-only",
         offset: BUFFER_SLOT_READ_ONLY,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "booleanp",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -439,7 +528,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "enable-multibyte-characters",
         offset: BUFFER_SLOT_ENABLE_MULTIBYTE_CHARACTERS,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
-        predicate: "booleanp",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -449,7 +538,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "buffer-file-truename",
         offset: BUFFER_SLOT_FILE_TRUENAME,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "stringp",
+        predicate: BufferSlotPredicate::String,
         reset_on_kill: false,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -463,7 +552,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "default-directory",
         offset: BUFFER_SLOT_DEFAULT_DIRECTORY,
         default: SlotDefault::LazyCwd,
-        predicate: "stringp",
+        predicate: BufferSlotPredicate::String,
         reset_on_kill: false,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -473,7 +562,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "buffer-saved-size",
         offset: BUFFER_SLOT_SAVED_SIZE,
         default: SlotDefault::LazyFixnum(0),
-        predicate: "integerp",
+        predicate: BufferSlotPredicate::Integer,
         reset_on_kill: false,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -483,7 +572,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "buffer-backed-up",
         offset: BUFFER_SLOT_BACKED_UP,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "booleanp",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -493,7 +582,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "buffer-file-format",
         offset: BUFFER_SLOT_FILE_FORMAT,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "listp",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -503,7 +592,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "buffer-auto-save-file-format",
         offset: BUFFER_SLOT_AUTO_SAVE_FILE_FORMAT,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
-        predicate: "listp",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -513,7 +602,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "major-mode",
         offset: BUFFER_SLOT_MAJOR_MODE,
         default: SlotDefault::LazySymbol("fundamental-mode"),
-        predicate: "symbolp",
+        predicate: BufferSlotPredicate::Symbol,
         reset_on_kill: true,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -523,7 +612,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "local-minor-modes",
         offset: BUFFER_SLOT_LOCAL_MINOR_MODES,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "listp",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -533,7 +622,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "mode-name",
         offset: BUFFER_SLOT_MODE_NAME,
         default: SlotDefault::LazyString("Fundamental"),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: true,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -543,7 +632,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "mark-active",
         offset: BUFFER_SLOT_MARK_ACTIVE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -553,7 +642,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "point-before-scroll",
         offset: BUFFER_SLOT_POINT_BEFORE_SCROLL,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -563,7 +652,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "buffer-display-count",
         offset: BUFFER_SLOT_DISPLAY_COUNT,
         default: SlotDefault::LazyFixnum(0),
-        predicate: "integerp",
+        predicate: BufferSlotPredicate::Integer,
         reset_on_kill: false,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -573,7 +662,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "buffer-display-time",
         offset: BUFFER_SLOT_DISPLAY_TIME,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -586,7 +675,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "buffer-invisibility-spec",
         offset: BUFFER_SLOT_INVISIBILITY_SPEC,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: true,
         local_flags_idx: -1,
         install_as_forwarder: true,
@@ -601,7 +690,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "fill-column",
         offset: BUFFER_SLOT_FILL_COLUMN,
         default: SlotDefault::LazyFixnum(70),
-        predicate: "integerp",
+        predicate: BufferSlotPredicate::Integer,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_FILL_COLUMN.local_flags_idx(),
         install_as_forwarder: true,
@@ -612,7 +701,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "tab-width",
         offset: BUFFER_SLOT_TAB_WIDTH,
         default: SlotDefault::LazyFixnum(8),
-        predicate: "integerp",
+        predicate: BufferSlotPredicate::Integer,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_TAB_WIDTH.local_flags_idx(),
         install_as_forwarder: true,
@@ -623,7 +712,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "left-margin",
         offset: BUFFER_SLOT_LEFT_MARGIN,
         default: SlotDefault::LazyFixnum(0),
-        predicate: "integerp",
+        predicate: BufferSlotPredicate::Integer,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_LEFT_MARGIN.local_flags_idx(),
         install_as_forwarder: true,
@@ -634,7 +723,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "abbrev-mode",
         offset: BUFFER_SLOT_ABBREV_MODE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_ABBREV_MODE.local_flags_idx(),
         install_as_forwarder: true,
@@ -645,7 +734,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "overwrite-mode",
         offset: BUFFER_SLOT_OVERWRITE_MODE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::OverwriteMode,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_OVERWRITE_MODE.local_flags_idx(),
         install_as_forwarder: true,
@@ -656,7 +745,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "selective-display",
         offset: BUFFER_SLOT_SELECTIVE_DISPLAY,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_SELECTIVE_DISPLAY.local_flags_idx(),
         install_as_forwarder: true,
@@ -667,7 +756,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "selective-display-ellipses",
         offset: BUFFER_SLOT_SELECTIVE_DISPLAY_ELLIPSES,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_SELECTIVE_DISPLAY_ELLIPSES.local_flags_idx(),
         install_as_forwarder: true,
@@ -682,7 +771,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "truncate-lines",
         offset: BUFFER_SLOT_TRUNCATE_LINES,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_TRUNCATE_LINES.local_flags_idx(),
         install_as_forwarder: true,
@@ -693,7 +782,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "word-wrap",
         offset: BUFFER_SLOT_WORD_WRAP,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_WORD_WRAP.local_flags_idx(),
         install_as_forwarder: true,
@@ -704,7 +793,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "ctl-arrow",
         offset: BUFFER_SLOT_CTL_ARROW,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_CTL_ARROW.local_flags_idx(),
         install_as_forwarder: true,
@@ -715,7 +804,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "auto-fill-function",
         offset: BUFFER_SLOT_AUTO_FILL_FUNCTION,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_AUTO_FILL_FUNCTION.local_flags_idx(),
         install_as_forwarder: true,
@@ -728,7 +817,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "mode-line-format",
         offset: BUFFER_SLOT_MODE_LINE_FORMAT,
         default: SlotDefault::LazyString("%-"),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_MODE_LINE_FORMAT.local_flags_idx(),
         install_as_forwarder: true,
@@ -739,7 +828,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "header-line-format",
         offset: BUFFER_SLOT_HEADER_LINE_FORMAT,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_HEADER_LINE_FORMAT.local_flags_idx(),
         install_as_forwarder: true,
@@ -750,7 +839,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "tab-line-format",
         offset: BUFFER_SLOT_TAB_LINE_FORMAT,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_TAB_LINE_FORMAT.local_flags_idx(),
         install_as_forwarder: true,
@@ -763,7 +852,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "bidi-display-reordering",
         offset: BUFFER_SLOT_BIDI_DISPLAY_REORDERING,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_BIDI_DISPLAY_REORDERING.local_flags_idx(),
         install_as_forwarder: true,
@@ -774,7 +863,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "bidi-paragraph-direction",
         offset: BUFFER_SLOT_BIDI_PARAGRAPH_DIRECTION,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_BIDI_PARAGRAPH_DIRECTION.local_flags_idx(),
         install_as_forwarder: true,
@@ -785,7 +874,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "bidi-paragraph-start-re",
         offset: BUFFER_SLOT_BIDI_PARAGRAPH_START_RE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_BIDI_PARAGRAPH_START_RE.local_flags_idx(),
         install_as_forwarder: true,
@@ -796,7 +885,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "bidi-paragraph-separate-re",
         offset: BUFFER_SLOT_BIDI_PARAGRAPH_SEPARATE_RE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_BIDI_PARAGRAPH_SEPARATE_RE.local_flags_idx(),
         install_as_forwarder: true,
@@ -807,7 +896,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "cursor-type",
         offset: BUFFER_SLOT_CURSOR_TYPE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_CURSOR_TYPE.local_flags_idx(),
         install_as_forwarder: true,
@@ -818,7 +907,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "line-spacing",
         offset: BUFFER_SLOT_LINE_SPACING,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_LINE_SPACING.local_flags_idx(),
         install_as_forwarder: true,
@@ -829,7 +918,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "text-conversion-style",
         offset: BUFFER_SLOT_TEXT_CONVERSION_STYLE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_TEXT_CONVERSION_STYLE.local_flags_idx(),
         install_as_forwarder: true,
@@ -840,7 +929,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "cursor-in-non-selected-windows",
         offset: BUFFER_SLOT_CURSOR_IN_NON_SELECTED_WINDOWS,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_CURSOR_IN_NON_SELECTED_WINDOWS.local_flags_idx(),
         install_as_forwarder: true,
@@ -851,7 +940,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "left-margin-width",
         offset: BUFFER_SLOT_LEFT_MARGIN_WIDTH,
         default: SlotDefault::LazyFixnum(0),
-        predicate: "",
+        predicate: BufferSlotPredicate::Integer,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_LEFT_MARGIN_WIDTH.local_flags_idx(),
         install_as_forwarder: true,
@@ -862,7 +951,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "right-margin-width",
         offset: BUFFER_SLOT_RIGHT_MARGIN_WIDTH,
         default: SlotDefault::LazyFixnum(0),
-        predicate: "",
+        predicate: BufferSlotPredicate::Integer,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_RIGHT_MARGIN_WIDTH.local_flags_idx(),
         install_as_forwarder: true,
@@ -873,7 +962,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "left-fringe-width",
         offset: BUFFER_SLOT_LEFT_FRINGE_WIDTH,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Integer,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_LEFT_FRINGE_WIDTH.local_flags_idx(),
         install_as_forwarder: true,
@@ -884,7 +973,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "right-fringe-width",
         offset: BUFFER_SLOT_RIGHT_FRINGE_WIDTH,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Integer,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_RIGHT_FRINGE_WIDTH.local_flags_idx(),
         install_as_forwarder: true,
@@ -895,7 +984,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "fringes-outside-margins",
         offset: BUFFER_SLOT_FRINGES_OUTSIDE_MARGINS,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_FRINGES_OUTSIDE_MARGINS.local_flags_idx(),
         install_as_forwarder: true,
@@ -906,7 +995,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "scroll-bar-width",
         offset: BUFFER_SLOT_SCROLL_BAR_WIDTH,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Integer,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_SCROLL_BAR_WIDTH.local_flags_idx(),
         install_as_forwarder: true,
@@ -917,7 +1006,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "scroll-bar-height",
         offset: BUFFER_SLOT_SCROLL_BAR_HEIGHT,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Integer,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_SCROLL_BAR_HEIGHT.local_flags_idx(),
         install_as_forwarder: true,
@@ -928,7 +1017,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "vertical-scroll-bar",
         offset: BUFFER_SLOT_VERTICAL_SCROLL_BAR,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
-        predicate: "",
+        predicate: BufferSlotPredicate::VerticalScrollBar,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_VERTICAL_SCROLL_BAR.local_flags_idx(),
         install_as_forwarder: true,
@@ -939,7 +1028,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "horizontal-scroll-bar",
         offset: BUFFER_SLOT_HORIZONTAL_SCROLL_BAR,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_HORIZONTAL_SCROLL_BAR.local_flags_idx(),
         install_as_forwarder: true,
@@ -950,7 +1039,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "indicate-empty-lines",
         offset: BUFFER_SLOT_INDICATE_EMPTY_LINES,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_INDICATE_EMPTY_LINES.local_flags_idx(),
         install_as_forwarder: true,
@@ -961,7 +1050,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "indicate-buffer-boundaries",
         offset: BUFFER_SLOT_INDICATE_BUFFER_BOUNDARIES,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_INDICATE_BUFFER_BOUNDARIES.local_flags_idx(),
         install_as_forwarder: true,
@@ -972,7 +1061,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "fringe-indicator-alist",
         offset: BUFFER_SLOT_FRINGE_INDICATOR_ALIST,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_FRINGE_INDICATOR_ALIST.local_flags_idx(),
         install_as_forwarder: true,
@@ -983,7 +1072,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "fringe-cursor-alist",
         offset: BUFFER_SLOT_FRINGE_CURSOR_ALIST,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_FRINGE_CURSOR_ALIST.local_flags_idx(),
         install_as_forwarder: true,
@@ -994,7 +1083,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "scroll-up-aggressively",
         offset: BUFFER_SLOT_SCROLL_UP_AGGRESSIVELY,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Fraction,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_SCROLL_UP_AGGRESSIVELY.local_flags_idx(),
         install_as_forwarder: true,
@@ -1005,7 +1094,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "scroll-down-aggressively",
         offset: BUFFER_SLOT_SCROLL_DOWN_AGGRESSIVELY,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Fraction,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_SCROLL_DOWN_AGGRESSIVELY.local_flags_idx(),
         install_as_forwarder: true,
@@ -1016,7 +1105,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "cache-long-scans",
         offset: BUFFER_SLOT_CACHE_LONG_SCANS,
         default: SlotDefault::Const(crate::emacs_core::value::Value::T),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_CACHE_LONG_SCANS.local_flags_idx(),
         install_as_forwarder: true,
@@ -1027,7 +1116,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "local-abbrev-table",
         offset: BUFFER_SLOT_LOCAL_ABBREV_TABLE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_LOCAL_ABBREV_TABLE.local_flags_idx(),
         install_as_forwarder: true,
@@ -1038,7 +1127,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "buffer-display-table",
         offset: BUFFER_SLOT_BUFFER_DISPLAY_TABLE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_BUFFER_DISPLAY_TABLE.local_flags_idx(),
         install_as_forwarder: true,
@@ -1052,7 +1141,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "buffer-file-coding-system",
         offset: BUFFER_SLOT_BUFFER_FILE_CODING_SYSTEM,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_BUFFER_FILE_CODING_SYSTEM.local_flags_idx(),
         install_as_forwarder: true,
@@ -1073,7 +1162,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "syntax-table",
         offset: BUFFER_SLOT_SYNTAX_TABLE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_SYNTAX_TABLE.local_flags_idx(),
         install_as_forwarder: false,
@@ -1086,7 +1175,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "category-table",
         offset: BUFFER_SLOT_CATEGORY_TABLE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: BUFFER_SLOT_CATEGORY_TABLE.local_flags_idx(),
         install_as_forwarder: false,
@@ -1103,7 +1192,7 @@ pub const BUFFER_SLOT_INFO: &[BufferSlotInfo] = &[
         name: "case-table",
         offset: BUFFER_SLOT_CASE_TABLE,
         default: SlotDefault::Const(crate::emacs_core::value::Value::NIL),
-        predicate: "",
+        predicate: BufferSlotPredicate::Unrestricted,
         reset_on_kill: false,
         local_flags_idx: -1,
         install_as_forwarder: false,
@@ -1573,29 +1662,6 @@ pub(crate) fn preserve_partial_permanent_local_hook_value(
         }
     }
     Value::list(preserved)
-}
-
-pub(crate) fn coerce_to_slot(
-    info: &BufferSlotInfo,
-    value: crate::emacs_core::value::Value,
-    current: crate::emacs_core::value::Value,
-) -> crate::emacs_core::value::Value {
-    use crate::emacs_core::value::{Value, ValueKind};
-    match info.predicate {
-        "stringp" => match value.kind() {
-            ValueKind::String => value,
-            ValueKind::Nil => Value::NIL,
-            _ => current,
-        },
-        "booleanp" => {
-            if value.is_truthy() {
-                Value::T
-            } else {
-                Value::NIL
-            }
-        }
-        _ => value,
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -3432,8 +3498,7 @@ impl Buffer {
 
     pub fn set_buffer_local_by_sym_id(&mut self, sym_id: SymId, value: Value) {
         if let Some(info) = lookup_buffer_slot_by_sym_id(sym_id) {
-            self.slots[info.offset.index()] =
-                coerce_to_slot(info, value, self.slots[info.offset.index()]);
+            self.slots[info.offset.index()] = value;
             if info.local_flags_idx >= 0 {
                 self.set_slot_local_flag(info.offset, true);
             }

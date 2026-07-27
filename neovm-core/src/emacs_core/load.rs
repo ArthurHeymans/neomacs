@@ -4418,15 +4418,10 @@ fn finalize_cached_bootstrap_eval(
                 continue;
             }
             let id = intern(info.name);
-            let predicate = if info.predicate.is_empty() {
-                intern("null")
-            } else {
-                intern(info.predicate)
-            };
             let fwd = alloc_buffer_objfwd(
                 info.offset.as_u16(),
                 info.local_flags_idx,
-                predicate,
+                info.predicate,
                 info.default.to_value(),
             );
             obarray.install_buffer_objfwd(id, fwd);

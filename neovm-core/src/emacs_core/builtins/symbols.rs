@@ -746,7 +746,7 @@ pub(crate) fn builtin_set_2(
         "set",
         &where_value,
     )?;
-    eval.set_runtime_binding_by_id(resolved, value);
+    eval.try_set_runtime_binding_by_id(resolved, value)?;
     Ok(value)
 }
 

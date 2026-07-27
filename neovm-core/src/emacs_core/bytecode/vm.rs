@@ -1872,11 +1872,11 @@ impl<'a> Vm<'a> {
                     // called from the let body and surface as `void-variable`.
                     let name_id = sym_id_at(constants, *idx);
                     let val = stk!().pop().unwrap_or(Value::NIL);
-                    bind_stack.push(self.ctx.specpdl.len());
-                    // specbind can run variable watchers (Lisp) — escape.
-                    cursor.publish(self.ctx);
-                    self.ctx.specbind(name_id, val);
-                    cursor = StackCursor::acquire(self.ctx);
+                    let bind_depth = self.ctx.specpdl.len();
+                    // vm_try publishes the stack because specbind can run
+                    // variable watchers (arbitrary Lisp).
+                    vm_try!(self.ctx.try_specbind(name_id, val));
+                    bind_stack.push(bind_depth);
                 }
                 Op::Unbind(n) => {
                     let n = *n as usize;
@@ -3532,6 +3532,10 @@ impl<'a> Vm<'a> {
                         .get(buf_id)
                         .is_some_and(|buf| offset < buf.slots.len());
                     if slot_exists {
+                        crate::emacs_core::eval::validate_buffer_slot_write(
+                            buf_fwd.predicate,
+                            value,
+                        )?;
                         let where_value = Value::make_buffer(buf_id);
                         self.run_variable_watchers_by_id_with_where(
                             resolved,
@@ -3614,7 +3618,7 @@ impl<'a> Vm<'a> {
             "set",
             &where_value,
         )?;
-        crate::emacs_core::eval::set_runtime_binding_in_state(&mut *self.ctx, resolved, value);
+        crate::emacs_core::eval::set_runtime_binding_in_state(&mut *self.ctx, resolved, value)?;
         self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
         Ok(())
     }
@@ -3697,7 +3701,7 @@ impl<'a> Vm<'a> {
             "set",
             &where_value,
         )?;
-        crate::emacs_core::eval::set_runtime_binding_in_state(&mut *self.ctx, resolved, value);
+        crate::emacs_core::eval::set_runtime_binding_in_state(&mut *self.ctx, resolved, value)?;
         Ok(())
     }
 
@@ -3836,7 +3840,7 @@ impl<'a> Vm<'a> {
                 s.redirect() == crate::emacs_core::symbol::SymbolRedirect::Localized
             });
         if !is_buffer_local {
-            crate::emacs_core::eval::set_runtime_binding_in_state(&mut *self.ctx, resolved, value);
+            crate::emacs_core::eval::set_runtime_binding_in_state(&mut *self.ctx, resolved, value)?;
         } else {
             self.ctx.obarray.set_symbol_value_id(resolved, value);
         }

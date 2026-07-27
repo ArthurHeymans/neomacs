@@ -4,6 +4,82 @@ use crate::buffer::{CharRange, LispCharPos1};
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::{LispString, OverlayData};
 
+#[test]
+fn forwarded_slot_predicates_are_closed_typed_contracts() {
+    use BufferSlotPredicate::{
+        Fraction, Integer, Number, OverwriteMode, String as StringPredicate, Symbol, Unrestricted,
+        VerticalScrollBar,
+    };
+    use BufferSlotPredicateError::{Choice, Range, WrongType};
+
+    for predicate in [
+        Unrestricted,
+        StringPredicate,
+        Symbol,
+        Integer,
+        Number,
+        Fraction,
+        VerticalScrollBar,
+        OverwriteMode,
+    ] {
+        assert_eq!(predicate.check(Value::NIL), Ok(()));
+    }
+
+    assert_eq!(
+        StringPredicate.check(Value::symbol("not-a-string")),
+        Err(WrongType("stringp"))
+    );
+    assert_eq!(
+        Symbol.check(Value::string("not-a-symbol")),
+        Err(WrongType("symbolp"))
+    );
+    assert_eq!(
+        Integer.check(Value::make_float(1.0)),
+        Err(WrongType("integerp"))
+    );
+    assert_eq!(Number.check(Value::fixnum(1)), Ok(()));
+    assert_eq!(
+        Fraction.check(Value::string("far")),
+        Err(WrongType("numberp"))
+    );
+    assert_eq!(
+        Fraction.check(Value::make_float(2.0)),
+        Err(Range("Value should be from 0.0 to 1.0"))
+    );
+    assert_eq!(VerticalScrollBar.check(Value::symbol("left")), Ok(()));
+    assert_eq!(
+        VerticalScrollBar.check(Value::symbol("middle")),
+        Err(Choice("One of nil, t, left or right should be specified"))
+    );
+    assert_eq!(
+        OverwriteMode.check(Value::symbol("overwrite-mode-binary")),
+        Ok(())
+    );
+    assert_eq!(
+        OverwriteMode.check(Value::symbol("replace-everything")),
+        Err(Choice(
+            "One of nil, overwrite-mode-textual or overwrite-mode-binary should be specified"
+        ))
+    );
+
+    assert_eq!(
+        lookup_buffer_slot("buffer-read-only").unwrap().predicate,
+        Unrestricted,
+        "GNU permits non-boolean sentinel values such as `read-mostly`"
+    );
+    assert_eq!(lookup_buffer_slot("major-mode").unwrap().predicate, Symbol);
+    assert_eq!(
+        lookup_buffer_slot("overwrite-mode").unwrap().predicate,
+        OverwriteMode
+    );
+    assert_eq!(
+        lookup_buffer_slot("scroll-up-aggressively")
+            .unwrap()
+            .predicate,
+        Fraction
+    );
+}
+
 // -----------------------------------------------------------------------
 // Helper: create a buffer with some text and correct zv.
 // -----------------------------------------------------------------------
