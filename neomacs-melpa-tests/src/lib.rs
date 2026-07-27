@@ -561,6 +561,10 @@ pub const ANCIENT_ONE_DARK_THEME_MELPA_PIN: (&str, &str) =
 /// corpus.
 pub const ANCIENT_THEME_MELPA_PIN: (&str, &str) = ("ancient-theme", "20260322.1856");
 
+/// The exact android-env package selected by the comprehensive API parity
+/// corpus.
+pub const ANDROID_ENV_MELPA_PIN: (&str, &str) = ("android-env", "20220810.1449");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
