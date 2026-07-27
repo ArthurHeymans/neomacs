@@ -348,6 +348,10 @@ pub const AGENT_SHELL_MELPA_PIN: (&str, &str) = ("agent-shell", "20260724.1019")
 pub const AGGRESSIVE_FILL_PARAGRAPH_MELPA_PIN: (&str, &str) =
     ("aggressive-fill-paragraph", "20240213.2320");
 
+/// The exact aggressive-indent package selected by the comprehensive API
+/// parity corpus.
+pub const AGGRESSIVE_INDENT_MELPA_PIN: (&str, &str) = ("aggressive-indent", "20230112.1300");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
