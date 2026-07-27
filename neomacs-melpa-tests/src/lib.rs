@@ -794,6 +794,10 @@ pub const ARTBOLLOCKS_MODE_MELPA_PIN: (&str, &str) = ("artbollocks-mode", "20251
 /// extraction, Dired lifecycle, process, and cleanup parity corpus.
 pub const ARVIEW_MELPA_PIN: (&str, &str) = ("arview", "20160419.2109");
 
+/// The exact ASCII Table package selected by the comprehensive formatting,
+/// rendering, navigation, and command-workflow parity corpus.
+pub const ASCII_TABLE_MELPA_PIN: (&str, &str) = ("ascii-table", "20231215.1527");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

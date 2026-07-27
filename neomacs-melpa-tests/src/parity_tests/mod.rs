@@ -186,6 +186,7 @@ mod arscript_mode;
 mod artbollocks_mode;
 mod arview;
 mod arxiv_citation;
+mod ascii_table;
 mod async_package;
 mod at_package;
 mod bind_key;
