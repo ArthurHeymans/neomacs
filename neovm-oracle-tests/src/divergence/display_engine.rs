@@ -112,6 +112,30 @@ fn divergence_overlay_arrow() {
 }
 
 #[test]
+fn divergence_overlay_arrow_defvar_lisp_declarations_are_special() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU declares all three variables with DEFVAR_LISP in xdisp.c.  Besides
+    // installing a value, that declaration makes lexical `let' bindings
+    // dynamically visible to independently created functions.
+    let expect = expect_test::expect![[r#""OK (t t t changed)""#]];
+    crate::common::assert_oracle_parity_expect(
+        r#"(list
+  (special-variable-p 'overlay-arrow-position)
+  (special-variable-p 'overlay-arrow-string)
+  (special-variable-p 'overlay-arrow-variable-list)
+  (let ((overlay-arrow-position nil))
+    (funcall
+     (eval
+      '(lambda ()
+         (setq overlay-arrow-position 'changed))
+      t))
+    overlay-arrow-position))"#,
+        expect,
+    );
+}
+
+#[test]
 fn divergence_truncate_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

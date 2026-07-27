@@ -39,6 +39,38 @@ fn symbol_redirect_codes_match_gnu_symbol_redirect() {
 }
 
 #[test]
+fn define_lisp_variable_encodes_specialness_and_locality_together() {
+    crate::test_utils::init_test_tracing();
+    let mut ob = Obarray::new();
+
+    ob.define_lisp_variable(
+        "defvar-global",
+        Value::fixnum(41),
+        LispVariableLocality::Global,
+    );
+    assert_eq!(
+        ob.symbol_value("defvar-global").copied(),
+        Some(Value::fixnum(41))
+    );
+    assert!(ob.is_special("defvar-global"));
+    assert!(!ob.is_buffer_local("defvar-global"));
+
+    ob.define_lisp_variable(
+        "defvar-local-if-set",
+        Value::fixnum(42),
+        LispVariableLocality::BufferLocalIfSet,
+    );
+    let local_id = intern("defvar-local-if-set");
+    assert_eq!(
+        ob.symbol_value("defvar-local-if-set").copied(),
+        Some(Value::fixnum(42))
+    );
+    assert!(ob.is_special("defvar-local-if-set"));
+    assert!(ob.is_buffer_local("defvar-local-if-set"));
+    assert!(ob.blv(local_id).is_some_and(|binding| binding.local_if_set));
+}
+
+#[test]
 fn symbol_trapped_write_codes_match_gnu_symbol_trapped_write() {
     crate::test_utils::init_test_tracing();
 

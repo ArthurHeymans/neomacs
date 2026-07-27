@@ -20,6 +20,7 @@ use super::display_spec;
 use super::error::{EvalResult, Flow, signal};
 use super::hook_runtime;
 use super::intern::intern;
+use super::symbol::LispVariableLocality;
 use super::value::*;
 use crate::buffer::{
     Buffer, BufferId, CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, LispCharPos1,
@@ -5291,9 +5292,7 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
         name: &str,
         default: Value,
     ) {
-        obarray.set_symbol_value(name, default);
-        obarray.make_special(name);
-        obarray.make_buffer_local(name, true);
+        obarray.define_lisp_variable(name, default, LispVariableLocality::BufferLocalIfSet);
     }
 
     obarray.set_symbol_value("redisplay--inhibit-bidi", Value::T);
@@ -5390,12 +5389,21 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     // GNU inits this to `(overlay-arrow-position)` (xdisp.c: `Voverlay_arrow_variable_list
     // = list1 (intern_c_string ("overlay-arrow-position"))`), so the plain
     // `overlay-arrow-position` marker (used by e.g. gud) is scanned by redisplay.
-    obarray.set_symbol_value(
+    obarray.define_lisp_variable(
         "overlay-arrow-variable-list",
         Value::cons(Value::symbol("overlay-arrow-position"), Value::NIL),
+        LispVariableLocality::Global,
     );
-    obarray.set_symbol_value("overlay-arrow-string", Value::string("=>"));
-    obarray.set_symbol_value("overlay-arrow-position", Value::NIL);
+    obarray.define_lisp_variable(
+        "overlay-arrow-string",
+        Value::string("=>"),
+        LispVariableLocality::Global,
+    );
+    obarray.define_lisp_variable(
+        "overlay-arrow-position",
+        Value::NIL,
+        LispVariableLocality::Global,
+    );
     // Mirror GNU Emacs: set char-table-extra-slots property for all subtypes
     // that need extra slots. Fmake_char_table reads this property to allocate
     // the correct number of extra slots.

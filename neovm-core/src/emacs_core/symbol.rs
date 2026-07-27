@@ -59,6 +59,21 @@ pub enum SymbolRedirect {
     Forwarded = 3,
 }
 
+/// Locality established while declaring a Lisp-visible C/Rust variable.
+///
+/// GNU's `DEFVAR_*` family always declares the symbol dynamically special;
+/// some declarations additionally call `make-variable-buffer-local`, making
+/// the variable local in a buffer on first assignment.  Keeping that choice in
+/// the declaration type prevents bootstrap code from installing only a value
+/// and silently omitting either part of the binding contract.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum LispVariableLocality {
+    /// One dynamically special value shared by all buffers.
+    Global,
+    /// Dynamically special, with a buffer-local binding created on assignment.
+    BufferLocalIfSet,
+}
+
 impl SymbolRedirect {
     pub fn from_gnu_code(code: u8) -> Option<Self> {
         Self::try_from(code).ok()
@@ -1672,6 +1687,22 @@ impl Obarray {
         let id = intern(name);
         self.mark_global_member(id);
         self.set_symbol_value_id_inner(id, value);
+    }
+
+    /// Declare and initialize a Lisp-visible variable with GNU `DEFVAR_*`
+    /// binding semantics.
+    pub fn define_lisp_variable(
+        &mut self,
+        name: &str,
+        value: Value,
+        locality: LispVariableLocality,
+    ) {
+        self.set_symbol_value(name, value);
+        self.make_special(name);
+        match locality {
+            LispVariableLocality::Global => {}
+            LispVariableLocality::BufferLocalIfSet => self.make_buffer_local(name, true),
+        }
     }
 
     /// Set the value cell of a symbol by identity.
