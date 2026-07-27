@@ -42,7 +42,12 @@ impl TryFrom<f32> for ImageScaleFactor {
 /// Meaning of an image spec's `:scale` property before frame realization.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ImageScalePolicy {
-    /// Resolve through GNU's `image-scaling-factor` variable.
+    /// No `:scale` key in the spec at all. GNU leaves the scale at 1 here and
+    /// never consults `image-scaling-factor` (`double scale = 1` with no
+    /// matching branch, src/image.c:2697-2736) — only an explicit
+    /// `:scale default` opts into the variable.
+    Unspecified,
+    /// `:scale default` — resolve through GNU's `image-scaling-factor`.
     Default,
     /// A numeric scale written directly in the image spec.
     Explicit(ImageScaleFactor),
@@ -93,6 +98,7 @@ impl ImageScaleEnvironment {
     pub fn resolve(self, policy: ImageScalePolicy) -> ResolvedImageRealization {
         let device_scale = self.device_scale.get();
         let layout_scale = match policy {
+            ImageScalePolicy::Unspecified => 1.0,
             ImageScalePolicy::Explicit(scale) => scale.get(),
             ImageScalePolicy::Default => {
                 let device_factor = match self.default_scale {

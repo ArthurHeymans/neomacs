@@ -372,7 +372,8 @@ pub(crate) fn image_resolve_request_from_spec(
     // their `:max-` counterpart, `:max-width`/`:max-height` are clamps.
     let (mut width, mut max_width) = (None, None);
     let (mut height, mut max_height) = (None, None);
-    let mut scale = ImageScalePolicy::Default;
+    // Absent `:scale` is NOT `:scale default` — see ImageScalePolicy.
+    let mut scale = ImageScalePolicy::Unspecified;
 
     let mut i = 1usize;
     while i + 1 < items.len() {

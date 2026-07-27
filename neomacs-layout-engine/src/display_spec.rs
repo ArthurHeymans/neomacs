@@ -209,7 +209,8 @@ pub(crate) fn parse_display_image_layout(
     // Kept apart per GNU: `:width`/`:height` are targets, `:max-*` are clamps.
     let (mut width, mut max_width) = (None, None);
     let (mut height, mut max_height) = (None, None);
-    let mut scale = ImageScalePolicy::Default;
+    // Absent `:scale` is NOT `:scale default` — see ImageScalePolicy.
+    let mut scale = ImageScalePolicy::Unspecified;
     let mut ascent = DisplayImageAscentPolicy::default();
     let mut margin = DisplayImageMargin::default();
     let mut fg_color = default_fg;
