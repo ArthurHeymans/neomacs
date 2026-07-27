@@ -6747,7 +6747,11 @@ fn window_end_prefers_last_redisplay_snapshot_when_available() {
     }
 
     let result = super::builtin_window_end(&mut ev, vec![]).expect("window-end");
-    assert_eq!(result, Value::fixnum(12));
+    // The snapshot's last row ends AT character 12, but GNU's `window-end` is
+    // `BUF_Z (b) - w->window_end_pos` — the position just after the last
+    // displayed character, so 13. (Measured against GNU 31: a window showing
+    // buffer lines 1-21 reports the start of line 22.)
+    assert_eq!(result, Value::fixnum(13));
 }
 
 #[test]
