@@ -752,6 +752,12 @@ pub const ARDUINO_MODE_FLYCHECK_MELPA_PIN: (&str, &str) = ("flycheck", "20260727
 /// from upstream commit `797e1d0ef1312e8ff846abd0c6853358041f7691`.
 pub const ARSCRIPT_MODE_MELPA_PIN: (&str, &str) = ("arscript-mode", "20240819.1927");
 
+/// The exact arxiv-citation package selected by the comprehensive parsing,
+/// citation, dependency, editing, and download-workflow parity corpus. MELPA
+/// built this archive from upstream commit
+/// `04de0dae1121fb92c30b393449c6f8d6d940dbed`.
+pub const ARXIV_CITATION_MELPA_PIN: (&str, &str) = ("arxiv-citation", "20230713.627");
+
 /// The exact archive-phar package selected by the comprehensive archive
 /// browsing and extraction parity corpus.
 pub const ARCHIVE_PHAR_MELPA_PIN: (&str, &str) = ("archive-phar", "20221009.2129");
