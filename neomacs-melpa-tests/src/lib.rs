@@ -767,6 +767,10 @@ pub const ARDUINO_CLI_MODE_MELPA_PIN: (&str, &str) = ("arduino-cli-mode", "20260
 /// tabulated-list, and command workflow parity corpus.
 pub const ARIA2_MELPA_PIN: (&str, &str) = ("aria2", "20230314.2131");
 
+/// The exact Arjen Grey Theme package selected by the comprehensive theme
+/// definition, rendering, and lifecycle parity corpus.
+pub const ARJEN_GREY_THEME_MELPA_PIN: (&str, &str) = ("arjen-grey-theme", "20170522.2047");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
