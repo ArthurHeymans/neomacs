@@ -276,6 +276,10 @@ pub const ACTON_MODE_MELPA_PIN: (&str, &str) = ("acton-mode", "20250113.1059");
 /// corpus.
 pub const ADA_TS_MODE_MELPA_PIN: (&str, &str) = ("ada-ts-mode", "20260627.1553");
 
+/// The exact adafruit-wisdom package selected by the comprehensive API parity
+/// corpus.
+pub const ADAFRUIT_WISDOM_MELPA_PIN: (&str, &str) = ("adafruit-wisdom", "20200217.306");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
