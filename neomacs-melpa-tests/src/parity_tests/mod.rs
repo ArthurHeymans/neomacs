@@ -123,6 +123,7 @@ mod ameba;
 mod ample_regexps;
 mod ample_theme;
 mod ample_zen_theme;
+mod amread_mode;
 mod async_package;
 mod at_package;
 mod bind_key;

@@ -529,6 +529,11 @@ pub const AMPLE_THEME_MELPA_PIN: (&str, &str) = ("ample-theme", "20260611.1532")
 /// corpus.
 pub const AMPLE_ZEN_THEME_MELPA_PIN: (&str, &str) = ("ample-zen-theme", "20150119.2154");
 
+/// The exact amread-mode package selected by the comprehensive API parity
+/// corpus. MELPA built this archive from upstream commit
+/// `bf06b05c6322fe74f0e5ac2436cad46f66f673c6`.
+pub const AMREAD_MODE_MELPA_PIN: (&str, &str) = ("amread-mode", "20240903.1534");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
@@ -2080,6 +2085,23 @@ fn prepare_cached_package_with_url_dependency(
     let version_string = elisp_string(version);
     let archive_name_string = elisp_string(archive.name);
     let archive_url_string = elisp_string(archive.url);
+    let package_archives = if archive.name == MELPA_ARCHIVE.name {
+        format!(
+            r##"(list
+                      (cons {archive_name_string}
+                            {archive_url_string})
+                      (cons {}
+                            {}))"##,
+            elisp_string(GNU_ELPA_ARCHIVE.name),
+            elisp_string(GNU_ELPA_ARCHIVE.url)
+        )
+    } else {
+        format!(
+            r##"(list
+                      (cons {archive_name_string}
+                            {archive_url_string}))"##
+        )
+    };
     let dependency_setup = dependency.map_or_else(String::new, |dependency| {
         let dependency_name = elisp_string(dependency.name);
         let dependency_version = elisp_string(dependency.version);
@@ -2124,10 +2146,7 @@ fn prepare_cached_package_with_url_dependency(
                (setq package-user-dir
                      (expand-file-name ".emacs.d/elpa" (getenv "HOME"))
                      package-check-signature nil
-                     package-archives
-                     (list
-                      (cons {archive_name_string}
-                            {archive_url_string})))
+                     package-archives {package_archives})
                (package-refresh-contents)
                {dependency_setup}
                (let* ((package-name {name_string})
