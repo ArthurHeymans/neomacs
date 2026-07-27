@@ -770,6 +770,12 @@ pub const ARXIV_MODE_MELPA_PIN: (&str, &str) = ("arxiv-mode", "20240111.2203");
 /// `8914fad451f9c7f9c2286cf18db5edaa51a92cd7`.
 pub const ASCIIDOC_MODE_MELPA_PIN: (&str, &str) = ("asciidoc-mode", "20260612.645");
 
+/// The exact asdf-vm package selected by the comprehensive tool-version,
+/// process, environment, installer, plugin, and menu workflow parity corpus.
+/// MELPA built this archive from upstream commit
+/// `f6dbb4b6560cd7e5bb05006e9fc416c5c323b567`.
+pub const ASDF_VM_MELPA_PIN: (&str, &str) = ("asdf-vm", "20250710.1053");
+
 /// The exact archive-phar package selected by the comprehensive archive
 /// browsing and extraction parity corpus.
 pub const ARCHIVE_PHAR_MELPA_PIN: (&str, &str) = ("archive-phar", "20221009.2129");
