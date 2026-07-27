@@ -1062,6 +1062,31 @@ fn secure_hash_eval_buffer_sha1() {
 }
 
 #[test]
+fn secure_hash_encodes_multibyte_buffer_raw_byte_characters_for_writing() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.insert_lisp_string(&crate::heap_types::LispString::from_unibyte(vec![
+            65, 195, 169, 90,
+        ]));
+    }
+    eval.set_variable("coding-system-for-write", Value::symbol("utf-8-unix"));
+    let id = eval.buffers.current_buffer().expect("current buffer").id;
+
+    let result = builtin_secure_hash(
+        &mut eval,
+        vec![Value::symbol("sha256"), Value::make_buffer(id)],
+    )
+    .expect("secure-hash should encode the buffer through its write coding");
+
+    assert_eq!(
+        result.as_utf8_str(),
+        Some("6a1917777ebb7105da25b045353aeda24a7a9863e4d1ab0d72e1dc5f7d482257")
+    );
+}
+
+#[test]
 fn secure_hash_eval_buffer_range_errors() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

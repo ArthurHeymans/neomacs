@@ -6,7 +6,7 @@
 //! compare-strings, string-version-lessp, string-collate-lessp/equalp.
 
 use super::error::{EvalResult, Flow, signal};
-use super::intern::resolve_sym;
+use super::intern::{intern, resolve_sym};
 use crate::emacs_core::error::LispCondition;
 // bytes_to_unibyte_storage_string and encode_nonunicode_char_for_storage
 // imports removed — using emacs_char + LispString directly
@@ -807,13 +807,14 @@ pub(crate) fn builtin_md5(eval: &mut super::eval::Context, args: Vec<Value>) -> 
             md5_coding_system_name(&args).as_deref(),
         )?)),
         ValueKind::Veclike(VecLikeType::Buffer) => {
-            Ok(Value::string(md5_hex_for_buffer_in_manager(
-                &eval.buffers,
+            let input = encoded_hash_slice_for_buffer_in_context(
+                eval,
                 object.as_buffer_id().unwrap(),
                 args.get(1),
                 args.get(2),
-                md5_coding_system_name(&args).as_deref(),
-            )?))
+                md5_coding_system_name(&args).map(|name| intern(&name)),
+            )?;
+            Ok(Value::string(md5_hash(&input)))
         }
         _ => Err(signal(
             "error",
@@ -977,46 +978,52 @@ fn md5_hex_for_string(
     Ok(md5_hash(&bytes[byte_from..byte_to]))
 }
 
-fn hash_slice_for_buffer_in_manager(
-    buffers: &BufferManager,
+/// Extract and externally encode a buffer region before hashing it.
+///
+/// GNU's `extract_data_from_object` does not expose the gap buffer's internal
+/// bytes to `md5` or `secure-hash`.  It first makes a Lisp string for the
+/// character region, selects the same coding policy used for writing, and runs
+/// the complete coding engine.  Keeping that protocol in one helper prevents
+/// individual digest algorithms from accidentally choosing a representation.
+fn encoded_hash_slice_for_buffer_in_context(
+    eval: &mut super::eval::Context,
     buffer_id: crate::buffer::BufferId,
     start_raw: Option<&Value>,
     end_raw: Option<&Value>,
+    coding_override: Option<super::intern::SymId>,
 ) -> Result<Vec<u8>, Flow> {
-    let buf = buffers
-        .get(buffer_id)
-        .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-
-    let byte_range =
-        checked_buffer_hash_lisp_region(buf, start_raw, end_raw)?.to_accessible_byte_range(buf);
-    Ok(buf.buffer_substring_bytes_range(byte_range))
-}
-
-fn md5_hex_for_buffer_in_manager(
-    buffers: &BufferManager,
-    buffer_id: crate::buffer::BufferId,
-    start_raw: Option<&Value>,
-    end_raw: Option<&Value>,
-    coding_system: Option<&str>,
-) -> Result<String, Flow> {
-    if let Some(coding_system) = coding_system {
-        let buf = buffers
+    let (text, multibyte) = {
+        let buf = eval
+            .buffers
             .get(buffer_id)
             .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
         let byte_range =
             checked_buffer_hash_lisp_region(buf, start_raw, end_raw)?.to_accessible_byte_range(buf);
-        let text = buf.buffer_substring_lisp_string_range(byte_range);
-        if text.is_multibyte() {
-            return Ok(md5_hash(&crate::encoding::encode_lisp_string(
-                &text,
-                coding_system,
-            )));
-        }
-        return Ok(md5_hash(text.as_bytes()));
-    }
-
-    let slice = hash_slice_for_buffer_in_manager(buffers, buffer_id, start_raw, end_raw)?;
-    Ok(md5_hash(&slice))
+        (
+            buf.buffer_substring_lisp_string_range(byte_range),
+            buf.get_multibyte(),
+        )
+    };
+    let fallback = if multibyte {
+        super::fileio::WriteCodingFallback::Utf8
+    } else {
+        super::fileio::WriteCodingFallback::RawText
+    };
+    let coding_system = coding_override
+        .unwrap_or_else(|| super::fileio::resolve_write_coding_system(eval, buffer_id, fallback));
+    let encoded = crate::encoding::builtin_encode_coding_string_in_context(
+        eval,
+        vec![Value::heap_string(text), Value::symbol(coding_system)],
+    )?;
+    let encoded = encoded.as_lisp_string().ok_or_else(|| {
+        signal(
+            "error",
+            vec![Value::string(
+                "Coding system produced non-string hash input",
+            )],
+        )
+    })?;
+    Ok(encoded.as_bytes().to_vec())
 }
 
 fn secure_hash_algorithm_name(val: &Value) -> Result<String, Flow> {
@@ -1155,11 +1162,12 @@ pub(crate) fn builtin_secure_hash(eval: &mut super::eval::Context, args: Vec<Val
     let object = &args[1];
     let input = match object.kind() {
         ValueKind::String => hash_slice_for_string(object, args.get(2), args.get(3))?,
-        ValueKind::Veclike(VecLikeType::Buffer) => hash_slice_for_buffer_in_manager(
-            &eval.buffers,
+        ValueKind::Veclike(VecLikeType::Buffer) => encoded_hash_slice_for_buffer_in_context(
+            eval,
             object.as_buffer_id().unwrap(),
             args.get(2),
             args.get(3),
+            None,
         )?,
         _ => {
             return Err(signal(

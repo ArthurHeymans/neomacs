@@ -5854,33 +5854,50 @@ pub(crate) fn builtin_insert_file_contents(
     Ok(value)
 }
 
-/// Resolve the coding system to use for writing.
+/// Typed fallback for operations that share GNU's write-coding precedence but
+/// differ when neither a dynamic nor a buffer coding system is selected.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum WriteCodingFallback {
+    Utf8,
+    RawText,
+}
+
+impl WriteCodingFallback {
+    fn symbol(self) -> super::intern::SymId {
+        match self {
+            Self::Utf8 => intern("utf-8"),
+            Self::RawText => intern("raw-text"),
+        }
+    }
+}
+
+/// Resolve the coding system to use for writing as an interned protocol value.
 ///
 /// Priority:
 /// 1. `coding-system-for-write` (if bound and non-nil)
-/// 2. `buffer-file-coding-system` (buffer-local)
-/// 3. Fallback to `"utf-8"`
-fn resolve_write_coding_system(
+/// 2. the buffer's visible `buffer-file-coding-system`
+/// 3. the caller's operation-specific fallback
+pub(crate) fn resolve_write_coding_system(
     eval: &super::eval::Context,
-    buffers: &crate::buffer::BufferManager,
     buffer_id: crate::buffer::BufferId,
-) -> String {
+    fallback: WriteCodingFallback,
+) -> super::intern::SymId {
     // 1. Check coding-system-for-write
     let coding_system_for_write = eval.visible_variable_value_or_nil("coding-system-for-write");
     if let Some(name) = coding_system_value_to_name(&coding_system_for_write) {
-        return name;
+        return intern(&name);
     }
 
-    // 2. Check buffer-file-coding-system (buffer-local)
-    if let Some(buf) = buffers.get(buffer_id)
-        && let Some(val) = buf.get_buffer_local("buffer-file-coding-system")
+    // 2. Read the visible per-buffer slot, not only an explicitly local
+    // override.  GNU's BVAR accessor sees the inherited slot value too.
+    if let Some(buf) = eval.buffers.get(buffer_id)
+        && let Some(val) = buf.buffer_local_value("buffer-file-coding-system")
         && let Some(name) = coding_system_value_to_name(&val)
     {
-        return name;
+        return intern(&name);
     }
 
-    // 3. Default
-    "utf-8".to_string()
+    fallback.symbol()
 }
 
 /// Extract a coding system name from a `Value` (symbol or string).
@@ -6034,8 +6051,8 @@ pub(crate) fn builtin_write_region(
 
     // --- Encode using the appropriate coding system ---
     // Priority: coding-system-for-write > buffer-file-coding-system > utf-8
-    let coding_system = resolve_write_coding_system(eval, &eval.buffers, current_id);
-    let encoded_bytes = crate::encoding::encode_lisp_string(&content, &coding_system);
+    let coding_system = resolve_write_coding_system(eval, current_id, WriteCodingFallback::Utf8);
+    let encoded_bytes = crate::encoding::encode_lisp_string(&content, resolve_sym(coding_system));
 
     // --- Write encoded bytes and handle fsync ---
     let file = write_bytes_to_file_with_mode(&encoded_bytes, &resolved_path, append_mode).map_err(
@@ -6100,7 +6117,7 @@ pub(crate) fn builtin_write_region(
         }
     }
 
-    eval.set_variable("last-coding-system-used", Value::symbol(&coding_system));
+    eval.set_variable("last-coding-system-used", Value::symbol(coding_system));
     if let Some(path) = wrote_message_path.filter(|_| !eval.noninteractive()) {
         crate::emacs_core::builtins::builtin_message(
             eval,
