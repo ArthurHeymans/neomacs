@@ -188,6 +188,7 @@ mod arview;
 mod arxiv_citation;
 mod arxiv_mode;
 mod ascii_table;
+mod asciidoc_mode;
 mod asilea;
 mod async_package;
 mod at_package;

@@ -764,6 +764,12 @@ pub const ARXIV_CITATION_MELPA_PIN: (&str, &str) = ("arxiv-citation", "20230713.
 /// `f629ec64f8bbac0cadb472c6741f8f33d49e9160`.
 pub const ARXIV_MODE_MELPA_PIN: (&str, &str) = ("arxiv-mode", "20240111.2203");
 
+/// The exact asciidoc-mode package selected by the comprehensive Tree-sitter,
+/// editing, navigation, completion, and diagnostics parity corpus. MELPA built
+/// this archive from upstream commit
+/// `8914fad451f9c7f9c2286cf18db5edaa51a92cd7`.
+pub const ASCIIDOC_MODE_MELPA_PIN: (&str, &str) = ("asciidoc-mode", "20260612.645");
+
 /// The exact archive-phar package selected by the comprehensive archive
 /// browsing and extraction parity corpus.
 pub const ARCHIVE_PHAR_MELPA_PIN: (&str, &str) = ("archive-phar", "20221009.2129");
@@ -2026,6 +2032,48 @@ pub fn prepare_cached_tree_sitter_grammar(
     repository: &str,
     revision: &str,
 ) -> Result<PathBuf, String> {
+    prepare_cached_tree_sitter_grammar_with_source_directory(
+        gnu_emacs, language, repository, revision, None,
+    )
+}
+
+/// Build one exact Tree-sitter grammar whose generated sources live below a
+/// repository subdirectory.
+///
+/// This supports grammar monorepositories such as
+/// `cathaysia/tree-sitter-asciidoc`, which contains separate block and inline
+/// grammars under distinct source directories.
+pub fn prepare_cached_tree_sitter_grammar_from_subdirectory(
+    gnu_emacs: &EmacsRuntime,
+    language: &str,
+    repository: &str,
+    revision: &str,
+    source_directory: &str,
+) -> Result<PathBuf, String> {
+    prepare_cached_tree_sitter_grammar_with_source_directory(
+        gnu_emacs,
+        language,
+        repository,
+        revision,
+        Some(source_directory),
+    )
+}
+
+fn prepare_cached_tree_sitter_grammar_with_source_directory(
+    gnu_emacs: &EmacsRuntime,
+    language: &str,
+    repository: &str,
+    revision: &str,
+    source_directory: Option<&str>,
+) -> Result<PathBuf, String> {
+    let source_directory_is_safe = source_directory.is_none_or(|directory| {
+        let path = Path::new(directory);
+        !directory.is_empty()
+            && !path.is_absolute()
+            && path
+                .components()
+                .all(|component| matches!(component, std::path::Component::Normal(_)))
+    });
     if language.is_empty()
         || !language
             .chars()
@@ -2035,9 +2083,10 @@ pub fn prepare_cached_tree_sitter_grammar(
         || !revision
             .chars()
             .all(|character| character.is_ascii_hexdigit())
+        || !source_directory_is_safe
     {
         return Err(format!(
-            "cached Tree-sitter grammar requires a safe language, GitHub repository, and full revision, got `{language}` `{repository}` `{revision}`"
+            "cached Tree-sitter grammar requires a safe language, GitHub repository, full revision, and optional source directory, got `{language}` `{repository}` `{revision}` `{source_directory:?}`"
         ));
     }
 
@@ -2076,7 +2125,9 @@ pub fn prepare_cached_tree_sitter_grammar(
     let source = root.join("source");
     let grammar_dir = home.join(".emacs.d/tree-sitter");
     let ready_marker = root.join("ready");
-    let expected_marker = format!("{language}\t{repository}\t{revision}\n");
+    let source_directory_marker = source_directory.unwrap_or("");
+    let expected_marker =
+        format!("{language}\t{repository}\t{revision}\t{source_directory_marker}\n");
     let cache_is_ready = grammar_library_exists(&grammar_dir, language)
         && fs::read_to_string(&ready_marker).is_ok_and(|contents| contents == expected_marker);
     if cache_is_ready {
@@ -2168,6 +2219,13 @@ pub fn prepare_cached_tree_sitter_grammar(
 
     let language_symbol = language;
     let source_string = elisp_string(&source_arg);
+    let grammar_recipe = match source_directory {
+        Some(directory) => {
+            let directory = elisp_string(directory);
+            format!("({language_symbol} {source_string} nil {directory})")
+        }
+        None => format!("({language_symbol} {source_string})"),
+    };
     let form = format!(
         r##"(progn
                (require 'treesit)
@@ -2175,8 +2233,7 @@ pub fn prepare_cached_tree_sitter_grammar(
                      (file-name-as-directory
                       (expand-file-name ".emacs.d" (getenv "HOME")))
                      treesit-language-source-alist
-                     '(({language_symbol}
-                        {source_string})))
+                     '({grammar_recipe}))
                (treesit-install-language-grammar '{language_symbol})
                (unless (treesit-language-available-p '{language_symbol})
                  (error "Installed Tree-sitter grammar is unavailable: %s"
