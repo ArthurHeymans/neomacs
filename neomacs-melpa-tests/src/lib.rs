@@ -305,6 +305,9 @@ pub const ADVENT_MODE_MELPA_PIN: (&str, &str) = ("advent-mode", "20260209.1903")
 /// parity corpus.
 pub const ADWAITA_DARK_THEME_MELPA_PIN: (&str, &str) = ("adwaita-dark-theme", "20231209.1033");
 
+/// The exact AES package selected by the comprehensive API parity corpus.
+pub const AES_MELPA_PIN: (&str, &str) = ("aes", "20211204.2348");
+
 /// The exact Afterglow package selected by the comprehensive API parity corpus.
 pub const AFTERGLOW_MELPA_PIN: (&str, &str) = ("afterglow", "20240312.953");
 
