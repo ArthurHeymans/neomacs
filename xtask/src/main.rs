@@ -26,10 +26,10 @@ struct FreshBuildOptions {
     repo_root: PathBuf,
     runtime_root: PathBuf,
     bin_dir: PathBuf,
-    /// Cargo profile to build with (`release`, `profiling`, ...). Determines
-    /// both the `cargo build` flag and the `target/<dir>` the binaries come
-    /// from, so a non-release profile does NOT overwrite the release build.
-    profile: String,
+    /// Cargo profile to build with. Determines both the `cargo build` flag and
+    /// the `target/<dir>` the binaries come from, so a non-release profile does
+    /// NOT overwrite the release build.
+    profile: BuildProfile,
     dry_run: bool,
     native_comp: bool,
     skip_build: bool,
@@ -290,7 +290,7 @@ impl FreshBuildOptions {
 
         let mut runtime_root = repo_root.clone();
         let mut bin_dir = None;
-        let mut profile: Option<String> = None;
+        let mut profile: Option<BuildProfile> = None;
         let mut dry_run = false;
         let mut native_comp =
             env::var("NEOMACS_NATIVE_COMP").is_ok_and(|value| value.eq_ignore_ascii_case("yes"));
@@ -313,12 +313,12 @@ impl FreshBuildOptions {
                         .ok_or_else(|| "--runtime-root requires a path".to_string())?;
                     runtime_root = resolve_cli_path(&repo_root, value);
                 }
-                "--release" => profile = Some("release".to_string()),
+                "--release" => profile = Some(BuildProfile::Release),
                 "--profile" => {
                     let value = args
                         .next()
                         .ok_or_else(|| "--profile requires a profile name".to_string())?;
-                    profile = Some(value.to_string_lossy().trim().to_string());
+                    profile = Some(BuildProfile::parse(value.to_string_lossy().trim()));
                 }
                 "--dry-run" => dry_run = true,
                 "--native-comp" => native_comp = true,
@@ -365,12 +365,13 @@ impl FreshBuildOptions {
         // The pipeline byte-compiles the whole Lisp tree with the binary it
         // just built; an unoptimized profile makes that take hours, which is
         // what the original --release requirement existed to prevent.
-        if matches!(profile.as_str(), "dev" | "debug" | "test") {
+        if !profile.is_optimized() {
             return Err(format!(
-                "fresh-build cannot use the `{profile}` profile: the pipeline \
+                "fresh-build cannot use the `{}` profile: the pipeline \
                  byte-compiles the Lisp tree with the binary it builds, so it \
                  needs an optimized profile (`release`, or `profiling` which \
-                 inherits it)."
+                 inherits it).",
+                profile.as_name()
             )
             .into());
         }
@@ -399,7 +400,7 @@ fn repository_root() -> PathBuf {
         .to_path_buf()
 }
 
-fn default_bin_dir(repo_root: &Path, profile: &str) -> PathBuf {
+fn default_bin_dir(repo_root: &Path, profile: &BuildProfile) -> PathBuf {
     env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .map(|path| {
@@ -410,21 +411,7 @@ fn default_bin_dir(repo_root: &Path, profile: &str) -> PathBuf {
             }
         })
         .unwrap_or_else(|| repo_root.join("target"))
-        .join(profile_target_subdir(profile))
-}
-
-/// Directory name cargo writes a profile's artifacts into.
-///
-/// Cargo does not simply use the profile name: the built-in `dev` and `test`
-/// profiles share `target/debug`, and `bench` shares `target/release`. Custom
-/// profiles (such as `profiling`) get a directory of their own -- which is
-/// exactly why a profiling build does not disturb `target/release`.
-fn profile_target_subdir(profile: &str) -> &str {
-    match profile {
-        "dev" | "test" => "debug",
-        "bench" => "release",
-        other => other,
-    }
+        .join(profile.target_subdir())
 }
 
 fn resolve_cli_path(repo_root: &Path, raw: OsString) -> PathBuf {
@@ -436,17 +423,73 @@ fn resolve_cli_path(repo_root: &Path, raw: OsString) -> PathBuf {
     }
 }
 
-/// Cargo profile prefix meaning "optimize using a PGO profile".
+/// A cargo profile `fresh-build` was asked to build with.
 ///
-/// Covers `release-pgo` (shipping) and `release-pgo-profiling` (same codegen,
-/// symbols kept). The instrumented pass `release-pgo-gen` is deliberately
-/// EXCLUDED -- it is the build that produces the profile, so treating it as a
-/// consumer would recurse.
-const PGO_PROFILE: &str = "release-pgo";
-const PGO_GEN_PROFILE: &str = "release-pgo-gen";
+/// Cargo profiles are user-extensible, so this is deliberately NOT a closed
+/// set: `Custom` carries anything defined in Cargo.toml that xtask has no
+/// opinion about. What the enum buys is that the profiles xtask *does* reason
+/// about are named values rather than string comparisons -- in particular the
+/// PGO classification below, where getting `ReleasePgoGen` on the wrong side of
+/// the test would make the instrumented pass recurse into itself.
+#[derive(Clone, Debug, PartialEq, Eq, strum::IntoStaticStr, strum::EnumString)]
+#[strum(serialize_all = "kebab-case")]
+enum BuildProfile {
+    Release,
+    Profiling,
+    /// Profile-guided shipping build.
+    ReleasePgo,
+    /// Profile-guided build that keeps symbols, for profiling what is shipped.
+    ReleasePgoProfiling,
+    /// The instrumented pass that PRODUCES a profile. Never a PGO consumer.
+    ReleasePgoGen,
+    /// Unoptimized; rejected, since the pipeline byte-compiles the Lisp tree
+    /// with the binary it just built.
+    Dev,
+    Debug,
+    Test,
+    #[strum(disabled)]
+    Custom(String),
+}
 
-fn is_pgo_profile(profile: &str) -> bool {
-    profile.starts_with(PGO_PROFILE) && profile != PGO_GEN_PROFILE
+impl BuildProfile {
+    fn parse(name: &str) -> Self {
+        use std::str::FromStr;
+        Self::from_str(name).unwrap_or_else(|_| Self::Custom(name.to_string()))
+    }
+
+    /// The name to hand cargo, and the `target/<dir>` it writes to.
+    fn as_name(&self) -> &str {
+        match self {
+            Self::Custom(name) => name,
+            other => other.into(),
+        }
+    }
+
+    /// Whether this profile CONSUMES a PGO profile, so `fresh-build` must run
+    /// the instrument-train-merge passes first.
+    ///
+    /// `ReleasePgoGen` is excluded by being a distinct variant rather than by a
+    /// string inequality, so the recursion is impossible rather than guarded.
+    fn consumes_pgo(&self) -> bool {
+        matches!(self, Self::ReleasePgo | Self::ReleasePgoProfiling)
+    }
+
+    /// Optimized enough to byte-compile the Lisp tree with.
+    fn is_optimized(&self) -> bool {
+        !matches!(self, Self::Dev | Self::Debug | Self::Test)
+    }
+
+    /// Directory name cargo writes this profile's artifacts into.
+    ///
+    /// Cargo does not simply use the profile name: `dev` and `test` share
+    /// `target/debug`, and `bench` shares `target/release`.
+    fn target_subdir(&self) -> &str {
+        match self {
+            Self::Dev | Self::Test => "debug",
+            Self::Custom(name) if name == "bench" => "release",
+            other => other.as_name(),
+        }
+    }
 }
 
 /// Where a PGO build keeps its raw counters and merged profile.
@@ -471,7 +514,7 @@ fn run_pgo_training(options: &FreshBuildOptions) -> Result<PathBuf> {
     // Instrumented pass: its own profile (and so its own target dir), so the
     // instrumented binary never displaces a normal build.
     let gen_options = FreshBuildOptions {
-        profile: PGO_GEN_PROFILE.to_string(),
+        profile: BuildProfile::ReleasePgoGen,
         ..options.clone()
     };
     let gen_options = FreshBuildOptions {
@@ -539,7 +582,7 @@ fn llvm_profdata_path() -> Result<PathBuf> {
 }
 
 fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
-    if is_pgo_profile(&options.profile) {
+    if options.profile.consumes_pgo() {
         let merged = run_pgo_training(options)?;
         println!("+ PGO pass 2/2: optimized build using {}", merged.display());
         return run_fresh_build_inner(
@@ -819,7 +862,7 @@ fn run_fresh_build_inner(
         run_compile_main(options, &paths, &envs)?;
     }
 
-    let mode = options.profile.as_str();
+    let mode = options.profile.as_name();
     println!(
         concat!(
             "+ xtask fresh-build finished successfully ({mode})\n",
@@ -974,7 +1017,7 @@ fn initial_cargo_build_args(options: &FreshBuildOptions) -> Vec<OsString> {
     // `--profile release` is accepted by cargo and is equivalent to
     // `--release`, so one uniform flag covers every profile.
     cargo_args.push(OsString::from("--profile"));
-    cargo_args.push(OsString::from(&options.profile));
+    cargo_args.push(OsString::from(options.profile.as_name()));
     cargo_args
 }
 
