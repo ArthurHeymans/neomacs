@@ -126,6 +126,7 @@ mod ample_zen_theme;
 mod amread_mode;
 mod amsreftex;
 mod amx;
+mod anaconda_mode;
 mod async_package;
 mod at_package;
 mod bind_key;
