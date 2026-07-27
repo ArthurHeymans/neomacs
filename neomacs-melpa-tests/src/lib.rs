@@ -607,6 +607,10 @@ pub const ANKI_MODE_MELPA_PIN: (&str, &str) = ("anki-mode", "20201223.719");
 /// corpus.
 pub const ANKI_VOCABULARY_MELPA_PIN: (&str, &str) = ("anki-vocabulary", "20200103.325");
 
+/// The exact Annalist package selected by the comprehensive recording and Org
+/// rendering parity corpus.
+pub const ANNALIST_MELPA_PIN: (&str, &str) = ("annalist", "20260531.1558");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
