@@ -7606,7 +7606,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
-    ctx.defsubr("plist-get", builtin_plist_get_with_ctx, 2, Some(3));
+    ctx.defsubr_slice("plist-get", builtin_plist_get_slice, 2, Some(3));
     ctx.defsubr("plist-put", builtin_plist_put_with_ctx, 3, Some(4));
     ctx.defsubr(
         "copy-alist",

@@ -1002,6 +1002,42 @@ pub(crate) fn builtin_plist_get(args: Vec<Value>) -> EvalResult {
     builtin_plist_get_eq_swp(args, false)
 }
 
+/// `plist-get` taking its arguments as a SLICE, so a call allocates nothing.
+///
+/// The default `defsubr` convention is `SubrFn::Many`, whose dispatch arm does
+/// `args[args_start..args_start + nargs].to_vec()` -- a heap allocation on
+/// EVERY call, purely to hand over the arguments. GNU has no equivalent: its
+/// subrs receive `Lisp_Object`s directly, or a `Lisp_Object *` for MANY, and
+/// nothing conses to make a call.
+///
+/// `plist-get` is the single hottest builtin in org editing -- 57373 calls,
+/// 12.87% of all builtin calls, in a 40-iteration screenful loop -- because
+/// org-element stores node properties in plists. Every one of those was a
+/// `Vec` allocation for two arguments, feeding the GC cost that shows up as
+/// ~8-9% of org (jemalloc alone 3.3%).
+///
+/// `SubrFn::ManySlice` already existed and is already wired into the
+/// dispatcher (`apply`, `funcall`, `sort`, `string-match` use it); this just
+/// opts `plist-get` into it. The rare PREDICATE form still needs an owned
+/// `Vec` because the predicate can run Lisp that mutates the list mid-walk, so
+/// it delegates to the existing entry point.
+pub(crate) fn builtin_plist_get_slice(
+    eval: &mut super::eval::Context,
+    args: &[Value],
+) -> EvalResult {
+    expect_min_args("plist-get", args, 2)?;
+    expect_max_args("plist-get", args, 3)?;
+    if args.get(2).is_none_or(|value| value.is_nil()) {
+        return Ok(crate::emacs_core::plist::plist_get_swp(
+            args[0],
+            &args[1],
+            eval.symbols_with_pos_enabled,
+        )
+        .unwrap_or(Value::NIL));
+    }
+    builtin_plist_get_with_ctx(eval, args.to_vec())
+}
+
 pub(crate) fn builtin_plist_get_with_ctx(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
