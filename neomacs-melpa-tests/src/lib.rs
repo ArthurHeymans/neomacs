@@ -758,6 +758,12 @@ pub const ARSCRIPT_MODE_MELPA_PIN: (&str, &str) = ("arscript-mode", "20240819.19
 /// `04de0dae1121fb92c30b393449c6f8d6d940dbed`.
 pub const ARXIV_CITATION_MELPA_PIN: (&str, &str) = ("arxiv-citation", "20230713.627");
 
+/// The exact arxiv-mode package selected by the comprehensive query, rendering,
+/// bibliography, navigation, and command-workflow parity corpus. MELPA built
+/// this archive from upstream commit
+/// `f629ec64f8bbac0cadb472c6741f8f33d49e9160`.
+pub const ARXIV_MODE_MELPA_PIN: (&str, &str) = ("arxiv-mode", "20240111.2203");
+
 /// The exact archive-phar package selected by the comprehensive archive
 /// browsing and extraction parity corpus.
 pub const ARCHIVE_PHAR_MELPA_PIN: (&str, &str) = ("archive-phar", "20221009.2129");
