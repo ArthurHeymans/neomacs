@@ -627,6 +627,9 @@ pub const ANNOTATION_MELPA_PIN: (&str, &str) = ("annotation", "20250805.1029");
 /// parity corpus.
 pub const ANNOYING_ARROWS_MODE_MELPA_PIN: (&str, &str) = ("annoying-arrows-mode", "20161024.646");
 
+/// The exact ansi package selected by the comprehensive API parity corpus.
+pub const ANSI_MELPA_PIN: (&str, &str) = ("ansi", "20251118.230");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
