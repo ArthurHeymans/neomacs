@@ -143,6 +143,7 @@ mod anki_editor_view;
 mod anki_mode;
 mod anki_vocabulary;
 mod annalist;
+mod annotate;
 mod async_package;
 mod at_package;
 mod bind_key;
