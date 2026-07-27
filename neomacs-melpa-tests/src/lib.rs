@@ -830,6 +830,12 @@ pub const ASM_BLOX_MELPA_PIN: (&str, &str) = ("asm-blox", "20240106.1930");
 /// `d5d4a8259daf708411699bcea85d322f18beb972`.
 pub const ASN1_MODE_MELPA_PIN: (&str, &str) = ("asn1-mode", "20170729.226");
 
+/// The exact Assess package selected by the comprehensive buffer, filesystem,
+/// indentation, fontification, discovery, and call-capture parity corpus.
+/// MELPA built this archive from upstream commit
+/// `cadeb24a5d8261fad4bdfdc09e7d571cc395a6ca`.
+pub const ASSESS_MELPA_PIN: (&str, &str) = ("assess", "20240303.1454");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

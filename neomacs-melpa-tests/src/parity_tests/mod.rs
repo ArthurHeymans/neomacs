@@ -193,6 +193,7 @@ mod asdf_vm;
 mod asilea;
 mod asm_blox;
 mod asn1_mode;
+mod assess;
 mod async_package;
 mod at_package;
 mod bind_key;
