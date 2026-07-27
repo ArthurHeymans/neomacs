@@ -881,6 +881,12 @@ pub const ASYNC_AWAIT_MELPA_PIN: (&str, &str) = ("async-await", "20220827.437");
 /// `d07a7bd4a5c3332a8a585680d67925385c595927`.
 pub const ASYNC_BACKUP_MELPA_PIN: (&str, &str) = ("async-backup", "20230412.1534");
 
+/// The exact async-http-queue package selected by the comprehensive state,
+/// scheduling, response, callback, and lifecycle parity corpus. MELPA built
+/// this archive from upstream commit
+/// `bd37342372a0b24ce0d54e9dad8070af997b0a0b`.
+pub const ASYNC_HTTP_QUEUE_MELPA_PIN: (&str, &str) = ("async-http-queue", "20260316.755");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

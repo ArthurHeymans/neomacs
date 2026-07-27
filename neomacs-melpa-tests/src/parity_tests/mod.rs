@@ -201,6 +201,7 @@ mod astyle;
 mod asx;
 mod async_await;
 mod async_backup;
+mod async_http_queue;
 mod async_melpa;
 mod async_package;
 mod at_package;
