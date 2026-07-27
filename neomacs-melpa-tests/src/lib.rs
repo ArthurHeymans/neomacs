@@ -509,6 +509,9 @@ pub const AMARANTH_DARK_THEME_MELPA_PIN: (&str, &str) = ("amaranth-dark-theme", 
 /// parity corpus.
 pub const AMBER_GLOW_THEME_MELPA_PIN: (&str, &str) = ("amber-glow-theme", "20250305.936");
 
+/// The exact amd-mode package selected by the comprehensive API parity corpus.
+pub const AMD_MODE_MELPA_PIN: (&str, &str) = ("amd-mode", "20180111.1402");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
