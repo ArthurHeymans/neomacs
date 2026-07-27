@@ -790,6 +790,10 @@ pub const ARIADNE_MELPA_PIN: (&str, &str) = ("ariadne", "20131117.1711");
 /// highlighting, search, and readability-metrics parity corpus.
 pub const ARTBOLLOCKS_MODE_MELPA_PIN: (&str, &str) = ("artbollocks-mode", "20251211.1624");
 
+/// The exact arview package selected by the comprehensive archive detection,
+/// extraction, Dired lifecycle, process, and cleanup parity corpus.
+pub const ARVIEW_MELPA_PIN: (&str, &str) = ("arview", "20160419.2109");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

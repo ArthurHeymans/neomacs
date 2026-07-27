@@ -184,6 +184,7 @@ mod ariadne;
 mod arjen_grey_theme;
 mod arscript_mode;
 mod artbollocks_mode;
+mod arview;
 mod arxiv_citation;
 mod async_package;
 mod at_package;
