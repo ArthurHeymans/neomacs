@@ -682,6 +682,11 @@ pub const APACHE_MODE_MELPA_PIN: (&str, &str) = ("apache-mode", "20210519.1931")
 /// The exact APDL Mode package selected by the comprehensive API parity corpus.
 pub const APDL_MODE_MELPA_PIN: (&str, &str) = ("apdl-mode", "20250508.908");
 
+/// The exact APEL package selected by the comprehensive API parity corpus.
+/// MELPA built this archive from upstream commit
+/// `1b043cfea58ea146356c237a5286ead69e97417b`.
+pub const APEL_MELPA_PIN: (&str, &str) = ("apel", "20250608.1806");
+
 /// The exact APIB Mode package selected by the comprehensive API parity corpus.
 pub const APIB_MODE_MELPA_PIN: (&str, &str) = ("apib-mode", "20200101.1017");
 
