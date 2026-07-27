@@ -70,6 +70,24 @@ fn oracle_prop_format_reverses_copied_format_and_argument_plists() {
 }
 
 #[test]
+fn oracle_prop_describe_key_briefly_preserves_message_and_insert_order() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((g (make-sparse-keymap)))
+  (define-key g (kbd "C-f") #'forward-char)
+  (use-global-map g)
+  (list
+   (describe-key-briefly (kbd "C-f"))
+   (with-temp-buffer
+     (describe-key-briefly (kbd "C-f") t)
+     (buffer-string))))
+"#;
+
+    assert_oracle_parity(form);
+}
+
+#[test]
 fn oracle_prop_add_text_properties_replacement_keeps_existing_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

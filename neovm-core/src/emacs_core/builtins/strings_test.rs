@@ -239,6 +239,37 @@ fn format_reverses_percent_s_text_property_plist_order_like_gnu_add_properties()
 }
 
 #[test]
+fn format_exact_percent_s_reuses_the_string_argument_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let source = Value::string("key");
+    let mut table = crate::buffer::text_props::TextPropertyTable::new();
+    put_string_property(
+        &mut table,
+        0,
+        3,
+        Value::symbol("face"),
+        Value::symbol("help-key-binding"),
+    );
+    put_string_property(
+        &mut table,
+        0,
+        3,
+        Value::symbol("font-lock-face"),
+        Value::symbol("help-key-binding"),
+    );
+    crate::emacs_core::value::set_string_text_properties_table_for_value(source, table);
+
+    let mut ctx = crate::emacs_core::eval::Context::new();
+    let formatted =
+        builtin_format_wrapper_strict_slice(&mut ctx, &[Value::string("%s"), source]).unwrap();
+    let message = builtin_format_message_slice(&mut ctx, &[Value::string("%s"), source]).unwrap();
+
+    assert_eq!(formatted, source);
+    assert_eq!(message, source);
+}
+
+#[test]
 fn format_percent_s_promotes_result_when_printer_outputs_non_ascii_text() {
     crate::test_utils::init_test_tracing();
 

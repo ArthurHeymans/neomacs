@@ -2060,12 +2060,35 @@ fn build_format_result(
     result
 }
 
+/// Return GNU `styled_format`'s exact `%s` identity result when it is a string.
+///
+/// GNU short-circuits an unpropertized two-character format string `%s` after
+/// resolving the argument.  Reusing a string argument is observable through
+/// `eq`, and it preserves the interval plist verbatim instead of copying it
+/// through `add-text-properties`.  Keep that reuse decision outside
+/// `do_format`: `Some` is the complete result, while `None` requires the normal
+/// allocation and property-transfer pipeline.
+fn exact_percent_s_string_result(args: &[Value]) -> Option<Value> {
+    let format = args.first()?;
+    let format_string = format.as_lisp_string()?;
+    if format_string.as_bytes() != b"%s"
+        || crate::emacs_core::value::get_string_text_properties_table_for_value(*format)
+            .is_some_and(|table| !table.is_empty())
+    {
+        return None;
+    }
+    args.get(1).copied().filter(|value| value.is_string())
+}
+
 pub(crate) fn builtin_format_wrapper_strict_slice(
     ctx: &mut super::eval::Context,
     args: &[Value],
 ) -> EvalResult {
     crate::emacs_core::perf_trace::time_op(crate::emacs_core::perf_trace::HotpathOp::Format, || {
         expect_min_args("format", args, 1)?;
+        if let Some(result) = exact_percent_s_string_result(args) {
+            return Ok(result);
+        }
         let (bytes, spans, source_spans, force_multibyte_result) = do_format(
             args,
             &|v| format_percent_s_in_state(ctx, v),
@@ -2226,6 +2249,9 @@ pub(crate) fn builtin_format_message_slice(
 ) -> EvalResult {
     crate::emacs_core::perf_trace::time_op(crate::emacs_core::perf_trace::HotpathOp::Format, || {
         expect_min_args("format-message", args, 1)?;
+        if let Some(result) = exact_percent_s_string_result(args) {
+            return Ok(result);
+        }
         let quoting_style = crate::emacs_core::coding::builtin_text_quoting_style(ctx, vec![])?;
         let quoting_style = TextQuotingStyle::from_symbol_value(quoting_style)
             .map(FormatMessageQuotingStyle::from_text_quoting_style)
