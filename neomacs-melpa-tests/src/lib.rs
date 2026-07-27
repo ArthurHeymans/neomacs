@@ -419,6 +419,10 @@ pub const ALDA_MODE_MELPA_PIN: (&str, &str) = ("alda-mode", "20251223.6");
 /// corpus.
 pub const ALECT_THEMES_MELPA_PIN: (&str, &str) = ("alect-themes", "20251205.1503");
 
+/// The exact Alectryon package selected by the comprehensive API parity
+/// corpus.
+pub const ALECTRYON_MELPA_PIN: (&str, &str) = ("alectryon", "20260525.2000");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

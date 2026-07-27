@@ -99,6 +99,7 @@ mod alarm_clock;
 mod alchemist;
 mod alda_mode;
 mod alect_themes;
+mod alectryon;
 mod async_package;
 mod at_package;
 mod bind_key;
