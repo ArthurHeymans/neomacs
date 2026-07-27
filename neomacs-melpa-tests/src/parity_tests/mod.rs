@@ -108,6 +108,7 @@ mod all_ext;
 mod all_the_icons;
 mod all_the_icons_completion;
 mod all_the_icons_dired;
+mod all_the_icons_gnus;
 mod async_package;
 mod at_package;
 mod bind_key;

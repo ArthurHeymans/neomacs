@@ -464,6 +464,10 @@ pub const ALL_THE_ICONS_COMPLETION_MELPA_PIN: (&str, &str) =
 /// parity corpus.
 pub const ALL_THE_ICONS_DIRED_MELPA_PIN: (&str, &str) = ("all-the-icons-dired", "20231207.1324");
 
+/// The exact all-the-icons-gnus package selected by the comprehensive API
+/// parity corpus.
+pub const ALL_THE_ICONS_GNUS_MELPA_PIN: (&str, &str) = ("all-the-icons-gnus", "20180511.654");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
