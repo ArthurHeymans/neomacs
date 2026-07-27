@@ -172,6 +172,7 @@ mod apples_mode;
 mod applescript_mode;
 mod apropospriate_theme;
 mod aqi;
+mod archive_phar;
 mod async_package;
 mod at_package;
 mod bind_key;

@@ -729,6 +729,10 @@ pub const APROPOSPRIATE_THEME_MELPA_PIN: (&str, &str) = ("apropospriate-theme", 
 /// and reporting parity corpus.
 pub const AQI_MELPA_PIN: (&str, &str) = ("aqi", "20230530.1204");
 
+/// The exact archive-phar package selected by the comprehensive archive
+/// browsing and extraction parity corpus.
+pub const ARCHIVE_PHAR_MELPA_PIN: (&str, &str) = ("archive-phar", "20221009.2129");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
