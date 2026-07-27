@@ -7926,6 +7926,7 @@ dependencies = [
  "flate2",
  "rayon",
  "sha2",
+ "strum",
  "tempfile",
 ]
 

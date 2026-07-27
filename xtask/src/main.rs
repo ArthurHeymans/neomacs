@@ -4160,9 +4160,12 @@ Options:
                       committed training workload xtask/pgo-train.el, then
                       llvm-profdata merge, then the optimized build into
                       target/release-pgo. Needs `rustup component add
-                      llvm-tools`. Measured on this tree: elisp editing -24%
-                      cycles, org -12%, and -17% instructions on byte-compile,
-                      which is NOT in the training set.
+                      llvm-tools`. Measured on this tree: STARTUP -17%,
+                      byte-compile -17% instructions, batch font-lock benches
+                      -23%/-27% cycles. It does NOT speed up the interactive
+                      edit loop: a real TTY keystroke->redisplay measurement is
+                      +2%, because the training workload runs in --batch and so
+                      never exercises redisplay. Scope claims accordingly.
   --profile release-pgo-profiling
                       As release-pgo, but keeps debug symbols so the SHIPPED
                       configuration can be profiled -- PGO changes inlining and

@@ -10,6 +10,14 @@
 ;; win. Training only on font-lock measured better on font-lock (-24%) but
 ;; risks biasing against everything else; byte-compilation and startup are
 ;; included so the common non-editing paths keep their profile too.
+;;
+;; KNOWN GAP -- this trains NOTHING in the redisplay path. It runs under
+;; --batch, where redisplay never happens, so the counters are dominated by
+;; startup and by fontification called directly. Measured consequence: a real
+;; TTY keystroke->redisplay loop is +2% under PGO while startup is -17%. If
+;; interactive latency is the goal, this file has to drive an actual TTY
+;; session (see tools/bench/pty-run.py, which makes that deterministic) rather
+;; than call font-lock functions in batch.
 
 (defun nm-pgo--edit-pass (file mode-fn iters)
   "Fontify and edit around FILE the way interactive editing does."
