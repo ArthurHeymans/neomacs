@@ -500,6 +500,11 @@ pub const ALSAMIXER_MELPA_PIN: (&str, &str) = ("alsamixer", "20250106.1025");
 /// corpus.
 pub const ALT_CODES_MELPA_PIN: (&str, &str) = ("alt-codes", "20260101.557");
 
+/// The exact Amaranth Dark theme selected by the comprehensive API parity
+/// corpus. MELPA built this archive from upstream commit
+/// `624e0b5ef632b3adfdc03e44dce7a98cd48d47ed`.
+pub const AMARANTH_DARK_THEME_MELPA_PIN: (&str, &str) = ("amaranth-dark-theme", "20251228.1916");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

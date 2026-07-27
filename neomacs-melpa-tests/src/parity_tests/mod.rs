@@ -116,6 +116,7 @@ mod all_the_icons_nerd_fonts;
 mod almost_mono_themes;
 mod alsamixer;
 mod alt_codes;
+mod amaranth_dark_theme;
 mod async_package;
 mod at_package;
 mod bind_key;
