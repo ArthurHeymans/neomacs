@@ -1,5 +1,6 @@
 //! Buffer source post-loop tail rendering and install context.
 
+use crate::scroll_policy::ScrollPolicy;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_row_face_state::DisplayRowActiveFaceState;
@@ -222,6 +223,8 @@ impl<'a> BufferSourceTailRequestContext<'a> {
             point_is_visible_eob,
             self.retry_bounds.text_area_top(),
             self.retry_bounds.text_area_bottom(),
+            ScrollPolicy::from_window_params(self.params),
+            self.params.scroll_margin,
             buf_access,
         )
     }

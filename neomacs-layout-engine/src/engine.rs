@@ -152,7 +152,6 @@ fn resolve_window_display_source_params(
     let mut resolved = params.clone();
     resolved.buffer_id = buf_id.0;
     resolved.window_start = 0;
-    resolved.window_end = 0;
     resolved.point = 0;
     resolved.buffer_begv = 0;
     resolved.buffer_size = buffer_size;
@@ -1821,7 +1820,6 @@ impl LayoutEngine {
             BufferSourceRenderAttemptOutcome::Retry { window_start } => {
                 let mut retry_params = params.clone();
                 retry_params.window_start = window_start;
-                retry_params.window_end = 0;
                 // A visibility retry re-flows the window from a new window_start,
                 // so the Phase A fast-path plan (snapshotted against the original
                 // window_start) no longer applies — re-lay from scratch.
@@ -1867,7 +1865,6 @@ impl LayoutEngine {
                 evaluator.set_window_point_for_redisplay(frame_id, window_id, point_lisp);
                 let mut retry_params = params.clone();
                 retry_params.point = point_charpos;
-                retry_params.window_end = 0;
                 return self.layout_window_rust(
                     evaluator,
                     frame_id,

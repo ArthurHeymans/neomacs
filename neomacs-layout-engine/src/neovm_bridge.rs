@@ -1296,8 +1296,6 @@ pub fn window_params_from_neovm_with_font_sizing(
         bounds,
         window_start,
         force_start,
-        window_end_pos,
-        window_end_valid,
         point,
         hscroll,
         vscroll,
@@ -1311,8 +1309,6 @@ pub fn window_params_from_neovm_with_font_sizing(
             bounds,
             window_start,
             force_start,
-            window_end_pos,
-            window_end_valid,
             point,
             hscroll,
             vscroll,
@@ -1325,8 +1321,6 @@ pub fn window_params_from_neovm_with_font_sizing(
             bounds,
             *window_start,
             *force_start,
-            *window_end_pos,
-            *window_end_valid,
             *point,
             *hscroll,
             *vscroll,
@@ -1419,6 +1413,10 @@ pub fn window_params_from_neovm_with_font_sizing(
     // (buffer-local with a global fallback) to choose between minimal scrolling
     // and recentering point when point jumps off-screen (src/xdisp.c).
     let scroll_conservatively = effective_buffer_int(buffer, obarray, "scroll-conservatively", 0);
+    let scroll_step = effective_buffer_int(buffer, obarray, "scroll-step", 0);
+    let scroll_minibuffer_conservatively = obarray
+        .symbol_value("scroll-minibuffer-conservatively")
+        .is_none_or(|value| !value.is_nil());
     let scroll_margin = effective_buffer_int(buffer, obarray, "scroll-margin", 0);
 
     // GNU window.c gates chrome reservation through window_wants_*:
@@ -1520,18 +1518,6 @@ pub fn window_params_from_neovm_with_font_sizing(
         // Normalize to the layout engine's internal 0-based char positions.
         window_start: lisp_char_pos_to_layout_i64(window_start),
         force_start,
-        // Previous visible end converted back to the layout engine's internal
-        // 0-based char position space.  GNU stores this as an offset from Z.
-        window_end: if window_end_valid {
-            buffer
-                .point_max_char_pos()
-                .get()
-                .saturating_add(1)
-                .saturating_sub(window_end_pos)
-                .saturating_sub(1) as i64
-        } else {
-            0
-        },
         // Mirror GNU `window.c:window_point` (around line 1782):
         //
         //   return (w == XWINDOW (selected_window)
@@ -1565,6 +1551,8 @@ pub fn window_params_from_neovm_with_font_sizing(
         word_wrap,
         tab_width,
         scroll_conservatively,
+        scroll_step,
+        scroll_minibuffer_conservatively,
         scroll_margin,
         tab_stop_list: buffer_local_list_values(buffer, "tab-stop-list")
             .iter()

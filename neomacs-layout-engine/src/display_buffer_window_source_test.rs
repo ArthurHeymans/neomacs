@@ -1,4 +1,5 @@
 use super::*;
+use crate::scroll_policy::ScrollPolicy;
 use crate::types::{LineWrapMode, WindowKind, WindowParams};
 use neomacs_display_protocol::types::Rect;
 
@@ -14,7 +15,6 @@ fn window_params() -> WindowParams {
         top_line: 0,
         window_start: 17,
         force_start: false,
-        window_end: 29,
         point: 21,
         buffer_size: 80,
         buffer_begv: 3,
@@ -24,6 +24,8 @@ fn window_params() -> WindowParams {
         word_wrap: false,
         tab_width: 8,
         scroll_conservatively: 0,
+        scroll_step: 0,
+        scroll_minibuffer_conservatively: true,
         scroll_margin: 0,
         tab_stop_list: vec![],
         default_fg: 0x00ff_ffff,
@@ -74,23 +76,21 @@ fn window_params() -> WindowParams {
 #[allow(clippy::too_many_arguments)]
 fn request(
     requested_window_start: i64,
-    previous_window_end: Option<i64>,
     point_charpos: i64,
     accessible_end: i64,
     max_rows: usize,
     kind: WindowKind,
-    scroll_conservatively: i64,
+    scroll_policy: ScrollPolicy,
 ) -> BufferWindowSourceRequest {
     BufferWindowSourceRequest::new(
         requested_window_start,
-        previous_window_end,
         point_charpos,
         0,
         accessible_end,
         max_rows,
         20,
         kind,
-        scroll_conservatively,
+        scroll_policy,
         0,
     )
 }
@@ -105,13 +105,23 @@ fn source_request_from_window_params_carries_source_bounds() {
     let request = BufferWindowSourceRequest::from_window_params(&params, 6);
 
     assert_eq!(request.requested_window_start, 17);
-    assert_eq!(request.previous_window_end, Some(29));
     assert_eq!(request.point_charpos, 21);
     assert_eq!(request.accessible_start, 3);
     assert_eq!(request.accessible_end, 80);
     assert_eq!(request.max_rows, 6);
     assert_eq!(request.visible_cols, 20);
     assert!(!request.kind.is_minibuffer());
+}
+
+#[test]
+fn source_request_from_window_params_resolves_the_scroll_policy() {
+    let mut params = window_params();
+    params.scroll_conservatively = 0;
+    params.scroll_step = 3;
+
+    let request = BufferWindowSourceRequest::from_window_params(&params, 6);
+
+    assert_eq!(request.scroll_policy, ScrollPolicy::Step { lines: 3 });
 }
 
 #[test]
@@ -126,22 +136,24 @@ fn source_request_from_window_params_uses_text_bounds_columns() {
     assert_eq!(request.visible_cols, 4);
 }
 
+// 6 single-letter lines; line N is the letter at charpos 2*(N-1).
+const LINES6: &[u8] = b"a\nb\nc\nd\ne\nf\n";
+
 #[test]
 fn source_request_scrolls_back_when_start_is_past_remaining_content() {
-    let text = b"a\nb\nc\nd\ne\nf\n";
-    let resolved = request(10, None, 10, text.len() as i64, 4, WindowKind::Main, 0)
-        .resolve_window_start(byte_at_charpos(text));
+    let resolved = request(10, 10, LINES6.len() as i64, 4, WindowKind::Main, ScrollPolicy::Recenter)
+        .resolve_window_start(byte_at_charpos(LINES6));
 
-    assert_eq!(resolved, 7);
+    // Start of line 4 ("d"), leaving max_rows/2 lines above point.
+    assert_eq!(resolved, 6);
 }
 
 #[test]
 fn source_request_scrolls_back_when_point_is_above_window_start() {
-    let text = b"a\nb\nc\nd\ne\nf\n";
-    let resolved = request(8, None, 3, text.len() as i64, 4, WindowKind::Main, 0)
-        .resolve_window_start(byte_at_charpos(text));
+    let resolved = request(8, 3, LINES6.len() as i64, 4, WindowKind::Main, ScrollPolicy::Recenter)
+        .resolve_window_start(byte_at_charpos(LINES6));
 
-    assert_eq!(resolved, 1);
+    assert_eq!(resolved, 0);
 }
 
 // 16 single-letter lines: line N is the letter at charpos 2*(N-1), the newline
@@ -149,57 +161,98 @@ fn source_request_scrolls_back_when_point_is_above_window_start() {
 const LINES16: &[u8] = b"a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nn\no\np\n";
 
 #[test]
-fn source_request_recenters_far_forward_jump() {
-    // GNU `try_scrolling` SCROLLING_FAILED -> `recenter:`: when point jumps more
-    // than `scroll-conservatively` lines below the viewport bottom, redisplay
-    // recenters point to the window middle — `max_rows/2 + 1` newlines above
-    // point (the +1 accounts for window_start landing on the newline). For an
-    // 8-row window that is the 5th newline above point (charpos 17). With the GNU
-    // default scroll-conservatively=0 any such off-screen jump recenters.
-    let resolved = request(0, Some(4), 26, LINES16.len() as i64, 8, WindowKind::Main, 0)
-        .resolve_window_start(byte_at_charpos(LINES16));
+fn source_request_scrolls_one_line_when_point_steps_off_the_bottom() {
+    // The #195 case: an 8-row window showing lines 1-8, point moved to line 9.
+    // GNU `try_scrolling` scrolls by exactly dy (1 line), so the window start
+    // moves to line 2 -- it does NOT jump a whole windowful.
+    let resolved = request(
+        0,
+        16,
+        LINES16.len() as i64,
+        8,
+        WindowKind::Main,
+        ScrollPolicy::Unlimited,
+    )
+    .resolve_window_start(byte_at_charpos(LINES16));
 
-    assert_eq!(resolved, 17, "far jump centers point (max_rows/2 above)");
+    assert_eq!(resolved, 2, "one line down, not a page");
 }
 
 #[test]
-fn source_request_near_forward_jump_does_not_recenter() {
-    // A jump within `scroll-conservatively` of the viewport bottom does NOT
-    // recenter; GNU `try_scrolling` scrolls minimally, leaving point on the last
-    // fully-visible row (bottom scroll-margin). For an 8-row window that is
-    // `max_rows - 1` newlines above point -> charpos 13 (point on the last
-    // visible row, row 7). Distinct from the recentered result (17) above.
+fn source_request_window_start_lands_on_a_line_beginning() {
+    // Every resolved start must be the first character of a line. A start on
+    // the *newline* that ends the previous line renders as an empty leading row
+    // and silently costs one line of text.
+    for policy in [
+        ScrollPolicy::Recenter,
+        ScrollPolicy::Unlimited,
+        ScrollPolicy::Conservative { max_lines: 20 },
+        ScrollPolicy::Step { lines: 3 },
+    ] {
+        for point in 0..LINES16.len() as i64 {
+            let resolved = request(0, point, LINES16.len() as i64, 8, WindowKind::Main, policy)
+                .resolve_window_start(byte_at_charpos(LINES16));
+            assert!(
+                resolved == 0 || LINES16[resolved as usize - 1] == b'\n',
+                "{policy:?} at point {point} resolved to {resolved}, mid-line"
+            );
+        }
+    }
+}
+
+#[test]
+fn source_request_recenters_far_forward_jump() {
+    // GNU `try_scrolling` SCROLLING_FAILED -> `recenter:`: with the GNU default
+    // scroll-conservatively=0 try_scrolling never runs at all, so any
+    // off-screen point recenters -- window start goes max_rows/2 lines above
+    // point, i.e. the start of line 10 for point on line 14.
     let resolved = request(
         0,
-        Some(4),
         26,
         LINES16.len() as i64,
         8,
         WindowKind::Main,
-        20,
+        ScrollPolicy::Recenter,
     )
     .resolve_window_start(byte_at_charpos(LINES16));
 
-    assert_eq!(resolved, 13);
+    assert_eq!(resolved, 18, "far jump centers point (max_rows/2 above)");
+}
+
+#[test]
+fn source_request_near_forward_jump_does_not_recenter() {
+    // A jump within `scroll-conservatively` scrolls minimally: GNU moves the
+    // window start down by exactly dy (6 lines here), leaving point on the last
+    // fully-visible row. Distinct from the recentered result (18) above.
+    let resolved = request(
+        0,
+        26,
+        LINES16.len() as i64,
+        8,
+        WindowKind::Main,
+        ScrollPolicy::Conservative { max_lines: 20 },
+    )
+    .resolve_window_start(byte_at_charpos(LINES16));
+
+    assert_eq!(resolved, 12);
 }
 
 #[test]
 fn source_request_high_scroll_conservatively_never_recenters() {
     // scroll-conservatively above GNU's SCROLL_LIMIT (100) disables recentering;
-    // even a far jump keeps the minimal forward-scroll (point on the last visible
-    // row, same result as the near jump, not the recentered 17).
+    // even a far jump keeps the minimal forward-scroll (same result as the near
+    // jump, not the recentered 18).
     let resolved = request(
         0,
-        Some(4),
         26,
         LINES16.len() as i64,
         8,
         WindowKind::Main,
-        101,
+        ScrollPolicy::Unlimited,
     )
     .resolve_window_start(byte_at_charpos(LINES16));
 
-    assert_eq!(resolved, 13);
+    assert_eq!(resolved, 12);
 }
 
 #[test]
@@ -207,12 +260,11 @@ fn source_request_does_not_forward_scroll_minibuffer() {
     let text = b"a\nb\nc\nd\ne\nf\ng\nh\n";
     let resolved = request(
         0,
-        Some(4),
         12,
         text.len() as i64,
         4,
         WindowKind::Minibuffer,
-        0,
+        ScrollPolicy::Recenter,
     )
     .resolve_window_start(byte_at_charpos(text));
 
@@ -230,7 +282,7 @@ fn source_request_does_not_forward_scroll_degenerate_one_row_window() {
     // when `SPC SPC` opens the project find-file posframe. A 1-row layout is not
     // a real scroll decision, so it must leave window_start unchanged.
     let text = b"a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nn\no\np\nq\nr\ns\nt\nu\nv\nw\nx\ny\nz\n";
-    let resolved = request(0, None, 50, text.len() as i64, 1, WindowKind::Main, 0)
+    let resolved = request(0, 50, text.len() as i64, 1, WindowKind::Main, ScrollPolicy::Recenter)
         .resolve_window_start(byte_at_charpos(text));
 
     assert_eq!(

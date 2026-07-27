@@ -721,18 +721,53 @@ impl InvisibleTextScanCheckpoint {
     }
 }
 
+/// Window start after scrolling down by `rows_to_scroll` DISPLAY rows, given the
+/// rows laid out from `current_start`.
+///
+/// This is GNU's `move_it_vertically (&it, amount_to_scroll)` from the old
+/// window start (src/xdisp.c:19526) evaluated against real display rows, so it
+/// is exact for wrapped lines, images and variable-height rows. Scrolling past
+/// the rows we have is not: those rows were never laid out, so the caller falls
+/// back to a buffer-line walk and the visibility retry converges on the rest.
+///
+/// `None` when the rows cannot produce a start further down than
+/// `current_start` — the caller must not retry, or it would loop.
 pub(crate) fn next_window_start_from_visible_rows(
     rows: &[DisplayRowSnapshot],
     current_start: i64,
+    rows_to_scroll: i64,
 ) -> Option<i64> {
-    if rows.is_empty() {
+    if rows.is_empty() || rows_to_scroll <= 0 {
         return None;
     }
 
-    rows.iter()
-        .rev()
+    // Row starts strictly below the current one, in display order. A row that
+    // begins where the previous one did (a continuation carrying no new buffer
+    // position) is not a distinct scroll step.
+    let mut starts = rows
+        .iter()
         .filter_map(row_next_window_start_charpos)
-        .find(|&pos| pos > current_start)
+        .filter(|&pos| pos > current_start);
+    let mut chosen = starts.next()?;
+    for _ in 1..rows_to_scroll {
+        match starts.next() {
+            Some(pos) => chosen = pos,
+            // Fewer laid-out rows than the scroll amount: return the furthest
+            // start we can prove, and let the caller extend it.
+            None => break,
+        }
+    }
+    Some(chosen)
+}
+
+/// Rows the caller can still scroll through beyond `window_start_after`, i.e.
+/// how much of a requested scroll [`next_window_start_from_visible_rows`] could
+/// actually satisfy.
+pub(crate) fn visible_rows_below(rows: &[DisplayRowSnapshot], current_start: i64) -> i64 {
+    rows.iter()
+        .filter_map(row_next_window_start_charpos)
+        .filter(|&pos| pos > current_start)
+        .count() as i64
 }
 
 #[inline]

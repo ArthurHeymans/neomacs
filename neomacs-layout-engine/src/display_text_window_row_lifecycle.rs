@@ -17,10 +17,15 @@ use crate::display_row_special_glyphs::{
 use crate::display_row_walk_state::{
     HitRowRangeTracker, next_window_start_for_partially_visible_point_row,
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
+    visible_rows_below,
 };
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
+use crate::scroll_policy::{
+    ForwardScroll, ScrollPolicy, count_lines_bounded, last_usable_row, line_start_above,
+    line_start_below,
+};
 use crate::types::WindowParams;
 use crate::window_output::{
     DisplayTextRowBegin, TextWindowBegin, TextWindowBodyOutputInstall, TextWindowCursorEffects,
@@ -254,6 +259,8 @@ pub(crate) struct TextWindowVisibilityRetryRequest<'a, 'buf, B: LayoutBufferView
     point_is_visible_eob: bool,
     text_area_top: i64,
     text_area_bottom: i64,
+    scroll_policy: ScrollPolicy,
+    scroll_margin: i64,
     buf_access: &'a RustBufferAccess<'buf, B>,
 }
 
@@ -715,6 +722,8 @@ impl<'a, 'buf, B: LayoutBufferView> TextWindowVisibilityRetryRequest<'a, 'buf, B
         point_is_visible_eob: bool,
         text_area_top: i64,
         text_area_bottom: i64,
+        scroll_policy: ScrollPolicy,
+        scroll_margin: i64,
         buf_access: &'a RustBufferAccess<'buf, B>,
     ) -> Self {
         Self {
@@ -727,6 +736,8 @@ impl<'a, 'buf, B: LayoutBufferView> TextWindowVisibilityRetryRequest<'a, 'buf, B
             point_is_visible_eob,
             text_area_top,
             text_area_bottom,
+            scroll_policy,
+            scroll_margin,
             buf_access,
         }
     }
@@ -755,8 +766,7 @@ impl<'a, 'buf, B: LayoutBufferView> TextWindowVisibilityRetryRequest<'a, 'buf, B
         // it never scrolls.
         let scroll_down_window_start =
             if point_beyond_visible_span && visible_progress > self.window_start {
-                next_window_start_from_visible_rows(self.rows, self.window_start)
-                    .map(|new_ws| new_ws.min(self.point_charpos.max(self.accessible_start)))
+                self.scroll_down_start(visible_end_lisp)
             } else {
                 None
             };
@@ -782,6 +792,68 @@ impl<'a, 'buf, B: LayoutBufferView> TextWindowVisibilityRetryRequest<'a, 'buf, B
             scroll_down_window_start,
             point_row_window_start,
             point_line_window_start,
+        }
+    }
+
+    /// New window start for a point that laid out below the last visible row —
+    /// GNU `try_scrolling` (src/xdisp.c:19487-19556) run against the rows we
+    /// just measured, then its `recenter:` fallback (src/xdisp.c:21108).
+    ///
+    /// Scrolling to `visible_end` (a whole windowful) is what GNU never does:
+    /// it is the "arbitrary page break" users see when walking down a buffer
+    /// one line at a time.
+    fn scroll_down_start(&self, visible_end_lisp: Option<LispCharPos1>) -> Option<i64> {
+        let byte_at_charpos = |charpos: i64| {
+            self.buf_access
+                .byte_at(self.buf_access.charpos_to_bytepos(charpos))
+        };
+        // Rows already laid out below the start, and the lowest one point may
+        // occupy once the bottom scroll-margin is honored.
+        let laid_out_rows = visible_rows_below(self.rows, self.window_start);
+        let bottom_row = last_usable_row(laid_out_rows as usize, self.scroll_margin);
+        // Point is past the visible end, so it is at least on the row after the
+        // last one; each further newline is at least one more row.
+        let slack = (laid_out_rows - bottom_row).max(1);
+        let first_hidden = visible_end_lisp.map_or(self.point_charpos, |end| end.as_i64());
+        let (extra_lines, bounded) = count_lines_bounded(
+            first_hidden,
+            self.point_charpos,
+            (self.scroll_policy.search_limit_lines() - slack).max(0),
+            &byte_at_charpos,
+        );
+        let dy = slack + extra_lines;
+
+        let advance = |lines: i64| {
+            let start = next_window_start_from_visible_rows(self.rows, self.window_start, lines)?;
+            // Rows below the window were never laid out; walk the remainder in
+            // buffer lines. Under-shooting is safe — the retry runs again.
+            let unsatisfied = lines - laid_out_rows.min(lines);
+            Some(line_start_below(
+                start,
+                unsatisfied,
+                self.accessible_end,
+                &byte_at_charpos,
+            ))
+        };
+
+        match self
+            .scroll_policy
+            .forward_scroll(dy, bounded, laid_out_rows as usize, self.scroll_margin)
+        {
+            ForwardScroll::Advance { lines } => advance(lines),
+            // `line_start_above` counts BUFFER lines, so on a single logical
+            // line wrapped over many rows it walks back to the line start —
+            // behind the current window. Recentering that way would leave point
+            // off screen forever (the retry only accepts a start that advances),
+            // so fall back to the measured display-row scroll.
+            ForwardScroll::Recenter { lines_above_point } => Some(line_start_above(
+                self.point_charpos,
+                lines_above_point,
+                self.accessible_start,
+                &byte_at_charpos,
+            ))
+            .filter(|start| *start > self.window_start)
+            .or_else(|| advance(dy)),
         }
     }
 }

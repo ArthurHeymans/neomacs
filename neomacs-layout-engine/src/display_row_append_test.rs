@@ -1,4 +1,5 @@
 use super::*;
+use crate::scroll_policy::ScrollPolicy;
 use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementRenderOutcome,
     BufferDisplayPropertyTextReplacementRenderRequest,
@@ -8108,14 +8109,20 @@ fn buffer_text_window_visibility_retry_request_scrolls_down_from_visible_rows() 
         false,
         0,
         48,
+        ScrollPolicy::Unlimited,
+        0,
         &access,
     )
     .decide();
 
     assert_eq!(outcome.visible_end_lisp(), Some(LispCharPos1::new(24)));
     assert!(outcome.point_beyond_visible_span());
-    assert_eq!(outcome.scroll_down_window_start(), Some(24));
-    assert_eq!(outcome.retry_window_start(), Some(24));
+    // Point is two display lines past the bottom row, so the window start moves
+    // down two rows (to the start of row 2). Scrolling to the visible end (24)
+    // would throw away the whole window -- GNU's `try_scrolling` never does
+    // that, and doing so is what #195 saw as an arbitrary page break.
+    assert_eq!(outcome.scroll_down_window_start(), Some(16));
+    assert_eq!(outcome.retry_window_start(), Some(16));
 }
 
 #[test]
@@ -8149,6 +8156,8 @@ fn buffer_text_window_visibility_retry_request_detects_partially_visible_point_r
         false,
         0,
         60,
+        ScrollPolicy::Unlimited,
+        0,
         &access,
     )
     .decide();
@@ -8189,6 +8198,8 @@ fn buffer_text_window_visibility_retry_request_detects_point_line_continuation()
         false,
         0,
         48,
+        ScrollPolicy::Unlimited,
+        0,
         &access,
     )
     .decide();
@@ -10298,7 +10309,6 @@ fn test_display_space_window_params() -> WindowParams {
         top_line: 0,
         window_start: 1,
         force_start: false,
-        window_end: 0,
         point: 1,
         buffer_size: 1,
         buffer_begv: 1,
@@ -10308,6 +10318,8 @@ fn test_display_space_window_params() -> WindowParams {
         word_wrap: false,
         tab_width: 8,
         scroll_conservatively: 0,
+        scroll_step: 0,
+        scroll_minibuffer_conservatively: true,
         scroll_margin: 0,
         tab_stop_list: vec![],
         default_fg: 0xFFFFFF,

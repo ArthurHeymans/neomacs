@@ -1373,7 +1373,6 @@ fn test_window_params() -> WindowParams {
         top_line: 0,
         window_start: 1,
         force_start: false,
-        window_end: 0,
         point: 1,
         buffer_size: 1,
         buffer_begv: 1,
@@ -1383,6 +1382,8 @@ fn test_window_params() -> WindowParams {
         word_wrap: false,
         tab_width: 8,
         scroll_conservatively: 0,
+        scroll_step: 0,
+        scroll_minibuffer_conservatively: true,
         scroll_margin: 0,
         tab_stop_list: vec![],
         default_fg: 0xFFFFFF,
@@ -11968,17 +11969,27 @@ fn next_window_start_from_visible_rows_uses_visual_row_boundaries() {
     ];
 
     assert_eq!(
-        next_window_start_from_visible_rows(&rows, 1),
-        Some(32),
-        "expected retry to advance to the next internal 0-based char position after the last visible row"
+        next_window_start_from_visible_rows(&rows, 1, 1),
+        Some(8),
+        "scrolling by one row starts at the second visual row, not past the last one"
     );
     assert_eq!(
-        next_window_start_from_visible_rows(&rows, 25),
+        next_window_start_from_visible_rows(&rows, 1, 3),
+        Some(24),
+        "each further row of scroll advances one visual row boundary"
+    );
+    assert_eq!(
+        next_window_start_from_visible_rows(&rows, 1, 99),
+        Some(32),
+        "a scroll past the laid-out rows stops at the furthest row boundary measured"
+    );
+    assert_eq!(
+        next_window_start_from_visible_rows(&rows, 25, 1),
         Some(32),
         "expected retry to keep the furthest internal 0-based visible progress that still advances"
     );
     assert_eq!(
-        next_window_start_from_visible_rows(&rows, 33),
+        next_window_start_from_visible_rows(&rows, 33, 1),
         None,
         "expected no retry candidate once the rendered span no longer advances"
     );

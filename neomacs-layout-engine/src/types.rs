@@ -76,9 +76,6 @@ pub struct WindowParams {
     /// the window when point ended up outside — never recompute the start
     /// around point.
     pub force_start: bool,
-    /// Last visible buffer position from previous frame in layout 0-based
-    /// char coordinates.  0 means unknown for this legacy raw field.
-    pub window_end: i64,
     /// Point position in this window's buffer in layout 0-based char coordinates.
     pub point: i64,
     /// Accessible end (ZV) in layout 0-based exclusive char coordinates.
@@ -107,6 +104,14 @@ pub struct WindowParams {
     /// SCROLLING_FAILED → the `recenter:` label, src/xdisp.c:19360/21108). A
     /// value above 100 (GNU `SCROLL_LIMIT`) disables recentering entirely.
     pub scroll_conservatively: i64,
+    /// `scroll-step`: how many lines to scroll when point moves off-screen and
+    /// `scroll-conservatively` is 0 (GNU `emacs_scroll_step`, consumed by
+    /// `try_scrolling` as `amount_to_scroll = scroll_max`, src/xdisp.c:19497).
+    pub scroll_step: i64,
+    /// `scroll-minibuffer-conservatively` (GNU default t, bug#44070): a
+    /// mini-window scrolls minimally whatever `scroll-conservatively` says
+    /// (GNU passes `SCROLL_LIMIT + 1` for it, src/xdisp.c:21083).
+    pub scroll_minibuffer_conservatively: bool,
     /// `scroll-margin`: minimum lines of context kept between point and the top
     /// or bottom window edge on a minimal scroll (GNU `window_scroll_margin`).
     pub scroll_margin: i64,
@@ -218,10 +223,6 @@ impl WindowParams {
 
     pub fn window_start_charpos(&self) -> LayoutCharPos0 {
         LayoutCharPos0::new(self.window_start)
-    }
-
-    pub fn previous_window_end_charpos(&self) -> Option<LayoutCharPos0> {
-        (self.window_end > 0).then(|| LayoutCharPos0::new(self.window_end))
     }
 
     pub fn point_charpos(&self) -> LayoutCharPos0 {
