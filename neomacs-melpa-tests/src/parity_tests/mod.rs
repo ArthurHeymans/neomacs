@@ -107,6 +107,7 @@ mod align_cljlet;
 mod all_ext;
 mod all_the_icons;
 mod all_the_icons_completion;
+mod all_the_icons_dired;
 mod async_package;
 mod at_package;
 mod bind_key;
