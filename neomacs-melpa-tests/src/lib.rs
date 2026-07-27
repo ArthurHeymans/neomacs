@@ -574,6 +574,10 @@ pub const ANDROID_MODE_MELPA_PIN: (&str, &str) = ("android-mode", "20250106.1022
 /// parity corpus.
 pub const ANGRY_POLICE_CAPTAIN_MELPA_PIN: (&str, &str) = ("angry-police-captain", "20120829.1252");
 
+/// The exact angular-mode package selected by the comprehensive API parity
+/// corpus.
+pub const ANGULAR_MODE_MELPA_PIN: (&str, &str) = ("angular-mode", "20151201.2127");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

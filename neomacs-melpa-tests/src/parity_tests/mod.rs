@@ -134,6 +134,7 @@ mod ancient_theme;
 mod android_env;
 mod android_mode;
 mod angry_police_captain;
+mod angular_mode;
 mod async_package;
 mod at_package;
 mod bind_key;
