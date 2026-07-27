@@ -50,7 +50,6 @@ Throw it all away and start fresh.
 - **21 scroll effects, 8 cursor modes, 10 buffer transitions** *(done)* — GPU-accelerated animations running on the render thread at display refresh rate
 - **Zero-copy DMA-BUF** *(done)* — efficient GPU texture sharing (Linux)
 - **Rewrite entire Emacs core in Rust** *(in progress)* — replacing all ~300,000 lines of C with safe, modern Rust: Elisp runtime, evaluator, bytecode VM, GC, buffer/window/frame subsystems, and all editor internals
-- **Buffers built for large files and long lines** *(planned)* — a paged, rope-style buffer with an incremental line index and per-line caches, so opening a hundred-MB log or editing a minified one-liner costs what the edit costs, not what the file costs
 - **True multi-threaded Elisp** *(planned)* — real concurrency for the Lisp machine, not just cooperative threading
 - **10x performance, and 100% Emacs compatibility.** *(planned)* — Rust-optimized Lisp machine with JIT compilation and inline caching
 
