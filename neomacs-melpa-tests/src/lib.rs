@@ -544,6 +544,11 @@ pub const AMX_MELPA_PIN: (&str, &str) = ("amx", "20230413.1210");
 /// corpus.
 pub const ANACONDA_MODE_MELPA_PIN: (&str, &str) = ("anaconda-mode", "20250430.227");
 
+/// The exact anakondo package selected by the comprehensive API parity corpus.
+/// MELPA built this archive from upstream commit
+/// `16b0ba14d94a5d7e55655efc9e1d6d069a9306f2`.
+pub const ANAKONDO_MELPA_PIN: (&str, &str) = ("anakondo", "20210221.1727");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
