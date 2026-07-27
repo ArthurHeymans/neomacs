@@ -112,6 +112,7 @@ mod all_the_icons_gnus;
 mod all_the_icons_ibuffer;
 mod all_the_icons_ivy;
 mod all_the_icons_ivy_rich;
+mod all_the_icons_nerd_fonts;
 mod async_package;
 mod at_package;
 mod bind_key;

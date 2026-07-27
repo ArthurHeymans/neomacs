@@ -483,6 +483,11 @@ pub const ALL_THE_ICONS_IVY_MELPA_PIN: (&str, &str) = ("all-the-icons-ivy", "201
 pub const ALL_THE_ICONS_IVY_RICH_MELPA_PIN: (&str, &str) =
     ("all-the-icons-ivy-rich", "20230420.1234");
 
+/// The exact all-the-icons-nerd-fonts package selected by the comprehensive
+/// API parity corpus.
+pub const ALL_THE_ICONS_NERD_FONTS_MELPA_PIN: (&str, &str) =
+    ("all-the-icons-nerd-fonts", "20260614.1246");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
