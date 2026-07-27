@@ -402,6 +402,9 @@ pub const AIRPLAY_MELPA_PIN: (&str, &str) = ("airplay", "20130212.1226");
 /// corpus.
 pub const ALABASTER_THEMES_MELPA_PIN: (&str, &str) = ("alabaster-themes", "20260113.657");
 
+/// The exact alan-mode package selected by the comprehensive API parity corpus.
+pub const ALAN_MODE_MELPA_PIN: (&str, &str) = ("alan-mode", "20260523.1330");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

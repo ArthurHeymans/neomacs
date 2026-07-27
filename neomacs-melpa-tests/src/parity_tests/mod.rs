@@ -94,6 +94,7 @@ mod aio;
 mod airline_themes;
 mod airplay;
 mod alabaster_themes;
+mod alan_mode;
 mod async_package;
 mod at_package;
 mod bind_key;
