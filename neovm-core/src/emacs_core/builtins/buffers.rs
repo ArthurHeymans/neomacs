@@ -1716,7 +1716,13 @@ pub(crate) fn builtin_replace_region_contents(
         byte_range,
     )?;
     let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
-    let inherit = args.get(5).is_some_and(|value| value.is_truthy());
+    // GNU 31's Freplace_region_contents currently passes its Lisp INHERIT
+    // argument to replace_range's adjust-match-data parameter and hard-codes
+    // the distinct property-inheritance parameter to false (editfns.c).
+    // Neomacs does not yet expose that internal match-data switch, but it must
+    // keep the two semantic axes separate: replacement SOURCE properties are
+    // copied, while adjoining destination properties are not inherited.
+    let _adjust_match_data = args.get(5).is_some_and(|value| value.is_truthy());
 
     // GNU `Freplace_region_contents` falls back to a plain `delete-region` +
     // `insert` when MAX-SECS or MAX-COSTS is exactly 0 (the comparison step is
@@ -1772,8 +1778,8 @@ pub(crate) fn builtin_replace_region_contents(
             &[],
             &mut eval.buffers,
             source_pieces,
-            false,
-            inherit,
+            InsertPieceMarkerPlacement::AfterMarkers,
+            InsertPiecePropertyMode::SourceOnly,
         )?;
         super::editfns::signal_after_text_change(eval, change)?;
         eval.restore_specpdl_roots(source_root_scope);
@@ -1830,8 +1836,8 @@ pub(crate) fn builtin_replace_region_contents(
                 &[],
                 &mut eval.buffers,
                 pieces,
-                false,
-                inherit,
+                InsertPieceMarkerPlacement::AfterMarkers,
+                InsertPiecePropertyMode::SourceOnly,
             )?;
         }
     }
@@ -3549,6 +3555,28 @@ fn insert_pieces_root_holder(pieces: &[InsertPiece]) -> Value {
     holder
 }
 
+/// Where markers exactly at an insertion site are placed.
+///
+/// GNU threads this decision through its insertion core as a boolean.  A
+/// dedicated type prevents it from being confused with the independent text
+/// property inheritance decision at call sites.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum InsertPieceMarkerPlacement {
+    AfterMarkers,
+    BeforeMarkers,
+}
+
+/// How an inserted piece obtains text properties.
+///
+/// SourceOnly copies only properties carried by the inserted string.
+/// InheritAdjoining additionally merges sticky properties from the destination
+/// text, matching insert-and-inherit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum InsertPiecePropertyMode {
+    SourceOnly,
+    InheritAdjoining,
+}
+
 pub(crate) fn builtin_insert(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
     let pieces = collect_insert_pieces(&args, target_multibyte)?;
@@ -3574,7 +3602,14 @@ pub(crate) fn builtin_insert(eval: &mut super::eval::Context, args: Vec<Value>) 
     let piece_root_scope = eval.save_specpdl_roots();
     eval.push_specpdl_root(insert_pieces_root_holder(&pieces));
     super::editfns::signal_before_text_change(eval, change)?;
-    insert_pieces_in_state(&eval.obarray, &[], &mut eval.buffers, pieces, false, false)?;
+    insert_pieces_in_state(
+        &eval.obarray,
+        &[],
+        &mut eval.buffers,
+        pieces,
+        InsertPieceMarkerPlacement::AfterMarkers,
+        InsertPiecePropertyMode::SourceOnly,
+    )?;
     super::editfns::signal_after_text_change(eval, change)?;
     eval.restore_specpdl_roots(piece_root_scope);
     Ok(Value::NIL)
@@ -3608,7 +3643,14 @@ pub(crate) fn builtin_insert_before_markers(
     let piece_root_scope = eval.save_specpdl_roots();
     eval.push_specpdl_root(insert_pieces_root_holder(&pieces));
     super::editfns::signal_before_text_change(eval, change)?;
-    insert_pieces_in_state(&eval.obarray, &[], &mut eval.buffers, pieces, true, false)?;
+    insert_pieces_in_state(
+        &eval.obarray,
+        &[],
+        &mut eval.buffers,
+        pieces,
+        InsertPieceMarkerPlacement::BeforeMarkers,
+        InsertPiecePropertyMode::SourceOnly,
+    )?;
     super::editfns::signal_after_text_change(eval, change)?;
     eval.restore_specpdl_roots(piece_root_scope);
     Ok(Value::NIL)
@@ -3640,7 +3682,14 @@ pub(crate) fn builtin_insert_and_inherit(
         insert_extent,
     )?;
     super::editfns::signal_before_text_change(eval, change)?;
-    insert_pieces_in_state(&eval.obarray, &[], &mut eval.buffers, pieces, false, true)?;
+    insert_pieces_in_state(
+        &eval.obarray,
+        &[],
+        &mut eval.buffers,
+        pieces,
+        InsertPieceMarkerPlacement::AfterMarkers,
+        InsertPiecePropertyMode::InheritAdjoining,
+    )?;
     super::editfns::signal_after_text_change(eval, change)?;
     Ok(Value::NIL)
 }
@@ -3671,7 +3720,14 @@ pub(crate) fn builtin_insert_before_markers_and_inherit(
         insert_extent,
     )?;
     super::editfns::signal_before_text_change(eval, change)?;
-    insert_pieces_in_state(&eval.obarray, &[], &mut eval.buffers, pieces, true, true)?;
+    insert_pieces_in_state(
+        &eval.obarray,
+        &[],
+        &mut eval.buffers,
+        pieces,
+        InsertPieceMarkerPlacement::BeforeMarkers,
+        InsertPiecePropertyMode::InheritAdjoining,
+    )?;
     super::editfns::signal_after_text_change(eval, change)?;
     Ok(Value::NIL)
 }
@@ -3681,8 +3737,8 @@ fn insert_pieces_in_state(
     dynamic: &[OrderedRuntimeBindingMap],
     buffers: &mut BufferManager,
     pieces: Vec<InsertPiece>,
-    before_markers: bool,
-    inherit: bool,
+    marker_placement: InsertPieceMarkerPlacement,
+    property_mode: InsertPiecePropertyMode,
 ) -> EvalResult {
     if pieces.iter().all(|piece| piece.text.is_empty()) {
         return Ok(Value::NIL);
@@ -3709,13 +3765,17 @@ fn insert_pieces_in_state(
             .get(current_id)
             .map(|buf| (buf.point_emacs_byte_pos(), buf.point_char_pos()))
             .unwrap_or((EmacsBytePos::ZERO, CharPos0::ZERO));
-        if before_markers {
-            let _ = buffers.insert_lisp_string_into_buffer_before_markers(current_id, &piece.text);
-        } else {
-            let _ = buffers.insert_lisp_string_into_buffer(current_id, &piece.text);
+        match marker_placement {
+            InsertPieceMarkerPlacement::AfterMarkers => {
+                let _ = buffers.insert_lisp_string_into_buffer(current_id, &piece.text);
+            }
+            InsertPieceMarkerPlacement::BeforeMarkers => {
+                let _ =
+                    buffers.insert_lisp_string_into_buffer_before_markers(current_id, &piece.text);
+            }
         }
         let inserted_end = insert_pos.add_len(EmacsByteLen::new(piece.text.sbytes()));
-        if !inherit && piece.text_props.is_none() {
+        if property_mode == InsertPiecePropertyMode::SourceOnly && piece.text_props.is_none() {
             // The inserted text occupies char range [insert_char_pos,
             // insert_char_pos + schars); use it directly to avoid the
             // byte->char reconversion of [insert_pos, inserted_end].
@@ -3724,7 +3784,7 @@ fn insert_pieces_in_state(
                 CharRange::from_start_len(insert_char_pos, CharLen::new(piece.text.schars())),
             );
         }
-        if inherit {
+        if property_mode == InsertPiecePropertyMode::InheritAdjoining {
             apply_inherited_text_properties(
                 obarray,
                 dynamic,
@@ -3741,7 +3801,7 @@ fn insert_pieces_in_state(
             }
         }
         if let Some(str_table) = piece.text_props {
-            if inherit {
+            if property_mode == InsertPiecePropertyMode::InheritAdjoining {
                 let _ = buffers
                     .merge_missing_buffer_text_properties(current_id, &str_table, insert_pos);
             } else {
@@ -3757,8 +3817,8 @@ pub(crate) fn insert_string_value_in_current_buffer(
     dynamic: &[OrderedRuntimeBindingMap],
     buffers: &mut BufferManager,
     value: Value,
-    before_markers: bool,
-    inherit: bool,
+    marker_placement: InsertPieceMarkerPlacement,
+    property_mode: InsertPiecePropertyMode,
 ) -> EvalResult {
     let target_multibyte = current_buffer_multibyte(buffers)?;
     let piece = buffer_insert_piece_from_string(value, target_multibyte)?;
@@ -3767,8 +3827,8 @@ pub(crate) fn insert_string_value_in_current_buffer(
         dynamic,
         buffers,
         vec![piece],
-        before_markers,
-        inherit,
+        marker_placement,
+        property_mode,
     )
 }
 

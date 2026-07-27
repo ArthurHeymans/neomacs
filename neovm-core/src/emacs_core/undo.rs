@@ -338,8 +338,8 @@ fn primitive_undo_inner(
                             &[],
                             &mut ctx.buffers,
                             car,
-                            false,
-                            false,
+                            super::builtins::InsertPieceMarkerPlacement::AfterMarkers,
+                            super::builtins::InsertPiecePropertyMode::SourceOnly,
                         )?;
                         // If POS was negative, point should be at end of
                         // inserted text (which insert_into_buffer already does).

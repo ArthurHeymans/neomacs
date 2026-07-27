@@ -1292,8 +1292,8 @@ pub(crate) fn builtin_indent_to(
             &[],
             &mut ctx.buffers,
             Value::string(indent),
-            false,
-            true,
+            super::builtins::InsertPieceMarkerPlacement::AfterMarkers,
+            super::builtins::InsertPiecePropertyMode::InheritAdjoining,
         )?;
         super::editfns::signal_after_text_change(ctx, change)?;
     }

@@ -251,6 +251,29 @@ fn replace_region_contents_vector_source_preserves_text_properties() {
 }
 
 #[test]
+fn replace_region_contents_keeps_source_properties_without_inheriting_destination_properties() {
+    // GNU 31 passes false as replace_range's property-inheritance flag even
+    // when replace-region-contents receives a non-nil INHERIT argument.  The
+    // optional argument occupies replace_range's independent match-data slot.
+    // Thus the unchanged destination prefix keeps its property, the inserted
+    // suffix keeps its source property, and the suffix does not acquire the
+    // adjoining destination property.
+    let result = eval_one(
+        r#"(with-temp-buffer
+              (insert "x")
+              (put-text-property 1 2 'destination 'kept)
+              (replace-region-contents
+               1 2 (propertize "xy" 'source 'inserted)
+               0.1 nil 'inherit)
+              (buffer-string))"#,
+    );
+    assert_eq!(
+        result,
+        r#"OK #("xy" 0 1 (destination kept) 1 2 (source inserted))"#
+    );
+}
+
+#[test]
 fn replace_region_contents_rejects_self_buffer() {
     // GNU signals "Cannot replace a buffer with itself".
     let result = eval_one(

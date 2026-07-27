@@ -8,6 +8,40 @@ use crate::common::assert_oracle_parity;
 use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
+fn oracle_replace_region_contents_does_not_inherit_adjoining_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU 31 editfns.c:Freplace_region_contents passes `false` as
+    // replace_range's property-inheritance flag in both the minimal-diff and
+    // fallback paths.  Its optional INHERIT argument is passed in the separate
+    // adjust-match-data position.  Consequently it preserves properties owned
+    // by inserted SOURCE text, but does not merge properties from adjoining
+    // destination text.  This intentionally differs from insert-and-inherit.
+    let form = r#"
+(list
+ (with-temp-buffer
+   (insert "x")
+   (put-text-property 1 2 'destination 'kept)
+   (replace-region-contents
+    1 2 (propertize "xy" 'source 'inserted) 0.1 nil 'inherit)
+   (buffer-string))
+ (with-temp-buffer
+   (insert "x")
+   (put-text-property 1 2 'destination 'kept)
+   (replace-region-contents 1 2 "xy" 0.1 nil 'inherit)
+   (buffer-string))
+ (with-temp-buffer
+   (insert "x")
+   (put-text-property 1 2 'destination 'kept)
+   (goto-char 2)
+   (insert-and-inherit "y")
+   (buffer-string)))
+"#;
+
+    assert_oracle_parity(form);
+}
+
+#[test]
 fn oracle_text_property_mutator_return_values_and_empty_ranges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
