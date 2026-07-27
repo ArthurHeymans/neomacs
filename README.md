@@ -138,13 +138,13 @@ Platform dependencies (Arch, macOS, Nix/Cachix) and the test suites:
 |------|-------|
 | 100% GNU Emacs compatibility (oracle test suites) | 🚧 ~95%, closing the last gaps |
 | JIT compilation + inline caching for Elisp | 🚧 working, profiling and improving |
+| zero pause GC | 🚧 maturing |
 | Elisp-hackable frontend — GPU shaders, surfaces | 🚧 early, expanding |
 | Rust Elisp runtime — evaluator, bytecode VM, portable dump | 🚧 refactoring, testing, improving |
 | GPU display + layout engine (replaces `xdisp.c`) | 🚧 early, improving |
 | Inline images, 4K video, WebKit browser | 🚧 works today, experimental, improving |
 | High-performance neo-term (GPU terminal) | 🚧 in development |
 | Cursor / scroll / buffer-switch animations | 🚧 polishing, catalog growing |
-| High-performance concurrent zero-pause GC | 🚧 maturing |
 | Performance | 🔬 profiling, benchmarking, tuning |
 | True multi-threaded Elisp | 🔬 designing, researching, experimental attempts |
 | TUI renderer (`neomacs -nw`) | 🚧 usable, polishing |
