@@ -335,6 +335,11 @@ pub const AGE_MELPA_PIN: (&str, &str) = ("age", "20250806.1723");
 /// The exact agenix package selected by the comprehensive API parity corpus.
 pub const AGENIX_MELPA_PIN: (&str, &str) = ("agenix", "20250209.551");
 
+/// The exact aggressive-fill-paragraph package selected by the comprehensive
+/// API parity corpus.
+pub const AGGRESSIVE_FILL_PARAGRAPH_MELPA_PIN: (&str, &str) =
+    ("aggressive-fill-paragraph", "20240213.2320");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
