@@ -820,6 +820,10 @@ pub const ASCII_TABLE_MELPA_PIN: (&str, &str) = ("ascii-table", "20231215.1527")
 /// compiler-option, process, and callback parity corpus.
 pub const ASILEA_MELPA_PIN: (&str, &str) = ("asilea", "20150105.1525");
 
+/// The exact asm-blox package selected by the comprehensive parser, virtual
+/// machine, gameboard, editor, persistence, and puzzle parity corpus.
+pub const ASM_BLOX_MELPA_PIN: (&str, &str) = ("asm-blox", "20240106.1930");
+
 /// The exact asn1-mode package selected by the comprehensive lexical,
 /// indentation, font-lock, outline, and editing-workflow parity corpus. MELPA
 /// built this archive from upstream commit
