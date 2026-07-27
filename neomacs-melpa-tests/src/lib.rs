@@ -395,6 +395,9 @@ pub const AIO_MELPA_PIN: (&str, &str) = ("aio", "20260214.1529");
 /// corpus.
 pub const AIRLINE_THEMES_MELPA_PIN: (&str, &str) = ("airline-themes", "20250502.1915");
 
+/// The exact airplay package selected by the comprehensive API parity corpus.
+pub const AIRPLAY_MELPA_PIN: (&str, &str) = ("airplay", "20130212.1226");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
