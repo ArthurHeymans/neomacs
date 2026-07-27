@@ -5346,13 +5346,6 @@ impl<'a> crate::emacs_core::builtins::symbols::MacroexpandRuntime for Vm<'a> {
         args: Vec<Value>,
         environment: Option<Value>,
     ) -> Result<Value, Flow> {
-        if let Some(cached) = self
-            .ctx
-            .lookup_runtime_macro_expansion(function, &args, environment)
-        {
-            return Ok(cached);
-        }
-        let args_for_cache = args.clone();
         let expand_start = std::time::Instant::now();
         self.with_dynamic_vm_roots(move |vm| {
             vm.push_dynamic_vm_root(form);
@@ -5368,15 +5361,8 @@ impl<'a> crate::emacs_core::builtins::symbols::MacroexpandRuntime for Vm<'a> {
             // `lexical-binding`; byte-compiled bytecomp/macroexp code depends
             // on the caller's visible dynamic value while compiling source.
             let expanded = vm.call_function(function, args)?;
-            let expand_elapsed = expand_start.elapsed();
-            vm.ctx.store_runtime_macro_expansion(
-                form,
-                function,
-                &args_for_cache,
-                &expanded,
-                expand_elapsed,
-                environment,
-            );
+            vm.ctx
+                .note_runtime_macro_expansion(form, expand_start.elapsed());
             Ok(expanded)
         })
     }

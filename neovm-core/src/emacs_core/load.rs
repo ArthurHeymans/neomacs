@@ -1666,8 +1666,6 @@ fn with_load_context<F>(
 where
     F: FnOnce(&mut super::eval::Context) -> Result<Value, EvalError>,
 {
-    let old_macro_cache_disabled = eval.macro_cache_disabled;
-
     let specpdl_count = eval.specpdl.len();
     // GNU Fload first specbinds `lexical-binding' to nil, then assigns the
     // file's cookie/default value before entering readevalloop. The specpdl
@@ -1709,31 +1707,7 @@ where
     eval.specbind(intern("load-file-name"), load_file_value);
     eval.specbind(intern("load-true-file-name"), load_true_file_value);
     eval.specbind(intern("current-load-list"), current_load_list);
-    // GNU eager load walks the current function cells directly and does not
-    // keep a separate runtime macro-expansion cache. Disable the NeoVM cache
-    // across file loads so exact GC does not retain or traverse stale
-    // load-local macroexpansion trees. Drop-guarded (house RAII pattern) so
-    // a panic contained at a module/JIT boundary inside the load restores
-    // the previous state too — an imperative restore would be skipped and
-    // latch the cache off for the rest of the session.
-    struct MacroCacheDisableGuard<'a> {
-        eval: &'a mut super::eval::Context,
-        old: bool,
-    }
-    impl Drop for MacroCacheDisableGuard<'_> {
-        fn drop(&mut self) {
-            self.eval.macro_cache_disabled = self.old;
-        }
-    }
-    let cache_guard = MacroCacheDisableGuard {
-        eval: &mut *eval,
-        old: old_macro_cache_disabled,
-    };
-    cache_guard.eval.macro_cache_disabled = true;
-
-    let result = body(&mut *cache_guard.eval);
-
-    drop(cache_guard);
+    let result = body(eval);
 
     // Restore lexenv via specpdl unbind_to, matching GNU's
     // readevalloop cleanup. This pops the LexicalEnv entry we

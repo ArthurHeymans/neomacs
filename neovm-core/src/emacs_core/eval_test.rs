@@ -779,12 +779,7 @@ fn source_cons_macro_form_expands_via_value_expansion_path() {
     // The expansion itself must return the body unchanged (the
     // lambda is identity), so evaluating the expansion yields 3.
     //
-    // Note: the previous version of this test asserted on
-    // `macro_cache_misses` / `macro_cache_hits`, but those counters
-    // track the `runtime_macro_expansion_cache` (used only by the
-    // `macroexpand` builtin during file loading), not the eval
-    // loop's macro dispatch. Reinstating those assertions would
-    // require exercising a different code path entirely.
+    // The ordinary eval loop expands the macro for each evaluated call.
     ev.eval_str(
         "(fset 'source-cache-macro
                   (cons 'macro
@@ -867,17 +862,11 @@ fn clear_top_level_eval_state_discards_stale_named_call_cache_entries() {
 }
 
 #[test]
-fn runtime_macro_cache_hits_across_equivalent_explicit_environments() {
+fn runtime_macro_expansion_repeats_across_equivalent_explicit_environments() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    // The runtime macro expansion cache is only active when
-    // `load-in-progress` is truthy (mirroring GNU, where elisp
-    // macros are cached only while loading `.el`/`.elc` files).
-    // Enable it explicitly for this unit test.
+    // `load-in-progress` must not change macro invocation semantics.
     ev.set_variable("load-in-progress", Value::T);
-    // Seed the macro used by the cache probe. The test relies on a
-    // Lisp-defined macro function whose body does a `setq` side
-    // effect so we can observe whether it ran (miss) or not (hit).
     ev.eval_str("(defvar runtime-cache-count 0)")
         .expect("defvar runtime-cache-count");
     ev.eval_str(
@@ -903,8 +892,7 @@ fn runtime_macro_cache_hits_across_equivalent_explicit_environments() {
         Value::symbol("marker"),
     )]);
 
-    let hits0 = ev.macro_cache_hits;
-    let misses0 = ev.macro_cache_misses;
+    let calls0 = ev.macro_expand_calls;
 
     let first = ev
         .expand_macro_for_macroexpand(form, definition, vec![arg], Some(env1))
@@ -915,12 +903,18 @@ fn runtime_macro_cache_hits_across_equivalent_explicit_environments() {
 
     assert!(equal_value(&first, &arg, 0));
     assert!(equal_value(&second, &arg, 0));
-    assert_eq!(ev.macro_cache_misses - misses0, 1);
-    assert_eq!(ev.macro_cache_hits - hits0, 1);
+    assert_eq!(ev.macro_expand_calls - calls0, 2);
+    assert_eq!(
+        ev.obarray()
+            .symbol_value("runtime-cache-count")
+            .copied()
+            .unwrap_or(Value::NIL),
+        Value::fixnum(2)
+    );
 }
 
 #[test]
-fn runtime_macro_cache_handles_raw_unibyte_strings_in_environment() {
+fn runtime_macro_expansion_handles_raw_unibyte_strings_in_environment() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     ev.set_variable("load-in-progress", Value::T);
@@ -944,8 +938,7 @@ fn runtime_macro_cache_handles_raw_unibyte_strings_in_environment() {
     let env1 = Value::list(vec![Value::cons(Value::symbol("context"), raw_unibyte)]);
     let env2 = Value::list(vec![Value::cons(Value::symbol("context"), raw_unibyte)]);
 
-    let hits0 = ev.macro_cache_hits;
-    let misses0 = ev.macro_cache_misses;
+    let calls0 = ev.macro_expand_calls;
 
     let first = ev
         .expand_macro_for_macroexpand(form, definition, vec![arg], Some(env1))
@@ -956,19 +949,18 @@ fn runtime_macro_cache_handles_raw_unibyte_strings_in_environment() {
 
     assert!(equal_value(&first, &arg, 0));
     assert!(equal_value(&second, &arg, 0));
-    assert_eq!(ev.macro_cache_misses - misses0, 1);
-    assert_eq!(ev.macro_cache_hits - hits0, 1);
+    assert_eq!(ev.macro_expand_calls - calls0, 2);
     assert_eq!(
         ev.obarray()
             .symbol_value("runtime-cache-count")
             .copied()
             .unwrap_or(Value::NIL),
-        Value::fixnum(1)
+        Value::fixnum(2)
     );
 }
 
 #[test]
-fn runtime_macro_cache_handles_raw_unibyte_string_arguments() {
+fn runtime_macro_expansion_handles_raw_unibyte_string_arguments() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     ev.set_variable("load-in-progress", Value::T);
@@ -991,8 +983,7 @@ fn runtime_macro_cache_handles_raw_unibyte_string_arguments() {
     let arg = Value::heap_string(LispString::from_unibyte(vec![0xFF]));
     let form = Value::list(vec![Value::symbol("runtime-cache-bytes-macro"), arg]);
 
-    let hits0 = ev.macro_cache_hits;
-    let misses0 = ev.macro_cache_misses;
+    let calls0 = ev.macro_expand_calls;
 
     let first = ev
         .expand_macro_for_macroexpand(form, definition, vec![arg], None)
@@ -1003,14 +994,13 @@ fn runtime_macro_cache_handles_raw_unibyte_string_arguments() {
 
     assert!(equal_value(&first, &arg, 0));
     assert!(equal_value(&second, &arg, 0));
-    assert_eq!(ev.macro_cache_misses - misses0, 1);
-    assert_eq!(ev.macro_cache_hits - hits0, 1);
+    assert_eq!(ev.macro_expand_calls - calls0, 2);
     assert_eq!(
         ev.obarray()
             .symbol_value("runtime-cache-bytes-count")
             .copied()
             .unwrap_or(Value::NIL),
-        Value::fixnum(1)
+        Value::fixnum(2)
     );
 }
 

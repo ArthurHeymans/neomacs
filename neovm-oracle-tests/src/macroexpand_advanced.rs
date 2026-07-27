@@ -191,6 +191,34 @@ fn oracle_prop_macroexpand_adv_side_effects_during_expansion() {
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
+#[test]
+fn oracle_prop_macroexpand_repeated_calls_preserve_fresh_expansion_identity() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // `load-in-progress' is an execution context, not permission to memoize
+    // macro results.  GNU invokes the expander for every call, so both its
+    // side effects and the identity of freshly allocated expansion data remain
+    // observable.
+    let form = r#"(progn
+  (defvar neovm--mea-fresh-count 0)
+  (defmacro neovm--mea-fresh ()
+    (setq neovm--mea-fresh-count (1+ neovm--mea-fresh-count))
+    (list 'quote (list neovm--mea-fresh-count)))
+  (unwind-protect
+      (let ((load-in-progress t))
+        (setq neovm--mea-fresh-count 0)
+        (let ((first (macroexpand '(neovm--mea-fresh)))
+              (second (macroexpand '(neovm--mea-fresh))))
+          (list neovm--mea-fresh-count
+                (eq (cadr first) (cadr second))
+                (cadr first)
+                (cadr second))))
+    (fmakunbound 'neovm--mea-fresh)
+    (makunbound 'neovm--mea-fresh-count)))"#;
+    let expect = expect_test::expect![r#""OK (2 nil (1) (2))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
 // ---------------------------------------------------------------------------
 // Macro that generates nested let bindings from keyword args
 // ---------------------------------------------------------------------------

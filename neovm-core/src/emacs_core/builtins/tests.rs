@@ -15021,16 +15021,20 @@ fn macroexpand_runtime_improper_lists_match_oracle_error_behavior() {
 }
 
 #[test]
-fn macroexpand_runtime_cache_tracks_load_forms_without_stale_hits() {
+fn macroexpand_runtime_reinvokes_load_macros_without_suppressing_effects() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
     let _ = eval.eval_str_each(
-        r#"(fset 'vm-cache-macro
+        r#"(defvar vm-macroexpand-count 0)
+            (fset 'vm-cache-macro
                  (cons 'macro
                        (lambda (x)
+                         (setq vm-macroexpand-count
+                               (1+ vm-macroexpand-count))
                          x)))"#,
     );
     eval.set_variable("load-in-progress", Value::T);
+    let calls0 = eval.macro_expand_calls;
 
     let tail = Value::cons(Value::fixnum(1), Value::NIL);
     let form = Value::cons(Value::symbol("vm-cache-macro"), tail);
@@ -15039,43 +15043,51 @@ fn macroexpand_runtime_cache_tracks_load_forms_without_stale_hits() {
     let second = builtin_macroexpand(&mut eval, vec![form]).expect("second expansion");
     assert_eq!(first, Value::fixnum(1));
     assert_eq!(second, Value::fixnum(1));
-    assert_eq!(eval.macro_cache_misses, 1);
-    assert_eq!(eval.macro_cache_hits, 1);
+    assert_eq!(eval.macro_expand_calls - calls0, 2);
+    assert_eq!(
+        eval.obarray().symbol_value("vm-macroexpand-count").copied(),
+        Some(Value::fixnum(2))
+    );
 
     let equivalent_tail = Value::cons(Value::fixnum(1), Value::NIL);
     let equivalent_form = Value::cons(Value::symbol("vm-cache-macro"), equivalent_tail);
-    let third = builtin_macroexpand(&mut eval, vec![equivalent_form])
-        .expect("equivalent runtime form should reuse cache");
+    let third =
+        builtin_macroexpand(&mut eval, vec![equivalent_form]).expect("equivalent runtime form");
     assert_eq!(third, Value::fixnum(1));
-    assert_eq!(eval.macro_cache_misses, 1);
-    assert_eq!(eval.macro_cache_hits, 2);
+    assert_eq!(eval.macro_expand_calls - calls0, 3);
 
     tail.set_car(Value::fixnum(2));
     let fourth = builtin_macroexpand(&mut eval, vec![form]).expect("mutated expansion");
     assert_eq!(fourth, Value::fixnum(2));
-    assert_eq!(eval.macro_cache_misses, 2);
-    assert_eq!(eval.macro_cache_hits, 2);
+    assert_eq!(eval.macro_expand_calls - calls0, 4);
+    assert_eq!(
+        eval.obarray().symbol_value("vm-macroexpand-count").copied(),
+        Some(Value::fixnum(4))
+    );
 }
 
 #[test]
-fn macroexpand_runtime_cache_survives_exact_gc() {
+fn macroexpand_runtime_repeated_expansions_survive_exact_gc() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
     let _ = eval.eval_str_each(
-        r#"(fset 'vm-cache-macro
+        r#"(defvar vm-macroexpand-gc-count 0)
+            (fset 'vm-cache-macro
                  (cons 'macro
                        (lambda (x)
+                         (setq vm-macroexpand-gc-count
+                               (1+ vm-macroexpand-gc-count))
                          x)))"#,
     );
     eval.set_variable("load-in-progress", Value::T);
+    let calls0 = eval.macro_expand_calls;
 
     let tail = Value::cons(Value::fixnum(1), Value::NIL);
     let form = Value::cons(Value::symbol("vm-cache-macro"), tail);
 
     let first = builtin_macroexpand(&mut eval, vec![form]).expect("first expansion");
     assert_eq!(first, Value::fixnum(1));
-    assert_eq!(eval.macro_cache_misses, 1);
-    assert_eq!(eval.macro_cache_hits, 0);
+    assert_eq!(eval.macro_expand_calls - calls0, 1);
 
     eval.gc_collect_exact();
     eval.set_variable("load-in-progress", Value::T);
@@ -15086,8 +15098,13 @@ fn macroexpand_runtime_cache_survives_exact_gc() {
 
     let second = builtin_macroexpand(&mut eval, vec![second_form]).expect("second expansion");
     assert_eq!(second, Value::fixnum(1));
-    assert_eq!(eval.macro_cache_misses, 1);
-    assert_eq!(eval.macro_cache_hits, 1);
+    assert_eq!(eval.macro_expand_calls - calls0, 2);
+    assert_eq!(
+        eval.obarray()
+            .symbol_value("vm-macroexpand-gc-count")
+            .copied(),
+        Some(Value::fixnum(2))
+    );
 }
 
 #[test]

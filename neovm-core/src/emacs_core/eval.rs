@@ -382,18 +382,6 @@ fn internal_make_interpreted_closure_function_symbol() -> SymId {
 }
 
 #[inline]
-fn load_in_progress_symbol() -> SymId {
-    static SYM: OnceLock<SymId> = OnceLock::new();
-    *SYM.get_or_init(|| intern("load-in-progress"))
-}
-
-#[inline]
-fn macroexpand_all_environment_symbol() -> SymId {
-    static SYM: OnceLock<SymId> = OnceLock::new();
-    *SYM.get_or_init(|| intern("macroexpand-all-environment"))
-}
-
-#[inline]
 fn throw_symbol() -> SymId {
     static SYM: OnceLock<SymId> = OnceLock::new();
     *SYM.get_or_init(|| intern("throw"))
@@ -686,106 +674,6 @@ impl GnuTimerTimestamp {
     }
 }
 
-fn runtime_tail_fingerprint(tail: &[Value]) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    let mut seen = std::collections::HashSet::new();
-    tail.len().hash(&mut hasher);
-    for (i, value) in tail.iter().enumerate() {
-        i.hash(&mut hasher);
-        value_fingerprint(*value, &mut hasher, 3, &mut seen);
-    }
-    hasher.finish()
-}
-
-fn value_fingerprint(
-    value: Value,
-    hasher: &mut impl std::hash::Hasher,
-    depth: usize,
-    seen: &mut std::collections::HashSet<usize>,
-) {
-    use std::hash::Hash;
-    match value.kind() {
-        ValueKind::Nil => 0u8.hash(hasher),
-        ValueKind::T => 1u8.hash(hasher),
-        ValueKind::Fixnum(n) => {
-            2u8.hash(hasher);
-            n.hash(hasher);
-        }
-        ValueKind::Float => {
-            3u8.hash(hasher);
-            value.as_float().unwrap().to_bits().hash(hasher);
-        }
-        ValueKind::Symbol(id) => {
-            4u8.hash(hasher);
-            id.0.hash(hasher);
-        }
-        ValueKind::String => {
-            5u8.hash(hasher);
-            let key = value.bits();
-            if depth == 0 || !seen.insert(key) {
-                key.hash(hasher);
-                return;
-            }
-            let string = match value.as_lisp_string() {
-                Some(string) => string,
-                None => {
-                    key.hash(hasher);
-                    return;
-                }
-            };
-            string.is_multibyte().hash(hasher);
-            string.schars().hash(hasher);
-            string.sbytes().hash(hasher);
-            for byte in string.as_bytes().iter().take(32) {
-                byte.hash(hasher);
-            }
-        }
-        ValueKind::Cons => {
-            6u8.hash(hasher);
-            let key = value.bits();
-            if depth == 0 || !seen.insert(key) {
-                key.hash(hasher);
-                return;
-            }
-            let mut cursor = value;
-            let mut count = 0usize;
-            while count < 4 && cursor.is_cons() {
-                count.hash(hasher);
-                value_fingerprint(cursor.cons_car(), hasher, depth - 1, seen);
-                cursor = cursor.cons_cdr();
-                count += 1;
-            }
-            value_fingerprint(cursor, hasher, depth - 1, seen);
-        }
-        ValueKind::Veclike(VecLikeType::Vector) => {
-            7u8.hash(hasher);
-            let key = value.bits();
-            if depth == 0 || !seen.insert(key) {
-                key.hash(hasher);
-                return;
-            }
-            let items = value.as_vector_data().unwrap();
-            items.len().hash(hasher);
-            for item in items.iter().take(4) {
-                value_fingerprint(*item, hasher, depth - 1, seen);
-            }
-        }
-        ValueKind::Subr(sym_id) => {
-            8u8.hash(hasher);
-            sym_id.0.hash(hasher);
-        }
-        ValueKind::Veclike(VecLikeType::Subr) => {
-            8u8.hash(hasher);
-            value.as_subr_id().unwrap().0.hash(hasher);
-        }
-        _ => {
-            9u8.hash(hasher);
-            value.bits().hash(hasher);
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 enum NamedCallTarget {
     Obarray(Value),
@@ -892,23 +780,6 @@ impl LexenvSpecialCache {
     }
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct RuntimeMacroExpansionCacheEntry {
-    function: Value,
-    expanded: Value,
-    fingerprint: u64,
-}
-
-impl RuntimeMacroExpansionCacheEntry {
-    fn new(function: Value, expanded: Value, fingerprint: u64) -> Self {
-        Self {
-            function,
-            expanded,
-            fingerprint,
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, Default)]
 struct MacroPerfCounter {
     calls: u64,
@@ -944,8 +815,6 @@ struct MacroPerfStats {
     scope_enter: MacroPerfCounter,
     scope_exit: MacroPerfCounter,
     macro_apply: MacroPerfCounter,
-    cache_lookup: MacroPerfCounter,
-    cache_store: MacroPerfCounter,
     expand_macro: MacroPerfCounter,
     eager_step1: MacroPerfCounter,
     eager_step3: MacroPerfCounter,
@@ -2364,20 +2233,9 @@ pub struct Context {
     /// expander is running. Eager-load caches use this to preserve GNU
     /// `eval-and-compile` side effects during replay.
     macro_expansion_mutation_epoch: u64,
-    /// Diagnostic counters for macro expansion cache.
-    pub(crate) macro_cache_hits: u64,
-    pub(crate) macro_cache_misses: u64,
+    /// Diagnostic counters for eager/runtime macro expansion.
+    pub(crate) macro_expand_calls: u64,
     pub(crate) macro_expand_total_us: u64,
-    /// When true, skip cache lookups (still populate cache for timing).
-    pub(crate) macro_cache_disabled: bool,
-    /// Value-side eager-load macro cache used by `macroexpand`/
-    /// `internal-macroexpand-for-load`.
-    ///
-    /// Keyed by macro identity plus a structural fingerprint of the runtime
-    /// argument tail, so equivalent cons trees rebuilt from cached/bootstrap
-    /// forms can reuse the same expansion.
-    pub(crate) runtime_macro_expansion_cache:
-        FxHashMap<(usize, usize, u64), RuntimeMacroExpansionCacheEntry>,
     /// When true, collect detailed timing counters for macro/eager-load paths.
     macro_perf_enabled: bool,
     macro_perf_stats: MacroPerfStats,
@@ -3316,11 +3174,8 @@ impl Context {
         ev.next_resume_id = 1;
         ev.named_call_cache.clear();
 
-        ev.runtime_macro_expansion_cache.clear();
-        ev.macro_cache_hits = 0;
-        ev.macro_cache_misses = 0;
+        ev.macro_expand_calls = 0;
         ev.macro_expand_total_us = 0;
-        ev.macro_cache_disabled = false;
         ev.macro_perf_enabled = std::env::var_os("NEOVM_TRACE_MACRO_PERF").is_some();
         ev.macro_perf_stats = MacroPerfStats::default();
         ev.interpreted_closure_filter_fn = None;
@@ -5792,11 +5647,8 @@ impl Context {
 
             macro_expansion_scope_depth: 0,
             macro_expansion_mutation_epoch: 0,
-            macro_cache_hits: 0,
-            macro_cache_misses: 0,
+            macro_expand_calls: 0,
             macro_expand_total_us: 0,
-            macro_cache_disabled: false,
-            runtime_macro_expansion_cache: FxHashMap::default(),
             macro_perf_enabled: std::env::var_os("NEOVM_TRACE_MACRO_PERF").is_some(),
             macro_perf_stats: MacroPerfStats::default(),
             interpreted_closure_filter_fn: None,
@@ -5982,11 +5834,8 @@ impl Context {
 
             macro_expansion_scope_depth: 0,
             macro_expansion_mutation_epoch: 0,
-            macro_cache_hits: 0,
-            macro_cache_misses: 0,
+            macro_expand_calls: 0,
             macro_expand_total_us: 0,
-            macro_cache_disabled: false,
-            runtime_macro_expansion_cache: FxHashMap::default(),
             macro_perf_enabled: std::env::var_os("NEOVM_TRACE_MACRO_PERF").is_some(),
             macro_perf_stats: MacroPerfStats::default(),
             interpreted_closure_filter_fn: None,
@@ -6134,10 +5983,6 @@ impl Context {
         visit(self.inhibit_quit);
         if self.cached_system_name.is_heap_object() {
             visit(self.cached_system_name);
-        }
-        for entry in self.runtime_macro_expansion_cache.values() {
-            visit(entry.function);
-            visit(entry.expanded);
         }
         if let Some(filter_fn) = self.interpreted_closure_filter_fn {
             visit(filter_fn);
@@ -14736,136 +14581,15 @@ impl Context {
         }
     }
 
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn macro_expansion_context_key(&self) -> u64 {
-        self.macro_expansion_context_key_for_environment(None)
-    }
-
-    fn macro_expansion_context_key_for_environment(&self, environment: Option<Value>) -> u64 {
-        fn value_identity_key(value: Value) -> u64 {
-            match value.kind() {
-                ValueKind::Nil => 0,
-                ValueKind::T => 1,
-                ValueKind::Fixnum(n) => ((n as u64).wrapping_mul(0x9E37_79B1)) ^ 0x10,
-                ValueKind::Symbol(sym) => ((sym.0 as u64) << 8) ^ 0x20,
-                ValueKind::Subr(sym) => ((sym.0 as u64) << 8) ^ 0x22,
-                ValueKind::Veclike(VecLikeType::Subr) => {
-                    let sym = value.as_subr_id().unwrap();
-                    ((sym.0 as u64) << 8) ^ 0x22
-                }
-                _ => (value.bits() as u64) ^ 0x30,
-            }
-        }
-
-        fn semantic_fingerprint(value: Value) -> u64 {
-            use std::hash::Hasher;
-
-            let mut hasher = std::collections::hash_map::DefaultHasher::new();
-            let mut seen = std::collections::HashSet::new();
-            value_fingerprint(value, &mut hasher, 4, &mut seen);
-            hasher.finish()
-        }
-
-        let current_macroexpand_env = self
-            .obarray()
-            .symbol_value_id_or_nil(macroexpand_all_environment_symbol());
-        let current_dynvars = self
-            .obarray()
-            .symbol_value_id_or_nil(macroexp_dynvars_symbol());
-
-        let explicit_environment_key = environment.map(semantic_fingerprint).unwrap_or(0);
-        let current_macroexpand_env_key = value_identity_key(current_macroexpand_env);
-        let current_dynvars_key = value_identity_key(current_dynvars);
-
-        explicit_environment_key.rotate_left(7)
-            ^ current_macroexpand_env_key.rotate_left(29)
-            ^ current_dynvars_key.rotate_left(43)
-    }
-
-    fn runtime_macro_expansion_cache_enabled(&self) -> bool {
-        !self.macro_cache_disabled
-            && self
-                .visible_variable_value_or_nil_by_id(load_in_progress_symbol())
-                .is_truthy()
-    }
-
-    fn runtime_macro_expansion_cache_key(
-        &self,
-        function: Value,
-        args_fingerprint: u64,
-        context_key: u64,
-    ) -> (usize, usize, u64) {
-        (
-            function.bits() ^ 0x9E37_79B1usize,
-            args_fingerprint as usize,
-            context_key,
-        )
-    }
-
-    pub(crate) fn lookup_runtime_macro_expansion(
-        &mut self,
-        function: Value,
-        args: &[Value],
-        environment: Option<Value>,
-    ) -> Option<Value> {
-        let perf_start = self.macro_perf_enabled.then(std::time::Instant::now);
-        if !self.runtime_macro_expansion_cache_enabled() {
-            if let Some(start) = perf_start {
-                self.macro_perf_stats
-                    .cache_lookup
-                    .note_duration(start.elapsed());
-            }
-            return None;
-        }
-        let current_fp = runtime_tail_fingerprint(args);
-        let context_key = self.macro_expansion_context_key_for_environment(environment);
-        let cache_key = self.runtime_macro_expansion_cache_key(function, current_fp, context_key);
-        let cached = self
-            .runtime_macro_expansion_cache
-            .get(&cache_key)
-            .cloned()?;
-        if cached.fingerprint == current_fp {
-            self.macro_cache_hits += 1;
-            if let Some(start) = perf_start {
-                self.macro_perf_stats
-                    .cache_lookup
-                    .note_duration(start.elapsed());
-            }
-            return Some(cached.expanded);
-        }
-        if let Some(start) = perf_start {
-            self.macro_perf_stats
-                .cache_lookup
-                .note_duration(start.elapsed());
-        }
-        None
-    }
-
-    pub(crate) fn store_runtime_macro_expansion(
+    pub(crate) fn note_runtime_macro_expansion(
         &mut self,
         form: Value,
-        function: Value,
-        args: &[Value],
-        expanded_value: &Value,
         expand_elapsed: std::time::Duration,
-        environment: Option<Value>,
     ) {
-        let perf_start = self.macro_perf_enabled.then(std::time::Instant::now);
-        if !self.runtime_macro_expansion_cache_enabled() {
-            if let Some(start) = perf_start {
-                self.macro_perf_stats
-                    .cache_store
-                    .note_duration(start.elapsed());
-            }
-            return;
-        }
-        self.macro_cache_misses += 1;
-        self.macro_expand_total_us += expand_elapsed.as_micros() as u64;
-        let current_fp = runtime_tail_fingerprint(args);
-        let context_key = self.macro_expansion_context_key_for_environment(environment);
-        let cache_key = self.runtime_macro_expansion_cache_key(function, current_fp, context_key);
-        let cache_entry =
-            RuntimeMacroExpansionCacheEntry::new(function, *expanded_value, current_fp);
+        self.macro_expand_calls = self.macro_expand_calls.saturating_add(1);
+        self.macro_expand_total_us = self
+            .macro_expand_total_us
+            .saturating_add(expand_elapsed.as_micros() as u64);
         if self.macro_perf_enabled && expand_elapsed.as_millis() > 50 {
             let macro_head = if form.is_cons() {
                 form.cons_car().as_symbol_name().unwrap_or("<non-symbol>")
@@ -14875,17 +14599,8 @@ impl Context {
             let form_str = crate::emacs_core::print::print_value(&form);
             let form_preview: String = form_str.chars().take(200).collect();
             tracing::warn!(
-                "runtime_macro_cache MISS head={macro_head} macro={:#x} fp={:#x} took {expand_elapsed:.2?} form={form_preview}",
-                function.bits(),
-                current_fp
+                "runtime macro expansion head={macro_head} took {expand_elapsed:.2?} form={form_preview}"
             );
-        }
-        self.runtime_macro_expansion_cache
-            .insert(cache_key, cache_entry);
-        if let Some(start) = perf_start {
-            self.macro_perf_stats
-                .cache_store
-                .note_duration(start.elapsed());
         }
     }
 
@@ -14916,15 +14631,6 @@ impl Context {
         environment: Option<Value>,
     ) -> Result<Value, Flow> {
         let perf_start = self.macro_perf_enabled.then(std::time::Instant::now);
-        if let Some(cached) = self.lookup_runtime_macro_expansion(definition, &args, environment) {
-            if let Some(start) = perf_start {
-                self.macro_perf_stats
-                    .expand_macro
-                    .note_duration(start.elapsed());
-            }
-            return Ok(cached);
-        }
-        let args_for_cache = args.clone();
         let expand_start = std::time::Instant::now();
         let specpdl_root_scope = self.save_specpdl_roots();
         self.push_specpdl_root(form);
@@ -14946,15 +14652,7 @@ impl Context {
                 return Err(signal(LispCondition::InvalidFunction, vec![definition]));
             };
 
-            let expand_elapsed = expand_start.elapsed();
-            self.store_runtime_macro_expansion(
-                form,
-                definition,
-                &args_for_cache,
-                &expanded,
-                expand_elapsed,
-                environment,
-            );
+            self.note_runtime_macro_expansion(form, expand_start.elapsed());
             Ok(expanded)
         })();
         self.restore_specpdl_roots(specpdl_root_scope);
@@ -14990,9 +14688,8 @@ impl Context {
         }
 
         let mut parts = vec![format!(
-            "cache=hits:{} misses:{} expand-total:{:.2}ms",
-            self.macro_cache_hits,
-            self.macro_cache_misses,
+            "expansions:{} expand-total:{:.2}ms",
+            self.macro_expand_calls,
             self.macro_expand_total_us as f64 / 1000.0
         )];
 
@@ -15000,8 +14697,6 @@ impl Context {
             self.macro_perf_stats.scope_enter.summary("scope-enter"),
             self.macro_perf_stats.scope_exit.summary("scope-exit"),
             self.macro_perf_stats.macro_apply.summary("macro-apply"),
-            self.macro_perf_stats.cache_lookup.summary("cache-lookup"),
-            self.macro_perf_stats.cache_store.summary("cache-store"),
             self.macro_perf_stats.expand_macro.summary("expand-macro"),
             self.macro_perf_stats.eager_step1.summary("eager-step1"),
             self.macro_perf_stats.eager_step3.summary("eager-step3"),

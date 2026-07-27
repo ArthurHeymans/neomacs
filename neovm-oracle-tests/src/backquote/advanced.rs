@@ -114,6 +114,37 @@ fn oracle_prop_backquote_macro_expansion_pipeline() {
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
+#[test]
+fn oracle_prop_backquote_full_expansion_keeps_equal_literal_tails_distinct() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // `backquote-list*' builds a fresh quoted tail for each source
+    // occurrence.  Recursive eager expansion must not merge equal cons trees:
+    // callers can observe their identity with `eq' (as face/theme code does).
+    let form = r#"(let* ((load-in-progress t)
+                         (expanded
+                          (macroexpand-all
+                           '(list
+                             `(a ((t (:foreground ,value :weight bold))))
+                             `(b ((t (:foreground ,value :weight bold)))))))
+                         (first (nth 1 expanded))
+                         (second (nth 2 expanded))
+                         (tail
+                          (lambda (expression)
+                            (cadr
+                             (nth 2
+                                  (nth 2
+                                       (nth 2
+                                            (nth 1
+                                                 (nth 2 expression))))))))
+                         (first-tail (funcall tail first))
+                         (second-tail (funcall tail second)))
+                    (list (equal first-tail second-tail)
+                          (eq first-tail second-tail)))"#;
+    let expect = expect_test::expect![r#""OK (t nil)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
 // ---------------------------------------------------------------------------
 // Backquote with computed splicing via mapcar
 // ---------------------------------------------------------------------------
