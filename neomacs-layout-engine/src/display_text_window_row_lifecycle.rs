@@ -764,12 +764,11 @@ impl<'a, 'buf, B: LayoutBufferView> TextWindowVisibilityRetryRequest<'a, 'buf, B
         // minibuffer is no longer excluded.  An inactive echo-area mini-window
         // has point reset to BEGV, so `point_beyond_visible_span` is false and
         // it never scrolls.
-        let scroll_down_window_start =
-            if point_beyond_visible_span && visible_progress > self.window_start {
-                self.scroll_down_start(visible_end_lisp)
-            } else {
-                None
-            };
+        let scroll_down_window_start = if visible_progress > self.window_start {
+            self.scroll_down_start(point_lisp, visible_end_lisp, point_beyond_visible_span)
+        } else {
+            None
+        };
         let point_row_window_start = next_window_start_for_partially_visible_point_row(
             self.rows,
             self.point_charpos,
@@ -795,33 +794,62 @@ impl<'a, 'buf, B: LayoutBufferView> TextWindowVisibilityRetryRequest<'a, 'buf, B
         }
     }
 
-    /// New window start for a point that laid out below the last visible row —
+    /// New window start when point laid out below the bottom scroll margin —
     /// GNU `try_scrolling` (src/xdisp.c:19487-19556) run against the rows we
     /// just measured, then its `recenter:` fallback (src/xdisp.c:21108).
+    /// `None` when point is where it belongs and nothing should move.
     ///
     /// Scrolling to `visible_end` (a whole windowful) is what GNU never does:
     /// it is the "arbitrary page break" users see when walking down a buffer
     /// one line at a time.
-    fn scroll_down_start(&self, visible_end_lisp: Option<LispCharPos1>) -> Option<i64> {
+    fn scroll_down_start(
+        &self,
+        point_lisp: LispCharPos1,
+        visible_end_lisp: Option<LispCharPos1>,
+        point_beyond_visible_span: bool,
+    ) -> Option<i64> {
         let byte_at_charpos = |charpos: i64| {
             self.buf_access
                 .byte_at(self.buf_access.charpos_to_bytepos(charpos))
         };
         // Rows already laid out below the start, and the lowest one point may
-        // occupy once the bottom scroll-margin is honored.
+        // occupy once the bottom scroll-margin is honored (GNU's
+        // `scroll_margin_y`, xdisp.c:19420).
         let laid_out_rows = visible_rows_below(self.rows, self.window_start);
         let bottom_row = last_usable_row(laid_out_rows as usize, self.scroll_margin);
-        // Point is past the visible end, so it is at least on the row after the
-        // last one; each further newline is at least one more row.
-        let slack = (laid_out_rows - bottom_row).max(1);
-        let first_hidden = visible_end_lisp.map_or(self.point_charpos, |end| end.as_i64());
-        let (extra_lines, bounded) = count_lines_bounded(
-            first_hidden,
-            self.point_charpos,
-            (self.scroll_policy.search_limit_lines() - slack).max(0),
-            &byte_at_charpos,
-        );
-        let dy = slack + extra_lines;
+
+        // Which display row point landed on. Inside the laid-out rows this is
+        // exact — it accounts for wrapped lines and for text the display hides.
+        // Below them nothing was measured, so estimate one row per newline.
+        let point_row_in_rows = self.rows.iter().position(|row| {
+            row.start_buffer_pos
+                .zip(row.end_buffer_pos)
+                .is_some_and(|(start, end)| start <= point_lisp && point_lisp <= end)
+        });
+        let (point_row, bounded) = match point_row_in_rows {
+            Some(row) => (row as i64, true),
+            // Point is off the bottom: nothing measured it, so estimate one row
+            // per newline below the visible end.
+            None if point_beyond_visible_span => {
+                let first_hidden = visible_end_lisp.map_or(self.point_charpos, |end| end.as_i64());
+                let (extra_lines, bounded) = count_lines_bounded(
+                    first_hidden,
+                    self.point_charpos,
+                    self.scroll_policy.search_limit_lines(),
+                    &byte_at_charpos,
+                );
+                (laid_out_rows + extra_lines, bounded)
+            }
+            // Point is not on any row and not below them — it is ABOVE the
+            // window, which this branch must never answer for.
+            None => return None,
+        };
+        // GNU's `dy`. Zero or less means point is already where the margin
+        // allows, and `try_scrolling` leaves the window alone.
+        let dy = point_row - bottom_row;
+        if dy <= 0 {
+            return None;
+        }
 
         let advance = |lines: i64| {
             let start = next_window_start_from_visible_rows(self.rows, self.window_start, lines)?;
@@ -836,10 +864,12 @@ impl<'a, 'buf, B: LayoutBufferView> TextWindowVisibilityRetryRequest<'a, 'buf, B
             ))
         };
 
-        match self
-            .scroll_policy
-            .forward_scroll(dy, bounded, laid_out_rows as usize, self.scroll_margin)
-        {
+        match self.scroll_policy.forward_scroll(
+            dy,
+            bounded,
+            laid_out_rows as usize,
+            self.scroll_margin,
+        ) {
             ForwardScroll::Advance { lines } => advance(lines),
             // `line_start_above` counts BUFFER lines, so on a single logical
             // line wrapped over many rows it walks back to the line start —

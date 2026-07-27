@@ -6,7 +6,7 @@
 use std::cmp::Ordering;
 
 use neovm_core::buffer::{
-    Buffer, BufferTextSnapshot, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange,
+    Buffer, BufferTextSnapshot, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1,
     buffer::{BUFFER_SLOT_COUNT, lookup_buffer_slot},
     overlay::OverlayList,
 };
@@ -1296,6 +1296,8 @@ pub fn window_params_from_neovm_with_font_sizing(
         bounds,
         window_start,
         force_start,
+        window_end_pos,
+        window_end_valid,
         point,
         hscroll,
         vscroll,
@@ -1309,6 +1311,8 @@ pub fn window_params_from_neovm_with_font_sizing(
             bounds,
             window_start,
             force_start,
+            window_end_pos,
+            window_end_valid,
             point,
             hscroll,
             vscroll,
@@ -1321,6 +1325,8 @@ pub fn window_params_from_neovm_with_font_sizing(
             bounds,
             *window_start,
             *force_start,
+            *window_end_pos,
+            *window_end_valid,
             *point,
             *hscroll,
             *vscroll,
@@ -1518,6 +1524,18 @@ pub fn window_params_from_neovm_with_font_sizing(
         // Normalize to the layout engine's internal 0-based char positions.
         window_start: lisp_char_pos_to_layout_i64(window_start),
         force_start,
+        // GNU stores this as an offset from Z; recover the Lisp position and
+        // normalize to the layout engine's 0-based space.
+        previous_visible_end: window_end_valid.then(|| {
+            lisp_char_pos_to_layout_i64(LispCharPos1::from_one_based_usize(
+                buffer
+                    .point_max_char_pos()
+                    .get()
+                    .saturating_add(1)
+                    .saturating_sub(window_end_pos)
+                    .max(1),
+            ))
+        }),
         // Mirror GNU `window.c:window_point` (around line 1782):
         //
         //   return (w == XWINDOW (selected_window)

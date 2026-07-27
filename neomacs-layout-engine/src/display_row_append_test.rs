@@ -1,5 +1,4 @@
 use super::*;
-use crate::scroll_policy::ScrollPolicy;
 use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementRenderOutcome,
     BufferDisplayPropertyTextReplacementRenderRequest,
@@ -100,6 +99,7 @@ use crate::display_text_window_row_lifecycle::{
 use crate::font_metrics::FontMetricsService;
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
+use crate::scroll_policy::ScrollPolicy;
 use crate::types::LayoutCharPos0;
 use crate::types::WindowKind;
 use crate::window_output::DisplayTextRowTransition;
@@ -10309,6 +10309,7 @@ fn test_display_space_window_params() -> WindowParams {
         top_line: 0,
         window_start: 1,
         force_start: false,
+        previous_visible_end: None,
         point: 1,
         buffer_size: 1,
         buffer_begv: 1,

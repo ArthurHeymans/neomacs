@@ -2080,12 +2080,16 @@ pub(crate) fn builtin_window_end(eval: &mut super::eval::Context, args: Vec<Valu
                 .unwrap_or(window_start.to_one_based_usize())
                 .saturating_sub(*window_end_pos)
                 .max(1);
-            if let Some(snapshot_end) = frames
+            if let Some(last_visible) = frames
                 .get(fid)
                 .and_then(|frame| frame.redisplay_snapshot(wid))
                 .and_then(|snapshot| snapshot.visible_buffer_span().map(|span| span.end()))
             {
-                return Ok(Value::fixnum(snapshot_end.as_i64()));
+                // `visible_buffer_span` ends at the LAST displayed character
+                // (that is what `point_for_buffer_pos` range-tests against),
+                // but GNU's `window-end` is `BUF_Z (b) - w->window_end_pos` —
+                // the position just AFTER it, matching `stored_end` above.
+                return Ok(Value::fixnum(last_visible.as_i64().saturating_add(1)));
             }
             if !update_requested || noninteractive || frame_initial || *window_end_valid {
                 return Ok(Value::fixnum(stored_end as i64));

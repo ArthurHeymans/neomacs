@@ -3,7 +3,7 @@
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::scroll_policy::{
     ForwardScroll, ScrollPolicy, count_lines_bounded, last_usable_row, line_start_above,
-    line_start_below,
+    line_start_below, top_margin,
 };
 use crate::types::{WindowKind, WindowParams};
 
@@ -56,6 +56,9 @@ impl BufferWindowSource {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferWindowSourceRequest {
     requested_window_start: i64,
+    /// Position just AFTER the last character the previous layout displayed
+    /// (EXCLUSIVE), or `None` when no previous layout describes this window.
+    previous_visible_end: Option<i64>,
     point_charpos: i64,
     accessible_start: i64,
     accessible_end: i64,
@@ -70,6 +73,7 @@ impl BufferWindowSourceRequest {
     pub(crate) fn from_window_params(params: &WindowParams, max_rows: usize) -> Self {
         Self::new(
             params.window_start_charpos().get(),
+            params.previous_visible_end_charpos().map(|pos| pos.get()),
             params.point_charpos().get(),
             params.accessible_start_charpos().get(),
             params.accessible_end_charpos().get(),
@@ -84,6 +88,7 @@ impl BufferWindowSourceRequest {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         requested_window_start: i64,
+        previous_visible_end: Option<i64>,
         point_charpos: i64,
         accessible_start: i64,
         accessible_end: i64,
@@ -95,6 +100,7 @@ impl BufferWindowSourceRequest {
     ) -> Self {
         Self {
             requested_window_start,
+            previous_visible_end,
             point_charpos,
             accessible_start,
             accessible_end,
@@ -169,16 +175,15 @@ impl BufferWindowSourceRequest {
             let remaining_chars = self.accessible_end - window_start;
             if remaining_chars < self.max_rows as i64 && self.accessible_end > self.max_rows as i64
             {
-                window_start = self.line_start_above_point(
-                    (self.max_rows as i64 / 2).max(1),
-                    &byte_at_charpos,
-                );
+                window_start = self
+                    .line_start_above_point((self.max_rows as i64 / 2).max(1), &byte_at_charpos);
             }
         }
 
-        if self.point_charpos >= self.accessible_start && self.point_charpos < window_start {
-            let adjusted =
-                self.line_start_above_point((self.max_rows as i64 / 4).max(1), &byte_at_charpos);
+        if self.point_charpos >= self.accessible_start
+            && self.point_is_above_top_margin(window_start, &byte_at_charpos)
+        {
+            let adjusted = self.backward_scroll_window_start(window_start, &byte_at_charpos);
             tracing::debug!(
                 "layout_window_rust: adjusted window_start {} -> {} (point={})",
                 self.requested_window_start,
@@ -201,15 +206,61 @@ impl BufferWindowSourceRequest {
         window_start
     }
 
+    /// Whether point sits above the top scroll-margin row, which is where GNU
+    /// starts scrolling backward — not at the window start itself (its
+    /// `PT < CHARPOS (scroll_margin_pos)` test, src/xdisp.c:19580).
+    fn point_is_above_top_margin(
+        self,
+        window_start: i64,
+        byte_at_charpos: &impl Fn(i64) -> Option<u8>,
+    ) -> bool {
+        if self.point_charpos < window_start {
+            return true;
+        }
+        let margin = top_margin(self.max_rows, self.scroll_margin);
+        margin > 0
+            && count_lines_bounded(window_start, self.point_charpos, margin, byte_at_charpos).0
+                < margin
+    }
+
+    /// New window start when point moved UP out of the window, per GNU
+    /// `try_scrolling`'s backward branch (src/xdisp.c:19558-19613).
+    ///
+    /// Minimal scrolling puts point on the top scroll-margin row; a jump too
+    /// far for the policy falls back to `recenter:`.
+    fn backward_scroll_window_start(
+        self,
+        window_start: i64,
+        byte_at_charpos: &impl Fn(i64) -> Option<u8>,
+    ) -> i64 {
+        let (lines_back, bounded) = count_lines_bounded(
+            self.point_charpos,
+            window_start,
+            self.scroll_policy.search_limit_lines(),
+            byte_at_charpos,
+        );
+        let lines_above_point = self.scroll_policy.backward_scroll(
+            lines_back,
+            bounded,
+            self.max_rows,
+            self.scroll_margin,
+        );
+        self.line_start_above_point(lines_above_point, byte_at_charpos)
+    }
+
     /// New window start when point sits below the window, per GNU
     /// `try_scrolling` (src/xdisp.c:19359). `None` when point is already on
     /// screen or this pass must not scroll.
     ///
-    /// This is the fast path — it runs before any layout, so it measures the
-    /// distance to point in BUFFER lines. That is exact for a window with no
-    /// wrapped or invisible text; anything else under-counts, point stays off
-    /// screen, and the display-line-accurate visibility retry
-    /// (`TextWindowVisibilityRetryRequest`) finishes the scroll.
+    /// The distance below the window is measured from `previous_visible_end`,
+    /// the only display-accurate fact available before laying out. Without it
+    /// this falls back to counting BUFFER lines from the window start, which is
+    /// exact only when nothing wraps and nothing is hidden.
+    ///
+    /// Under-scrolling is safe: the visibility retry measures real display rows
+    /// and finishes the job. Over-scrolling is not — point ends up visible, so
+    /// nothing corrects it — which is why the trigger uses the measured end
+    /// rather than a line count that grows with every hidden line.
     fn forward_scroll_window_start(
         self,
         window_start: i64,
@@ -231,16 +282,31 @@ impl BufferWindowSourceRequest {
         }
 
         let bottom_row = last_usable_row(self.max_rows, self.scroll_margin);
-        let (lines_to_point, bounded) = count_lines_bounded(
-            window_start,
-            self.point_charpos,
-            bottom_row + self.scroll_policy.search_limit_lines(),
-            byte_at_charpos,
-        );
+        let (point_row, bounded) = match self.previous_visible_end {
+            // Point was on screen last time. Any scroll it still needs is one
+            // the bottom scroll-margin asks for, and only real display rows can
+            // measure that — leave it to the visibility retry.
+            Some(end) if self.point_charpos < end => return None,
+            Some(end) => {
+                let (extra_lines, bounded) = count_lines_bounded(
+                    end,
+                    self.point_charpos,
+                    self.scroll_policy.search_limit_lines(),
+                    byte_at_charpos,
+                );
+                (self.max_rows as i64 + extra_lines, bounded)
+            }
+            None => count_lines_bounded(
+                window_start,
+                self.point_charpos,
+                bottom_row + self.scroll_policy.search_limit_lines(),
+                byte_at_charpos,
+            ),
+        };
         // GNU's `dy`: how far point falls past the last row the bottom
         // scroll-margin leaves usable (xdisp.c:19443). `<= 0` means point is
         // already visible, which is GNU's `if (dy > 0) scroll_down_p = true`.
-        let dy = lines_to_point - bottom_row;
+        let dy = point_row - bottom_row;
         if dy <= 0 {
             return None;
         }
@@ -250,12 +316,9 @@ impl BufferWindowSourceRequest {
                 .scroll_policy
                 .forward_scroll(dy, bounded, self.max_rows, self.scroll_margin)
             {
-                ForwardScroll::Advance { lines } => line_start_below(
-                    window_start,
-                    lines,
-                    self.accessible_end,
-                    byte_at_charpos,
-                ),
+                ForwardScroll::Advance { lines } => {
+                    line_start_below(window_start, lines, self.accessible_end, byte_at_charpos)
+                }
                 ForwardScroll::Recenter { lines_above_point } => {
                     self.line_start_above_point(lines_above_point, byte_at_charpos)
                 }

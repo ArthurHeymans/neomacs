@@ -76,6 +76,18 @@ pub struct WindowParams {
     /// the window when point ended up outside — never recompute the start
     /// around point.
     pub force_start: bool,
+    /// Buffer position just AFTER the last character the previous redisplay
+    /// actually displayed, in layout 0-based char coordinates — GNU's
+    /// `BUF_Z (b) - w->window_end_pos`. EXCLUSIVE: point is off the bottom
+    /// exactly when `point >= previous_visible_end`.
+    ///
+    /// `None` when GNU's `window_end_valid` is clear, i.e. the buffer or the
+    /// window changed since that layout and the position describes nothing.
+    ///
+    /// This is the only display-accurate fact available before laying out:
+    /// unlike a count of buffer lines it already accounts for wrapped lines and
+    /// for text the display hides.
+    pub previous_visible_end: Option<i64>,
     /// Point position in this window's buffer in layout 0-based char coordinates.
     pub point: i64,
     /// Accessible end (ZV) in layout 0-based exclusive char coordinates.
@@ -223,6 +235,10 @@ impl WindowParams {
 
     pub fn window_start_charpos(&self) -> LayoutCharPos0 {
         LayoutCharPos0::new(self.window_start)
+    }
+
+    pub fn previous_visible_end_charpos(&self) -> Option<LayoutCharPos0> {
+        self.previous_visible_end.map(LayoutCharPos0::new)
     }
 
     pub fn point_charpos(&self) -> LayoutCharPos0 {

@@ -36,6 +36,7 @@ fn window_params() -> WindowParams {
         top_line: 0,
         window_start: 10,
         force_start: false,
+        previous_visible_end: None,
         point: 10,
         buffer_size: 210,
         buffer_begv: 0,

@@ -126,8 +126,41 @@ impl ScrollPolicy {
             // GNU: amount_to_scroll = scroll_max, i.e. exactly `scroll-step`
             // lines — not `dy`. Point may still be off-screen afterwards; GNU
             // lets the next redisplay pass deal with that.
-            Self::Step { lines } if dy_is_bounded && dy <= lines => ForwardScroll::Advance { lines },
+            Self::Step { lines } if dy_is_bounded && dy <= lines => {
+                ForwardScroll::Advance { lines }
+            }
             _ => recenter(),
+        }
+    }
+
+    /// Display lines to leave above point when it moved UP out of the window,
+    /// per `try_scrolling`'s backward branch (xdisp.c:19558-19613).
+    ///
+    /// Minimal scrolling here means "just enough": point lands on the top
+    /// scroll-margin row and the text below it stays put. `lines_back` is how
+    /// far above the window start point sits, with `bounded` false when the
+    /// caller stopped counting at [`Self::search_limit_lines`].
+    pub(crate) fn backward_scroll(
+        self,
+        lines_back: i64,
+        bounded: bool,
+        window_rows: usize,
+        scroll_margin: i64,
+    ) -> i64 {
+        let margin = top_margin(window_rows, scroll_margin);
+        let within_budget = bounded && lines_back <= self.search_limit_lines();
+        match self {
+            Self::Conservative { .. } | Self::Unlimited if within_budget => margin,
+            // GNU scrolls the window start back by exactly `scroll-step` lines
+            // (`amount_to_scroll = scroll_max`, xdisp.c:19615), so point lands
+            // wherever that leaves it: `lines - lines_back` rows below the new
+            // start, never above the top margin.
+            Self::Step { lines } if within_budget => (lines - lines_back).max(margin),
+            // `recenter:` again — except that scroll-conservatively > 100 puts
+            // point at the top margin rather than the middle when it is
+            // scrolling backward (`centering_position = margin`, xdisp.c:21183).
+            Self::Unlimited => margin,
+            _ => (window_rows as i64 / 2).max(0),
         }
     }
 
@@ -146,15 +179,17 @@ impl ScrollPolicy {
     }
 }
 
+/// Effective `scroll-margin` in rows. GNU `window_scroll_margin` caps it at a
+/// quarter of the window so the two margins can never meet (window.c:5117).
+pub(crate) fn top_margin(window_rows: usize, scroll_margin: i64) -> i64 {
+    scroll_margin.clamp(0, (window_rows as i64 / 4).max(0))
+}
+
 /// Index of the lowest row point may occupy given the bottom `scroll-margin`
 /// (GNU `scroll_margin_y`, xdisp.c:19420). Rows are 0-based, so a margin-free
 /// window of `window_rows` rows allows `window_rows - 1`.
 pub(crate) fn last_usable_row(window_rows: usize, scroll_margin: i64) -> i64 {
-    let rows = window_rows as i64;
-    // GNU `window_scroll_margin` caps the margin at a quarter of the window so
-    // the two margins can never meet (window.c:5117).
-    let margin = scroll_margin.clamp(0, (rows / 4).max(0));
-    (rows - 1 - margin).max(0)
+    (window_rows as i64 - 1 - top_margin(window_rows, scroll_margin)).max(0)
 }
 
 /// Count newlines in `from..to`, stopping once `limit` is exceeded.
@@ -196,7 +231,8 @@ pub(crate) fn line_start_above(
     byte_at_charpos: &impl Fn(i64) -> Option<u8>,
 ) -> i64 {
     let mut pos = point.max(accessible_start);
-    let is_line_start = |pos: i64| pos <= accessible_start || byte_at_charpos(pos - 1) == Some(b'\n');
+    let is_line_start =
+        |pos: i64| pos <= accessible_start || byte_at_charpos(pos - 1) == Some(b'\n');
     while !is_line_start(pos) {
         pos -= 1;
     }

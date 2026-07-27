@@ -144,9 +144,18 @@ fn line_start_above_from_mid_line_uses_the_line_point_is_on() {
 #[test]
 fn line_start_below_advances_whole_lines() {
     // From the buffer start, one line down is line 2 (charpos 2).
-    assert_eq!(line_start_below(0, 1, LINES16.len() as i64, &byte_at(LINES16)), 2);
-    assert_eq!(line_start_below(0, 5, LINES16.len() as i64, &byte_at(LINES16)), 10);
-    assert_eq!(line_start_below(0, 0, LINES16.len() as i64, &byte_at(LINES16)), 0);
+    assert_eq!(
+        line_start_below(0, 1, LINES16.len() as i64, &byte_at(LINES16)),
+        2
+    );
+    assert_eq!(
+        line_start_below(0, 5, LINES16.len() as i64, &byte_at(LINES16)),
+        10
+    );
+    assert_eq!(
+        line_start_below(0, 0, LINES16.len() as i64, &byte_at(LINES16)),
+        0
+    );
     assert_eq!(
         line_start_below(0, 99, LINES16.len() as i64, &byte_at(LINES16)),
         LINES16.len() as i64,
@@ -160,4 +169,46 @@ fn count_lines_bounded_reports_when_it_gave_up() {
     let (lines, bounded) = count_lines_bounded(0, LINES16.len() as i64, 3, &byte_at(LINES16));
     assert!(!bounded, "scan stopped at the limit");
     assert_eq!(lines, 4, "reports the limit it tripped, not the true total");
+}
+
+#[test]
+fn backward_minimal_scroll_puts_point_on_the_top_margin_row() {
+    // GNU's backward branch scrolls just enough: point ends on the first row
+    // the top `scroll-margin` allows, and the text below it stays put.
+    for policy in [
+        ScrollPolicy::Conservative { max_lines: 20 },
+        ScrollPolicy::Unlimited,
+    ] {
+        assert_eq!(policy.backward_scroll(1, true, 21, 0), 0);
+        assert_eq!(policy.backward_scroll(1, true, 21, 3), 3);
+    }
+}
+
+#[test]
+fn backward_recenters_when_the_jump_is_too_far() {
+    // Conservative gives up past its limit and centres point (xdisp.c:21188)…
+    assert_eq!(
+        ScrollPolicy::Conservative { max_lines: 10 }.backward_scroll(50, false, 21, 0),
+        10
+    );
+    // …but scroll-conservatively > 100 never centres: point stays at the top
+    // margin even when the minimal scroll failed (xdisp.c:21183).
+    assert_eq!(
+        ScrollPolicy::Unlimited.backward_scroll(500, false, 21, 0),
+        0
+    );
+}
+
+#[test]
+fn backward_default_policy_centers_point() {
+    assert_eq!(ScrollPolicy::Recenter.backward_scroll(1, true, 21, 0), 10);
+}
+
+#[test]
+fn backward_step_moves_the_start_by_scroll_step_not_to_point() {
+    // GNU scrolls the start back by exactly `scroll-step` lines, so point ends
+    // up `step - lines_back` rows below the new start rather than on top of it.
+    let policy = ScrollPolicy::Step { lines: 3 };
+    assert_eq!(policy.backward_scroll(1, true, 21, 0), 2);
+    assert_eq!(policy.backward_scroll(3, true, 21, 0), 0);
 }

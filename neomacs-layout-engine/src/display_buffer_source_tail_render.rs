@@ -1,6 +1,5 @@
 //! Buffer source post-loop tail rendering and install context.
 
-use crate::scroll_policy::ScrollPolicy;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_row_face_state::DisplayRowActiveFaceState;
@@ -20,6 +19,7 @@ use crate::display_text_window_row_lifecycle::{
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
+use crate::scroll_policy::ScrollPolicy;
 use crate::types::WindowParams;
 use crate::window_layout::WindowChromeMetrics;
 use neomacs_display_protocol::types::FaceId;

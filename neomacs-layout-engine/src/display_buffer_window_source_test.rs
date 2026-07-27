@@ -15,6 +15,7 @@ fn window_params() -> WindowParams {
         top_line: 0,
         window_start: 17,
         force_start: false,
+        previous_visible_end: None,
         point: 21,
         buffer_size: 80,
         buffer_begv: 3,
@@ -84,6 +85,7 @@ fn request(
 ) -> BufferWindowSourceRequest {
     BufferWindowSourceRequest::new(
         requested_window_start,
+        None,
         point_charpos,
         0,
         accessible_end,
@@ -141,8 +143,15 @@ const LINES6: &[u8] = b"a\nb\nc\nd\ne\nf\n";
 
 #[test]
 fn source_request_scrolls_back_when_start_is_past_remaining_content() {
-    let resolved = request(10, 10, LINES6.len() as i64, 4, WindowKind::Main, ScrollPolicy::Recenter)
-        .resolve_window_start(byte_at_charpos(LINES6));
+    let resolved = request(
+        10,
+        10,
+        LINES6.len() as i64,
+        4,
+        WindowKind::Main,
+        ScrollPolicy::Recenter,
+    )
+    .resolve_window_start(byte_at_charpos(LINES6));
 
     // Start of line 4 ("d"), leaving max_rows/2 lines above point.
     assert_eq!(resolved, 6);
@@ -150,8 +159,15 @@ fn source_request_scrolls_back_when_start_is_past_remaining_content() {
 
 #[test]
 fn source_request_scrolls_back_when_point_is_above_window_start() {
-    let resolved = request(8, 3, LINES6.len() as i64, 4, WindowKind::Main, ScrollPolicy::Recenter)
-        .resolve_window_start(byte_at_charpos(LINES6));
+    let resolved = request(
+        8,
+        3,
+        LINES6.len() as i64,
+        4,
+        WindowKind::Main,
+        ScrollPolicy::Recenter,
+    )
+    .resolve_window_start(byte_at_charpos(LINES6));
 
     assert_eq!(resolved, 0);
 }
@@ -282,8 +298,15 @@ fn source_request_does_not_forward_scroll_degenerate_one_row_window() {
     // when `SPC SPC` opens the project find-file posframe. A 1-row layout is not
     // a real scroll decision, so it must leave window_start unchanged.
     let text = b"a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nn\no\np\nq\nr\ns\nt\nu\nv\nw\nx\ny\nz\n";
-    let resolved = request(0, 50, text.len() as i64, 1, WindowKind::Main, ScrollPolicy::Recenter)
-        .resolve_window_start(byte_at_charpos(text));
+    let resolved = request(
+        0,
+        50,
+        text.len() as i64,
+        1,
+        WindowKind::Main,
+        ScrollPolicy::Recenter,
+    )
+    .resolve_window_start(byte_at_charpos(text));
 
     assert_eq!(
         resolved, 0,

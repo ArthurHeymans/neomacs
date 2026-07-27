@@ -1373,6 +1373,7 @@ fn test_window_params() -> WindowParams {
         top_line: 0,
         window_start: 1,
         force_start: false,
+        previous_visible_end: None,
         point: 1,
         buffer_size: 1,
         buffer_begv: 1,
