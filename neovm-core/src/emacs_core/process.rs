@@ -5683,9 +5683,9 @@ impl super::eval::Context {
         // Root them for the callback span; unbind_to pops these with the
         // specbinds. GNU parks the same state on its specpdl
         // (record_unwind_protect restore_match_data, keyboard.c/process.c).
-        if let Some(crate::emacs_core::regex::MatchSource::String {
-            searched: Some(crate::emacs_core::regex::SearchedString::Heap(searched)),
-        }) = saved_match_data.as_ref().map(|md| &md.source)
+        if let Some(crate::emacs_core::regex::SearchedString::Heap(searched)) = saved_match_data
+            .as_ref()
+            .and_then(crate::emacs_core::regex::MatchData::searched_string)
         {
             self.push_specpdl_root(*searched);
         }

@@ -151,3 +151,35 @@ fn oracle_prop_match_data_with_buffer_search() {
         expect_test::expect![[r#""OK ((\"foo\" \"123\") (\"bar\" \"456\") (\"baz\" \"789\"))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
+
+#[test]
+fn oracle_buffer_match_data_survives_deleting_matched_text() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(with-temp-buffer
+                    (insert "${1:`\"Foo\"`}")
+                    (re-search-backward "`\"Foo\"`")
+                    (delete-region (match-beginning 0) (match-end 0))
+                    (let ((saved (match-data t)))
+                      (goto-char (car saved))
+                      (insert "Foo")
+                      (list (car saved) (buffer-string))))"#;
+    let expect = expect_test::expect![[r#""OK (5 \"${1:Foo}\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
+#[test]
+fn oracle_buffer_match_data_uses_char_positions_before_multibyte_text() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(with-temp-buffer
+                    (insert "α${1:`\"Foo\"`}ω")
+                    (re-search-backward "`\"Foo\"`")
+                    (delete-region (match-beginning 0) (match-end 0))
+                    (let ((saved (match-data t)))
+                      (goto-char (car saved))
+                      (insert "Foo")
+                      (list (car saved) (buffer-string))))"#;
+    let expect = expect_test::expect![[r#""OK (6 \"α${1:Foo}ω\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}

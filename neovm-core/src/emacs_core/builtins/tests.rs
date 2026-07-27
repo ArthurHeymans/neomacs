@@ -8066,6 +8066,30 @@ fn match_data_round_trip_with_nil_groups() {
 }
 
 #[test]
+fn buffer_match_data_keeps_lisp_positions_after_matched_text_is_deleted() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    load_minimal_gnu_backquote_runtime(&mut eval);
+
+    let result = eval
+        .eval_str_each(
+            r#"(with-temp-buffer
+                 (insert "${1:`\"Foo\"`}")
+                 (re-search-backward "`\"Foo\"`")
+                 (delete-region (match-beginning 0) (match-end 0))
+                 (let ((saved (match-data t)))
+                   (goto-char (car saved))
+                   (insert "Foo")
+                   (list (car saved) (buffer-string))))"#,
+        )
+        .iter()
+        .map(format_eval_result)
+        .collect::<Vec<_>>();
+
+    assert_eq!(result[0], r#"OK (5 "${1:Foo}")"#);
+}
+
+#[test]
 fn bootstrap_runtime_set_match_data_restores_multibyte_buffer_positions_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
@@ -8115,7 +8139,7 @@ fn replace_match_after_set_match_data_uses_gnu_buffer_char_positions() {
     builtin_set_match_data(&mut eval, vec![saved]).expect("restore GNU-style buffer positions");
     let restored = eval.match_data.as_ref().expect("restored match data");
     assert_eq!(
-        restored.groups.first().copied().flatten(),
+        restored.group(0),
         Some(crate::emacs_core::regex::MatchGroup::new(1, 6))
     );
     assert!(restored.searched_buffer_id().is_some());
@@ -9574,7 +9598,7 @@ fn re_search_forward_honors_inhibit_changing_match_data() {
     eval.set_variable("inhibit-changing-match-data", Value::NIL);
 
     // Prime match data with a successful "a" search. The exact
-    // numeric form of `match_data.groups[0]` is an internal detail
+    // numeric form of `match_data.group(0)` is an internal detail
     // (1-based marker span over bytes); we only need a reference
     // snapshot to compare against after the second search.
     let first = builtin_re_search_forward(&mut eval, vec![Value::string("a")])
@@ -9585,7 +9609,7 @@ fn re_search_forward_honors_inhibit_changing_match_data() {
     let primed_span = eval
         .match_data
         .as_ref()
-        .and_then(|md| md.groups.first().copied().flatten())
+        .and_then(|md| md.group(0))
         .expect("match data should be populated after a successful search");
 
     // Set the global and move point back to the start.
@@ -9606,7 +9630,7 @@ fn re_search_forward_honors_inhibit_changing_match_data() {
     let span_after_second = eval
         .match_data
         .as_ref()
-        .and_then(|md| md.groups.first().copied().flatten())
+        .and_then(|md| md.group(0))
         .expect("match data snapshot after second search");
     assert_eq!(
         span_after_second, primed_span,

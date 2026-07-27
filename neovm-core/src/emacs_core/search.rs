@@ -290,12 +290,14 @@ fn translate_match_data_to_substring(
     delta: i64,
     searched_string: super::regex::SearchedString,
 ) -> super::regex::MatchData {
-    let mut translated = match_data.clone();
-    for group in translated.groups.iter_mut().flatten() {
-        *group = group.translate_saturating(delta);
-    }
-    translated.set_string_source(Some(searched_string));
-    translated
+    super::regex::MatchData::string(
+        match_data
+            .groups_snapshot()
+            .into_iter()
+            .map(|group| group.map(|group| group.translate_saturating(delta)))
+            .collect(),
+        Some(searched_string),
+    )
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -308,14 +310,14 @@ fn replace_match_on_substring(
     match_data: &Option<super::regex::MatchData>,
 ) -> Result<crate::heap_types::LispString, Flow> {
     if let Some(md) = match_data
-        && subexp >= md.groups.len()
+        && subexp >= md.group_count()
     {
         return Err(signal(
             LispCondition::ArgsOutOfRange,
             vec![
                 Value::fixnum(subexp as i64),
                 Value::fixnum(0),
-                Value::fixnum(md.groups.len().saturating_sub(1) as i64),
+                Value::fixnum(md.group_count().saturating_sub(1) as i64),
             ],
         ));
     }
@@ -372,7 +374,7 @@ fn match_group_to_byte_range(
     md: &super::regex::MatchData,
     group: usize,
 ) -> Option<MatchGroup> {
-    let range = md.groups.get(group).and_then(|range| *range)?;
+    let range = md.group(group)?;
     if md.is_string_match() {
         Some(MatchGroup::new(
             super::regex::char_pos_to_byte_lisp_string(source, range.start()),
@@ -632,7 +634,7 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
         Some(md) => md,
         None => return Err(super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string()),
     };
-    let Some(match_group) = md.groups.get(subexp).and_then(|range| *range) else {
+    let Some(match_group) = md.group(subexp) else {
         return Err(super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string());
     };
     let match_start = match_group.start();
@@ -662,9 +664,7 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
     let mut replacement_match_data = md.clone();
     let source = if replacement_match_data.uses_buffer_lisp_char_positions() {
         let group0 = md
-            .groups
-            .first()
-            .and_then(|range| *range)
+            .group(0)
             .ok_or_else(|| super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string())?;
         let group0_start = group0.start();
         let group0_byte_start = buffer_match_char_pos_to_byte_pos(buf, group0_start);
@@ -675,11 +675,13 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
         ));
         // Group positions are 1-based buffer chars; re-base them to 0-based
         // offsets within `source` (whose char 0 is the first char of group 0).
-        for group in replacement_match_data.groups.iter_mut().flatten() {
-            *group = group.saturating_sub(group0_start);
-        }
-        replacement_match_data
-            .set_string_source(Some(super::regex::SearchedString::Owned(source.clone())));
+        replacement_match_data = super::regex::MatchData::string(
+            md.groups_snapshot()
+                .into_iter()
+                .map(|group| group.map(|group| group.saturating_sub(group0_start)))
+                .collect(),
+            Some(super::regex::SearchedString::Owned(source.clone())),
+        );
         source
     } else if replacement_match_data.searched_buffer_id().is_some() {
         // Same bounding, but the match was reported in BYTE positions
@@ -687,9 +689,7 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
         // convert each group's buffer-byte offset to a char position within the
         // small group-0 `source` so the shared string path below applies.
         let group0 = md
-            .groups
-            .first()
-            .and_then(|range| *range)
+            .group(0)
             .ok_or_else(|| super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string())?;
         let group0_byte_start = group0.start();
         let source = buf.buffer_substring_lisp_string_range(crate::buffer::EmacsByteRange::new(
@@ -702,14 +702,20 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
                 .min(source.byte_len());
             source.slice(0, rel).map(|s| s.schars()).unwrap_or(0)
         };
-        for group in replacement_match_data.groups.iter_mut().flatten() {
-            *group = super::regex::MatchGroup::new(
-                byte_to_char(group.start()),
-                byte_to_char(group.end()),
-            );
-        }
-        replacement_match_data
-            .set_string_source(Some(super::regex::SearchedString::Owned(source.clone())));
+        replacement_match_data = super::regex::MatchData::string(
+            md.groups_snapshot()
+                .into_iter()
+                .map(|group| {
+                    group.map(|group| {
+                        super::regex::MatchGroup::new(
+                            byte_to_char(group.start()),
+                            byte_to_char(group.end()),
+                        )
+                    })
+                })
+                .collect(),
+            Some(super::regex::SearchedString::Owned(source.clone())),
+        );
         source
     } else {
         buf.buffer_substring_lisp_string_range(buf.full_emacs_byte_range())
@@ -737,9 +743,8 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
         super::regex::char_pos_to_byte_lisp_string(
             &source,
             replacement_match_data
-                .groups
-                .get(subexp)
-                .and_then(|range| range.map(|group| group.start()))
+                .group(subexp)
+                .map(|group| group.start())
                 .unwrap_or(0),
         )
     } else {
@@ -749,9 +754,8 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
         super::regex::char_pos_to_byte_lisp_string(
             &source,
             replacement_match_data
-                .groups
-                .get(subexp)
-                .and_then(|range| range.map(|group| group.end()))
+                .group(subexp)
+                .map(|group| group.end())
                 .unwrap_or(0),
         )
     } else {
@@ -812,7 +816,7 @@ where
         let Some(current_md) = match_data.clone() else {
             break;
         };
-        let Some(full_group) = current_md.groups.first().and_then(|g| *g) else {
+        let Some(full_group) = current_md.group(0) else {
             break;
         };
         let full_start_char = full_group.start();
@@ -902,9 +906,9 @@ pub(crate) fn builtin_replace_regexp_in_string(
     // The saved match data's searched string is a heap object held only in
     // this Rust local while REP runs arbitrary Lisp; a new string-match in
     // REP replaces its previous root and a GC frees it before the restore.
-    if let Some(crate::emacs_core::regex::MatchSource::String {
-        searched: Some(crate::emacs_core::regex::SearchedString::Heap(searched)),
-    }) = saved_match_data.as_ref().map(|md| &md.source)
+    if let Some(crate::emacs_core::regex::SearchedString::Heap(searched)) = saved_match_data
+        .as_ref()
+        .and_then(super::regex::MatchData::searched_string)
     {
         eval.push_specpdl_root(*searched);
     }
@@ -913,10 +917,7 @@ pub(crate) fn builtin_replace_regexp_in_string(
         // GNU wraps the whole function in `save-match-data`, but each REP
         // callback observes the translated substring-local match data.
         eval.match_data = translated_md.clone();
-        let Some(match_group) = translated_md
-            .as_ref()
-            .and_then(|md| md.groups.first().and_then(|group| *group))
-        else {
+        let Some(match_group) = translated_md.as_ref().and_then(|md| md.group(0)) else {
             return Err(signal(
                 "error",
                 vec![

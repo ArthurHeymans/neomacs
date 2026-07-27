@@ -1,5 +1,5 @@
 use super::*;
-use crate::buffer::{CharLen, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1};
+use crate::buffer::{CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use crate::emacs_core::regex::{MatchGroup, char_pos_to_byte, char_pos_to_byte_lisp_string};
 use crate::emacs_core::value::ValueKind;
 
@@ -42,20 +42,19 @@ fn match_data_for_explicit_string_arg(
     buffers: &crate::buffer::BufferManager,
     md: &super::regex::MatchData,
 ) -> super::regex::MatchData {
-    let mut converted = md.clone();
+    let mut groups = md.groups_snapshot();
     if md.uses_buffer_byte_positions()
         && let Some(buf) = md
             .searched_buffer_id()
             .and_then(|buffer_id| buffers.get(buffer_id))
     {
-        for group in converted.groups.iter_mut().flatten() {
+        for group in groups.iter_mut().flatten() {
             let start = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.start()));
             let end = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.end()));
             *group = MatchGroup::new(start.max(0) as usize, end.max(0) as usize);
         }
     }
-    converted.set_string_source(None);
-    converted
+    super::regex::MatchData::string(groups, None)
 }
 
 fn buffer_byte_to_char_pos(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> CharPos0 {
@@ -66,11 +65,32 @@ fn record_buffer_search_success(
     buffers: &mut crate::buffer::BufferManager,
     buffer_id: crate::buffer::BufferId,
     pos: usize,
+    match_data: &mut Option<super::regex::MatchData>,
 ) -> Result<usize, Flow> {
     buffers
         .goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(pos))
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    freeze_buffer_match_data_in_manager(buffers, match_data)?;
     Ok(pos)
+}
+
+fn freeze_buffer_match_data_in_manager(
+    buffers: &crate::buffer::BufferManager,
+    match_data: &mut Option<super::regex::MatchData>,
+) -> Result<(), Flow> {
+    if let Some(match_data) = match_data {
+        match_data
+            .freeze_buffer_lisp_positions(buffers)
+            .map_err(|error| {
+                signal(
+                    "error",
+                    vec![Value::string(format!(
+                        "Cannot publish buffer match data: {error:?}"
+                    ))],
+                )
+            })?;
+    }
+    Ok(())
 }
 
 pub(crate) fn builtin_search_forward(
@@ -135,7 +155,9 @@ pub(crate) fn builtin_search_forward_with_state(
         };
         match result {
             Ok(Some(pos)) => {
-                last_pos = Some(record_buffer_search_success(buffers, current_id, pos)?)
+                last_pos = Some(record_buffer_search_success(
+                    buffers, current_id, pos, match_data,
+                )?)
             }
             Ok(None) => {
                 // regex::search_* with `noerror = false` never returns None.
@@ -416,7 +438,9 @@ pub(crate) fn builtin_search_backward_with_state(
         };
         match result {
             Ok(Some(pos)) => {
-                last_pos = Some(record_buffer_search_success(buffers, current_id, pos)?)
+                last_pos = Some(record_buffer_search_success(
+                    buffers, current_id, pos, match_data,
+                )?)
             }
             Ok(None) => {
                 return Err(signal(LispCondition::SearchFailed, vec![args[0]]));
@@ -526,7 +550,9 @@ pub(crate) fn re_search_forward_with_state_posix(
 
         match result {
             Ok(Some(pos)) => {
-                last_pos = Some(record_buffer_search_success(buffers, current_id, pos)?)
+                last_pos = Some(record_buffer_search_success(
+                    buffers, current_id, pos, match_data,
+                )?)
             }
             Ok(None) => {
                 return Err(signal(LispCondition::SearchFailed, vec![args[0]]));
@@ -635,7 +661,9 @@ pub(crate) fn re_search_backward_with_state_posix(
 
         match result {
             Ok(Some(pos)) => {
-                last_pos = Some(record_buffer_search_success(buffers, current_id, pos)?)
+                last_pos = Some(record_buffer_search_success(
+                    buffers, current_id, pos, match_data,
+                )?)
             }
             Ok(None) => {
                 return Err(signal(LispCondition::SearchFailed, vec![args[0]]));
@@ -744,7 +772,12 @@ pub(crate) fn builtin_looking_at_with_state(
     };
 
     match result {
-        Ok(matched) => Ok(Value::bool_val(matched)),
+        Ok(matched) => {
+            if matched && !inhibit_modify {
+                freeze_buffer_match_data_in_manager(buffers, match_data)?;
+            }
+            Ok(Value::bool_val(matched))
+        }
         Err(msg) => Err(regex_error_signal(msg)),
     }
 }
@@ -836,7 +869,12 @@ pub(crate) fn builtin_posix_looking_at_with_state(
     };
 
     match result {
-        Ok(matched) => Ok(Value::bool_val(matched)),
+        Ok(matched) => {
+            if matched && !inhibit_modify {
+                freeze_buffer_match_data_in_manager(buffers, match_data)?;
+            }
+            Ok(Value::bool_val(matched))
+        }
         Err(msg) => Err(regex_error_signal(msg)),
     }
 }
@@ -1185,9 +1223,8 @@ pub(crate) fn builtin_match_string(
         None => return Ok(Value::NIL),
     };
 
-    let group = match md.groups.get(group_index) {
-        Some(Some(group)) => *group,
-        _ => return Ok(Value::NIL),
+    let Some(group) = md.group(group_index) else {
+        return Ok(Value::NIL);
     };
     let start = group.start();
     let end = group.end();
@@ -1211,7 +1248,7 @@ pub(crate) fn builtin_match_string(
     // If an optional second arg is a string, use that first.
     if args.len() > 1 {
         let explicit_md = match_data_for_explicit_string_arg(&eval.buffers, md);
-        let Some(Some(group)) = explicit_md.groups.get(group_index) else {
+        let Some(group) = explicit_md.group(group_index) else {
             return Ok(Value::NIL);
         };
         let start = group.start();
@@ -1306,8 +1343,8 @@ pub(crate) fn builtin_match_beginning_with_state(
                 None => return Ok(Value::NIL),
             };
 
-            match md.groups.get(group) {
-                Some(Some(group)) => {
+            match md.group(group) {
+                Some(group) => {
                     let start = group.start();
                     if md.is_string_match() {
                         Ok(Value::fixnum(start as i64))
@@ -1326,7 +1363,6 @@ pub(crate) fn builtin_match_beginning_with_state(
                         Ok(Value::fixnum(start as i64))
                     }
                 }
-                Some(None) => Ok(Value::NIL),
                 None => Ok(Value::NIL),
             }
         },
@@ -1365,8 +1401,8 @@ pub(crate) fn builtin_match_end_with_state(
                 None => return Ok(Value::NIL),
             };
 
-            match md.groups.get(group) {
-                Some(Some(group)) => {
+            match md.group(group) {
+                Some(group) => {
                     let end = group.end();
                     if md.is_string_match() {
                         Ok(Value::fixnum(end as i64))
@@ -1385,7 +1421,6 @@ pub(crate) fn builtin_match_end_with_state(
                         Ok(Value::fixnum(end as i64))
                     }
                 }
-                Some(None) => Ok(Value::NIL),
                 None => Ok(Value::NIL),
             }
         },
@@ -1425,13 +1460,14 @@ pub(crate) fn builtin_match_data_with_state(
     let searched_buffer_id = md.searched_buffer_id();
 
     // Emacs trims trailing unmatched groups from match-data output.
-    let mut trailing = md.groups.len();
-    while trailing > 0 && md.groups[trailing - 1].is_none() {
+    let mut trailing = md.group_count();
+    while trailing > 0 && md.group(trailing - 1).is_none() {
         trailing -= 1;
     }
 
     let mut flat: Vec<Value> = Vec::with_capacity(trailing * 2);
-    for grp in md.groups.iter().take(trailing) {
+    for group_index in 0..trailing {
+        let grp = md.group(group_index);
         match grp {
             Some(group) => {
                 let start = group.start();
@@ -1678,9 +1714,7 @@ pub(crate) fn builtin_set_match_data(
 
 fn translate_match_data(match_data: &mut Option<super::regex::MatchData>, delta: i64) {
     if let Some(md) = match_data {
-        for group in md.groups.iter_mut().flatten() {
-            *group = group.translate_saturating(delta);
-        }
+        md.map_groups(|group| group.translate_saturating(delta));
     }
 }
 
@@ -1694,18 +1728,9 @@ pub(crate) fn builtin_match_data_translate_with_state(
     if let Some(md) = match_data
         && md.uses_buffer_byte_positions()
     {
-        let buffer_id = md.searched_buffer_id();
-        if let Some(buf) = buffer_id.and_then(|buffer_id| buffers.get(buffer_id)) {
-            for group in md.groups.iter_mut().flatten() {
-                let start = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.start()));
-                let end = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.end()));
-                *group = MatchGroup::new(start.max(0) as usize, end.max(0) as usize);
-            }
-            md.source = super::regex::MatchSource::Buffer {
-                id: buffer_id,
-                positions: super::regex::BufferMatchPositions::LispChars,
-            };
-        }
+        // Public search results are already frozen. Preserve the historical
+        // no-error behavior for any internal raw result whose buffer died.
+        let _ = md.freeze_buffer_lisp_positions(buffers);
     }
     translate_match_data(match_data, delta);
     Ok(Value::NIL)
@@ -1718,23 +1743,46 @@ pub(crate) fn builtin_match_data_translate(
     builtin_match_data_translate_with_state(&eval.buffers, &mut eval.match_data, &args)
 }
 
-fn update_match_data_after_buffer_replace(
-    match_data: &mut Option<super::regex::MatchData>,
+#[derive(Clone, Copy)]
+struct BufferReplacementCoordinates {
     old_byte_range: EmacsByteRange,
     new_byte_range: EmacsByteRange,
+    old_char_range: CharRange,
+    replacement_char_len: CharLen,
+}
+
+impl BufferReplacementCoordinates {
+    fn match_data_bounds(self, lisp_char_positions: bool) -> (usize, usize, usize) {
+        if lisp_char_positions {
+            let oldstart = self.old_char_range.start_lisp().to_one_based_usize();
+            let oldend = self.old_char_range.end_lisp().to_one_based_usize();
+            (
+                oldstart,
+                oldend,
+                oldstart.saturating_add(self.replacement_char_len.get()),
+            )
+        } else {
+            (
+                self.old_byte_range.start().get(),
+                self.old_byte_range.end().get(),
+                self.new_byte_range.end().get(),
+            )
+        }
+    }
+}
+
+fn update_match_data_after_buffer_replace(
+    match_data: &mut Option<super::regex::MatchData>,
+    replacement: BufferReplacementCoordinates,
 ) {
     let Some(md) = match_data else {
         return;
     };
 
-    let oldstart = old_byte_range.start().get();
-    let oldend = old_byte_range.end().get();
-    let newend = new_byte_range.end().get();
+    let (oldstart, oldend, newend) =
+        replacement.match_data_bounds(md.uses_buffer_lisp_char_positions());
     let change = newend as i64 - oldend as i64;
-    for group in md.groups.iter_mut() {
-        let Some(match_group) = group.as_mut() else {
-            continue;
-        };
+    md.map_groups(|match_group| {
         let mut start = match_group.start();
         let mut end = match_group.end();
 
@@ -1752,8 +1800,8 @@ fn update_match_data_after_buffer_replace(
         } else if end > oldstart {
             end = oldstart;
         }
-        *match_group = MatchGroup::new(start, end);
-    }
+        MatchGroup::new(start, end)
+    });
 }
 
 /// Variant that also carries the current value of
@@ -1836,14 +1884,14 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
             return Err(missing_subexp_signal(raw_subexp));
         }
         if let Some(md) = md_snapshot.as_ref()
-            && subexp >= md.groups.len()
+            && subexp >= md.group_count()
         {
             return Err(signal(
                 LispCondition::ArgsOutOfRange,
                 vec![
                     Value::fixnum(subexp as i64),
                     Value::fixnum(0),
-                    Value::fixnum(md.groups.len().saturating_sub(1) as i64),
+                    Value::fixnum(md.group_count().saturating_sub(1) as i64),
                 ],
             ));
         }
@@ -1871,14 +1919,14 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         ));
     }
     if let Some(md) = md_snapshot.as_ref()
-        && subexp >= md.groups.len()
+        && subexp >= md.group_count()
     {
         return Err(signal(
             LispCondition::ArgsOutOfRange,
             vec![
                 Value::fixnum(subexp as i64),
                 Value::fixnum(0),
-                Value::fixnum(md.groups.len().saturating_sub(1) as i64),
+                Value::fixnum(md.group_count().saturating_sub(1) as i64),
             ],
         ));
     }
@@ -1886,7 +1934,7 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
     let current_id = buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let (old_byte_range, replacement, case_action) = {
+    let (old_byte_range, old_char_range, replacement, case_action) = {
         let buf = buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
@@ -1920,11 +1968,16 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
                 EmacsBytePos::new(replacement.0),
                 EmacsBytePos::new(replacement.1),
             ),
+            CharRange::new(
+                buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(replacement.0)),
+                buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(replacement.1)),
+            ),
             replacement.2,
             case_action,
         )
     };
     let replacement_len = replacement.sbytes();
+    let replacement_char_len = CharLen::new(replacement.schars());
     let old_range = buffers
         .edit_range_for_buffer_emacs_byte_range(current_id, old_byte_range)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
@@ -1972,7 +2025,15 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
     // this to continue after an expanded entity rather than re-reading the
     // replacement from its beginning.
     let _ = buffers.goto_buffer_emacs_byte_pos(current_id, replacement_byte_range.end());
-    update_match_data_after_buffer_replace(match_data, old_byte_range, replacement_byte_range);
+    update_match_data_after_buffer_replace(
+        match_data,
+        BufferReplacementCoordinates {
+            old_byte_range,
+            new_byte_range: replacement_byte_range,
+            old_char_range,
+            replacement_char_len,
+        },
+    );
     Ok(Value::NIL)
 }
 
@@ -2012,7 +2073,7 @@ pub(crate) fn builtin_replace_match(
         };
         if let Some(ref md) = eval.match_data
             && !md.is_string_match()
-            && md.groups.get(subexp).is_some_and(|group| group.is_some())
+            && md.group(subexp).is_some()
         {
             let newtext_lisp = expect_lisp_string(&args[0])?;
             let fixedcase = args.get(1).is_some_and(|arg| arg.is_truthy());
