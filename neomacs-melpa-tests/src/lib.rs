@@ -468,6 +468,11 @@ pub const ALL_THE_ICONS_DIRED_MELPA_PIN: (&str, &str) = ("all-the-icons-dired", 
 /// parity corpus.
 pub const ALL_THE_ICONS_GNUS_MELPA_PIN: (&str, &str) = ("all-the-icons-gnus", "20180511.654");
 
+/// The exact all-the-icons-ibuffer package selected by the comprehensive API
+/// parity corpus.
+pub const ALL_THE_ICONS_IBUFFER_MELPA_PIN: (&str, &str) =
+    ("all-the-icons-ibuffer", "20230503.1625");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
