@@ -670,6 +670,11 @@ pub const ANYINS_MELPA_PIN: (&str, &str) = ("anyins", "20131229.1041");
 /// parity corpus.
 pub const ANZU_MELPA_PIN: (&str, &str) = ("anzu", "20240929.201");
 
+/// The exact aozora-view package selected by the comprehensive API parity
+/// corpus. MELPA built this archive from upstream commit
+/// `b0390616d19e45f15f9a2f5d5688274831e721fd`.
+pub const AOZORA_VIEW_MELPA_PIN: (&str, &str) = ("aozora-view", "20140310.1317");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

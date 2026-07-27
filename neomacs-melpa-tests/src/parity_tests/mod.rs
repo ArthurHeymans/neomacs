@@ -158,6 +158,7 @@ mod anx_api;
 mod anybar;
 mod anyins;
 mod anzu;
+mod aozora_view;
 mod async_package;
 mod at_package;
 mod bind_key;
