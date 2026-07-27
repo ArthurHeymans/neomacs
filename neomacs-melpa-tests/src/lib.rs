@@ -505,6 +505,10 @@ pub const ALT_CODES_MELPA_PIN: (&str, &str) = ("alt-codes", "20260101.557");
 /// `624e0b5ef632b3adfdc03e44dce7a98cd48d47ed`.
 pub const AMARANTH_DARK_THEME_MELPA_PIN: (&str, &str) = ("amaranth-dark-theme", "20251228.1916");
 
+/// The exact amber-glow-theme package selected by the comprehensive API
+/// parity corpus.
+pub const AMBER_GLOW_THEME_MELPA_PIN: (&str, &str) = ("amber-glow-theme", "20250305.936");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
