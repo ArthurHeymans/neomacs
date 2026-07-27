@@ -75,6 +75,7 @@ mod agda_editor_tactics;
 mod agda_lib_mode;
 mod age;
 mod agenix;
+mod agent_recall;
 mod aggressive_fill_paragraph;
 mod async_package;
 mod at_package;

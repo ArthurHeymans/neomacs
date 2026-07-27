@@ -335,6 +335,10 @@ pub const AGE_MELPA_PIN: (&str, &str) = ("age", "20250806.1723");
 /// The exact agenix package selected by the comprehensive API parity corpus.
 pub const AGENIX_MELPA_PIN: (&str, &str) = ("agenix", "20250209.551");
 
+/// The exact agent-recall package selected by the comprehensive API parity
+/// corpus.
+pub const AGENT_RECALL_MELPA_PIN: (&str, &str) = ("agent-recall", "20260710.1707");
+
 /// The exact aggressive-fill-paragraph package selected by the comprehensive
 /// API parity corpus.
 pub const AGGRESSIVE_FILL_PARAGRAPH_MELPA_PIN: (&str, &str) =
