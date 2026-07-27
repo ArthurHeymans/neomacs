@@ -194,6 +194,7 @@ mod asilea;
 mod asm_blox;
 mod asn1_mode;
 mod assess;
+mod ast_grep;
 mod astro_ts_mode;
 mod astute;
 mod astyle;

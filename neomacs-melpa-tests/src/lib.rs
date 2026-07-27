@@ -776,6 +776,12 @@ pub const ASCIIDOC_MODE_MELPA_PIN: (&str, &str) = ("asciidoc-mode", "20260612.64
 /// `f6dbb4b6560cd7e5bb05006e9fc416c5c323b567`.
 pub const ASDF_VM_MELPA_PIN: (&str, &str) = ("asdf-vm", "20250710.1053");
 
+/// The exact ast-grep package selected by the comprehensive command, stream,
+/// rewrite, completion-backend, and outline workflow parity corpus. MELPA
+/// built this archive from upstream commit
+/// `28bc6e9ac21acf1d1ef58b962b6acd670c27e80f`.
+pub const AST_GREP_MELPA_PIN: (&str, &str) = ("ast-grep", "20260702.238");
+
 /// The exact archive-phar package selected by the comprehensive archive
 /// browsing and extraction parity corpus.
 pub const ARCHIVE_PHAR_MELPA_PIN: (&str, &str) = ("archive-phar", "20221009.2129");

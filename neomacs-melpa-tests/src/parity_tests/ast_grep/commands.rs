@@ -1,0 +1,301 @@
+use expect_test::expect;
+
+use super::assert_ast_grep_parity;
+
+#[test]
+fn ast_grep_build_command_preserves_patterns_rewrites_and_expands_directory() {
+    let elisp_form = r##"(let* ((root (ast-grep-test-path "work"))
+               (default-directory (file-name-as-directory root))
+               (ast-grep-executable "sg fixture"))
+          (make-directory root t)
+          (mapcar
+           (lambda (command)
+             (mapcar
+              (lambda (part)
+                (if (string-prefix-p root part)
+                    (concat "$ROOT/" (file-relative-name part root))
+                  part))
+              command))
+           (list
+            (ast-grep--build-command "console.log($A)")
+            (ast-grep--build-command "$A && $A()" "src")
+            (ast-grep--build-command
+             "old($X)" "src/lib" "new($X)"))))"##;
+    let expect = expect![[
+        r#"OK (("sg fixture" "run" "--pattern=console.log($A)" "--json=stream") ("sg fixture" "run" "--pattern=$A && $A()" "--json=stream" "$ROOT/src") ("sg fixture" "run" "--pattern=old($X)" "--rewrite=new($X)" "--json=stream" "$ROOT/src/lib"))"#
+    ]];
+    assert_ast_grep_parity(elisp_form, expect);
+}
+
+#[test]
+fn ast_grep_command_string_shell_quotes_hostile_arguments_losslessly() {
+    let elisp_form = r##"(let* ((command
+                '("ast grep"
+                  "run"
+                  "--pattern=a b;$(touch nope)"
+                  "--rewrite=it's \"$X\""
+                  "/work/a dir"))
+               (quoted (ast-grep--command-string command)))
+          (list
+           quoted
+           (shell-command-to-string
+            (concat
+             "set -- "
+             quoted
+             "; printf '<%s>' \"$@\""))
+           (file-exists-p "nope")))"##;
+    let expect = expect![[
+        r#"OK ("ast\\ grep run --pattern\\=a\\ b\\;\\$\\(touch\\ nope\\) --rewrite\\=it\\'s\\ \\\"\\$X\\\" /work/a\\ dir" "<ast grep><run><--pattern=a b;$(touch nope)><--rewrite=it's \"$X\"></work/a dir>" nil)"#
+    ]];
+    assert_ast_grep_parity(elisp_form, expect);
+}
+
+#[test]
+fn ast_grep_read_file_and_executable_probe_cover_present_missing_and_disabled_tools() {
+    let elisp_form = r##"(let* ((file (ast-grep-test-write-file
+                      "work/utf8.txt"
+                      "alpha\nβeta\n"))
+               (program
+                (ast-grep-test-make-executable
+                 "sg-ok"
+                 "printf '%s\\n' ok"))
+               (ast-grep-executable program)
+               (available (ast-grep--executable-available-p)))
+          (list
+           (ast-grep--read-file file)
+           (ast-grep--read-file (ast-grep-test-path "missing"))
+           (ast-grep--read-file nil)
+           (and available
+                (equal (file-truename available)
+                       (file-truename program)))
+           (let ((ast-grep-executable "certainly-no-such-sg"))
+             (ast-grep--executable-available-p))))"##;
+    let expect = expect![[r#"OK ("alpha\nβeta\n" "" "" t nil)"#]];
+    assert_ast_grep_parity(elisp_form, expect);
+}
+
+#[test]
+fn ast_grep_call_runs_real_program_with_exact_argv_cwd_stdout_and_stderr() {
+    let elisp_form = r##"(let* ((work (ast-grep-test-path "project"))
+               (log (ast-grep-test-path "argv.log"))
+               (program
+                (ast-grep-test-make-executable
+                 "sg-capture"
+                 (format
+                  "printf 'cwd=%%s\\n' \"$PWD\" > %s\nprintf 'arg=%%s\\n' \"$@\" >> %s\nprintf 'match-one\\nmatch-two\\n'\nprintf 'diagnostic-only\\n' >&2"
+                  (shell-quote-argument log)
+                  (shell-quote-argument log))))
+               (ast-grep-executable program))
+          (make-directory work t)
+          (let ((stdout
+                 (ast-grep--call
+                  (list program "run" "--pattern=a b" "--json=stream" ".")
+                  work
+                  "integration")))
+            (list
+             stdout
+             (replace-regexp-in-string
+              (regexp-quote work)
+              "$WORK"
+              (ast-grep-test-read-file log))
+             (directory-files
+              temporary-file-directory
+              nil
+              "\\`ast-grep-stderr-"
+              t))))"##;
+    let expect = expect![[
+        r#"OK ("match-one\nmatch-two\n" "cwd=$WORK\narg=run\narg=--pattern=a b\narg=--json=stream\narg=.\n" nil)"#
+    ]];
+    assert_ast_grep_parity(elisp_form, expect);
+}
+
+#[test]
+fn ast_grep_call_reports_real_exit_failures_with_both_output_streams() {
+    let elisp_form = r##"(let* ((program
+                (ast-grep-test-make-executable
+                 "sg-fail"
+                 "printf 'partial result\\n'\nprintf 'invalid pattern: $BAD\\n' >&2\nexit 7"))
+               (ast-grep-executable program))
+          (ast-grep-test-error-data
+           (lambda ()
+             (ast-grep--call
+              (list program "run" "--pattern=$BAD")
+              nil
+              "search"))))"##;
+    let expect = expect![[
+        r#"OK (:error error ("The ast-grep failed with exit code 7: partial result\n\ninvalid pattern: $BAD"))"#
+    ]];
+    assert_ast_grep_parity(elisp_form, expect);
+}
+
+#[test]
+fn ast_grep_call_debug_mode_emits_command_directory_streams_and_status() {
+    let elisp_form = r##"(let* ((work (ast-grep-test-path "debug-work"))
+               (program
+                (ast-grep-test-make-executable
+                 "sg-debug"
+                 "printf 'json-output\\n'\nprintf 'warning-output\\n' >&2"))
+               (ast-grep-executable program)
+               (ast-grep-debug t)
+               messages)
+          (make-directory work t)
+          (cl-letf (((symbol-function 'message)
+                     (lambda (format-string &rest args)
+                       (push
+                        (replace-regexp-in-string
+                         (regexp-quote work) "$WORK"
+                         (apply #'format format-string args))
+                        messages))))
+            (list
+             (ast-grep--call
+              (list program "run" "--pattern=x y")
+              work
+              "fixture")
+             (nreverse messages))))"##;
+    let expect = expect![[
+        r#"OK ("json-output\n" ("Debug: fixture command: [ORACLE-SANDBOX]/bin/sg-debug run --pattern\\=x\\ y" "Debug: Working directory: $WORK" "Debug: fixture stdout: json-output\n" "Debug: fixture stderr: warning-output\n" "Debug: fixture exit code: 0"))"#
+    ]];
+    assert_ast_grep_parity(elisp_form, expect);
+}
+
+#[test]
+fn ast_grep_run_command_composes_real_search_command_and_parses_stream_workflow() {
+    let elisp_form = r##"(let* ((work (ast-grep-test-path "search-root"))
+               (log (ast-grep-test-path "search-argv.log"))
+               (program
+                (ast-grep-test-make-executable
+                 "sg-stream"
+                 (format
+                  "printf '%%s\\n' \"$@\" > %s\nprintf '%%s\\n' '{\"file\":\"src/app.js\",\"range\":{\"start\":{\"line\":2,\"column\":4}},\"text\":\"console.log(value)\"}'"
+                  (shell-quote-argument log))))
+               (ast-grep-executable program))
+          (make-directory work t)
+          (ast-grep--reset-candidate-table)
+          (let* ((output (ast-grep--run-command "console.log($A)" work))
+                 (candidates (ast-grep--parse-stream-output output)))
+            (list
+             (ast-grep-test-read-file log)
+             (mapcar #'substring-no-properties candidates)
+             (mapcar #'ast-grep-test-match-summary candidates)
+             (hash-table-count ast-grep--candidate-table))))"##;
+    let expect = expect![[
+        r#"OK ("run\n--pattern=console.log($A)\n--json=stream\n[ORACLE-SANDBOX]/search-root\n" ("src/app.js:3:4:console.log(value)") (("src/app.js" 2 4 nil nil "console.log(value)" nil)) 1)"#
+    ]];
+    assert_ast_grep_parity(elisp_form, expect);
+}
+
+#[test]
+fn ast_grep_project_directory_and_search_dispatch_real_user_workflow() {
+    let elisp_form = r##"(let ((program
+                (ast-grep-test-make-executable
+                 "sg-present"
+                 "exit 0"))
+               calls)
+          (let ((ast-grep-executable program))
+            (cl-letf (((symbol-function 'ast-grep--project-root)
+                       (lambda () "/fixture/project/"))
+                      ((symbol-function 'ast-grep--select-backend)
+                       (lambda () 'sync))
+                      ((symbol-function 'ast-grep--run-search-backend)
+                       (lambda (backend directory)
+                         (push (list backend directory) calls)
+                         :searched)))
+              (list
+               (ast-grep-search "/explicit/")
+               (ast-grep-project)
+               (ast-grep-directory "~/source")
+               (nreverse calls)))))"##;
+    let expect = expect![[
+        r#"OK (:searched :searched :searched ((sync "/explicit/") (sync "/fixture/project/") (sync "~/source")))"#
+    ]];
+    assert_ast_grep_parity(elisp_form, expect);
+}
+
+#[test]
+fn ast_grep_project_root_uses_project_current_and_project_root_protocol() {
+    let elisp_form = r##"(let (calls current)
+          (cl-letf (((symbol-function 'project-current)
+                     (lambda (&rest args)
+                       (push (list :current args) calls)
+                       current))
+                    ((symbol-function 'project-root)
+                     (lambda (project)
+                       (push (list :root project) calls)
+                       (cdr project))))
+            (setq current nil)
+            (let ((outside
+                   (list
+                    (ast-grep--project-root)
+                    (nreverse calls))))
+              (setq current '(fixture-project . "/fixture/root/")
+                    calls nil)
+              (list
+               outside
+               (ast-grep--project-root)
+               (nreverse calls)))))"##;
+    let expect = expect![[
+        r#"OK ((nil ((:current nil))) "/fixture/root/" ((:current nil) (:root (fixture-project . "/fixture/root/"))))"#
+    ]];
+    assert_ast_grep_parity(elisp_form, expect);
+}
+
+#[test]
+fn ast_grep_search_rejects_missing_executable_before_backend_selection() {
+    let elisp_form = r##"(let ((ast-grep-executable
+                "ast-grep-certainly-not-installed")
+               selected
+               dispatched)
+          (cl-letf (((symbol-function 'ast-grep--select-backend)
+                     (lambda ()
+                       (setq selected t)
+                       'sync))
+                    ((symbol-function 'ast-grep--run-search-backend)
+                     (lambda (&rest _)
+                       (setq dispatched t))))
+            (list
+             (ast-grep-test-error-data
+              (lambda ()
+                (ast-grep-search "/fixture/")))
+             selected
+             dispatched)))"##;
+    let expect = expect![[
+        r#"OK ((:error error ("The ast-grep executable not found. Please install ast-grep")) nil nil)"#
+    ]];
+    assert_ast_grep_parity(elisp_form, expect);
+}
+
+#[test]
+fn ast_grep_project_commands_signal_useful_errors_outside_projects() {
+    let elisp_form = r##"(cl-letf (((symbol-function 'ast-grep--project-root)
+                    (lambda () nil)))
+          (list
+           (ast-grep-test-error-data #'ast-grep-project)
+           (ast-grep-test-error-data #'ast-grep-rewrite-project)))"##;
+    let expect = expect![[
+        r#"OK ((:error error ("Not in a project")) (:error error ("Not in a project")))"#
+    ]];
+    assert_ast_grep_parity(elisp_form, expect);
+}
+
+#[test]
+fn ast_grep_minor_mode_toggles_buffer_local_state_and_exact_lighter() {
+    let elisp_form = r##"(with-temp-buffer
+          (let ((initial
+                 (list ast-grep-mode
+                       (local-variable-p 'ast-grep-mode))))
+            (ast-grep-mode 1)
+            (let ((enabled
+                   (list
+                    ast-grep-mode
+                    (local-variable-p 'ast-grep-mode)
+                    (assq 'ast-grep-mode minor-mode-alist))))
+              (ast-grep-mode -1)
+              (list
+               initial
+               enabled
+               (list
+                ast-grep-mode
+                (local-variable-p 'ast-grep-mode))))))"##;
+    let expect = expect![[r#"OK ((nil nil) (t t (ast-grep-mode " ast-grep")) (nil t))"#]];
+    assert_ast_grep_parity(elisp_form, expect);
+}
