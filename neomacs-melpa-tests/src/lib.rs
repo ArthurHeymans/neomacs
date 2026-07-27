@@ -703,6 +703,10 @@ pub const APIWRAP_MELPA_PIN: (&str, &str) = ("apiwrap", "20180602.2231");
 pub const APP_MONOCHROME_THEMES_MELPA_PIN: (&str, &str) =
     ("app-monochrome-themes", "20250710.2315");
 
+/// The exact apparmor-mode package selected by the comprehensive policy
+/// editing and diagnostics parity corpus.
+pub const APPARMOR_MODE_MELPA_PIN: (&str, &str) = ("apparmor-mode", "20260515.454");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
