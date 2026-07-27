@@ -742,6 +742,10 @@ pub const ARCH_PACKER_MELPA_PIN: (&str, &str) = ("arch-packer", "20170730.1321")
 /// browsing and extraction parity corpus.
 pub const ARCHIVE_PHAR_MELPA_PIN: (&str, &str) = ("archive-phar", "20221009.2129");
 
+/// The exact Archive Region package selected by the comprehensive editing and
+/// filesystem workflow parity corpus.
+pub const ARCHIVE_REGION_MELPA_PIN: (&str, &str) = ("archive-region", "20200316.1425");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

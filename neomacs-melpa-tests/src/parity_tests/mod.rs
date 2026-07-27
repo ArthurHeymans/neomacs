@@ -175,6 +175,7 @@ mod apt_sources_list;
 mod aqi;
 mod arch_packer;
 mod archive_phar;
+mod archive_region;
 mod async_package;
 mod at_package;
 mod bind_key;
