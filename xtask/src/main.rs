@@ -26,7 +26,10 @@ struct FreshBuildOptions {
     repo_root: PathBuf,
     runtime_root: PathBuf,
     bin_dir: PathBuf,
-    release: bool,
+    /// Cargo profile to build with (`release`, `profiling`, ...). Determines
+    /// both the `cargo build` flag and the `target/<dir>` the binaries come
+    /// from, so a non-release profile does NOT overwrite the release build.
+    profile: String,
     dry_run: bool,
     native_comp: bool,
     skip_build: bool,
@@ -287,7 +290,7 @@ impl FreshBuildOptions {
 
         let mut runtime_root = repo_root.clone();
         let mut bin_dir = None;
-        let mut release = false;
+        let mut profile: Option<String> = None;
         let mut dry_run = false;
         let mut native_comp =
             env::var("NEOMACS_NATIVE_COMP").is_ok_and(|value| value.eq_ignore_ascii_case("yes"));
@@ -310,7 +313,13 @@ impl FreshBuildOptions {
                         .ok_or_else(|| "--runtime-root requires a path".to_string())?;
                     runtime_root = resolve_cli_path(&repo_root, value);
                 }
-                "--release" => release = true,
+                "--release" => profile = Some("release".to_string()),
+                "--profile" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| "--profile requires a profile name".to_string())?;
+                    profile = Some(value.to_string_lossy().trim().to_string());
+                }
                 "--dry-run" => dry_run = true,
                 "--native-comp" => native_comp = true,
                 "--no-native-comp" => native_comp = false,
@@ -338,22 +347,41 @@ impl FreshBuildOptions {
             }
         }
 
-        if !release {
-            return Err("fresh-build must be used with --release.\n\n\
+        let profile = match profile {
+            Some(profile) => profile,
+            None => {
+                return Err(
+                    "fresh-build must be used with --release or --profile NAME.\n\n\
                  fresh-build builds the runnable GNU-shaped runtime pipeline \
-                 (cargo build, temacs bootstrap, byte-compilation, pdump) and is a \
-                 release-only operation. Re-run with:\n    cargo xtask fresh-build --release"
-                .to_string()
-                .into());
+                 (cargo build, temacs bootstrap, byte-compilation, pdump) and is an \
+                 optimized-build operation. Re-run with:\n    cargo xtask fresh-build --release\n\
+                 or, for a symbol-preserving profiling build that leaves target/release \
+                 alone:\n    cargo xtask fresh-build --profile profiling"
+                        .to_string()
+                        .into(),
+                );
+            }
+        };
+        // The pipeline byte-compiles the whole Lisp tree with the binary it
+        // just built; an unoptimized profile makes that take hours, which is
+        // what the original --release requirement existed to prevent.
+        if matches!(profile.as_str(), "dev" | "debug" | "test") {
+            return Err(format!(
+                "fresh-build cannot use the `{profile}` profile: the pipeline \
+                 byte-compiles the Lisp tree with the binary it builds, so it \
+                 needs an optimized profile (`release`, or `profiling` which \
+                 inherits it)."
+            )
+            .into());
         }
 
-        let bin_dir = bin_dir.unwrap_or_else(|| default_bin_dir(&repo_root));
+        let bin_dir = bin_dir.unwrap_or_else(|| default_bin_dir(&repo_root, &profile));
 
         Ok(FreshBuildOptions {
             repo_root,
             runtime_root,
             bin_dir,
-            release,
+            profile,
             dry_run,
             native_comp,
             skip_build,
@@ -371,7 +399,7 @@ fn repository_root() -> PathBuf {
         .to_path_buf()
 }
 
-fn default_bin_dir(repo_root: &Path) -> PathBuf {
+fn default_bin_dir(repo_root: &Path, profile: &str) -> PathBuf {
     env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .map(|path| {
@@ -382,7 +410,21 @@ fn default_bin_dir(repo_root: &Path) -> PathBuf {
             }
         })
         .unwrap_or_else(|| repo_root.join("target"))
-        .join("release")
+        .join(profile_target_subdir(profile))
+}
+
+/// Directory name cargo writes a profile's artifacts into.
+///
+/// Cargo does not simply use the profile name: the built-in `dev` and `test`
+/// profiles share `target/debug`, and `bench` shares `target/release`. Custom
+/// profiles (such as `profiling`) get a directory of their own -- which is
+/// exactly why a profiling build does not disturb `target/release`.
+fn profile_target_subdir(profile: &str) -> &str {
+    match profile {
+        "dev" | "test" => "debug",
+        "bench" => "release",
+        other => other,
+    }
 }
 
 fn resolve_cli_path(repo_root: &Path, raw: OsString) -> PathBuf {
@@ -657,7 +699,7 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
         run_compile_main(options, &paths, &envs)?;
     }
 
-    let mode = if options.release { "release" } else { "debug" };
+    let mode = options.profile.as_str();
     println!(
         concat!(
             "+ xtask fresh-build finished successfully ({mode})\n",
@@ -809,9 +851,10 @@ fn initial_cargo_build_args(options: &FreshBuildOptions) -> Vec<OsString> {
         cargo_args.push(OsString::from("--features"));
         cargo_args.push(OsString::from(options.features.join(",")));
     }
-    if options.release {
-        cargo_args.push(OsString::from("--release"));
-    }
+    // `--profile release` is accepted by cargo and is equivalent to
+    // `--release`, so one uniform flag covers every profile.
+    cargo_args.push(OsString::from("--profile"));
+    cargo_args.push(OsString::from(&options.profile));
     cargo_args
 }
 
@@ -3919,9 +3962,10 @@ fn print_usage() {
 
 fn usage_text() -> &'static str {
     "\
-Usage: cargo xtask [fresh-build] --release [--bin-dir DIR] [--runtime-root DIR] [--dry-run] [--native-comp|--no-native-comp] [--skip-build] [--no-byte-compile] [--aot-preload]
+Usage: cargo xtask [fresh-build] (--release | --profile NAME) [--bin-dir DIR] [--runtime-root DIR] [--dry-run] [--native-comp|--no-native-comp] [--skip-build] [--no-byte-compile] [--aot-preload]
 
---release is required: fresh-build produces the runnable runtime binary and is a release-only operation.
+--release (or --profile NAME) is required: fresh-build produces the runnable runtime
+binary by byte-compiling the Lisp tree with it, so it needs an optimized profile.
 
 Build the GNU-shaped Neomacs runtime pipeline:
   1. cargo build --verbose -p neomacs [--features wpe-webkit on Linux] [--release]
@@ -3938,8 +3982,20 @@ Build the GNU-shaped Neomacs runtime pipeline:
 
 Options:
   --bin-dir DIR       Directory containing neomacs and generated role copies
+                      (an INPUT: the binaries must already be there, e.g. with
+                      --skip-build; it is not a cargo output directory)
+  --features LIST     Comma-separated extra cargo features for stage 1, e.g.
+                      vm-profile. Combine with --profile so the feature build
+                      lands in its own target dir instead of replacing the
+                      release binary (whose pdump would then stop matching).
   --runtime-root DIR  Runtime root containing lisp/ and etc/
-  --release           (required) Build neomacs in release mode and use target/release by default
+  --release           Build with the release profile, using target/release
+                      (equivalent to --profile release)
+  --profile NAME      Build with cargo profile NAME, using target/<dir> for it.
+                      `profiling` inherits release but keeps debug symbols, and
+                      lives in target/profiling -- so it does NOT disturb an
+                      existing target/release build or its pdump. Unoptimized
+                      profiles (dev/debug/test) are rejected.
   --dry-run           Print planned commands without running them
   --native-comp       Include native-comp-only COMPILE_FIRST entries
   --no-native-comp    Exclude native-comp-only COMPILE_FIRST entries
