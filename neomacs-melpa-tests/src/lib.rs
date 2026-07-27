@@ -521,6 +521,10 @@ pub const AMEBA_MELPA_PIN: (&str, &str) = ("ameba", "20200103.1454");
 /// corpus.
 pub const AMPLE_REGEXPS_MELPA_PIN: (&str, &str) = ("ample-regexps", "20200508.1021");
 
+/// The exact ample-theme package selected by the comprehensive API parity
+/// corpus.
+pub const AMPLE_THEME_MELPA_PIN: (&str, &str) = ("ample-theme", "20260611.1532");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
