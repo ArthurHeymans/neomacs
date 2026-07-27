@@ -129,6 +129,7 @@ mod amx;
 mod anaconda_mode;
 mod anakondo;
 mod anaphora;
+mod ancient_one_dark_theme;
 mod async_package;
 mod at_package;
 mod bind_key;

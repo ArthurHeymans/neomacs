@@ -552,6 +552,11 @@ pub const ANAKONDO_MELPA_PIN: (&str, &str) = ("anakondo", "20210221.1727");
 /// The exact anaphora package selected by the comprehensive API parity corpus.
 pub const ANAPHORA_MELPA_PIN: (&str, &str) = ("anaphora", "20260720.903");
 
+/// The exact ancient-one-dark-theme package selected by the comprehensive
+/// theme parity corpus.
+pub const ANCIENT_ONE_DARK_THEME_MELPA_PIN: (&str, &str) =
+    ("ancient-one-dark-theme", "20211030.1358");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
