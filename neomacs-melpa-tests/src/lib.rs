@@ -451,6 +451,10 @@ pub const ALIGN_CLJLET_MELPA_PIN: (&str, &str) = ("align-cljlet", "20160112.2101
 /// `c865c62506af2c9edc7705a7c24dc8b70d5d4de2`.
 pub const ALL_EXT_MELPA_PIN: (&str, &str) = ("all-ext", "20200315.1443");
 
+/// The exact all-the-icons package selected by the comprehensive API parity
+/// corpus.
+pub const ALL_THE_ICONS_MELPA_PIN: (&str, &str) = ("all-the-icons", "20250527.927");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

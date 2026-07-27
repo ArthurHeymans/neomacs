@@ -105,6 +105,7 @@ mod alert_termux;
 mod alert_toast;
 mod align_cljlet;
 mod all_ext;
+mod all_the_icons;
 mod async_package;
 mod at_package;
 mod bind_key;
