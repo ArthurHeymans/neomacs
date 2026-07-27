@@ -309,6 +309,9 @@ pub const ADWAITA_DARK_THEME_MELPA_PIN: (&str, &str) = ("adwaita-dark-theme", "2
 /// corpus.
 pub const AFTERNOON_THEME_MELPA_PIN: (&str, &str) = ("afternoon-theme", "20140104.1859");
 
+/// The exact ag package selected by the comprehensive API parity corpus.
+pub const AG_MELPA_PIN: (&str, &str) = ("ag", "20201031.2202");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
