@@ -371,6 +371,9 @@ pub const AHK_MODE_MELPA_PIN: (&str, &str) = ("ahk-mode", "20200412.1832");
 /// corpus.
 pub const AHUNGRY_THEME_MELPA_PIN: (&str, &str) = ("ahungry-theme", "20180131.328");
 
+/// The exact ai-code package selected by the comprehensive API parity corpus.
+pub const AI_CODE_MELPA_PIN: (&str, &str) = ("ai-code", "20260726.2000");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

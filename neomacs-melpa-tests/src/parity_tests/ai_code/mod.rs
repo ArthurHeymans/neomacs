@@ -1,0 +1,47 @@
+use std::time::Duration;
+
+use crate::{AI_CODE_MELPA_PIN, CachedMelpaOracle};
+use expect_test::Expect;
+
+mod backends;
+mod behaviors;
+mod core;
+mod links;
+mod mcp;
+mod prompts;
+mod sessions;
+mod viewport;
+
+const AI_CODE_TEST_TIMEOUT: Duration = Duration::from_secs(30);
+const AI_CODE_PRELUDE: &str = r##"
+(require 'cl-lib)
+(require 'map)
+(require 'seq)
+"##;
+
+fn ai_code_oracle(source_file: &str) -> CachedMelpaOracle {
+    CachedMelpaOracle::new(AI_CODE_MELPA_PIN, source_file)
+        .expect("prepare pinned ai-code source below ./tmp")
+        .with_prelude(AI_CODE_PRELUDE)
+        .with_timeout(AI_CODE_TEST_TIMEOUT)
+}
+
+fn current_test_name() -> String {
+    let thread = std::thread::current();
+    thread
+        .name()
+        .unwrap_or("unnamed ai-code parity test")
+        .into()
+}
+
+fn assert_ai_code_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+    let name = current_test_name();
+    let report = ai_code_oracle(source_file)
+        .run_value(&name, elisp_form)
+        .unwrap_or_else(|error| panic!("ai-code parity case `{name}` failed:\n{error}"));
+    expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+pub(crate) fn assert_ai_code_parity(elisp_form: &str, expected: Expect) {
+    assert_ai_code_source_parity("ai-code.el", elisp_form, expected);
+}

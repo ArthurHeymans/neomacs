@@ -85,6 +85,7 @@ mod ah;
 mod ahg;
 mod ahk_mode;
 mod ahungry_theme;
+mod ai_code;
 mod async_package;
 mod at_package;
 mod bind_key;
