@@ -287,6 +287,10 @@ pub const ADD_HOOKS_MELPA_PIN: (&str, &str) = ("add-hooks", "20171217.123");
 /// parity corpus.
 pub const ADD_NODE_MODULES_PATH_MELPA_PIN: (&str, &str) = ("add-node-modules-path", "20230307.655");
 
+/// The exact addressbook-bookmark package selected by the comprehensive API
+/// parity corpus.
+pub const ADDRESSBOOK_BOOKMARK_MELPA_PIN: (&str, &str) = ("addressbook-bookmark", "20260105.453");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

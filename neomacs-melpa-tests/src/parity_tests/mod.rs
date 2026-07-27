@@ -61,6 +61,7 @@ mod ada_ts_mode;
 mod adafruit_wisdom;
 mod add_hooks;
 mod add_node_modules_path;
+mod addressbook_bookmark;
 mod async_package;
 mod at_package;
 mod bind_key;
