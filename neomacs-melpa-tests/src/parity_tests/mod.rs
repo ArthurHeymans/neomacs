@@ -179,6 +179,7 @@ mod archive_region;
 mod archive_rpm;
 mod arduino_cli_mode;
 mod arduino_mode;
+mod aria2;
 mod async_package;
 mod at_package;
 mod bind_key;
