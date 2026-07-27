@@ -63,6 +63,7 @@ mod add_hooks;
 mod add_node_modules_path;
 mod addressbook_bookmark;
 mod ado_mode;
+mod adoc_mode;
 mod async_package;
 mod at_package;
 mod bind_key;
