@@ -103,6 +103,7 @@ mod alectryon;
 mod alert;
 mod alert_termux;
 mod alert_toast;
+mod align_cljlet;
 mod async_package;
 mod at_package;
 mod bind_key;

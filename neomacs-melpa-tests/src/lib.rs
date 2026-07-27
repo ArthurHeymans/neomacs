@@ -434,6 +434,10 @@ pub const ALERT_TERMUX_MELPA_PIN: (&str, &str) = ("alert-termux", "20181119.951"
 /// corpus.
 pub const ALERT_TOAST_MELPA_PIN: (&str, &str) = ("alert-toast", "20220312.229");
 
+/// The exact align-cljlet package selected by the comprehensive API parity
+/// corpus.
+pub const ALIGN_CLJLET_MELPA_PIN: (&str, &str) = ("align-cljlet", "20160112.2101");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
