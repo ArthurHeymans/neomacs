@@ -4,6 +4,7 @@ use crate::emacs_core::image_catalog::{
     ImageCatalog, ImageLookup, ImageResolveRequest, ImageResolveSource, PendingImage, ReadyImage,
     ResolvedImageMetadata,
 };
+use crate::emacs_core::value::list_to_vec;
 use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
@@ -1062,17 +1063,58 @@ fn image_type_unknown_signals() {
 // -----------------------------------------------------------------------
 
 #[test]
-fn image_transforms_p_returns_t() {
+fn image_transforms_p_reports_the_transforms_neomacs_implements() {
+    // GNU returns the LIST of capabilities a window-system frame supports, not
+    // `t` (src/image.c:12843). Neomacs scales images (`ImageScalePolicy` /
+    // `ImageRealization`) but has no rotation in the pipeline, so it reports
+    // `(scale)` — the same shape GNU's own scale-only build returns
+    // (`HAVE_NTGUI` -> `list1 (Qscale)`, image.c:12867).
+    //
+    // Reporting this honestly is what lets telega.el past its startup
+    // `cl-assert`: it accepts either imagemagick or native transforms, and
+    // its own comment says imagemagick is NOT required when transforms exist.
     crate::test_utils::init_test_tracing();
-    let result = builtin_image_transforms_p(vec![]);
-    assert!(result.is_ok());
-    assert!(result.unwrap().is_nil());
+    let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_window_system(Some(Value::symbol("neo")));
+
+    let result = builtin_image_transforms_p(&mut eval, vec![]).expect("image-transforms-p");
+
+    assert_eq!(
+        list_to_vec(&result).expect("capability list"),
+        vec![Value::symbol("scale")],
+        "a window-system frame must advertise scale (and only what we implement)"
+    );
+}
+
+#[test]
+fn image_transforms_p_is_nil_without_a_window_system() {
+    // GNU gates the whole thing on FRAME_WINDOW_P: a TTY frame has no native
+    // transforms. telega.el relies on this — it skips the requirement entirely
+    // when there is no graphical frame.
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval).0;
+
+    let result = builtin_image_transforms_p(&mut eval, vec![Value::make_frame(frame_id)])
+        .expect("image-transforms-p");
+
+    assert!(
+        result.is_nil(),
+        "TTY frames report no native transforms, got {result:?}"
+    );
 }
 
 #[test]
 fn image_transforms_p_with_frame() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_image_transforms_p(vec![Value::NIL]);
+    // `nil` means "the selected frame"; a TTY selected frame reports nothing.
+    let mut eval = crate::emacs_core::Context::new();
+    crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    let result = builtin_image_transforms_p(&mut eval, vec![Value::NIL]);
     assert!(result.is_ok());
     assert!(result.unwrap().is_nil());
 }
@@ -1080,7 +1122,8 @@ fn image_transforms_p_with_frame() {
 #[test]
 fn image_transforms_p_with_non_integer_or_small_frame() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_image_transforms_p(vec![Value::fixnum(1)]);
+    let mut eval = crate::emacs_core::Context::new();
+    let result = builtin_image_transforms_p(&mut eval, vec![Value::fixnum(1)]);
     assert!(matches!(
         result,
         Err(Flow::Signal(sig))
@@ -1093,7 +1136,8 @@ fn image_transforms_p_with_non_integer_or_small_frame() {
 #[test]
 fn image_transforms_p_too_many_args() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_image_transforms_p(vec![Value::NIL, Value::NIL]);
+    let mut eval = crate::emacs_core::Context::new();
+    let result = builtin_image_transforms_p(&mut eval, vec![Value::NIL, Value::NIL]);
     assert!(result.is_err());
 }
 

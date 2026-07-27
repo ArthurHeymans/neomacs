@@ -176,7 +176,7 @@ pub(crate) fn live_frame_designator_p_in_state(
     }
 }
 
-fn frame_window_system_symbol(
+pub(crate) fn frame_window_system_symbol(
     eval: &mut super::eval::Context,
     frame: Option<&Value>,
 ) -> Result<Option<Value>, Flow> {

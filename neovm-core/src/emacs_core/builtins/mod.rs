@@ -8914,7 +8914,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "image-transforms-p",
-        |_ctx, args| super::image::builtin_image_transforms_p(args),
+        super::image::builtin_image_transforms_p,
         0,
         Some(1),
     );

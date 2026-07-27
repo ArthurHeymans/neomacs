@@ -1093,17 +1093,68 @@ pub(crate) fn builtin_image_type(args: Vec<Value>) -> EvalResult {
     Ok(Value::symbol(resolved))
 }
 
-/// (image-transforms-p &optional FRAME) -> bool
+/// A native image transform a window-system frame can perform.
 ///
-/// Return nil if FRAME does not match an active frame designator in Neovm.
-/// (Compatibility layer keeps this conservative and follows official Emacs semantics
-/// observed for common callers.)
-pub(crate) fn builtin_image_transforms_p(args: Vec<Value>) -> EvalResult {
+/// GNU reports these from `image-transforms-p` (src/image.c:12843) so Lisp can
+/// choose between native transforms and ImageMagick. Which ones a build offers
+/// varies — GNU's own Windows build reports `scale` alone when rotation is
+/// unavailable (image.c:12865) — so this is a set, not a boolean.
+///
+/// Add a variant only when the image pipeline actually performs it: callers
+/// treat this as a promise and stop supplying their own fallback.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+pub enum ImageTransform {
+    /// Resize to `:scale` / `:width` / `:height`. Implemented by
+    /// `ImageScalePolicy` and `ImageRealization` in the layout engine.
+    Scale,
+    /// Rotate by integral multiples of 90 degrees (`:rotation`).
+    #[allow(dead_code)] // GNU's other capability; no rotation in the pipeline yet.
+    Rotate90,
+}
+
+impl ImageTransform {
+    /// The transforms neomacs performs today, in GNU's report order.
+    ///
+    /// `Rotate90` is absent deliberately: nothing in the image pipeline rotates,
+    /// and claiming it would make callers skip their own rotation fallback.
+    const SUPPORTED: [Self; 1] = [Self::Scale];
+
+    pub fn name(self) -> &'static str {
+        self.into()
+    }
+
+    pub fn value(self) -> Value {
+        Value::symbol(self.name())
+    }
+}
+
+/// `(image-transforms-p &optional FRAME)` -> list of capabilities, or nil.
+///
+/// GNU gates this on `FRAME_WINDOW_P` (src/image.c:12855): a TTY frame has no
+/// native transforms and reports nil. A window-system frame reports the list
+/// of transforms the build can perform — never `t`.
+pub(crate) fn builtin_image_transforms_p(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_max_args("image-transforms-p", &args, 1)?;
     if let Some(frame_or_display) = args.first() {
         expect_frame_designator("image-transforms-p", frame_or_display)?;
     }
-    Ok(Value::NIL)
+    // GNU decodes the FRAME and tests `FRAME_WINDOW_P` — it does not fall back
+    // to the global `window-system`, the way the `display-*-p` predicates do.
+    let window_system = super::display::frame_window_system_symbol(eval, args.first())?
+        .is_some_and(|value| value.is_symbol());
+    if !window_system {
+        return Ok(Value::NIL);
+    }
+    Ok(Value::list(
+        ImageTransform::SUPPORTED
+            .iter()
+            .map(|transform| transform.value())
+            .collect(),
+    ))
 }
 
 // ---------------------------------------------------------------------------
