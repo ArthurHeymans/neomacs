@@ -591,6 +591,11 @@ pub const ANJU_MELPA_PIN: (&str, &str) = ("anju", "20260701.2139");
 /// `e32e611d54a3819f88c5ff58009df70c9ae01934`.
 pub const ANKI_CONNECT_MELPA_PIN: (&str, &str) = ("anki-connect", "20250414.1301");
 
+/// The exact anki-editor package selected by the comprehensive API parity
+/// corpus. MELPA built this archive from upstream commit
+/// `4a55c3f937b176d31e36d484c196682cae9f9104`.
+pub const ANKI_EDITOR_MELPA_PIN: (&str, &str) = ("anki-editor", "20260714.1156");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
