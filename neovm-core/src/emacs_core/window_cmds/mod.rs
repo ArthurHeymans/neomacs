@@ -8866,13 +8866,20 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     ] {
         obarray.make_special(name);
     }
-    obarray.set_symbol_value("delete-frame-functions", Value::NIL);
-    obarray.set_symbol_value("after-delete-frame-functions", Value::NIL);
-    obarray.set_symbol_value("window-buffer-change-functions", Value::NIL);
-    obarray.set_symbol_value("window-size-change-functions", Value::NIL);
-    obarray.set_symbol_value("window-selection-change-functions", Value::NIL);
-    obarray.set_symbol_value("window-state-change-functions", Value::NIL);
-    obarray.set_symbol_value("window-state-change-hook", Value::NIL);
+    // GNU window.c declares all of these through DEFVAR_LISP.  Register their
+    // value and dynamic-binding semantics atomically so lexical package code
+    // cannot observe a bound-but-non-special hook variable.
+    for name in [
+        "delete-frame-functions",
+        "after-delete-frame-functions",
+        "window-buffer-change-functions",
+        "window-size-change-functions",
+        "window-selection-change-functions",
+        "window-state-change-functions",
+        "window-state-change-hook",
+    ] {
+        obarray.define_special_variable(name, Value::NIL);
+    }
     obarray.set_symbol_value("window-sides-vertical", Value::NIL);
     obarray.set_symbol_value("window-sides-slots", Value::NIL);
     obarray.set_symbol_value("window-resize-pixelwise", Value::NIL);

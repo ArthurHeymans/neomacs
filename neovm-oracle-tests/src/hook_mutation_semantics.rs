@@ -8,6 +8,77 @@ use crate::common::assert_oracle_parity;
 use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
+fn oracle_c_defvar_lisp_hook_state_is_declared_special() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU DEFVAR_LISP sets the declared_special bit as part of registering
+    // each C-backed Lisp variable.  Merely prebinding the value cell is not
+    // equivalent: lexical package code would capture a `let` binding instead
+    // of dynamically exposing it to separately defined package functions.
+    let form = r#"
+(mapcar
+ (lambda (symbol)
+   (list symbol
+         (boundp symbol)
+         (special-variable-p symbol)))
+ '(kbd-macro-termination-hook
+   mouse-leave-buffer-hook
+   prefix-help-command
+   pre-command-hook
+   post-command-hook
+   window-size-change-functions))
+"#;
+
+    let expect = expect_test::expect![[
+        r#""OK ((kbd-macro-termination-hook t t) (mouse-leave-buffer-hook t t) (prefix-help-command t t) (pre-command-hook t t) (post-command-hook t t) (window-size-change-functions t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
+#[test]
+fn oracle_c_defvar_hook_mutation_targets_active_lexical_file_let() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // Define the mutator outside the lexical `let`, as a package function
+    // would be.  When kbd-macro-termination-hook is special, add-hook and
+    // remove-hook operate on the active dynamic binding through
+    // default-value/set-default.  If the C variable was only prebound but not
+    // declared special, the helper instead mutates the unrelated global cell.
+    let form = r#"
+(let ((saved-default (default-value 'kbd-macro-termination-hook)))
+  (fset 'neomacs--oracle-mutate-kbd-hook
+        (lambda (operation)
+          (if (eq operation 'add)
+              (add-hook 'kbd-macro-termination-hook
+                        'neomacs--oracle-kbd-hook-function)
+            (remove-hook 'kbd-macro-termination-hook
+                         'neomacs--oracle-kbd-hook-function))))
+  (unwind-protect
+      (progn
+        (set-default 'kbd-macro-termination-hook nil)
+        (eval
+         '(let ((kbd-macro-termination-hook '(base-function)))
+            (neomacs--oracle-mutate-kbd-hook 'add)
+            (let ((after-add
+                   (list kbd-macro-termination-hook
+                         (symbol-value 'kbd-macro-termination-hook))))
+              (neomacs--oracle-mutate-kbd-hook 'remove)
+              (list
+               after-add
+               (list kbd-macro-termination-hook
+                     (symbol-value 'kbd-macro-termination-hook)))))
+         t))
+    (set-default 'kbd-macro-termination-hook saved-default)
+    (fmakunbound 'neomacs--oracle-mutate-kbd-hook)))
+"#;
+
+    let expect = expect_test::expect![[
+        r#""OK (((neomacs--oracle-kbd-hook-function base-function) (neomacs--oracle-kbd-hook-function base-function)) ((base-function) (base-function)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
+#[test]
 fn oracle_add_hook_depth_order_and_metadata() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

@@ -4074,7 +4074,7 @@ impl Context {
         obarray.set_symbol_value("display-line-numbers-minor-tick", Value::fixnum(0));
         obarray.set_symbol_value("double-click-fuzz", Value::fixnum(3));
         obarray.set_symbol_value("double-click-time", Value::fixnum(500));
-        obarray.set_symbol_value("echo-keystrokes", Value::fixnum(1));
+        obarray.define_special_variable("echo-keystrokes", Value::fixnum(1));
         obarray.set_symbol_value("gc-cons-threshold", Value::fixnum(800_000));
         obarray.set_symbol_value("help-char", Value::fixnum(8));
         obarray.set_symbol_value("hourglass-delay", Value::fixnum(1));
@@ -4146,7 +4146,7 @@ impl Context {
         // The default is consulted by `read_key_sequence` when the
         // help-char fires after a prefix. Keyboard audit Finding 5
         // in `drafts/keyboard-command-loop-audit.md`.
-        obarray.set_symbol_value(
+        obarray.define_special_variable(
             "prefix-help-command",
             Value::symbol("describe-prefix-bindings"),
         );
@@ -4356,7 +4356,7 @@ impl Context {
         obarray.make_special("executing-kbd-macro");
         obarray.set_symbol_value("executing-kbd-macro-index", Value::fixnum(0));
         obarray.make_special("executing-kbd-macro-index");
-        obarray.set_symbol_value("kbd-macro-termination-hook", Value::NIL);
+        obarray.define_special_variable("kbd-macro-termination-hook", Value::NIL);
         obarray.set_symbol_value("command-history", Value::NIL);
         obarray.make_special("command-history");
         obarray.set_symbol_value("extended-command-history", Value::NIL);
@@ -5305,6 +5305,13 @@ impl Context {
         }
 
         // --- src/keyboard.c: syms_of_keyboard ---
+        // These are all DEFVAR_LISP variables in GNU.  They must exist and be
+        // special before Lisp loadup: package functions compiled with lexical
+        // binding rely on surrounding `let` forms remaining dynamically
+        // visible while add-hook/remove-hook update the active value cell.
+        obarray.define_special_variable("pre-command-hook", Value::NIL);
+        obarray.define_special_variable("post-command-hook", Value::NIL);
+
         // GNU registers this command-loop restriction label with DEFSYM.
         {
             let id = crate::emacs_core::intern::intern("long-line-optimizations-in-command-hooks");
@@ -5322,8 +5329,7 @@ impl Context {
 
         // --- src/callint.c: syms_of_callint ---
         // DEFVAR_LISP, default nil.
-        obarray.set_symbol_value("mouse-leave-buffer-hook", Value::NIL);
-        obarray.make_special("mouse-leave-buffer-hook");
+        obarray.define_special_variable("mouse-leave-buffer-hook", Value::NIL);
 
         // --- src/xterm.c: syms_of_xterm / src/pgtkterm.c: syms_of_pgtkterm ---
         // GNU defines these from the compiled window-system backend before

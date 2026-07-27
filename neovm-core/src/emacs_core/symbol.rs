@@ -2648,6 +2648,18 @@ impl Obarray {
         self.ensure_symbol_id(id).flags.set_declared_special(true);
     }
 
+    /// Define a bound special variable in one semantic operation.
+    ///
+    /// GNU's `DEFVAR_LISP`, `DEFVAR_BOOL`, and related C registration macros
+    /// both initialize the value cell and set `declared_special`.  Keeping
+    /// those steps behind one Rust API prevents bootstrap call sites from
+    /// constructing the invalid half-registered state where a variable is
+    /// bound but lexical Lisp does not treat it as dynamically scoped.
+    pub fn define_special_variable(&mut self, name: &str, value: Value) {
+        self.set_symbol_value(name, value);
+        self.make_special(name);
+    }
+
     /// Mark a symbol as special by identity.
     pub fn make_special_id(&mut self, id: SymId) {
         self.ensure_global_member_if_canonical(id);

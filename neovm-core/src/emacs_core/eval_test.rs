@@ -12045,6 +12045,25 @@ fn c_defvar_runtime_globals_are_special_like_gnu() {
 }
 
 #[test]
+fn c_defvar_lisp_hook_state_is_bound_and_special_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        "(mapcar (lambda (sym)
+                   (list sym (boundp sym) (special-variable-p sym)))
+                 '(kbd-macro-termination-hook
+                   mouse-leave-buffer-hook
+                   prefix-help-command
+                   pre-command-hook
+                   post-command-hook
+                   window-size-change-functions))",
+    );
+    assert_eq!(
+        results[0],
+        "OK ((kbd-macro-termination-hook t t) (mouse-leave-buffer-hook t t) (prefix-help-command t t) (pre-command-hook t t) (post-command-hook t t) (window-size-change-functions t t))"
+    );
+}
+
+#[test]
 fn system_type_matches_gnu_host_platform_symbol() {
     crate::test_utils::init_test_tracing();
     let results = eval_all("system-type");
