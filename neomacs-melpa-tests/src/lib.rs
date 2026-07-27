@@ -721,6 +721,10 @@ pub const APPLES_MODE_MELPA_PIN: (&str, &str) = ("apples-mode", "20110121.418");
 /// and execution parity corpus.
 pub const APPLESCRIPT_MODE_MELPA_PIN: (&str, &str) = ("applescript-mode", "20210802.1715");
 
+/// The exact apropospriate-theme package selected by the comprehensive theme
+/// definition and lifecycle parity corpus.
+pub const APROPOSPRIATE_THEME_MELPA_PIN: (&str, &str) = ("apropospriate-theme", "20251010.121");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
