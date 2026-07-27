@@ -712,6 +712,11 @@ pub const APPARMOR_MODE_MELPA_PIN: (&str, &str) = ("apparmor-mode", "20260515.45
 pub const APPLE_CONTAINER_TRAMP_MELPA_PIN: (&str, &str) =
     ("apple-container-tramp", "20260504.1350");
 
+/// The exact apples-mode package selected by the comprehensive API parity
+/// corpus. MELPA built this archive from upstream commit
+/// `83a9ab0d6ba82496e2f7df386909b1a55701fccb`.
+pub const APPLES_MODE_MELPA_PIN: (&str, &str) = ("apples-mode", "20110121.418");
+
 /// The exact AppleScript Mode package selected by the comprehensive editing
 /// and execution parity corpus.
 pub const APPLESCRIPT_MODE_MELPA_PIN: (&str, &str) = ("applescript-mode", "20210802.1715");

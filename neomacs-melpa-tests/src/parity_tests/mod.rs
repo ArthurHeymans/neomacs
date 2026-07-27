@@ -168,6 +168,7 @@ mod apiwrap;
 mod app_monochrome_themes;
 mod apparmor_mode;
 mod apple_container_tramp;
+mod apples_mode;
 mod applescript_mode;
 mod async_package;
 mod at_package;
