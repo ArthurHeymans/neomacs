@@ -496,6 +496,10 @@ pub const ALMOST_MONO_THEMES_MELPA_PIN: (&str, &str) = ("almost-mono-themes", "2
 /// corpus.
 pub const ALSAMIXER_MELPA_PIN: (&str, &str) = ("alsamixer", "20250106.1025");
 
+/// The exact alt-codes package selected by the comprehensive API parity
+/// corpus.
+pub const ALT_CODES_MELPA_PIN: (&str, &str) = ("alt-codes", "20260101.557");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
