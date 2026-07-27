@@ -377,6 +377,9 @@ pub const AI_CODE_MELPA_PIN: (&str, &str) = ("ai-code", "20260726.2000");
 /// The exact aider package selected by the comprehensive API parity corpus.
 pub const AIDER_MELPA_PIN: (&str, &str) = ("aider", "20251201.133");
 
+/// The exact Aidermacs package selected by the comprehensive API parity corpus.
+pub const AIDERMACS_MELPA_PIN: (&str, &str) = ("aidermacs", "20260726.839");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
