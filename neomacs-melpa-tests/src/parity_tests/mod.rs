@@ -55,6 +55,7 @@ mod acme_theme;
 mod acp;
 mod act_mode;
 mod actionscript_mode;
+mod activity_watch_mode;
 mod async_package;
 mod at_package;
 mod bind_key;
