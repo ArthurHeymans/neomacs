@@ -614,6 +614,10 @@ pub const ANNALIST_MELPA_PIN: (&str, &str) = ("annalist", "20260531.1558");
 /// The exact Annotate package selected by the comprehensive API parity corpus.
 pub const ANNOTATE_MELPA_PIN: (&str, &str) = ("annotate", "20260514.1320");
 
+/// The exact annotate-depth package selected by the comprehensive API parity
+/// corpus.
+pub const ANNOTATE_DEPTH_MELPA_PIN: (&str, &str) = ("annotate-depth", "20160520.2040");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
