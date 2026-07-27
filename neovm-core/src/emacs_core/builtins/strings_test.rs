@@ -199,7 +199,7 @@ fn format_preserves_multibyte_text_properties_as_char_intervals() {
 }
 
 #[test]
-fn format_preserves_percent_s_text_property_plist_order() {
+fn format_reverses_percent_s_text_property_plist_order_like_gnu_add_properties() {
     crate::test_utils::init_test_tracing();
 
     let source = Value::string("key");
@@ -234,7 +234,7 @@ fn format_preserves_percent_s_text_property_plist_order() {
     assert_eq!(result.as_utf8_str(), Some("key ok"));
     assert_eq!(
         ordered_keys,
-        vec!["font-lock-face".to_string(), "face".to_string()]
+        vec!["face".to_string(), "font-lock-face".to_string()]
     );
 }
 

@@ -11,7 +11,7 @@ use crate::emacs_core::error::LispCondition;
 use super::plist;
 use super::symbol::Obarray;
 use super::value::*;
-use crate::buffer::text_props::TextPropertyTable;
+use crate::buffer::text_props::{PropertyPlistApplication, TextPropertyTable};
 use crate::buffer::{
     Buffer, BufferId, BufferManager, CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange,
     LispCharPos1,
@@ -1585,17 +1585,12 @@ pub(crate) fn builtin_add_text_properties_in_buffers(
             return Ok(Value::NIL);
         };
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        let mut any_changed = false;
-        for (name, val) in pairs {
-            if table.put_property_for_object_char_len(
-                char_range,
-                string_char_len(s.schars()),
-                name,
-                val,
-            ) {
-                any_changed = true;
-            }
-        }
+        let any_changed = table.apply_property_plist_for_object_char_len(
+            char_range,
+            string_char_len(s.schars()),
+            &pairs,
+            PropertyPlistApplication::AddProperties,
+        );
         save_string_props_for_value(str_val, table);
         return Ok(if any_changed { Value::T } else { Value::NIL });
     }

@@ -46,6 +46,30 @@ fn oracle_prop_propertize_preserves_supplied_plist_order() {
 }
 
 #[test]
+fn oracle_prop_format_reverses_copied_format_and_argument_plists() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU styled_format copies both property sources through
+    // text_property_list -> add_text_properties_from_list ->
+    // Fadd_text_properties.  Each pair is prepended to the destination
+    // interval, so the copied order is observably reversed even though the
+    // original propertized strings retain their supplied plist order.
+    let form = r#"
+(let* ((arg (propertize "arg" 'a 1 'b 2 'c 3))
+       (fmt (propertize "[%s]" 'f1 1 'f2 2 'f3 3))
+       (out (format fmt arg)))
+  (list
+   (text-properties-at 0 arg)
+   (text-properties-at 0 fmt)
+   (text-properties-at 0 out)
+   (text-properties-at 1 out)
+   (text-properties-at 4 out)))
+"#;
+
+    assert_oracle_parity(form);
+}
+
+#[test]
 fn oracle_prop_add_text_properties_replacement_keeps_existing_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

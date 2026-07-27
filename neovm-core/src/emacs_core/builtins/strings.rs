@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::text_props::PropertyPlistApplication;
 use crate::buffer::{CharLen, CharPos0, CharRange};
 use crate::emacs_core::coding::TextQuotingStyle;
 use crate::emacs_core::value::{
@@ -2041,7 +2042,10 @@ fn build_format_result(
 
     // Copy text properties from the format string first, then from each
     // `%s` argument's string, mirroring GNU `styled_format`
-    // (editfns.c:4299-4396).
+    // (editfns.c:4299-4396).  GNU routes each copied plist through
+    // `Fadd_text_properties`; adding its pairs prepends them one by one, so a
+    // copied plist has the reverse of its source order.  The order is
+    // observable through `text-properties-at`.
     apply_format_string_prop_spans(result, args[0], source_spans);
 
     // Copy text properties from each `%s` argument's string into the
@@ -2109,17 +2113,16 @@ fn apply_format_string_prop_spans(result: Value, format_value: Value, spans: &[F
             continue;
         }
 
-        let ordered: Vec<_> = src_interval.ordered_properties().collect();
-        for (name, value) in ordered.into_iter().rev() {
-            if table.put_property_for_object_char_len(
-                string_char_range(result_start, result_end),
-                CharLen::new(result_string.schars()),
-                name,
-                *value,
-            ) {
-                touched = true;
-            }
-        }
+        let properties: Vec<_> = src_interval
+            .ordered_properties()
+            .map(|(name, value)| (name, *value))
+            .collect();
+        touched |= table.apply_property_plist_for_object_char_len(
+            string_char_range(result_start, result_end),
+            CharLen::new(result_string.schars()),
+            &properties,
+            PropertyPlistApplication::AddProperties,
+        );
     }
 
     if touched {
@@ -2190,20 +2193,19 @@ fn apply_format_prop_spans(result: Value, args: &[Value], spans: &[FormatPropSpa
             if interval.start >= end {
                 continue;
             }
-            let ordered: Vec<_> = interval.ordered_properties().collect();
-            for (name, value) in ordered.into_iter().rev() {
-                if table.put_property_for_object_char_len(
-                    string_char_range(
-                        span.result_char_start + interval.start,
-                        span.result_char_start + end,
-                    ),
-                    CharLen::new(result_string.schars()),
-                    name,
-                    *value,
-                ) {
-                    touched = true;
-                }
-            }
+            let properties: Vec<_> = interval
+                .ordered_properties()
+                .map(|(name, value)| (name, *value))
+                .collect();
+            touched |= table.apply_property_plist_for_object_char_len(
+                string_char_range(
+                    span.result_char_start + interval.start,
+                    span.result_char_start + end,
+                ),
+                CharLen::new(result_string.schars()),
+                &properties,
+                PropertyPlistApplication::AddProperties,
+            );
         }
     }
     if touched {

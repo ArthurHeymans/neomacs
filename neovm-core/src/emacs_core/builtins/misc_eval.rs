@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::text_props::PropertyPlistApplication;
 use crate::buffer::{CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::symbol::Obarray;
 
@@ -2314,31 +2315,26 @@ pub(crate) fn builtin_propertize(args: Vec<Value>) -> EvalResult {
         set_string_text_properties_table_for_value(new_str, src_table);
     }
 
-    // Parse and apply plist properties.
-    // GNU Emacs's `propertize` reverses the property list before calling
-    // `add_text_properties`, which then prepends each property. The net
-    // effect is that properties appear in the original order in the plist.
-    // We match this by iterating the pairs in reverse order, since our
-    // `put_property` prepends new properties.
+    // Parse and apply plist properties.  GNU `propertize` reverses this plist
+    // before calling `add-text-properties`, so select that typed application
+    // policy rather than encoding the semantic distinction as iterator
+    // direction at this call site.
     if args.len() > 1 {
         let char_len = new_str
             .as_lisp_string()
             .expect("new string must carry LispString payload")
             .schars();
         let mut table = get_string_text_properties_table_for_value(new_str).unwrap_or_default();
-        let pairs = &args[1..];
-        // Collect chunks and iterate in reverse to match GNU's reversal behavior
-        let chunks: Vec<&[Value]> = pairs.chunks(2).collect();
-        for chunk in chunks.iter().rev() {
-            if chunk.len() == 2 {
-                table.put_property_for_object_char_len(
-                    CharRange::new(CharPos0::new(0), CharPos0::new(char_len)),
-                    CharLen::new(char_len),
-                    chunk[0],
-                    chunk[1],
-                );
-            }
-        }
+        let properties: Vec<_> = args[1..]
+            .chunks_exact(2)
+            .map(|chunk| (chunk[0], chunk[1]))
+            .collect();
+        table.apply_property_plist_for_object_char_len(
+            CharRange::new(CharPos0::new(0), CharPos0::new(char_len)),
+            CharLen::new(char_len),
+            &properties,
+            PropertyPlistApplication::PreserveSuppliedOrder,
+        );
         set_string_text_properties_table_for_value(new_str, table);
     }
 

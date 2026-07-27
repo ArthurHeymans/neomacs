@@ -1737,6 +1737,24 @@ fn plists_equal_values_equal(left: &[(Value, Value)], right: &[(Value, Value)]) 
 // TextPropertyTable
 // ---------------------------------------------------------------------------
 
+/// How an ordered property plist is applied to an interval.
+///
+/// This makes GNU's two distinct ordering policies explicit at call sites,
+/// instead of encoding them as an easy-to-reverse iterator convention.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PropertyPlistApplication {
+    /// Apply pairs in plist order, as GNU `Fadd_text_properties` does.
+    ///
+    /// Each newly added pair is prepended, so a fresh destination observes the
+    /// reverse of the supplied plist order.
+    AddProperties,
+    /// Apply pairs in reverse so the destination retains their supplied order.
+    ///
+    /// GNU `propertize` obtains this effect by reversing its plist before
+    /// calling `add-text-properties`.
+    PreserveSuppliedOrder,
+}
+
 /// Text-property interval storage.
 ///
 /// The backing store is a GNU-shaped augmented interval tree.  Callers still
@@ -1942,6 +1960,26 @@ impl TextPropertyTable {
         value: Value,
     ) -> bool {
         self.put_property_for_object_len_raw(range, object_len, name, value)
+    }
+
+    pub(crate) fn apply_property_plist_for_object_char_len(
+        &mut self,
+        range: CharRange,
+        object_len: CharLen,
+        properties: &[(Value, Value)],
+        application: PropertyPlistApplication,
+    ) -> bool {
+        let mut changed = false;
+        let mut apply = |&(name, value): &(Value, Value)| {
+            changed |= self.put_property_for_object_len_raw(range, object_len, name, value);
+        };
+        match application {
+            PropertyPlistApplication::AddProperties => properties.iter().for_each(&mut apply),
+            PropertyPlistApplication::PreserveSuppliedOrder => {
+                properties.iter().rev().for_each(&mut apply);
+            }
+        }
+        changed
     }
 
     fn put_property_for_object_len_raw(
