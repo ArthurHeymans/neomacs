@@ -30,6 +30,14 @@ struct PackageArchiveSpec {
     url: &'static str,
 }
 
+#[derive(Clone, Copy)]
+struct CachedUrlPackageSpec<'a> {
+    name: &'a str,
+    version: &'a str,
+    url: &'a str,
+    sha256: &'a str,
+}
+
 const MELPA_ARCHIVE: PackageArchiveSpec = PackageArchiveSpec {
     cache_directory: "package-cache",
     label: "MELPA",
@@ -437,6 +445,11 @@ pub const ALERT_TOAST_MELPA_PIN: (&str, &str) = ("alert-toast", "20220312.229");
 /// The exact align-cljlet package selected by the comprehensive API parity
 /// corpus.
 pub const ALIGN_CLJLET_MELPA_PIN: (&str, &str) = ("align-cljlet", "20160112.2101");
+
+/// The exact all-ext package selected by the comprehensive API parity corpus.
+/// MELPA built this archive from upstream commit
+/// `c865c62506af2c9edc7705a7c24dc8b70d5d4de2`.
+pub const ALL_EXT_MELPA_PIN: (&str, &str) = ("all-ext", "20200315.1443");
 
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
@@ -1042,6 +1055,30 @@ impl CachedPackageOracle {
     pub fn new(package: (&str, &str), source_file_name: &str) -> Result<Self, String> {
         validate_cached_source_file_name(MELPA_ARCHIVE.label, source_file_name)?;
         let package_dir = prepare_cached_melpa_package(&EmacsRuntime::gnu_emacs(), package)?;
+        Self::from_package_dir(package, source_file_name, package_dir)
+    }
+
+    /// Prepare one pinned MELPA package whose removed dependency must first be
+    /// installed from an integrity-checked upstream package file.
+    #[cfg(test)]
+    pub(crate) fn new_with_melpa_url_dependency(
+        package: (&str, &str),
+        source_file_name: &str,
+        dependency: (&str, &str, &str, &str),
+    ) -> Result<Self, String> {
+        validate_cached_source_file_name(MELPA_ARCHIVE.label, source_file_name)?;
+        let dependency = CachedUrlPackageSpec {
+            name: dependency.0,
+            version: dependency.1,
+            url: dependency.2,
+            sha256: dependency.3,
+        };
+        let package_dir = prepare_cached_package_with_url_dependency(
+            &EmacsRuntime::gnu_emacs(),
+            package,
+            MELPA_ARCHIVE,
+            Some(dependency),
+        )?;
         Self::from_package_dir(package, source_file_name, package_dir)
     }
 
@@ -1826,6 +1863,15 @@ fn prepare_cached_package(
     package: (&str, &str),
     archive: PackageArchiveSpec,
 ) -> Result<PathBuf, String> {
+    prepare_cached_package_with_url_dependency(gnu_emacs, package, archive, None)
+}
+
+fn prepare_cached_package_with_url_dependency(
+    gnu_emacs: &EmacsRuntime,
+    package: (&str, &str),
+    archive: PackageArchiveSpec,
+    dependency: Option<CachedUrlPackageSpec<'_>>,
+) -> Result<PathBuf, String> {
     let (name, version) = package;
     if name.is_empty()
         || version.is_empty()
@@ -1839,6 +1885,31 @@ fn prepare_cached_package(
         return Err(format!(
             "cached {} package must have a safe hard-coded name and version, got `{name}` `{version}`",
             archive.label
+        ));
+    }
+    if let Some(dependency) = dependency
+        && (dependency.name.is_empty()
+            || dependency.version.is_empty()
+            || !dependency
+                .name
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric() || character == '-')
+            || !dependency.version.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '+')
+            })
+            || !dependency
+                .url
+                .starts_with("https://raw.githubusercontent.com/")
+            || dependency.url.contains(['\n', '\r', '\t'])
+            || dependency.sha256.len() != 64
+            || !dependency
+                .sha256
+                .chars()
+                .all(|character| character.is_ascii_hexdigit()))
+    {
+        return Err(format!(
+            "cached URL dependency must have a safe name, version, raw GitHub URL, and SHA-256, got `{}` `{}` `{}` `{}`",
+            dependency.name, dependency.version, dependency.url, dependency.sha256
         ));
     }
 
@@ -1874,8 +1945,22 @@ fn prepare_cached_package(
     let package_dir = home.join(".emacs.d/elpa").join(format!("{name}-{version}"));
     let descriptor = package_dir.join(format!("{name}-pkg.el"));
     let ready_marker = root.join("ready");
-    let expected_marker = format!("{name}\t{version}\n");
+    let dependency_descriptor = dependency.map(|dependency| {
+        home.join(".emacs.d/elpa")
+            .join(format!("{}-{}", dependency.name, dependency.version))
+            .join(format!("{}-pkg.el", dependency.name))
+    });
+    let dependency_marker = dependency.map_or_else(String::new, |dependency| {
+        format!(
+            "\t{}\t{}\t{}\t{}",
+            dependency.name, dependency.version, dependency.url, dependency.sha256
+        )
+    });
+    let expected_marker = format!("{name}\t{version}{dependency_marker}\n");
     let cache_is_ready = descriptor.is_file()
+        && dependency_descriptor
+            .as_ref()
+            .is_none_or(|descriptor| descriptor.is_file())
         && fs::read_to_string(&ready_marker).is_ok_and(|contents| contents == expected_marker);
     if cache_is_ready {
         return Ok(package_dir);
@@ -1917,6 +2002,44 @@ fn prepare_cached_package(
     let version_string = elisp_string(version);
     let archive_name_string = elisp_string(archive.name);
     let archive_url_string = elisp_string(archive.url);
+    let dependency_setup = dependency.map_or_else(String::new, |dependency| {
+        let dependency_name = elisp_string(dependency.name);
+        let dependency_version = elisp_string(dependency.version);
+        let dependency_url = elisp_string(dependency.url);
+        let dependency_sha256 = elisp_string(dependency.sha256);
+        format!(
+            r##"(let* ((dependency-name {dependency_name})
+                       (dependency-symbol (intern dependency-name))
+                       (dependency-version {dependency_version})
+                       (dependency-file
+                        (expand-file-name
+                         (concat dependency-name "-" dependency-version ".el")
+                         (getenv "TMPDIR"))))
+                  (require 'url)
+                  (url-copy-file {dependency_url} dependency-file t)
+                  (let ((actual-sha256
+                         (with-temp-buffer
+                           (set-buffer-multibyte nil)
+                           (insert-file-contents-literally dependency-file)
+                           (secure-hash 'sha256 (current-buffer)))))
+                    (unless (equal actual-sha256 {dependency_sha256})
+                      (error
+                       "Dependency checksum mismatch: %s expected %s, got %s"
+                       dependency-name {dependency_sha256} actual-sha256)))
+                  (package-install-file dependency-file)
+                  (package-initialize)
+                  (let* ((installed
+                          (cadr (assq dependency-symbol package-alist)))
+                         (installed-version
+                          (and installed
+                               (package-version-join
+                                (package-desc-version installed)))))
+                    (unless (equal installed-version dependency-version)
+                      (error
+                       "URL dependency version mismatch: %s expected %s, got %s"
+                       dependency-name dependency-version installed-version))))"##
+        )
+    });
     let form = format!(
         r##"(progn
                (require 'package)
@@ -1928,6 +2051,7 @@ fn prepare_cached_package(
                       (cons {archive_name_string}
                             {archive_url_string})))
                (package-refresh-contents)
+               {dependency_setup}
                (let* ((package-name {name_string})
                       (expected-version {version_string})
                       (package-symbol (intern package-name))
