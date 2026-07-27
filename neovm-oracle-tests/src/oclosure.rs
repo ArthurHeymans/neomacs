@@ -39,6 +39,44 @@ fn oracle_prop_make_interpreted_closure_basic_callable() {
 }
 
 #[test]
+fn oracle_interpreted_closure_is_not_a_list_cell() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU eval.c creates interpreted functions as PVEC_CLOSURE objects.
+    // data.c therefore treats them as non-cons values: safe accessors return
+    // nil and strict accessors signal.  A quoted lambda remains an ordinary
+    // cons, which guards against "fixing" this by rejecting lambda syntax too.
+    let form = r#"
+(let ((closure
+       (make-interpreted-closure nil '((quote ok)) nil))
+      (quoted-lambda '(lambda () (quote ok))))
+  (list
+   (closurep closure)
+   (listp closure)
+   (consp closure)
+   (car-safe closure)
+   (cdr-safe closure)
+   (condition-case error-data
+       (car closure)
+     (error (car error-data)))
+   (condition-case error-data
+       (cdr closure)
+     (error (car error-data)))
+   (condition-case error-data
+       (nthcdr 1 closure)
+     (error (car error-data)))
+   (car-safe quoted-lambda)
+   (consp (cdr-safe quoted-lambda))
+   (eq (nthcdr 1 quoted-lambda)
+       (cdr quoted-lambda))))
+"#;
+    let expect = expect_test::expect![[
+        r#""OK (t nil nil nil nil wrong-type-argument wrong-type-argument wrong-type-argument lambda t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
+#[test]
 fn oracle_prop_make_interpreted_closure_lexenv_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

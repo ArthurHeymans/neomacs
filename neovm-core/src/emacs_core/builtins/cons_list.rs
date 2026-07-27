@@ -146,84 +146,6 @@ pub(crate) fn collect_proper_list_items(list: Value) -> Result<Vec<Value>, Flow>
     }
 }
 
-// ---------------------------------------------------------------------------
-// Lambda → cons-list transparency helpers
-//
-// Official Emacs represents closures as cons lists:
-//   (closure ENV PARAMS [DOCSTRING] BODY...)   — lexical closure
-//   (lambda PARAMS [DOCSTRING] BODY...)        — dynamic lambda
-//
-// NeoVM uses Value::Lambda(tagged pointer) internally.  The helpers below let all
-// list / sequence operations treat Lambda values as if they were cons lists,
-// which is required for cl-generic, oclosure, nadvice and many other packages.
-// ---------------------------------------------------------------------------
-
-/// Convert a Lambda (or Macro) value to a cons-list representation matching
-/// the official Emacs format.
-pub(crate) fn lambda_to_cons_list(value: &Value) -> Option<Value> {
-    let saved_roots = crate::emacs_core::eval::save_scratch_gc_roots();
-    let mut elements = Vec::new();
-
-    if let Some(env_val) = value.closure_env().flatten() {
-        elements.push(Value::symbol("closure"));
-        if env_val.is_nil() {
-            elements.push(Value::list(vec![Value::T]));
-        } else {
-            elements.push(env_val);
-        }
-    } else {
-        elements.push(Value::symbol("lambda"));
-    }
-
-    let params_value = lambda_params_to_value(value.closure_params()?);
-    crate::emacs_core::eval::push_scratch_gc_root(params_value);
-    elements.push(params_value);
-
-    if let Some(doc) = value.closure_docstring().flatten() {
-        let doc_value = Value::heap_string(doc.clone());
-        crate::emacs_core::eval::push_scratch_gc_root(doc_value);
-        elements.push(doc_value);
-    }
-
-    // Include (:documentation TYPE) form for oclosures
-    if let Some(doc_form) = value.closure_doc_form().flatten() {
-        let doc_entry = Value::list(vec![Value::keyword(":documentation"), doc_form]);
-        crate::emacs_core::eval::push_scratch_gc_root(doc_entry);
-        elements.push(doc_entry);
-    }
-
-    if let Some(interactive) = value.closure_interactive().flatten() {
-        let interactive_entry = if interactive.is_cons()
-            && interactive.cons_car().as_symbol_name() == Some("interactive")
-        {
-            interactive
-        } else if interactive.is_vector() {
-            let items = interactive
-                .as_vector_data()
-                .map(|items| items.to_vec())
-                .unwrap_or_default();
-            let mut list_items = Vec::with_capacity(items.len() + 1);
-            list_items.push(Value::symbol("interactive"));
-            list_items.extend(items);
-            Value::list(list_items)
-        } else {
-            Value::list(vec![Value::symbol("interactive"), interactive])
-        };
-        crate::emacs_core::eval::push_scratch_gc_root(interactive_entry);
-        elements.push(interactive_entry);
-    }
-
-    let body = value.closure_body_value()?;
-    for form in list_to_vec(&body)? {
-        crate::emacs_core::eval::push_scratch_gc_root(form);
-        elements.push(form);
-    }
-
-    let result = Value::list(elements);
-    crate::emacs_core::eval::restore_scratch_gc_roots(saved_roots);
-    Some(result)
-}
-
 pub(crate) fn lambda_closure_length(value: &Value) -> Option<i64> {
     let slots = value.closure_slots()?;
     Some(slots.len() as i64)
@@ -379,53 +301,50 @@ pub fn lambda_params_to_value(params: &LambdaParams) -> Value {
     Value::list(elements)
 }
 
-fn car_value(value: &Value) -> Result<Value, Flow> {
-    match value.kind() {
-        ValueKind::Nil => Ok(Value::NIL),
-        ValueKind::Cons => Ok(value.cons_car()),
-        // In official Emacs, closures are cons lists with car = closure/lambda.
-        ValueKind::Veclike(VecLikeType::Lambda) => {
-            if value.closure_env().flatten().is_some() {
-                Ok(Value::symbol("closure"))
-            } else {
-                Ok(Value::symbol("lambda"))
-            }
-        }
-        _ => {
-            if value.is_t() {
-                tracing::error!("car called on t — likely closure env or alist issue");
-            }
-            Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("listp"), *value],
-            ))
+/// Semantic view used by Lisp list-cell accessors.
+///
+/// GNU represents interpreted functions as `PVEC_CLOSURE`, not cons cells.
+/// Keep that distinction encoded in one classifier so direct builtins cannot
+/// accidentally expose closure slots as a synthetic `(closure ...)` list.
+/// Quoted `(lambda ...)` syntax naturally enters through the `Cons` variant.
+enum ConsCellView {
+    Empty,
+    Cell { car: Value, cdr: Value },
+    NonList(Value),
+}
+
+impl From<Value> for ConsCellView {
+    fn from(value: Value) -> Self {
+        match value.kind() {
+            ValueKind::Nil => Self::Empty,
+            ValueKind::Cons => Self::Cell {
+                car: value.cons_car(),
+                cdr: value.cons_cdr(),
+            },
+            _ => Self::NonList(value),
         }
     }
 }
 
+fn car_value(value: &Value) -> Result<Value, Flow> {
+    match ConsCellView::from(*value) {
+        ConsCellView::Empty => Ok(Value::NIL),
+        ConsCellView::Cell { car, .. } => Ok(car),
+        ConsCellView::NonList(value) => Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("listp"), value],
+        )),
+    }
+}
+
 fn cdr_value(value: &Value) -> Result<Value, Flow> {
-    match value.kind() {
-        ValueKind::Nil => Ok(Value::NIL),
-        ValueKind::Cons => Ok(value.cons_cdr()),
-        // Convert Lambda to cons list, return cdr.
-        ValueKind::Veclike(VecLikeType::Lambda) => {
-            let list = lambda_to_cons_list(value).unwrap_or(Value::NIL);
-            match list.kind() {
-                ValueKind::Cons => Ok(list.cons_cdr()),
-                _ => Ok(Value::NIL),
-            }
-        }
-        _ => {
-            if value.is_t() {
-                tracing::error!("cdr called on t — stack trace:");
-                let bt = std::backtrace::Backtrace::force_capture();
-                tracing::error!("{bt}");
-            }
-            Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("listp"), *value],
-            ))
-        }
+    match ConsCellView::from(*value) {
+        ConsCellView::Empty => Ok(Value::NIL),
+        ConsCellView::Cell { cdr, .. } => Ok(cdr),
+        ConsCellView::NonList(value) => Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("listp"), value],
+        )),
     }
 }
 
@@ -445,33 +364,17 @@ pub(crate) fn builtin_cdr_safe_1(_eval: &mut super::eval::Context, arg: Value) -
     Ok(cdr_safe_value(&arg))
 }
 
-// Treats neomacs Lambda values as their cons-list equivalents to match
-// GNU semantics where lambdas are actual cons lists.
 fn car_safe_value(val: &Value) -> Value {
-    match val.kind() {
-        ValueKind::Cons => val.cons_car(),
-        ValueKind::Veclike(VecLikeType::Lambda) => {
-            if val.closure_env().flatten().is_some() {
-                Value::symbol("closure")
-            } else {
-                Value::symbol("lambda")
-            }
-        }
-        _ => Value::NIL,
+    match ConsCellView::from(*val) {
+        ConsCellView::Cell { car, .. } => car,
+        ConsCellView::Empty | ConsCellView::NonList(_) => Value::NIL,
     }
 }
 
 fn cdr_safe_value(val: &Value) -> Value {
-    match val.kind() {
-        ValueKind::Cons => val.cons_cdr(),
-        ValueKind::Veclike(VecLikeType::Lambda) => {
-            let list = super::lambda_to_cons_list(val).unwrap_or(Value::NIL);
-            match list.kind() {
-                ValueKind::Cons => list.cons_cdr(),
-                _ => Value::NIL,
-            }
-        }
-        _ => Value::NIL,
+    match ConsCellView::from(*val) {
+        ConsCellView::Cell { cdr, .. } => cdr,
+        ConsCellView::Empty | ConsCellView::NonList(_) => Value::NIL,
     }
 }
 
@@ -763,10 +666,7 @@ fn nthcdr_impl(n_value: Value, list: Value) -> EvalResult {
         return Ok(list);
     }
 
-    let mut tail = match list.kind() {
-        ValueKind::Veclike(VecLikeType::Lambda) => lambda_to_cons_list(&list).unwrap_or(Value::NIL),
-        _ => list,
-    };
+    let mut tail = list;
 
     if let NthcdrCount::Fixnum(n) = &count
         && *n <= 127

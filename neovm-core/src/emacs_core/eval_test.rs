@@ -8628,6 +8628,34 @@ fn quoted_closure_list_is_not_callable() {
 }
 
 #[test]
+fn interpreted_closure_is_not_a_cons_cell() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            "(let ((closure
+                    (make-interpreted-closure
+                     nil '((quote ok)) nil))
+                   (quoted-lambda '(lambda () (quote ok))))
+               (list
+                (car-safe closure)
+                (cdr-safe closure)
+                (condition-case error-data
+                    (car closure)
+                  (error (car error-data)))
+                (condition-case error-data
+                    (cdr closure)
+                  (error (car error-data)))
+                (condition-case error-data
+                    (nthcdr 1 closure)
+                  (error (car error-data)))
+                (car-safe quoted-lambda)
+                (consp (cdr-safe quoted-lambda))))"
+        ),
+        "OK (nil nil wrong-type-argument wrong-type-argument wrong-type-argument lambda t)"
+    );
+}
+
+#[test]
 fn lexical_binding_closure() {
     crate::test_utils::init_test_tracing();
     // With lexical binding, closures capture the lexical environment
@@ -19195,7 +19223,7 @@ fn gc_stress_aref_on_closure_survives_closure_vector_conversion() {
 }
 
 #[test]
-fn gc_stress_cdr_on_lambda_survives_cons_list_conversion() {
+fn gc_stress_cdr_rejects_closure_without_losing_capture() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     ev.set_lexical_binding(true);
@@ -19204,9 +19232,13 @@ fn gc_stress_cdr_on_lambda_survives_cons_list_conversion() {
     let result = format_eval_result(&ev.eval_str(
         r#"(let ((payload (list 1 2 3)))
              (let ((closure (lambda () payload)))
-               (not (null (car (cdr closure))))))"#,
+               (list
+                (condition-case error-data
+                    (cdr closure)
+                  (error (car error-data)))
+                (funcall closure))))"#,
     ));
-    assert_eq!(result, "OK t");
+    assert_eq!(result, "OK (wrong-type-argument (1 2 3))");
 }
 
 #[test]
