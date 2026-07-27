@@ -388,6 +388,9 @@ pub const AIDEV_MODE_MELPA_PIN: (&str, &str) = ("aidev-mode", "20250318.2144");
 /// corpus.
 pub const AIKEN_MODE_MELPA_PIN: (&str, &str) = ("aiken-mode", "20230920.1210");
 
+/// The exact aio package selected by the comprehensive API parity corpus.
+pub const AIO_MELPA_PIN: (&str, &str) = ("aio", "20260214.1529");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
