@@ -643,6 +643,9 @@ pub const ANSIBLE_DOC_MELPA_PIN: (&str, &str) = ("ansible-doc", "20160924.824");
 /// `74f96ce226f51bec203af343f73182ea132749a6`.
 pub const ANSIBLE_VAULT_MELPA_PIN: (&str, &str) = ("ansible-vault", "20251029.2146");
 
+/// The exact Ansilove package selected by the comprehensive API parity corpus.
+pub const ANSILOVE_MELPA_PIN: (&str, &str) = ("ansilove", "20250105.1853");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

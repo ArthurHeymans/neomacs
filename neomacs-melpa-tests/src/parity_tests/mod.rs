@@ -151,6 +151,7 @@ mod ansi;
 mod ansible;
 mod ansible_doc;
 mod ansible_vault;
+mod ansilove;
 mod async_package;
 mod at_package;
 mod bind_key;
