@@ -492,6 +492,10 @@ pub const ALL_THE_ICONS_NERD_FONTS_MELPA_PIN: (&str, &str) =
 /// parity corpus.
 pub const ALMOST_MONO_THEMES_MELPA_PIN: (&str, &str) = ("almost-mono-themes", "20250722.1957");
 
+/// The exact alsamixer package selected by the comprehensive API parity
+/// corpus.
+pub const ALSAMIXER_MELPA_PIN: (&str, &str) = ("alsamixer", "20250106.1025");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

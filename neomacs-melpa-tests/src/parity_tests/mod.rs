@@ -114,6 +114,7 @@ mod all_the_icons_ivy;
 mod all_the_icons_ivy_rich;
 mod all_the_icons_nerd_fonts;
 mod almost_mono_themes;
+mod alsamixer;
 mod async_package;
 mod at_package;
 mod bind_key;
