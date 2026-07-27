@@ -2002,8 +2002,8 @@ pub extern "C" fn neovm_jit_cbsym_read(
         #[cfg(debug_assertions)]
         CBSYM_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
         // DELEGATE to the builtin body (GC-free OK path). match-beginning/end read
-        // ctx.match_data + ctx.buffers and do the byte→char conversion, so a
-        // register-read reimplementation would return BYTE offsets = WRONG.
+        // ctx.match_data through the same published-register interface, so a
+        // separate register-read reimplementation could drift from Lisp.
         use crate::emacs_core::builtins::{buffers, search};
         use crate::emacs_core::{editfns, navigation};
         let res = match which {
@@ -2021,16 +2021,12 @@ pub extern "C" fn neovm_jit_cbsym_read(
             CBSYM_A_MATCH_BEGINNING => {
                 // SAFETY: the generated code stored exactly nargs==1 word at args_ptr.
                 let group = Value::from_bits(unsafe { *args_ptr } as usize);
-                search::builtin_match_beginning_with_state(
-                    Some(&ctx.buffers),
-                    &ctx.match_data,
-                    &[group],
-                )
+                search::builtin_match_beginning_with_state(&ctx.match_data, &[group])
             }
             CBSYM_A_MATCH_END => {
                 // SAFETY: the generated code stored exactly nargs==1 word at args_ptr.
                 let group = Value::from_bits(unsafe { *args_ptr } as usize);
-                search::builtin_match_end_with_state(Some(&ctx.buffers), &ctx.match_data, &[group])
+                search::builtin_match_end_with_state(&ctx.match_data, &[group])
             }
             // Unknown discriminant (unreachable for a classified site): bounce.
             _ => return STATUS_NEED_GENERIC,

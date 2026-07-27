@@ -543,26 +543,25 @@ fn directory_files_and_attributes_with_dir(args: &[Value], dir: &LispString) -> 
     let mut remaining = count.unwrap_or(usize::MAX);
     for name in names {
         if let Some(pattern) = match_regexp.as_ref() {
-            let mut throwaway = None;
-            let matched = super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix(
-                pattern,
-                &name,
-                super::regex::SearchedString::Owned(name.clone()),
-                0,
-                false,
-                false,
-                &mut throwaway,
-            )
-            .map_err(|msg| {
-                signal(
-                    LispCondition::InvalidRegexp,
-                    vec![Value::string(format!(
-                        "Invalid regexp \"{}\": {}",
-                        super::emacs_char::to_utf8_lossy(pattern.as_bytes()),
-                        msg
-                    ))],
+            let matched =
+                super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix(
+                    pattern,
+                    &name,
+                    super::regex::SearchedString::Owned(name.clone()),
+                    0,
+                    false,
+                    false,
                 )
-            })?;
+                .map_err(|msg| {
+                    signal(
+                        LispCondition::InvalidRegexp,
+                        vec![Value::string(format!(
+                            "Invalid regexp \"{}\": {}",
+                            super::emacs_char::to_utf8_lossy(pattern.as_bytes()),
+                            msg
+                        ))],
+                    )
+                })?;
             if matched.is_none() {
                 continue;
             }

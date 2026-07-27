@@ -1468,23 +1468,22 @@ fn directory_files(
 
     for name in names {
         if let Some(pattern) = match_regex {
-            let mut throwaway = None;
-            let matched = super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix(
-                pattern,
-                &name,
-                super::regex::SearchedString::Owned(name.clone()),
-                0,
-                false,
-                false,
-                &mut throwaway,
-            )
-            .map_err(|msg| {
-                DirectoryFilesError::InvalidRegexp(format!(
-                    "Invalid regexp \"{}\": {}",
-                    crate::emacs_core::emacs_char::to_utf8_lossy(pattern.as_bytes()),
-                    msg
-                ))
-            })?;
+            let matched =
+                super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix(
+                    pattern,
+                    &name,
+                    super::regex::SearchedString::Owned(name.clone()),
+                    0,
+                    false,
+                    false,
+                )
+                .map_err(|msg| {
+                    DirectoryFilesError::InvalidRegexp(format!(
+                        "Invalid regexp \"{}\": {}",
+                        crate::emacs_core::emacs_char::to_utf8_lossy(pattern.as_bytes()),
+                        msg
+                    ))
+                })?;
             if matched.is_none() {
                 continue;
             }
@@ -4721,18 +4720,16 @@ fn find_file_name_handler_lisp_with_values(
         }
 
         // Match the regexp against the filename.
-        let mut match_data: Option<crate::emacs_core::regex::MatchData> = None;
         let match_pos =
-            match super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix(
+            match super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix(
                 regexp,
                 filename,
                 crate::emacs_core::regex::SearchedString::Owned(filename.clone()),
                 0,
                 false,
                 false,
-                &mut match_data,
             ) {
-                Ok(Some(pos)) => pos as i64,
+                Ok(Some(success)) => success.into_parts().0.get() as i64,
                 _ => continue,
             };
 

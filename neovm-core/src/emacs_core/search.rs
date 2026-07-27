@@ -374,18 +374,11 @@ fn match_group_to_byte_range(
     md: &super::regex::MatchData,
     group: usize,
 ) -> Option<MatchGroup> {
-    let range = md.group(group)?;
-    if md.is_string_match() {
-        Some(MatchGroup::new(
-            super::regex::char_pos_to_byte_lisp_string(source, range.start()),
-            super::regex::char_pos_to_byte_lisp_string(source, range.end()),
-        ))
-    } else {
-        Some(MatchGroup::new(
-            range.start().min(source.byte_len()),
-            range.end().min(source.byte_len()),
-        ))
-    }
+    let range = md.group_zero_based_char_range(group)?;
+    Some(MatchGroup::new(
+        super::regex::char_pos_to_byte_lisp_string(source, range.start().get()),
+        super::regex::char_pos_to_byte_lisp_string(source, range.end().get()),
+    ))
 }
 
 fn build_replacement_lisp_string(
@@ -634,27 +627,19 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
         Some(md) => md,
         None => return Err(super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string()),
     };
-    let Some(match_group) = md.group(subexp) else {
+    if md.group(subexp).is_none() {
         return Err(super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string());
-    };
-    let match_start = match_group.start();
-    let match_end = match_group.end();
+    }
 
-    let (buffer_start, buffer_end) = if md.is_string_match() {
-        (
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(match_start))
-                .get(),
-            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(match_end))
-                .get(),
-        )
-    } else if md.uses_buffer_lisp_char_positions() {
-        (
-            buffer_match_char_pos_to_byte_pos(buf, match_start).get(),
-            buffer_match_char_pos_to_byte_pos(buf, match_end).get(),
-        )
-    } else {
-        (match_start, match_end)
-    };
+    let char_range = md
+        .group_zero_based_char_range(subexp)
+        .expect("group existence checked above");
+    let buffer_start = buf
+        .char_pos_to_emacs_byte_pos_clamped(char_range.start())
+        .get();
+    let buffer_end = buf
+        .char_pos_to_emacs_byte_pos_clamped(char_range.end())
+        .get();
 
     // GNU `replace_match` reads only the matched text from the buffer; it never
     // copies the whole buffer.  Materialize just group 0 -- which spans the
@@ -662,7 +647,7 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
     // onto it, so this is O(match) rather than O(buffer).  The whole-buffer copy
     // made a replace loop (query-replace / replace-string) O(n^2).
     let mut replacement_match_data = md.clone();
-    let source = if replacement_match_data.uses_buffer_lisp_char_positions() {
+    let source = if !replacement_match_data.is_string_match() {
         let group0 = md
             .group(0)
             .ok_or_else(|| super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string())?;
@@ -679,40 +664,6 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
             md.groups_snapshot()
                 .into_iter()
                 .map(|group| group.map(|group| group.saturating_sub(group0_start)))
-                .collect(),
-            Some(super::regex::SearchedString::Owned(source.clone())),
-        );
-        source
-    } else if replacement_match_data.searched_buffer_id().is_some() {
-        // Same bounding, but the match was reported in BYTE positions
-        // (`buffer_positions_are_bytes`).  Group 0's byte range bounds `source`;
-        // convert each group's buffer-byte offset to a char position within the
-        // small group-0 `source` so the shared string path below applies.
-        let group0 = md
-            .group(0)
-            .ok_or_else(|| super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string())?;
-        let group0_byte_start = group0.start();
-        let source = buf.buffer_substring_lisp_string_range(crate::buffer::EmacsByteRange::new(
-            crate::buffer::EmacsBytePos::new(group0_byte_start),
-            crate::buffer::EmacsBytePos::new(group0.end()),
-        ));
-        let byte_to_char = |byte: usize| -> usize {
-            let rel = byte
-                .saturating_sub(group0_byte_start)
-                .min(source.byte_len());
-            source.slice(0, rel).map(|s| s.schars()).unwrap_or(0)
-        };
-        replacement_match_data = super::regex::MatchData::string(
-            md.groups_snapshot()
-                .into_iter()
-                .map(|group| {
-                    group.map(|group| {
-                        super::regex::MatchGroup::new(
-                            byte_to_char(group.start()),
-                            byte_to_char(group.end()),
-                        )
-                    })
-                })
                 .collect(),
             Some(super::regex::SearchedString::Owned(source.clone())),
         );

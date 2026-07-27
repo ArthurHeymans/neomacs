@@ -8143,7 +8143,7 @@ fn replace_match_after_set_match_data_uses_gnu_buffer_char_positions() {
         Some(crate::emacs_core::regex::MatchGroup::new(1, 6))
     );
     assert!(restored.searched_buffer_id().is_some());
-    assert!(restored.uses_buffer_lisp_char_positions());
+    assert!(!restored.is_string_match());
     let (start, end, replacement) =
         crate::emacs_core::regex::compute_buffer_replacement_with_syntax(
             eval.buffers.current_buffer().expect("current buffer"),
@@ -9081,6 +9081,27 @@ fn string_match_inhibit_modify_preserves_match_data() {
 }
 
 #[test]
+fn string_match_honors_inhibit_changing_match_data() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::eval::Context;
+
+    let mut eval = Context::new();
+    let baseline = Value::list(vec![Value::fixnum(10), Value::fixnum(11)]);
+    builtin_set_match_data(&mut eval, vec![baseline]).expect("seed baseline");
+    eval.set_variable("inhibit-changing-match-data", Value::T);
+
+    let result = builtin_string_match(
+        &mut eval,
+        vec![Value::string("\\(foo\\)"), Value::string("foo")],
+    )
+    .expect("string-match with inhibited publication");
+    assert_eq!(result, Value::fixnum(0));
+
+    let observed = builtin_match_data(&mut eval, vec![]).expect("read match-data");
+    assert_eq!(observed, baseline);
+}
+
+#[test]
 fn string_match_handles_gnu_flex_regex_with_repeated_nongreedy_segments() {
     crate::test_utils::init_test_tracing();
     use crate::emacs_core::eval::Context;
@@ -9570,12 +9591,12 @@ fn looking_at_honors_per_buffer_case_fold_search() {
 ///     bool modify_match_data = NILP (Vinhibit_changing_match_data)
 ///                              && modify_data;
 ///
-/// so when the variable is non-nil the search runs against a
-/// throwaway match-data slot and the caller's match data stays
-/// frozen. The Rust fix: every Context-facing search wrapper
+/// so when the variable is non-nil the search does not publish its
+/// successful match data and the caller's match data stays frozen.
+/// The Rust fix: every Context-facing search wrapper
 /// (`looking-at`, `search-forward`, `re-search-forward`, etc.)
 /// checks the variable via `read_inhibit_changing_match_data` and
-/// redirects `match_data` to a local throwaway when set.
+/// passes no match-data commit target when set.
 ///
 /// Scenario: run `re-search-forward` twice. The first call (with
 /// the variable nil) primes `eval.match_data` to match `"a"`. The

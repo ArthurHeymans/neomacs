@@ -7,6 +7,81 @@ fn match_group(group: Option<MatchGroup>) -> Option<MatchGroup> {
     group
 }
 
+fn commit_test_search_success(
+    success: Option<BufferSearchSuccess>,
+    match_data: &mut Option<MatchData>,
+) -> Option<usize> {
+    success.map(|success| {
+        let (_buffer_id, point, published_match_data) = success.into_parts();
+        *match_data = Some(published_match_data);
+        point.get()
+    })
+}
+
+fn search_forward(
+    buf: &mut Buffer,
+    pattern: &LispString,
+    bound: Option<usize>,
+    noerror: bool,
+    case_fold: bool,
+    match_data: &mut Option<MatchData>,
+) -> Result<Option<usize>, String> {
+    super::search_forward(buf, pattern, bound, noerror, case_fold)
+        .map(|success| commit_test_search_success(success, match_data))
+}
+
+fn search_backward(
+    buf: &mut Buffer,
+    pattern: &LispString,
+    bound: Option<usize>,
+    noerror: bool,
+    case_fold: bool,
+    match_data: &mut Option<MatchData>,
+) -> Result<Option<usize>, String> {
+    super::search_backward(buf, pattern, bound, noerror, case_fold)
+        .map(|success| commit_test_search_success(success, match_data))
+}
+
+fn re_search_forward(
+    buf: &mut Buffer,
+    pattern: &LispString,
+    bound: Option<usize>,
+    noerror: bool,
+    case_fold: bool,
+    match_data: &mut Option<MatchData>,
+) -> Result<Option<usize>, String> {
+    super::re_search_forward(buf, pattern, bound, noerror, case_fold)
+        .map(|success| commit_test_search_success(success, match_data))
+}
+
+fn re_search_backward(
+    buf: &mut Buffer,
+    pattern: &LispString,
+    bound: Option<usize>,
+    noerror: bool,
+    case_fold: bool,
+    match_data: &mut Option<MatchData>,
+) -> Result<Option<usize>, String> {
+    super::re_search_backward(buf, pattern, bound, noerror, case_fold)
+        .map(|success| commit_test_search_success(success, match_data))
+}
+
+fn looking_at(
+    buf: &Buffer,
+    pattern: &LispString,
+    case_fold: bool,
+    match_data: &mut Option<MatchData>,
+) -> Result<bool, String> {
+    super::looking_at(buf, pattern, case_fold).map(|published_match_data| {
+        if let Some(published_match_data) = published_match_data {
+            *match_data = Some(published_match_data);
+            true
+        } else {
+            false
+        }
+    })
+}
+
 /// `replace_match_string` is byte-native (issue #131). These string tests pass
 /// Rust `&str` sources mirroring `string_match_full`, which searches
 /// `LispString::from_utf8(source)`; this helper threads the matching Emacs-bytes
@@ -38,8 +113,15 @@ fn lisp_pat(s: &str) -> LispString {
     LispString::from_utf8(s)
 }
 
-fn match_group_byte_range(group: MatchGroup) -> EmacsByteRange {
-    EmacsByteRange::from_usize(group.start(), group.end())
+fn buffer_match_group_byte_range(buf: &Buffer, group: MatchGroup) -> EmacsByteRange {
+    EmacsByteRange::new(
+        buf.lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::from_one_based_usize(
+            group.start(),
+        )),
+        buf.lisp_pos_to_emacs_byte_pos(crate::buffer::LispCharPos1::from_one_based_usize(
+            group.end(),
+        )),
+    )
 }
 
 fn extract_heap_match_string(md: &MatchData, group: usize) -> Option<String> {
@@ -921,7 +1003,7 @@ fn posix_word_class_extends_via_buffer_syntax_table_override() {
     let md = md.unwrap();
     assert_eq!(
         match_group(md.group(0)),
-        Some(MatchGroup::new(0, 7)),
+        Some(MatchGroup::new(1, 8)),
         "match should cover the whole `foo_bar`"
     );
 
@@ -934,7 +1016,7 @@ fn posix_word_class_extends_via_buffer_syntax_table_override() {
     assert!(matched);
     assert_eq!(
         match_group(md.unwrap().group(0)),
-        Some(MatchGroup::new(0, 3)),
+        Some(MatchGroup::new(1, 4)),
         "without override, match stops at `_`"
     );
 }
@@ -1510,8 +1592,8 @@ fn re_search_forward_backreference_word_boundary() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(7));
     let md = md.unwrap();
-    assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(0, 7)));
-    assert_eq!(match_group(md.group(1)), Some(MatchGroup::new(0, 3)));
+    assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(1, 8)));
+    assert_eq!(match_group(md.group(1)), Some(MatchGroup::new(1, 4)));
 }
 
 #[test]
@@ -1657,7 +1739,6 @@ struct MatchDataSnapshot {
     groups: Vec<Option<MatchGroup>>,
     searched_buffer: Option<BufferId>,
     searched_string_is_some: bool,
-    buffer_positions_are_bytes: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1675,7 +1756,6 @@ fn match_data_snapshot(match_data: &Option<MatchData>) -> Option<MatchDataSnapsh
         groups: data.groups_snapshot(),
         searched_buffer: data.searched_buffer_id(),
         searched_string_is_some: data.is_string_match(),
-        buffer_positions_are_bytes: data.uses_buffer_byte_positions(),
     })
 }
 
@@ -1922,7 +2002,7 @@ fn search_forward_basic() {
     assert_eq!(result.unwrap(), Some(11)); // end of "world"
     assert_eq!(buf.point_char_pos().get(), 0);
     let md = md.unwrap();
-    assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(6, 11)));
+    assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(7, 12)));
 }
 
 #[test]
@@ -2021,7 +2101,7 @@ fn re_search_forward_trivial_regexp_follows_literal_case_fold_path() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(2));
     let md = md.unwrap();
-    assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(0, 2)));
+    assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(1, 3)));
 }
 
 #[test]
@@ -2113,7 +2193,7 @@ fn re_search_forward_basic() {
     assert_eq!(result.unwrap(), Some(7)); // end of "123"
     assert_eq!(buf.point_char_pos().get(), 0);
     let md = md.unwrap();
-    assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(4, 7)));
+    assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(5, 8)));
 }
 
 #[test]
@@ -2133,8 +2213,8 @@ fn re_search_forward_with_groups() {
     assert!(result.is_ok());
     let md = md.unwrap();
     assert_eq!(md.group_count(), GNU_SEARCH_REGS_BASE_CAPACITY);
-    assert_eq!(match_group(md.group(1)), Some(MatchGroup::new(0, 4))); // "name"
-    assert_eq!(match_group(md.group(2)), Some(MatchGroup::new(6, 10))); // "John"
+    assert_eq!(match_group(md.group(1)), Some(MatchGroup::new(1, 5))); // "name"
+    assert_eq!(match_group(md.group(2)), Some(MatchGroup::new(7, 11))); // "John"
 }
 
 #[test]
@@ -2156,7 +2236,10 @@ fn re_search_forward_multiline_anchor_respects_real_line_start() {
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(first.unwrap()));
     let first_md = md.as_ref().expect("match data for first search");
     assert_eq!(
-        buf.buffer_substring_range(match_group_byte_range(first_md.group(1).unwrap())),
+        buf.buffer_substring_range(buffer_match_group_byte_range(
+            &buf,
+            first_md.group(1).unwrap(),
+        )),
         "alpha"
     );
 
@@ -2172,11 +2255,17 @@ fn re_search_forward_multiline_anchor_respects_real_line_start() {
     assert_eq!(second, Some("alpha=1\nbeta=2".len()));
     let second_md = md.as_ref().expect("match data for second search");
     assert_eq!(
-        buf.buffer_substring_range(match_group_byte_range(second_md.group(1).unwrap())),
+        buf.buffer_substring_range(buffer_match_group_byte_range(
+            &buf,
+            second_md.group(1).unwrap(),
+        )),
         "beta"
     );
     assert_eq!(
-        buf.buffer_substring_range(match_group_byte_range(second_md.group(2).unwrap())),
+        buf.buffer_substring_range(buffer_match_group_byte_range(
+            &buf,
+            second_md.group(2).unwrap(),
+        )),
         "2"
     );
 }
@@ -2254,7 +2343,7 @@ fn re_search_backward_finds_nullable_match_at_point() {
     assert_eq!(result, Ok(Some(3)));
     assert_eq!(buf.point_char_pos().get(), 3);
     let md = md.expect("match data");
-    assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(3, 3)));
+    assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(4, 4)));
 }
 
 #[test]
@@ -2283,9 +2372,9 @@ fn re_search_backward_log_line_loop_progresses() {
     assert_eq!(
         positions,
         vec![
-            (74, Some(MatchGroup::new(74, 117))),
-            (32, Some(MatchGroup::new(32, 73))),
-            (0, Some(MatchGroup::new(0, 31)))
+            (74, Some(MatchGroup::new(75, 118))),
+            (32, Some(MatchGroup::new(33, 74))),
+            (0, Some(MatchGroup::new(1, 32)))
         ]
     );
 }
@@ -2300,7 +2389,7 @@ fn re_search_forward_finds_nullable_match_at_buffer_end() {
     assert_eq!(result, Ok(Some(3)));
     assert_eq!(buf.point_char_pos().get(), 3);
     let md = md.expect("match data");
-    assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(3, 3)));
+    assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(4, 4)));
 }
 
 // -----------------------------------------------------------------------
@@ -2388,7 +2477,7 @@ fn looking_at_character_class_backslash_range_like_gnu() {
     let result = looking_at(&buf, &lisp_pat("[+\\-*/=<>]"), false, &mut md);
     assert_eq!(result, Ok(true));
     let md = md.expect("match data");
-    assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(0, 1)));
+    assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(1, 2)));
 
     let mut md = None;
     let buf = make_test_buffer("*");
@@ -2603,19 +2692,19 @@ fn search_forward_then_match_string() {
 
     // match-string 0 = "quick brown"
     assert_eq!(
-        buf.buffer_substring_range(match_group_byte_range(md.group(0).unwrap())),
+        buf.buffer_substring_range(buffer_match_group_byte_range(&buf, md.group(0).unwrap(),)),
         "quick brown"
     );
 
     // match-string 1 = "quick"
     assert_eq!(
-        buf.buffer_substring_range(match_group_byte_range(md.group(1).unwrap())),
+        buf.buffer_substring_range(buffer_match_group_byte_range(&buf, md.group(1).unwrap(),)),
         "quick"
     );
 
     // match-string 2 = "brown"
     assert_eq!(
-        buf.buffer_substring_range(match_group_byte_range(md.group(2).unwrap())),
+        buf.buffer_substring_range(buffer_match_group_byte_range(&buf, md.group(2).unwrap(),)),
         "brown"
     );
 }

@@ -386,16 +386,14 @@ fn string_matches_regexp(
 ) -> Result<bool, Flow> {
     // Issue #131: match the line's Emacs bytes against the faithful LispString
     // pattern, no storage round-trip.
-    let mut match_data = None;
     let text = lisp_string_from_buffer_bytes(line.to_vec(), multibyte);
-    super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix(
+    super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix(
         pattern,
         &text,
         super::regex::SearchedString::Owned(text.clone()),
         0,
         case_fold,
         false,
-        &mut match_data,
     )
     .map(|matched| matched.is_some())
     .map_err(|e| signal(LispCondition::InvalidRegexp, vec![Value::string(e)]))

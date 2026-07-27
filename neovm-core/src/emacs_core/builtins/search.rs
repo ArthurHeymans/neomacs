@@ -38,59 +38,27 @@ fn buffer_byte_to_lisp_char(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos)
     buf.emacs_byte_pos_to_lisp_char_pos(byte_pos).as_i64()
 }
 
-fn match_data_for_explicit_string_arg(
-    buffers: &crate::buffer::BufferManager,
-    md: &super::regex::MatchData,
-) -> super::regex::MatchData {
-    let mut groups = md.groups_snapshot();
-    if md.uses_buffer_byte_positions()
-        && let Some(buf) = md
-            .searched_buffer_id()
-            .and_then(|buffer_id| buffers.get(buffer_id))
-    {
-        for group in groups.iter_mut().flatten() {
-            let start = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.start()));
-            let end = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.end()));
-            *group = MatchGroup::new(start.max(0) as usize, end.max(0) as usize);
-        }
-    }
-    super::regex::MatchData::string(groups, None)
+fn match_data_for_explicit_string_arg(md: &super::regex::MatchData) -> super::regex::MatchData {
+    super::regex::MatchData::string(md.groups_snapshot(), None)
 }
 
 fn buffer_byte_to_char_pos(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> CharPos0 {
     buf.emacs_byte_pos_to_char_pos_clamped(byte_pos)
 }
 
-fn record_buffer_search_success(
+fn commit_buffer_search_success(
     buffers: &mut crate::buffer::BufferManager,
-    buffer_id: crate::buffer::BufferId,
-    pos: usize,
-    match_data: &mut Option<super::regex::MatchData>,
-) -> Result<usize, Flow> {
+    success: super::regex::BufferSearchSuccess,
+    match_data: Option<&mut Option<super::regex::MatchData>>,
+) -> Result<EmacsBytePos, Flow> {
+    let (buffer_id, point, published_match_data) = success.into_parts();
     buffers
-        .goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(pos))
+        .goto_buffer_emacs_byte_pos(buffer_id, point)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    freeze_buffer_match_data_in_manager(buffers, match_data)?;
-    Ok(pos)
-}
-
-fn freeze_buffer_match_data_in_manager(
-    buffers: &crate::buffer::BufferManager,
-    match_data: &mut Option<super::regex::MatchData>,
-) -> Result<(), Flow> {
     if let Some(match_data) = match_data {
-        match_data
-            .freeze_buffer_lisp_positions(buffers)
-            .map_err(|error| {
-                signal(
-                    "error",
-                    vec![Value::string(format!(
-                        "Cannot publish buffer match data: {error:?}"
-                    ))],
-                )
-            })?;
+        *match_data = Some(published_match_data);
     }
-    Ok(())
+    Ok(point)
 }
 
 pub(crate) fn builtin_search_forward(
@@ -101,23 +69,14 @@ pub(crate) fn builtin_search_forward(
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
-    // GNU search.c:1168 — `search_buffer_non_re` checks
-    // `preserve_match_data = NILP(Vinhibit_changing_match_data)` at
-    // the top. When set, the search runs against a throwaway
-    // match-data slot so the evaluator's match data is untouched.
-    let mut throwaway: Option<super::regex::MatchData> = None;
-    let md_slot: &mut Option<super::regex::MatchData> = if inhibit_changing {
-        &mut throwaway
-    } else {
-        &mut eval.match_data
-    };
-    builtin_search_forward_with_state(case_fold, &mut eval.buffers, md_slot, &args)
+    let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
+    builtin_search_forward_with_state(case_fold, &mut eval.buffers, match_data, &args)
 }
 
 pub(crate) fn builtin_search_forward_with_state(
     case_fold: bool,
     buffers: &mut crate::buffer::BufferManager,
-    match_data: &mut Option<super::regex::MatchData>,
+    mut match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
 ) -> EvalResult {
     expect_range_args("search-forward", args, 1, 4)?;
@@ -141,7 +100,6 @@ pub(crate) fn builtin_search_forward_with_state(
                     opts.bound.map(|bound| bound.get()),
                     false,
                     case_fold,
-                    match_data,
                 ),
                 SearchDirection::Backward => super::regex::search_backward(
                     buf,
@@ -149,14 +107,15 @@ pub(crate) fn builtin_search_forward_with_state(
                     opts.bound.map(|bound| bound.get()),
                     false,
                     case_fold,
-                    match_data,
                 ),
             }
         };
         match result {
-            Ok(Some(pos)) => {
-                last_pos = Some(record_buffer_search_success(
-                    buffers, current_id, pos, match_data,
+            Ok(Some(success)) => {
+                last_pos = Some(commit_buffer_search_success(
+                    buffers,
+                    success,
+                    match_data.as_deref_mut(),
                 )?)
             }
             Ok(None) => {
@@ -177,7 +136,7 @@ pub(crate) fn builtin_search_forward_with_state(
     }
 
     let end = last_pos.expect("search loop should produce at least one match");
-    buffer_byte_to_char_result_in_manager(buffers, current_id, EmacsBytePos::new(end))
+    buffer_byte_to_char_result_in_manager(buffers, current_id, end)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -388,19 +347,14 @@ pub(crate) fn builtin_search_backward(
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
-    let mut throwaway: Option<super::regex::MatchData> = None;
-    let md_slot: &mut Option<super::regex::MatchData> = if inhibit_changing {
-        &mut throwaway
-    } else {
-        &mut eval.match_data
-    };
-    builtin_search_backward_with_state(case_fold, &mut eval.buffers, md_slot, &args)
+    let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
+    builtin_search_backward_with_state(case_fold, &mut eval.buffers, match_data, &args)
 }
 
 pub(crate) fn builtin_search_backward_with_state(
     case_fold: bool,
     buffers: &mut crate::buffer::BufferManager,
-    match_data: &mut Option<super::regex::MatchData>,
+    mut match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
 ) -> EvalResult {
     expect_range_args("search-backward", args, 1, 4)?;
@@ -424,7 +378,6 @@ pub(crate) fn builtin_search_backward_with_state(
                     opts.bound.map(|bound| bound.get()),
                     false,
                     case_fold,
-                    match_data,
                 ),
                 SearchDirection::Backward => super::regex::search_backward(
                     buf,
@@ -432,14 +385,15 @@ pub(crate) fn builtin_search_backward_with_state(
                     opts.bound.map(|bound| bound.get()),
                     false,
                     case_fold,
-                    match_data,
                 ),
             }
         };
         match result {
-            Ok(Some(pos)) => {
-                last_pos = Some(record_buffer_search_success(
-                    buffers, current_id, pos, match_data,
+            Ok(Some(success)) => {
+                last_pos = Some(commit_buffer_search_success(
+                    buffers,
+                    success,
+                    match_data.as_deref_mut(),
                 )?)
             }
             Ok(None) => {
@@ -459,7 +413,7 @@ pub(crate) fn builtin_search_backward_with_state(
     }
 
     let end = last_pos.expect("search loop should produce at least one match");
-    buffer_byte_to_char_result_in_manager(buffers, current_id, EmacsBytePos::new(end))
+    buffer_byte_to_char_result_in_manager(buffers, current_id, end)
 }
 
 pub(crate) fn builtin_re_search_forward(
@@ -470,13 +424,9 @@ pub(crate) fn builtin_re_search_forward(
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
-    let mut throwaway: Option<super::regex::MatchData> = None;
-    let md_slot: &mut Option<super::regex::MatchData> = if inhibit_changing {
-        &mut throwaway
-    } else {
-        &mut eval.match_data
-    };
-    let result = builtin_re_search_forward_with_state(case_fold, &mut eval.buffers, md_slot, &args);
+    let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
+    let result =
+        builtin_re_search_forward_with_state(case_fold, &mut eval.buffers, match_data, &args);
     // Mirrors GNU `search.c:1247,1291`: poll quit after each search
     // call so a `C-g` that set `tls_quit_pending()` during the match
     // surfaces as a `quit` signal rather than being interpreted as
@@ -489,7 +439,7 @@ pub(crate) fn builtin_re_search_forward(
 pub(crate) fn builtin_re_search_forward_with_state(
     case_fold: bool,
     buffers: &mut crate::buffer::BufferManager,
-    match_data: &mut Option<super::regex::MatchData>,
+    match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
 ) -> EvalResult {
     re_search_forward_with_state_posix(case_fold, false, buffers, match_data, args)
@@ -504,7 +454,7 @@ pub(crate) fn re_search_forward_with_state_posix(
     case_fold: bool,
     posix: bool,
     buffers: &mut crate::buffer::BufferManager,
-    match_data: &mut Option<super::regex::MatchData>,
+    mut match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
 ) -> EvalResult {
     let name = if posix {
@@ -534,7 +484,6 @@ pub(crate) fn re_search_forward_with_state_posix(
                     false,
                     case_fold,
                     posix,
-                    match_data,
                 ),
                 SearchDirection::Backward => super::regex::re_search_backward_lisp_with_posix(
                     buf,
@@ -543,15 +492,16 @@ pub(crate) fn re_search_forward_with_state_posix(
                     false,
                     case_fold,
                     posix,
-                    match_data,
                 ),
             }
         };
 
         match result {
-            Ok(Some(pos)) => {
-                last_pos = Some(record_buffer_search_success(
-                    buffers, current_id, pos, match_data,
+            Ok(Some(success)) => {
+                last_pos = Some(commit_buffer_search_success(
+                    buffers,
+                    success,
+                    match_data.as_deref_mut(),
                 )?)
             }
             Ok(None) => {
@@ -575,7 +525,7 @@ pub(crate) fn re_search_forward_with_state_posix(
     }
 
     let end = last_pos.expect("search loop should produce at least one match");
-    buffer_byte_to_char_result_in_manager(buffers, current_id, EmacsBytePos::new(end))
+    buffer_byte_to_char_result_in_manager(buffers, current_id, end)
 }
 
 pub(crate) fn builtin_re_search_backward(
@@ -586,14 +536,9 @@ pub(crate) fn builtin_re_search_backward(
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
-    let mut throwaway: Option<super::regex::MatchData> = None;
-    let md_slot: &mut Option<super::regex::MatchData> = if inhibit_changing {
-        &mut throwaway
-    } else {
-        &mut eval.match_data
-    };
+    let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
     let result =
-        builtin_re_search_backward_with_state(case_fold, &mut eval.buffers, md_slot, &args);
+        builtin_re_search_backward_with_state(case_fold, &mut eval.buffers, match_data, &args);
     // See `builtin_re_search_forward`: promote a TLS-detected quit.
     eval.maybe_quit()?;
     result
@@ -602,7 +547,7 @@ pub(crate) fn builtin_re_search_backward(
 pub(crate) fn builtin_re_search_backward_with_state(
     case_fold: bool,
     buffers: &mut crate::buffer::BufferManager,
-    match_data: &mut Option<super::regex::MatchData>,
+    match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
 ) -> EvalResult {
     re_search_backward_with_state_posix(case_fold, false, buffers, match_data, args)
@@ -615,7 +560,7 @@ pub(crate) fn re_search_backward_with_state_posix(
     case_fold: bool,
     posix: bool,
     buffers: &mut crate::buffer::BufferManager,
-    match_data: &mut Option<super::regex::MatchData>,
+    mut match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
 ) -> EvalResult {
     let name = if posix {
@@ -645,7 +590,6 @@ pub(crate) fn re_search_backward_with_state_posix(
                     false,
                     case_fold,
                     posix,
-                    match_data,
                 ),
                 SearchDirection::Backward => super::regex::re_search_backward_lisp_with_posix(
                     buf,
@@ -654,15 +598,16 @@ pub(crate) fn re_search_backward_with_state_posix(
                     false,
                     case_fold,
                     posix,
-                    match_data,
                 ),
             }
         };
 
         match result {
-            Ok(Some(pos)) => {
-                last_pos = Some(record_buffer_search_success(
-                    buffers, current_id, pos, match_data,
+            Ok(Some(success)) => {
+                last_pos = Some(commit_buffer_search_success(
+                    buffers,
+                    success,
+                    match_data.as_deref_mut(),
                 )?)
             }
             Ok(None) => {
@@ -686,7 +631,7 @@ pub(crate) fn re_search_backward_with_state_posix(
     }
 
     let end = last_pos.expect("search loop should produce at least one match");
-    buffer_byte_to_char_result_in_manager(buffers, current_id, EmacsBytePos::new(end))
+    buffer_byte_to_char_result_in_manager(buffers, current_id, end)
 }
 
 pub(crate) fn builtin_posix_search_forward(
@@ -697,13 +642,8 @@ pub(crate) fn builtin_posix_search_forward(
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
-    let mut throwaway: Option<super::regex::MatchData> = None;
-    let md_slot: &mut Option<super::regex::MatchData> = if inhibit_changing {
-        &mut throwaway
-    } else {
-        &mut eval.match_data
-    };
-    re_search_forward_with_state_posix(case_fold, true, &mut eval.buffers, md_slot, &args)
+    let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
+    re_search_forward_with_state_posix(case_fold, true, &mut eval.buffers, match_data, &args)
 }
 
 pub(crate) fn builtin_posix_search_backward(
@@ -714,13 +654,8 @@ pub(crate) fn builtin_posix_search_backward(
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
-    let mut throwaway: Option<super::regex::MatchData> = None;
-    let md_slot: &mut Option<super::regex::MatchData> = if inhibit_changing {
-        &mut throwaway
-    } else {
-        &mut eval.match_data
-    };
-    re_search_backward_with_state_posix(case_fold, true, &mut eval.buffers, md_slot, &args)
+    let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
+    re_search_backward_with_state_posix(case_fold, true, &mut eval.buffers, match_data, &args)
 }
 
 pub(crate) fn builtin_looking_at(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
@@ -728,17 +663,8 @@ pub(crate) fn builtin_looking_at(eval: &mut super::eval::Context, args: Vec<Valu
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
-    // GNU search.c:282 `bool modify_match_data = NILP(Vinhibit_changing_match_data) && modify_data`
-    // — when the global is set, route the search through a throwaway
-    // match-data slot so neither the per-buffer match_data nor any
-    // match data stored on the evaluator changes.
-    let mut throwaway: Option<super::regex::MatchData> = None;
-    let md_slot: &mut Option<super::regex::MatchData> = if inhibit_changing {
-        &mut throwaway
-    } else {
-        &mut eval.match_data
-    };
-    let result = builtin_looking_at_with_state(case_fold, &eval.buffers, md_slot, &args);
+    let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
+    let result = builtin_looking_at_with_state(case_fold, &eval.buffers, match_data, &args);
     // Promote a TLS-detected quit to a `quit` signal (see
     // `builtin_re_search_forward`).
     eval.maybe_quit()?;
@@ -748,7 +674,7 @@ pub(crate) fn builtin_looking_at(eval: &mut super::eval::Context, args: Vec<Valu
 pub(crate) fn builtin_looking_at_with_state(
     case_fold: bool,
     buffers: &crate::buffer::BufferManager,
-    match_data: &mut Option<super::regex::MatchData>,
+    match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
 ) -> EvalResult {
     expect_range_args("looking-at", args, 1, 2)?;
@@ -758,23 +684,16 @@ pub(crate) fn builtin_looking_at_with_state(
     let buf = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let result = if inhibit_modify {
-        let mut preserved_match_data = match_data.clone();
-        super::regex::looking_at_lisp_with_posix(
-            buf,
-            pattern,
-            case_fold,
-            false,
-            &mut preserved_match_data,
-        )
-    } else {
-        super::regex::looking_at_lisp_with_posix(buf, pattern, case_fold, false, match_data)
-    };
+    let result = super::regex::looking_at_lisp_with_posix(buf, pattern, case_fold, false);
 
     match result {
-        Ok(matched) => {
-            if matched && !inhibit_modify {
-                freeze_buffer_match_data_in_manager(buffers, match_data)?;
+        Ok(published_match_data) => {
+            let matched = published_match_data.is_some();
+            if !inhibit_modify
+                && let (Some(match_data), Some(published_match_data)) =
+                    (match_data, published_match_data)
+            {
+                *match_data = Some(published_match_data);
             }
             Ok(Value::bool_val(matched))
         }
@@ -806,15 +725,8 @@ pub(crate) fn builtin_looking_at_p_with_state(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
-    let mut throwaway_match_data = None;
-    match super::regex::looking_at_lisp_with_posix(
-        buf,
-        pattern,
-        case_fold,
-        false,
-        &mut throwaway_match_data,
-    ) {
-        Ok(matched) => Ok(Value::bool_val(matched)),
+    match super::regex::looking_at_lisp_with_posix(buf, pattern, case_fold, false) {
+        Ok(published_match_data) => Ok(Value::bool_val(published_match_data.is_some())),
         Err(msg) => Err(regex_error_signal(msg)),
     }
 }
@@ -827,19 +739,14 @@ pub(crate) fn builtin_posix_looking_at(
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
-    let mut throwaway: Option<super::regex::MatchData> = None;
-    let md_slot: &mut Option<super::regex::MatchData> = if inhibit_changing {
-        &mut throwaway
-    } else {
-        &mut eval.match_data
-    };
-    builtin_posix_looking_at_with_state(case_fold, &eval.buffers, md_slot, &args)
+    let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
+    builtin_posix_looking_at_with_state(case_fold, &eval.buffers, match_data, &args)
 }
 
 pub(crate) fn builtin_posix_looking_at_with_state(
     case_fold: bool,
     buffers: &crate::buffer::BufferManager,
-    match_data: &mut Option<super::regex::MatchData>,
+    match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
 ) -> EvalResult {
     // GNU `src/search.c:Fposix_looking_at` calls `looking_at_1`
@@ -855,26 +762,36 @@ pub(crate) fn builtin_posix_looking_at_with_state(
     let buf = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let result = if inhibit_modify {
-        let mut preserved_match_data = match_data.clone();
-        super::regex::looking_at_lisp_with_posix(
-            buf,
-            pattern,
-            case_fold,
-            true,
-            &mut preserved_match_data,
-        )
-    } else {
-        super::regex::looking_at_lisp_with_posix(buf, pattern, case_fold, true, match_data)
-    };
+    let result = super::regex::looking_at_lisp_with_posix(buf, pattern, case_fold, true);
 
     match result {
-        Ok(matched) => {
-            if matched && !inhibit_modify {
-                freeze_buffer_match_data_in_manager(buffers, match_data)?;
+        Ok(published_match_data) => {
+            let matched = published_match_data.is_some();
+            if !inhibit_modify
+                && let (Some(match_data), Some(published_match_data)) =
+                    (match_data, published_match_data)
+            {
+                *match_data = Some(published_match_data);
             }
             Ok(Value::bool_val(matched))
         }
+        Err(msg) => Err(regex_error_signal(msg)),
+    }
+}
+
+fn commit_string_search_success(
+    result: Result<Option<super::regex::StringSearchSuccess>, String>,
+    match_data: Option<&mut Option<super::regex::MatchData>>,
+) -> EvalResult {
+    match result {
+        Ok(Some(success)) => {
+            let (start, published_match_data) = success.into_parts();
+            if let Some(match_data) = match_data {
+                *match_data = Some(published_match_data);
+            }
+            Ok(Value::fixnum(start.get() as i64))
+        }
+        Ok(None) => Ok(Value::NIL),
         Err(msg) => Err(regex_error_signal(msg)),
     }
 }
@@ -884,7 +801,7 @@ pub(crate) fn builtin_string_match_with_state(
     case_translation: Option<crate::emacs_core::regex_emacs::CaseTranslation>,
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     category_table: Option<Value>,
-    match_data: &mut Option<super::regex::MatchData>,
+    mut match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
 ) -> EvalResult {
     crate::emacs_core::perf_trace::time_op(
@@ -901,12 +818,6 @@ pub(crate) fn builtin_string_match_with_state(
                         string,
                         args.get(2),
                     )?;
-                    let mut throwaway = None;
-                    let target = if inhibit_modify {
-                        &mut throwaway
-                    } else {
-                        match_data
-                    };
                     let default_syntax = crate::emacs_core::regex_emacs::DefaultSyntaxLookup;
                     let buffer_syntax = syntax_table.map(|syntax_table| {
                         crate::emacs_core::regex_emacs::BufferSyntaxLookup {
@@ -916,7 +827,7 @@ pub(crate) fn builtin_string_match_with_state(
                     });
                     let syntax: &dyn crate::emacs_core::regex_emacs::SyntaxLookup =
                         buffer_syntax.as_ref().map_or(&default_syntax, |s| s);
-                    match super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
+                    let result = super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix_syntax(
                         pattern,
                         string,
                         super::regex::SearchedString::Heap(args[1]),
@@ -925,30 +836,23 @@ pub(crate) fn builtin_string_match_with_state(
                         false,
                         case_translation.clone(),
                         syntax,
-                        target,
-                    ) {
-                        Ok(Some(char_pos)) => Ok(Value::fixnum(char_pos as i64)),
-                        Ok(None) => Ok(Value::NIL),
-                        Err(msg) => Err(regex_error_signal(msg)),
-                    }
+                    );
+                    let target = (!inhibit_modify)
+                        .then(|| match_data.as_deref_mut())
+                        .flatten();
+                    commit_string_search_success(result, target)
                 }
                 _ => {
                     let pattern = expect_string_lossy(&args[0])?;
                     let s = expect_string_lossy(&args[1])?;
                     let start = normalize_string_start_arg(&s, args.get(2))?;
-                    let mut throwaway = None;
-                    let target = if inhibit_modify {
-                        &mut throwaway
-                    } else {
-                        match_data
-                    };
-                    match super::regex::string_match_full_with_case_fold(
-                        &pattern, &s, start, case_fold, target,
-                    ) {
-                        Ok(Some(char_pos)) => Ok(Value::fixnum(char_pos as i64)),
-                        Ok(None) => Ok(Value::NIL),
-                        Err(msg) => Err(regex_error_signal(msg)),
-                    }
+                    let result = super::regex::string_search_full_with_case_fold_and_posix(
+                        &pattern, &s, start, case_fold, false,
+                    );
+                    let target = (!inhibit_modify)
+                        .then(|| match_data.as_deref_mut())
+                        .flatten();
+                    commit_string_search_success(result, target)
                 }
             }
         },
@@ -981,18 +885,13 @@ pub(crate) fn builtin_string_match_slice(
     let category_table =
         Some(crate::emacs_core::category::active_category_table_for_buffer(current_buffer)?);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
-    let mut throwaway: Option<super::regex::MatchData> = None;
-    let md_slot: &mut Option<super::regex::MatchData> = if inhibit_changing {
-        &mut throwaway
-    } else {
-        &mut eval.match_data
-    };
+    let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
     let result = builtin_string_match_with_state(
         case_fold,
         case_translation,
         syntax_table.as_ref(),
         category_table,
-        md_slot,
+        match_data,
         args,
     );
     // Promote a TLS-detected quit (see `builtin_re_search_forward`).
@@ -1005,7 +904,7 @@ pub(crate) fn builtin_posix_string_match_with_state(
     case_translation: Option<crate::emacs_core::regex_emacs::CaseTranslation>,
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     category_table: Option<Value>,
-    match_data: &mut Option<super::regex::MatchData>,
+    mut match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
 ) -> EvalResult {
     // GNU `src/search.c:Fposix_string_match` calls `string_match_1`
@@ -1028,12 +927,6 @@ pub(crate) fn builtin_posix_string_match_with_state(
                         string,
                         args.get(2),
                     )?;
-                    let mut throwaway = None;
-                    let target = if inhibit_modify {
-                        &mut throwaway
-                    } else {
-                        match_data
-                    };
                     let default_syntax = crate::emacs_core::regex_emacs::DefaultSyntaxLookup;
                     let buffer_syntax = syntax_table.map(|syntax_table| {
                         crate::emacs_core::regex_emacs::BufferSyntaxLookup {
@@ -1043,7 +936,7 @@ pub(crate) fn builtin_posix_string_match_with_state(
                     });
                     let syntax: &dyn crate::emacs_core::regex_emacs::SyntaxLookup =
                         buffer_syntax.as_ref().map_or(&default_syntax, |s| s);
-                    match super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
+                    let result = super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix_syntax(
                         pattern,
                         string,
                         super::regex::SearchedString::Heap(args[1]),
@@ -1052,30 +945,23 @@ pub(crate) fn builtin_posix_string_match_with_state(
                         true,
                         case_translation.clone(),
                         syntax,
-                        target,
-                    ) {
-                        Ok(Some(char_pos)) => Ok(Value::fixnum(char_pos as i64)),
-                        Ok(None) => Ok(Value::NIL),
-                        Err(msg) => Err(regex_error_signal(msg)),
-                    }
+                    );
+                    let target = (!inhibit_modify)
+                        .then(|| match_data.as_deref_mut())
+                        .flatten();
+                    commit_string_search_success(result, target)
                 }
                 _ => {
                     let pattern = expect_string_lossy(&args[0])?;
                     let s = expect_string_lossy(&args[1])?;
                     let start = normalize_string_start_arg(&s, args.get(2))?;
-                    let mut throwaway = None;
-                    let target = if inhibit_modify {
-                        &mut throwaway
-                    } else {
-                        match_data
-                    };
-                    match super::regex::string_match_full_with_case_fold_and_posix(
-                        &pattern, &s, start, case_fold, true, target,
-                    ) {
-                        Ok(Some(char_pos)) => Ok(Value::fixnum(char_pos as i64)),
-                        Ok(None) => Ok(Value::NIL),
-                        Err(msg) => Err(regex_error_signal(msg)),
-                    }
+                    let result = super::regex::string_search_full_with_case_fold_and_posix(
+                        &pattern, &s, start, case_fold, true,
+                    );
+                    let target = (!inhibit_modify)
+                        .then(|| match_data.as_deref_mut())
+                        .flatten();
+                    commit_string_search_success(result, target)
                 }
             }
         },
@@ -1096,7 +982,6 @@ pub(crate) fn builtin_string_match_p_with_case_fold(
             let string = args[1].as_lisp_string().unwrap();
             let start =
                 crate::emacs_core::search::normalize_lisp_string_start_arg(string, args.get(2))?;
-            let mut throwaway = None;
             let default_syntax = crate::emacs_core::regex_emacs::DefaultSyntaxLookup;
             let buffer_syntax = syntax_table.map(|syntax_table| {
                 crate::emacs_core::regex_emacs::BufferSyntaxLookup {
@@ -1106,39 +991,30 @@ pub(crate) fn builtin_string_match_p_with_case_fold(
             });
             let syntax: &dyn crate::emacs_core::regex_emacs::SyntaxLookup =
                 buffer_syntax.as_ref().map_or(&default_syntax, |s| s);
-            match super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
-                pattern,
-                string,
-                super::regex::SearchedString::Heap(args[1]),
-                start,
-                case_fold,
-                false,
-                case_translation,
-                syntax,
-                &mut throwaway,
-            ) {
-                Ok(Some(char_pos)) => Ok(Value::fixnum(char_pos as i64)),
-                Ok(None) => Ok(Value::NIL),
-                Err(msg) => Err(regex_error_signal(msg)),
-            }
+            commit_string_search_success(
+                super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix_syntax(
+                    pattern,
+                    string,
+                    super::regex::SearchedString::Heap(args[1]),
+                    start,
+                    case_fold,
+                    false,
+                    case_translation,
+                    syntax,
+                ),
+                None,
+            )
         }
         _ => {
             let pattern = expect_string_lossy(&args[0])?;
             let s = expect_string_lossy(&args[1])?;
             let start = normalize_string_start_arg(&s, args.get(2))?;
-            let mut throwaway = None;
-
-            match super::regex::string_match_full_with_case_fold(
-                &pattern,
-                &s,
-                start,
-                case_fold,
-                &mut throwaway,
-            ) {
-                Ok(Some(char_pos)) => Ok(Value::fixnum(char_pos as i64)),
-                Ok(None) => Ok(Value::NIL),
-                Err(msg) => Err(regex_error_signal(msg)),
-            }
+            commit_string_search_success(
+                super::regex::string_search_full_with_case_fold_and_posix(
+                    &pattern, &s, start, case_fold, false,
+                ),
+                None,
+            )
         }
     }
 }
@@ -1187,18 +1063,13 @@ pub(crate) fn builtin_posix_string_match(
     let category_table =
         Some(crate::emacs_core::category::active_category_table_for_buffer(current_buffer)?);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
-    let mut throwaway: Option<super::regex::MatchData> = None;
-    let md_slot: &mut Option<super::regex::MatchData> = if inhibit_changing {
-        &mut throwaway
-    } else {
-        &mut eval.match_data
-    };
+    let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
     builtin_posix_string_match_with_state(
         case_fold,
         case_translation,
         syntax_table.as_ref(),
         category_table,
-        md_slot,
+        match_data,
         &args,
     )
 }
@@ -1247,7 +1118,7 @@ pub(crate) fn builtin_match_string(
 
     // If an optional second arg is a string, use that first.
     if args.len() > 1 {
-        let explicit_md = match_data_for_explicit_string_arg(&eval.buffers, md);
+        let explicit_md = match_data_for_explicit_string_arg(md);
         let Some(group) = explicit_md.group(group_index) else {
             return Ok(Value::NIL);
         };
@@ -1299,16 +1170,6 @@ pub(crate) fn builtin_match_string(
         Some(b) => b,
         None => return Ok(Value::NIL),
     };
-    if md.uses_buffer_byte_positions() {
-        if end <= buf.total_emacs_byte_len().get() {
-            return Ok(buf.buffer_substring_value_range(EmacsByteRange::new(
-                EmacsBytePos::new(start),
-                EmacsBytePos::new(end),
-            )));
-        }
-        return Ok(Value::NIL);
-    }
-
     let start_byte = buf.lisp_pos_to_emacs_byte_pos(LispCharPos1::from_one_based_usize(start));
     let end_byte = buf.lisp_pos_to_emacs_byte_pos(LispCharPos1::from_one_based_usize(end));
     if end_byte.get() <= buf.total_emacs_byte_len().get() && start_byte <= end_byte {
@@ -1319,7 +1180,6 @@ pub(crate) fn builtin_match_string(
 }
 
 pub(crate) fn builtin_match_beginning_with_state(
-    buffers: Option<&crate::buffer::BufferManager>,
     match_data: &Option<super::regex::MatchData>,
     args: &[Value],
 ) -> EvalResult {
@@ -1344,25 +1204,7 @@ pub(crate) fn builtin_match_beginning_with_state(
             };
 
             match md.group(group) {
-                Some(group) => {
-                    let start = group.start();
-                    if md.is_string_match() {
-                        Ok(Value::fixnum(start as i64))
-                    } else if md.uses_buffer_byte_positions()
-                        && let Some(buf) = md
-                            .searched_buffer_id()
-                            .and_then(|buffer_id| buffers.and_then(|bufs| bufs.get(buffer_id)))
-                    {
-                        if start <= buf.total_emacs_byte_len().get() {
-                            let pos = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(start));
-                            Ok(Value::fixnum(pos))
-                        } else {
-                            Ok(Value::fixnum(start as i64))
-                        }
-                    } else {
-                        Ok(Value::fixnum(start as i64))
-                    }
-                }
+                Some(group) => Ok(Value::fixnum(group.start() as i64)),
                 None => Ok(Value::NIL),
             }
         },
@@ -1373,11 +1215,10 @@ pub(crate) fn builtin_match_beginning(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_match_beginning_with_state(Some(&eval.buffers), &eval.match_data, &args)
+    builtin_match_beginning_with_state(&eval.match_data, &args)
 }
 
 pub(crate) fn builtin_match_end_with_state(
-    buffers: Option<&crate::buffer::BufferManager>,
     match_data: &Option<super::regex::MatchData>,
     args: &[Value],
 ) -> EvalResult {
@@ -1402,25 +1243,7 @@ pub(crate) fn builtin_match_end_with_state(
             };
 
             match md.group(group) {
-                Some(group) => {
-                    let end = group.end();
-                    if md.is_string_match() {
-                        Ok(Value::fixnum(end as i64))
-                    } else if md.uses_buffer_byte_positions()
-                        && let Some(buf) = md
-                            .searched_buffer_id()
-                            .and_then(|buffer_id| buffers.and_then(|bufs| bufs.get(buffer_id)))
-                    {
-                        if end <= buf.total_emacs_byte_len().get() {
-                            let pos = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(end));
-                            Ok(Value::fixnum(pos))
-                        } else {
-                            Ok(Value::fixnum(end as i64))
-                        }
-                    } else {
-                        Ok(Value::fixnum(end as i64))
-                    }
-                }
+                Some(group) => Ok(Value::fixnum(group.end() as i64)),
                 None => Ok(Value::NIL),
             }
         },
@@ -1428,7 +1251,7 @@ pub(crate) fn builtin_match_end_with_state(
 }
 
 pub(crate) fn builtin_match_end(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    builtin_match_end_with_state(Some(&eval.buffers), &eval.match_data, &args)
+    builtin_match_end_with_state(&eval.match_data, &args)
 }
 
 pub(crate) fn builtin_match_data_with_state(
@@ -1478,22 +1301,7 @@ pub(crate) fn builtin_match_data_with_state(
                     continue;
                 }
 
-                let buffer_positions = if md.uses_buffer_byte_positions() {
-                    searched_buffer_id.and_then(|buffer_id| {
-                        buffers.as_deref().and_then(|bufs| {
-                            bufs.get(buffer_id).and_then(|buffer| {
-                                if start <= end && end <= buffer.total_emacs_byte_len().get() {
-                                    Some((
-                                        buffer_byte_to_lisp_char(buffer, EmacsBytePos::new(start)),
-                                        buffer_byte_to_lisp_char(buffer, EmacsBytePos::new(end)),
-                                    ))
-                                } else {
-                                    None
-                                }
-                            })
-                        })
-                    })
-                } else if searched_buffer_id.is_some() {
+                let buffer_positions = if searched_buffer_id.is_some() {
                     Some((start as i64, end as i64))
                 } else {
                     None
@@ -1671,7 +1479,7 @@ pub(crate) fn builtin_set_match_data_with_state(
 
     if groups.is_empty() {
         *match_data = None;
-    } else if searched_buffer.is_some() {
+    } else if let Some(searched_buffer) = searched_buffer {
         *match_data = Some(super::regex::MatchData::buffer_lisp_chars(
             groups,
             searched_buffer,
@@ -1714,24 +1522,17 @@ pub(crate) fn builtin_set_match_data(
 
 fn translate_match_data(match_data: &mut Option<super::regex::MatchData>, delta: i64) {
     if let Some(md) = match_data {
-        md.map_groups(|group| group.translate_saturating(delta));
+        md.translate_positions(delta);
     }
 }
 
 pub(crate) fn builtin_match_data_translate_with_state(
-    buffers: &crate::buffer::BufferManager,
+    _buffers: &crate::buffer::BufferManager,
     match_data: &mut Option<super::regex::MatchData>,
     args: &[Value],
 ) -> EvalResult {
     expect_args("match-data--translate", args, 1)?;
     let delta = expect_fixnum(&args[0])?;
-    if let Some(md) = match_data
-        && md.uses_buffer_byte_positions()
-    {
-        // Public search results are already frozen. Preserve the historical
-        // no-error behavior for any internal raw result whose buffer died.
-        let _ = md.freeze_buffer_lisp_positions(buffers);
-    }
     translate_match_data(match_data, delta);
     Ok(Value::NIL)
 }
@@ -1745,29 +1546,19 @@ pub(crate) fn builtin_match_data_translate(
 
 #[derive(Clone, Copy)]
 struct BufferReplacementCoordinates {
-    old_byte_range: EmacsByteRange,
-    new_byte_range: EmacsByteRange,
     old_char_range: CharRange,
     replacement_char_len: CharLen,
 }
 
 impl BufferReplacementCoordinates {
-    fn match_data_bounds(self, lisp_char_positions: bool) -> (usize, usize, usize) {
-        if lisp_char_positions {
-            let oldstart = self.old_char_range.start_lisp().to_one_based_usize();
-            let oldend = self.old_char_range.end_lisp().to_one_based_usize();
-            (
-                oldstart,
-                oldend,
-                oldstart.saturating_add(self.replacement_char_len.get()),
-            )
-        } else {
-            (
-                self.old_byte_range.start().get(),
-                self.old_byte_range.end().get(),
-                self.new_byte_range.end().get(),
-            )
-        }
+    fn published_match_data_bounds(self) -> (usize, usize, usize) {
+        let oldstart = self.old_char_range.start_lisp().to_one_based_usize();
+        let oldend = self.old_char_range.end_lisp().to_one_based_usize();
+        (
+            oldstart,
+            oldend,
+            oldstart.saturating_add(self.replacement_char_len.get()),
+        )
     }
 }
 
@@ -1779,10 +1570,12 @@ fn update_match_data_after_buffer_replace(
         return;
     };
 
-    let (oldstart, oldend, newend) =
-        replacement.match_data_bounds(md.uses_buffer_lisp_char_positions());
+    if md.is_string_match() {
+        return;
+    }
+    let (oldstart, oldend, newend) = replacement.published_match_data_bounds();
     let change = newend as i64 - oldend as i64;
-    md.map_groups(|match_group| {
+    md.map_buffer_positions(|match_group| {
         let mut start = match_group.start();
         let mut end = match_group.end();
 
@@ -1895,9 +1688,7 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
                 ],
             ));
         }
-        let string_md_snapshot = md_snapshot
-            .as_ref()
-            .map(|md| match_data_for_explicit_string_arg(buffers, md));
+        let string_md_snapshot = md_snapshot.as_ref().map(match_data_for_explicit_string_arg);
         return match crate::emacs_core::search::replace_match_lisp_string_with_syntax(
             source,
             newtext_lisp,
@@ -2028,8 +1819,6 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
     update_match_data_after_buffer_replace(
         match_data,
         BufferReplacementCoordinates {
-            old_byte_range,
-            new_byte_range: replacement_byte_range,
             old_char_range,
             replacement_char_len,
         },

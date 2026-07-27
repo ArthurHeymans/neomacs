@@ -2250,15 +2250,13 @@ fn completion_string_matches_regexps(
     ignore_case: bool,
 ) -> Result<bool, Flow> {
     for re in regexps {
-        let mut md = None;
-        match super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix(
+        match super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix(
             re,
             candidate,
             searched_string.clone(),
             0,
             ignore_case,
             false,
-            &mut md,
         ) {
             Ok(Some(_)) => {} // matched — continue checking remaining regexps
             Ok(None) => return Ok(false),
