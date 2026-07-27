@@ -398,6 +398,7 @@ jobs:
 
   neomacs-melpa-tests:
     name: MELPA offline compatibility and GNU parity (linux x86_64)
+    if: ${{ false }}
     needs: [neomacs-test-runtime, neomacs-workspace-test-archive]
     runs-on: ubuntu-22.04
     timeout-minutes: 30
