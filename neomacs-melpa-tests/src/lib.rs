@@ -596,6 +596,10 @@ pub const ANKI_CONNECT_MELPA_PIN: (&str, &str) = ("anki-connect", "20250414.1301
 /// `4a55c3f937b176d31e36d484c196682cae9f9104`.
 pub const ANKI_EDITOR_MELPA_PIN: (&str, &str) = ("anki-editor", "20260714.1156");
 
+/// The exact anki-editor-view package selected by the comprehensive API parity
+/// corpus.
+pub const ANKI_EDITOR_VIEW_MELPA_PIN: (&str, &str) = ("anki-editor-view", "20230807.806");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

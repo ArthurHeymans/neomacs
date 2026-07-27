@@ -139,6 +139,7 @@ mod angular_snippets;
 mod anju;
 mod anki_connect;
 mod anki_editor;
+mod anki_editor_view;
 mod async_package;
 mod at_package;
 mod bind_key;
