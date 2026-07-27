@@ -88,6 +88,7 @@ mod ahungry_theme;
 mod ai_code;
 mod aider;
 mod aidermacs;
+mod aidev_mode;
 mod async_package;
 mod at_package;
 mod bind_key;
