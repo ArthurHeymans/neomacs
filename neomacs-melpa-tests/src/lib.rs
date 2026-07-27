@@ -280,6 +280,9 @@ pub const ADA_TS_MODE_MELPA_PIN: (&str, &str) = ("ada-ts-mode", "20260627.1553")
 /// corpus.
 pub const ADAFRUIT_WISDOM_MELPA_PIN: (&str, &str) = ("adafruit-wisdom", "20200217.306");
 
+/// The exact add-hooks package selected by the comprehensive API parity corpus.
+pub const ADD_HOOKS_MELPA_PIN: (&str, &str) = ("add-hooks", "20171217.123");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
