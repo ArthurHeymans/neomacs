@@ -73,6 +73,7 @@ mod afternoon_theme;
 mod ag;
 mod agda_editor_tactics;
 mod agda_lib_mode;
+mod age;
 mod agenix;
 mod async_package;
 mod at_package;
