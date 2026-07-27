@@ -137,6 +137,7 @@ mod angry_police_captain;
 mod angular_mode;
 mod angular_snippets;
 mod anju;
+mod anki_connect;
 mod async_package;
 mod at_package;
 mod bind_key;

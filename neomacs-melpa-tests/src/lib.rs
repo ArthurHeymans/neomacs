@@ -586,6 +586,11 @@ pub const ANGULAR_SNIPPETS_MELPA_PIN: (&str, &str) = ("angular-snippets", "20140
 /// corpus.
 pub const ANJU_MELPA_PIN: (&str, &str) = ("anju", "20260701.2139");
 
+/// The exact anki-connect package selected by the comprehensive API parity
+/// corpus. MELPA built this archive from upstream commit
+/// `e32e611d54a3819f88c5ff58009df70c9ae01934`.
+pub const ANKI_CONNECT_MELPA_PIN: (&str, &str) = ("anki-connect", "20250414.1301");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
