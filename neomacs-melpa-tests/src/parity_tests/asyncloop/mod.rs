@@ -1,0 +1,219 @@
+use std::time::Duration;
+
+use crate::{ASYNCLOOP_MELPA_PIN, CachedMelpaOracle};
+use expect_test::Expect;
+
+mod errors;
+mod lifecycle;
+mod logging;
+mod registry;
+mod scheduling;
+mod series;
+mod timers;
+
+const ASYNCLOOP_TEST_TIMEOUT: Duration = Duration::from_secs(120);
+const ASYNCLOOP_ARCHIVE_URL: &str = "https://melpa.org/packages/asyncloop-20240818.1247.tar";
+const ASYNCLOOP_ARCHIVE_SHA256: &str =
+    "cb1d00df6c9045d07b5a194c834bc2114485291711732bd3d99fc2f8df817f90";
+const ASYNCLOOP_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+(require 'seq)
+
+(defvar asyncloop-test-now 0)
+(defvar asyncloop-test-next-id 0)
+(defvar asyncloop-test-timer-queue nil)
+(defvar asyncloop-test-cancelled nil)
+
+(defun asyncloop-test-reset
+    ()
+  (asyncloop-reset-all)
+  (setq asyncloop-test-now 0
+        asyncloop-test-next-id 0
+        asyncloop-test-timer-queue nil
+        asyncloop-test-cancelled nil
+        asyncloop-recursion-ctr 0))
+
+(defun asyncloop-test-schedule
+    (delay repeat function &rest arguments)
+  (let* ((id
+          (setq asyncloop-test-next-id
+                (1+ asyncloop-test-next-id)))
+         (due
+          (+ asyncloop-test-now
+             (or delay 0)))
+         (timer
+          (list :asyncloop-test-timer id))
+         (event
+          (list due id repeat function arguments timer)))
+    (push event asyncloop-test-timer-queue)
+    timer))
+
+(defun asyncloop-test-cancel-timer
+    (timer)
+  (when
+      (and
+       (consp timer)
+       (eq
+        (car timer)
+        :asyncloop-test-timer))
+    (cl-pushnew
+     (cadr timer)
+     asyncloop-test-cancelled))
+  nil)
+
+(defun asyncloop-test-event-due
+    (event)
+  (nth 0 event))
+
+(defun asyncloop-test-event-id
+    (event)
+  (nth 1 event))
+
+(defun asyncloop-test-event-repeat
+    (event)
+  (nth 2 event))
+
+(defun asyncloop-test-event-function
+    (event)
+  (nth 3 event))
+
+(defun asyncloop-test-event-arguments
+    (event)
+  (nth 4 event))
+
+(defun asyncloop-test-event-timer
+    (event)
+  (nth 5 event))
+
+(defun asyncloop-test-event-before-p
+    (left right)
+  (or
+   (<
+    (asyncloop-test-event-due left)
+    (asyncloop-test-event-due right))
+   (and
+    (=
+     (asyncloop-test-event-due left)
+     (asyncloop-test-event-due right))
+    (<
+     (asyncloop-test-event-id left)
+     (asyncloop-test-event-id right)))))
+
+(defun asyncloop-test-drain
+    (&optional maximum-events)
+  (let ((remaining
+         (or maximum-events
+             10000))
+        trace)
+    (while
+        (and
+         asyncloop-test-timer-queue
+         (> remaining 0))
+      (setq remaining
+            (1- remaining)
+            asyncloop-test-timer-queue
+            (sort asyncloop-test-timer-queue
+                  #'asyncloop-test-event-before-p))
+      (let* ((event
+              (pop asyncloop-test-timer-queue))
+             (due
+              (asyncloop-test-event-due event))
+             (id
+              (asyncloop-test-event-id event))
+             (repeat
+              (asyncloop-test-event-repeat event))
+             (function
+              (asyncloop-test-event-function event))
+             (arguments
+              (asyncloop-test-event-arguments event)))
+        (setq asyncloop-test-now due)
+        (if
+            (memq id asyncloop-test-cancelled)
+            (push
+             (list :skipped :at due :id id)
+             trace)
+          (let ((entry
+                 (list
+                  :ran
+                  :at due
+                  :id id
+                  :repeat repeat
+                  :function
+                  (if
+                      (symbolp function)
+                      function
+                    :closure))))
+            (push entry trace))
+          (apply function arguments))))
+    (nreverse trace)))
+
+(defmacro asyncloop-test-with-scheduler
+    (&rest body)
+  `(cl-letf
+       (((symbol-function 'run-with-idle-timer)
+         #'asyncloop-test-schedule)
+        ((symbol-function 'cancel-timer)
+         #'asyncloop-test-cancel-timer)
+        ((symbol-function 'input-pending-p)
+         (lambda () nil)))
+     ,@body))
+
+(defun asyncloop-test-error
+    (thunk)
+  (condition-case error
+      (list :ok
+            (funcall thunk))
+    ((error quit)
+     (list
+      :signal
+      (car error)
+      (cdr error)))))
+
+(defun asyncloop-test-log-text
+    (buffer)
+  (when
+      (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (replace-regexp-in-string
+       "[[:digit:]][[:digit:]]:[[:digit:]][[:digit:]]:[[:digit:]][[:digit:]]: "
+       "<TIME>: "
+       (buffer-substring-no-properties
+        (point-min)
+        (point-max))))))
+"##;
+
+fn asyncloop_oracle(source_file: &str) -> CachedMelpaOracle {
+    CachedMelpaOracle::new_from_frozen_melpa_archive(
+        ASYNCLOOP_MELPA_PIN,
+        source_file,
+        ASYNCLOOP_ARCHIVE_URL,
+        ASYNCLOOP_ARCHIVE_SHA256,
+    )
+    .expect("prepare digest-verified asyncloop source below ./tmp")
+    .with_prelude(ASYNCLOOP_TEST_PRELUDE)
+    .with_timeout(ASYNCLOOP_TEST_TIMEOUT)
+}
+
+fn current_test_name() -> String {
+    let thread = std::thread::current();
+    thread
+        .name()
+        .unwrap_or("unnamed asyncloop parity test")
+        .into()
+}
+
+fn assert_asyncloop_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+    let name = current_test_name();
+    let report = asyncloop_oracle(source_file)
+        .run_value(&name, elisp_form)
+        .unwrap_or_else(|error| panic!("asyncloop parity case `{name}` failed:\n{error}"));
+    expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+pub(crate) fn assert_asyncloop_parity(elisp_form: &str, expected: Expect) {
+    assert_asyncloop_source_parity("asyncloop.el", elisp_form, expected);
+}
+
+pub(crate) fn assert_asyncloop_autoload_parity(elisp_form: &str, expected: Expect) {
+    assert_asyncloop_source_parity("asyncloop-autoloads.el", elisp_form, expected);
+}

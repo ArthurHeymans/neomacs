@@ -69,6 +69,12 @@ pub const ASYNC_MELPA_PIN: (&str, &str) = ("async", "20260318.1803");
 /// `88cccffe14bdd0a61dbb2e33edf8c335706f24dc`.
 pub const ASYNC1_MELPA_PIN: (&str, &str) = ("async1", "20260421.2116");
 
+/// The exact asyncloop package selected by the comprehensive non-blocking
+/// series, cancellation, timer-ordering, recovery, and lifecycle parity
+/// corpus. MELPA built this archive from upstream commit
+/// `7d60950d160098a879293e049b9863bc955f8666`.
+pub const ASYNCLOOP_MELPA_PIN: (&str, &str) = ("asyncloop", "20240818.1247");
+
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 
