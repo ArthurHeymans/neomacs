@@ -226,6 +226,7 @@ mod auth_source_gopass;
 mod auth_source_keytar;
 mod auth_source_kwallet;
 mod auth_source_xoauth2;
+mod auto_async_byte_compile;
 mod bind_key;
 mod compat;
 mod dash;

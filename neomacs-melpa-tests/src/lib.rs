@@ -1019,6 +1019,13 @@ pub const AUTH_SOURCE_KEYTAR_MELPA_PIN: (&str, &str) = ("auth-source-keytar", "2
 /// commit `f0485df065bcdc8f446be3e00aa77a43629ec84e`.
 pub const KEYTAR_MELPA_PIN: (&str, &str) = ("keytar", "20251231.1727");
 
+/// The exact auto-async-byte-compile package selected by the comprehensive
+/// metadata, save-hook, asynchronous process, status, display, and real
+/// byte-compilation lifecycle parity corpus. MELPA built this archive from
+/// upstream commit `8681e74ddb8481789c5dbb3cafabb327db4c4484`.
+pub const AUTO_ASYNC_BYTE_COMPILE_MELPA_PIN: (&str, &str) =
+    ("auto-async-byte-compile", "20160916.454");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
