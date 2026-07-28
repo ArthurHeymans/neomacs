@@ -813,9 +813,22 @@ progress idiom collapses to a single line. Neomacs logs both.
 ;; Neomacs => "Analysing project for completion...\nAnalysing project for completion...done\n"
 ```
 
-**Not general prefix collapsing**, which is what makes it easy to misdiagnose:
-`"Plain"` → `"Plain extended"` keeps both lines in *both* editors. The rule is
-specifically the `...`. The mechanism is `message_log_check_duplicate`
+**Not general prefix collapsing**, which is what makes it easy to misdiagnose.
+The full characterisation, from an independent reduction that agrees with this
+one:
+
+| previous → new | GNU | Neomacs |
+|---|---|---|
+| `Foo...` → `Foo...done` | one line | two lines |
+| `Foo...` → `Foo...50%` → `Foo...done` | one line | three lines |
+| `Foo` → `Foobar` (plain prefix) | two lines | two lines |
+| `Foo...` → `Bar...done` | two lines | two lines |
+| `Foo...` → `Foo...` (identical) | `Foo... [2 times]` | `Foo... [2 times]` |
+| `Foo...\n` → `Foo...done` | two lines | two lines |
+
+Only the `...` continuation differs, and the multi-step row is the one that
+shows the cost: a progress report with N steps leaves N lines in Neomacs where
+GNU leaves one. The mechanism is `message_log_check_duplicate`
 (GNU `src/xdisp.c:12501`), which walks the two lines together tracking a
 `seen_dots` flag set once the previous line has had `...` behind it, and on the
 first differing byte returns that flag; a nonzero return makes `message_dolog`
