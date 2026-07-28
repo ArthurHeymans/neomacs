@@ -46,6 +46,23 @@ across repeated runs. The rule is: pin sharing you can explain from the
 package's data structure, never sharing that merely happens between two equal
 strings.
 
+**SILENT — `print-circle` leaks into text the *package* writes for the user.**
+The notes above concern sharing inside a value you capture; this is the other
+direction. anaconda-mode `format`s url's status plist into `*anaconda-response*`,
+a buffer the user is meant to read, and with `print-circle` on url's repeated
+host string printed as `#1=`/`#1#` *inside that buffer* — reader markers in
+package output, and flaky besides. Bind `print-circle` to nil while the command
+runs **and while any asynchronous callback lands**, which means the helper that
+types the keys and pumps the event loop should be the one binding it.
+
+**SILENT — project-relative paths escape the sandbox normaliser.**
+`xref--show-xrefs` groups results by project; the project is the Neomacs
+checkout, so the heading is the per-case sandbox's random directory name spelled
+*relative* to the repository root. The oracle rewrites the absolute sandbox path
+only, so two runs disagree on `...-YwrfNK` vs `...-IAgVWA` and it reads as a
+divergence. Any suite whose assertions pass through xref, project.el, or
+`file-relative-name` must normalise the workspace-relative spelling too.
+
 **Transcribe expectations from a harness run, not a raw probe.** The oracle's
 normaliser breaks string identity, so probe output containing `#1=` sharing
 markers never matches. Applies whenever a value repeats.
@@ -204,11 +221,44 @@ because it predicted the right observable for the wrong reason. Two agents held
 that story between them until the dispatcher was instrumented. Reading each text
 property separately is what would have caught it.
 
+Granularity alone is not sufficient, because **ordering** can defeat it: in this
+same case the icon was built unconditionally *before* the `member` test believed
+to select it, so even a per-property assertion placed after the branch would have
+agreed with the wrong story. The formulation that covers both halves: assert
+something only the claimed mechanism can produce, *and* confirm the claimed
+mechanism is the one that actually ran rather than inferring it from the output.
+
 **Instrument the dispatcher rather than inferring it from the source.** Advising
 both candidate entry points and reporting per input which one fires settled two
 wrong attributions that reading the code had not — the second being that a guard
 "short-circuits before the call", when the call is made three lines earlier and
 its result discarded.
+
+**SILENT — a capture read after the next call is a stale capture.** A helper
+that resets a shared record on entry, called twice, leaves only the second
+result behind; reading both captures at the end of the enclosing `let` reports
+the second display twice. It passes, self-consistently, and it makes a
+one-match regexp look as though it offered two entries — so the symptom points
+at the *package*, not at the test, and reads as a divergence worth filing. Bind
+each capture in the `let*` immediately after its own call. Same family as the
+`copy-tree` note, but the mechanism is ordering rather than sharing.
+
+**SILENT — a multi-key sort fixture must tie on the primary key.** Two records
+that differ in the field being sorted on are not enough: if the primary
+comparison already fully orders the pair, the secondary key is never consulted
+and `("author" "title")` and `("author" "year")` produce identical output, which
+reads as the sort ignoring its argument. Construct the pair so the primary key
+genuinely ties — identical author lists, titles that reverse the year order —
+and check that it does.
+
+**A theme's face spec replaces the standard definition, it does not merge with
+it.** `face-spec-recalc` applies the defface spec only when no enabled theme has
+one, so every attribute the theme omits is *dropped*, not inherited. amber-glow
+sets `:bold t` and a foreground on `font-lock-warning-face` and says nothing
+about `:inherit`; the stock `:inherit error` is gone while the theme is enabled
+and back when it is disabled. A theme that omits `:weight` on a stock-bold face
+silently un-bolds it — and a suite that reads only the attributes the theme
+*sets* is structurally unable to see that happen.
 
 **If a measurement is not behaviour, do not pin it at all.** An amread-mode
 initial-delay assertion read 0 tenths in a probe and 17 under UPDATE_EXPECT on

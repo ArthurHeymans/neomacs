@@ -523,7 +523,7 @@ Affects: `ac-mozc` (1) — mozc.el reports "…Starting mozc-helper-process…" 
 "…done". Hits any package using the `"..."` / `"...done"` progress idiom, which
 is most of them.
 
-## 21. A refused connection reports a different error
+## 21. A refused connection reports a different error — synchronously only
 
 Two differences in one reduction: Neomacs's message is Rust's
 `std::io::Error` Display text, which appends the raw errno as
@@ -539,8 +539,26 @@ drops the connection parameters GNU appends to the error data.
 ```
 
 Other errno-derived file errors agree in both editors, so this is specific to
-the network-process path rather than to error formatting generally. Affects:
-`adafruit-wisdom` (1).
+the network-process path rather than to error formatting generally.
+
+**The url transport is not affected, and a suite testing an HTTP package should
+not expect a red test here.** `url-retrieve` reaches a closed port through its
+own asynchronous connection rather than through a signal out of
+`make-network-process`, and the status plist it hands the callback is
+byte-identical in both editors — the shared trailing newline in
+`"failed with code 111\n"` included:
+
+```elisp
+(url-retrieve "http://127.0.0.1:1/probe" (lambda (status) ...) nil t)
+;; GNU and Neomacs alike =>
+;;   (:error (error connection-failed "failed with code 111\n"
+;;            :host "127.0.0.1" :service 1))
+```
+
+So the entry is confined to the error object raised by a *synchronous*
+`make-network-process`. A package that only ever connects through url will not
+witness it. Established by `anaconda-mode`, which closed its listener mid-session
+and got matching output in both editors. Affects: `adafruit-wisdom` (1).
 
 ## 22. `format` reverses the plist of a propertized string used as the FORMAT
 
