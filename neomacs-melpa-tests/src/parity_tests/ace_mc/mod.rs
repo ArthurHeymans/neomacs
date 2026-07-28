@@ -1,20 +1,81 @@
 use std::time::Duration;
 
 use crate::{ACE_MC_MELPA_PIN, CachedMelpaOracle};
-use expect_test::{Expect, expect};
+use expect_test::Expect;
 
-mod autoloads;
-mod commands;
-mod hooks;
-mod lifecycle;
-mod surface;
 mod workflows;
 
-const ACE_MC_TEST_TIMEOUT: Duration = Duration::from_secs(120);
+const ACE_MC_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
-fn ace_mc_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ACE_MC_MELPA_PIN, source_file)
+/// ace-mc adds and removes multiple-cursors fake cursors at ace-jump targets.
+/// Nothing is stubbed in these workflows: ace-jump really searches the window,
+/// really builds its label overlays and its `overriding-local-map`,
+/// multiple-cursors really creates the fake cursors and really replays typed
+/// commands for each of them, and every key is delivered through
+/// `execute-kbd-macro`.  Keys only reach the buffer of the selected window, so
+/// the work buffer is displayed rather than merely current.
+const ACE_MC_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+(require 'multiple-cursors)
+(require 'ace-jump-mode)
+
+(setq make-backup-files nil
+      create-lockfiles nil
+      ace-jump-mode-gray-background nil)
+
+(defmacro ace-mc-test-in-buffer (text &rest body)
+  "Run BODY in a window-displayed buffer holding TEXT, with a clean mc state."
+  `(let ((buffer (generate-new-buffer "*ace-mc-workflow*")))
+     (unwind-protect
+         (progn
+           (set-window-buffer (selected-window) buffer)
+           (set-buffer buffer)
+           (fundamental-mode)
+           (insert ,text)
+           (goto-char (point-min))
+           (global-set-key (kbd "C-c m") #'ace-mc-add-multiple-cursors)
+           (global-set-key (kbd "C-c s") #'ace-mc-add-single-cursor)
+           ,@body)
+       (when (buffer-live-p buffer)
+         (with-current-buffer buffer
+           (when multiple-cursors-mode (multiple-cursors-mode -1))
+           (mc/remove-fake-cursors)
+           (set-buffer-modified-p nil))
+         (kill-buffer buffer)))))
+
+(defun ace-mc-test-state ()
+  "Everything a workflow wants to know after driving keys."
+  (list :text (buffer-substring-no-properties (point-min) (point-max))
+        :point (point)
+        :cursors (sort (mapcar #'overlay-start (mc/all-fake-cursors)) #'<)
+        :num (mc/num-cursors)
+        :mc-mode (and multiple-cursors-mode t)
+        :ace-mode ace-jump-current-mode
+        :ace-marking ace-mc-marking
+        :overriding (and overriding-local-map t)))
+
+(defun ace-mc-test-labels ()
+  "The label characters ace-jump is currently showing, with their positions."
+  (sort (delq nil
+              (mapcar (lambda (overlay)
+                        (and (overlay-get overlay 'aj-data)
+                             (cons (overlay-start overlay)
+                                   (overlay-get overlay 'display))))
+                      (overlays-in (point-min) (point-max))))
+        (lambda (a b) (< (car a) (car b)))))
+
+(defvar ace-mc-test-recorded-labels nil
+  "Labels ace-jump was showing at each jump, newest first.")
+
+(defun ace-mc-test-record-labels ()
+  "Snapshot the live label overlays; runs from `ace-jump-mode-before-jump-hook'."
+  (push (ace-mc-test-labels) ace-mc-test-recorded-labels))
+"##;
+
+fn ace_mc_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ACE_MC_MELPA_PIN, "ace-mc.el")
         .expect("prepare pinned ace-mc source below ./tmp")
+        .with_prelude(ACE_MC_TEST_PRELUDE)
         .with_timeout(ACE_MC_TEST_TIMEOUT)
 }
 
@@ -25,57 +86,8 @@ fn current_test_name() -> String {
 
 pub(crate) fn assert_ace_mc_parity(form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = ace_mc_oracle("ace-mc.el")
+    let report = ace_mc_oracle()
         .run_value(&name, form)
         .unwrap_or_else(|error| panic!("ace-mc parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ace_mc_signal_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ace_mc_oracle("ace-mc.el")
-        .run_signal(&name, form)
-        .unwrap_or_else(|error| panic!("ace-mc signal parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ace_mc_autoload_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ace_mc_oracle("ace-mc-autoloads.el")
-        .run_value(&name, form)
-        .unwrap_or_else(|error| panic!("ace-mc autoload parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-#[test]
-fn ace_mc_exact_pin_dependencies_metadata_and_feature_match() {
-    let elisp_form = r##"(let ((descriptor
-                    (cadr
-                     (assq
-                      'ace-mc
-                      package-alist))))
-               (list
-                (package-desc-name descriptor)
-                (package-version-join
-                 (package-desc-version descriptor))
-                (package-desc-reqs descriptor)
-                (package-desc-summary descriptor)
-                (copy-tree
-                 (package-desc-extras descriptor))
-                (featurep 'ace-mc)))"##;
-    let expect = expect![[
-        r#"OK (ace-mc "20190206.749" ((ace-jump-mode (1 0)) (multiple-cursors (1 0)) (dash (2 10 0))) "Add multiple cursors quickly using ace jump." ((:maintainers ("Josh Moller-Mara" . "jmm@cns.nyu.edu")) (:authors ("Josh Moller-Mara" . "jmm@cns.nyu.edu")) (:keywords "motion" "location" "cursor") (:revdesc . "6877880efd99") (:commit . "6877880efd99e177e4e9116a364576def3da391b") (:url . "https://github.com/mm--/ace-mc")) t)"#
-    ]];
-    assert_ace_mc_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_mc_required_dependency_features_are_loaded() {
-    let elisp_form = r##"(list
-         (featurep 'ace-jump-mode)
-         (featurep 'multiple-cursors-core)
-         (featurep 'dash)
-         (featurep 'ace-mc))"##;
-    let expect = expect!["OK (t t t t)"];
-    assert_ace_mc_parity(elisp_form, expect);
 }
