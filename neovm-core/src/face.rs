@@ -1425,13 +1425,27 @@ impl FaceRemapping {
 /// Global face registry.
 #[derive(Clone)]
 pub struct FaceTable {
-    faces: HashMap<Value, Face>,
+    /// Shared copy-on-write storage.
+    ///
+    /// `FaceResolver::new_with_font_sizing` clones the table ONCE PER
+    /// REDISPLAY (twice, in fact -- the engine and the window-params paths
+    /// each build a resolver), and with plain ownership that was a deep copy
+    /// of every `Face`: 7.7% of a real typing session went to `Face::clone`,
+    /// plus the memmove traffic to carry it. Behind `Rc` the same clone is a
+    /// refcount bump, and the rare mutation paths (face materialization)
+    /// pay a one-time copy via `Rc::make_mut`.
+    ///
+    /// GC safety is unchanged: the keys are `Value`s, rooted through
+    /// `collect_gc_roots` on the CONTEXT's handle, and a resolver's shared
+    /// handle aliases the same allocation for the duration of one redisplay
+    /// -- exactly the lifetime the old bitwise deep copy had.
+    faces: std::rc::Rc<HashMap<Value, Face>>,
 }
 
 impl FaceTable {
     pub fn new() -> Self {
         let mut table = Self {
-            faces: HashMap::new(),
+            faces: std::rc::Rc::new(HashMap::new()),
         };
         table.register_standard_faces();
         table
@@ -1754,13 +1768,15 @@ impl FaceTable {
 
     /// Define or update a face.
     pub fn define(&mut self, name: &str, face: Face) {
-        self.faces.insert(face_symbol_value(name), face);
+        std::rc::Rc::make_mut(&mut self.faces).insert(face_symbol_value(name), face);
     }
 
     /// Ensure a face exists (create empty if not present).
     pub fn ensure_face(&mut self, name: &str) {
         let key = face_symbol_value(name);
-        self.faces.entry(key).or_insert_with(|| Face::new(name));
+        std::rc::Rc::make_mut(&mut self.faces)
+            .entry(key)
+            .or_insert_with(|| Face::new(name));
     }
 
     /// Update a single attribute on a face.
@@ -1769,7 +1785,9 @@ impl FaceTable {
     pub fn set_attribute(&mut self, name: &str, attr: LFaceAttr, value: FaceAttrValue) -> bool {
         self.ensure_face(name);
         let key = face_symbol_value(name);
-        let face = self.faces.get_mut(&key).unwrap();
+        let face = std::rc::Rc::make_mut(&mut self.faces)
+            .get_mut(&key)
+            .unwrap();
         face.set_attribute(attr, value)
     }
 
@@ -2041,19 +2059,23 @@ impl FaceTable {
 
     pub(crate) fn from_dump(faces: HashMap<String, Face>) -> Self {
         Self {
-            faces: faces
-                .into_iter()
-                .map(|(name, face)| (face_symbol_value(&name), face))
-                .collect(),
+            faces: std::rc::Rc::new(
+                faces
+                    .into_iter()
+                    .map(|(name, face)| (face_symbol_value(&name), face))
+                    .collect(),
+            ),
         }
     }
 
     pub(crate) fn from_dump_sym_ids(faces: Vec<(SymId, Face)>) -> Self {
         Self {
-            faces: faces
-                .into_iter()
-                .map(|(name, face)| (Value::from_sym_id(name), face))
-                .collect(),
+            faces: std::rc::Rc::new(
+                faces
+                    .into_iter()
+                    .map(|(name, face)| (Value::from_sym_id(name), face))
+                    .collect(),
+            ),
         }
     }
 }
