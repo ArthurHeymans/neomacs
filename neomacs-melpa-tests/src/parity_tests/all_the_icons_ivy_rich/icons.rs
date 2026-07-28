@@ -76,72 +76,56 @@ fn real_all_the_icons_file_lookup_renders_directory_source_document_and_fallback
 }
 
 #[test]
-fn completion_category_icons_use_real_all_the_icons_glyphs_and_exact_face_properties() {
+fn installed_symbol_transformer_renders_real_command_and_custom_variable_candidates() {
     let elisp_form = r##"(progn
                (require 'cl-lib)
-               (cl-letf
-                   (((symbol-function 'display-graphic-p)
-                     (lambda (&optional _frame) t)))
-                 (mapcar
-                  (lambda (entry)
-                    (let ((icon
-                           (funcall (cdr entry) "fixture")))
-                      (list
-                       (car entry)
-                       (substring-no-properties icon)
-                       (string-to-list
-                        (substring-no-properties icon))
-                       (get-text-property 1 'face icon))))
-                  '((directory
-                     . all-the-icons-ivy-rich-dir-icon)
-                    (project
-                     . all-the-icons-ivy-rich-project-icon)
-                    (mode
-                     . all-the-icons-ivy-rich-mode-icon)
-                    (command
-                     . all-the-icons-ivy-rich-command-icon)
-                    (history
-                     . all-the-icons-ivy-rich-history-icon)
-                    (face
-                     . all-the-icons-ivy-rich-face-icon)
-                    (theme
-                     . all-the-icons-ivy-rich-theme-icon)
-                    (keybinding
-                     . all-the-icons-ivy-rich-keybinding-icon)
-                    (library
-                     . all-the-icons-ivy-rich-library-icon)
-                    (package
-                     . all-the-icons-ivy-rich-package-icon)
-                    (font
-                     . all-the-icons-ivy-rich-font-icon)
-                    (world-clock
-                     . all-the-icons-ivy-rich-world-clock-icon)
-                    (tramp
-                     . all-the-icons-ivy-rich-tramp-icon)
-                    (git-branch
-                     . all-the-icons-ivy-rich-git-branch-icon)
-                    (git-commit
-                     . all-the-icons-ivy-rich-git-commit-icon)
-                    (process
-                     . all-the-icons-ivy-rich-process-icon)
-                    (custom-group
-                     . all-the-icons-ivy-rich-group-settings-icon)
-                    (custom-variable
-                     . all-the-icons-ivy-rich-variable-settings-icon)
-                    (charset
-                     . all-the-icons-ivy-rich-charset-icon)
-                    (coding-system
-                     . all-the-icons-ivy-rich-coding-system-icon)
-                    (language
-                     . all-the-icons-ivy-rich-lang-icon)
-                    (input-method
-                     . all-the-icons-ivy-rich-input-method-icon)
-                    (environment-key
-                     . all-the-icons-ivy-rich-key-icon)
-                    (lsp
-                     . all-the-icons-ivy-rich-lsp-icon)))))"##;
+               (defun all-the-icons-ivy-rich-workflow-command
+                   (path &optional force)
+                 "Open PATH and optionally FORCE the operation."
+                 (interactive "fPath: \nP"))
+               (defcustom all-the-icons-ivy-rich-workflow-option 17
+                 "Number of entries rendered by the workflow."
+                 :type 'integer)
+               (let (rendered)
+                 (unwind-protect
+                     (cl-letf
+                       (((symbol-function 'display-graphic-p)
+                           (lambda (&optional _frame) t)))
+                       (all-the-icons-ivy-rich-mode 1)
+                       (let* ((configuration
+                               (cadr
+                                (memq
+                                 'counsel-describe-symbol
+                                 ivy-rich-display-transformers-list)))
+                              (transformer
+                               (ivy-rich-build-transformer
+                                'counsel-describe-symbol
+                                configuration)))
+                         (setq
+                          rendered
+                          (mapcar
+                           (lambda (candidate)
+                             (let* ((line
+                                     (funcall transformer candidate))
+                                    (fields
+                                     (split-string line "\t")))
+                               (mapcar
+                                (lambda (field)
+                                  (list
+                                   (string-trim-right
+                                    (substring-no-properties field))
+                                   (get-text-property
+                                    (if (> (length field) 1) 1 0)
+                                    'face
+                                    field)))
+                                fields)))
+                           '("all-the-icons-ivy-rich-workflow-command"
+                             "all-the-icons-ivy-rich-workflow-option")))))
+                   (when all-the-icons-ivy-rich-mode
+                     (all-the-icons-ivy-rich-mode -1)))
+                 rendered))"##;
     let expect = expect![[
-        r#"OK ((directory " " (32 61462) (:inherit all-the-icons-silver :family "github-octicons" :height 1.0)) (project " " (32 61441) (:inherit all-the-icons-silver :family "github-octicons" :height 1.0)) (mode " " (32 61874) (:inherit all-the-icons-blue :family "FontAwesome" :height 1.0)) (command " " (32 61459) (:inherit all-the-icons-blue :family "FontAwesome" :height 1.0)) (history " " (32 59529) (:inherit all-the-icons-lblue :family "Material Icons" :height 1.0)) (face " " (32 58378) (:inherit all-the-icons-blue :family "Material Icons" :height 1.0)) (theme " " (32 58378) (:inherit all-the-icons-lcyan :family "Material Icons" :height 1.0)) (keybinding " " (32 61724) (:inherit all-the-icons-lsilver :family "FontAwesome" :height 1.0)) (library " " (32 59632) (:inherit all-the-icons-lblue :family "Material Icons" :height 1.0)) (package " " (32 61831) (:inherit all-the-icons-silver :family "FontAwesome" :height 1.0)) (font " " (32 61489) (:inherit all-the-icons-lblue :family "FontAwesome" :height 1.0)) (world-clock " " (32 61612) (:inherit all-the-icons-lblue :family "FontAwesome" :height 1.0)) (tramp " " (32 61488) (:inherit (:family "github-octicons" :height 0.96) :family "github-octicons" :height 1.0)) (git-branch " " (32 61472) (:inherit all-the-icons-green :family "github-octicons" :height 1.0)) (git-commit " " (32 61471) (:inherit all-the-icons-green :family "github-octicons" :height 1.0)) (process " " (32 61671) (:inherit all-the-icons-lblue :family "FontAwesome" :height 1.0)) (custom-group " " (32 61564) (:inherit all-the-icons-lblue :family "github-octicons" :height 1.0)) (custom-variable " " (32 61564) (:inherit all-the-icons-lgreen :family "github-octicons" :height 1.0)) (charset " " (32 61646) (:inherit all-the-icons-lblue :family "FontAwesome" :height 1.0)) (coding-system " " (32 61646) (:inherit all-the-icons-purple :family "FontAwesome" :height 1.0)) (language " " (32 61867) (:inherit all-the-icons-lblue :family "FontAwesome" :height 1.0)) (input-method " " (32 61724) (:inherit all-the-icons-lblue :family "FontAwesome" :height 1.0)) (environment-key " " (32 61513) (:inherit (:family "github-octicons" :height 0.96) :family "github-octicons" :height 1.0)) (lsp " " (32 61749) (:inherit all-the-icons-lgreen :family "FontAwesome" :height 1.0)))"#
+        r#"OK (((" " (:inherit all-the-icons-blue :family "FontAwesome" :height 1.0)) ("all-the-icons-ivy-rich-…" nil) ("c" all-the-icons-ivy-rich-type-face) ("Open PATH and optionally FORCE the operation." all-the-icons-ivy-rich-doc-face)) ((" " (:inherit all-the-icons-lblue :family "FontAwesome" :height 1.0)) ("all-the-icons-ivy-rich-…" nil) ("u" all-the-icons-ivy-rich-type-face) ("Number of entries rendered by the workflow." all-the-icons-ivy-rich-doc-face)))"#
     ]];
 
     assert_all_the_icons_ivy_rich_parity(elisp_form, expect);
@@ -226,21 +210,27 @@ fn bookmark_icons_distinguish_real_file_directory_and_missing_targets() {
                        (cl-letf
                            (((symbol-function 'display-graphic-p)
                              (lambda (&optional _frame) t)))
-                         (list
                          (mapcar
-                           (lambda (candidate)
-                             (let ((icon
-                                    (all-the-icons-ivy-rich-bookmark-icon
-                                     candidate)))
-                               (list
-                                candidate
-                                (substring-no-properties icon))))
-                           '("file"
-                             "directory"
-                             "missing"))))
+                          (lambda (candidate)
+                            (let ((icon
+                                   (all-the-icons-ivy-rich-bookmark-icon
+                                    candidate)))
+                              (list
+                               candidate
+                               (substring-no-properties icon)
+                               (string-to-list
+                                (substring-no-properties icon))
+                               (get-text-property 1 'face icon)
+                               (all-the-icons-ivy-rich-bookmark-filename
+                                candidate))))
+                          '("file"
+                            "directory"
+                            "missing"))))
                    (when (file-exists-p root)
-                     (delete-directory root t))))))"##;
-    let expect = expect!["OK nil"];
+                     (delete-directory root t)))))"##;
+    let expect = expect![[
+        r#"OK (("file" " " (32 61641) (:inherit all-the-icons-lblue :family "github-octicons" :height 1.0) "[ORACLE-TMPDIR]/all-the-icons-ivy-rich-icon-bookmarks/notes.md") ("directory" " " (32 61462) (:inherit (:family "github-octicons" :height 1.08) :family "github-octicons" :height 1.0) "[ORACLE-TMPDIR]/all-the-icons-ivy-rich-icon-bookmarks/") ("missing" " " (32 57675) (:inherit all-the-icons-ivy-rich-error-face :family "Material Icons" :height 1.0) "[ORACLE-TMPDIR]/all-the-icons-ivy-rich-icon-bookmarks/missing.el"))"#
+    ]];
 
     assert_all_the_icons_ivy_rich_parity(elisp_form, expect);
 }
@@ -297,31 +287,61 @@ fn markdown_link_icons_distinguish_anchor_and_external_link_candidates() {
 }
 
 #[test]
-fn every_icon_entry_point_is_suppressed_in_the_real_batch_nongraphical_runtime() {
-    let elisp_form = r##"(list
-               (display-graphic-p)
-               (mapcar
-                (lambda (function)
-                  (list
-                   function
-                   (funcall function "fixture")))
-                '(all-the-icons-ivy-rich-file-icon
-                  all-the-icons-ivy-rich-dir-icon
-                  all-the-icons-ivy-rich-project-icon
-                  all-the-icons-ivy-rich-function-icon
-                  all-the-icons-ivy-rich-variable-icon
-                  all-the-icons-ivy-rich-face-icon
-                  all-the-icons-ivy-rich-theme-icon
-                  all-the-icons-ivy-rich-library-icon
-                  all-the-icons-ivy-rich-package-icon
-                  all-the-icons-ivy-rich-font-icon
-                  all-the-icons-ivy-rich-world-clock-icon
-                  all-the-icons-ivy-rich-process-icon
-                  all-the-icons-ivy-rich-key-icon
-                  all-the-icons-ivy-rich-lsp-icon)))"##;
-    let expect = expect![
-        "OK (nil ((all-the-icons-ivy-rich-file-icon nil) (all-the-icons-ivy-rich-dir-icon nil) (all-the-icons-ivy-rich-project-icon nil) (all-the-icons-ivy-rich-function-icon nil) (all-the-icons-ivy-rich-variable-icon nil) (all-the-icons-ivy-rich-face-icon nil) (all-the-icons-ivy-rich-theme-icon nil) (all-the-icons-ivy-rich-library-icon nil) (all-the-icons-ivy-rich-package-icon nil) (all-the-icons-ivy-rich-font-icon nil) (all-the-icons-ivy-rich-world-clock-icon nil) (all-the-icons-ivy-rich-process-icon nil) (all-the-icons-ivy-rich-key-icon nil) (all-the-icons-ivy-rich-lsp-icon nil)))"
-    ];
+fn nongraphical_file_transformer_keeps_useful_metadata_while_suppressing_only_the_icon() {
+    let elisp_form = r##"(let* ((root
+                     (file-name-as-directory
+                      (expand-file-name
+                       "all-the-icons-ivy-rich-nongraphical"
+                       (getenv "TMPDIR"))))
+                    (file (expand-file-name "report.md" root))
+                    (ivy--directory root)
+                    (ivy-last
+                     (make-ivy-state :caller 'counsel-find-file))
+                    rendered)
+               (unwind-protect
+                   (progn
+                     (when (file-exists-p root)
+                       (delete-directory root t))
+                     (make-directory root t)
+                     (with-temp-file file
+                       (insert "release notes\n"))
+                     (set-file-modes file #o640)
+                     (set-file-times file
+                                     (encode-time 0 34 12 2 1 2024 t))
+                     (all-the-icons-ivy-rich-mode 1)
+                     (let* ((configuration
+                             (cadr
+                              (memq
+                               'counsel-find-file
+                               ivy-rich-display-transformers-list)))
+                            (transformer
+                             (ivy-rich-build-transformer
+                              'counsel-find-file
+                              configuration))
+                            (line
+                             (funcall transformer "report.md")))
+                       (setq
+                        rendered
+                        (list
+                         (display-graphic-p)
+                         (mapcar
+                          (lambda (field)
+                            (string-trim-right
+                             (substring-no-properties field)))
+                          (split-string line "\t"))
+                         (mapcar
+                          (lambda (field)
+                            (and (> (length field) 0)
+                                 (get-text-property 0 'face field)))
+                          (split-string line "\t"))))))
+                 (when all-the-icons-ivy-rich-mode
+                   (all-the-icons-ivy-rich-mode -1))
+                 (when (file-exists-p root)
+                   (delete-directory root t)))
+               rendered)"##;
+    let expect = expect![[
+        r#"OK (nil ("" "report.md" "" "-rw-r-----" "14" "Jan 02 12:34") (nil nil all-the-icons-ivy-rich-file-owner-face all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-size-face all-the-icons-ivy-rich-time-face))"#
+    ]];
 
     assert_all_the_icons_ivy_rich_parity(elisp_form, expect);
 }

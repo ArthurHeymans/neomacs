@@ -35,80 +35,161 @@ fn pinned_package_loads_its_real_ivy_rich_ivy_and_all_the_icons_dependency_graph
 }
 
 #[test]
-fn customization_defaults_and_ui_faces_match_the_installed_package_contract() {
-    let elisp_form = r##"(list
-               (mapcar
-                (lambda (symbol)
-                  (list
-                   symbol
-                   (symbol-value symbol)
-                   (get symbol 'custom-type)
-                   (get symbol 'standard-value)))
-                '(all-the-icons-ivy-rich-icon
-                  all-the-icons-ivy-rich-color-icon
-                  all-the-icons-ivy-rich-icon-size
-                  all-the-icons-ivy-rich-project
-                  all-the-icons-ivy-rich-field-width))
-               (mapcar
-                (lambda (face)
-                  (list
-                   face
-                   (facep face)
-                   (get face 'face-defface-spec)
-                   (documentation-property
-                    face 'face-documentation)))
-                '(all-the-icons-ivy-rich-on-face
-                  all-the-icons-ivy-rich-off-face
-                  all-the-icons-ivy-rich-icon-face
-                  all-the-icons-ivy-rich-file-priv-dir
-                  all-the-icons-ivy-rich-file-priv-read
-                  all-the-icons-ivy-rich-file-priv-write
-                  all-the-icons-ivy-rich-file-priv-exec
-                  all-the-icons-ivy-rich-process-status-alt-face
-                  all-the-icons-ivy-rich-imenu-doc-face)))"##;
+fn readme_color_size_and_icon_customizations_change_a_rendered_file_candidate() {
+    let elisp_form = r##"(progn
+               (require 'cl-lib)
+               (cl-letf
+                   (((symbol-function 'display-graphic-p)
+                     (lambda (&optional _frame) t)))
+                 (let* ((all-the-icons-ivy-rich-icon t)
+                        (all-the-icons-ivy-rich-color-icon t)
+                        (all-the-icons-ivy-rich-icon-size 1.4)
+                        (colored
+                         (all-the-icons-ivy-rich-file-icon "README.md"))
+                        (all-the-icons-ivy-rich-color-icon nil)
+                        (all-the-icons-ivy-rich-icon-size 0.75)
+                        (plain
+                         (all-the-icons-ivy-rich-file-icon "README.md"))
+                        (all-the-icons-ivy-rich-icon nil)
+                        (disabled
+                         (all-the-icons-ivy-rich-file-icon "README.md")))
+                   (list
+                    (list
+                     (substring-no-properties colored)
+                     (get-text-property 1 'face colored)
+                     (get-text-property 1 'display colored))
+                    (list
+                     (substring-no-properties plain)
+                     (get-text-property 1 'face plain)
+                     (get-text-property 1 'display plain))
+                    disabled))))"##;
     let expect = expect![[
-        r#"OK (((all-the-icons-ivy-rich-icon t boolean ((funcall #'#[nil (t) #1=(ivy-posframe-buffer counsel--fzf-dir t)]))) (all-the-icons-ivy-rich-color-icon t boolean ((funcall #'#[nil (t) #1#]))) (all-the-icons-ivy-rich-icon-size 1.0 float ((funcall #'#[nil (1.0) #1#]))) (all-the-icons-ivy-rich-project t boolean ((funcall #'#[nil (t) #1#]))) (all-the-icons-ivy-rich-field-width 80 integer ((funcall #'#[nil (80) #1#])))) ((all-the-icons-ivy-rich-on-face [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t :inherit success)) "Face used to signal enabled modes.") (all-the-icons-ivy-rich-off-face [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t :inherit shadow)) "Face used to signal disabled modes.") (all-the-icons-ivy-rich-icon-face [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t (:inherit default))) "Face used for the icons while ‘all-the-icons-ivy-rich-color-icon’ is nil.") (all-the-icons-ivy-rich-file-priv-dir [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t :inherit font-lock-keyword-face)) "Face used to highlight the dir file privilege attribute.") (all-the-icons-ivy-rich-file-priv-read [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t :inherit font-lock-type-face)) "Face used to highlight the read file privilege attribute.") (all-the-icons-ivy-rich-file-priv-write [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t :inherit font-lock-builtin-face)) "Face used to highlight the write file privilege attribute.") (all-the-icons-ivy-rich-file-priv-exec [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t :inherit font-lock-function-name-face)) "Face used to highlight the exec file privilege attribute.") (all-the-icons-ivy-rich-process-status-alt-face [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t :inherit all-the-icons-ivy-rich-error-face)) "Face used for process status: stop, exit, closed and failed.") (all-the-icons-ivy-rich-imenu-doc-face [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t (:inherit all-the-icons-ivy-rich-doc-face :height 0.9))) "Face used for imenu documentation.")))"#
+        r#"OK ((" " (:inherit all-the-icons-lcyan :family "github-octicons" :height 1.4) #1=(raise 0.0)) (" " (:inherit all-the-icons-ivy-rich-icon-face :family "github-octicons" :height 0.75) #1#) nil)"#
     ]];
 
     assert_all_the_icons_ivy_rich_parity(elisp_form, expect);
 }
 
 #[test]
-fn transformer_registry_describes_real_buffer_file_symbol_package_and_process_columns() {
-    let elisp_form = r##"(let ((callers
-                    '(ivy-switch-buffer
-                      counsel-find-file
-                      counsel-describe-symbol
-                      package-install
-                      counsel-list-processes
-                      project-find-file
-                      counsel-rg
-                      counsel-bookmark)))
-               (list
-                (length
-                 all-the-icons-ivy-rich-display-transformers-list)
-                (mapcar
-                 (lambda (caller)
-                   (let* ((tail
-                           (memq
-                            caller
-                            all-the-icons-ivy-rich-display-transformers-list))
-                          (configuration (cadr tail))
-                          (columns (plist-get configuration :columns)))
-                     (list
-                      caller
-                      (mapcar
-                       (lambda (column)
-                         (list
-                          (car column)
-                          (cdr column)))
-                       columns)
-                      (plist-get configuration :delimiter)
-                      (functionp
-                       (plist-get configuration :predicate)))))
-                 callers)))"##;
+fn enabled_package_mode_builds_and_applies_real_file_and_buffer_transformers() {
+    let elisp_form = r##"(let* ((root
+                     (file-name-as-directory
+                      (expand-file-name
+                       "air"
+                       (getenv "TMPDIR"))))
+                    (source-directory
+                     (file-name-as-directory
+                      (expand-file-name "src" root)))
+                    (file
+                     (expand-file-name
+                      "work-notes.el"
+                      source-directory))
+                    (buffer-name "work-notes.el")
+                    (ivy--directory source-directory)
+                    (ivy-last
+                     (make-ivy-state :caller 'counsel-find-file))
+                    (all-the-icons-ivy-rich-project nil)
+                    buffer
+                    rendered)
+               (unwind-protect
+                   (progn
+                     (when (file-exists-p root)
+                       (delete-directory root t))
+                     (make-directory
+                      (expand-file-name ".git" root)
+                      t)
+                     (make-directory source-directory t)
+                     (with-temp-file file
+                       (insert "(message \"ready\")\n"))
+                     (set-file-modes file #o640)
+                     (set-file-times
+                      file
+                      (encode-time 0 34 12 2 1 2024 t))
+                     (setq buffer (find-file-noselect file))
+                     (with-current-buffer buffer
+                       (emacs-lisp-mode)
+                       (goto-char (point-max))
+                       (insert ";; unsaved\n"))
+                     (cl-letf
+                         (((symbol-function 'display-graphic-p)
+                           (lambda (&optional _frame) t)))
+                       (all-the-icons-ivy-rich-mode 1)
+                       (let* ((file-configuration
+                               (cadr
+                                (memq
+                                 'counsel-find-file
+                                 ivy-rich-display-transformers-list)))
+                              (buffer-configuration
+                               (cadr
+                                (memq
+                                 'ivy-switch-buffer
+                                 ivy-rich-display-transformers-list)))
+                              (file-transformer
+                               (ivy-rich-build-transformer
+                                'counsel-find-file
+                                file-configuration))
+                              (buffer-transformer
+                               (ivy-rich-build-transformer
+                                'ivy-switch-buffer
+                                buffer-configuration))
+                              (file-fields
+                               (split-string
+                                (funcall file-transformer
+                                         "work-notes.el")
+                                "\t"))
+                              (buffer-fields
+                               (split-string
+                                (funcall buffer-transformer
+                                         buffer-name)
+                                "\t")))
+                         (setq
+                          rendered
+                          (list
+                           (functionp file-transformer)
+                           (functionp buffer-transformer)
+                           (mapcar
+                            (lambda (field)
+                              (string-trim-right
+                               (substring-no-properties field)))
+                            file-fields)
+                           (list
+                            (substring-no-properties
+                             (nth 0 buffer-fields))
+                            (string-trim-right
+                             (substring-no-properties
+                              (nth 1 buffer-fields)))
+                            (string-trim
+                             (substring-no-properties
+                              (nth 2 buffer-fields)))
+                            (string-trim
+                             (substring-no-properties
+                              (nth 3 buffer-fields)))
+                            (string-trim-right
+                             (substring-no-properties
+                              (nth 4 buffer-fields)))
+                            (string-trim
+                             (substring-no-properties
+                              (nth 5 buffer-fields)))
+                            (file-name-nondirectory
+                             (directory-file-name
+                              (string-trim
+                               (substring-no-properties
+                                (nth 6 buffer-fields)))))
+                            (get-text-property
+                             1 'face (nth 0 buffer-fields))
+                            (get-text-property
+                             0 'face (nth 4 buffer-fields))))))))
+                 (when all-the-icons-ivy-rich-mode
+                   (all-the-icons-ivy-rich-mode -1))
+                 (when (buffer-live-p buffer)
+                   (with-current-buffer buffer
+                     (set-buffer-modified-p nil))
+                   (kill-buffer buffer))
+                 (when (file-exists-p root)
+                   (delete-directory root t)))
+               rendered)"##;
     let expect = expect![[
-        r#"OK (206 ((ivy-switch-buffer ((all-the-icons-ivy-rich-buffer-icon nil) (ivy-switch-buffer-transformer ((:width 0.3))) (ivy-rich-switch-buffer-size ((:width 7 :face all-the-icons-ivy-rich-size-face))) (ivy-rich-switch-buffer-indicators ((:width 4 :face all-the-icons-ivy-rich-indicator-face :align right))) (all-the-icons-ivy-rich-switch-buffer-major-mode ((:width 18 :face all-the-icons-ivy-rich-major-mode-face))) (ivy-rich-switch-buffer-project ((:width 0.12 :face all-the-icons-ivy-rich-project-face))) (ivy-rich-switch-buffer-path ((:width (lambda (x) (ivy-rich-switch-buffer-shorten-path x (ivy-rich-minibuffer-width 0.3))) :face all-the-icons-ivy-rich-path-face)))) "\11" t) (counsel-find-file ((all-the-icons-ivy-rich-file-icon nil) (all-the-icons-ivy-rich-file-name ((:width 0.4))) (all-the-icons-ivy-rich-file-id ((:width 15 :face all-the-icons-ivy-rich-file-owner-face :align right))) (all-the-icons-ivy-rich-file-modes ((:width 12))) (all-the-icons-ivy-rich-file-size ((:width 7 :face all-the-icons-ivy-rich-size-face))) (all-the-icons-ivy-rich-file-modification-time ((:face all-the-icons-ivy-rich-time-face)))) "\11" nil) (counsel-describe-symbol ((all-the-icons-ivy-rich-symbol-icon nil) (ivy-rich-candidate ((:width 0.3))) (all-the-icons-ivy-rich-symbol-class ((:width 8 :face all-the-icons-ivy-rich-type-face))) (all-the-icons-ivy-rich-symbol-docstring ((:face all-the-icons-ivy-rich-doc-face)))) "\11" nil) (package-install ((all-the-icons-ivy-rich-package-icon nil) (ivy-rich-candidate ((:width 0.25))) (all-the-icons-ivy-rich-package-version ((:width 16 :face all-the-icons-ivy-rich-version-face))) (all-the-icons-ivy-rich-package-status ((:width 12))) (all-the-icons-ivy-rich-package-archive-summary ((:width 7 :face all-the-icons-ivy-rich-archive-face))) (all-the-icons-ivy-rich-package-install-summary ((:face all-the-icons-ivy-rich-pacage-desc-face)))) "\11" nil) (counsel-list-processes ((all-the-icons-ivy-rich-process-icon nil) (ivy-rich-candidate ((:width 25))) (all-the-icons-ivy-rich-process-id ((:width 7 :face all-the-icons-ivy-rich-process-id-face))) (all-the-icons-ivy-rich-process-status ((:width 7))) (all-the-icons-ivy-rich-process-buffer-name ((:width 25 :face all-the-icons-ivy-rich-process-buffer-face))) (all-the-icons-ivy-rich-process-tty-name ((:width 12 :face all-the-icons-ivy-rich-process-tty-face))) (all-the-icons-ivy-rich-process-thread ((:width 12 :face all-the-icons-ivy-rich-process-thread-face))) (all-the-icons-ivy-rich-process-command ((:face all-the-icons-ivy-rich-process-command-face)))) "\11" nil) (project-find-file ((all-the-icons-ivy-rich-file-icon nil) (all-the-icons-ivy-rich-project-find-file-transformer ((:width 0.4))) (all-the-icons-ivy-rich-project-file-id ((:width 15 :face all-the-icons-ivy-rich-file-owner-face :align right))) (all-the-icons-ivy-rich-project-file-modes ((:width 12))) (all-the-icons-ivy-rich-project-file-size ((:width 7 :face all-the-icons-ivy-rich-size-face))) (all-the-icons-ivy-rich-project-file-modification-time ((:face all-the-icons-ivy-rich-time-face)))) "\11" nil) (counsel-rg ((all-the-icons-ivy-rich-grep-file-icon nil) (all-the-icons-ivy-rich-grep-transformer nil)) "\11" nil) (counsel-bookmark ((all-the-icons-ivy-rich-bookmark-icon nil) (all-the-icons-ivy-rich-bookmark-name ((:width 0.25))) (ivy-rich-bookmark-type ((:width 10))) (all-the-icons-ivy-rich-bookmark-filename ((:width 0.3 :face all-the-icons-ivy-rich-bookmark-face))) (all-the-icons-ivy-rich-bookmark-context ((:face all-the-icons-ivy-rich-doc-face)))) "\11" nil)))"#
+        r#"OK (t t (" " "work-notes.el" "" "-rw-r-----" "18" "Jan 02 12:34") (" " "work-notes.el" "29" "*" "" "air" "src" (:inherit all-the-icons-purple :family "file-icons" :height 1.0) all-the-icons-ivy-rich-major-mode-face))"#
     ]];
 
     assert_all_the_icons_ivy_rich_parity(elisp_form, expect);

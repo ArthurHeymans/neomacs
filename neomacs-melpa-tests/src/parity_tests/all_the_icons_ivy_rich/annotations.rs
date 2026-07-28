@@ -377,23 +377,27 @@ fn bookmark_annotations_use_real_bookmark_records_for_name_path_and_compact_cont
 
 #[test]
 fn installed_package_annotations_report_real_version_archive_summary_and_status() {
-    let elisp_form = r##"(mapcar
-               (lambda (candidate)
-                 (list
-                  candidate
-                  (all-the-icons-ivy-rich-package-name
-                   candidate)
-                  (all-the-icons-ivy-rich-package-version
-                   candidate)
-                  (all-the-icons-ivy-rich-package-archive-summary
-                   candidate)
-                  (all-the-icons-ivy-rich-package-install-summary
-                   candidate)
-                  (all-the-icons-ivy-rich-package-status
-                   candidate)))
-               '("all-the-icons-ivy-rich-20230420.1234"
-                 "ivy-rich-20230425.1422"
-                 "not-a-real-package-9.9"))"##;
+    let elisp_form = r##"(let
+               ((package-load-list '(all))
+                (package-selected-packages
+                 '(all-the-icons-ivy-rich)))
+               (mapcar
+                (lambda (candidate)
+                  (list
+                   candidate
+                   (all-the-icons-ivy-rich-package-name
+                    candidate)
+                   (all-the-icons-ivy-rich-package-version
+                    candidate)
+                   (all-the-icons-ivy-rich-package-archive-summary
+                    candidate)
+                   (all-the-icons-ivy-rich-package-install-summary
+                    candidate)
+                   (all-the-icons-ivy-rich-package-status
+                    candidate)))
+                '("all-the-icons-ivy-rich-20230420.1234"
+                  "ivy-rich-20230425.1422"
+                  "not-a-real-package-9.9")))"##;
     let expect = expect![[
         r#"OK (("all-the-icons-ivy-rich-20230420.1234" "all-the-icons-ivy-rich" "" "" "" #("installed" 0 9 (face all-the-icons-ivy-rich-package-status-installed-face))) ("ivy-rich-20230425.1422" "ivy-rich" "" "" "" #("dependency" 0 10 (face all-the-icons-ivy-rich-package-status-installed-face))) ("not-a-real-package-9.9" "not-a-real-package" "" "" "" #("orphan" 0 6 (face all-the-icons-ivy-rich-error-face))))"#
     ]];

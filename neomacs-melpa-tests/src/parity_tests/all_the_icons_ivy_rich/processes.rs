@@ -3,7 +3,7 @@ use expect_test::expect;
 use super::assert_all_the_icons_ivy_rich_parity;
 
 #[test]
-fn live_subprocess_annotations_report_status_buffer_thread_command_and_nondeterministic_id_shape() {
+fn live_subprocess_annotations_report_status_buffer_thread_command_and_identifier_shapes() {
     let elisp_form = r##"(let* ((buffer
                      (generate-new-buffer
                       " *all-the-icons-ivy-rich-process*"))
@@ -26,6 +26,9 @@ fn live_subprocess_annotations_report_status_buffer_thread_command_and_nondeterm
                              (process-name process)))
                            (status
                             (all-the-icons-ivy-rich-process-status
+                             (process-name process)))
+                           (tty
+                            (all-the-icons-ivy-rich-process-tty-name
                              (process-name process))))
                        (setq
                         result
@@ -34,14 +37,19 @@ fn live_subprocess_annotations_report_status_buffer_thread_command_and_nondeterm
                           (stringp identifier)
                           (string-match-p
                            "\\`[0-9]+\\'"
-                           identifier))
+                           identifier)
+                          t)
                          (list
                           (substring-no-properties status)
                           (get-text-property 0 'face status))
                          (all-the-icons-ivy-rich-process-buffer-name
                           (process-name process))
-                         (all-the-icons-ivy-rich-process-tty-name
-                          (process-name process))
+                         (and
+                          (stringp tty)
+                          (string-match-p
+                           "\\`/dev/pts/[0-9]+\\'"
+                           tty)
+                          t)
                          (all-the-icons-ivy-rich-process-thread
                           (process-name process))
                          (all-the-icons-ivy-rich-process-command
@@ -52,7 +60,7 @@ fn live_subprocess_annotations_report_status_buffer_thread_command_and_nondeterm
                    (kill-buffer buffer)))
                result)"##;
     let expect = expect![[
-        r#"OK (0 ("run" all-the-icons-ivy-rich-process-status-face) " *all-the-icons-ivy-rich-process*" "/dev/pts/0" #("Main        " 0 12 (face all-the-icons-ivy-rich-process-thread-face)) "sh -c sleep 30")"#
+        r#"OK (t ("run" all-the-icons-ivy-rich-process-status-face) " *all-the-icons-ivy-rich-process*" t #("Main        " 0 12 (face all-the-icons-ivy-rich-process-thread-face)) "sh -c sleep 30")"#
     ]];
 
     assert_all_the_icons_ivy_rich_parity(elisp_form, expect);
