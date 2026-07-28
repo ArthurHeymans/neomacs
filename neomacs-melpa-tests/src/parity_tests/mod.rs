@@ -229,6 +229,7 @@ mod auth_source_xoauth2;
 mod auto_async_byte_compile;
 mod auto_auto_indent;
 mod auto_compile;
+mod auto_complete;
 mod auto_dark;
 mod bind_key;
 mod compat;

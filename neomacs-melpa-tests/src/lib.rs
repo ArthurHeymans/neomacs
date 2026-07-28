@@ -87,6 +87,12 @@ pub const ATOM_DARK_THEME_MELPA_PIN: (&str, &str) = ("atom-dark-theme", "2022011
 /// `bba02fb2672a4c439d71920d8e068a3ff2ed463e`.
 pub const ATOM_ONE_DARK_THEME_MELPA_PIN: (&str, &str) = ("atom-one-dark-theme", "20260119.1824");
 
+/// The exact auto-complete package selected by the comprehensive source,
+/// candidate, completion, dictionary, history, configuration, and lifecycle
+/// parity corpus. MELPA built this archive from upstream commit
+/// `07f9915e08342410b933145d7934998709753a29`.
+pub const AUTO_COMPLETE_MELPA_PIN: (&str, &str) = ("auto-complete", "20251231.1622");
+
 /// The exact audio-notes-mode package selected by the comprehensive
 /// filesystem, playback, process-control, mode-line, advice, and global-mode
 /// lifecycle parity corpus. MELPA built this archive from upstream commit
@@ -104,6 +110,11 @@ pub const AUSTRALIA_HOLIDAYS_MELPA_PIN: (&str, &str) = ("australia-holidays", "2
 /// corpus. MELPA built this archive from upstream commit
 /// `1e1bff2403966c3a0683ee65fb28cb8d8ff2c389`.
 pub const AUTH_SOURCE_KWALLET_MELPA_PIN: (&str, &str) = ("auth-source-kwallet", "20250419.1330");
+
+/// The exact popup dependency selected for the auto-complete parity corpus.
+/// MELPA built this archive from upstream commit
+/// `45a0b759076ce4139aba36dde0a2904136282e73`.
+pub const POPUP_MELPA_PIN: (&str, &str) = ("popup", "20251231.1622");
 
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
