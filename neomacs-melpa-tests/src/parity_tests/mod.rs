@@ -210,6 +210,7 @@ mod async_status;
 mod asyncloop;
 mod at_package;
 mod atcoder_tools;
+mod atl_long_lines;
 mod atom_dark_theme;
 mod bind_key;
 mod compat;

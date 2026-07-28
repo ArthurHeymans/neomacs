@@ -923,6 +923,12 @@ pub const ASYNC_STATUS_MELPA_PIN: (&str, &str) = ("async-status", "20230821.204"
 /// `cfe61ed18ea9b3b1bfb6f9e7d80a47599680cd1f`.
 pub const ATCODER_TOOLS_MELPA_PIN: (&str, &str) = ("atcoder-tools", "20200109.1236");
 
+/// The exact atl-long-lines package selected by the comprehensive mode,
+/// line-measurement, timer, toggle, and end-to-end workflow parity corpus.
+/// MELPA built this archive from upstream commit
+/// `82cdd4edefba2d5b1d491bf3fcc487385819d713`.
+pub const ATL_LONG_LINES_MELPA_PIN: (&str, &str) = ("atl-long-lines", "20240101.929");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

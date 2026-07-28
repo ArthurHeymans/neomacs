@@ -1,0 +1,281 @@
+use expect_test::expect;
+
+use super::assert_atl_long_lines_parity;
+
+#[test]
+fn atl_long_lines_start_timer_schedules_one_shot_idle_callback_with_custom_delay() {
+    let elisp_form = r##"(let ((atl-long-lines-delay 1.25)
+               (atl-long-lines--timer nil)
+               calls
+               (sentinel
+                (list :scheduled)))
+         (cl-letf
+             (((symbol-function 'timerp)
+               (lambda (_value) nil))
+              ((symbol-function
+                'run-with-idle-timer)
+               (lambda
+                   (seconds repeat function
+                            &rest arguments)
+                 (push
+                  (list
+                   seconds
+                   repeat
+                   function
+                   arguments)
+                  calls)
+                 sentinel)))
+           (list
+            (atl-long-lines--start-timer)
+            (eq
+             atl-long-lines--timer
+             sentinel)
+            (nreverse calls))))"##;
+    let expect = expect!["OK ((:scheduled) t ((1.25 nil atl-long-lines-do-toggle nil)))"];
+    assert_atl_long_lines_parity(elisp_form, expect);
+}
+
+#[test]
+fn atl_long_lines_start_timer_cancels_an_existing_timer_before_rescheduling() {
+    let elisp_form = r##"(let ((atl-long-lines-delay 0.4)
+               (old
+                (list :old))
+               (new
+                (list :new))
+               events)
+         (setq
+          atl-long-lines--timer
+          old)
+         (cl-letf
+             (((symbol-function 'timerp)
+               (lambda (value)
+                 (eq value old)))
+              ((symbol-function 'cancel-timer)
+               (lambda (timer)
+                 (push
+                  (list :cancel timer)
+                  events)))
+              ((symbol-function
+                'run-with-idle-timer)
+               (lambda
+                   (delay repeat function
+                          &rest arguments)
+                 (push
+                  (list
+                   :schedule
+                   delay
+                   repeat
+                   function
+                   arguments)
+                  events)
+                 new)))
+           (atl-long-lines--start-timer)
+           (list
+            (nreverse events)
+            (eq
+             atl-long-lines--timer
+             new))))"##;
+    let expect =
+        expect!["OK (((:cancel (:old)) (:schedule 0.4 nil atl-long-lines-do-toggle nil)) t)"];
+    assert_atl_long_lines_parity(elisp_form, expect);
+}
+
+#[test]
+fn atl_long_lines_start_timer_does_not_cancel_a_non_timer_sentinel() {
+    let elisp_form = r##"(let ((atl-long-lines--timer
+                :not-a-timer)
+               cancelled
+               (new
+                (list :new)))
+         (cl-letf
+             (((symbol-function 'timerp)
+               (lambda (_value) nil))
+              ((symbol-function 'cancel-timer)
+               (lambda (value)
+                 (push value cancelled)))
+              ((symbol-function
+                'run-with-idle-timer)
+               (lambda (&rest _arguments)
+                 new)))
+           (atl-long-lines--start-timer)
+           (list
+            cancelled
+            (eq
+             atl-long-lines--timer
+             new))))"##;
+    let expect = expect!["OK (nil t)"];
+    assert_atl_long_lines_parity(elisp_form, expect);
+}
+
+#[test]
+fn atl_long_lines_repeated_start_timer_keeps_only_the_latest_scheduled_handle() {
+    let elisp_form = r##"(let ((atl-long-lines--timer nil)
+               (next-id 0)
+               live
+               cancelled)
+         (cl-letf
+             (((symbol-function 'timerp)
+               (lambda (value)
+                 (memq value live)))
+              ((symbol-function 'cancel-timer)
+               (lambda (value)
+                 (setq
+                  live
+                  (delq value live))
+                 (push value cancelled)))
+              ((symbol-function
+                'run-with-idle-timer)
+               (lambda (&rest _arguments)
+                 (let ((timer
+                        (list
+                         :timer
+                         (setq
+                          next-id
+                          (1+ next-id)))))
+                   (push timer live)
+                   timer))))
+           (dotimes
+               (_ 4)
+             (atl-long-lines--start-timer))
+           (list
+            (cadr
+             atl-long-lines--timer)
+            (mapcar #'cadr live)
+            (eq
+             atl-long-lines--timer
+             (car live))
+            (mapcar
+             #'cadr
+             (nreverse cancelled))
+            next-id)))"##;
+    let expect = expect!["OK (4 (4) t (1 2 3) 4)"];
+    assert_atl_long_lines_parity(elisp_form, expect);
+}
+
+#[test]
+fn atl_long_lines_start_timer_forwards_fractional_zero_and_negative_delays_unchanged() {
+    let elisp_form = r##"(let (observed)
+         (cl-letf
+             (((symbol-function 'timerp)
+               (lambda (_value) nil))
+              ((symbol-function
+                'run-with-idle-timer)
+               (lambda
+                   (delay repeat function
+                          &rest arguments)
+                 (push
+                  (list
+                   delay
+                   repeat
+                   function
+                   arguments)
+                  observed)
+                 (list :timer delay))))
+           (mapcar
+            (lambda (delay)
+              (let ((atl-long-lines-delay
+                     delay)
+                    (atl-long-lines--timer
+                     nil))
+                (atl-long-lines--start-timer)
+                atl-long-lines--timer))
+            '(0 0.125 -1 3))
+           (nreverse observed)))"##;
+    let expect = expect![
+        "OK ((0 nil atl-long-lines-do-toggle nil) (0.125 nil atl-long-lines-do-toggle nil) (-1 nil atl-long-lines-do-toggle nil) (3 nil atl-long-lines-do-toggle nil))"
+    ];
+    assert_atl_long_lines_parity(elisp_form, expect);
+}
+
+#[test]
+fn atl_long_lines_start_timer_creates_a_real_registered_one_shot_idle_timer() {
+    let elisp_form = r##"(let ((atl-long-lines-delay 60)
+               (atl-long-lines--timer nil))
+         (unwind-protect
+             (progn
+               (atl-long-lines--start-timer)
+               (list
+                (atl-long-lines-test-timer-shape
+                 atl-long-lines--timer)
+                (and
+                 (memq
+                  atl-long-lines--timer
+                  timer-idle-list)
+                 t)))
+           (when
+               (timerp
+                atl-long-lines--timer)
+             (cancel-timer
+              atl-long-lines--timer))))"##;
+    let expect = expect!["OK ((t atl-long-lines-do-toggle nil nil idle) t)"];
+    assert_atl_long_lines_parity(elisp_form, expect);
+}
+
+#[test]
+fn atl_long_lines_real_reschedule_unregisters_old_idle_timer_and_registers_new_one() {
+    let elisp_form = r##"(let ((atl-long-lines-delay 60)
+               (atl-long-lines--timer nil)
+               old
+               new)
+         (unwind-protect
+             (progn
+               (atl-long-lines--start-timer)
+               (setq old
+                     atl-long-lines--timer)
+               (atl-long-lines--start-timer)
+               (setq new
+                     atl-long-lines--timer)
+               (list
+                (timerp old)
+                (timerp new)
+                (eq old new)
+                (and
+                 (memq old timer-idle-list)
+                 t)
+                (and
+                 (memq new timer-idle-list)
+                 t)))
+           (when
+               (timerp new)
+             (cancel-timer new))
+           (when
+               (timerp old)
+             (cancel-timer old))))"##;
+    let expect = expect!["OK (t t nil nil t)"];
+    assert_atl_long_lines_parity(elisp_form, expect);
+}
+
+#[test]
+fn atl_long_lines_disabling_mode_removes_hook_but_leaves_already_scheduled_timer_active() {
+    let elisp_form = r##"(with-temp-buffer
+         (let ((atl-long-lines-delay 60)
+               (atl-long-lines--timer nil)
+               timer)
+           (unwind-protect
+               (progn
+                 (atl-long-lines-mode 1)
+                 (run-hooks
+                  'post-command-hook)
+                 (setq timer
+                       atl-long-lines--timer)
+                 (atl-long-lines-mode -1)
+                 (list
+                  atl-long-lines-mode
+                  (atl-long-lines-test-hook-count
+                   #'atl-long-lines--start-timer
+                   post-command-hook)
+                  (timerp timer)
+                  (and
+                   (memq
+                    timer
+                    timer-idle-list)
+                   t)
+                  (eq
+                   timer
+                   atl-long-lines--timer)))
+             (when
+                 (timerp timer)
+               (cancel-timer timer)))))"##;
+    let expect = expect!["OK (nil 0 t t t)"];
+    assert_atl_long_lines_parity(elisp_form, expect);
+}
