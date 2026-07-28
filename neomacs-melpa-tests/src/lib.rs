@@ -1158,6 +1158,12 @@ pub const AUTO_DIM_OTHER_BUFFERS_MELPA_PIN: (&str, &str) =
 /// upstream commit `e84da32e7cf1baefb0a9eef42a2fc842cf18f8b3`.
 pub const AUTO_HIGHLIGHT_SYMBOL_MELPA_PIN: (&str, &str) = ("auto-highlight-symbol", "20260101.552");
 
+/// The exact auto-indent-mode package selected by the comprehensive
+/// indentation, yank, deletion, kill, repository, lifecycle, and practical
+/// editing workflow parity corpus. MELPA built this archive from upstream
+/// commit `664006b67329a8e27330541547f8c2187dab947c`.
+pub const AUTO_INDENT_MODE_MELPA_PIN: (&str, &str) = ("auto-indent-mode", "20211029.11");
+
 /// The exact ht package selected as auto-highlight-symbol's hash-table
 /// dependency. MELPA built this archive from upstream commit
 /// `1c49aad1c820c86f7ee35bf9fff8429502f60fef`.
