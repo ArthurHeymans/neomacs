@@ -3,16 +3,11 @@ use std::time::Duration;
 use crate::{AQI_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod accessors;
-mod cache;
-mod registry;
-mod reports;
-mod requests;
+mod workflows;
 
 const AQI_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 const AQI_TEST_PRELUDE: &str = r##"
 (require 'cl-lib)
-(require 'seq)
 
 (defun aqi-test-city-data
     (city score dominant)
@@ -69,8 +64,4 @@ fn assert_aqi_source_parity(source_file: &str, elisp_form: &str, expected: Expec
 
 pub(crate) fn assert_aqi_parity(elisp_form: &str, expected: Expect) {
     assert_aqi_source_parity("aqi.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_aqi_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_aqi_source_parity("aqi-autoloads.el", elisp_form, expected);
 }
