@@ -122,6 +122,18 @@ pub const AUTO_COMPLETE_CHUNK_MELPA_PIN: (&str, &str) = ("auto-complete-chunk", 
 /// upstream commit `a195db1d0593b4fb97efe50885e12aa6764d998c`.
 pub const AUTO_COMPLETE_CLANG_MELPA_PIN: (&str, &str) = ("auto-complete-clang", "20140409.752");
 
+/// The exact auto-complete-distel package selected by the comprehensive
+/// prefix, source, Distel bridge, documentation, and practical Erlang
+/// completion workflow parity corpus. MELPA built this archive from upstream
+/// commit `acc4c0a5521904203d797fe96b08e5fae4233c7e`.
+pub const AUTO_COMPLETE_DISTEL_MELPA_PIN: (&str, &str) = ("auto-complete-distel", "20180827.1344");
+
+/// The exact companion Distel completion library required by
+/// `AUTO_COMPLETE_DISTEL_MELPA_PIN`. MELPA built both archives from the same
+/// upstream commit `acc4c0a5521904203d797fe96b08e5fae4233c7e`.
+pub const DISTEL_COMPLETION_LIB_MELPA_PIN: (&str, &str) =
+    ("distel-completion-lib", "20180827.1344");
+
 /// The exact auto-complete-nxml package selected by the comprehensive context,
 /// candidate, documentation, namespace, action, and practical nXML workflow
 /// parity corpus. MELPA built this archive from upstream commit
