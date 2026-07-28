@@ -1360,15 +1360,10 @@ pub fn window_params_from_neovm_with_font_sizing(
 
     let char_width = frame.char_width;
     let char_height = frame.char_height;
-    let default_face = face_table.resolve("default");
-    let default_fg = default_face
-        .foreground
-        .map(|color| color_to_pixel(&color))
-        .unwrap_or(0x000000);
-    let default_bg = default_face
-        .background
-        .map(|color| color_to_pixel(&color))
-        .unwrap_or(0x00FFFFFF);
+    // One authority for the default face's realized pixels, shared with the
+    // image builtins so a spec keys the image cache identically from Lisp and
+    // from layout (GNU: `lookup_image` via `DEFAULT_FACE_ID`).
+    let (default_fg, default_bg) = face_table.default_face_colors();
     let face_resolver = FaceResolver::new_with_font_sizing(
         face_table,
         default_fg,
@@ -2496,7 +2491,7 @@ fn overlay_string_priority(overlay: Value) -> i64 {
 
 /// Convert a neovm-core `Color` to a packed sRGB pixel (0x00RRGGBB).
 fn color_to_pixel(c: &NeoColor) -> u32 {
-    ((c.r as u32) << 16) | ((c.g as u32) << 8) | (c.b as u32)
+    c.to_pixel()
 }
 
 /// Check if two colors are perceptually close.

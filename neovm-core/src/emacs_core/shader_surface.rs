@@ -138,10 +138,14 @@ fn resolve_channel_value(
     match head.as_deref() {
         Some("image") => {
             let environment = image_scale_environment_for_frame(eval, None).unwrap_or_default();
-            let request =
-                image_resolve_request_from_spec(&value, environment).ok_or_else(|| {
-                    surface_error("neomacs-surface-create: invalid image spec in :channel0")
-                })?;
+            let request = image_resolve_request_from_spec(
+                &value,
+                environment,
+                eval.face_table().default_face_colors(),
+            )
+            .ok_or_else(|| {
+                surface_error("neomacs-surface-create: invalid image spec in :channel0")
+            })?;
             let catalog = eval
                 .display_host
                 .as_ref()

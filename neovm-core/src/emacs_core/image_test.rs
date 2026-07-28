@@ -5,6 +5,7 @@ use crate::emacs_core::image_catalog::{
     PendingImage, ReadyImage, ResolvedImageMetadata,
 };
 use crate::emacs_core::value::list_to_vec;
+use crate::face::{Color, FaceTable};
 use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
@@ -1386,7 +1387,42 @@ fn image_spec_parse_reduces_rotation_to_a_quarter_turn() {
         Value::keyword("rotation"),
         Value::fixnum(90),
     ]);
-    let request = image_resolve_request_from_spec(&spec, ImageScaleEnvironment::default())
+    let request = image_resolve_request_from_spec(&spec, ImageScaleEnvironment::default(), (0, 0))
         .expect("valid image spec");
     assert_eq!(request.rotation, ImageRotation::Quarter);
+}
+
+/// GNU's `Fimage_size` calls `lookup_image (f, spec, -1)`, and `lookup_image`
+/// maps a negative face id to `DEFAULT_FACE_ID` and keys the image cache on
+/// THAT face's foreground/background (image.c: `search_image_cache` compares
+/// `img->face_foreground`/`face_background`).
+///
+/// Neomacs hardcoded `fg_color: 0, bg_color: 0` here while the layout engine
+/// built its request from the resolved face, so one image spec produced two
+/// different cache keys — two catalog entries, two decodes and two GPU
+/// textures for the same file.
+#[test]
+fn image_request_uses_the_default_face_colors_like_gnu() {
+    let mut table = FaceTable::new();
+    let mut default = table.resolve("default");
+    default.foreground = Some(Color::rgb(0x11, 0x22, 0x33));
+    default.background = Some(Color::rgb(0x44, 0x55, 0x66));
+    table.define("default", default);
+
+    let spec = Value::list(vec![
+        Value::symbol("image"),
+        Value::keyword("type"),
+        Value::symbol("png"),
+        Value::keyword("file"),
+        Value::string("/tmp/x.png"),
+    ]);
+    let request = image_resolve_request_from_spec(
+        &spec,
+        ImageScaleEnvironment::default(),
+        table.default_face_colors(),
+    )
+    .expect("valid image spec");
+
+    assert_eq!(request.fg_color, 0x00112233);
+    assert_eq!(request.bg_color, 0x00445566);
 }

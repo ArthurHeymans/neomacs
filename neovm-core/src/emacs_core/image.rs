@@ -361,6 +361,7 @@ fn parse_image_dimension(value: Value) -> Option<u32> {
 pub(crate) fn image_resolve_request_from_spec(
     spec: &Value,
     environment: ImageScaleEnvironment,
+    default_colors: (u32, u32),
 ) -> Option<ImageResolveRequest> {
     let items = list_to_vec(spec)?;
     if items.first()?.as_symbol_name() != Some("image") {
@@ -427,8 +428,12 @@ pub(crate) fn image_resolve_request_from_spec(
             AxisSize::resolve(height, max_height),
         ),
         rotation,
-        fg_color: 0,
-        bg_color: 0,
+        // GNU keys the image cache on the face's colors, and `Fimage_size`
+        // resolves through `DEFAULT_FACE_ID` (image.c `lookup_image`). Using
+        // zeros here gave the same spec a different key than the one layout
+        // builds from the resolved face, so every measured image decoded twice.
+        fg_color: default_colors.0,
+        bg_color: default_colors.1,
         realization: environment.resolve(scale),
     })
 }
@@ -674,7 +679,11 @@ pub(crate) fn builtin_image_size_in_context(eval: &mut Context, args: Vec<Value>
             vec![Value::string("Window system frame should be used")],
         ));
     };
-    let Some(request) = image_resolve_request_from_spec(&args[0], environment) else {
+    let Some(request) = image_resolve_request_from_spec(
+        &args[0],
+        environment,
+        eval.face_table().default_face_colors(),
+    ) else {
         return Err(signal(
             "error",
             vec![Value::string("Invalid image specification")],
@@ -790,7 +799,11 @@ pub(crate) fn builtin_image_mask_p_in_context(eval: &mut Context, args: Vec<Valu
             vec![Value::string("Window system frame should be used")],
         ));
     };
-    let Some(request) = image_resolve_request_from_spec(&args[0], environment) else {
+    let Some(request) = image_resolve_request_from_spec(
+        &args[0],
+        environment,
+        eval.face_table().default_face_colors(),
+    ) else {
         return Err(signal(
             "error",
             vec![Value::string("Invalid image specification")],
@@ -949,9 +962,11 @@ pub(crate) fn builtin_image_flush_in_context(eval: &mut Context, args: Vec<Value
         ));
     }
 
+    let default_colors = eval.face_table().default_face_colors();
     let Some(request) = image_resolve_request_from_spec(
         &args[0],
         image_scale_environment_for_frame(eval, args.get(1)).unwrap_or_default(),
+        default_colors,
     ) else {
         return Err(signal(
             "error",

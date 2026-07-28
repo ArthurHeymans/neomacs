@@ -133,6 +133,13 @@ impl Color {
         Self { r, g, b, a }
     }
 
+    /// Pack as an sRGB pixel (`0x00RRGGBB`) — the form face colors take
+    /// everywhere they cross into display code and image cache keys.
+    #[must_use]
+    pub const fn to_pixel(self) -> u32 {
+        ((self.r as u32) << 16) | ((self.g as u32) << 8) | (self.b as u32)
+    }
+
     /// Parse a GNU/X11 hex color: `#` followed by 3, 6, 9, or 12 hex digits —
     /// i.e. 1..=4 hex digits PER CHANNEL (4/8/12/16 bits). Each channel is
     /// downscaled to 8 bits using its most-significant bits, so the wide forms
@@ -1775,6 +1782,27 @@ impl FaceTable {
     /// Returns a fully-specified face with all inherited attributes filled in.
     pub fn resolve(&self, name: &str) -> Face {
         self.resolve_depth(name, 0)
+    }
+
+    /// Foreground and background of the `default` face as sRGB pixels.
+    ///
+    /// GNU's `lookup_image` maps a negative face id to `DEFAULT_FACE_ID` and
+    /// reads `face->foreground`/`face->background` (image.c), so this is the
+    /// answer both the image cache key and the display-side default face need.
+    /// It lived only in the layout engine, and the image builtins substituted
+    /// zeros — giving one image spec two different cache keys, hence two
+    /// decodes of the same file.
+    ///
+    /// The unset case keeps GNU's black-on-white default. Callers that must
+    /// preserve the TTY `unspecified-fg`/`unspecified-bg` sentinel look at the
+    /// `Face` itself; this returns the realized pixels only.
+    #[must_use]
+    pub fn default_face_colors(&self) -> (u32, u32) {
+        let default = self.resolve("default");
+        (
+            default.foreground.map_or(0x000000, Color::to_pixel),
+            default.background.map_or(0x00FF_FFFF, Color::to_pixel),
+        )
     }
 
     fn resolve_depth(&self, name: &str, depth: usize) -> Face {
