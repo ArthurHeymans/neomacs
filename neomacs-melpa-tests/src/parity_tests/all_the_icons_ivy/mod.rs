@@ -42,7 +42,18 @@ const ALL_THE_ICONS_IVY_TEST_PRELUDE: &str = r##"
 ;; tab carrying a `display' property, which separator follows, and what the
 ;; candidate text and its face are.  Properties are read one at a time with
 ;; `get-text-property' rather than by comparing propertized strings, so a
-;; plist-order difference (catalogue entry 22) shows up as a named property.
+;; plist-order difference shows up as a named property rather than as an
+;; opaque string mismatch.
+;;
+;; Catalogue entry 22 cannot be reached from here, which was measured rather
+;; than assumed.  That entry is about the FORMAT string -- `(format s)' where
+;; `s' itself carries the properties.  This package propertizes only its
+;; arguments; its template is `(concat "%s" all-the-icons-spacer "%s")', which
+;; is unpropertized in both editors.  The one route to a propertized template
+;; is setting `all-the-icons-spacer' to a propertized string, and that round
+;; trips identically in both: `concat' reverses the plist and `format'
+;; reverses it back.  The per-property reading is kept anyway, so the suite
+;; would notice if this ever did start to bite.
 (defun ativ-test-describe (result)
   (if (not (stringp result))
       (list 'not-a-string result)
@@ -51,10 +62,10 @@ const ALL_THE_ICONS_IVY_TEST_PRELUDE: &str = r##"
       (list :text plain
             :length (length plain)
             :first-char (aref plain 0)
-            ;; Property NAMES in order.  Catalogue entry 22 is about `format'
-            ;; reversing a propertized string's plist, so the order is the
-            ;; thing to pin; the values are all-the-icons' surface and the
-            ;; icon string also shares structure unstably, so neither appears.
+            ;; Property NAMES in order.  The order is what a plist-reversal
+            ;; bug would disturb, so it is the thing to pin; the values are
+            ;; all-the-icons' surface and the icon string also shares
+            ;; structure unstably, so neither appears.
             :prop-names-at-0 (cl-loop for (key _value) on (text-properties-at 0 result)
                                       by #'cddr collect key)
             :icon-one-char-string (and (stringp icon) (= (length icon) 1))
