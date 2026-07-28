@@ -55,6 +55,11 @@ cons cells between their variables (amx's `amx-data` and `amx-cache` do), so a
 snapshot taken early can render the *final* values under a `#1=` marker and look
 self-contradictory beside something captured at the same moment.
 
+Predicates can leak the live structure too: `custom-theme-p` returns a *tail of
+`custom-enabled-themes`*, so capturing it across several load/disable cycles
+renders the final list under `#N=` markers. Coerce to a boolean —
+`(and (custom-theme-p theme) t)`.
+
 ## Driving the editor in batch
 
 **`execute-kbd-macro` only reaches the buffer of the selected window.**
