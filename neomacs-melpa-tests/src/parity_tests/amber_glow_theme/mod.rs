@@ -3,16 +3,109 @@ use std::time::Duration;
 use crate::{AMBER_GLOW_THEME_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod lifecycle;
-mod registry;
-mod rendering;
-mod specs;
+mod workflows;
 
-const AMBER_GLOW_THEME_TEST_TIMEOUT: Duration = Duration::from_secs(120);
+const AMBER_GLOW_THEME_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
-fn amber_glow_theme_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(AMBER_GLOW_THEME_MELPA_PIN, source_file)
+/// Helpers shared by the workflows.
+///
+/// amber-glow is a small theme: one `custom-theme-set-faces' call, eighteen
+/// faces, no variables and no palette variables - every colour is written out
+/// as a literal in the spec.  Every spec uses the `((t ...))' shape, so a batch
+/// frame matches all of them and `face-attribute ... nil t' returns the real
+/// colour strings; resolved appearance is the assertable surface and nothing
+/// needs faking.  See HARNESS-NOTES.md for the `min-colors' families where it
+/// is not, and `amaranth_dark_theme' for a theme in the same shape with
+/// display-conditional specs as well - amber-glow has none, so there is no
+/// workflow here for choosing between clauses.
+///
+/// Eighteen faces is few enough that what the theme *does not* set matters as
+/// much as what it does, which is why one workflow is about the faces it leaves
+/// alone.
+///
+/// `amber-test-copy-tree' copies strings as well as conses so repeated colours
+/// do not print as `#1=' definitions and `#1#' back references.
+const AMBER_GLOW_THEME_TEST_PRELUDE: &str = r##"(require 'cl-lib)
+
+(defun amber-test-copy-tree (value)
+  "Copy VALUE deeply, strings included, so nothing prints as a `#N=' reference."
+  (cond ((consp value) (cons (amber-test-copy-tree (car value))
+                             (amber-test-copy-tree (cdr value))))
+        ((stringp value) (copy-sequence value))
+        (t value)))
+
+(defun amber-test-face-report (specs)
+  "Resolve SPECS the way the display would; each entry is (FACE ATTRIBUTE...)."
+  (mapcar
+   (lambda (spec)
+     (cons (car spec)
+           (mapcar (lambda (attribute)
+                     (cons attribute
+                           (amber-test-copy-tree
+                            (face-attribute (car spec) attribute nil t))))
+                   (cdr spec))))
+   specs))
+
+(defun amber-test-token-faces (tokens)
+  "For each token, the face font lock gave it and how that face resolves."
+  (mapcar
+   (lambda (token)
+     (goto-char (point-min))
+     (search-forward token)
+     (let* ((position (- (point) (length token)))
+            (face (get-text-property position 'face))
+            (primary (if (listp face) (car face) face)))
+       (list (copy-sequence token)
+             face
+             (and primary (amber-test-copy-tree
+                           (face-attribute primary :foreground nil t)))
+             (and primary (face-attribute primary :weight nil t)))))
+   tokens))
+
+(defun amber-test-face-count ()
+  "How many faces amber-glow has registered a setting for."
+  (cl-count-if (lambda (setting) (eq (car setting) 'theme-face))
+               (get 'amber-glow 'theme-settings)))
+
+(defconst amber-test-themed-faces
+  '((default :foreground :background)
+    (cursor :background)
+    (fringe :background :foreground)
+    (region :background :foreground)
+    (highlight :background :foreground)
+    (vertical-border :background :foreground)
+    (font-lock-builtin-face :foreground)
+    (font-lock-comment-face :foreground)
+    (font-lock-constant-face :foreground)
+    (font-lock-function-name-face :foreground)
+    (font-lock-keyword-face :foreground)
+    (font-lock-string-face :foreground)
+    (font-lock-type-face :foreground)
+    (font-lock-variable-name-face :foreground)
+    (font-lock-warning-face :foreground :weight :inherit)
+    (mode-line :background :foreground)
+    (mode-line-inactive :background :foreground)
+    (minibuffer-prompt :foreground))
+  "Every face amber-glow sets, and the attributes it sets on each.")
+
+(defconst amber-test-unreached-faces
+  '((isearch :background :foreground)
+    (lazy-highlight :background :foreground)
+    (link :foreground :underline)
+    (show-paren-match :background :foreground)
+    (secondary-selection :background)
+    (trailing-whitespace :background)
+    (tab-bar :background :foreground)
+    (tooltip :background :foreground)
+    (match :background)
+    (shadow :foreground))
+  "Faces amber-glow never mentions and never reaches by inheritance either.")
+"##;
+
+fn amber_glow_theme_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(AMBER_GLOW_THEME_MELPA_PIN, "amber-glow-theme.el")
         .expect("prepare pinned amber-glow-theme source below ./tmp")
+        .with_prelude(AMBER_GLOW_THEME_TEST_PRELUDE)
         .with_timeout(AMBER_GLOW_THEME_TEST_TIMEOUT)
 }
 
@@ -24,18 +117,10 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_amber_glow_theme_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_amber_glow_theme_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = amber_glow_theme_oracle(source_file)
+    let report = amber_glow_theme_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("amber-glow-theme parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_amber_glow_theme_parity(elisp_form: &str, expected: Expect) {
-    assert_amber_glow_theme_source_parity("amber-glow-theme.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_amber_glow_theme_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_amber_glow_theme_source_parity("amber-glow-theme-autoloads.el", elisp_form, expected);
 }
