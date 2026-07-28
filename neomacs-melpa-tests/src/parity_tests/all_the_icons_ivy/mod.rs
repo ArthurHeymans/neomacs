@@ -3,16 +3,76 @@ use std::time::Duration;
 use crate::{ALL_THE_ICONS_IVY_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod buffers;
-mod files;
-mod registry;
-mod setup;
+mod workflows;
 
 const ALL_THE_ICONS_IVY_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
-fn all_the_icons_ivy_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ALL_THE_ICONS_IVY_MELPA_PIN, source_file)
+/// all-the-icons-ivy registers two display transformers with ivy and provides
+/// the transformers themselves, which turn a candidate string into the same
+/// string prefixed by an icon.
+///
+/// Three notes on what these workflows do and do not need.  The package has no
+/// graphical gate -- no `display-graphic-p`, `window-system` or `noninteractive`
+/// guard anywhere in it -- so unlike the ibuffer package there is no open and
+/// closed path to assert.  Nothing here needs a live ivy session either: the
+/// transformers are pure functions of a string, and the registration is checked
+/// by reading ivy's own transformer registry, which is what ivy consults, so no
+/// workflow depends on catalogue entry 1.  And the glyph and its font family
+/// remain all-the-icons' surface: candidates are described structurally, and
+/// where a workflow must distinguish two icons it compares them rather than
+/// naming either.
+const ALL_THE_ICONS_IVY_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+(require 'ivy)
+
+(setq make-backup-files nil create-lockfiles nil)
+
+(defvar ativ-test-root (file-name-as-directory (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
+
+(defun ativ-test-write (name text)
+  (let ((path (expand-file-name name ativ-test-root)))
+    (make-directory (file-name-directory path) t)
+    (with-temp-buffer (insert text)
+      (write-region (point-min) (point-max) path nil 'silent))
+    path))
+
+;; Describe a transformed candidate structurally.  The glyph and its font
+;; family belong to all-the-icons and are covered by its own suite, so this
+;; reports only what this package contributes: that the leading character is a
+;; tab carrying a `display' property, which separator follows, and what the
+;; candidate text and its face are.  Properties are read one at a time with
+;; `get-text-property' rather than by comparing propertized strings, so a
+;; plist-order difference (catalogue entry 22) shows up as a named property.
+(defun ativ-test-describe (result)
+  (if (not (stringp result))
+      (list 'not-a-string result)
+    (let* ((plain (copy-sequence (substring-no-properties result)))
+           (icon (get-text-property 0 'display result)))
+      (list :text plain
+            :length (length plain)
+            :first-char (aref plain 0)
+            ;; Property NAMES in order.  Catalogue entry 22 is about `format'
+            ;; reversing a propertized string's plist, so the order is the
+            ;; thing to pin; the values are all-the-icons' surface and the
+            ;; icon string also shares structure unstably, so neither appears.
+            :prop-names-at-0 (cl-loop for (key _value) on (text-properties-at 0 result)
+                                      by #'cddr collect key)
+            :icon-one-char-string (and (stringp icon) (= (length icon) 1))
+            :icon-prop-names (and (stringp icon)
+                                  (cl-loop for (key _value) on (text-properties-at 0 icon)
+                                           by #'cddr collect key))
+            :face-on-name (copy-tree (get-text-property (1- (length plain)) 'face result))))))
+
+(defun ativ-test-transformer-for (command)
+  "What ivy would actually call for COMMAND, read from ivy's own registry."
+  (let ((entry (assq command ivy--display-transformers-alist)))
+    (and entry (cdr entry))))
+"##;
+
+fn all_the_icons_ivy_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ALL_THE_ICONS_IVY_MELPA_PIN, "all-the-icons-ivy.el")
         .expect("prepare pinned all-the-icons-ivy source below ./tmp")
+        .with_prelude(ALL_THE_ICONS_IVY_TEST_PRELUDE)
         .with_timeout(ALL_THE_ICONS_IVY_TEST_TIMEOUT)
 }
 
@@ -24,18 +84,10 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_all_the_icons_ivy_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_all_the_icons_ivy_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = all_the_icons_ivy_oracle(source_file)
+    let report = all_the_icons_ivy_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("all-the-icons-ivy parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_all_the_icons_ivy_parity(elisp_form: &str, expected: Expect) {
-    assert_all_the_icons_ivy_source_parity("all-the-icons-ivy.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_all_the_icons_ivy_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_all_the_icons_ivy_source_parity("all-the-icons-ivy-autoloads.el", elisp_form, expected);
 }
