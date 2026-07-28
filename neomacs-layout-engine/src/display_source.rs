@@ -1690,67 +1690,6 @@ impl DisplayReplacementStretchSourceItem {
     }
 }
 
-/// Resolve every `(image …)` operand reachable inside a `(space …)` spec to its
-/// intrinsic pixel size, so the arithmetic evaluator never has to touch the
-/// display host.
-///
-/// GNU does this lookup inline, in `calc_pixel_width_or_height`, because its
-/// `struct it` carries the frame (xdisp.c:30506). NEO Emacs resolves media
-/// ahead of layout everywhere else — the row builder receives images as an id
-/// plus a size — so the same convention applies here: walk the operand once,
-/// resolve through the catalog, and hand the evaluator owned sizes.
-///
-/// With no catalog (terminal frames) the map stays empty, which reproduces
-/// GNU's `FRAME_WINDOW_P` guard exactly: the operand fails to evaluate, so the
-/// whole expression fails and `:align-to` goes unapplied.
-fn resolve_space_image_operands(
-    spec: &Value,
-    params: &WindowParams,
-) -> crate::display_pixel_calc::PixelCalcImageSizes {
-    let mut sizes = crate::display_pixel_calc::PixelCalcImageSizes::default();
-    let Some(catalog) = params.space_image_catalog.as_ref() else {
-        return sizes;
-    };
-    collect_space_image_operands(spec, params, catalog, &mut sizes, 0);
-    sizes
-}
-
-fn collect_space_image_operands(
-    value: &Value,
-    params: &WindowParams,
-    catalog: &crate::types::SharedImageCatalog,
-    sizes: &mut crate::display_pixel_calc::PixelCalcImageSizes,
-    depth: u32,
-) {
-    // `(space …)` expressions nest only a few levels, but the walk descends
-    // one level per cdr step, so the bound is sized for plists; it exists only
-    // to stop a circular list from looping forever.
-    if depth > 256 || !value.is_cons() {
-        return;
-    }
-    if value.cons_car().is_symbol_named("image")
-        && let Some(layout) = crate::display_spec::parse_display_image_layout(
-            value,
-            params.default_fg,
-            params.default_bg,
-        )
-    {
-        let request = layout.into_resolve_request(params.image_scale_environment);
-        let placement = catalog.lookup(request).placement();
-        sizes.insert(
-            *value,
-            f64::from(placement.width().max(1)),
-            f64::from(placement.height().max(1)),
-        );
-        return;
-    }
-    // Recurse over BOTH halves of the cons: in `(0.5 . IMAGE-SPEC)` — GNU's
-    // `(NUM . EXPR)` product — the image spec is the CDR, not an element, so a
-    // car-only walk would never see it.
-    collect_space_image_operands(&value.cons_car(), params, catalog, sizes, depth + 1);
-    collect_space_image_operands(&value.cons_cdr(), params, catalog, sizes, depth + 1);
-}
-
 impl DisplaySpaceGeometry {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_display_space_spec(
@@ -1809,7 +1748,10 @@ impl DisplaySpaceGeometry {
             scroll_bar_on_left: false,
             line_number_pixel_width: 0.0,
             symbol_values: std::collections::HashMap::new(),
-            image_sizes: resolve_space_image_operands(spec, params),
+            image_sizes: crate::display_pixel_calc::PixelCalcImageSizes::resolve_for_space_spec(
+                spec,
+                &params.space_image_inputs(),
+            ),
         };
 
         let width_policy = DisplaySpaceWidthPolicy::from_items(&items);

@@ -10731,6 +10731,36 @@ fn issue_204_align_to_image_operand_falls_back_without_a_catalog() {
     assert_eq!(geometry.width, 8.0, "GNU falls back to one char width");
 }
 
+/// An image that finishes decoding must invalidate the window's retained
+/// matrix, not just request a redisplay.
+///
+/// Redisplay has two independent gates: `RedisplaySignature` decides whether to
+/// redisplay at all, and `RetainedWindowKey` decides whether a window may reuse
+/// its retained matrix. `ImageStateChanged` bumped only the former, so
+/// redisplay ran and then reused the matrix that had captured the image's 1x1
+/// `Pending` placeholder — every async-decoded buffer image stayed one pixel
+/// wide for the lifetime of the buffer, no matter how many redisplays or buffer
+/// edits followed.
+#[test]
+fn completed_image_decode_invalidates_the_retained_window_key() {
+    let mut eval = Context::new();
+    let params = test_window_params();
+    let layout_box = WindowLayoutBox::resolve(&params, Default::default(), Default::default());
+
+    let before = RetainedWindowKey::from_params(&params, layout_box, &eval);
+
+    // The decode landing is delivered as `ImageStateChanged` -> `LayoutInvalidated`.
+    eval.invalidate_media();
+
+    let after = RetainedWindowKey::from_params(&params, layout_box, &eval);
+
+    assert_ne!(
+        before, after,
+        "a completed image decode must escalate past retained-matrix reuse, \
+         otherwise the 1x1 placeholder geometry is never re-resolved"
+    );
+}
+
 struct FixedSizeImageCatalog {
     width: u32,
     height: u32,

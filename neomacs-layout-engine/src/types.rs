@@ -69,6 +69,18 @@ impl std::fmt::Debug for SharedImageCatalog {
     }
 }
 
+impl WindowParams {
+    /// Inputs for resolving `(image …)` operands inside `(space …)` specs.
+    pub(crate) fn space_image_inputs(&self) -> crate::display_pixel_calc::PixelCalcImageInputs {
+        crate::display_pixel_calc::PixelCalcImageInputs {
+            catalog: self.space_image_catalog.clone(),
+            scale: self.image_scale_environment,
+            default_fg: self.default_fg,
+            default_bg: self.default_bg,
+        }
+    }
+}
+
 impl SharedImageCatalog {
     #[must_use]
     pub fn lookup(&self, request: ImageResolveRequest) -> ImageLookup {

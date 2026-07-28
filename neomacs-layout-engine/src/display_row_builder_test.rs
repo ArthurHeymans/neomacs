@@ -36,6 +36,7 @@ fn layout() -> DisplayRowLayout {
             16.0,
             std::collections::HashMap::new(),
         ),
+        space_image_params: None,
     }
 }
 

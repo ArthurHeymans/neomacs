@@ -95,6 +95,7 @@ impl DisplayRowGeometry {
         ascent_px: f32,
         base_face: RenderFaceRef,
         pixel_calc: PixelCalcContext,
+        space_image_params: Option<crate::display_pixel_calc::PixelCalcImageInputs>,
     ) -> DisplayRowLayout {
         DisplayRowLayout {
             role,
@@ -105,6 +106,7 @@ impl DisplayRowGeometry {
             tab_policy: self.tab_policy.clone(),
             base_face,
             pixel_calc,
+            space_image_params,
         }
     }
 }

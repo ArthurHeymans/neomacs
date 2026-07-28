@@ -119,6 +119,20 @@ impl PixelCalcImageSizes {
         self.entries.push((spec, (width, height)));
     }
 
+    /// Resolve every `(image …)` operand reachable in `spec` through the
+    /// image catalog — GNU's inline `lookup_image` (xdisp.c:30506).
+    ///
+    /// Empty without a catalog (terminal frames), which reproduces GNU's
+    /// `FRAME_WINDOW_P` guard: the operand fails, so the whole expression
+    /// fails and `:align-to` goes unapplied.
+    pub fn resolve_for_space_spec(spec: &Value, inputs: &PixelCalcImageInputs) -> Self {
+        let mut sizes = Self::default();
+        if inputs.catalog.is_some() {
+            collect_space_image_operands(spec, inputs, &mut sizes, 0);
+        }
+        sizes
+    }
+
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
@@ -130,6 +144,52 @@ impl PixelCalcImageSizes {
             .find(|(candidate, _)| candidate == spec)
             .map(|(_, size)| *size)
     }
+}
+
+/// Everything needed to turn an `(image …)` operand into pixels, owned so the
+/// evaluator never borrows the display host. GNU reads the equivalent straight
+/// off `it->f` / `it->face_id`.
+#[derive(Clone, Debug, Default)]
+pub struct PixelCalcImageInputs {
+    pub catalog: Option<crate::types::SharedImageCatalog>,
+    pub scale: neovm_core::emacs_core::image_catalog::ImageScaleEnvironment,
+    pub default_fg: u32,
+    pub default_bg: u32,
+}
+
+fn collect_space_image_operands(
+    value: &Value,
+    inputs: &PixelCalcImageInputs,
+    sizes: &mut PixelCalcImageSizes,
+    depth: u32,
+) {
+    // The walk descends one level per cdr step, so the bound is sized for
+    // plists; it exists only to stop a circular list from looping forever.
+    if depth > 256 || !value.is_cons() {
+        return;
+    }
+    if value.cons_car().is_symbol_named("image")
+        && let Some(layout) = crate::display_spec::parse_display_image_layout(
+            value,
+            inputs.default_fg,
+            inputs.default_bg,
+        )
+        && let Some(catalog) = inputs.catalog.as_ref()
+    {
+        let request = layout.into_resolve_request(inputs.scale);
+        let placement = catalog.lookup(request).placement();
+        sizes.insert(
+            *value,
+            f64::from(placement.width().max(1)),
+            f64::from(placement.height().max(1)),
+        );
+        return;
+    }
+    // Recurse over BOTH halves: in `(0.5 . IMAGE-SPEC)` — GNU's `(NUM . EXPR)`
+    // product — the image spec is the CDR, not an element, so a car-only walk
+    // would never see it.
+    collect_space_image_operands(&value.cons_car(), inputs, sizes, depth + 1);
+    collect_space_image_operands(&value.cons_cdr(), inputs, sizes, depth + 1);
 }
 
 /// Context equivalent to the fields of GNU's `struct it` that

@@ -1274,6 +1274,7 @@ fn display_row_geometry_builds_row_layout() {
             16.0,
             std::collections::HashMap::new(),
         ),
+        None,
     );
 
     assert_eq!(layout.role, GlyphRowRole::Text);

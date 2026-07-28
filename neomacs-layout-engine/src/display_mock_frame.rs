@@ -118,6 +118,7 @@ fn new_empty_mock_display_row(
             geometry.height(),
             std::collections::HashMap::new(),
         ),
+        None,
     ))
 }
 

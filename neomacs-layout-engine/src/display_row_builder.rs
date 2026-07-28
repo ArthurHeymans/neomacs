@@ -36,6 +36,30 @@ pub(crate) struct DisplayRowLayout {
     /// tab-line rows resolve region symbols (`text`, `right`, fringes, …)
     /// through this context, the same authority the buffer text path uses.
     pub(crate) pixel_calc: PixelCalcContext,
+    /// Window inputs needed to resolve `(image …)` operands appearing inside a
+    /// `(space :width/:align-to …)` expression on this row. `None` for rows
+    /// built without window context (tests, terminal frames), which matches
+    /// GNU's `FRAME_WINDOW_P` guard: the operand fails and `:align-to` is not
+    /// applied.
+    pub(crate) space_image_params: Option<crate::display_pixel_calc::PixelCalcImageInputs>,
+}
+
+impl DisplayRowLayout {
+    /// The pixel-calc context for evaluating `spec`, with any `(image …)`
+    /// operands it contains resolved to real pixel sizes.
+    fn pixel_calc_for_space_spec(&self, spec: &neovm_core::emacs_core::Value) -> PixelCalcContext {
+        let Some(inputs) = self.space_image_params.as_ref() else {
+            return self.pixel_calc.clone();
+        };
+        let sizes =
+            crate::display_pixel_calc::PixelCalcImageSizes::resolve_for_space_spec(spec, inputs);
+        if sizes.is_empty() {
+            return self.pixel_calc.clone();
+        }
+        let mut pixel_calc = self.pixel_calc.clone();
+        pixel_calc.image_sizes = sizes;
+        pixel_calc
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1862,12 +1886,13 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 // raw numeric targets; region-symbol targets have already set
                 // `align_to >= 0` and keep the resolved region coordinate.
                 let mut align_to: i32 = -1;
-                let evaluated = calc_pixel_width_or_height(
-                    &self.layout.pixel_calc,
-                    prop,
-                    true,
-                    Some(&mut align_to),
-                );
+                // An `(image …)` operand resolves to the image's own pixel
+                // width (GNU `lookup_image`, xdisp.c:30506). Resolve the
+                // operand's images for this evaluation; the sizes are owned, so
+                // the evaluator itself stays free of the display host.
+                let pixel_calc = self.layout.pixel_calc_for_space_spec(prop);
+                let evaluated =
+                    calc_pixel_width_or_height(&pixel_calc, prop, true, Some(&mut align_to));
                 // GNU xdisp.c:32878 — when no width form computes, the stretch
                 // falls back to the canonical char width rather than vanishing.
                 let Some(pixels) = evaluated else {

@@ -75,6 +75,12 @@ pub enum MatrixValidity {
 /// real geometry/metric change makes them differ and forces a full rebuild.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RetainedWindowKey {
+    /// Generation of asynchronously decoded media (see
+    /// `Context::invalidate_media`). An image that finishes decoding changes
+    /// none of the buffer ticks or geometry below, so without this term the
+    /// window kept reusing the matrix that captured the image's 1x1 `Pending`
+    /// placeholder and every async-decoded buffer image stayed one pixel.
+    pub media_generation: u64,
     pub buffer_id: u64,
     pub window_start: i64,
     pub point: i64,
@@ -174,6 +180,7 @@ impl RetainedWindowKey {
             })
             .unwrap_or((0, 0, 0, false, p.buffer_size));
         Self {
+            media_generation: evaluator.media_generation(),
             buffer_id: p.buffer_id,
             window_start: p.window_start,
             point: p.point,
@@ -925,6 +932,7 @@ mod scroll_classifier_tests {
 
     fn synthetic_key(window_start: i64, point: i64) -> RetainedWindowKey {
         RetainedWindowKey {
+            media_generation: 0,
             buffer_id: 1,
             window_start,
             point,

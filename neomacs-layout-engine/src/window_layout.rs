@@ -66,7 +66,7 @@ pub(crate) struct WindowLayoutBox {
     regions: PresentedWindowRegions,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub(crate) struct WindowDividerLayout {
     right_edge: f32,
     bottom_edge: f32,

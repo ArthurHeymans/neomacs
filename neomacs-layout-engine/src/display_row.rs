@@ -925,12 +925,27 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             .ascent_px()
             .max(geometry.ascent())
             .min(geometry.height().max(1.0));
+        // `(space :align-to …)` on this row may embed an `(image …)` operand
+        // whose intrinsic size decides the result (GNU resolves it inline with
+        // `lookup_image`). Carry the inputs so the row builder can resolve it.
+        let space_image_params =
+            context
+                .display_host
+                .map(|host| crate::display_pixel_calc::PixelCalcImageInputs {
+                    catalog: host
+                        .image_catalog_shared()
+                        .map(crate::types::SharedImageCatalog),
+                    scale: image_scale_environment,
+                    default_fg: base_face.fg,
+                    default_bg: base_face.bg,
+                });
         let mut row_layout = geometry.to_layout(
             role,
             char_width,
             row_ascent,
             RenderFaceRef::FaceId(row_face.face_id),
             pixel_calc,
+            space_image_params,
         );
         let mut position = render_bounds.start();
         let mut source_slots = Vec::new();
