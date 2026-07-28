@@ -3,10 +3,7 @@ use std::time::Duration;
 use crate::{A_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod association;
-mod equality_merge;
-mod lookup;
-mod nested;
+mod workflows;
 
 const A_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
