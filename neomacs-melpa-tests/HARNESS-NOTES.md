@@ -608,6 +608,18 @@ line, so a capture starting after that line sees a bare `("[2 times]")` —
 accurate and unreadable. This bites exactly where the repeat is the assertion, as
 in angular-snippets' third documentation press echoing the same docstring.
 
+**On a library with a large flat API, confidence about semantics is the hazard,
+not ignorance.** Three `f` fixtures were wrong in one package, written by the
+agent who had been filing these very notes — because the behaviour *seemed
+obvious*. `f-copy` onto an existing name signals `file-already-exists` even when
+the destination is an empty directory; the fixture asserted it copies inside, and
+so produced identical trees for `f-copy` and `f-copy-contents`, unable to tell
+them apart. The same agent read the source for `attrap` and `angular-snippets`
+because that behaviour was unfamiliar. **Derive the prediction from the source
+first and let the snapshot confirm it, rather than writing from memory and
+letting the snapshot correct you** — the snapshot does catch it, but only after
+you have built a fixture around the wrong belief.
+
 **SILENT — a fixture that cannot fail for the reason the test is named after.**
 android-mode's `android-project-main-activities` uses `cl-member-if`, so it
 returns the tail from the first match rather than the matches. The workflow
@@ -732,6 +744,22 @@ than one grab-bag return value.
 So: if a workflow fails only under the harness, only with a large aggregate
 return, and the error names the harness's own variables, suspect this before the
 package. Return per-story structures rather than one omnibus value.
+
+**A tight elisp loop ignores `with-timeout`, so some defects are describable but
+not assertable.** `f-uniquify` does not return on duplicate input — its docstring
+says it "expects no duplicate paths", and the consequence is not an error but
+`f--uniquify` spinning until the group count reaches the input count, which two
+identical paths never reach. It timed out a suite at 180 seconds and cannot be
+pinned. Record it as a comment and keep the workflow inside the precondition;
+this is a limit of the harness, not a gap in the suite.
+
+**Drain pending sentinels before asserting — every one, not just the process you
+started.** Async processes from an *earlier* probe in the same Emacs can have
+their sentinels fire after your `setq`, so the assertion reads back the previous
+state. In ac-html-csswatcher that looked exactly like "the package ignores the
+failure correctly" and was luck. Wait for every process matching the package's
+name prefix, not the one handle you happen to hold. Green and right for the wrong
+reason, with the wrong reason in the *fixture* rather than the assertion.
 
 **haskell-mode's process command queue does not drain in batch.** A real session
 starts and the GHCi process runs, but `haskell-process-cmd` never returns to nil,
