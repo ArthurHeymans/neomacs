@@ -3,7 +3,7 @@
 //! A scenario installs packages into an isolated, workspace-local sandbox,
 //! exits the editor, and launches a fresh process to probe the installed
 //! packages. The same scenario can run against Neomacs or GNU Emacs and
-//! against either a frozen package archive or the live package ecosystem.
+//! against either revision-pinned package source or a local fixture archive.
 
 use std::ffi::OsString;
 use std::fmt;
@@ -17,6 +17,13 @@ use std::time::{Duration, Instant};
 use neomacs_test_oracle::{EvalOutcome, extract_marked_outcome, wrap_elisp_outcome};
 use wait_timeout::ChildExt;
 
+mod source_lock;
+
+pub use source_lock::{
+    LockedPackageSource, SourceBuild, locked_melpa_install_plan, locked_melpa_source,
+    locked_melpa_sources, preflight_locked_melpa_packages, prepare_cached_locked_melpa_package,
+};
+
 const RESULT_MARKER: &str = "NEOMACS-MELPA-RESULT:";
 const OUTCOME_MARKER: &str = "NEOMACS-MELPA-OUTCOME:";
 const INSTALLED_MARKER: &str = "NEOMACS-MELPA-INSTALLED:";
@@ -29,21 +36,6 @@ struct PackageArchiveSpec {
     name: &'static str,
     url: &'static str,
 }
-
-#[derive(Clone, Copy)]
-struct CachedUrlPackageSpec<'a> {
-    name: &'a str,
-    version: &'a str,
-    url: &'a str,
-    sha256: &'a str,
-}
-
-const MELPA_ARCHIVE: PackageArchiveSpec = PackageArchiveSpec {
-    cache_directory: "package-cache",
-    label: "MELPA",
-    name: "melpa",
-    url: "https://melpa.org/packages/",
-};
 
 const GNU_ELPA_ARCHIVE: PackageArchiveSpec = PackageArchiveSpec {
     cache_directory: "package-cache-gnu-elpa",
@@ -508,7 +500,7 @@ pub const AGENT_RECALL_MELPA_PIN: (&str, &str) = ("agent-recall", "20260710.1707
 
 /// The exact agent-shell package selected by the comprehensive API parity
 /// corpus.
-pub const AGENT_SHELL_MELPA_PIN: (&str, &str) = ("agent-shell", "20260724.1019");
+pub const AGENT_SHELL_MELPA_PIN: (&str, &str) = ("agent-shell", "20260728.953");
 
 /// The exact aggressive-fill-paragraph package selected by the comprehensive
 /// API parity corpus.
@@ -539,7 +531,7 @@ pub const AHK_MODE_MELPA_PIN: (&str, &str) = ("ahk-mode", "20200412.1832");
 pub const AHUNGRY_THEME_MELPA_PIN: (&str, &str) = ("ahungry-theme", "20180131.328");
 
 /// The exact ai-code package selected by the comprehensive API parity corpus.
-pub const AI_CODE_MELPA_PIN: (&str, &str) = ("ai-code", "20260726.2000");
+pub const AI_CODE_MELPA_PIN: (&str, &str) = ("ai-code", "20260727.2322");
 
 /// The exact aider package selected by the comprehensive API parity corpus.
 pub const AIDER_MELPA_PIN: (&str, &str) = ("aider", "20251201.133");
@@ -1302,7 +1294,7 @@ pub const MAGIT_SECTION_MELPA_PIN: (&str, &str) = ("magit-section", "20260722.21
 
 /// The exact Projectile package selected by the comprehensive API parity
 /// corpus.
-pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260727.2157");
+pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260728.945");
 
 /// The exact s package selected by the live lifecycle and comprehensive API
 /// parity corpora.
@@ -1797,7 +1789,6 @@ impl ErtScenario {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ScenarioPhase {
-    PrepareArchive,
     Install,
     RestartProbe,
     QuickstartProbe,
@@ -1807,21 +1798,6 @@ pub enum ScenarioPhase {
     VcDelete,
     VcRestartAfterDelete,
     Ert,
-}
-
-/// A current package transaction downloaded once for both editor adapters.
-///
-/// The owning sandbox keeps catalogs and package payloads alive below
-/// `<workspace>/tmp/melpa` for the duration of the oracle comparison.
-pub struct PreparedPackageSource {
-    _sandbox: MelpaSandbox,
-    source: PackageSource,
-}
-
-impl PreparedPackageSource {
-    pub fn source(&self) -> &PackageSource {
-        &self.source
-    }
 }
 
 #[derive(Debug)]
@@ -1871,39 +1847,19 @@ pub struct CachedPackageOracle {
 pub type CachedMelpaOracle = CachedPackageOracle;
 
 impl CachedPackageOracle {
-    /// Prepare the pinned package and select the Elisp source file to load.
+    /// Build an exact revision-pinned package from source and select its file.
     pub fn new(package: (&str, &str), source_file_name: &str) -> Result<Self, String> {
-        validate_cached_source_file_name(MELPA_ARCHIVE.label, source_file_name)?;
-        let package_dir = prepare_cached_melpa_package(&EmacsRuntime::gnu_emacs(), package)?;
-        Self::from_package_dir(package, source_file_name, package_dir)
+        Self::new_from_manifest_with_runtime(&EmacsRuntime::gnu_emacs(), package, source_file_name)
     }
 
-    /// Prepare one pinned MELPA package whose removed dependency must first be
-    /// installed from an integrity-checked upstream package file.
-    #[cfg(test)]
-    pub(crate) fn new_with_melpa_url_dependency(
+    fn new_from_manifest_with_runtime(
+        gnu_emacs: &EmacsRuntime,
         package: (&str, &str),
         source_file_name: &str,
-        dependency: (&str, &str, &str, &str),
     ) -> Result<Self, String> {
-        validate_cached_source_file_name(MELPA_ARCHIVE.label, source_file_name)?;
-        let dependency = CachedUrlPackageSpec {
-            name: dependency.0,
-            version: dependency.1,
-            url: dependency.2,
-            sha256: dependency.3,
-        };
-        let package_dir = prepare_cached_package_with_url_dependency(
-            &EmacsRuntime::gnu_emacs(),
-            package,
-            MELPA_ARCHIVE,
-            Some(dependency),
-        )?;
-        let mut oracle = Self::from_package_dir(package, source_file_name, package_dir)?;
-        oracle
-            .package_load_list
-            .push((dependency.name.to_string(), dependency.version.to_string()));
-        Ok(oracle)
+        validate_cached_source_file_name("source-built package", source_file_name)?;
+        let package_dir = prepare_cached_locked_melpa_package(gnu_emacs, package)?;
+        Self::from_package_dir(package, source_file_name, package_dir)
     }
 
     /// Prepare one pinned GNU ELPA package and select its Elisp source file.
@@ -1913,28 +1869,6 @@ impl CachedPackageOracle {
     ) -> Result<Self, String> {
         validate_cached_source_file_name(GNU_ELPA_ARCHIVE.label, source_file_name)?;
         let package_dir = prepare_cached_gnu_elpa_package(&EmacsRuntime::gnu_emacs(), package)?;
-        Self::from_package_dir(package, source_file_name, package_dir)
-    }
-
-    /// Prepare an exact package from an immutable MELPA payload URL.
-    ///
-    /// This is for packages whose historical payload remains available even
-    /// though the package has been removed from the current MELPA catalog.
-    /// GNU Emacs verifies the payload digest and installs it through
-    /// `package-install-file`; package contents remain below `./tmp`.
-    pub fn new_from_frozen_melpa_archive(
-        package: (&str, &str),
-        source_file_name: &str,
-        archive_url: &str,
-        sha256: &str,
-    ) -> Result<Self, String> {
-        validate_cached_source_file_name(MELPA_ARCHIVE.label, source_file_name)?;
-        let package_dir = prepare_cached_frozen_melpa_package(
-            &EmacsRuntime::gnu_emacs(),
-            package,
-            archive_url,
-            sha256,
-        )?;
         Self::from_package_dir(package, source_file_name, package_dir)
     }
 
@@ -2002,10 +1936,10 @@ impl CachedPackageOracle {
         Ok(self)
     }
 
-    /// Make another exact MELPA package cache visible as a system-wide
+    /// Make another exact source-built package cache visible as a system-wide
     /// package directory while loading the package under test.
     pub fn with_melpa_dependency(self, package: (&str, &str)) -> Result<Self, String> {
-        let package_dir = prepare_cached_melpa_package(&EmacsRuntime::gnu_emacs(), package)?;
+        let package_dir = prepare_cached_locked_melpa_package(&EmacsRuntime::gnu_emacs(), package)?;
         self.with_prepared_dependency(package, package_dir)
     }
 
@@ -2289,18 +2223,6 @@ pub fn run_scenario(
     )
 }
 
-/// Install one exact MELPA package into a validated, cross-process cache.
-///
-/// The returned package directory stays below
-/// `<workspace>/tmp/melpa/package-cache`. Package payloads remain runtime
-/// artifacts and are never copied into the source tree.
-pub fn prepare_cached_melpa_package(
-    gnu_emacs: &EmacsRuntime,
-    package: (&str, &str),
-) -> Result<PathBuf, String> {
-    prepare_cached_package(gnu_emacs, package, MELPA_ARCHIVE)
-}
-
 /// Install one exact GNU ELPA package into a validated, cross-process cache.
 ///
 /// Like the MELPA cache, this remains a workspace-local runtime artifact.
@@ -2311,213 +2233,26 @@ pub fn prepare_cached_gnu_elpa_package(
     prepare_cached_package(gnu_emacs, package, GNU_ELPA_ARCHIVE)
 }
 
-/// Install one immutable historical MELPA payload into a validated cache.
-///
-/// The payload is downloaded and retained only below `./tmp`, verified by its
-/// hard-coded SHA-256 digest, and installed by GNU Emacs's package manager.
-pub fn prepare_cached_frozen_melpa_package(
-    gnu_emacs: &EmacsRuntime,
-    package: (&str, &str),
-    archive_url: &str,
-    sha256: &str,
-) -> Result<PathBuf, String> {
-    let (name, version) = package;
-    let expected_url = format!("https://melpa.org/packages/{name}-{version}.tar");
-    if name.is_empty()
-        || version.is_empty()
-        || !name
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '@'))
-        || !version.chars().all(|character| {
-            character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '+')
-        })
-        || archive_url != expected_url
-        || sha256.len() != 64
-        || !sha256
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+fn package_preparation_run_id() -> String {
+    std::env::var("NEXTEST_RUN_ID").unwrap_or_else(|_| format!("process-{}", std::process::id()))
+}
+
+fn publish_package_preparation_failure(
+    failed_marker: &Path,
+    failure_prefix: &str,
+    error: String,
+) -> String {
+    let marker_tmp = failed_marker.with_extension(format!("{}.tmp", std::process::id()));
+    let contents = format!("{failure_prefix}{error}");
+    if let Err(cache_error) =
+        fs::write(&marker_tmp, contents).and_then(|()| fs::rename(&marker_tmp, failed_marker))
     {
-        return Err(format!(
-            "cached frozen MELPA package requires a safe exact pin, canonical payload URL, and SHA-256 digest, got `{name}` `{version}` `{archive_url}` `{sha256}`"
-        ));
+        return format!(
+            "{error}\nfailed to publish shared package preparation failure {}: {cache_error}",
+            failed_marker.display()
+        );
     }
-
-    let root = workspace_root()
-        .join("tmp/melpa/package-cache-frozen-melpa")
-        .join(name)
-        .join(version);
-    fs::create_dir_all(&root).map_err(|error| {
-        format!(
-            "failed to create frozen MELPA cache root {}: {error}",
-            root.display()
-        )
-    })?;
-    let lock_path = root.join("prepare.lock");
-    let lock = fs::OpenOptions::new()
-        .create(true)
-        .read(true)
-        .write(true)
-        .truncate(false)
-        .open(&lock_path)
-        .map_err(|error| {
-            format!(
-                "failed to open frozen MELPA cache lock {}: {error}",
-                lock_path.display()
-            )
-        })?;
-    fs4::FileExt::lock(&lock).map_err(|error| {
-        format!(
-            "failed to lock frozen MELPA cache {}: {error}",
-            root.display()
-        )
-    })?;
-
-    let home = root.join("home");
-    let tmp = root.join("tmp");
-    let package_dir = home.join(".emacs.d/elpa").join(format!("{name}-{version}"));
-    let descriptor = package_dir.join(format!("{name}-pkg.el"));
-    let ready_marker = root.join("ready");
-    let expected_marker = format!("{name}\t{version}\t{sha256}\n");
-    let cache_is_ready = descriptor.is_file()
-        && fs::read_to_string(&ready_marker).is_ok_and(|contents| contents == expected_marker);
-    if cache_is_ready {
-        return Ok(package_dir);
-    }
-
-    if home.exists() {
-        fs::remove_dir_all(&home).map_err(|error| {
-            format!(
-                "failed to remove incomplete frozen MELPA cache {}: {error}",
-                home.display()
-            )
-        })?;
-    }
-    if ready_marker.exists() {
-        fs::remove_file(&ready_marker).map_err(|error| {
-            format!(
-                "failed to remove invalid frozen MELPA marker {}: {error}",
-                ready_marker.display()
-            )
-        })?;
-    }
-    for directory in [
-        home.join(".emacs.d"),
-        tmp.clone(),
-        root.join("xdg/config"),
-        root.join("xdg/cache"),
-        root.join("xdg/data"),
-        root.join("xdg/state"),
-    ] {
-        fs::create_dir_all(&directory).map_err(|error| {
-            format!(
-                "failed to create frozen MELPA cache directory {}: {error}",
-                directory.display()
-            )
-        })?;
-    }
-
-    let archive_file = tmp.join(format!("{name}-{version}.tar"));
-    let form = format!(
-        r##"(progn
-               (require 'package)
-               (require 'url)
-               (setq package-user-dir
-                     (expand-file-name ".emacs.d/elpa" (getenv "HOME"))
-                     package-check-signature nil)
-               (let ((archive-file {})
-                     (archive-url {})
-                     (expected-sha256 {})
-                     (package-name {})
-                     (expected-version {}))
-                 (url-copy-file archive-url archive-file t)
-                 (let ((actual-sha256
-                        (with-temp-buffer
-                          (set-buffer-multibyte nil)
-                          (insert-file-contents-literally archive-file)
-                          (secure-hash 'sha256 (current-buffer)))))
-                   (unless (equal actual-sha256 expected-sha256)
-                     (error
-                      "Frozen MELPA payload digest changed: expected %s, got %s"
-                      expected-sha256 actual-sha256)))
-                 (package-install-file archive-file)
-                 (package-initialize)
-                 (let* ((package-symbol (intern package-name))
-                        (installed
-                         (cadr (assq package-symbol package-alist)))
-                        (installed-version
-                         (and installed
-                              (package-version-join
-                               (package-desc-version installed))))
-                        (directory
-                         (and installed (package-desc-dir installed)))
-                        (descriptor
-                         (and directory
-                              (expand-file-name
-                               (concat package-name "-pkg.el")
-                               directory))))
-                   (unless (equal installed-version expected-version)
-                     (error
-                      "Installed frozen package mismatch: %s expected %s, got %s"
-                      package-name expected-version installed-version))
-                   (unless (and descriptor (file-readable-p descriptor))
-                     (error
-                      "Installed frozen package descriptor is unreadable: %s"
-                      descriptor))))
-               (princ "NEOMACS-FROZEN-MELPA-CACHE:ready"))"##,
-        elisp_string(&archive_file.to_string_lossy()),
-        elisp_string(archive_url),
-        elisp_string(sha256),
-        elisp_string(name),
-        elisp_string(version),
-    );
-    let mut command = gnu_emacs.command();
-    configure_process_environment(&mut command, &root, &home, &tmp);
-    command.args(["--batch", "--quick", "--eval", &form]);
-    let output =
-        output_with_timeout(&mut command, gnu_emacs.timeout).map_err(|error| match error {
-            CommandError::Launch(error) => format!(
-                "failed to launch {} for frozen MELPA package `{name}` in {}: {error}",
-                gnu_emacs.name,
-                root.display()
-            ),
-            CommandError::TimedOut => format!(
-                "{} frozen MELPA package `{name}` timed out after {:?} in {}",
-                gnu_emacs.name,
-                gnu_emacs.timeout,
-                root.display()
-            ),
-            CommandError::Capture(error) => format!(
-                "failed to capture {} frozen MELPA package `{name}` output: {error}",
-                gnu_emacs.name
-            ),
-        })?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if !output.status.success()
-        || !stdout.contains("NEOMACS-FROZEN-MELPA-CACHE:ready")
-        || !descriptor.is_file()
-    {
-        return Err(format!(
-            "failed to prepare frozen MELPA package {name} {version} below {}\nstatus: {:?}\nstdout:\n{stdout}\nstderr:\n{stderr}",
-            root.display(),
-            output.status.code()
-        ));
-    }
-
-    let marker_tmp = root.join(format!("ready.{}.tmp", std::process::id()));
-    fs::write(&marker_tmp, &expected_marker).map_err(|error| {
-        format!(
-            "failed to write frozen MELPA cache marker {}: {error}",
-            marker_tmp.display()
-        )
-    })?;
-    fs::rename(&marker_tmp, &ready_marker).map_err(|error| {
-        format!(
-            "failed to publish frozen MELPA cache marker {}: {error}",
-            ready_marker.display()
-        )
-    })?;
-    Ok(package_dir)
+    error
 }
 
 /// Build one exact Tree-sitter grammar into a cross-process cache below
@@ -2806,15 +2541,6 @@ fn prepare_cached_package(
     package: (&str, &str),
     archive: PackageArchiveSpec,
 ) -> Result<PathBuf, String> {
-    prepare_cached_package_with_url_dependency(gnu_emacs, package, archive, None)
-}
-
-fn prepare_cached_package_with_url_dependency(
-    gnu_emacs: &EmacsRuntime,
-    package: (&str, &str),
-    archive: PackageArchiveSpec,
-    dependency: Option<CachedUrlPackageSpec<'_>>,
-) -> Result<PathBuf, String> {
     let (name, version) = package;
     if name.is_empty()
         || version.is_empty()
@@ -2828,31 +2554,6 @@ fn prepare_cached_package_with_url_dependency(
         return Err(format!(
             "cached {} package must have a safe hard-coded name and version, got `{name}` `{version}`",
             archive.label
-        ));
-    }
-    if let Some(dependency) = dependency
-        && (dependency.name.is_empty()
-            || dependency.version.is_empty()
-            || !dependency
-                .name
-                .chars()
-                .all(|character| character.is_ascii_alphanumeric() || character == '-')
-            || !dependency.version.chars().all(|character| {
-                character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '+')
-            })
-            || !dependency
-                .url
-                .starts_with("https://raw.githubusercontent.com/")
-            || dependency.url.contains(['\n', '\r', '\t'])
-            || dependency.sha256.len() != 64
-            || !dependency
-                .sha256
-                .chars()
-                .all(|character| character.is_ascii_hexdigit()))
-    {
-        return Err(format!(
-            "cached URL dependency must have a safe name, version, raw GitHub URL, and SHA-256, got `{}` `{}` `{}` `{}`",
-            dependency.name, dependency.version, dependency.url, dependency.sha256
         ));
     }
 
@@ -2888,25 +2589,21 @@ fn prepare_cached_package_with_url_dependency(
     let package_dir = home.join(".emacs.d/elpa").join(format!("{name}-{version}"));
     let descriptor = package_dir.join(format!("{name}-pkg.el"));
     let ready_marker = root.join("ready");
-    let dependency_descriptor = dependency.map(|dependency| {
-        home.join(".emacs.d/elpa")
-            .join(format!("{}-{}", dependency.name, dependency.version))
-            .join(format!("{}-pkg.el", dependency.name))
-    });
-    let dependency_marker = dependency.map_or_else(String::new, |dependency| {
-        format!(
-            "\t{}\t{}\t{}\t{}",
-            dependency.name, dependency.version, dependency.url, dependency.sha256
-        )
-    });
-    let expected_marker = format!("{name}\t{version}{dependency_marker}\n");
+    let failed_marker = root.join("failed");
+    let expected_marker = format!("{name}\t{version}\n");
     let cache_is_ready = descriptor.is_file()
-        && dependency_descriptor
-            .as_ref()
-            .is_none_or(|descriptor| descriptor.is_file())
         && fs::read_to_string(&ready_marker).is_ok_and(|contents| contents == expected_marker);
     if cache_is_ready {
         return Ok(package_dir);
+    }
+    let failure_prefix = format!(
+        "run-id\t{}\nidentity\t{expected_marker}error\n",
+        package_preparation_run_id()
+    );
+    if let Ok(contents) = fs::read_to_string(&failed_marker)
+        && let Some(error) = contents.strip_prefix(&failure_prefix)
+    {
+        return Err(error.to_string());
     }
 
     if home.exists() {
@@ -2922,6 +2619,14 @@ fn prepare_cached_package_with_url_dependency(
             format!(
                 "failed to remove invalid package cache marker {}: {error}",
                 ready_marker.display()
+            )
+        })?;
+    }
+    if failed_marker.exists() {
+        fs::remove_file(&failed_marker).map_err(|error| {
+            format!(
+                "failed to remove stale package preparation failure {}: {error}",
+                failed_marker.display()
             )
         })?;
     }
@@ -2945,61 +2650,11 @@ fn prepare_cached_package_with_url_dependency(
     let version_string = elisp_string(version);
     let archive_name_string = elisp_string(archive.name);
     let archive_url_string = elisp_string(archive.url);
-    let package_archives = if archive.name == MELPA_ARCHIVE.name {
-        format!(
-            r##"(list
-                      (cons {archive_name_string}
-                            {archive_url_string})
-                      (cons {}
-                            {}))"##,
-            elisp_string(GNU_ELPA_ARCHIVE.name),
-            elisp_string(GNU_ELPA_ARCHIVE.url)
-        )
-    } else {
-        format!(
-            r##"(list
+    let package_archives = format!(
+        r##"(list
                       (cons {archive_name_string}
                             {archive_url_string}))"##
-        )
-    };
-    let dependency_setup = dependency.map_or_else(String::new, |dependency| {
-        let dependency_name = elisp_string(dependency.name);
-        let dependency_version = elisp_string(dependency.version);
-        let dependency_url = elisp_string(dependency.url);
-        let dependency_sha256 = elisp_string(dependency.sha256);
-        format!(
-            r##"(let* ((dependency-name {dependency_name})
-                       (dependency-symbol (intern dependency-name))
-                       (dependency-version {dependency_version})
-                       (dependency-file
-                        (expand-file-name
-                         (concat dependency-name "-" dependency-version ".el")
-                         (getenv "TMPDIR"))))
-                  (require 'url)
-                  (url-copy-file {dependency_url} dependency-file t)
-                  (let ((actual-sha256
-                         (with-temp-buffer
-                           (set-buffer-multibyte nil)
-                           (insert-file-contents-literally dependency-file)
-                           (secure-hash 'sha256 (current-buffer)))))
-                    (unless (equal actual-sha256 {dependency_sha256})
-                      (error
-                       "Dependency checksum mismatch: %s expected %s, got %s"
-                       dependency-name {dependency_sha256} actual-sha256)))
-                  (package-install-file dependency-file)
-                  (package-initialize)
-                  (let* ((installed
-                          (cadr (assq dependency-symbol package-alist)))
-                         (installed-version
-                          (and installed
-                               (package-version-join
-                                (package-desc-version installed)))))
-                    (unless (equal installed-version dependency-version)
-                      (error
-                       "URL dependency version mismatch: %s expected %s, got %s"
-                       dependency-name dependency-version installed-version))))"##
-        )
-    });
+    );
     let form = format!(
         r##"(progn
                (require 'package)
@@ -3008,7 +2663,6 @@ fn prepare_cached_package_with_url_dependency(
                      package-check-signature nil
                      package-archives {package_archives})
                (package-refresh-contents)
-               {dependency_setup}
                (let* ((package-name {name_string})
                       (expected-version {version_string})
                       (package-symbol (intern package-name))
@@ -3054,35 +2708,49 @@ fn prepare_cached_package_with_url_dependency(
     let mut command = gnu_emacs.command();
     configure_process_environment(&mut command, &root, &home, &tmp);
     command.args(["--batch", "--quick", "--eval", &form]);
-    let output =
-        output_with_timeout(&mut command, gnu_emacs.timeout).map_err(|error| match error {
-            CommandError::Launch(error) => format!(
-                "failed to launch {} for cached package `{name}` in {}: {error}",
-                gnu_emacs.name,
-                root.display()
-            ),
-            CommandError::TimedOut => format!(
-                "{} cached package `{name}` timed out after {:?} in {}",
-                gnu_emacs.name,
-                gnu_emacs.timeout,
-                root.display()
-            ),
-            CommandError::Capture(error) => format!(
-                "failed to capture {} cached package `{name}` output: {error}",
-                gnu_emacs.name
-            ),
-        })?;
+    let output = match output_with_timeout(&mut command, gnu_emacs.timeout) {
+        Ok(output) => output,
+        Err(error) => {
+            let error = match error {
+                CommandError::Launch(error) => format!(
+                    "failed to launch {} for cached package `{name}` in {}: {error}",
+                    gnu_emacs.name,
+                    root.display()
+                ),
+                CommandError::TimedOut => format!(
+                    "{} cached package `{name}` timed out after {:?} in {}",
+                    gnu_emacs.name,
+                    gnu_emacs.timeout,
+                    root.display()
+                ),
+                CommandError::Capture(error) => format!(
+                    "failed to capture {} cached package `{name}` output: {error}",
+                    gnu_emacs.name
+                ),
+            };
+            return Err(publish_package_preparation_failure(
+                &failed_marker,
+                &failure_prefix,
+                error,
+            ));
+        }
+    };
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     if !output.status.success()
         || !stdout.contains("NEOMACS-PACKAGE-CACHE:ready")
         || !descriptor.is_file()
     {
-        return Err(format!(
+        let error = format!(
             "failed to prepare cached {} package {name} {version} below {}\nstatus: {:?}\nstdout:\n{stdout}\nstderr:\n{stderr}",
             archive.label,
             root.display(),
             output.status.code()
+        );
+        return Err(publish_package_preparation_failure(
+            &failed_marker,
+            &failure_prefix,
+            error,
         ));
     }
 
@@ -3100,169 +2768,6 @@ fn prepare_cached_package_with_url_dependency(
         )
     })?;
     Ok(package_dir)
-}
-
-/// Build one local package transaction under `./tmp` for both editors.
-///
-/// GNU Emacs reads the live GNU ELPA/MELPA catalogs, verifies every selected
-/// package's hard-coded version, computes the dependency closure, and
-/// downloads that closure into local archives. The later oracle runs cannot
-/// contact the remote archives because their `package-archives` contains only
-/// these local directories.
-pub fn prepare_shared_package_source(
-    gnu_emacs: &EmacsRuntime,
-    scenario: &PackageScenario,
-) -> Result<PreparedPackageSource, String> {
-    validate_versioned_scenario(scenario)?;
-    let sandbox = MelpaSandbox::new(&format!("{}-shared-archive", scenario.name))?;
-    let archive_root = sandbox.root().join("archive");
-    let gnu_archive = archive_root.join("gnu");
-    let melpa_archive = archive_root.join("melpa");
-    fs::create_dir_all(&gnu_archive)
-        .and_then(|()| fs::create_dir_all(&melpa_archive))
-        .map_err(|error| {
-            format!(
-                "failed to create shared package archives below {}: {error}",
-                archive_root.display()
-            )
-        })?;
-
-    let requested = scenario
-        .package_names()
-        .iter()
-        .map(|package| elisp_string(package))
-        .collect::<Vec<_>>()
-        .join(" ");
-    let expected = scenario
-        .package_pins()
-        .expect("validated versioned scenario")
-        .iter()
-        .map(|package| {
-            format!(
-                "({} . {})",
-                elisp_string(&package.name),
-                elisp_string(&package.version)
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    let archive_root = format!("{}/", archive_root.display());
-    let form = format!(
-        r##"(progn
-           (require 'package)
-           (require 'url)
-           (setq package-user-dir
-                 (expand-file-name ".emacs.d/mirror-builder-elpa" (getenv "HOME"))
-                 package-check-signature nil)
-           (let* ((remote-archives
-                   '(("gnu" . "https://elpa.gnu.org/packages/")
-                     ("melpa" . "https://melpa.org/packages/")))
-                  (mirror-root {})
-                  (local-archives
-                   (mapcar
-                    (lambda (archive)
-                      (let ((directory
-                             (expand-file-name
-                              (concat (car archive) "/")
-                              mirror-root)))
-                        (make-directory directory t)
-                        (url-copy-file
-                         (concat (cdr archive) "archive-contents")
-                         (expand-file-name "archive-contents" directory)
-                         t)
-                        (cons (car archive) directory)))
-                    remote-archives))
-                  (expected '({expected}))
-                  (requested
-                   (mapcar #'intern '({requested}))))
-             (setq package-archives local-archives)
-             (package-initialize)
-             (package-refresh-contents)
-             (dolist (entry expected)
-               (let* ((name (intern (car entry)))
-                      (description
-                       (cadr (assq name package-archive-contents)))
-                      (actual
-                       (and description
-                            (package-version-join
-                             (package-desc-version description)))))
-                 (unless description
-                   (error "package absent from current archives: %s"
-                          (car entry)))
-                 (unless (equal actual (cdr entry))
-                   (error
-                    "package version changed: %s expected %s, current %s"
-                    (car entry) (cdr entry) actual))))
-             (let ((transaction
-                    (package-compute-transaction
-                     nil
-                     (mapcar (lambda (name) (list name)) requested))))
-               (dolist (description transaction)
-                 (let* ((archive
-                         (package-desc-archive description))
-                        (remote
-                         (cdr (assoc archive remote-archives)))
-                        (local
-                         (cdr (assoc archive local-archives)))
-                        (filename
-                         (concat
-                          (package-desc-full-name description)
-                          (package-desc-suffix description))))
-                   (unless (and remote local)
-                     (error "unknown package archive: %S" archive))
-                   (url-copy-file
-                    (concat remote filename)
-                    (expand-file-name filename local)
-                    t))))
-             (princ "NEOMACS-MELPA-ARCHIVE:ready")))"##,
-        elisp_string(&archive_root)
-    );
-    let report = run_phase(
-        gnu_emacs,
-        &sandbox,
-        &scenario.name,
-        ScenarioPhase::PrepareArchive,
-        &form,
-    )?;
-    if !report.stdout.contains("NEOMACS-MELPA-ARCHIVE:ready") {
-        return Err(format!(
-            "{} scenario `{}` did not finish shared archive preparation\nstdout:\n{}\nstderr:\n{}",
-            gnu_emacs.name, scenario.name, report.stdout, report.stderr
-        ));
-    }
-
-    Ok(PreparedPackageSource {
-        _sandbox: sandbox,
-        source: PackageSource::local([("gnu", gnu_archive), ("melpa", melpa_archive)]),
-    })
-}
-
-fn validate_versioned_scenario(scenario: &PackageScenario) -> Result<(), String> {
-    let Some(packages) = scenario.package_pins() else {
-        let package = scenario
-            .package_names()
-            .into_iter()
-            .next()
-            .unwrap_or("<missing package>");
-        return Err(format!(
-            "shared package scenario `{}` must hard-code exactly one version for `{package}`",
-            scenario.name
-        ));
-    };
-    for (index, package) in packages.iter().enumerate() {
-        if package.name.is_empty()
-            || package.version.is_empty()
-            || packages[..index]
-                .iter()
-                .any(|earlier| earlier.name == package.name)
-        {
-            return Err(format!(
-                "shared package scenario `{}` must hard-code exactly one version for `{}`",
-                scenario.name, package.name
-            ));
-        }
-    }
-    Ok(())
 }
 
 /// Run the same package lifecycle and probe against GNU Emacs and Neomacs.

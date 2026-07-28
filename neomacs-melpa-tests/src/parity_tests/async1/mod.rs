@@ -10,9 +10,6 @@ mod registry;
 mod timers;
 
 const ASYNC1_TEST_TIMEOUT: Duration = Duration::from_secs(180);
-const ASYNC1_ARCHIVE_URL: &str = "https://melpa.org/packages/async1-20260421.2116.tar";
-const ASYNC1_ARCHIVE_SHA256: &str =
-    "fef17778d235913a76e9f5341a0cfb7c9dc96c7ccd22103ba5952e6fd936c2f2";
 const ASYNC1_TEST_PRELUDE: &str = r##"
 (require 'cl-lib)
 (require 'seq)
@@ -115,15 +112,10 @@ const ASYNC1_TEST_PRELUDE: &str = r##"
 "##;
 
 fn async1_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new_from_frozen_melpa_archive(
-        ASYNC1_MELPA_PIN,
-        source_file,
-        ASYNC1_ARCHIVE_URL,
-        ASYNC1_ARCHIVE_SHA256,
-    )
-    .expect("prepare digest-verified async1 source below ./tmp")
-    .with_prelude(ASYNC1_TEST_PRELUDE)
-    .with_timeout(ASYNC1_TEST_TIMEOUT)
+    CachedMelpaOracle::new(ASYNC1_MELPA_PIN, source_file)
+        .expect("prepare revision-pinned async1 source below ./tmp")
+        .with_prelude(ASYNC1_TEST_PRELUDE)
+        .with_timeout(ASYNC1_TEST_TIMEOUT)
 }
 
 fn current_test_name() -> String {

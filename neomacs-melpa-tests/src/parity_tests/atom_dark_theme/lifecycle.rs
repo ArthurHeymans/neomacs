@@ -149,7 +149,7 @@ fn atom_dark_theme_enable_disable_enable_cycle_is_stable_and_does_not_duplicate_
 }
 
 #[test]
-fn atom_dark_theme_load_theme_from_frozen_install_is_repeatable_without_setting_growth() {
+fn atom_dark_theme_load_theme_from_source_install_is_repeatable_without_setting_growth() {
     let elisp_form = r##"(let ((before
                 (length
                  (get 'atom-dark 'theme-settings)))

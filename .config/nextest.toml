@@ -1,10 +1,17 @@
-experimental = ["wrapper-scripts"]
+nextest-version = "0.9.137"
+experimental = ["wrapper-scripts", "setup-scripts"]
 
 # Memory-limited wrapper: each test process gets an 8GB virtual address space limit.
 # Uses prlimit (RLIMIT_AS) so allocation failures produce a Rust abort with
 # backtrace instead of a silent SIGKILL from cgroup OOM killer.
 [scripts.wrapper.memory-limit]
 command = 'prlimit --as=8589934592 --'
+
+[scripts.setup.melpa-infra-preflight]
+command = { command-line = "scripts/melpa-infra-preflight.sh", relative-to = "workspace-root" }
+slow-timeout = { period = "60s", terminate-after = 1 }
+capture-stdout = true
+capture-stderr = true
 
 [profile.default]
 test-threads = 24
@@ -27,6 +34,14 @@ slow-timeout = { period = "600s", terminate-after = 1, grace-period = "0s" }
 [[profile.default.scripts]]
 filter = 'not binary_id(neomacs-gui-tests::real_gui_smoke)'
 run-wrapper = 'memory-limit'
+
+# Start both editor adapters once before package parity cases are dispatched.
+# Harness contract tests use fake runtimes and therefore remain independent of
+# a release Neomacs build.
+[[profile.default.scripts]]
+filter = 'package(neomacs-melpa-tests) and not test(~parity_tests::harness_contract::)'
+platform = { host = "cfg(unix)" }
+setup = 'melpa-infra-preflight'
 
 # Minimax oracle cases intentionally evaluate game trees in both Neomacs
 # and GNU Emacs.  The exhaustive tic-tac-toe forms can legitimately exceed

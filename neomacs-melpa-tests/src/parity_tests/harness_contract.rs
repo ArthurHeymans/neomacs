@@ -3,10 +3,11 @@ use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
+use crate::source_lock::SHALLOW_GIT_FETCH_ARGS;
 use crate::{
     EmacsRuntime, ErtScenario, MelpaSandbox, PackageScenario, PackageSource, ScenarioPhase,
-    prepare_cached_melpa_package, prepare_shared_package_source, run_elisp_oracle,
-    run_ert_scenario, run_oracle_scenario, run_scenario, workspace_root,
+    SourceBuild, locked_melpa_install_plan, locked_melpa_source, locked_melpa_sources,
+    run_elisp_oracle, run_ert_scenario, run_oracle_scenario, run_scenario, workspace_root,
 };
 use neomacs_test_oracle::EvalOutcome;
 
@@ -62,6 +63,26 @@ fn sandbox_keeps_process_state_under_workspace_tmp() {
             ]
         );
     }
+}
+
+#[test]
+fn nextest_runs_melpa_infrastructure_preflight_once_before_parity_tests() {
+    let nextest = include_str!("../../../.config/nextest.toml");
+    let preflight = include_str!("../../../scripts/melpa-infra-preflight.sh");
+
+    assert!(nextest.contains(r#"experimental = ["wrapper-scripts", "setup-scripts"]"#));
+    assert!(nextest.contains("[scripts.setup.melpa-infra-preflight]"));
+    assert!(nextest.contains("scripts/melpa-infra-preflight.sh"));
+    assert!(nextest.contains(
+        "filter = 'package(neomacs-melpa-tests) and not test(~parity_tests::harness_contract::)'"
+    ));
+    assert!(nextest.contains("setup = 'melpa-infra-preflight'"));
+    assert!(preflight.contains("NEXTEST_WORKSPACE_ROOT"));
+    assert!(preflight.contains(r#"mktemp -d "$scratch_parent/preflight.XXXXXX""#));
+    assert!(preflight.contains("resolve_executable Git git"));
+    assert!(preflight.contains("NEOMACS-MELPA-PREFLIGHT:ready"));
+    assert!(!preflight.contains("mktemp -d /tmp"));
+    assert!(!preflight.contains("TMPDIR=/tmp"));
 }
 
 #[cfg(unix)]
@@ -223,77 +244,133 @@ esac
     assert_eq!(report.neomacs, report.gnu_emacs);
 }
 
-#[cfg(unix)]
 #[test]
-fn concurrent_cached_melpa_package_preparation_downloads_once_below_workspace_tmp() {
-    use std::os::unix::fs::PermissionsExt;
+fn exact_git_package_uses_upstream_with_an_emacsmirror_fallback() {
+    let source = locked_melpa_source(("agent-shell", "20260728.953"))
+        .expect("resolve the revision-pinned agent-shell source");
 
-    let fixture = MelpaSandbox::new("cached-package-contract").expect("create fixture sandbox");
-    let invocation_log = fixture.root().join("cache-invocations");
-    let runtime_script = fixture.root().join("cache-emacs");
-    let cache_nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock is after the Unix epoch")
-        .as_nanos();
-    let version = format!("0.0.{}-{cache_nonce}", std::process::id());
-    fs::write(
-        &runtime_script,
-        format!(
-            r##"#!/bin/sh
-printf '%s\n' invoke >> '{}'
-sleep 1
-package_dir="$HOME/.emacs.d/elpa/neomacs-cache-contract-$CACHE_CONTRACT_VERSION"
-mkdir -p "$package_dir"
-: > "$package_dir/neomacs-cache-contract-pkg.el"
-printf '%s\n' 'NEOMACS-PACKAGE-CACHE:ready'
-"##,
-            invocation_log.display()
-        ),
-    )
-    .expect("write cache runtime");
-    fs::set_permissions(&runtime_script, fs::Permissions::from_mode(0o755))
-        .expect("make cache runtime executable");
-    let runtime = EmacsRuntime::new("fake-cache", runtime_script)
-        .with_env("CACHE_CONTRACT_VERSION", &version);
+    assert_eq!(source.package(), ("agent-shell", "20260728.953"));
+    assert_eq!(
+        source.upstream_repository(),
+        "https://github.com/xenodium/agent-shell"
+    );
+    assert_eq!(
+        source.upstream_revision(),
+        "a59891a9d8f1d26afb8358239346e081708cf2cb"
+    );
+    assert_eq!(
+        source.repository(),
+        "https://github.com/xenodium/agent-shell"
+    );
+    assert_eq!(
+        source.revision(),
+        "a59891a9d8f1d26afb8358239346e081708cf2cb"
+    );
+    assert_eq!(
+        source.fallback_repository(),
+        Some("https://github.com/emacsmirror/agent-shell")
+    );
+    assert_eq!(source.build(), SourceBuild::MelpaRecipe);
 
-    let barrier = std::sync::Barrier::new(3);
-    let package = ("neomacs-cache-contract", version.as_str());
-    let (first, second) = std::thread::scope(|scope| {
-        let first = scope.spawn(|| {
-            barrier.wait();
-            prepare_cached_melpa_package(&runtime, package)
-                .expect("prepare cached package concurrently")
-        });
-        let second = scope.spawn(|| {
-            barrier.wait();
-            prepare_cached_melpa_package(&runtime, package)
-                .expect("reuse concurrently prepared cached package")
-        });
-        barrier.wait();
-        (
-            first.join().expect("join first cache caller"),
-            second.join().expect("join second cache caller"),
-        )
-    });
-
-    assert_eq!(first, second);
-    assert!(first.starts_with(workspace_root().join("tmp/melpa/package-cache")));
-    assert!(!first.starts_with(Path::new("/tmp")));
-    let invocations = fs::read_to_string(invocation_log).expect("read cache invocations");
-    assert_eq!(invocations.lines().count(), 1);
+    let error = locked_melpa_source(("agent-shell", "20260724.1019"))
+        .expect_err("an obsolete rolling pin must not resolve");
+    assert!(error.contains("revision-pinned source lock"));
 }
 
 #[test]
-fn shared_package_source_requires_a_hard_coded_version_per_package() {
-    let scenario = PackageScenario::new("unversioned-package", ["dash"], "t");
-    let error = prepare_shared_package_source(
-        &EmacsRuntime::new("must-not-run", "missing-emacs"),
-        &scenario,
-    )
-    .err()
-    .expect("an unversioned package must be rejected");
+fn non_git_upstream_is_acquired_from_an_exact_emacsmirror_git_revision() {
+    let source = locked_melpa_source(("2048-game", "20230809.356"))
+        .expect("resolve the mirrored 2048-game source");
 
-    assert!(error.contains("hard-code exactly one version for `dash`"));
+    assert_eq!(
+        source.upstream_repository(),
+        "https://hg.sr.ht/~zck/game-2048"
+    );
+    assert_eq!(
+        source.upstream_revision(),
+        "8175ca5191175183b9522141dcb55d30673d2323"
+    );
+    assert_eq!(
+        source.repository(),
+        "https://github.com/emacsmirror/2048-game"
+    );
+    assert_eq!(
+        source.revision(),
+        "8976bb8875fc638806d0db5e0ba9c573f6ca7a25"
+    );
+    assert_eq!(source.fallback_repository(), None);
+    assert_eq!(source.build(), SourceBuild::DefaultFiles);
+}
+
+#[test]
+fn exact_source_install_plan_orders_dependencies_before_the_main_package() {
+    let plan = locked_melpa_install_plan(("arxiv-citation", "20230713.627"))
+        .expect("resolve the source-locked arxiv-citation dependency closure");
+    let packages = plan
+        .into_iter()
+        .map(|source| source.package())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        packages,
+        [
+            ("dash", "20260221.1346"),
+            ("s", "20220902.1511"),
+            ("arxiv-citation", "20230713.627"),
+        ]
+    );
+}
+
+#[test]
+fn every_exact_package_has_a_complete_acyclic_source_plan() {
+    let sources = locked_melpa_sources().expect("parse the source lock");
+    assert_eq!(
+        sources.len(),
+        362,
+        "every root package, exact dependency, and legacy all-ext dependency stays pinned"
+    );
+
+    for source in sources {
+        let package = source.package();
+        let plan = locked_melpa_install_plan(package)
+            .unwrap_or_else(|error| panic!("resolve {} {}: {error}", package.0, package.1));
+        assert_eq!(
+            plan.last().map(|planned| planned.package()),
+            Some(package),
+            "the selected package must be installed after its dependencies"
+        );
+        assert!(!source.repository().contains("melpa.org"));
+        assert!(!source.repository().contains("/releases/download/"));
+        if let Some(fallback) = source.fallback_repository() {
+            assert!(
+                fallback.starts_with("https://github.com/emacsmirror/")
+                    || fallback.starts_with("https://github.com/emacsattic/")
+            );
+            assert!(!fallback.contains("/releases/download/"));
+        }
+    }
+
+    let all_ext_plan = locked_melpa_install_plan(("all-ext", "20200315.1443"))
+        .expect("resolve the legacy source dependency");
+    assert_eq!(
+        all_ext_plan
+            .into_iter()
+            .map(|source| source.package())
+            .collect::<Vec<_>>(),
+        [("all", "1.0"), ("all-ext", "20200315.1443")]
+    );
+}
+
+#[test]
+fn git_source_acquisition_is_shallow_and_never_reads_a_package_catalog() {
+    let source_harness = include_str!("../source_lock.rs");
+
+    assert_eq!(SHALLOW_GIT_FETCH_ARGS, ["fetch", "--depth=1", "--no-tags"]);
+    assert!(source_harness.contains("--is-shallow-repository"));
+    assert!(!source_harness.contains("package-refresh-contents"));
+    assert!(!source_harness.contains("package-archive-contents"));
+    assert!(!source_harness.contains("url-copy-file"));
+    assert!(!source_harness.contains("melpa.org/packages"));
 }
 
 #[cfg(unix)]

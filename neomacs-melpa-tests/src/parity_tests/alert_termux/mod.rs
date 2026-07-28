@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::{
     ALERT_MELPA_PIN, ALERT_TERMUX_MELPA_PIN, CachedMelpaOracle, EmacsRuntime,
-    prepare_cached_melpa_package,
+    prepare_cached_locked_melpa_package,
 };
 use expect_test::Expect;
 
@@ -17,7 +17,7 @@ fn alert_termux_oracle(source_file: &str) -> CachedMelpaOracle {
         .with_timeout(ALERT_TERMUX_TEST_TIMEOUT);
     if source_file == "alert-termux.el" {
         let alert_directory =
-            prepare_cached_melpa_package(&EmacsRuntime::gnu_emacs(), ALERT_MELPA_PIN)
+            prepare_cached_locked_melpa_package(&EmacsRuntime::gnu_emacs(), ALERT_MELPA_PIN)
                 .expect("prepare exact alert dependency below ./tmp");
         let alert_source = alert_directory.join("alert.el");
         oracle.with_prelude(format!(

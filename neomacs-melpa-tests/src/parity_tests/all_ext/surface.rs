@@ -3,7 +3,7 @@ use expect_test::expect;
 use super::assert_all_ext_parity;
 
 #[test]
-fn all_ext_exact_pin_dependency_feature_default_and_archive_source_match() {
+fn all_ext_exact_pin_dependency_feature_default_and_source_build_match() {
     let elisp_form = r##"(let ((descriptor
                            (cadr (assq 'all-ext package-alist)))
                           (all-descriptor
@@ -28,7 +28,7 @@ fn all_ext_exact_pin_dependency_feature_default_and_archive_source_match() {
                        (file-name-nondirectory
                         (getenv "NEOMACS_PACKAGE_SOURCE"))))"##;
     let expect = expect![[
-        r#"OK (all-ext "20200315.1443" ((emacs (24 4)) (all (1 0))) t t "1.0" "4a46ebedd5e64488428976510cec57d7b0b6ab378b8c60e9b08feee2df4e7d38" t "all-ext.el")"#
+        r#"OK (all-ext "20200315.1443" ((emacs (24 4)) (all (1 0))) t t "1.0" "0d12a0c8d1098903a3625cb6b01884c5a1a63d163226d2a6e72d4dfd8f18b8c7" t "all-ext.el")"#
     ]];
     assert_all_ext_parity(elisp_form, expect);
 }

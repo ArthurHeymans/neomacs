@@ -221,7 +221,8 @@ fn async1_generated_autoload_surface_contains_only_the_five_documented_entries()
               (fboundp symbol)
               (autoloadp
                (symbol-function symbol)))
-             (symbol-file symbol 'defun)))
+             (when-let ((source (symbol-file symbol 'defun)))
+               (file-name-nondirectory source))))
           '(async1-default-template
             async1-default-aggregator
             async1-plist-remove
@@ -231,7 +232,7 @@ fn async1_generated_autoload_surface_contains_only_the_five_documented_entries()
             async1--handle-parallel-step
             async1--handle-sequential-step)))"##;
     let expect = expect![[
-        r#"OK (nil ((async1-default-template t t "[ORACLE-WORKSPACE]/tmp/melpa/package-cache-frozen-melpa/async1/20260421.2116/home/.emacs.d/elpa/async1-20260421.2116/async1.el") (async1-default-aggregator t t "[ORACLE-WORKSPACE]/tmp/melpa/package-cache-frozen-melpa/async1/20260421.2116/home/.emacs.d/elpa/async1-20260421.2116/async1.el") (async1-plist-remove t t "[ORACLE-WORKSPACE]/tmp/melpa/package-cache-frozen-melpa/async1/20260421.2116/home/.emacs.d/elpa/async1-20260421.2116/async1.el") (async1-plist-get t t "[ORACLE-WORKSPACE]/tmp/melpa/package-cache-frozen-melpa/async1/20260421.2116/home/.emacs.d/elpa/async1-20260421.2116/async1.el") (async1-start t t "[ORACLE-WORKSPACE]/tmp/melpa/package-cache-frozen-melpa/async1/20260421.2116/home/.emacs.d/elpa/async1-20260421.2116/async1.el") (async1-create-function nil nil nil) (async1--handle-parallel-step nil nil nil) (async1--handle-sequential-step nil nil nil)))"#
+        r#"OK (nil ((async1-default-template t t "async1.el") (async1-default-aggregator t t "async1.el") (async1-plist-remove t t "async1.el") (async1-plist-get t t "async1.el") (async1-start t t "async1.el") (async1-create-function nil nil nil) (async1--handle-parallel-step nil nil nil) (async1--handle-sequential-step nil nil nil)))"#
     ]];
 
     assert_async1_autoload_parity(elisp_form, expect);

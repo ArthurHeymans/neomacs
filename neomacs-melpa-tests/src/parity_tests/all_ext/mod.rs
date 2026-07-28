@@ -10,21 +10,11 @@ mod navigation;
 mod surface;
 
 const ALL_EXT_TEST_TIMEOUT: Duration = Duration::from_secs(120);
-const ALL_DEPENDENCY: (&str, &str, &str, &str) = (
-    "all",
-    "1.0",
-    "https://raw.githubusercontent.com/conao3/all.el/d3f5a18962170c69cbff9dbbabcf07acfa2763f8/all.el",
-    "4a46ebedd5e64488428976510cec57d7b0b6ab378b8c60e9b08feee2df4e7d38",
-);
 
 fn all_ext_oracle() -> CachedMelpaOracle {
-    CachedMelpaOracle::new_with_melpa_url_dependency(
-        ALL_EXT_MELPA_PIN,
-        "all-ext.el",
-        ALL_DEPENDENCY,
-    )
-    .expect("prepare pinned all-ext source and dependencies below ./tmp")
-    .with_timeout(ALL_EXT_TEST_TIMEOUT)
+    CachedMelpaOracle::new(ALL_EXT_MELPA_PIN, "all-ext.el")
+        .expect("prepare pinned all-ext source and immutable dependencies below ./tmp")
+        .with_timeout(ALL_EXT_TEST_TIMEOUT)
 }
 
 fn current_test_name() -> String {

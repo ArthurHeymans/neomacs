@@ -9,10 +9,6 @@ mod registry;
 mod remapping;
 
 const ATOM_DARK_THEME_TEST_TIMEOUT: Duration = Duration::from_secs(120);
-const ATOM_DARK_THEME_ARCHIVE_URL: &str =
-    "https://melpa.org/packages/atom-dark-theme-20220114.1902.tar";
-const ATOM_DARK_THEME_ARCHIVE_SHA256: &str =
-    "fd7abcd4bd5354fc489aa3d687e83071d791224040ba0afe27d896d211ff63bc";
 const ATOM_DARK_THEME_TEST_PRELUDE: &str = r##"
 (require 'cl-lib)
 (require 'seq)
@@ -78,15 +74,10 @@ const ATOM_DARK_THEME_TEST_PRELUDE: &str = r##"
 "##;
 
 fn atom_dark_theme_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new_from_frozen_melpa_archive(
-        ATOM_DARK_THEME_MELPA_PIN,
-        source_file,
-        ATOM_DARK_THEME_ARCHIVE_URL,
-        ATOM_DARK_THEME_ARCHIVE_SHA256,
-    )
-    .expect("prepare digest-verified atom-dark-theme source below ./tmp")
-    .with_prelude(ATOM_DARK_THEME_TEST_PRELUDE)
-    .with_timeout(ATOM_DARK_THEME_TEST_TIMEOUT)
+    CachedMelpaOracle::new(ATOM_DARK_THEME_MELPA_PIN, source_file)
+        .expect("prepare revision-pinned atom-dark-theme source below ./tmp")
+        .with_prelude(ATOM_DARK_THEME_TEST_PRELUDE)
+        .with_timeout(ATOM_DARK_THEME_TEST_TIMEOUT)
 }
 
 fn current_test_name() -> String {

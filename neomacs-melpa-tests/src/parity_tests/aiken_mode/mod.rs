@@ -11,25 +11,17 @@ mod workflows;
 const AIKEN_MODE_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
 fn aiken_mode_oracle() -> CachedMelpaOracle {
-    // MELPA built this release from aiken-lang/aiken-mode revision
-    // 1af54e4df02eb52cf62034acbe1c6dd54776d843. The package was later removed
-    // from the live catalog, but its digest-pinned payload remains available.
-    CachedMelpaOracle::new_from_frozen_melpa_archive(
-        AIKEN_MODE_MELPA_PIN,
-        "aiken-mode.el",
-        "https://melpa.org/packages/aiken-mode-20230920.1210.tar",
-        "9ba361ec1a4acf2d5c2083c5fe748da3a4015f3219a9a69b10b4babd118a301f",
-    )
-    .expect("prepare pinned aiken-mode source below ./tmp")
-    .with_prelude(
-        r##"
+    CachedMelpaOracle::new(AIKEN_MODE_MELPA_PIN, "aiken-mode.el")
+        .expect("prepare pinned aiken-mode source below ./tmp")
+        .with_prelude(
+            r##"
 (require 'cl-lib)
 (require 'compile)
 (require 'project)
 (require 'thingatpt)
 "##,
-    )
-    .with_timeout(AIKEN_MODE_TEST_TIMEOUT)
+        )
+        .with_timeout(AIKEN_MODE_TEST_TIMEOUT)
 }
 
 fn current_test_name() -> String {
