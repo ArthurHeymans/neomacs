@@ -140,6 +140,18 @@ pub const DISTEL_COMPLETION_LIB_MELPA_PIN: (&str, &str) =
 /// `ac7b09a23e45f9bd02affb31847263de4180163a`.
 pub const AUTO_COMPLETE_NXML_MELPA_PIN: (&str, &str) = ("auto-complete-nxml", "20140221.458");
 
+/// The exact auto-complete-pcmp package selected by the comprehensive
+/// programmable-completion capture, action, advice, error, and practical
+/// command workflow parity corpus. MELPA built this archive from upstream
+/// commit `2595d3dab1ef3549271ca922f212928e9d830eec`.
+pub const AUTO_COMPLETE_PCMP_MELPA_PIN: (&str, &str) = ("auto-complete-pcmp", "20140303.255");
+
+/// The exact log4e dependency selected for the auto-complete-pcmp corpus.
+pub const LOG4E_MELPA_PIN: (&str, &str) = ("log4e", "20240123.1313");
+
+/// The exact yaxception dependency selected for the auto-complete-pcmp corpus.
+pub const YAXCEPTION_MELPA_PIN: (&str, &str) = ("yaxception", "20240107.504");
+
 /// The exact audio-notes-mode package selected by the comprehensive
 /// filesystem, playback, process-control, mode-line, advice, and global-mode
 /// lifecycle parity corpus. MELPA built this archive from upstream commit
