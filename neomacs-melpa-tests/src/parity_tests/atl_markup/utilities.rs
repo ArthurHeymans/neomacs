@@ -1,0 +1,138 @@
+use expect_test::expect;
+
+use super::assert_atl_markup_parity;
+
+#[test]
+fn atl_markup_mute_apply_forwards_values_and_binds_message_controls_only_inside_call() {
+    let elisp_form = r##"(let ((message-log-max
+                77)
+               (inhibit-message nil)
+               observed)
+          (list
+           (atl-markup--mute-apply
+            (lambda (&rest arguments)
+              (setq observed
+                    (list
+                     arguments
+                     inhibit-message
+                     message-log-max))
+              (list
+               :result
+               (apply #'+ arguments)))
+            3
+            5
+            8)
+           observed
+           inhibit-message
+           message-log-max))"##;
+    let expect = expect!["OK ((:result 16) ((3 5 8) t nil) nil 77)"];
+    assert_atl_markup_parity(elisp_form, expect);
+}
+
+#[test]
+fn atl_markup_mute_apply_suppresses_practical_message_log_output_and_restores_status() {
+    let elisp_form = r##"(let* ((messages-buffer
+                (get-buffer-create
+                 "*Messages*"))
+               (message-log-max t)
+               (secret
+                "ATL-MARKUP-SECRET-MESSAGE")
+               before
+               after
+               result)
+          (with-current-buffer messages-buffer
+            (let ((inhibit-read-only t))
+              (erase-buffer)))
+          (message
+           "atl-markup-visible-sentinel")
+          (setq before
+                (current-message))
+          (setq result
+                (atl-markup--mute-apply
+                 (lambda ()
+                   (message "%s" secret)
+                   :completed)))
+          (setq after
+                (current-message))
+          (list
+           result
+           (equal before after)
+           (with-current-buffer messages-buffer
+             (goto-char
+              (point-min))
+             (and
+              (search-forward secret nil t)
+              t))
+           (with-current-buffer messages-buffer
+             (goto-char
+              (point-min))
+             (and
+              (search-forward
+               "atl-markup-visible-sentinel"
+               nil
+               t)
+              t))))"##;
+    let expect = expect!["OK (:completed t nil t)"];
+    assert_atl_markup_parity(elisp_form, expect);
+}
+
+#[test]
+fn atl_markup_mute_apply_records_error_propagation_and_message_state_after_unwind() {
+    let elisp_form = r##"(let ((message-log-max
+                12)
+               (inhibit-message
+                nil)
+               inside)
+          (list
+           (atl-markup-test-error-data
+            (lambda ()
+              (atl-markup--mute-apply
+               (lambda ()
+                 (setq inside
+                       (list
+                        message-log-max
+                        inhibit-message))
+                 (error
+                  "mute failure %s"
+                  42)))))
+           inside
+           message-log-max
+           inhibit-message))"##;
+    let expect = expect![[r#"OK ((:error error ("mute failure 42")) (nil t) 12 nil)"#]];
+    assert_atl_markup_parity(elisp_form, expect);
+}
+
+#[test]
+fn atl_markup_mute_apply_supports_symbols_zero_arguments_and_non_local_exit() {
+    let elisp_form = r##"(let ((message-log-max
+                9)
+               (inhibit-message nil)
+               inside-throw)
+          (list
+           (atl-markup--mute-apply
+            #'list)
+           (atl-markup--mute-apply
+            #'concat
+            "markup"
+            "-"
+            "value")
+           (catch 'done
+             (atl-markup--mute-apply
+              (lambda (payload)
+                (setq inside-throw
+                      (list
+                       payload
+                       message-log-max
+                       inhibit-message))
+                (throw
+                 'done
+                 (vector
+                  :escaped
+                  payload)))
+              17))
+           inside-throw
+           message-log-max
+           inhibit-message))"##;
+    let expect = expect![[r#"OK (nil "markup-value" [:escaped 17] (17 nil t) 9 nil)"#]];
+    assert_atl_markup_parity(elisp_form, expect);
+}
