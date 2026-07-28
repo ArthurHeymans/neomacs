@@ -819,94 +819,22 @@ pub(crate) enum DisplayLength {
     Columns(u16),
     Pixels(f32),
     Em(f32),
-    Expr(DisplayLengthExpr),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum DisplayLengthSymbol {
-    Height,
-    Width,
-    Text,
-    Left,
-    Right,
-    Center,
-    LeftFringe,
-    RightFringe,
-    LeftMargin,
-    RightMargin,
-    ScrollBar,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum DisplayLengthExpr {
-    Pixels(f32),
-    Em(f32),
-    Symbol(DisplayLengthSymbol),
-    Variable(Box<str>),
-    Add(Vec<DisplayLengthExpr>),
-    Sub(Vec<DisplayLengthExpr>),
-}
-
-impl DisplayLengthSymbol {
-    /// GNU symbol name for this region/font symbol, as it appears inside a
-    /// `(space :align-to SYMBOL)` form. Used to reconstruct the operand
-    /// `Value` so the single GNU-faithful `calc_pixel_width_or_height`
-    /// evaluator (xdisp.c:30355) can resolve it against window geometry.
-    pub(crate) fn lisp_name(self) -> &'static str {
-        match self {
-            Self::Height => "height",
-            Self::Width => "width",
-            Self::Text => "text",
-            Self::Left => "left",
-            Self::Right => "right",
-            Self::Center => "center",
-            Self::LeftFringe => "left-fringe",
-            Self::RightFringe => "right-fringe",
-            Self::LeftMargin => "left-margin",
-            Self::RightMargin => "right-margin",
-            Self::ScrollBar => "scroll-bar",
-        }
-    }
-}
-
-impl DisplayLengthExpr {
-    /// Reconstruct the Lisp operand `Value` for a `(space :width …)` or
-    /// `(space :align-to …)` expression so the unified
-    /// `calc_pixel_width_or_height` evaluator can resolve it. Mirrors the
-    /// inverse of `parse_display_length_expr`:
+    /// A `(space :width/:height/:ascent …)` operand kept verbatim as Lisp.
     ///
-    /// - `Em(n)`  → bare number (GNU scales by `FRAME_COLUMN_WIDTH`)
-    /// - `Pixels(n)` → `(n)` one-element list (GNU absolute pixel count)
-    /// - `Symbol(s)` → the region/font symbol
-    /// - `Variable(name)` → a plain symbol (GNU resolves via the
-    ///   buffer-local value; here the caller-provided `symbol_values`)
-    /// - `Add` / `Sub` → `(+ …)` / `(- …)` arithmetic forms
-    pub(crate) fn to_lisp_value(&self) -> Value {
-        match self {
-            Self::Em(n) => Value::make_float(f64::from(*n)),
-            Self::Pixels(px) => Value::list(vec![Value::make_float(f64::from(*px))]),
-            Self::Symbol(symbol) => Value::symbol(symbol.lisp_name()),
-            Self::Variable(name) => Value::symbol(name.as_ref()),
-            Self::Add(parts) => {
-                let mut form = Vec::with_capacity(parts.len() + 1);
-                form.push(Value::symbol("+"));
-                form.extend(parts.iter().map(Self::to_lisp_value));
-                Value::list(form)
-            }
-            Self::Sub(parts) => {
-                let mut form = Vec::with_capacity(parts.len() + 1);
-                form.push(Value::symbol("-"));
-                form.extend(parts.iter().map(Self::to_lisp_value));
-                Value::list(form)
-            }
-        }
-    }
+    /// GNU stores the property object and evaluates it with
+    /// `calc_pixel_width_or_height` (xdisp.c:30355); there is no second,
+    /// typed decode of the expression grammar. Keeping the operand as Lisp
+    /// means every form GNU accepts reaches the evaluator — including forms
+    /// a typed mirror would have to enumerate, such as `(NUM . EXPR)`
+    /// products and `(image …)` operands (issue #204).
+    Expr(Value),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum DisplayStretchWidth {
     Length(DisplayLength),
-    AlignTo(DisplayLengthExpr),
+    /// `:align-to` operand, kept verbatim as Lisp — see [`DisplayLength::Expr`].
+    AlignTo(Value),
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -1,8 +1,7 @@
 use super::*;
 use crate::display_item::{
-    DisplayImageItem, DisplayLength, DisplayLengthExpr, DisplayLengthSymbol,
-    DisplayMediaReplacement, DisplayStretch, DisplayStretchWidth, DisplayVideoItem,
-    DisplayXwidgetItem,
+    DisplayImageItem, DisplayLength, DisplayMediaReplacement, DisplayStretch, DisplayStretchWidth,
+    DisplayVideoItem, DisplayXwidgetItem,
 };
 use neovm_core::emacs_core::{Context, Value};
 
@@ -29,23 +28,21 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
             .cloned(),
         Some(DisplayReplacementProperty::String)
     );
+    let align_expr = Value::list(vec![
+        Value::symbol("-"),
+        Value::symbol("right"),
+        Value::fixnum(2),
+    ]);
     assert_eq!(
         classify_display_property(Value::list(vec![
             Value::symbol("space"),
             Value::keyword(":align-to"),
-            Value::list(vec![
-                Value::symbol("-"),
-                Value::symbol("right"),
-                Value::fixnum(2),
-            ]),
+            align_expr,
         ]))
         .replacement()
         .cloned(),
         Some(DisplayReplacementProperty::Stretch(DisplayStretch {
-            width: DisplayStretchWidth::AlignTo(DisplayLengthExpr::Sub(vec![
-                DisplayLengthExpr::Symbol(DisplayLengthSymbol::Right),
-                DisplayLengthExpr::Em(2.0),
-            ])),
+            width: DisplayStretchWidth::AlignTo(align_expr),
             height: None,
             ascent: None,
         }))
@@ -326,16 +323,46 @@ fn classify_display_property_keeps_fringe_length_units_in_space_specs() {
         .replacement()
         .cloned(),
         Some(DisplayReplacementProperty::Stretch(DisplayStretch {
-            width: DisplayStretchWidth::AlignTo(DisplayLengthExpr::Symbol(
-                DisplayLengthSymbol::LeftFringe
-            )),
+            width: DisplayStretchWidth::AlignTo(Value::symbol("left-fringe")),
             height: None,
             ascent: None,
         }))
     );
+}
+
+/// Issue #204 — `(space :align-to (- center (0.5 . IMAGE-SPEC)))` centres an
+/// image in GNU Emacs but left-aligned it in NEO Emacs.
+///
+/// GNU `calc_pixel_width_or_height` (xdisp.c:30506, :30551) evaluates an
+/// `(image …)` operand to the image's pixel width and `(NUM . EXPR)` to
+/// NUM × EXPR, so the spec resolves to `centre − half the image width`.
+/// Note `(0.5 . (image …))` reads as the proper list
+/// `(0.5 image :type png :file "…")`, which no `parse_display_length_expr`
+/// arm matched — the operand parse failed, the whole `:align-to` was
+/// dropped, and the stretch collapsed to zero width, flushing the image
+/// left. Dashboard and `image-dired` centre banners with this exact form.
+#[test]
+fn align_to_keeps_fractional_image_width_operand() {
+    let mut eval = Context::new();
+    let expr = eval
+        .eval_str(r#"(quote (- center (0.5 . (image :type png :file "x.png"))))"#)
+        .expect("read :align-to expression");
+
+    let spec = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword(":align-to"),
+        expr,
+    ]);
+
     assert_eq!(
-        parse_display_length_expr(Value::symbol("right-fringe")),
-        Some(DisplayLengthExpr::Symbol(DisplayLengthSymbol::RightFringe))
+        classify_display_property(spec).replacement().cloned(),
+        Some(DisplayReplacementProperty::Stretch(DisplayStretch {
+            width: DisplayStretchWidth::AlignTo(expr),
+            height: None,
+            ascent: None,
+        })),
+        "the `:align-to` operand must reach the evaluator verbatim; dropping it \
+         collapsed the stretch to a 1-column space and flushed the image left"
     );
 }
 

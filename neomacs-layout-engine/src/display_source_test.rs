@@ -5,10 +5,9 @@ use crate::display_buffer_source_consumption::{
 use crate::display_buffer_text_source::{BufferTextCursorItem, BufferTextSourceCursor};
 use crate::display_item::{
     BufferDisplayReplacementSource, DisplayGlyphless, DisplayImageItem, DisplayItem,
-    DisplayItemKind, DisplayLength, DisplayLengthExpr, DisplayLengthSymbol,
-    DisplayMediaReplacement, DisplayRowBreakReason, DisplaySourceId, DisplaySourceMappedText,
-    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessMethod,
-    RenderFaceRef, SourceSpan,
+    DisplayItemKind, DisplayLength, DisplayMediaReplacement, DisplayRowBreakReason,
+    DisplaySourceId, DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch,
+    DisplayStretchWidth, DisplayTextRun, GlyphlessMethod, RenderFaceRef, SourceSpan,
 };
 use crate::display_property::DisplayReplacementProperty;
 use crate::display_source::DisplaySourceTextPosition;
@@ -745,9 +744,10 @@ fn lisp_string_source_cursor_parses_display_space_align_to_as_typed_expression()
     assert_eq!(
         item.kind,
         DisplayItemKind::Stretch(DisplayStretch {
-            width: DisplayStretchWidth::AlignTo(DisplayLengthExpr::Sub(vec![
-                DisplayLengthExpr::Symbol(DisplayLengthSymbol::Right),
-                DisplayLengthExpr::Em(2.0),
+            width: DisplayStretchWidth::AlignTo(Value::list(vec![
+                Value::symbol("-"),
+                Value::symbol("right"),
+                Value::fixnum(2),
             ])),
             height: None,
             ascent: None,

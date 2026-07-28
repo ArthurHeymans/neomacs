@@ -1851,7 +1851,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     .max(1.0) as u16;
                 Some((cols, pixels))
             }
-            DisplayStretchWidth::AlignTo(expr) => {
+            DisplayStretchWidth::AlignTo(prop) => {
                 // GNU `display_line`/`produce_stretch_glyph` (xdisp.c) feeds
                 // the `:align-to` operand to `calc_pixel_width_or_height` with
                 // `*align_to == -1`, then takes the difference from the current
@@ -1861,14 +1861,18 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 // rows, GNU then adds `window_box_left_offset (TEXT_AREA)` to
                 // raw numeric targets; region-symbol targets have already set
                 // `align_to >= 0` and keep the resolved region coordinate.
-                let prop = expr.to_lisp_value();
                 let mut align_to: i32 = -1;
-                let pixels = calc_pixel_width_or_height(
+                let evaluated = calc_pixel_width_or_height(
                     &self.layout.pixel_calc,
-                    &prop,
+                    prop,
                     true,
                     Some(&mut align_to),
-                )?;
+                );
+                // GNU xdisp.c:32878 — when no width form computes, the stretch
+                // falls back to the canonical char width rather than vanishing.
+                let Some(pixels) = evaluated else {
+                    return Some((1, self.layout.char_width_px.max(1.0)));
+                };
                 let content_x = self.layout.tab_policy.origin_x_px;
                 let raw_align_base_x = if align_to < 0
                     && matches!(
@@ -1906,9 +1910,8 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             // frame column/line size in the pixel-calc context already, so the
             // authority scales bare numbers consistently with the explicit
             // `Em` arm above.
-            DisplayLength::Expr(expr) => {
-                let prop = expr.to_lisp_value();
-                calc_pixel_width_or_height(&self.layout.pixel_calc, &prop, true, None)
+            DisplayLength::Expr(prop) => {
+                calc_pixel_width_or_height(&self.layout.pixel_calc, prop, true, None)
                     .map(|pixels| pixels as f32)
             }
         }

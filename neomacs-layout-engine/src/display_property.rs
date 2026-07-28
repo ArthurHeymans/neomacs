@@ -1,7 +1,6 @@
 use crate::display_item::{
-    DisplayItemLayout, DisplayLength, DisplayLengthExpr, DisplayLengthSymbol,
-    DisplayMediaReplacement, DisplayStretch, DisplayStretchWidth, DisplaySurfaceItem,
-    DisplayXwidgetItem,
+    DisplayItemLayout, DisplayLength, DisplayMediaReplacement, DisplayStretch, DisplayStretchWidth,
+    DisplaySurfaceItem, DisplayXwidgetItem,
 };
 use crate::display_spec::{
     DisplayFringeLayout, DisplaySpaceKey, parse_display_fringe_layout,
@@ -318,7 +317,16 @@ fn parse_display_space(value: Value) -> Option<DisplayStretch> {
                 width = parse_display_length(val).map(DisplayStretchWidth::Length);
             }
             Some(DisplaySpaceKey::AlignTo) => {
-                width = parse_display_length_expr(val).map(DisplayStretchWidth::AlignTo);
+                // GNU only tests `!NILP (prop)` here (xdisp.c:32837); whether the
+                // expression is computable is decided by
+                // `calc_pixel_width_or_height` at resolve time, and an
+                // uncomputable one falls back to the canonical char width
+                // (xdisp.c:32879). Parsing it into a typed mirror here meant any
+                // form the mirror could not model silently became a 1-column
+                // space — issue #204's left-aligned image.
+                if !val.is_nil() {
+                    width = Some(DisplayStretchWidth::AlignTo(val));
+                }
             }
             Some(DisplaySpaceKey::Height | DisplaySpaceKey::RelativeHeight) => {
                 height = parse_display_length(val);
@@ -342,71 +350,11 @@ fn parse_display_length(value: Value) -> Option<DisplayLength> {
     if let Some(number) = lisp_number(value) {
         return Some(DisplayLength::Em(number));
     }
-    parse_display_length_expr(value).map(DisplayLength::Expr)
-}
-
-pub(crate) fn parse_display_length_expr(value: Value) -> Option<DisplayLengthExpr> {
-    if let Some(number) = lisp_number(value) {
-        return Some(DisplayLengthExpr::Em(number));
-    }
-
-    if value.is_symbol() {
-        let name = value.as_symbol_name()?;
-        return Some(
-            display_length_symbol(name)
-                .map(DisplayLengthExpr::Symbol)
-                .unwrap_or_else(|| DisplayLengthExpr::Variable(name.into())),
-        );
-    }
-
-    if !value.is_cons() {
+    if value.is_nil() {
         return None;
     }
-
-    let items = list_to_vec(&value)?;
-    let head = items.first()?;
-    if head.is_symbol_named("+") {
-        return items
-            .iter()
-            .skip(1)
-            .copied()
-            .map(parse_display_length_expr)
-            .collect::<Option<Vec<_>>>()
-            .map(DisplayLengthExpr::Add);
-    }
-    if head.is_symbol_named("-") {
-        return items
-            .iter()
-            .skip(1)
-            .copied()
-            .map(parse_display_length_expr)
-            .collect::<Option<Vec<_>>>()
-            .map(DisplayLengthExpr::Sub);
-    }
-    if items.len() == 1
-        && let Some(number) = lisp_number(items[0])
-    {
-        return Some(DisplayLengthExpr::Pixels(number));
-    }
-
-    None
-}
-
-fn display_length_symbol(name: &str) -> Option<DisplayLengthSymbol> {
-    match name {
-        "height" => Some(DisplayLengthSymbol::Height),
-        "width" => Some(DisplayLengthSymbol::Width),
-        "text" => Some(DisplayLengthSymbol::Text),
-        "left" => Some(DisplayLengthSymbol::Left),
-        "right" => Some(DisplayLengthSymbol::Right),
-        "center" => Some(DisplayLengthSymbol::Center),
-        "left-fringe" => Some(DisplayLengthSymbol::LeftFringe),
-        "right-fringe" => Some(DisplayLengthSymbol::RightFringe),
-        "left-margin" => Some(DisplayLengthSymbol::LeftMargin),
-        "right-margin" => Some(DisplayLengthSymbol::RightMargin),
-        "scroll-bar" => Some(DisplayLengthSymbol::ScrollBar),
-        _ => None,
-    }
+    // Keep the operand as Lisp for the single GNU-faithful evaluator.
+    Some(DisplayLength::Expr(value))
 }
 
 fn parse_display_raise_factor(value: Value) -> Option<f32> {
