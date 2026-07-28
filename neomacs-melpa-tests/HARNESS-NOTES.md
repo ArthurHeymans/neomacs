@@ -156,7 +156,17 @@ anaconda-mode's payloads are trustworthy because the pinned `anaconda-mode.py`
 was run as a real server and real `anaconda-mode-call` was driven at it over a
 real socket, so the fixtures carry the server's own serialisation rather than a
 reconstruction of it. For a package that *parses a tool's output* rather than
-speaking a protocol, that difference is the whole test. Record the tool's version
+speaking a protocol, that difference is the whole test.
+
+**The strongest case for this is error handling, where an invented fixture
+actively hides defects.** android-mode's `android-start-app` tests adb's reply
+against `^Error: `. Real adb with no device attached prints
+`adb: no devices/emulators found` — which does not match — so the command reports
+success and tells the user the activity started. A plausible invented error
+string (`Error: no devices found`) *would* have matched, the code would have
+looked correct, and the defect would have been invisible. Inventing a fixture
+does not merely risk being wrong; it biases the suite toward confirming that the
+package's parsing works, because you write the input its parser expects. Record the tool's version
 in the commit beside the package pin — a recording is only as good as the version
 it came from.
 
@@ -189,6 +199,17 @@ and `set-process-query-on-exit-flag` nil so `kill-buffer` does not prompt.
 **Make async deterministic.** Wait on the sentinel or `accept-process-output`
 until the process is dead. Sort concurrently recorded requests before asserting
 — activity-watch's bucket and heartbeat curl processes finish in either order.
+
+**SILENT — with `compile`, the last writer *is* the sentinel.** So output
+arriving is not completion: the sentinel appends `Compilation finished at …`
+after everything the build printed. A capture taken when the expected output
+appears catches GNU after that line and Neomacs before it — two byte-identical
+buffers differing by one trailing line, which is *exactly* what a real divergence
+looks like in the diff. Both editors write it; only the moment of capture
+differed. Require `get-buffer-process` to return nil, not merely that the output
+you asked for is present. Worth knowing that an agent holding the note below
+still got this wrong, because "the output I asked for is here" feels like the
+natural stopping condition.
 
 **SILENT — waiting for the process to die is not waiting for its output.**
 `process-live-p` goes nil while the last output and the sentinel's own line are
