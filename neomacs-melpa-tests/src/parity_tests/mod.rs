@@ -236,6 +236,7 @@ mod auto_complete_chunk;
 mod auto_complete_clang;
 mod auto_complete_clang_async;
 mod auto_complete_distel;
+mod auto_complete_exuberant_ctags;
 mod auto_complete_nxml;
 mod auto_complete_pcmp;
 mod auto_dark;

@@ -141,6 +141,13 @@ pub const AUTO_COMPLETE_DISTEL_MELPA_PIN: (&str, &str) = ("auto-complete-distel"
 pub const DISTEL_COMPLETION_LIB_MELPA_PIN: (&str, &str) =
     ("distel-completion-lib", "20180827.1344");
 
+/// The exact auto-complete-exuberant-ctags package selected by the
+/// comprehensive tag discovery, index parsing, candidate, hook, and practical
+/// project workflow parity corpus. MELPA built this archive from upstream
+/// commit `ff6121ff8b71beb5aa606d28fd389c484ed49765`.
+pub const AUTO_COMPLETE_EXUBERANT_CTAGS_MELPA_PIN: (&str, &str) =
+    ("auto-complete-exuberant-ctags", "20140320.724");
+
 /// The exact auto-complete-nxml package selected by the comprehensive context,
 /// candidate, documentation, namespace, action, and practical nXML workflow
 /// parity corpus. MELPA built this archive from upstream commit
