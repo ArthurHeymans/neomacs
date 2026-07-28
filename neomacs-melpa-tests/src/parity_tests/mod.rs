@@ -221,6 +221,7 @@ mod audio_notes_mode;
 mod aurel;
 mod aurora_config_mode;
 mod australia_holidays;
+mod auth_source_1password;
 mod auth_source_gopass;
 mod bind_key;
 mod compat;

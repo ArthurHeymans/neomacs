@@ -989,6 +989,13 @@ pub const AUDACIOUS_MELPA_PIN: (&str, &str) = ("audacious", "20210917.51");
 /// upstream commit `8273ec7937a21b469b9dbb6c11714255b890f410`.
 pub const AURORA_CONFIG_MODE_MELPA_PIN: (&str, &str) = ("aurora-config-mode", "20180216.2302");
 
+/// The exact auth-source-1password package selected by the comprehensive
+/// metadata, secret-reference, CLI, backend, cache, and end-to-end auth-source
+/// parity corpus. MELPA built this archive from upstream commit
+/// `10961bdc8a3ed551dde29fde416843058bea2374`.
+pub const AUTH_SOURCE_1PASSWORD_MELPA_PIN: (&str, &str) =
+    ("auth-source-1password", "20260221.2058");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
