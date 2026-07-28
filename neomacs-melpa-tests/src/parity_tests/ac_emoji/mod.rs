@@ -3,15 +3,50 @@ use std::time::Duration;
 use crate::{AC_EMOJI_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod data;
-mod setup;
-mod surface;
+mod workflows;
+
+/// ac-emoji is an auto-complete source, and the commentary's whole story is
+/// "call `ac-emoji-setup' then type `:name'".  The workflows therefore complete
+/// through `ac-start` / `ac-update` / `ac-complete` in a window-displayed
+/// buffer, which is also the only buffer `execute-kbd-macro` would reach.
+const AC_EMOJI_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+(require 'auto-complete)
+
+(defmacro ac-emoji-test-in-buffer (&rest body)
+  "Run BODY in a window-displayed text buffer with auto-complete armed."
+  `(let ((buffer (generate-new-buffer "*ac-emoji-workflow*")))
+     (unwind-protect
+         (progn
+           (set-window-buffer (selected-window) buffer)
+           (set-buffer buffer)
+           (text-mode)
+           (setq ac-sources nil)
+           (auto-complete-mode 1)
+           ,@body)
+       (kill-buffer buffer))))
+
+(defun ac-emoji-test-candidates ()
+  "Start completion at point and return the plain candidate strings."
+  (ac-start :force-init t)
+  (ac-update t)
+  (mapcar #'substring-no-properties ac-candidates))
+
+(defun ac-emoji-test-item (key)
+  "Return KEY's popup item as (KEY DOCUMENT SUMMARY)."
+  (let ((item (cl-find key ac-emoji--candidates :test #'equal)))
+    (and item
+         (list (substring-no-properties item)
+               (get-text-property 0 'document item)
+               (get-text-property 0 'summary item)))))
+"##;
 
 const AC_EMOJI_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
 fn ac_emoji_oracle() -> CachedMelpaOracle {
     CachedMelpaOracle::new(AC_EMOJI_MELPA_PIN, "ac-emoji.el")
         .expect("prepare pinned ac-emoji source below ./tmp")
+        .with_prelude(AC_EMOJI_TEST_PRELUDE)
         .with_timeout(AC_EMOJI_TEST_TIMEOUT)
 }
 
