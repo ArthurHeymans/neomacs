@@ -93,6 +93,13 @@ pub const ATOM_ONE_DARK_THEME_MELPA_PIN: (&str, &str) = ("atom-one-dark-theme", 
 /// `07f9915e08342410b933145d7934998709753a29`.
 pub const AUTO_COMPLETE_MELPA_PIN: (&str, &str) = ("auto-complete", "20251231.1622");
 
+/// The exact auto-complete-c-headers package selected by the comprehensive
+/// include-path, filesystem-cache, documentation, candidate-source, and
+/// completion workflow parity corpus. MELPA built this archive from upstream
+/// commit `52fef720c6f274ad8de52bef39a343421006c511`.
+pub const AUTO_COMPLETE_C_HEADERS_MELPA_PIN: (&str, &str) =
+    ("auto-complete-c-headers", "20150912.323");
+
 /// The exact audio-notes-mode package selected by the comprehensive
 /// filesystem, playback, process-control, mode-line, advice, and global-mode
 /// lifecycle parity corpus. MELPA built this archive from upstream commit
