@@ -1014,6 +1014,17 @@ pub const AUTH_SOURCE_1PASSWORD_MELPA_PIN: (&str, &str) =
 /// `ae32dd807aa3cff59e4384ce8c9d7de259e45998`.
 pub const AUTH_SOURCE_KEYTAR_MELPA_PIN: (&str, &str) = ("auth-source-keytar", "20251231.1726");
 
+/// The exact auto-auto-indent package selected by the comprehensive
+/// indentation, editing-command, post-command, timer, and practical typing
+/// workflow parity corpus. MELPA built this archive from upstream commit
+/// `0139378577f936d34b20276af6f022fb457af490`.
+pub const AUTO_AUTO_INDENT_MELPA_PIN: (&str, &str) = ("auto-auto-indent", "20131106.1903");
+
+/// The exact es-lib package selected as auto-auto-indent's runtime utility
+/// dependency. MELPA built this archive from upstream commit
+/// `753b27363e39c10edc9e4e452bdbbbe4d190df4a`.
+pub const ES_LIB_MELPA_PIN: (&str, &str) = ("es-lib", "20141111.1830");
+
 /// The exact Keytar package selected as auth-source-keytar's runtime
 /// credential-provider dependency. MELPA built this archive from upstream
 /// commit `f0485df065bcdc8f446be3e00aa77a43629ec84e`.
