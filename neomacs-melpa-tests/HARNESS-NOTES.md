@@ -687,6 +687,43 @@ between fixture and expectation. align-cljlet's suite is built that way.
 a brace counts by looking at its face, so the indenter only works on a fontified
 buffer — a suite that always fontifies would silently depend on that.
 
+## Harness ceilings
+
+**The oracle's normaliser recurses once per cons cell, so a large return value
+fails as if the package had.** `neomacs--test-oracle-normalize` calls itself on
+`(cdr value)`, so the recursion depth is the list's **length**, not its nesting.
+`max-lisp-eval-depth` is 1600 in both editors, and a flat list of a few hundred
+elements already signals `excessive-lisp-nesting` — measured identically in GNU
+and Neomacs, so it is a harness ceiling and never a divergence.
+
+The damage is in how it presents: the failure arrives as `ERR ` with a broken or
+absent payload, inside the wrapper that is supposed to report *the package's*
+errors. One suite hit it as `void-variable (neomacs--oracle-error)` and the same
+form returned cleanly when run standalone. **Splitting the workflow in two
+cleared it**, which is also the better suite — two coherent user stories rather
+than one grab-bag return value.
+
+So: if a workflow fails only under the harness, only with a large aggregate
+return, and the error names the harness's own variables, suspect this before the
+package. Return per-story structures rather than one omnibus value.
+
+**haskell-mode's process command queue does not drain in batch.** A real session
+starts and the GHCi process runs, but `haskell-process-cmd` never returns to nil,
+so `haskell-process-queue-sync-request` — and therefore
+`haskell-process-get-repl-completions`, `haskell-process-do-type` and the rest —
+blocks forever. **The blockage is the `\4` prompt-marker handshake, not
+buffering and not the subprocess**: the pending command is the startup
+`:set prompt "\4"`, whose accumulated response holds GHCi's banner and two
+`ghci> ` prompts and never a `\4`. `process-connection-type` t (a pty, so GHCi
+line-buffers) makes no difference — measured, same result at 300 tenths. Standing
+in for the ghci binary cannot help either, since a stand-in sits behind the same
+unfinished handshake. Cover the no-session branch and say why the other is
+absent.
+
+**`popup-tip` never returns under `--batch`** — it waits for an event to dismiss
+the tooltip, so any popup path that really has something to show is unreachable.
+Same family as "helm cannot be driven in batch".
+
 ## Before you replace a corpus
 
 **Read the existing corpus before deciding to replace it.** `workflows.rs` is a
