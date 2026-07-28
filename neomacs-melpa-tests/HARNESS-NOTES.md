@@ -20,10 +20,16 @@ expectations keep their old value while the run reports success. Use
 each macro's position at *compile* time, so once an earlier test's update
 rewrites the file, a later test in the same run panics with "Failed to parse
 macro invocation" and its snapshot is silently left at the old value, while the
-run reports a failure that looks unrelated. Re-running does not always clear it.
-The recovery that works: replace the stale literal with an empty
-`expect![[r#""#]];` by hand and re-run. After any UPDATE_EXPECT pass, check that
-every snapshot you expected to change actually changed.
+run reports a failure that looks unrelated. The recovery that works: replace the
+stale literal with an empty `expect![[r#""#]];` by hand and re-run. After any
+UPDATE_EXPECT pass, check that every snapshot you expected to change actually
+changed.
+
+Refinement from a second encounter: a literal holding *stale text* may not clear
+by re-running, but an **empty** literal does. One suite hit the cascade on 5 of 6
+tests with empty literals already in place and a single further pass filled all
+five. So if your expectations are still empty, just re-run; hand-editing is only
+needed to clear stale text.
 
 **SILENT — `#N=` back references over *strings* are flaky by construction.**
 Two equal strings that happen to be the same object print as a back reference
@@ -142,6 +148,12 @@ the empty-line guard case exercised a *non-empty* line and asserted an overlay
 where the entire point was to assert none. It passed in both editors and looked
 right. Same shape as the `transient-mark-mode` trap: a green test asserting the
 opposite of its own name.
+
+The fix for the *class*, not just the fixture: **assert text, not arithmetic.**
+Make every assertion whole-buffer text rather than a column or offset, and make
+each element of the fixture wrong by a *different* amount. Then a miscomputed
+position shows up as text and cannot be hidden by an arithmetic mistake shared
+between fixture and expectation. align-cljlet's suite is built that way.
 
 **If an indenter consults faces, assert both with and without
 `font-lock-ensure`.** actionscript-mode's `as3-count-scope-depth` decides whether
