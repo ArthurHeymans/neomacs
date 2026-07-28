@@ -3,184 +3,178 @@ use expect_test::expect;
 use super::assert_all_the_icons_nerd_fonts_parity;
 
 #[test]
-fn all_the_icons_nerd_fonts_override_map_contains_every_declared_entry() {
-    let elisp_form = r##"(let ((map
-                (all-the-icons-nerd-fonts--build-override-map)))
-         (list
-          (hash-table-count map)
-          (gethash "all-the-icons-alltheicon-rust" map)
-          (gethash "all-the-icons-faicon-github" map)
-          (gethash "all-the-icons-fileicon-dockerfile" map)
-          (gethash "all-the-icons-material-message" map)
-          (gethash "all-the-icons-octicon-file-text" map)
-          (gethash "missing-family-missing-icon" map)
-          (secure-hash
-           'sha256
-           (prin1-to-string
-            (sort
-             (let (entries)
-               (maphash
-                (lambda (key value)
-                  (push (cons key value) entries))
-                map)
-               entries)
-             (lambda (left right)
-               (string< (car left) (car right))))))))"##;
+fn readme_preference_routes_specific_overrides_family_conversions_and_real_fallbacks() {
+    let elisp_form = r##"(let* ((override-map
+                      (all-the-icons-nerd-fonts--build-override-map))
+                     (nerd-material
+                      (all-the-icons-nerd-fonts--get-nerd-data-alist
+                       'all-the-icons-nerd-md))
+                     (fallback
+                      (car
+                       (seq-find
+                        (lambda (entry)
+                          (let ((name (car entry)))
+                            (and
+                             (not
+                              (gethash
+                               (concat
+                                "all-the-icons-material-"
+                                name)
+                               override-map))
+                             (not
+                              (assoc
+                               (string-replace "_" "-" name)
+                               nerd-material)))))
+                        all-the-icons-data/material-icons-alist)))
+                     (describe
+                      (lambda (icon)
+                        (list
+                         (substring-no-properties icon)
+                         (string-to-list
+                          (substring-no-properties icon))
+                         (all-the-icons-icon-family icon)
+                         (get-text-property 0 'face icon)
+                         (get-text-property 0 'display icon))))
+                     (before
+                      (list
+                       (funcall
+                        describe
+                        (all-the-icons-faicon
+                         "github"
+                         :face 'font-lock-constant-face))
+                       (funcall
+                        describe
+                        (all-the-icons-material
+                         "format_align_left"
+                         :face 'font-lock-keyword-face))
+                       (funcall
+                        describe
+                        (all-the-icons-material
+                         fallback
+                         :face 'warning))))
+                     preferred)
+               (unwind-protect
+                   (progn
+                     (all-the-icons-nerd-fonts-prefer '())
+                     (setq
+                      preferred
+                      (list
+                       (funcall
+                        describe
+                        (all-the-icons-faicon
+                         "github"
+                         :face 'font-lock-constant-face))
+                       (funcall
+                        describe
+                        (all-the-icons-material
+                         "format_align_left"
+                         :face 'font-lock-keyword-face))
+                       (funcall
+                        describe
+                        (all-the-icons-material
+                         fallback
+                         :face 'warning))))
+                     (list fallback before preferred))
+                 (all-the-icons-nerd-fonts-unprefer)))"##;
     let expect = expect![[
-        r#"OK (53 (all-the-icons-nerd-dev . "rust") (all-the-icons-nerd-cod . "github") (all-the-icons-nerd-linux . "docker") (all-the-icons-nerd-md . "message-text") (all-the-icons-nerd-oct . "file") nil "0b871bd0dfec3829fcf50d10a72a4d70ef8d84080b18d48b72d9eb1d54dfcf28")"#
+        r#"OK ("3d_rotation" (("" (61595) "FontAwesome" (:family "FontAwesome" :height 1.2 :inherit font-lock-constant-face) (raise -0.24)) ("" (57910) "Material Icons" (:family "Material Icons" :height 1.2 :inherit font-lock-keyword-face) (raise -0.24)) ("" (59469) "Material Icons" (:family "Material Icons" :height 1.2 :inherit warning) (raise -0.24))) (("" (60036) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-constant-face) (raise -0.24)) ("󰉢" (983650) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-keyword-face) (raise -0.24)) ("" (59469) "Material Icons" (:family "Material Icons" :height 1.2 :inherit warning) (raise -0.24))))"#
     ]];
+
     assert_all_the_icons_nerd_fonts_parity(elisp_form, expect);
 }
 
 #[test]
-fn all_the_icons_nerd_fonts_advice_uses_specific_override_before_family_conversion() {
-    let elisp_form = r##"(let ((all-the-icons-nerd-fonts--advice-enabled t)
-               (all-the-icons-nerd-fonts--override-map
-                (all-the-icons-nerd-fonts--build-override-map))
-               calls)
-         (cl-letf
-             (((symbol-function 'all-the-icons-nerd-cod)
-               (lambda (&rest arguments)
-                 (push (cons 'nerd-cod arguments) calls)
-                 "NERD"))
-              ((symbol-function 'all-the-icons-faicon)
-               (lambda (&rest arguments)
-                 (push (cons 'original arguments) calls)
-                 "ORIGINAL")))
-           (let ((advice
-                  (all-the-icons-nerd-fonts--make-advice
-                   'all-the-icons-faicon)))
-             (list
-              (funcall
-               advice
-               #'all-the-icons-faicon
-               "github" :height 1.5 :face 'bold)
-              (nreverse calls)))))"##;
-    let expect = expect![[r#"OK ("NERD" ((nerd-cod "github" :height 1.5 :face bold)))"#]];
-    assert_all_the_icons_nerd_fonts_parity(elisp_form, expect);
-}
-
-#[test]
-fn all_the_icons_nerd_fonts_advice_converts_compatible_family_and_normalizes_name() {
-    let elisp_form = r##"(let ((all-the-icons-nerd-fonts--advice-enabled t)
-               (all-the-icons-nerd-fonts--override-map
-                (make-hash-table :test 'equal))
-               calls)
-         (cl-letf
-             (((symbol-function
-                'all-the-icons-nerd-fonts--icon-exists-p)
-               (lambda (family name)
-                 (push (list 'exists family name) calls)
-                 t))
-              ((symbol-function 'all-the-icons-nerd-md)
-               (lambda (&rest arguments)
-                 (push (cons 'nerd-md arguments) calls)
-                 "NERD"))
-              ((symbol-function 'all-the-icons-material)
-               (lambda (&rest arguments)
-                 (push (cons 'original arguments) calls)
-                 "ORIGINAL")))
-           (let ((advice
-                  (all-the-icons-nerd-fonts--make-advice
-                   'all-the-icons-material)))
-             (list
-              (funcall
-               advice
-               #'all-the-icons-material
-               "format_align_left" :v-adjust 0.1)
-              (nreverse calls)))))"##;
+fn user_override_customization_redirects_a_real_direct_call_with_arguments_intact() {
+    let elisp_form = r##"(let
+               ((all-the-icons-nerd-fonts-overrides
+                 '((all-the-icons-faicon
+                    "github"
+                    all-the-icons-nerd-dev
+                    "rust")))
+                (all-the-icons-nerd-fonts-convert-families
+                 '((all-the-icons-faicon
+                    . all-the-icons-nerd-fa)))
+                icon)
+               (unwind-protect
+                   (progn
+                     (all-the-icons-nerd-fonts-prefer '())
+                     (setq
+                      icon
+                      (all-the-icons-faicon
+                       "github"
+                       :face 'font-lock-type-face
+                       :height 1.5
+                       :v-adjust 0.1))
+                     (list
+                      (substring-no-properties icon)
+                      (string-to-list
+                       (substring-no-properties icon))
+                      (all-the-icons-icon-family icon)
+                      (get-text-property 0 'face icon)
+                      (get-text-property 0 'display icon)
+                      all-the-icons-nerd-fonts--advice-enabled
+                      (not
+                       (null
+                        (advice-member-p
+                         'all-the-icons-nerd-fonts
+                         'all-the-icons-faicon)))))
+                 (all-the-icons-nerd-fonts-unprefer)))"##;
     let expect = expect![[
-        r#"OK ("NERD" ((exists all-the-icons-nerd-md "format-align-left") (nerd-md "format-align-left" :v-adjust 0.1)))"#
+        r#"OK ("" (59304) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.7999999999999998 :inherit font-lock-type-face) (raise 0.12) t t)"#
     ]];
+
     assert_all_the_icons_nerd_fonts_parity(elisp_form, expect);
 }
 
 #[test]
-fn all_the_icons_nerd_fonts_advice_falls_back_when_conversion_icon_is_missing() {
-    let elisp_form = r##"(let ((all-the-icons-nerd-fonts--advice-enabled t)
-               (all-the-icons-nerd-fonts--override-map
-                (make-hash-table :test 'equal))
-               calls)
-         (cl-letf
-             (((symbol-function
-                'all-the-icons-nerd-fonts--icon-exists-p)
-               (lambda (family name)
-                 (push (list 'exists family name) calls)
-                 nil))
-              ((symbol-function 'all-the-icons-material)
-               (lambda (&rest arguments)
-                 (push (cons 'original arguments) calls)
-                 "ORIGINAL")))
-           (let ((advice
-                  (all-the-icons-nerd-fonts--make-advice
-                   'all-the-icons-material)))
-             (list
-              (funcall
-               advice
-               #'all-the-icons-material
-               "not_real" :face 'warning)
-              (nreverse calls)))))"##;
+fn unprefer_restores_original_direct_rendering_after_a_real_preference_session() {
+    let elisp_form = r##"(let* ((describe
+                      (lambda (icon)
+                        (list
+                         (substring-no-properties icon)
+                         (string-to-list
+                          (substring-no-properties icon))
+                         (all-the-icons-icon-family icon)
+                         (get-text-property 0 'face icon))))
+                     (before
+                      (funcall
+                       describe
+                       (all-the-icons-faicon
+                        "github"
+                        :face 'success)))
+                     preferred
+                     restored)
+               (unwind-protect
+                   (progn
+                     (all-the-icons-nerd-fonts-prefer '())
+                     (setq
+                      preferred
+                      (funcall
+                       describe
+                       (all-the-icons-faicon
+                        "github"
+                        :face 'success)))
+                     (all-the-icons-nerd-fonts-unprefer)
+                     (setq
+                      restored
+                      (funcall
+                       describe
+                       (all-the-icons-faicon
+                        "github"
+                        :face 'success)))
+                     (list
+                      before
+                      preferred
+                      restored
+                      (equal before restored)
+                      all-the-icons-nerd-fonts--advice-enabled
+                      (advice-member-p
+                       'all-the-icons-nerd-fonts
+                       'all-the-icons-faicon)))
+                 (all-the-icons-nerd-fonts-unprefer)))"##;
     let expect = expect![[
-        r#"OK ("ORIGINAL" ((exists all-the-icons-nerd-md "not-real") (original "not_real" :face warning)))"#
+        r#"OK (("" (61595) "FontAwesome" (:family "FontAwesome" :height 1.2 :inherit success)) ("" (60036) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit success)) ("" (61595) "FontAwesome" (:family "FontAwesome" :height 1.2 :inherit success)) t nil nil)"#
     ]];
-    assert_all_the_icons_nerd_fonts_parity(elisp_form, expect);
-}
 
-#[test]
-fn all_the_icons_nerd_fonts_disabled_advice_calls_original_without_lookup() {
-    let elisp_form = r##"(let ((all-the-icons-nerd-fonts--advice-enabled nil)
-               lookup-called
-               calls)
-         (cl-letf
-             (((symbol-function 'gethash)
-               (lambda (&rest _)
-                 (setq lookup-called t)
-                 nil))
-              ((symbol-function 'all-the-icons-faicon)
-               (lambda (&rest arguments)
-                 (push arguments calls)
-                 "ORIGINAL")))
-           (let ((advice
-                  (all-the-icons-nerd-fonts--make-advice
-                   'all-the-icons-faicon)))
-             (list
-              (funcall
-               advice
-               #'all-the-icons-faicon
-               "github" :height 2)
-              lookup-called
-              (nreverse calls)))))"##;
-    let expect = expect![[r#"OK ("ORIGINAL" nil (("github" :height 2)))"#]];
-    assert_all_the_icons_nerd_fonts_parity(elisp_form, expect);
-}
-
-#[test]
-fn all_the_icons_nerd_fonts_real_advice_rewrites_direct_icon_calls_and_unprefer_restores_them() {
-    let elisp_form = r##"(let* ((before
-                (all-the-icons-faicon "github"))
-               preferred unpreferred)
-         (unwind-protect
-             (progn
-               (all-the-icons-nerd-fonts-prefer '())
-               (setq preferred
-                     (all-the-icons-faicon "github"))
-               (all-the-icons-nerd-fonts-unprefer)
-               (setq unpreferred
-                     (all-the-icons-faicon "github"))
-               (list
-                (mapcar
-                 #'string-to-list
-                 (list before preferred unpreferred))
-                (mapcar
-                 #'all-the-icons-icon-family
-                 (list before preferred unpreferred))
-                all-the-icons-nerd-fonts--advice-enabled
-                (advice-member-p
-                 'all-the-icons-nerd-fonts
-                 'all-the-icons-faicon)))
-           (all-the-icons-nerd-fonts-unprefer)))"##;
-    let expect = expect![[
-        r#"OK (((61595) (60036) (61595)) ("FontAwesome" "Symbols Nerd Font" "FontAwesome") nil nil)"#
-    ]];
     assert_all_the_icons_nerd_fonts_parity(elisp_form, expect);
 }
