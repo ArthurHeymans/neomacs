@@ -3,9 +3,7 @@ use std::time::Duration;
 use crate::{ANKI_EDITOR_VIEW_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod open_note;
-mod registry;
-mod ripgrep;
+mod workflows;
 
 const ANKI_EDITOR_VIEW_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -31,10 +29,6 @@ fn assert_anki_editor_view_source_parity(source_file: &str, elisp_form: &str, ex
     expected.assert_eq(&report.gnu_emacs.to_string());
 }
 
-pub(crate) fn assert_anki_editor_view_parity(elisp_form: &str, expected: Expect) {
+fn assert_anki_editor_view_parity(elisp_form: &str, expected: Expect) {
     assert_anki_editor_view_source_parity("anki-editor-view.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_anki_editor_view_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_anki_editor_view_source_parity("anki-editor-view-autoloads.el", elisp_form, expected);
 }
