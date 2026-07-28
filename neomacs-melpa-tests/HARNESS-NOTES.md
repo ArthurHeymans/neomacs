@@ -556,14 +556,25 @@ Do **not** run `cargo fmt --all` in a commit retry loop for a Markdown-only
 change: it rewrites peers' half-written `.rs` files. Wait for a fmt-clean tree
 instead.
 
-**And the same hazard applies to your own concurrent jobs.** A deferred commit
-reads both the file *and its message* at commit time, not when you queue it. Two
-background jobs sharing one scratch message path will land the second message on
-the first job's content — `96b446312` carries this note *and* the
-`.dir-locals.el` trap under a subject naming only the `min-colors` one, because a
-retry loop reached its commit after the message file had been overwritten. Give
-every deferred commit its own message file, and re-read `git show --stat` after
-it lands rather than trusting the job's own success line.
+**Do not use a detached retry loop to commit at all.** This is the strongest
+rule in this section and it was learned twice. A backgrounded "wait for a clean
+tree, then commit" loop keeps running after you have moved on, and it commits
+**whatever is dirty when it finally wins**, under **whatever its message file
+says at that moment**. Both halves drift:
+
+- `96b446312` carries the `min-colors` note, the `.dir-locals.el` trap *and* the
+  "Committing shared files" section, under a subject naming only the first —
+  two jobs shared one scratch message path and the later message landed on the
+  earlier job's content.
+- `f7aa116fe` carries the invented-error-fixture and `compile`-sentinel notes
+  under that *same* stale `min-colors` subject, because a zombie loop from the
+  previous round was still alive and grabbed the next edits to touch the file.
+
+Giving each job its own message file is not sufficient; the loop still outlives
+its purpose. Commit synchronously with a short bounded retry you watch, and
+verify with `git show --stat --format=%s` after it lands. A job's own
+`COMMITTED`/`PUSHED` line is true and tells you nothing about *what* it
+committed.
 
 ## Reducing a divergence
 
