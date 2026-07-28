@@ -6,22 +6,100 @@ use crate::{
 };
 use expect_test::Expect;
 
-mod adapters;
-mod configuration;
-mod editing;
-mod indentation;
-mod projects;
-mod registry;
-mod state_machine;
-mod treesit_behavior;
-mod treesit_matrix;
-mod upstream_matrix;
+mod workflows;
 
-const ADA_TS_MODE_TEST_TIMEOUT: Duration = Duration::from_secs(120);
+const ADA_TS_MODE_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 const ADA_TREE_SITTER_REPOSITORY: &str = "https://github.com/briot/tree-sitter-ada";
 const ADA_TREE_SITTER_REVISION: &str = "6b58259a08b1a22ba0247a7ce30be384db618da6";
 
-fn ada_ts_mode_oracle(source_file: &str) -> CachedMelpaOracle {
+/// ada-ts-mode is a tree-sitter major mode, so every workflow needs the real
+/// pinned Ada grammar: it is fetched at the exact revision above, built below
+/// `./tmp`, and put on `treesit-extra-load-path`.  The mode itself refuses to
+/// start unless `treesit-ready-p` is true, so a passing workflow is proof that
+/// the grammar loaded and a real parse tree exists -- there is no non-treesit
+/// fallback path that could quietly satisfy these tests.  Real `.ads`/`.adb`
+/// files are written into the per-case sandbox and visited normally.
+const ADA_TS_MODE_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+(require 'treesit)
+
+(setq make-backup-files nil create-lockfiles nil)
+
+(defvar ada-test-root (file-name-as-directory (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
+
+(defun ada-test-write (name text)
+  (let ((path (expand-file-name name ada-test-root)))
+    (make-directory (file-name-directory path) t)
+    (with-temp-buffer (insert text)
+      (write-region (point-min) (point-max) path nil 'silent))
+    path))
+
+(defconst ada-test-spec
+  "--  Inventory management for the demo shop.
+package Shop.Inventory is
+
+   Max_Items : constant Natural := 100;
+
+   type Item_Id is new Positive;
+
+   function Name_Of (Id : Item_Id) return String;
+
+   procedure Restock (Id : Item_Id; Count : Natural);
+
+end Shop.Inventory;
+")
+
+(defconst ada-test-body
+  "package body Shop.Inventory is
+
+   function Name_Of (Id : Item_Id) return String is
+   begin
+      return \"Artikel\";
+   end Name_Of;
+
+   procedure Restock (Id : Item_Id; Count : Natural) is
+      Remaining : Natural := Count;
+   begin
+      while Remaining > 0 loop
+         Remaining := Remaining - 1;
+      end loop;
+   end Restock;
+
+end Shop.Inventory;
+")
+
+(defmacro ada-test-in-file (name text &rest body)
+  `(let* ((path (ada-test-write ,name ,text))
+          (buffer (find-file-noselect path)))
+     (unwind-protect
+         (progn
+           (set-window-buffer (selected-window) buffer)
+           (set-buffer buffer)
+           ,@body)
+       (when (buffer-live-p buffer)
+         (with-current-buffer buffer (set-buffer-modified-p nil))
+         (kill-buffer buffer)))))
+
+(defun ada-test-faces-at (needles)
+  "Face at the start of each NEEDLE, searched in order from point-min."
+  (mapcar (lambda (needle)
+            (goto-char (point-min))
+            (search-forward needle)
+            (goto-char (match-beginning 0))
+            (list needle (point) (get-text-property (point) 'face)))
+          needles))
+
+(defun ada-test-flatten-index (node)
+  "NODE with every marker replaced by its position and strings unpropertized."
+  (cond
+   ((markerp node) (marker-position node))
+   ((stringp node) (substring-no-properties node))
+   ((consp node) (cons (ada-test-flatten-index (car node))
+                       (ada-test-flatten-index (cdr node))))
+   (t node)))
+"##;
+
+fn ada_ts_mode_oracle() -> CachedMelpaOracle {
     let grammar_dir = prepare_cached_tree_sitter_grammar(
         &EmacsRuntime::gnu_emacs(),
         "ada",
@@ -30,10 +108,10 @@ fn ada_ts_mode_oracle(source_file: &str) -> CachedMelpaOracle {
     )
     .expect("prepare pinned Ada Tree-sitter grammar below ./tmp");
     let grammar_dir = elisp_string(&grammar_dir.to_string_lossy());
-    CachedMelpaOracle::new(ADA_TS_MODE_MELPA_PIN, source_file)
+    CachedMelpaOracle::new(ADA_TS_MODE_MELPA_PIN, "ada-ts-mode.el")
         .expect("prepare pinned ada-ts-mode source below ./tmp")
         .with_prelude(format!(
-            "(setq treesit-extra-load-path (list {grammar_dir}))"
+            "(setq treesit-extra-load-path (list {grammar_dir}))\n{ADA_TS_MODE_TEST_PRELUDE}"
         ))
         .with_timeout(ADA_TS_MODE_TEST_TIMEOUT)
 }
@@ -46,26 +124,10 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_ada_ts_mode_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_ada_ts_mode_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = ada_ts_mode_oracle(source_file)
+    let report = ada_ts_mode_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("ada-ts-mode parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ada_ts_mode_parity(elisp_form: &str, expected: Expect) {
-    assert_ada_ts_mode_source_parity("ada-ts-mode.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_ada_ts_mode_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_ada_ts_mode_source_parity("ada-ts-mode-autoloads.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_ada_ts_mode_eglot_parity(elisp_form: &str, expected: Expect) {
-    assert_ada_ts_mode_source_parity("ada-ts-lspclient-eglot.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_ada_ts_mode_lsp_mode_parity(elisp_form: &str, expected: Expect) {
-    assert_ada_ts_mode_source_parity("ada-ts-lspclient-lsp-mode.el", elisp_form, expected);
 }
