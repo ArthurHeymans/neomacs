@@ -64,6 +64,19 @@ unwrapping. Enable the mode explicitly in the workflow.
 command loop to notice idleness, so a workflow that types and then waits
 observes nothing. Run the due entries of `timer-idle-list` instead.
 
+**Running timers needs a captured baseline, not a function match.** The editor
+has its own pending timers (`undo-auto--boundary-timer` is live in every batch
+run), so "run everything in `timer-list`" runs editor internals too. Capture
+`timer-list` before the trigger, run only what appeared, and pin how many
+appeared. Matching on the timer's printed function is the tempting alternative
+and it is editor-specific — Neomacs need not print a closure the way GNU does.
+
+**SILENT — a timer's delay is only assertable as a delta.** Capture a timestamp
+immediately before the trigger and assert
+`(round (* 10 (- (float-time (timer--time timer)) start)))`, which gives tenths
+and is stable. Pinning `timer--time` itself pins wall-clock: it passes locally
+forever and means nothing.
+
 **Arbitrary literal text as keys:** `(vconcat (kbd "C-c a") (string-to-vector
 "some text") [?\r])`. `kbd` swallows spaces (use `SPC`) and cannot express `[`.
 
@@ -113,6 +126,13 @@ editors. `display-color-cells` is 0 and neither `tty-color-mode` nor
 colour strings plus the display clause — and record the display facts with
 `face-spec-set-match-display` so the reason is on the record. Themes using
 `((t …))` (abyss, acme) are unaffected.
+
+**SILENT — compute fixture positions, do not eyeball them.** An afterglow
+workflow whose fixture had a deliberately empty line was one character short, so
+the empty-line guard case exercised a *non-empty* line and asserted an overlay
+where the entire point was to assert none. It passed in both editors and looked
+right. Same shape as the `transient-mark-mode` trap: a green test asserting the
+opposite of its own name.
 
 **If an indenter consults faces, assert both with and without
 `font-lock-ensure`.** actionscript-mode's `as3-count-scope-depth` decides whether
