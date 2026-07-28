@@ -996,6 +996,17 @@ pub const AURORA_CONFIG_MODE_MELPA_PIN: (&str, &str) = ("aurora-config-mode", "2
 pub const AUTH_SOURCE_1PASSWORD_MELPA_PIN: (&str, &str) =
     ("auth-source-1password", "20260221.2058");
 
+/// The exact auth-source-keytar package selected by the comprehensive
+/// credential lookup, parsing, backend registration, cache, and auth-source
+/// workflow parity corpus. MELPA built this archive from upstream commit
+/// `ae32dd807aa3cff59e4384ce8c9d7de259e45998`.
+pub const AUTH_SOURCE_KEYTAR_MELPA_PIN: (&str, &str) = ("auth-source-keytar", "20251231.1726");
+
+/// The exact Keytar package selected as auth-source-keytar's runtime
+/// credential-provider dependency. MELPA built this archive from upstream
+/// commit `f0485df065bcdc8f446be3e00aa77a43629ec84e`.
+pub const KEYTAR_MELPA_PIN: (&str, &str) = ("keytar", "20251231.1727");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

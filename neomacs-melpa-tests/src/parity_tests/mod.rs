@@ -223,6 +223,7 @@ mod aurora_config_mode;
 mod australia_holidays;
 mod auth_source_1password;
 mod auth_source_gopass;
+mod auth_source_keytar;
 mod bind_key;
 mod compat;
 mod dash;
