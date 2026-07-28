@@ -170,6 +170,28 @@ package's parsing works, because you write the input its parser expects. Record 
 in the commit beside the package pin — a recording is only as good as the version
 it came from.
 
+**SILENT — a fixture that is source code in another language must be diffed
+against what lands on disk.** ac-php's PHP fixtures live in the prelude as Elisp
+string constants, and PHP namespaces use backslashes. Writing `\\\\` in a Rust raw
+string where Elisp needs `\\` puts doubled backslashes in the file, and **nothing
+errors**: the file is written, the buffer opens, `php-mode` starts, the indexer
+runs, the index loads, and completion returns nil for every context — because
+`namespace Shop\\Service;` is not the namespace any candidate belongs to. Two
+attempts were lost to it; a `diff` against the recording's own input found it.
+Diff the file that lands on disk against the file the expectations were derived
+from, rather than trusting the constant.
+
+**Two ways a recording goes wrong even when you ran the real tool.** Both hit
+the same ameba session. *You captured the wrong process's status:* `$?` after a
+pipeline is the **last** command's, so `ameba … | head` records `head`'s exit
+status, not the linter's. Capture the status of the process you are recording, in
+its own run. *You recorded what you expected rather than what it said:* a fixture
+written to trigger a rule the tool does not actually implement produces a
+recording with nothing in it for that case — real ameba 1.6.4 does not flag a
+redundant `begin`. Read the recording against the fixture before building
+assertions on it; a rule you were sure would fire and did not is the cheapest
+possible warning that you are reasoning from documentation.
+
 **A missing program is usually a dev-time problem, not a blocker.**
 `nix shell nixpkgs#<tool> --command …` obtains the real tool for the recording
 step without touching the dev shell, and the committed test does not depend on it
@@ -353,6 +375,16 @@ minor mode it never asked for.
 
 This is the second trap of the shape "the sandbox is inside the repository, and
 the repository has opinions". Expect more.
+
+**And read it the other way round too: a package that walks up for a marker has
+a bug the sandbox will show you.** `ameba-project-root` does
+`(cl-find-if fn ameba-project-root-files)` — the *list* is searched in order, so
+the **nearest** marker does not win. With the default list `.git` is checked
+before `shard.yml`, matches the enclosing checkout, and the linter runs from
+there rather than from the shard, changing what every path in its output means.
+That is a real quirk for any user whose project sits inside a larger repository,
+not a sandbox artefact. When a package resolves a root, pin it under several
+marker configurations rather than assuming the harness trap is the whole story.
 
 **SILENT — the sandbox is inside a project, so "outside a project" is
 unreachable.** Every sandbox lives at `<workspace>/tmp/melpa/<label>-XXXXXX`,
