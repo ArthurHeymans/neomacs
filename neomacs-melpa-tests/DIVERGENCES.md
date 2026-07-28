@@ -113,6 +113,11 @@ success, so it can hide unrelated failures.
 ;; Neomacs => no output, exit status 0
 ```
 
+Verified side by side with another tag: `(throw 'my-tag 7)` gives
+`(caught (no-catch my-tag 7))` in both editors and execution continues. So this
+is not a `throw` or `condition-case` bug — it points at an implicit top-level
+`catch 'exit` in Neomacs's batch evaluation.
+
 Found via `helm-exit-minibuffer` in `ace-jump-helm-line`, and confirmed
 independently from `ac-helm`, where it is the sole cause of the one workflow
 that produces no output at all rather than a mismatch.
@@ -272,6 +277,11 @@ Not yet reduced below "run `ac-complete-with-helm` under a keyboard macro"; a
 reduction pass is in progress. Affects: `ac-helm` (2 of its 6 failures, when
 stdin is `/dev/null`).
 
+There is a floor under the reduction: `ace-jump-helm-line`'s full-session
+workflow, a plain `helm :sources …` under a keyboard macro, is stable — five
+consecutive runs all gave the deterministic `end-of-file` of entry 1. So the
+crash needs something above a bare helm session.
+
 ## 16. `real-last-command` is never updated
 
 `last-command` is correct; `real-last-command` stays nil forever. GNU sets it
@@ -296,6 +306,53 @@ Blast radius beyond the package: keyfreq's `pre-command-hook` records exactly
 this variable, so command counting is dead. Anything doing "what did the user
 just run" analytics — keyfreq, command-log-mode, repeat.el-style logic — is
 affected. Affects: `achievements` (5).
+
+## 17. An undefined face reference is never reported
+
+The measurement agrees; only the diagnostic is missing. GNU logs from
+`merge_face_ref` (src/xfaces.c:3022, via `add_to_log`) whenever a face name
+cannot be resolved.
+
+```elisp
+(let ((buffer (get-buffer-create "*probe*")))
+  (set-window-buffer (selected-window) buffer)
+  (set-buffer buffer)
+  (insert (propertize "value" 'face 'no-such-face-here) "\n")
+  (list (window-text-pixel-size)
+        (with-current-buffer "*Messages*" (buffer-string))))
+;; GNU     => ((5 . 1) "Invalid face reference: no-such-face-here [3 times]\n")
+;; Neomacs => ((5 . 1) "")
+```
+
+Distinct from entry 10: nothing here is an alias, the face simply does not
+exist. Reached through `fit-window-to-buffer`, which measures with
+`window-text-pixel-size`. Affects: `ack-menu` (2) — mag-menu draws its argument
+values with `'face 'widget-field`, undefined in both editors, and the two
+workflows agree on menu text, argv, working directory, results buffer and text
+properties, failing on the message list alone.
+
+## 18. An error signalled inside a process filter is swallowed
+
+```elisp
+(let ((process (start-process "probe" (get-buffer-create "*out*")
+                              "sh" "-c" "printf hello")))
+  (set-process-filter process (lambda (_p _o) (error "filter boom")))
+  (while (process-live-p process) (accept-process-output process 0.05))
+  (accept-process-output nil 0.05))
+(princ "AFTER\n")
+;; GNU     => "error in process filter: filter boom", exit 255, AFTER not printed
+;; Neomacs => no diagnostic at all, AFTER printed, exit 0
+```
+
+Both editors drop the filter's output; only GNU reports the failure, fatally in
+batch.
+
+**Not assertable by this harness**: batch GNU dies before the oracle can print
+its marker, so no parity workflow can express it. It is recorded here and in the
+`ack-menu` commit body deliberately — do not "fix" its absence by writing a test.
+Surfaced by `ack-menu`, whose SGR parser reads `ansi-color-drop-regexp`, deleted
+from ansi-color.el in Emacs 26.1 (commit 35ed01dfb3f), so every search it runs
+raises inside the filter on a current Emacs.
 
 ---
 
