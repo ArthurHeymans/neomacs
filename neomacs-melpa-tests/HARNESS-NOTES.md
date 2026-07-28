@@ -237,7 +237,16 @@ Any project-based fixture must plant its own marker file, and every workflow mus
 assert the project root, so that a fixture which failed to establish itself shows
 up as a wrong root instead of a silent test against the entire repository.
 `GIT_CEILING_DIRECTORIES` does not help: it stops git walking *above* the
-workspace, and the workspace is the problem. Compounds with the project-relative
+workspace, and the workspace is the problem.
+
+**For the "outside any project" case, use a buffer whose `default-directory` is
+the filesystem root.** Nothing needs faking — `/` has no project above it — and
+this is the only way to reach a guard that refuses outside a project. Omitting a
+marker file does *not* reach it: the test records the guard passing and reads as
+coverage. amd-mode's `registry.rs` had exactly that test, recording nil for its
+"outside directory" case while distinguishing nothing. Covered for real, all
+three amd-mode commands refuse with `(error "Not within a project")` and leave
+the buffer and kill ring untouched. Compounds with the project-relative
 path note in Snapshots — a fixture that silently resolves to the workspace and a
 heading spelled relative to it will agree with each other while both are wrong.
 
