@@ -231,7 +231,7 @@ fn oracle_execute_kbd_macro_select_window_affects_following_key() {
 fn oracle_execute_kbd_macro_publishes_raw_event_before_menu_filter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (((ignore 32)) " " 32 t)""#]];
+    let expect = expect_test::expect![[r#""OK (((ignore 32)) \" \" 32 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
              (setq oracle-menu-filter-observations nil)
@@ -253,7 +253,7 @@ fn oracle_execute_kbd_macro_publishes_raw_event_before_menu_filter() {
                          (buffer-string)
                          last-input-event
                          (equal recent-before
-                                (append (recent-keys) nil))))))"#,
+                                (append (recent-keys) nil)))))))"#,
         expect,
     );
 }
