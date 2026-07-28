@@ -172,6 +172,16 @@ documented as ASCII 65. All six tests passed self-consistently, asserting codes
 nobody chose. Check one expectation against your own doc comment before trusting
 the set.
 
+**SILENT — a fixture name can shadow one of the library's own built-ins.** An
+`ample-regexps` fixture used `num`, which is a built-in `rx` name, and it shadowed
+silently. Check your fixture's names against the library's namespace before
+concluding the package mishandled them.
+
+**`let`-bind a variable only after its library is loaded.** Binding
+`byte-compile-verbose` before bytecomp is loaded gives "Defining as dynamic an
+already lexical var" — `(require 'bytecomp)` first. Same error surfaces from
+inside Gnus when `gnus-use-byte-compile` is left on; see the Gnus note above.
+
 **SILENT — a fixture must be able to tell the two answers apart.** Four buffers
 under 1k made `file-size-human-readable` return the same digits as the raw size,
 so the human-readable setting would have been asserted with a fixture that could
