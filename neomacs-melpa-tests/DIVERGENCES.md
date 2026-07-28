@@ -43,9 +43,16 @@ always takes the stdin path and the prompt hits EOF.
 inside the macro in both.
 
 Affects: `aangit` (6), `abc-mode` (1), `academic-phrases` (1),
-`ace-jump-helm-line` (1), `ac-helm` (6). Any package that prompts, and every
-helm session — helm reads its pattern with `read-from-minibuffer`, so no helm
-session can be driven in Neomacs batch at all.
+`ace-jump-helm-line` (1). Any package that prompts, and every helm session —
+helm reads its pattern with `read-from-minibuffer`, so no helm session can be
+driven in Neomacs batch at all.
+
+`ac-helm`'s six failures are *triggered* here but do not all land as
+`end-of-file`. With stdin at `/dev/null` they arrive as an intermittent core
+dump (twice), `End of buffer` (twice), `Quit` (once) and silent termination
+(once — that one is divergence 4); with a pipe on stdin the modes shift again.
+Treat "helm cannot be driven" as the trigger and read entries 4 and 15 for the
+rest.
 
 ## 2. `read-char` / `read-event` / `read-char-exclusive` ignore the macro
 
@@ -106,7 +113,9 @@ success, so it can hide unrelated failures.
 ;; Neomacs => no output, exit status 0
 ```
 
-Found via `helm-exit-minibuffer` in `ace-jump-helm-line`.
+Found via `helm-exit-minibuffer` in `ace-jump-helm-line`, and confirmed
+independently from `ac-helm`, where it is the sole cause of the one workflow
+that produces no output at all rather than a mismatch.
 
 ## 5. `write-region` writes `?` for every legacy coding system
 
@@ -232,11 +241,18 @@ completion-in-region map is affected. Affects: `accent` (1).
 
 Affects: `ace-popup-menu` (1).
 
-## 13. `buffer-list` ordering differs
+## 13. `buffer-list` differs in order *and* contents
 
-GNU and Neomacs return the buffers in a different order, so anything rendering a
-buffer menu (bs, ibuffer, ace-jump-buffer) shows a different list, and any
-labelling of that list differs with it. Affects: `ace-jump-buffer` (4).
+Two distinct problems in one primitive.
+
+**Order.** GNU and Neomacs return the buffers in a different order, so anything
+rendering a buffer menu (bs, ibuffer, ace-jump-buffer) shows a different list,
+and any labelling of that list differs with it. Affects: `ace-jump-buffer` (4).
+
+**Contents.** In batch, Neomacs exposes internal echo-area buffers that GNU does
+not. After the same three commands GNU reports 6 buffers and Neomacs 8, the
+extras being `" *Echo Area 0*"` and `" *Echo Area 1*"`. Enough to push a
+"fewer than N buffers open" check past its threshold. Affects: `achievements`.
 
 ## 14. `delete-other-windows` does not move the surviving window
 
@@ -244,6 +260,42 @@ After `C-x 1` from a window that is not at the frame's left edge, GNU relocates
 the surviving window to the frame origin and gives it the frame's width; Neomacs
 leaves its left edge where it was and grows it, so the right edge ends up past
 the frame. Affects: `ace-window` (1).
+
+## 15. Driving `ac-complete-with-helm` under a keyboard macro can dump core
+
+The highest-severity finding so far: a crash rather than a signal, and
+intermittent — three consecutive runs of the same workflow gave a result, a core
+dump, and a result. A *bare* helm session does not crash; it signals cleanly. It
+takes the ac-helm path (auto-complete plus `with-helm-show-completion`) on top.
+
+Not yet reduced below "run `ac-complete-with-helm` under a keyboard macro"; a
+reduction pass is in progress. Affects: `ac-helm` (2 of its 6 failures, when
+stdin is `/dev/null`).
+
+## 16. `real-last-command` is never updated
+
+`last-command` is correct; `real-last-command` stays nil forever. GNU sets it
+from the previous iteration's `real-this-command` each time round the command
+loop (src/keyboard.c:1354 and 1580).
+
+```elisp
+(add-hook 'pre-command-hook
+          (lambda () (push (list this-command real-last-command last-command) events)))
+(execute-kbd-macro (kbd "C-x C-b C-h e C-x o"))
+;; GNU     => (view-echo-area-messages list-buffers list-buffers)
+;;            (other-window view-echo-area-messages view-echo-area-messages)
+;; Neomacs => (view-echo-area-messages nil list-buffers)
+;;            (other-window nil view-echo-area-messages)
+```
+
+Pointer for the fixer: the assignment exists in `command_loop_1`
+(`neovm-core/src/emacs_core/eval.rs:6996`) but snapshots `this-command`, which
+is already nil at that point, instead of the previous `real-this-command`.
+
+Blast radius beyond the package: keyfreq's `pre-command-hook` records exactly
+this variable, so command counting is dead. Anything doing "what did the user
+just run" analytics — keyfreq, command-log-mode, repeat.el-style logic — is
+affected. Affects: `achievements` (5).
 
 ---
 
@@ -261,3 +313,7 @@ Recorded so nobody re-investigates them:
   modern org-fold. Both are upstream bugs, identical in both editors.
 - `read-key` and `read-key-sequence` DO receive keys from a running keyboard
   macro in Neomacs. Divergence 2 is specific to the `read-char` family.
+- `achievements` defines `achievements-list-mode-map` with `defvar` after
+  `define-derived-mode` has already defined it, so that `defvar` is a no-op and
+  the documented `d` binding resolves to `undefined` from the suppressed
+  special-mode map. Upstream defect, identical in both editors.
