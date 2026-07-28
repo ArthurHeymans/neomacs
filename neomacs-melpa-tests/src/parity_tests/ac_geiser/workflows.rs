@@ -1,0 +1,186 @@
+use expect_test::expect;
+
+use super::assert_ac_geiser_parity;
+
+/// The installation the README prescribes: hook `ac-geiser-setup' into the
+/// geiser modes and add `geiser-repl-mode' to `ac-modes'.  The command's
+/// docstring promises the source goes to the *front* of `ac-sources' and that
+/// this "affects only the current buffer", so this pins the resulting source
+/// list, that running setup twice does not install the source twice, that
+/// `ac-sources' is buffer local and another buffer is untouched, and that
+/// auto-complete knows `scheme-mode' out of the box but not
+/// `geiser-repl-mode' -- which is exactly why the README asks the user to add
+/// it.
+#[test]
+fn setup_puts_the_geiser_source_first_for_the_current_buffer_only() {
+    let elisp_form = r##"(progn
+  (acg-test-configure)
+  (let ((other (generate-new-buffer "*acg-other*"))
+        (observed nil))
+    (acg-test-scheme-buffer "(define (demo x) x)\n")
+    (push (list :default-sources ac-sources
+                :repl-mode-known (and (memq 'geiser-repl-mode ac-modes) t)
+                :scheme-mode-known (and (memq 'scheme-mode ac-modes) t))
+          observed)
+    (ac-geiser-setup)
+    (ac-geiser-setup)
+    (add-to-list 'ac-modes 'geiser-repl-mode)
+    (push (list :sources ac-sources
+                :buffer-local (local-variable-p 'ac-sources)
+                :repl-mode-known (and (memq 'geiser-repl-mode ac-modes) t))
+          observed)
+    (with-current-buffer other
+      (push (list :other-sources ac-sources) observed))
+    (nreverse observed)))"##;
+
+    let expect = expect![
+        "OK ((:default-sources #1=(ac-source-words-in-same-mode-buffers) :repl-mode-known nil :scheme-mode-known t) (:sources (ac-source-geiser . #1#) :buffer-local t :repl-mode-known t) (:other-sources #1#))"
+    ];
+
+    assert_ac_geiser_parity(elisp_form, expect);
+}
+
+/// The primary workflow: at a live Scheme REPL the user types a prefix and
+/// completes.  ac-geiser must ask the running Scheme -- exactly once, with the
+/// identifier request and not the module one -- offer what it answered, tag
+/// every candidate with the source's "g" marker and its documentation
+/// function, and insert the chosen identifier into the REPL's input line.
+#[test]
+fn completing_at_the_repl_asks_the_live_scheme_and_inserts_the_choice() {
+    let elisp_form = r##"(progn
+  (acg-test-start-repl)
+  (add-to-list 'ac-modes 'geiser-repl-mode)
+  (ac-geiser-setup)
+  (goto-char (point-max))
+  (insert "ca")
+  (acg-test-complete)
+  (let ((first (nth 0 ac-candidates))
+        (result nil))
+    (setq result (list :prefix ac-prefix
+                       :candidates (acg-test-candidates)
+                       :annotation (popup-item-symbol first)
+                       :properties (text-properties-at 0 first)
+                       :requests (acg-test-requests)))
+    (ac-complete)
+    (append result
+            (list :line (acg-test-line)
+                  :column (current-column)
+                  :buffer (buffer-name)
+                  :mode major-mode))))"##;
+
+    let expect = expect![[
+        r#"OK (:prefix "ca" :candidates ("car" "case" "cadr" "call-with-values") :annotation "g" :properties (symbol "g" document ac-geiser-documentation) :requests ("(geiser:eval #f (geiser:completions \"ca\"))") :line "car" :column 21 :buffer "*Geiser Fake REPL*" :mode geiser-repl-mode)"#
+    ]];
+
+    assert_ac_geiser_parity(elisp_form, expect);
+}
+
+/// The other half of the documented setup: completing in a Scheme source
+/// buffer whose REPL is running.  Here the source's value is that it merges
+/// two different origins -- the bindings geiser scans out of the surrounding
+/// `define' and `let' (pure Elisp, innermost first) and the identifiers the
+/// live Scheme reports -- into one list, which auto-complete then merges again
+/// with the words already in the buffer.  This pins both lists and the single
+/// request each completion causes.
+#[test]
+fn completing_in_a_scheme_buffer_merges_local_bindings_with_repl_symbols() {
+    let elisp_form = r##"(progn
+  (acg-test-configure)
+  (let ((scheme (acg-test-scheme-buffer
+                 "(define (demo cadence)\n  (let ((carriage 1))\n    ca")))
+    (geiser-fake)
+    (switch-to-buffer scheme)
+    (goto-char (point-max))
+    (ac-geiser-setup)
+    (acg-test-complete)
+    (list :live (and (geiser-repl--live-p) t)
+          :prefix ac-prefix
+          :from-geiser (ac-source-geiser-candidates)
+          :candidates (acg-test-candidates)
+          :requests (acg-test-requests))))"##;
+
+    let expect = expect![[
+        r#"OK (:live t :prefix "ca" :from-geiser ("carriage" "cadence" "call-with-values" "car" "case" "cadr") :candidates ("car" "case" "cadr" "cadence" "cadence" "carriage" "carriage" "call-with-values") :requests ("(geiser:eval #f (geiser:completions \"ca\"))" "(geiser:eval #f (geiser:completions \"ca\"))"))"#
+    ]];
+
+    assert_ac_geiser_parity(elisp_form, expect);
+}
+
+/// Every candidate carries a documentation function, and auto-complete's popup
+/// calls it per candidate to fill the quick help.  Asking three of the offered
+/// candidates pins that each one is looked up separately in the running Scheme
+/// with its own symbol, that the signature is rendered from the Scheme's
+/// argument description (with the identifier fontified) followed by the
+/// docstring under a rule, and that a symbol the Scheme documents without a
+/// docstring still renders its signature and an empty body.
+#[test]
+fn each_candidate_documents_itself_from_the_running_scheme() {
+    let elisp_form = r##"(progn
+  (acg-test-start-repl)
+  (ac-geiser-setup)
+  (goto-char (point-max))
+  (insert "ca")
+  (acg-test-complete)
+  (list :car (popup-item-documentation (acg-test-candidate "car"))
+        :case (popup-item-documentation (acg-test-candidate "case"))
+        :cadr (popup-item-documentation (acg-test-candidate "cadr"))
+        :requests (acg-test-requests)))"##;
+
+    let expect = expect![[
+        r#"OK (:car #("(car pair)\n----\nReturn the contents of the car of PAIR." 1 4 (face geiser-font-lock-autodoc-identifier)) :case #("(case key clauses)\n----\nEvaluate the clause whose datum matches KEY." 1 5 (face geiser-font-lock-autodoc-identifier)) :cadr #("(cadr pair)\n----\n" 1 5 (face geiser-font-lock-autodoc-identifier)) :requests ("(geiser:eval #f (geiser:completions \"ca\"))" "(geiser:eval #f (geiser:symbol-documentation (quote car)))" "(geiser:eval #f (geiser:symbol-documentation (quote case)))" "(geiser:eval #f (geiser:symbol-documentation (quote cadr)))"))"#
+    ]];
+
+    assert_ac_geiser_parity(elisp_form, expect);
+}
+
+/// A prefix the Scheme has never heard of.  The request still goes out -- the
+/// package cannot know in advance -- but the empty answer must produce no
+/// candidates at all rather than an error or a stale list, and the typed text
+/// must be left exactly as it was.
+#[test]
+fn a_prefix_the_scheme_does_not_know_produces_no_candidates() {
+    let elisp_form = r##"(progn
+  (acg-test-start-repl)
+  (ac-geiser-setup)
+  (goto-char (point-max))
+  (insert "zzz")
+  (acg-test-complete)
+  (list :prefix ac-prefix
+        :from-geiser (ac-source-geiser-candidates)
+        :candidates (acg-test-candidates)
+        :line (acg-test-line)
+        :requests (acg-test-requests)))"##;
+
+    let expect = expect![[
+        r#"OK (:prefix "zzz" :from-geiser nil :candidates nil :line "zzz" :requests ("(geiser:eval #f (geiser:completions \"zzz\"))" "(geiser:eval #f (geiser:completions \"zzz\"))"))"#
+    ]];
+
+    assert_ac_geiser_parity(elisp_form, expect);
+}
+
+/// Editing Scheme before starting a REPL is the normal state of affairs, and
+/// the source is documented to be usable then too: it must contribute nothing,
+/// must not start or contact a Scheme at all, and must not break completion --
+/// auto-complete still offers the words already in the buffer.
+#[test]
+fn without_a_running_repl_the_source_stays_silent_and_contacts_no_scheme() {
+    let elisp_form = r##"(progn
+  (acg-test-configure)
+  (acg-test-scheme-buffer "(define (cabbage x) x)\n(carriage)\nca")
+  (goto-char (point-max))
+  (ac-geiser-setup)
+  (acg-test-complete)
+  (list :live (geiser-repl--live-p)
+        :from-geiser (ac-source-geiser-candidates)
+        :prefix ac-prefix
+        :candidates (acg-test-candidates)
+        :sources ac-sources
+        :requests (acg-test-requests)
+        :line (acg-test-line)))"##;
+
+    let expect = expect![[
+        r#"OK (:live nil :from-geiser nil :prefix "ca" :candidates ("cabbage" "carriage") :sources (ac-source-geiser ac-source-words-in-same-mode-buffers) :requests no-request :line "ca")"#
+    ]];
+
+    assert_ac_geiser_parity(elisp_form, expect);
+}
