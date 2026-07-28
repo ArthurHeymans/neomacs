@@ -1,23 +1,104 @@
 use std::time::Duration;
 
 use crate::{ACE_JUMP_BUFFER_MELPA_PIN, CachedMelpaOracle};
-use expect_test::{Expect, expect};
+use expect_test::Expect;
 
-mod advice;
-mod autoloads;
-mod commands;
-mod integrations;
-mod macro_configuration;
-mod options;
-mod selection;
-mod surface;
-mod variables;
+mod workflows;
 
 const ACE_JUMP_BUFFER_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
-fn ace_jump_buffer_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ACE_JUMP_BUFFER_MELPA_PIN, source_file)
+/// ace-jump-buffer shows a real `bs' menu and reads a real avy key, so every
+/// workflow types the command's key binding and the jump key through
+/// `execute-kbd-macro'.  Keys only reach the buffer of the *selected window*,
+/// which is why the workspace displays a buffer instead of merely making it
+/// current.
+///
+/// The menu is torn down by the jump itself, so it is snapshotted from
+/// `avy-translate-char-function' - avy's documented hook for rewriting the key
+/// the user pressed.  The observer returns the character unchanged, so avy's
+/// real overlays, real key reading and real dispatch all still happen; nothing
+/// in ace-jump-buffer, avy or bs is stubbed.
+const ACE_JUMP_BUFFER_TEST_PRELUDE: &str = r###"
+(require 'cl-lib)
+(require 'bs)
+
+;; A realistic working set: prose, code, Unicode names and a name with a
+;; space, each in a distinct major mode so the "same-mode" filter has
+;; something to reject.
+(defconst ajb-test-buffer-specs
+  '(("notes.org" text-mode "* Roadmap\n** Ship the résumé exporter\n")
+    ("project plan.md" text-mode "# Plan\n\n- [ ] 日本語 locale review\n")
+    ("server.py" prog-mode "def main():\n    return 0\n")
+    ("résumé.tex" text-mode "\\documentclass{article}\n")))
+
+(defmacro ajb-test-with-workspace (&rest body)
+  "Create the workspace buffers, display the first one, run BODY, clean up."
+  (declare (indent 0))
+  `(let ((buffers
+          (mapcar (lambda (spec)
+                    (let ((buffer (generate-new-buffer (car spec))))
+                      (with-current-buffer buffer
+                        (funcall (nth 1 spec))
+                        (insert (nth 2 spec)))
+                      buffer))
+                  ajb-test-buffer-specs)))
+     (unwind-protect
+         (progn
+           (set-window-buffer (selected-window) (car buffers))
+           (set-buffer (car buffers))
+           (global-set-key (kbd "C-c j") #'ace-jump-buffer)
+           (global-set-key (kbd "C-c o") #'ace-jump-buffer-other-window)
+           (global-set-key (kbd "C-c 1") #'ace-jump-buffer-in-one-window)
+           (global-set-key (kbd "C-c c") #'ace-jump-buffer-with-configuration)
+           ,@body)
+       (dolist (buffer buffers)
+         (when (buffer-live-p buffer) (kill-buffer buffer)))
+       (when (get-buffer "*buffer-selection*")
+         (kill-buffer "*buffer-selection*")))))
+
+(defun ajb-test-menu-snapshot ()
+  "Snapshot the `*buffer-selection*' menu while avy's overlays are still up."
+  (with-current-buffer "*buffer-selection*"
+    (list :mode major-mode
+          :text (buffer-substring-no-properties (point-min) (point-max))
+          :point (point)
+          :window-buffer (buffer-name (window-buffer (selected-window)))
+          :header-lines bs-header-lines-length
+          :max-height bs-max-window-height
+          :sort bs-buffer-sort-function
+          :overlays
+          (mapcar (lambda (overlay)
+                    (list (line-number-at-pos (overlay-start overlay))
+                          (overlay-start overlay)
+                          (overlay-end overlay)
+                          (overlay-get overlay 'display)
+                          (buffer-name
+                           (window-buffer (overlay-get overlay 'window)))))
+                  (sort (overlays-in (point-min) (point-max))
+                        (lambda (a b) (< (overlay-start a) (overlay-start b))))))))
+
+(defun ajb-test-labels (snapshot)
+  "Return the avy label assigned to each menu line as (LINE . LABEL)."
+  (mapcar (lambda (overlay)
+            (cons (nth 0 overlay)
+                  (substring-no-properties (nth 3 overlay))))
+          (plist-get snapshot :overlays)))
+
+(defun ajb-test-windows ()
+  "Return the buffer shown in every live window, in window order."
+  (mapcar (lambda (window) (buffer-name (window-buffer window)))
+          (window-list nil 'never)))
+
+(defun ajb-test-visible-buffers ()
+  "Return `buffer-list' without Emacs' internal space-prefixed buffers."
+  (seq-remove (lambda (name) (string-prefix-p " " name))
+              (mapcar #'buffer-name (buffer-list))))
+"###;
+
+fn ace_jump_buffer_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ACE_JUMP_BUFFER_MELPA_PIN, "ace-jump-buffer.el")
         .expect("prepare pinned ace-jump-buffer source below ./tmp")
+        .with_prelude(ACE_JUMP_BUFFER_TEST_PRELUDE)
         .with_timeout(ACE_JUMP_BUFFER_TEST_TIMEOUT)
 }
 
@@ -31,111 +112,8 @@ fn current_test_name() -> String {
 
 pub(crate) fn assert_ace_jump_buffer_parity(form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = ace_jump_buffer_oracle("ace-jump-buffer.el")
+    let report = ace_jump_buffer_oracle()
         .run_value(&name, form)
         .unwrap_or_else(|error| panic!("ace-jump-buffer parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ace_jump_buffer_signal_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ace_jump_buffer_oracle("ace-jump-buffer.el")
-        .run_signal(&name, form)
-        .unwrap_or_else(|error| {
-            panic!("ace-jump-buffer signal parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ace_jump_buffer_with_prelude_parity(
-    prelude: &str,
-    form: &str,
-    expected: Expect,
-) {
-    let name = current_test_name();
-    let report = CachedMelpaOracle::new(ACE_JUMP_BUFFER_MELPA_PIN, "ace-jump-buffer.el")
-        .expect("prepare pinned ace-jump-buffer source below ./tmp")
-        .with_prelude(prelude)
-        .with_timeout(ACE_JUMP_BUFFER_TEST_TIMEOUT)
-        .run_value(&name, form)
-        .unwrap_or_else(|error| {
-            panic!("ace-jump-buffer prelude parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ace_jump_buffer_autoload_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ace_jump_buffer_oracle("ace-jump-buffer-autoloads.el")
-        .run_value(&name, form)
-        .unwrap_or_else(|error| {
-            panic!("ace-jump-buffer autoload parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ace_jump_buffer_autoload_with_prelude_parity(
-    prelude: &str,
-    form: &str,
-    expected: Expect,
-) {
-    let name = current_test_name();
-    let report = CachedMelpaOracle::new(ACE_JUMP_BUFFER_MELPA_PIN, "ace-jump-buffer-autoloads.el")
-        .expect("prepare pinned ace-jump-buffer autoloads below ./tmp")
-        .with_prelude(prelude)
-        .with_timeout(ACE_JUMP_BUFFER_TEST_TIMEOUT)
-        .run_value(&name, form)
-        .unwrap_or_else(|error| {
-            panic!("ace-jump-buffer autoload prelude parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-#[test]
-fn ace_jump_buffer_exact_pin_dependencies_feature_and_group_match() {
-    let elisp_form = r##"(let ((descriptor
-                    (cadr
-                     (assq
-                      'ace-jump-buffer
-                      package-alist))))
-               (list
-                (package-desc-name descriptor)
-                (package-version-join
-                 (package-desc-version descriptor))
-                (package-desc-reqs descriptor)
-                (package-desc-summary descriptor)
-                (copy-tree
-                 (package-desc-extras descriptor))
-                (featurep 'ace-jump-buffer)
-                (get
-                 'ace-jump-buffer
-                 'group-documentation)
-                (get
-                 'ace-jump-buffer
-                 'custom-version)
-                (get
-                 'ace-jump-buffer
-                 'custom-links)
-                (assq
-                 'ace-jump-buffer
-                 (get
-                  'convenience
-                  'custom-group))))"##;
-    let expect = expect![[
-        r#"OK (ace-jump-buffer "20171031.1550" ((avy (0 4 0)) (dash (2 4 0))) "Fast buffer switching extension to `avy'." ((:maintainers ("Justin Talbott" . "justin@waymondo.com")) (:authors ("Justin Talbott" . "justin@waymondo.com")) (:revdesc . "ae5be0415c82") (:commit . "ae5be0415c823f7bb66833aa4af2180d4cf99cef") (:url . "https://github.com/waymondo/ace-jump-buffer")) t "Fast buffer switching extension to `avy'." "0.4.0" ((url-link "https://github.com/waymondo/ace-jump-buffer")) (ace-jump-buffer custom-group))"#
-    ]];
-    assert_ace_jump_buffer_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_jump_buffer_required_features_are_loaded() {
-    let elisp_form = r##"(mapcar
-               #'featurep
-               '(bs
-                 avy
-                 recentf
-                 dash
-                 ace-jump-buffer))"##;
-    let expect = expect!["OK (t t t t t)"];
-    assert_ace_jump_buffer_parity(elisp_form, expect);
 }
