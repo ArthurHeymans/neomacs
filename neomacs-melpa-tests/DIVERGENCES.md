@@ -291,21 +291,66 @@ the frame.
 
 Affects: `ace-window` (1).
 
-## 15. Driving `ac-complete-with-helm` under a keyboard macro can dump core
+## 15. SIGSEGV in `%S` printing of a string nested in conses
 
-The highest-severity finding so far: a crash rather than a signal, and
-intermittent — three consecutive runs of the same workflow gave a result, a core
-dump, and a result. A *bare* helm session does not crash; it signals cleanly. It
-takes the ac-helm path (auto-complete plus `with-helm-show-completion`) on top.
+The most severe entry in this file: a memory fault, not a signal. **It is not a
+helm bug** — helm is only how it was reached. Neomacs segfaults inside its own
+`format`/`%S` printer while walking a cons tree.
 
-Not yet reduced below "run `ac-complete-with-helm` under a keyboard macro"; a
-reduction pass is in progress. Affects: `ac-helm` (2 of its 6 failures, when
-stdin is `/dev/null`).
+**Signal:** SIGSEGV (11), core dumped. No Rust panic, no `RUST_BACKTRACE`
+output, so a genuine memory fault rather than an assertion.
 
-There is a floor under the reduction: `ace-jump-helm-line`'s full-session
-workflow, a plain `helm :sources …` under a keyboard macro, is stable — five
-consecutive runs all gave the deterministic `end-of-file` of entry 1. So the
-crash needs something above a bare helm session.
+**Rate:** 8/20, 6/20 and 10/20 across three configurations — roughly 30–40%.
+
+**Stack** (`coredumpctl debug`; full trace kept at `tmp/crash/bt.txt`):
+
+```
+#0  neovm_core::emacs_core::string_escape::format_lisp_string_bytes_inner_emacs
+#1  neovm_core::emacs_core::error::format_string_bytes_in_state
+#2  neovm_core::emacs_core::error::format_value_bytes_in_state_with_options
+#3  neovm_core::emacs_core::error::format_cons_bytes_in_state
+#4..#8   … the same two frames recursing through the cons tree …
+#9  …::builtins::strings::builtin_format_message_slice::{{closure}}::{{closure}}
+#10 …::builtins::strings::do_format
+#12 …::builtins::strings::builtin_format_slice
+```
+
+It dies `%S`-printing a **string nested inside conses** — in the harness's own
+`(format "RESULT %S" …)`, *after* helm has already failed and returned.
+`format_string_bytes_in_state` (`neovm-core/src/emacs_core/error.rs:983`) does
+`value.as_lisp_string().expect("checked string")` and hands `ls.as_bytes()` to
+`neovm-core/src/emacs_core/string_escape.rs:634`.
+
+**Hypothesis, not confirmed:** a segfault in a leaf string-escape while
+recursively walking a cons tree, intermittently, looks like a stale
+`LispString` — a `Value` collected or moved during the walk. That matches this
+repo's documented hazard that the exact GC does not scan the Rust stack, so a
+`Value` held in a Rust local across a safepoint needs `push_specpdl_root`. GC
+landing inside the format walk would explain the intermittency exactly.
+
+**Ruled out** (20–25 iterations each, all clean, all under the same keyboard
+macro): a bare `helm :sources …`; `with-helm-show-completion` around a helm
+session without auto-complete; auto-complete armed and started followed by a
+bare helm session; the same followed by a plain `read-from-minibuffer`;
+auto-complete armed and started alone; helm driven by `unread-command-events`
+instead of a keyboard macro; ac-helm's own
+`helm-source-auto-complete-candidates` with plain and with propertized
+candidates; and the same plus buffer/helm-buffer cleanup. So neither the
+keyboard macro nor `with-helm-show-completion` is required. What the clean
+variants share is returning something *small*; the crashing ones `%S` a large
+structure containing the captured error object.
+
+**Reductions tried that do NOT reproduce**, recorded so nobody repeats them:
+formatting propertized strings in a loop under allocation pressure, and `%S` on
+strings holding raw non-UTF-8 bytes (`\310\311`, `\377\376`, lone continuation
+bytes, broken UTF-8) — those print byte-identically in both editors.
+
+**Not reduced below the package.** The smallest reproducer is still "run
+`ac-complete-with-helm` under a keyboard macro and `%S` the resulting
+structure", at 30–40%. Scripts in `tmp/crash/`: `raw.sh` reproduces, `run.sh`
+takes probe/iterations/stdin-mode and tallies exit codes.
+
+Affects: `ac-helm` (2 of its 6 failures, when stdin is `/dev/null`).
 
 ## 16. `real-last-command` is never updated
 
