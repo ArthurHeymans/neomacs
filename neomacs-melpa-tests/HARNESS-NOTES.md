@@ -186,6 +186,33 @@ until the process is dead. Sort concurrently recorded requests before asserting
 
 ## Assertions
 
+**A display that cannot satisfy a theme's clause is a finding, not an
+obstacle.** The tempting fix is to redefine `display-color-cells` and
+`face-spec-set-match-display` so the gated clause matches. That is worse than a
+weak assertion: it manufactures a frame neither editor has, and every colour the
+suite then asserts belongs to that invented display. ancient-one-dark-theme's old
+corpus did exactly this, and it read as the *strongest* corpus replaced so far —
+it fontified a real Elisp buffer and read the faces back — while asserting an
+appearance neither editor can produce. It is the min-colors note turned inside
+out: that note says you cannot assert resolved appearance on this display, and
+the answer was to fake a display where you can.
+
+The honest route, which is also more coverage rather than less:
+
+- pin the registered specs **whole** (all 202, as ample-regexps pins its regexps);
+- pin the display facts beside them — 0 colour cells, `static-gray`, gated clause
+  does not match, `(t …)` clause does — so the reason is on the record;
+- assert resolved `face-attribute` only for the settings that genuinely apply
+  (11 of the 202 here);
+- and list every themed face with the theme **on and off**, so the snapshot
+  states exactly which faces the theme changes on this display. For
+  ancient-one-dark that is precisely `line-number` and `line-number-current-line`
+  — the theme's entire terminal effect, now recorded rather than papered over.
+
+Generalises past themes: whenever a package's behaviour is gated on a capability
+the batch editor lacks, pin the gate's *answer* and the behaviour on both sides
+of it. Never synthesise the capability.
+
 **SILENT — the sandbox is inside a project, so "outside a project" is
 unreachable.** Every sandbox lives at `<workspace>/tmp/melpa/<label>-XXXXXX`,
 inside the neomacs worktree, so a fixture directory with no marker of its own is
