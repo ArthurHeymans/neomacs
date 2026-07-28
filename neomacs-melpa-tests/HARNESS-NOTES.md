@@ -511,6 +511,43 @@ at the *package*, not at the test, and reads as a divergence worth filing. Bind
 each capture in the `let*` immediately after its own call. Same family as the
 `copy-tree` note, but the mechanism is ordering rather than sharing.
 
+**SILENT — name the text, do not count the line.** ahk-mode's font-lock
+workflow located each construct by a hand-counted line number and **four of
+eleven were wrong** — `:hotstring` was reading a `MsgBox` line, `:label` a
+different one. Every one was green, because a face run is a face run wherever you
+take it from: the assertion cannot know it is pointed at the wrong construct, and
+the snapshot's label says one thing while its recorded value describes another.
+The fix is structural, not more careful counting — locate by content
+(`ahk-test-faces-where "::btw::"`), so the label and the subject are the same
+string and cannot drift apart. Where you can, do not compute a fixture position
+at all.
+
+**SILENT — a helper whose effect is invisible in its caller's output must be
+exercised on both sides.** Every angular-snippets html snippet ends by calling
+`ng-snip/maybe-space-after-attr`, which exists to stop the new attribute running
+into what follows. Called directly it inserts the space correctly; through a real
+`yas-expand` it never takes effect, yielding `<div ng-hide=""class="card">` —
+joined and invalid. The trap is that without a baseline for correct, jammed
+output reads as simply what the snippet produces. Drive the public route *and*
+the helper alone: if they disagree the public route is broken, and if you only
+ever look at the public route, what the helper was meant to add is
+indistinguishable from it never having been intended. Distinct from the stand-in
+notes — the package is not lying about its input, it is silently dropping its own
+work.
+
+**A correct assertion is the dangerous case**, because there is nothing to
+notice. The android-mode fixture pinned the right list and could not fail for the
+reason its test was named after; what exposed it was a peer quoting *counts* from
+a four-activity manifest against a three-activity one, and the arithmetic not
+lining up. So when forwarding a finding, put the **number** in the report, not
+only the behaviour — the number is what another fixture can disagree with.
+
+**Take the whole line when an echo-area capture begins with `[`.** Emacs collapses
+a message identical to its predecessor into a `[N times]` suffix on the *existing*
+line, so a capture starting after that line sees a bare `("[2 times]")` —
+accurate and unreadable. This bites exactly where the repeat is the assertion, as
+in angular-snippets' third documentation press echoing the same docstring.
+
 **SILENT — a fixture that cannot fail for the reason the test is named after.**
 android-mode's `android-project-main-activities` uses `cl-member-if`, so it
 returns the tail from the first match rather than the matches. The workflow
