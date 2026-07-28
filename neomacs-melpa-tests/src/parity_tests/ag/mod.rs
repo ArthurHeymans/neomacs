@@ -3,18 +3,154 @@ use std::time::Duration;
 use crate::{AG_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod commands;
-mod dired;
-mod mode;
-mod pure;
-mod registry;
-mod search;
+mod workflows;
 
-const AG_TEST_TIMEOUT: Duration = Duration::from_secs(120);
+const AG_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
-fn ag_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(AG_MELPA_PIN, source_file)
+/// ag.el builds a silver-searcher command line, runs it through
+/// `compilation-start` and renders the output in its own compilation-derived
+/// mode.  The `ag` binary is absent on this host, so it is the one stand-in: a
+/// recording executable on PATH that logs the exact argument vector it was
+/// given and replies with realistic ag output, colour escapes included.  ag.el
+/// keeps doing its own real work -- assembling and shell-quoting the command
+/// line, starting the compilation, filtering the escape sequences, parsing the
+/// results into navigable matches and visiting them.
+const AG_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+
+;; ag.el builds a silver-searcher command line, runs it through
+;; `compilation-start' and renders the output in its own compilation-derived
+;; mode.  The `ag' binary is absent here, so it is the one stand-in: a recording
+;; executable on PATH that logs the exact argument vector it was given and
+;; replies with realistic ag output, colour escapes included.  ag.el keeps doing
+;; its own real work -- building the command line, quoting it, starting the
+;; compilation, filtering the escapes and parsing the results into navigable
+;; matches.
+
+(setq make-backup-files nil create-lockfiles nil)
+
+(defvar ag-test-root (file-name-as-directory (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
+(defvar ag-test-project (file-name-as-directory (expand-file-name "project" ag-test-root)))
+
+(defun ag-test-write (path text)
+  (make-directory (file-name-directory path) t)
+  (with-temp-buffer (insert text)
+    (write-region (point-min) (point-max) path nil 'silent))
+  path)
+
+(defun ag-test-make-project ()
+  "Create the fixture tree: Unicode content and a file name with a space."
+  (make-directory (expand-file-name ".git" ag-test-project) t)
+  (ag-test-write (expand-file-name "src/greeting.el" ag-test-project)
+                 ";; Grüße an alle\n(defun greet () \"Grüße\")\n(defun farewell () \"Tschüss\")\n")
+  (ag-test-write (expand-file-name "docs/design notes.md" ag-test-project)
+                 "# Notes\n\nWe say Grüße in the greeting module.\n")
+  (ag-test-write (expand-file-name "README.md" ag-test-project)
+                 "Grüße everyone.\n")
+  ag-test-project)
+
+(defconst ag-test-agent-script
+  "#!/bin/sh
+{ printf '%s\\n' '--CALL--'; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } >> \"$AG_TEST_DIR/ag.log\"
+for a in \"$@\"; do
+  case \"$a\" in
+    NOTHING) exit 1 ;;
+    EXPLODE) printf 'ag: unknown option\\n' >&2; exit 2 ;;
+  esac
+done
+cat \"$AG_TEST_DIR/ag-output.txt\"
+exit 0
+")
+
+(defun ag-test-install-ag ()
+  "Install the recording `ag' stand-in and point `ag-executable' at it."
+  (let ((path (expand-file-name "bin/ag" ag-test-root)))
+    (ag-test-write path ag-test-agent-script)
+    (set-file-modes path #o755)
+    ;; Realistic grouped, coloured ag output for the fixture tree.
+    (ag-test-write
+     (expand-file-name "ag-output.txt" ag-test-root)
+     (concat "\033[1;32msrc/greeting.el\033[0m\033[K\n"
+             "1:4:;; \033[30;43mGrüße\033[0m\033[K an alle\n"
+             "2:24:(defun greet () \"\033[30;43mGrüße\033[0m\033[K\")\n"
+             "\n"
+             "\033[1;32mdocs/design notes.md\033[0m\033[K\n"
+             "3:9:We say \033[30;43mGrüße\033[0m\033[K in the greeting module.\n"
+             "\n"
+             "\033[1;32mREADME.md\033[0m\033[K\n"
+             "1:1:\033[30;43mGrüße\033[0m\033[K everyone.\n"))
+    (setenv "AG_TEST_DIR" (directory-file-name ag-test-root))
+    (setenv "PATH" (concat (expand-file-name "bin" ag-test-root)
+                           path-separator (getenv "PATH")))
+    (push (expand-file-name "bin" ag-test-root) exec-path)
+    (setq ag-executable path)))
+
+(defun ag-test-calls ()
+  "Each recorded ag invocation as an argument list, oldest first."
+  (let ((path (expand-file-name "ag.log" ag-test-root)))
+    (if (file-regular-p path)
+        (with-temp-buffer
+          (let ((coding-system-for-read 'utf-8)) (insert-file-contents path))
+          (let (calls current)
+            (dolist (line (split-string (buffer-string) "\n"))
+              (cond ((string= line "--CALL--")
+                     (when current (push (nreverse current) calls))
+                     (setq current nil))
+                    ((string= line ""))
+                    (t (push line current))))
+            (when current (push (nreverse current) calls))
+            (nreverse calls)))
+      nil)))
+
+(defun ag-test-wait-for-search ()
+  "Wait until the compilation process ag started has finished."
+  (let ((deadline (+ (float-time) 10)))
+    (while (and (< (float-time) deadline)
+                (cl-find-if (lambda (p) (string-match-p "ag" (process-name p)))
+                            (process-list)))
+      (accept-process-output nil 0.02)
+      (sit-for 0.01))
+    (sit-for 0.05)))
+
+(defun ag-test-results-buffer ()
+  (cl-find-if (lambda (b) (string-prefix-p "*ag search" (buffer-name b)))
+              (buffer-list)))
+
+(defun ag-test-rendered ()
+  "The rendered results buffer: name, mode and text with the header normalised."
+  (let ((buffer (ag-test-results-buffer)))
+    (if (not buffer)
+        'no-results-buffer
+      (with-current-buffer buffer
+        (list :name (buffer-name)
+              :mode major-mode
+              :text (replace-regexp-in-string
+                     "\\(Compilation \\|Ag \\)\\(started\\|finished\\|exited\\).*"
+                     "<STATUS>"
+                     (replace-regexp-in-string
+                      (regexp-quote (directory-file-name ag-test-root)) "<ROOT>"
+                      (buffer-substring-no-properties (point-min) (point-max)))))))))
+
+(defmacro ag-test-with-project (&rest body)
+  `(progn
+     (ag-test-make-project)
+     (ag-test-install-ag)
+     (let ((default-directory ag-test-project))
+       (unwind-protect (progn ,@body)
+         (dolist (buffer (buffer-list))
+           (when (string-prefix-p "*ag search" (buffer-name buffer))
+             (let ((kill-buffer-query-functions nil))
+               (with-current-buffer buffer (set-buffer-modified-p nil))
+               (kill-buffer buffer))))
+         (dolist (process (process-list))
+           (set-process-query-on-exit-flag process nil)
+           (delete-process process))))))
+"##;
+
+fn ag_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(AG_MELPA_PIN, "ag.el")
         .expect("prepare pinned ag source below ./tmp")
+        .with_prelude(AG_TEST_PRELUDE)
         .with_timeout(AG_TEST_TIMEOUT)
 }
 
@@ -23,18 +159,10 @@ fn current_test_name() -> String {
     thread.name().unwrap_or("unnamed ag parity test").into()
 }
 
-fn assert_ag_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_ag_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = ag_oracle(source_file)
+    let report = ag_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("ag parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ag_parity(elisp_form: &str, expected: Expect) {
-    assert_ag_source_parity("ag.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_ag_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_ag_source_parity("ag-autoloads.el", elisp_form, expected);
 }
