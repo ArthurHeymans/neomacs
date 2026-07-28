@@ -194,6 +194,14 @@ added".** If the command re-sorts, the head is whichever entry sorts first.
 workflows agreed with themselves and reported the same alarm three times. Look
 the record up by a field you set.
 
+**If a measurement is not behaviour, do not pin it at all.** An amread-mode
+initial-delay assertion read 0 tenths in a probe and 17 under UPDATE_EXPECT on
+identical code, because the baseline is taken before the mode-enabling call
+returns and so absorbs however long loading its dependencies took. Both numbers
+are "correct"; neither is behaviour. The repeat *interval* is stable and was
+pinned instead. Dropping an assertion is better than pinning a wall-clock value
+that passes here and fails on a loaded machine.
+
 **Pin deltas, not absolute counts,** for anything editor-wide. amx's
 `amx-detect-new-commands` returns a total command count; only the +1 per newly
 defined command is portable. Same reasoning: keep a package's history length

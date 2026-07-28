@@ -234,13 +234,26 @@ does not follow the `face-alias` symbol property.
 ```elisp
 (defface neomacs-probe-real-face '((t :background "red")) "Probe.")
 (define-obsolete-face-alias 'neomacs-probe-alias-face 'neomacs-probe-real-face "1.0")
-(face-differs-from-default-p 'neomacs-probe-alias-face)
-;; GNU     => t
-;; Neomacs => (error "Invalid face" neomacs-probe-alias-face)
+(list (facep 'neomacs-probe-alias-face)
+      (get 'neomacs-probe-alias-face 'face-alias)
+      (face-attribute 'neomacs-probe-alias-face :background nil t))
+;; GNU     => (<face vector>  neomacs-probe-real-face  "red")
+;; Neomacs => (nil            neomacs-probe-real-face  (error "Invalid face" …))
 ```
 
+**The `face-alias` property is set identically in both editors** — so
+`define-obsolete-face-alias` is not implicated and the divergence is entirely in
+*lookup*. Worth stating, because "aliases are not followed" reads as though the
+alias might not be getting created.
+
+`facep` is the cheapest probe: one call, no frame, no defface comparison, and it
+returns nil rather than signalling, so it can sit inside a larger report without
+a `condition-case`. `face-differs-from-default-p` shows the same thing by
+signalling.
+
 Affects: `abridge-diff` (1), via `smerge-refine`'s use of the obsolete
-`smerge-refined-change` alias. Every `define-obsolete-face-alias` in the Emacs
+`smerge-refined-change` alias; `amaranth-dark-theme` (1), via flymake's
+`flymake-errline` alias. Every `define-obsolete-face-alias` in the Emacs
 tree is affected.
 
 ## 11. `completion-in-region-mode-map` is empty
