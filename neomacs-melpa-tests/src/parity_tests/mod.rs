@@ -219,6 +219,7 @@ mod attrap;
 mod audacious;
 mod audio_notes_mode;
 mod aurel;
+mod aurora_config_mode;
 mod bind_key;
 mod compat;
 mod dash;

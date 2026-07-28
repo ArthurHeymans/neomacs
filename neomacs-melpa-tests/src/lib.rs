@@ -971,6 +971,12 @@ pub const AUREL_MELPA_PIN: (&str, &str) = ("aurel", "20260429.458");
 /// `65c37f12a5c774a0ae434beee27ff7737006dd2f`.
 pub const AUDACIOUS_MELPA_PIN: (&str, &str) = ("audacious", "20210917.51");
 
+/// The exact aurora-config-mode package selected by the comprehensive
+/// metadata, prompting, command, Python-derived mode, font-lock, and practical
+/// configuration-workflow parity corpus. MELPA built this archive from
+/// upstream commit `8273ec7937a21b469b9dbb6c11714255b890f410`.
+pub const AURORA_CONFIG_MODE_MELPA_PIN: (&str, &str) = ("aurora-config-mode", "20180216.2302");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
