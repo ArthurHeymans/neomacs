@@ -317,6 +317,15 @@ fn starting_an_activity_reads_the_manifest_and_asks_adb_to_launch_it() {
           :main-activities (mapcar #'amd-test-copy (android-project-main-activities))
           :launcher-activities (mapcar #'amd-test-copy
                                        (android-project-main-activities "LAUNCHER"))
+          ;; DEFAULT is the query that makes the defect unmistakable.  Exactly
+          ;; one activity declares that category, so a filter returns one name;
+          ;; a tail returns that activity and everything after it in the
+          ;; manifest.  Without this the other two queries both return all
+          ;; three and cannot tell a broken filter from one where everything
+          ;; happens to match.
+          :default-activities (mapcar #'amd-test-copy
+                                      (android-project-main-activities "DEFAULT"))
+          :activities-declaring-default 1
           :from-this-buffer
           (progn (execute-kbd-macro (read-kbd-macro (concat android-mode-key-prefix " a")))
                  (list :commands (amd-test-commands)
@@ -335,7 +344,7 @@ fn starting_an_activity_reads_the_manifest_and_asks_adb_to_launch_it() {
     "##;
 
     let expect = expect![[
-        r#"OK (:package "com.warehouse.inventory" :class-of-this-buffer "com.warehouse.inventory.MainActivity" :main-activities ("com.warehouse.inventory.MainActivity" "com.warehouse.inventory.ReportActivity" "com.warehouse.tools.ScannerActivity") :launcher-activities ("com.warehouse.inventory.MainActivity" "com.warehouse.inventory.ReportActivity" "com.warehouse.tools.ScannerActivity") :from-this-buffer (:commands ("adb shell am start -n com.warehouse.inventory/com.warehouse.inventory.MainActivity") :messages ("Starting activity: com.warehouse.inventory.MainActivity")) :from-a-non-activity-buffer "adb shell am start -n com.warehouse.inventory/com.warehouse.inventory.ReportActivity" :with-no-device-attached :reported-success)"#
+        r#"OK (:package "com.warehouse.inventory" :class-of-this-buffer "com.warehouse.inventory.MainActivity" :main-activities ("com.warehouse.inventory.MainActivity" "com.warehouse.inventory.ReportActivity" "com.warehouse.tools.ScannerActivity") :launcher-activities ("com.warehouse.inventory.MainActivity" "com.warehouse.inventory.ReportActivity" "com.warehouse.tools.ScannerActivity") :default-activities ("com.warehouse.inventory.ReportActivity" "com.warehouse.tools.ScannerActivity") :activities-declaring-default 1 :from-this-buffer (:commands ("adb shell am start -n com.warehouse.inventory/com.warehouse.inventory.MainActivity") :messages ("Starting activity: com.warehouse.inventory.MainActivity")) :from-a-non-activity-buffer "adb shell am start -n com.warehouse.inventory/com.warehouse.inventory.ReportActivity" :with-no-device-attached :reported-success)"#
     ]];
 
     assert_android_mode_parity(elisp_form, expect);
