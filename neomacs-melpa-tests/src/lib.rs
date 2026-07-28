@@ -874,8 +874,10 @@ pub const APIB_MODE_MELPA_PIN: (&str, &str) = ("apib-mode", "20200101.1017");
 /// `e4c9c57d6620a788ec8a715ff1bb50542edea3a6`.
 pub const APIWRAP_MELPA_PIN: (&str, &str) = ("apiwrap", "20180602.2231");
 
-/// The exact app-monochrome-themes package selected by the comprehensive
-/// theme-definition and lifecycle parity corpus.
+/// The exact app-monochrome-themes package selected by the practical code,
+/// writing, Dired, and theme-lifecycle parity corpus. MELPA built this archive
+/// from upstream commit
+/// `bd8bfee0b64bf10543f4cefaf40bb5dcd4cf123b`.
 pub const APP_MONOCHROME_THEMES_MELPA_PIN: (&str, &str) =
     ("app-monochrome-themes", "20250710.2315");
 
