@@ -387,9 +387,9 @@ pub(crate) fn builtin_internal_define_uninitialized_variable(
     // GNU `Finternal__define_uninitialized_variable` (eval.c:913) calls
     // LOADHIST_ATTACH(symbol), recording the bare defvar/defconst symbol on
     // current-load-list so it appears in the file's `load-history` entry.
-    // `loadhist_attach` self-guards on file-load context, so this is a no-op
+    // The typed recorder self-guards on file-load context, so this is a no-op
     // outside a load.
-    eval.loadhist_attach(args[0]);
+    eval.record_load_history_entry(crate::emacs_core::eval::LoadHistoryEntry::Variable(symbol));
 
     Ok(Value::NIL)
 }
@@ -458,6 +458,13 @@ pub(crate) fn builtin_defvaralias(eval: &mut super::eval::Context, args: Vec<Val
     )?;
     install_defvaralias_state(eval, &state_change);
     eval.watchers.clear_watchers(state_change.alias_id);
+    // GNU `Fdefvaralias` treats the alias as a variable definition in its own
+    // right: `LOADHIST_ATTACH (new_alias)` records the bare alias symbol after
+    // the alias edge is installed and before its documentation is written.
+    // This provenance is deliberately independent of the base variable.
+    eval.record_load_history_entry(crate::emacs_core::eval::LoadHistoryEntry::Variable(
+        state_change.alias_id,
+    ));
     builtin_put(
         eval,
         vec![

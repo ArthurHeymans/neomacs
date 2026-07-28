@@ -3,10 +3,46 @@
 //! GNU implements `defvaralias` and `internal-delete-indirect-variable` in
 //! `src/eval.c`, while value access follows `SYMBOL_VARALIAS` in `src/data.c`.
 //! These tests focus on alias value migration, chain following, cycle
-//! rejection, let-bound rejection, and alias deletion.
+//! rejection, let-bound rejection, definition provenance, and alias deletion.
 
 use crate::common::assert_oracle_parity;
 use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn oracle_defvaralias_records_alias_as_variable_definition_origin() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((file
+       (make-temp-file
+        "neomacs-oracle-defvaralias-origin-" nil ".el"
+        "(defvar neomacs--oracle-alias-origin-base nil)\n\
+(defvaralias 'neomacs--oracle-alias-origin-name \
+'neomacs--oracle-alias-origin-base)\n")))
+  (unwind-protect
+      (progn
+        (load file nil nil t)
+        (let ((origin
+               (symbol-file 'neomacs--oracle-alias-origin-name 'defvar)))
+          (list
+           (stringp origin)
+           (equal origin file)
+           (and
+            (memq 'neomacs--oracle-alias-origin-name
+                  (cdr (assoc file load-history)))
+            t))))
+    (condition-case nil
+        (internal-delete-indirect-variable
+         'neomacs--oracle-alias-origin-name)
+      (error nil))
+    (when (boundp 'neomacs--oracle-alias-origin-base)
+      (makunbound 'neomacs--oracle-alias-origin-base))
+    (delete-file file)))
+"#;
+
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
 
 #[test]
 fn oracle_defvaralias_migrates_existing_alias_value_to_void_base() {

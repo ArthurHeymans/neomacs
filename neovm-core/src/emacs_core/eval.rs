@@ -107,6 +107,44 @@ pub(crate) enum EchoMessageClearResult {
     PreserveEchoArea,
 }
 
+/// Definition/provenance records accepted by GNU's `load-history`.
+///
+/// Keep the Lisp encoding and its duplicate policy behind this enum so
+/// definition primitives cannot invent raw cons shapes or accidentally apply
+/// `require`'s deduplication rule to ordinary definitions.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum LoadHistoryEntry {
+    Variable(SymId),
+    Function(Value),
+    ProvidedFeature(Value),
+    RequiredFeature(Value),
+}
+
+#[derive(Clone, Copy, Debug, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum TaggedLoadHistoryKind {
+    Defun,
+    Provide,
+    Require,
+}
+
+impl LoadHistoryEntry {
+    fn into_lisp_value(self) -> Value {
+        let (kind, subject) = match self {
+            Self::Variable(symbol) => return value_from_symbol_id(symbol),
+            Self::Function(symbol) => (TaggedLoadHistoryKind::Defun, symbol),
+            Self::ProvidedFeature(feature) => (TaggedLoadHistoryKind::Provide, feature),
+            Self::RequiredFeature(feature) => (TaggedLoadHistoryKind::Require, feature),
+        };
+        let kind_name: &'static str = kind.into();
+        Value::cons(Value::symbol(kind_name), subject)
+    }
+
+    fn should_deduplicate(self) -> bool {
+        matches!(self, Self::RequiredFeature(_))
+    }
+}
+
 fn gnu_system_type() -> &'static str {
     if cfg!(target_os = "windows") {
         "windows-nt"
@@ -12228,7 +12266,7 @@ impl Context {
     pub(crate) fn defalias_value(&mut self, sym: Value, def: Value) -> EvalResult {
         let plan = builtins::plan_defalias_in_obarray(self.obarray(), &[sym, def])?;
         let builtins::DefaliasPlan { action, result, .. } = plan;
-        self.loadhist_attach(Value::cons(Value::symbol("defun"), result));
+        self.record_load_history_entry(LoadHistoryEntry::Function(result));
         self.record_defalias_function_history(result);
         match action {
             builtins::DefaliasAction::SetFunction { symbol, definition } => {
@@ -12372,15 +12410,9 @@ impl Context {
         false
     }
 
-    pub(crate) fn loadhist_attach(&mut self, entry: Value) {
-        self.loadhist_attach_inner(entry, false);
-    }
-
-    pub(crate) fn loadhist_attach_once(&mut self, entry: Value) {
-        self.loadhist_attach_inner(entry, true);
-    }
-
-    fn loadhist_attach_inner(&mut self, entry: Value, dedup: bool) {
+    pub(crate) fn record_load_history_entry(&mut self, entry: LoadHistoryEntry) {
+        let dedup = entry.should_deduplicate();
+        let entry = entry.into_lisp_value();
         let current_load_list = self.visible_variable_value_or_nil("current-load-list");
         if !Self::current_load_list_is_file_context(current_load_list) {
             return;
@@ -12411,7 +12443,7 @@ impl Context {
     ) -> EvalResult {
         self.note_macro_expansion_mutation();
         provide_value_in_state(&mut self.obarray, &mut self.features, feature, subfeatures)?;
-        self.loadhist_attach(Value::cons(Value::symbol("provide"), feature));
+        self.record_load_history_entry(LoadHistoryEntry::ProvidedFeature(feature));
         // GNU Emacs Fprovide (fns.c): after adding the feature, run any
         // load-hooks registered in `after-load-alist`.
         //   tem = Fassq(feature, Vafter_load_alist);
@@ -12517,7 +12549,7 @@ impl Context {
                 return Err(e);
             }
             Ok(plan) => {
-                self.loadhist_attach_once(Value::cons(Value::symbol("require"), feature));
+                self.record_load_history_entry(LoadHistoryEntry::RequiredFeature(feature));
                 match plan {
                     RequirePlan::Return(value) => Ok(value),
                     RequirePlan::Load { sym_id, name, path } => {
