@@ -30,6 +30,7 @@ fn test_ctx() -> PixelCalcContext {
         scroll_bar_on_left: false,
         line_number_pixel_width: 0.0,
         symbol_values: HashMap::new(),
+        image_sizes: PixelCalcImageSizes::default(),
     }
 }
 
@@ -402,5 +403,47 @@ fn fixnum_align_to_in_align_mode_writes_column_offset() {
     assert_eq!(
         calc_pixel_width_or_height(&ctx, &v, true, Some(&mut align)),
         Some(50.0)
+    );
+}
+
+/// Issue #204 — `(- center (0.5 . IMAGE-SPEC))` is how Dashboard and
+/// `image-dired` centre a banner.
+///
+/// GNU evaluates `(image …)` to the image's own pixel width (xdisp.c:30506,
+/// via `lookup_image`) and `(NUM . EXPR)` to NUM × EXPR (xdisp.c:30551), so a
+/// 400px-wide image resolves to `centre − 200`. Answering the image operand
+/// with a fixed placeholder mis-centred every such banner.
+#[test]
+fn image_operand_uses_resolved_image_width() {
+    let mut ctx = test_ctx();
+    let (_c, prop) = parse(r#"(- center (0.5 . (image :type png :file "x.png")))"#);
+    let (_c2, image) = parse(r#"(image :type png :file "x.png")"#);
+    ctx.image_sizes.insert(image, 400.0, 300.0);
+
+    let mut align_to: i32 = -1;
+    let pixels = calc_pixel_width_or_height(&ctx, &prop, true, Some(&mut align_to));
+
+    // `center` = text_area_left (8) + text_area_width/2 (392) = 400.
+    assert_eq!(align_to, 400);
+    assert_eq!(
+        pixels,
+        Some(-200.0),
+        "half of the resolved 400px image width"
+    );
+}
+
+/// GNU guards the image arm with `FRAME_WINDOW_P` (xdisp.c:30506): on a
+/// terminal frame no arm matches an `(image …)` head, so the whole expression
+/// fails and `:align-to` goes unapplied. With no resolved size we must do the
+/// same rather than invent a width.
+#[test]
+fn image_operand_without_resolved_size_fails_like_gnu_on_tty() {
+    let ctx = test_ctx();
+    let (_c, prop) = parse(r#"(- center (0.5 . (image :type png :file "x.png")))"#);
+
+    let mut align_to: i32 = -1;
+    assert_eq!(
+        calc_pixel_width_or_height(&ctx, &prop, true, Some(&mut align_to)),
+        None
     );
 }

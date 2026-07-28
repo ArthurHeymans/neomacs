@@ -26,6 +26,7 @@ fn install_skipped_geometry(
 
 fn window_params() -> WindowParams {
     WindowParams {
+        space_image_catalog: None,
         window_id: 41,
         buffer_id: 7,
         bounds: Rect::new(10.0, 20.0, 120.0, 100.0),

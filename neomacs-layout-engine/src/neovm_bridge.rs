@@ -1508,6 +1508,9 @@ pub fn window_params_from_neovm_with_font_sizing(
     let default_bg = buffer_default_face.bg;
 
     Some(WindowParams {
+        // Filled in by `resolve_window_display_source_params`, the one place
+        // every window's params pass through that also holds the evaluator.
+        space_image_catalog: None,
         window_id: win_id.0 as i64,
         buffer_id: buffer.id().0,
         bounds: display_bounds,

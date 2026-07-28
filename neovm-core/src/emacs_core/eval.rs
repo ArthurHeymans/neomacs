@@ -1627,6 +1627,17 @@ pub trait DisplayHost {
     fn image_catalog(&self) -> Option<&dyn super::image_catalog::ImageCatalog> {
         None
     }
+    /// The same catalog as [`Self::image_catalog`], as a shared handle.
+    ///
+    /// Layout needs to resolve `(image …)` operands inside `(space :align-to …)`
+    /// expressions (GNU does this inline with `lookup_image`), but the layout
+    /// engine's pixel arithmetic must not hold a borrow of the host. Hosts with
+    /// a catalog should return it here as well.
+    fn image_catalog_shared(
+        &self,
+    ) -> Option<std::sync::Arc<dyn super::image_catalog::ImageCatalog>> {
+        None
+    }
     fn request_video(
         &self,
         _request: VideoResolveRequest,

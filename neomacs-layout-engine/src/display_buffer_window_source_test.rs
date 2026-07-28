@@ -5,6 +5,7 @@ use neomacs_display_protocol::types::Rect;
 
 fn window_params() -> WindowParams {
     WindowParams {
+        space_image_catalog: None,
         window_id: 1,
         buffer_id: 1,
         bounds: Rect::new(0.0, 8.0, 240.0, 120.0),

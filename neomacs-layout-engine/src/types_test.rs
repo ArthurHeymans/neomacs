@@ -5,6 +5,7 @@ use neomacs_display_protocol::cursor::CursorBarWidth;
 #[test]
 fn window_params_construction() {
     let params = WindowParams {
+        space_image_catalog: None,
         window_id: 12345,
         buffer_id: 67890,
         bounds: Rect::new(0.0, 0.0, 800.0, 600.0),
@@ -87,6 +88,7 @@ fn window_params_construction() {
 #[test]
 fn window_params_minibuffer() {
     let params = WindowParams {
+        space_image_catalog: None,
         window_id: 1,
         buffer_id: 1,
         bounds: Rect::new(0.0, 580.0, 800.0, 20.0),
@@ -161,6 +163,7 @@ fn window_params_minibuffer() {
 #[test]
 fn window_params_clone() {
     let params = WindowParams {
+        space_image_catalog: None,
         window_id: 1,
         buffer_id: 1,
         bounds: Rect::new(0.0, 0.0, 100.0, 100.0),

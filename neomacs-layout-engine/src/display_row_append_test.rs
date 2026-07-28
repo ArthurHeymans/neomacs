@@ -10299,6 +10299,7 @@ fn display_replacement_stretch_append_item_names_cursor_and_extent_policy() {
 
 fn test_display_space_window_params() -> WindowParams {
     WindowParams {
+        space_image_catalog: None,
         window_id: 1,
         buffer_id: 1,
         bounds: Rect::new(0.0, 0.0, 800.0, 600.0),

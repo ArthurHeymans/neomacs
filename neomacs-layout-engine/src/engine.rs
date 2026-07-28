@@ -130,6 +130,18 @@ fn resolve_window_display_source_params(
     params: &WindowParams,
 ) -> WindowParams {
     let window_id = neovm_core::window::WindowId(params.window_id as u64);
+    // Hand layout a shared handle to the image catalog: `(space :align-to …)`
+    // may embed an `(image …)` operand whose intrinsic size decides the result
+    // (GNU resolves it inline with `lookup_image`). This is the single point
+    // every window's params pass through that also holds the evaluator.
+    let mut params = params.clone();
+    params.space_image_catalog = evaluator
+        .display_host
+        .as_ref()
+        .and_then(|host| host.image_catalog_shared())
+        .map(crate::types::SharedImageCatalog);
+    let params = &params;
+
     if !params.is_minibuffer() || evaluator.minibuffer_window_is_active(window_id) {
         return params.clone();
     }

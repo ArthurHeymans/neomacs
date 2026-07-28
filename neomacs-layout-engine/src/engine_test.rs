@@ -1364,6 +1364,7 @@ fn visual_text_window_cursor_publish_context_publishes_decorative_cursor_from_di
 
 fn test_window_params() -> WindowParams {
     WindowParams {
+        space_image_catalog: None,
         window_id: 1,
         buffer_id: 1,
         bounds: Rect::new(0.0, 0.0, 800.0, 600.0),
@@ -10646,6 +10647,107 @@ fn display_space_relative_height_spec(factor: i64, ascent_percent: i64) -> Value
         Value::keyword("ascent"),
         Value::fixnum(ascent_percent),
     ])
+}
+
+/// Issue #204 — a `(space :align-to (- center (0.5 . IMAGE-SPEC)))` prefix is
+/// how Dashboard and `image-dired` centre a banner image.
+///
+/// GNU resolves the `(image …)` operand to the image's own pixel width
+/// (xdisp.c:30506) and `(NUM . EXPR)` to NUM × EXPR (xdisp.c:30551), so the
+/// stretch reaches `centre − half the image`. NEO Emacs left-aligned it: the
+/// operand could not be modelled by the typed expression mirror, so the whole
+/// `:align-to` was dropped and the stretch collapsed to one column.
+#[test]
+fn issue_204_align_to_centers_image_by_its_resolved_width() {
+    let _eval = Context::new();
+    let mut params = test_window_params();
+    params.space_image_catalog = Some(crate::types::SharedImageCatalog(std::sync::Arc::new(
+        FixedSizeImageCatalog {
+            width: 400,
+            height: 300,
+        },
+    )));
+
+    let image = Value::list(vec![
+        Value::symbol("image"),
+        Value::keyword("type"),
+        Value::symbol("png"),
+        Value::keyword("file"),
+        Value::string("banner.png"),
+    ]);
+    // `(0.5 . IMAGE)` — reads as the proper list `(0.5 image :type png …)`.
+    let half_image = Value::cons(Value::make_float(0.5), image);
+    let spec = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword("align-to"),
+        Value::list(vec![
+            Value::symbol("-"),
+            Value::symbol("center"),
+            half_image,
+        ]),
+    ]);
+
+    let geometry = DisplaySpaceGeometry::from_display_space_spec(
+        &spec, 0.0, 0.0, 8.0, 8.0, 10.0, 7.0, &params,
+    );
+
+    // The 800px-wide text area centres at 400; half the 400px image is 200.
+    assert_eq!(
+        geometry.width, 200.0,
+        "stretch must reach centre minus half the image width"
+    );
+}
+
+/// Without a catalog — a terminal frame — GNU's `FRAME_WINDOW_P` guard makes
+/// the `(image …)` operand, and with it the whole expression, fail. The stretch
+/// then falls back to one canonical char width (xdisp.c:32879) rather than
+/// centring on a made-up image size.
+#[test]
+fn issue_204_align_to_image_operand_falls_back_without_a_catalog() {
+    let _eval = Context::new();
+    let params = test_window_params();
+
+    let image = Value::list(vec![
+        Value::symbol("image"),
+        Value::keyword("type"),
+        Value::symbol("png"),
+        Value::keyword("file"),
+        Value::string("banner.png"),
+    ]);
+    let spec = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword("align-to"),
+        Value::list(vec![
+            Value::symbol("-"),
+            Value::symbol("center"),
+            Value::cons(Value::make_float(0.5), image),
+        ]),
+    ]);
+
+    let geometry = DisplaySpaceGeometry::from_display_space_spec(
+        &spec, 0.0, 0.0, 8.0, 8.0, 10.0, 7.0, &params,
+    );
+
+    assert_eq!(geometry.width, 8.0, "GNU falls back to one char width");
+}
+
+struct FixedSizeImageCatalog {
+    width: u32,
+    height: u32,
+}
+
+impl ImageCatalog for FixedSizeImageCatalog {
+    fn lookup(&self, _request: ImageResolveRequest) -> ImageLookup {
+        ImageLookup::Ready(ReadyImage {
+            image_id: 9,
+            metadata: neovm_core::emacs_core::image_catalog::ResolvedImageMetadata {
+                width: self.width,
+                height: self.height,
+                background: 0,
+                background_transparent: false,
+            },
+        })
+    }
 }
 
 #[test]

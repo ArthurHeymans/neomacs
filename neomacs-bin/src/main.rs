@@ -1011,7 +1011,7 @@ struct PrimaryWindowDisplayHost {
     last_window_titles: Mutex<HashMap<neovm_core::window::FrameId, LispString>>,
     font_metrics: Option<FontMetricsService>,
     primary_window_size: SharedPrimaryWindowSize,
-    image_catalog: AsyncImageCatalog,
+    image_catalog: Arc<AsyncImageCatalog>,
     resolved_videos: Mutex<HashMap<VideoResolveRequest, ResolvedVideo>>,
     resolved_webkits: Mutex<HashMap<WebKitResolveRequest, ResolvedWebKit>>,
     resolved_surfaces: Mutex<ResolvedSurfaceMemo>,
@@ -1728,7 +1728,11 @@ impl DisplayHost for PrimaryWindowDisplayHost {
     }
 
     fn image_catalog(&self) -> Option<&dyn ImageCatalog> {
-        Some(&self.image_catalog)
+        Some(&*self.image_catalog)
+    }
+
+    fn image_catalog_shared(&self) -> Option<Arc<dyn ImageCatalog>> {
+        Some(self.image_catalog.clone())
     }
 
     fn request_video(&self, request: VideoResolveRequest) -> Result<Option<ResolvedVideo>, String> {
@@ -2921,11 +2925,11 @@ fn run_gui_evaluator_worker(
         last_window_titles: Mutex::new(HashMap::new()),
         font_metrics: None,
         primary_window_size: Arc::clone(&primary_window_size),
-        image_catalog: AsyncImageCatalog::new(
+        image_catalog: Arc::new(AsyncImageCatalog::new(
             emacs_comms.cmd_tx.clone(),
             Some(render_waker.clone()),
             Arc::clone(&gui_image_metadata),
-        ),
+        )),
         resolved_videos: Mutex::new(HashMap::new()),
         resolved_webkits: Mutex::new(HashMap::new()),
         resolved_surfaces: Mutex::new(ResolvedSurfaceMemo::default()),

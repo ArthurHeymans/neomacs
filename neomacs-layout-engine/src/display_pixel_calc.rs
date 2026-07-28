@@ -93,6 +93,45 @@ impl PixelCalcConsHead {
     }
 }
 
+/// Intrinsic pixel sizes for the `(image …)` operands of a `(space …)` form.
+///
+/// GNU resolves such an operand inline with
+/// `lookup_image (it->f, prop, it->face_id)` and reads `img->width` /
+/// `img->height` (xdisp.c:30506). NEO Emacs resolves media *before* layout
+/// arithmetic — the row builder already receives images as an id plus a size —
+/// so these are resolved once, where the image catalog is in scope, and handed
+/// to the evaluator as owned data. The evaluator stays pure: it never borrows
+/// the display host.
+///
+/// An operand with no entry behaves exactly as GNU does on a terminal frame:
+/// `FRAME_WINDOW_P` fails, no later arm matches an `(image …)` head, and the
+/// whole expression fails — leaving `:align-to` unapplied rather than
+/// inventing a width.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PixelCalcImageSizes {
+    /// Keyed by the image spec itself, compared structurally like GNU's image
+    /// cache. A single `(space …)` form carries at most a handful.
+    entries: Vec<(Value, (f64, f64))>,
+}
+
+impl PixelCalcImageSizes {
+    pub fn insert(&mut self, spec: Value, width: f64, height: f64) {
+        self.entries.push((spec, (width, height)));
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    fn get(&self, spec: &Value) -> Option<(f64, f64)> {
+        self.entries
+            .iter()
+            .find(|(candidate, _)| candidate == spec)
+            .map(|(_, size)| *size)
+    }
+}
+
 /// Context equivalent to the fields of GNU's `struct it` that
 /// `calc_pixel_width_or_height` reads.
 ///
@@ -181,6 +220,9 @@ pub struct PixelCalcContext {
     /// Buffer-local symbol fall-through used by GNU's
     /// `buffer_local_value` tail in `calc_pixel_width_or_height`.
     pub symbol_values: HashMap<String, Value>,
+
+    /// Pre-resolved sizes for `(image …)` operands — GNU's `lookup_image`.
+    pub image_sizes: PixelCalcImageSizes,
 }
 
 impl PixelCalcContext {
@@ -232,6 +274,7 @@ impl PixelCalcContext {
             scroll_bar_on_left: false,
             line_number_pixel_width: 0.0,
             symbol_values,
+            image_sizes: PixelCalcImageSizes::default(),
         }
     }
 
@@ -260,6 +303,7 @@ impl PixelCalcContext {
             scroll_bar_on_left: false,
             line_number_pixel_width: 0.0,
             symbol_values: HashMap::new(),
+            image_sizes: PixelCalcImageSizes::default(),
         }
     }
 }
@@ -565,11 +609,19 @@ fn calc_cons(
         let head = PixelCalcConsHead::from_symbol_name(head_name);
         // GNU xdisp.c:30261 — `(image PROPS...)`. Requires image
         // infrastructure; return placeholder width.
+        // GNU xdisp.c:30506 — `(image PROPS...)` is the image's own pixel width
+        // or height, resolved through `lookup_image`, and ONLY on a
+        // window-system frame. With no resolved size — a terminal frame, or an
+        // image that failed to load — GNU's `FRAME_WINDOW_P`/`valid_image_p`
+        // guard falls through, no later arm matches an `(image …)` head, and
+        // the expression fails. Returning a fixed placeholder here mis-centred
+        // every `(- center (0.5 . IMAGE-SPEC))` banner (issue #204).
         if head == Some(PixelCalcConsHead::Image) {
-            // TODO(verify): actually look up image dimensions.
-            return Some(100.0);
+            let (width, height) = ctx.image_sizes.get(prop)?;
+            return Some(if width_p { width } else { height });
         }
-        // GNU xdisp.c:30269 — `(xwidget PROPS...)`. Same placeholder.
+        // GNU xdisp.c:30514 — `(xwidget PROPS...)` really does return a dummy
+        // 100px in GNU ("TODO: Don't return dummy size"), so match it.
         if head == Some(PixelCalcConsHead::Xwidget) {
             return Some(100.0);
         }

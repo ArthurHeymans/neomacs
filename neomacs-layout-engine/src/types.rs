@@ -6,7 +6,9 @@
 
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::types::Rect;
-use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
+use neovm_core::emacs_core::image_catalog::{
+    ImageCatalog, ImageLookup, ImageResolveRequest, ImageScaleEnvironment,
+};
 
 /// Parameters for a window that the layout engine needs.
 /// Populated from Emacs data via FFI before layout runs.
@@ -47,6 +49,30 @@ pub enum WindowKind {
 impl WindowKind {
     pub const fn is_minibuffer(self) -> bool {
         matches!(self, Self::Minibuffer)
+    }
+}
+
+/// Shared handle to the host's image catalog, carried into layout so a
+/// `(space :align-to (… (image …)))` operand can be resolved to real pixels —
+/// GNU does this inline with `lookup_image` (xdisp.c:30506).
+///
+/// A handle rather than a borrow: layout's pixel arithmetic stays free of any
+/// lifetime tied to the display host. `None` on frames without a catalog,
+/// which reproduces GNU's `FRAME_WINDOW_P` guard (the operand, and with it the
+/// whole expression, simply fails).
+#[derive(Clone)]
+pub struct SharedImageCatalog(pub std::sync::Arc<dyn ImageCatalog>);
+
+impl std::fmt::Debug for SharedImageCatalog {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SharedImageCatalog(..)")
+    }
+}
+
+impl SharedImageCatalog {
+    #[must_use]
+    pub fn lookup(&self, request: ImageResolveRequest) -> ImageLookup {
+        self.0.lookup(request)
     }
 }
 
@@ -141,6 +167,11 @@ pub struct WindowParams {
     pub font_pixel_size: f32,
     /// Immutable GNU image-scaling facts inherited from the containing frame.
     pub image_scale_environment: ImageScaleEnvironment,
+
+    /// Shared image catalog used to resolve `(image …)` operands inside
+    /// `(space :width/:align-to …)` expressions before layout arithmetic runs.
+    /// `None` on frames without a catalog — GNU's `FRAME_WINDOW_P` guard.
+    pub space_image_catalog: Option<SharedImageCatalog>,
     /// Font ascent
     pub font_ascent: f32,
 
