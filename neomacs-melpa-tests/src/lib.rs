@@ -935,6 +935,12 @@ pub const ASYNC_STATUS_MELPA_PIN: (&str, &str) = ("async-status", "20230821.204"
 /// `cfe61ed18ea9b3b1bfb6f9e7d80a47599680cd1f`.
 pub const ATCODER_TOOLS_MELPA_PIN: (&str, &str) = ("atcoder-tools", "20200109.1236");
 
+/// The exact attrap package selected by the comprehensive option, diagnostic
+/// dispatch, Elisp, GHC, HLint, LaTeX, and repair-workflow parity corpus.
+/// MELPA built this archive from upstream commit
+/// `ad1d9443fcd93e32f2aefadc5af2646701664581`.
+pub const ATTRAP_MELPA_PIN: (&str, &str) = ("attrap", "20260304.1504");
+
 /// The exact atl-long-lines package selected by the comprehensive mode,
 /// line-measurement, timer, toggle, and end-to-end workflow parity corpus.
 /// MELPA built this archive from upstream commit
