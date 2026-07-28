@@ -16,11 +16,9 @@ emacs -Q --batch --eval '<form>'
 
 **Every reduction below was executed in both editors and reproduces as
 written** (checked 2026-07-28 against GNU Emacs 31.0.50 and
-`target/release/neomacs`), with three marked exceptions: entry 9 needs two files
-on disk rather than one form, entry 15 is an intermittent segfault not reduced
-below its package, and entry 25 is a **verified symptom whose reduction is not
-yet found** — its candidate one-liner does not reproduce and is recorded as such
-so nobody trusts it. The script that runs the rest is
+`target/release/neomacs`), with two marked exceptions: entry 9 needs two files
+on disk rather than one form, and entry 15 is an intermittent segfault not
+reduced below its package. The script that runs the rest is
 `tmp/verify-divergences.sh`.
 
 Entry 15 is a **memory fault**, not a behavioural difference; read it first if
@@ -588,33 +586,63 @@ the reduction sets `display-type` by hand. No suite witnesses this: it needs a
 theme whose `default` clause carries no `min-colors`, and `adwaita-dark-theme`'s
 does. Recorded from a verified reduction rather than a failing test.
 
-## 25. `(void-variable mode-name)` — symptom verified, reduction NOT found
+## 25. An interpreted lambda's parameter destroys a built-in buffer-local
 
-**Do not treat the one-liner below as reproducing.** The `ag` suite fails 0/5 on
-Neomacs with `ERR (void-variable mode-name)`, deterministically across runs,
-where GNU passes 5/5. That symptom is real. The reduction originally reported —
-
-```elisp
-(with-temp-buffer (let ((mode-name "Ag")) mode-name) mode-name)
-```
-
-— does **not** reproduce: both editors return `"Fundamental"`. Also tried and
-not reproducing: the same with `text-mode` or a `setq-local` first; a lambda
-whose argument is named `mode-name`, called directly and built by backquote as
-`ag.el` builds it; `compilation-start` with such a name-function; and
-`define-compilation-mode` followed by using the mode.
-
-One verified difference in the neighbourhood, which may or may not be the
-mechanism:
+Calling an **interpreted list** lambda whose parameter names a built-in
+buffer-local variable leaves that variable void — **process-wide and
+permanently**, not just in the current buffer.
 
 ```elisp
-(default-value 'mode-name)
-;; GNU => nil    Neomacs => "Fundamental"
+(with-temp-buffer
+  (funcall (list 'lambda (list 'mode-name) "ok") "Ag")
+  mode-name)
+;; GNU     => "Fundamental"
+;; Neomacs => (void-variable mode-name)
 ```
 
-`ag.el` reaches the failure through `compilation-start` with
-`` `(lambda (mode-name) ,(ag/buffer-name …)) ``. Needs re-reducing from the
-failing test. Affects: `ag` (5).
+```elisp
+(progn
+  (with-temp-buffer (funcall (list 'lambda (list 'mode-name) "ok") "Ag"))
+  (list (with-temp-buffer mode-name) (default-value 'mode-name)))
+;; GNU     => ("Fundamental" nil)
+;; Neomacs => (void-variable mode-name)      ; every buffer, for the rest of the session
+```
+
+**Both conditions are required.**
+
+*An interpreted list lambda.* These three reproduce — `(list 'lambda …)`,
+`` `(lambda (mode-name) …) `` and `'(lambda (mode-name) …)`. A real closure does
+**not**:
+
+```elisp
+(with-temp-buffer (funcall (lambda (mode-name) "ok") "Ag") mode-name)
+;; "Fundamental" in both editors
+```
+
+Under lexical binding a bare `lambda` is a closure, so only a list built by
+`quote`/backquote/`list` hits it. `ag.el` has no lexical-binding cookie and
+builds exactly `` `(lambda (mode-name) ,(ag/buffer-name …)) ``.
+
+*The parameter must shadow a built-in buffer-local.* A user variable is fine:
+
+```elisp
+(defvar-local pv 'default-val)
+(with-temp-buffer (setq-local pv 'loc) (funcall (list 'lambda (list 'pv) "ok") "x") pv)
+;; 'loc in both editors
+```
+
+`major-mode` is damaged the same way, but GNU signals `wrong-type-argument` on
+that input, so `mode-name` is the clean witness.
+
+Likely mechanism, consistent with a neighbouring verified difference —
+`(default-value 'mode-name)` is nil in GNU and `"Fundamental"` here, so Neomacs
+appears to hold the value in the default cell with no per-buffer binding, and
+unwinding the dynamic bind clears the only cell there is.
+
+Blast radius: any package passing an interpreted list lambda whose parameter
+names a built-in buffer-local. The `compilation-start` name-function idiom is
+the common one and is not exotic — `ag.el` reaches it on **every search**, after
+which `mode-name` is void everywhere. Affects: `ag` (5).
 
 ---
 
