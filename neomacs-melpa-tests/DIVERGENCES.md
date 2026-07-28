@@ -559,6 +559,9 @@ directory accumulates `.#` files that make other Emacs instances believe the
 data is being edited elsewhere. Anything else built on bookmark.el, and any
 package calling `write-file`, is affected. Affects: `addressbook-bookmark` (1).
 
+Read with entry 26, which is its converse: an ordinary modified visited buffer
+takes no lock at all. Locking is wrong in both directions.
+
 ## 24. The `default` face ignores a display-conditional theme setting
 
 Ordinary faces take a display-conditional setting and `default` takes an
@@ -643,6 +646,31 @@ Blast radius: any package passing an interpreted list lambda whose parameter
 names a built-in buffer-local. The `compilation-start` name-function idiom is
 the common one and is not exotic — `ag.el` reaches it on **every search**, after
 which `mode-name` is void everywhere. Affects: `ag` (5).
+
+## 26. No lock file is created for a modified visited buffer
+
+The converse of entry 23, and the two together say Neomacs's file locking is
+inverted: it omits the lock GNU takes, and leaves behind one GNU never makes.
+
+```elisp
+(let ((buf (find-file-noselect FILE)))          ; FILE exists, create-lockfiles is t
+  (with-current-buffer buf
+    (goto-char (point-max))
+    (insert "edited\n")
+    (list (directory-files DIR)                 ; while modified
+          (progn (save-buffer) (directory-files DIR)))))
+;; GNU     while modified => ("." ".#secret.txt" ".." "secret.txt")
+;;         after save     => ("." ".." "secret.txt" "secret.txt~")
+;; Neomacs while modified => ("." ".." "secret.txt")          ← no lock, ever
+;;         after save     => ("." ".." "secret.txt" "secret.txt~")
+```
+
+`create-lockfiles` is t and `buffer-modified-p` is t in both. The consequence is
+the one locking exists to prevent: two Emacs instances editing the same file see
+nothing to warn about. Affects: `agenix` (1).
+
+Read with entry 23: a `write-file` leaves a stale `.#` lock that is never
+removed, while an ordinary modified buffer takes no lock at all.
 
 ---
 
