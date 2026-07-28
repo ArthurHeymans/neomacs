@@ -131,6 +131,27 @@ until the process is dead. Sort concurrently recorded requests before asserting
 
 ## Assertions
 
+**SILENT — check the package is not silently a no-op in batch.** Several
+packages have a path that quietly does nothing on a non-graphical or
+noninteractive Emacs, and a suite that does not notice asserts the no-op while
+claiming to cover the feature — passing in both editors. Four found so far:
+
+| package | gate | effect in batch |
+|---|---|---|
+| `all-the-icons-ibuffer` | `all-the-icons-ibuffer-display-predicate` defaults to `display-graphic-p` | icon column renders empty |
+| `ada-ts-mode` | `treesit-ready-p` | falls back to a non-treesit path |
+| `activity-watch-mode` | its own `noninteractive` guard | refuses to switch on |
+| DDSKK (via `ac-skk`) | `(unless noninteractive …)` in `skk-save-jisyo` | no dictionary is written |
+
+Assert the gate itself in its own workflow, both open and closed, so the suite
+says which path it exercised.
+
+**SILENT — a fixture must be able to tell the two answers apart.** Four buffers
+under 1k made `file-size-human-readable` return the same digits as the raw size,
+so the human-readable setting would have been asserted with a fixture that could
+not distinguish it. A 2048-byte buffer reads `2k` against `2048`. Same principle
+as making each element of an alignment fixture wrong by a different amount.
+
 **SILENT — do not take the head of a package's list to mean "the item I just
 added".** If the command re-sorts, the head is whichever entry sorts first.
 `alarm-clock-set` calls `alarm-clock--list-prepare`, which sorts, so three
