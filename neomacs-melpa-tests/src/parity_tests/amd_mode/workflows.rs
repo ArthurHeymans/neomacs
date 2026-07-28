@@ -258,6 +258,9 @@ fn searching_for_references_runs_ag_with_the_configured_ignores() {
 /// with the right arguments, which is what places the failure after the search
 /// rather than in it.  A short match through the same code path is asserted
 /// alongside so the length is visibly what makes the difference.
+///
+/// Found independently by melpa-abgaben while prototyping the same command, and
+/// by this suite while converting it; both readings of those three lines agree.
 #[test]
 fn a_reference_longer_than_a_hundred_characters_aborts_the_search() {
     let elisp_form = r##"(let* ((root (amd-test-project "amd-long"))
