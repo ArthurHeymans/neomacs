@@ -68,6 +68,10 @@ fn javac_and_kotlinc_errors_in_the_build_output_become_navigable_locations() {
                    "package com.example;\nclass Checkout {}\n")
   (aenv-test-write "app/app/src/main/kotlin/com/example/Gateway.kt"
                    "package com.example\nclass Gateway\n")
+  ;; The javac and kotlinc lines below are not invented.  They were produced
+  ;; on this host by compiling genuinely broken sources -- javac 21.0.10 with
+  ;; an absolute path, the way gradle invokes it, and Kotlin 2.2.21 -- and
+  ;; pasted here with only the paths made to point into the sandbox.
   (aenv-test-write
    "app/gradlew"
    (concat "#!/bin/sh\n"
@@ -75,10 +79,14 @@ fn javac_and_kotlinc_errors_in_the_build_output_become_navigable_locations() {
            "echo \":compileDevDebugJavaWithJavac $(pwd)"
            "/app/src/main/java/com/example/Checkout.java:17: \""
            "'cannot find symbol'\n"
-           "echo \"$(pwd)/app/src/main/java/com/example/Checkout.java:42:"
-           " error: incompatible types: String cannot be converted to int\"\n"
+           "echo \"$(pwd)/app/src/main/java/com/example/Checkout.java:5:"
+           " error: cannot find symbol\"\n"
+           "echo \"$(pwd)/app/src/main/java/com/example/Checkout.java:8:"
+           " error: incompatible types: int cannot be converted to String\"\n"
+           "echo '> Task :app:compileDevDebugKotlin'\n"
            "echo \"e: $(pwd)/app/src/main/kotlin/com/example/Gateway.kt:"
            " (23, 9): unresolved reference: charge\"\n"
+           "echo \"Gateway.kt:5:16: error: unresolved reference 'chargeCard'.\"\n"
            "echo 'BUILD FAILED in 1s'\n"
            "exit 1\n")
    t)
@@ -87,13 +95,37 @@ fn javac_and_kotlinc_errors_in_the_build_output_become_navigable_locations() {
   (let ((wait (aenv-test-await "*android-env-compile*")))
     (list :wait wait
           :buffer (aenv-test-compilation-text "*android-env-compile*")
-          ;; One location per registered regexp: the `:compile' form, the
-          ;; plain javac form, and the kotlin `e:' form with a column.
-          :locations (aenv-test-locations "*android-env-compile*"))))
+          ;; Three of the five diagnostic lines resolve.  The two real javac
+          ;; lines match `android-java-2', and the historical `e: PATH:
+          ;; (LINE, COL)' kotlin line matches `android-kotlin' -- but the
+          ;; line a current kotlinc actually prints matches nothing the
+          ;; package registers, so it yields no location at all.
+          :locations (aenv-test-locations "*android-env-compile*")
+          :what-each-regexp-matches
+          (mapcar
+           (lambda (name)
+             (let ((regexp (nth 1 (assq name
+                                        compilation-error-regexp-alist-alist))))
+               (cons name
+                     (mapcar
+                      (lambda (line)
+                        (cons (car line)
+                              (and (string-match regexp (cdr line)) t)))
+                      '((:javac-absolute
+                         . "/tmp/x/Checkout.java:5: error: cannot find symbol")
+                        (:javac-relative
+                         . "Checkout.java:5: error: cannot find symbol")
+                        (:kotlin-2-2
+                         . "Gateway.kt:5:16: error: unresolved reference 'x'.")
+                        (:kotlin-historical
+                         . "e: /tmp/x/Gateway.kt: (23, 9): unresolved reference: charge")
+                        (:gradle-task-prefixed
+                         . ":compileDevDebugJavaWithJavac /tmp/x/Checkout.java:17: cannot find symbol"))))))
+           '(android-java android-java-2 android-kotlin)))))
 "##;
 
     let expect = expect![[
-        r#"OK (:wait :finished :buffer "-*- mode: android-env-compile; default-directory: \"[ORACLE-SANDBOX]/app/\" -*-\nAndroid Compile started at <TIME>\n\ncd [ORACLE-SANDBOX]/app/; ./gradlew assembleDevDebug\n> Task :app:compileDevDebugJavaWithJavac\n:compileDevDebugJavaWithJavac [ORACLE-SANDBOX]/app/app/src/main/java/com/example/Checkout.java:17: cannot find symbol\n[ORACLE-SANDBOX]/app/app/src/main/java/com/example/Checkout.java:42: error: incompatible types: String cannot be converted to int\ne: [ORACLE-SANDBOX]/app/app/src/main/kotlin/com/example/Gateway.kt: (23, 9): unresolved reference: charge\nBUILD FAILED in 1s\n\nAndroid Compile exited abnormally with code 1 at <TIME>\n" :locations ((:file "[ORACLE-SANDBOX]/app/app/src/main/java/com/example/Checkout.java" :line 17 :column nil) (:file "[ORACLE-SANDBOX]/app/app/src/main/java/com/example/Checkout.java" :line 42 :column nil) (:file "[ORACLE-SANDBOX]/app/app/src/main/kotlin/com/example/Gateway.kt" :line 23 :column 9)))"#
+        r#"OK (:wait :finished :buffer "-*- mode: android-env-compile; default-directory: \"[ORACLE-SANDBOX]/app/\" -*-\nAndroid Compile started at <TIME>\n\ncd [ORACLE-SANDBOX]/app/; ./gradlew assembleDevDebug\n> Task :app:compileDevDebugJavaWithJavac\n:compileDevDebugJavaWithJavac [ORACLE-SANDBOX]/app/app/src/main/java/com/example/Checkout.java:17: cannot find symbol\n[ORACLE-SANDBOX]/app/app/src/main/java/com/example/Checkout.java:5: error: cannot find symbol\n[ORACLE-SANDBOX]/app/app/src/main/java/com/example/Checkout.java:8: error: incompatible types: int cannot be converted to String\n> Task :app:compileDevDebugKotlin\ne: [ORACLE-SANDBOX]/app/app/src/main/kotlin/com/example/Gateway.kt: (23, 9): unresolved reference: charge\nGateway.kt:5:16: error: unresolved reference 'chargeCard'.\nBUILD FAILED in 1s\n\nAndroid Compile exited abnormally with code 1 at <TIME>\n" :locations ((:file "[ORACLE-SANDBOX]/app/app/src/main/java/com/example/Checkout.java" :line 17 :column nil) (:file "[ORACLE-SANDBOX]/app/app/src/main/java/com/example/Checkout.java" :line 5 :column nil) (:file "[ORACLE-SANDBOX]/app/app/src/main/java/com/example/Checkout.java" :line 8 :column nil) (:file "[ORACLE-SANDBOX]/app/app/src/main/kotlin/com/example/Gateway.kt" :line 23 :column 9)) :what-each-regexp-matches ((android-java (:javac-absolute) (:javac-relative) (:kotlin-2-2) (:kotlin-historical) (:gradle-task-prefixed . t)) (android-java-2 (:javac-absolute . t) (:javac-relative) (:kotlin-2-2) (:kotlin-historical) (:gradle-task-prefixed)) (android-kotlin (:javac-absolute) (:javac-relative) (:kotlin-2-2) (:kotlin-historical . t) (:gradle-task-prefixed))))"#
     ]];
 
     assert_android_env_parity(elisp_form, expect);
