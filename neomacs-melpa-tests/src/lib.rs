@@ -902,8 +902,10 @@ pub const APPLES_MODE_MELPA_PIN: (&str, &str) = ("apples-mode", "20110121.418");
 /// `00c141bbff46c89a96598b605dee05dd1d89f624`.
 pub const APPLESCRIPT_MODE_MELPA_PIN: (&str, &str) = ("applescript-mode", "20210802.1715");
 
-/// The exact apropospriate-theme package selected by the comprehensive theme
-/// definition and lifecycle parity corpus.
+/// The exact apropospriate-theme package selected by the practical code,
+/// diff, Org, ANSI output, customization, and dark/light lifecycle parity
+/// corpus. MELPA built this archive from upstream commit
+/// `2b26eed7e2063ca93998a6807f5a4e602483a23d`.
 pub const APROPOSPRIATE_THEME_MELPA_PIN: (&str, &str) = ("apropospriate-theme", "20251010.121");
 
 /// The exact apt-sources-list package selected by the comprehensive API parity

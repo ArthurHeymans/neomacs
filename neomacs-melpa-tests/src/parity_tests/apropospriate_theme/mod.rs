@@ -3,16 +3,86 @@ use std::time::Duration;
 use crate::{APROPOSPRIATE_THEME_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod contrast;
-mod dark;
-mod light;
-mod registry;
+mod workflows;
 
 const APROPOSPRIATE_THEME_TEST_TIMEOUT: Duration = Duration::from_secs(180);
+const APROPOSPRIATE_THEME_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
 
-fn apropospriate_theme_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(APROPOSPRIATE_THEME_MELPA_PIN, source_file)
+(defun apropospriate-test-face-at
+    (token)
+  (goto-char
+   (point-min))
+  (search-forward token)
+  (or
+   (get-text-property
+    (match-beginning 0)
+    'face)
+   (get-text-property
+    (match-beginning 0)
+    'font-lock-face)))
+
+(defun apropospriate-test-face-view
+    (token)
+  (let ((face
+         (apropospriate-test-face-at
+          token)))
+    (list
+     face
+     (face-attribute
+      face
+      :foreground
+      nil
+      'default)
+     (face-attribute
+      face
+      :background
+      nil
+      'default)
+     (face-attribute
+      face
+      :weight
+      nil
+      'default))))
+
+(defun apropospriate-test-load-color-theme
+    (theme)
+  (let ((original-frame-parameter
+         (symbol-function
+          'frame-parameter)))
+    (cl-letf
+        (((symbol-function
+           'display-color-cells)
+          (lambda
+              (&optional _frame)
+            16777216))
+         ((symbol-function
+           'frame-parameter)
+          (lambda
+              (frame parameter)
+            (if
+                (eq parameter
+                    'display-type)
+                'color
+              (funcall
+               original-frame-parameter
+               frame
+               parameter)))))
+      (load-theme
+       theme
+       t))))
+
+(defun apropospriate-test-disable-themes ()
+  (mapc
+   #'disable-theme
+   (copy-sequence
+    custom-enabled-themes)))
+"##;
+
+fn apropospriate_theme_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(APROPOSPRIATE_THEME_MELPA_PIN, "apropospriate-theme.el")
         .expect("prepare pinned apropospriate-theme source below ./tmp")
+        .with_prelude(APROPOSPRIATE_THEME_TEST_PRELUDE)
         .with_timeout(APROPOSPRIATE_THEME_TEST_TIMEOUT)
 }
 
@@ -24,24 +94,12 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_apropospriate_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_apropospriate_theme_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = apropospriate_theme_oracle(source_file)
+    let report = apropospriate_theme_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| {
             panic!("apropospriate-theme parity case `{name}` failed:\n{error}")
         });
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_apropospriate_theme_parity(elisp_form: &str, expected: Expect) {
-    assert_apropospriate_source_parity("apropospriate-theme.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_apropospriate_dark_parity(elisp_form: &str, expected: Expect) {
-    assert_apropospriate_source_parity("apropospriate-dark-theme.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_apropospriate_light_parity(elisp_form: &str, expected: Expect) {
-    assert_apropospriate_source_parity("apropospriate-light-theme.el", elisp_form, expected);
 }
