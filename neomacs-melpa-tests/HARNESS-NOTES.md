@@ -207,5 +207,21 @@ everywhere — so a probe file that runs the real trigger first and the candidat
 second sees the candidate fail against already-broken state and blames the wrong
 form. This is a property of the bug, not carelessness; it caught a careful agent.
 
+**Prefer designing a known divergence out of reach over citing it.** When a
+catalogued divergence is not what the package under test is about, build the
+suite so it cannot be reached: `all-the-icons-completion` goes through
+`completion-metadata-get` — the package's real route, which a UI calls when it
+renders candidates — so entry 11 never arises without a minibuffer anywhere, and
+passes explicit buffer candidates so entry 13's ordering cannot reach an
+assertion. `all-the-icons-ibuffer` does the same with prefixed fixtures and
+name-sorted assertions. Citing after the fact leaves a red test that says
+nothing new; designing it out leaves a green test that covers the package.
+
+**Assert a private-use glyph as character codes *and* its font family.** Code
+lists stay readable and diff-friendly in a snapshot where a raw glyph does not,
+but codes alone are not enough: an unknown extension and a directory can resolve
+to the *same code point in different fonts*, which a code-only assertion calls
+equal.
+
 **Cite an existing catalogue entry rather than re-witnessing it.** Every red test
 should be a distinct problem, or the failure count stops carrying information.
