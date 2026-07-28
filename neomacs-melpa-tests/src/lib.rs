@@ -116,6 +116,12 @@ pub const AUTO_COMPLETE_C_HEADERS_MELPA_PIN: (&str, &str) =
 /// `a9aa77ffb84a1037984a7ce4dda25074272f13fe`.
 pub const AUTO_COMPLETE_CHUNK_MELPA_PIN: (&str, &str) = ("auto-complete-chunk", "20140225.946");
 
+/// The exact auto-complete-clang package selected by the comprehensive output
+/// parsing, compiler invocation, language/argument, documentation, template,
+/// and completion workflow parity corpus. MELPA built this archive from
+/// upstream commit `a195db1d0593b4fb97efe50885e12aa6764d998c`.
+pub const AUTO_COMPLETE_CLANG_MELPA_PIN: (&str, &str) = ("auto-complete-clang", "20140409.752");
+
 /// The exact audio-notes-mode package selected by the comprehensive
 /// filesystem, playback, process-control, mode-line, advice, and global-mode
 /// lifecycle parity corpus. MELPA built this archive from upstream commit
