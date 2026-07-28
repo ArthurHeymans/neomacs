@@ -83,6 +83,18 @@ immediately before the trigger and assert
 and is stable. Pinning `timer--time` itself pins wall-clock: it passes locally
 forever and means nothing.
 
+**SILENT — one baseline per *call*, not per workflow.** A delta measured from a
+timestamp captured before several calls absorbs the time the earlier calls took,
+so a slower editor fails on arithmetic rather than behaviour. This produced
+three false failures in one suite, all blamed on Neomacs, because the earlier
+calls wrote a file. Take a fresh timestamp immediately before each triggering
+call, and prefer whole seconds — minutes for anything read back from a file that
+stores truncated timestamps.
+
+**A truncated timestamp cannot be asserted in seconds against a sub-second
+baseline** — the delta straddles a rounding boundary. Assert in minutes, or
+against the in-memory record the value was written from.
+
 **Arbitrary literal text as keys:** `(vconcat (kbd "C-c a") (string-to-vector
 "some text") [?\r])`. `kbd` swallows spaces (use `SPC`) and cannot express `[`.
 
@@ -118,6 +130,12 @@ until the process is dead. Sort concurrently recorded requests before asserting
 — activity-watch's bucket and heartbeat curl processes finish in either order.
 
 ## Assertions
+
+**SILENT — do not take the head of a package's list to mean "the item I just
+added".** If the command re-sorts, the head is whichever entry sorts first.
+`alarm-clock-set` calls `alarm-clock--list-prepare`, which sorts, so three
+workflows agreed with themselves and reported the same alarm three times. Look
+the record up by a field you set.
 
 **Pin deltas, not absolute counts,** for anything editor-wide. amx's
 `amx-detect-new-commands` returns a total command count; only the +1 per newly
