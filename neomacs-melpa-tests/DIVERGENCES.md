@@ -494,6 +494,27 @@ Other errno-derived file errors agree in both editors, so this is specific to
 the network-process path rather than to error formatting generally. Affects:
 `adafruit-wisdom` (1).
 
+## 22. `format` reverses the text-property plist of its FORMAT string
+
+The properties survive, but their plist order is reversed, so any comparison of
+a formatted propertized string against an expected one fails.
+
+```elisp
+(let ((s (propertize "x" 'alpha 1 'beta 2)))
+  (list (text-properties-at 0 s)
+        (text-properties-at 0 (format s))))
+;; GNU     => ((alpha 1 beta 2) (alpha 1 beta 2))
+;; Neomacs => ((alpha 1 beta 2) (beta 2 alpha 1))
+```
+
+Reached in practice through any error message built with `format` from a
+propertized template — `ac-octave` sees it in inferior-octave's
+"No inferior octave process running. Type M-x run-octave", where GNU keeps
+`(font-lock-face help-key-binding face help-key-binding)` and Neomacs yields
+`(face help-key-binding font-lock-face help-key-binding)`.
+
+Affects: `ac-octave` (1).
+
 ---
 
 ## Behaviour that is NOT a divergence
