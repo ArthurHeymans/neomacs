@@ -84,6 +84,15 @@ printer's representation is not the value.
 normaliser breaks string identity, so probe output containing `#1=` sharing
 markers never matches. Applies whenever a value repeats.
 
+**And a probe driver is usually the *more forgiving* environment, which is the
+wrong way round for a prototype.** A probe that calls `package-initialize` loads
+every installed package, and one of them may `require` a library the harness's
+bare session does not have. apiwrap's `:condition-case` config path calls
+`byte-compile-warn`, which lives in `bytecomp`: it worked in the probe and
+signalled `void-function` under the harness. A defect that reproduces only in the
+stricter environment is invisible from the permissive one — so a probe that
+passes is not evidence, and only the harness run is.
+
 **`copy-tree` / `copy-sequence` state you capture mid-workflow.** Packages share
 cons cells between their variables (amx's `amx-data` and `amx-cache` do), so a
 snapshot taken early can render the *final* values under a `#1=` marker and look
@@ -677,6 +686,32 @@ between fixture and expectation. align-cljlet's suite is built that way.
 `font-lock-ensure`.** actionscript-mode's `as3-count-scope-depth` decides whether
 a brace counts by looking at its face, so the indenter only works on a fontified
 buffer — a suite that always fontifies would silently depend on that.
+
+## Before you replace a corpus
+
+**Read the existing corpus before deciding to replace it.** `workflows.rs` is a
+**filename convention from this campaign, not evidence of quality**. A package
+converted before the convention existed, or by someone who chose another module
+name, reads as unconverted to any filename check — and the pre-flight rule
+(`git ls-files` + porcelain) catches *in-flight* work, not *already-good* work.
+
+apiwrap is the case that proves it. Porcelain clean, no `workflows.rs`, so it
+read as unconverted; a replacement suite was written and `practical.rs` was
+`git rm`'d. Reading it afterwards showed it was already workflow-shaped and
+**stronger than the replacement** — a six-method issue lifecycle against a
+recording request primitive, `:pre-process-params`/`:pre-process-data`/`:around`
+with endpoint-specific overrides, custom `define-error` conditions propagated and
+recovered, two backends side by side. It was restored and the new work committed
+*additively*.
+
+So the sequence is: pre-flight for collisions → **read the corpus** → replace
+only what is genuinely weak (symbol inventories, private helpers with fabricated
+inputs, mocked-out subjects), and *add to* what is not. Most corpora in this tree
+really are weak, which is exactly why the assumption is dangerous: it has been
+right often enough to stop being checked.
+
+**Report it if you find a corpus that was replaced when it should have been
+extended.** The conversions already landed were made under that assumption.
 
 ## Committing shared files
 
