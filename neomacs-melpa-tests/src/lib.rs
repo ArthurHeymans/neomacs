@@ -122,6 +122,12 @@ pub const AUTO_COMPLETE_CHUNK_MELPA_PIN: (&str, &str) = ("auto-complete-chunk", 
 /// upstream commit `a195db1d0593b4fb97efe50885e12aa6764d998c`.
 pub const AUTO_COMPLETE_CLANG_MELPA_PIN: (&str, &str) = ("auto-complete-clang", "20140409.752");
 
+/// The exact auto-complete-nxml package selected by the comprehensive context,
+/// candidate, documentation, namespace, action, and practical nXML workflow
+/// parity corpus. MELPA built this archive from upstream commit
+/// `ac7b09a23e45f9bd02affb31847263de4180163a`.
+pub const AUTO_COMPLETE_NXML_MELPA_PIN: (&str, &str) = ("auto-complete-nxml", "20140221.458");
+
 /// The exact audio-notes-mode package selected by the comprehensive
 /// filesystem, playback, process-control, mode-line, advice, and global-mode
 /// lifecycle parity corpus. MELPA built this archive from upstream commit
