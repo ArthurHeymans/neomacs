@@ -3,49 +3,72 @@ use std::time::Duration;
 use crate::{ARIA2_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod api;
-mod commands;
-mod controller;
-mod entries;
-mod registry;
-mod timers;
-mod utils;
+mod workflows;
 
-const ARIA2_TEST_TIMEOUT: Duration = Duration::from_secs(120);
+const ARIA2_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 const ARIA2_TEST_PRELUDE: &str = r##"
 (require 'cl-lib)
-(require 'seq)
 
-(defun aria2-test-path
-    (filename)
-  (expand-file-name
-   filename
-   (getenv
-    "NEOMACS_TEST_SANDBOX_ROOT")))
+(defun neomacs-aria2-test-rpc-request
+    (url silent)
+  (unless
+      (and
+       (equal
+        url
+        "http://localhost:6800/jsonrpc")
+       silent
+       (equal
+        url-request-method
+        "POST")
+       (equal
+        url-request-extra-headers
+        '(("Content-Type" . "application/json"))))
+    (error
+     "Unexpected aria2 RPC transport: %S"
+     (list
+      url
+      silent
+      url-request-method
+      url-request-extra-headers)))
+  (let ((request
+         (json-read-from-string
+          url-request-data)))
+    (list
+     (alist-get 'id request)
+     (alist-get 'method request)
+     (append
+      (alist-get 'params request)
+      nil))))
 
-(defun aria2-test-controller
-    (&optional request-id pid)
-  (make-instance
-   'aria2-controller
-   "aria2-test-controller"
-   :file
-   (aria2-test-path
-    "controller.eieio")
-   :request-id
-   (or request-id 0)
-   :rcp-url
-   "http://fixture.invalid:6800/jsonrpc"
-   :secret
-   "fixture-secret"
-   :pid
-   (or pid -1)))
+(defun neomacs-aria2-test-rpc-response
+    (request result)
+  (let ((buffer
+         (generate-new-buffer
+          " *neomacs-aria2-rpc-response*")))
+    (with-current-buffer buffer
+      (insert
+       "HTTP/1.1 200 OK\n"
+       "Content-Type: application/json\n"
+       "\n"
+       (json-encode
+        `((jsonrpc . "2.0")
+          (id . ,(car request))
+          (result . ,result)))))
+    buffer))
 
-(defun aria2-test-kill-buffers ()
+(defun neomacs-aria2-test-cleanup ()
+  (when (timerp aria2--master-timer)
+    (cancel-timer aria2--master-timer))
+  (when (timerp aria2--refresh-timer)
+    (cancel-timer aria2--refresh-timer))
+  (setq aria2--master-timer nil
+        aria2--refresh-timer nil
+        aria2--current-buffer-refresh-speed nil
+        aria2--url-list-widget nil)
   (dolist (name
            (list
             aria2-list-buffer-name
-            aria2-url-list-buffer-name
-            "*aria2-response*"))
+            aria2-url-list-buffer-name))
     (when-let ((buffer
                 (get-buffer name)))
       (with-current-buffer buffer
@@ -53,8 +76,8 @@ const ARIA2_TEST_PRELUDE: &str = r##"
       (kill-buffer buffer))))
 "##;
 
-fn aria2_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ARIA2_MELPA_PIN, source_file)
+fn aria2_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ARIA2_MELPA_PIN, "aria2.el")
         .expect("prepare pinned aria2 source below ./tmp")
         .with_prelude(ARIA2_TEST_PRELUDE)
         .with_timeout(ARIA2_TEST_TIMEOUT)
@@ -65,18 +88,10 @@ fn current_test_name() -> String {
     thread.name().unwrap_or("unnamed aria2 parity test").into()
 }
 
-fn assert_aria2_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_aria2_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = aria2_oracle(source_file)
+    let report = aria2_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("aria2 parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_aria2_parity(elisp_form: &str, expected: Expect) {
-    assert_aria2_source_parity("aria2.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_aria2_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_aria2_source_parity("aria2-autoloads.el", elisp_form, expected);
 }

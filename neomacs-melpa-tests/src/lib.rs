@@ -993,8 +993,10 @@ pub const ARCHIVE_RPM_MELPA_PIN: (&str, &str) = ("archive-rpm", "20220527.632");
 /// `d5614acdca80871cf4db65843227223b5a0e3a2c`.
 pub const ARDUINO_CLI_MODE_MELPA_PIN: (&str, &str) = ("arduino-cli-mode", "20260628.2219");
 
-/// The exact aria2 package selected by the comprehensive RPC, process,
-/// tabulated-list, and command workflow parity corpus.
+/// The exact aria2 package selected by the practical downloads-dashboard,
+/// transfer-control, URL-dialog, and torrent-import workflow parity corpus.
+/// MELPA built this archive from upstream commit
+/// `1f2cbe624f3a4e0109b5dc123bb4bbed496b15a7`.
 pub const ARIA2_MELPA_PIN: (&str, &str) = ("aria2", "20230314.2131");
 
 /// The exact Arjen Grey Theme package selected by the practical editor,
