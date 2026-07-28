@@ -3,10 +3,7 @@ use std::time::Duration;
 use crate::{ARSCRIPT_MODE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod editing;
-mod font_lock;
-mod indentation;
-mod surface;
+mod workflows;
 
 const ARSCRIPT_MODE_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -34,8 +31,4 @@ fn assert_arscript_mode_source_parity(source_file: &str, elisp_form: &str, expec
 
 pub(crate) fn assert_arscript_mode_parity(elisp_form: &str, expected: Expect) {
     assert_arscript_mode_source_parity("arscript-mode.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_arscript_mode_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_arscript_mode_source_parity("arscript-mode-autoloads.el", elisp_form, expected);
 }
