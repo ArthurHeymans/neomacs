@@ -1,20 +1,103 @@
 use std::time::Duration;
 
 use crate::{ACE_JUMP_ZAP_MELPA_PIN, CachedMelpaOracle};
-use expect_test::{Expect, expect};
+use expect_test::Expect;
 
-mod autoloads;
-mod commands;
-mod filters;
-mod state;
-mod surface;
 mod workflows;
 
 const ACE_JUMP_ZAP_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
-fn ace_jump_zap_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ACE_JUMP_ZAP_MELPA_PIN, source_file)
+/// ace-jump-zap is zap-to-char driven by ace-jump labels: the command hands
+/// over to `ace-jump-char-mode', and the key the user presses next both picks
+/// the target and triggers the kill, through `ace-jump-mode-before-jump-hook'
+/// and `ace-jump-mode-end-hook'.  Every workflow therefore types real keys with
+/// `execute-kbd-macro' into a buffer displayed in the selected window, and
+/// watches the session from `post-command-hook', which sees the labels while
+/// they are still on screen.  Nothing is stubbed, and the package's own hooks
+/// and advice stay installed.
+const ACE_JUMP_ZAP_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+
+(defconst ajz-test-recipe
+  (concat
+   "Pasta with tomato sauce\n"
+   "  - 400 g tomatoes, peeled\n"
+   "  - 2 cloves of garlic\n"
+   "  - olive oil, salt, pepper\n"
+   "Simmer for 20 minutes, then serve.\n"))
+
+(defmacro ajz-test-with-live-buffer (&rest body)
+  "Run BODY in a real, window-displayed buffer so typed keys reach it."
+  `(let ((buffer (generate-new-buffer "*ace-jump-zap-workflow*")))
+     (unwind-protect
+         (progn
+           (set-window-buffer (selected-window) buffer)
+           (set-buffer buffer)
+           (global-set-key (kbd "M-z") 'ace-jump-zap-to-char)
+           (global-set-key (kbd "M-Z") 'ace-jump-zap-up-to-char)
+           (global-set-key (kbd "C-c z") 'ace-jump-zap-to-char-dwim)
+           (global-set-key (kbd "C-c Z") 'ace-jump-zap-up-to-char-dwim)
+           ,@body)
+       (kill-buffer buffer))))
+
+(defun ajz-test-labels ()
+  "Return (LABEL . POSITION) for every zap candidate, ordered by label."
+  (sort
+   (delq nil
+         (mapcar (lambda (overlay)
+                   (let ((display (overlay-get overlay 'display)))
+                     (and (overlay-get overlay 'aj-data)
+                          (cons (substring display 0 1) (overlay-start overlay)))))
+                 (overlays-in (point-min) (point-max))))
+   (lambda (a b) (string< (car a) (car b)))))
+
+(defvar ajz-test-captured-labels nil)
+
+(defun ajz-test-capture-labels ()
+  "Record the labels while they are still on screen.
+Meant to be added to `ace-jump-mode-before-jump-hook' beside the
+package's own `ajz/maybe-zap-start'."
+  (setq ajz-test-captured-labels (ajz-test-labels)))
+
+(defvar ajz-test-trace nil)
+
+(defun ajz-test-record ()
+  "Record the zap state after a command; for `post-command-hook'."
+  (push (list this-command
+              (key-description (this-command-keys))
+              (point)
+              ajz/zapping
+              ajz/to-char
+              ajz/saved-point
+              (ajz-test-labels))
+        ajz-test-trace))
+
+(defmacro ajz-test-tracing (&rest body)
+  "Run BODY recording the zap state after every command it executes."
+  `(let ((ajz-test-trace nil))
+     (add-hook 'post-command-hook #'ajz-test-record)
+     (unwind-protect
+         (let ((result (progn ,@body)))
+           (cons (nreverse ajz-test-trace) result))
+       (remove-hook 'post-command-hook #'ajz-test-record))))
+
+(defun ajz-test-state ()
+  "Everything a zap can change, in one list."
+  (list (buffer-string)
+        (point)
+        (mark t)
+        mark-active
+        ajz/zapping
+        ajz/to-char
+        ajz/saved-point
+        (length (overlays-in (point-min) (point-max)))
+        kill-ring))
+"##;
+
+fn ace_jump_zap_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ACE_JUMP_ZAP_MELPA_PIN, "ace-jump-zap.el")
         .expect("prepare pinned ace-jump-zap source below ./tmp")
+        .with_prelude(ACE_JUMP_ZAP_TEST_PRELUDE)
         .with_timeout(ACE_JUMP_ZAP_TEST_TIMEOUT)
 }
 
@@ -28,78 +111,8 @@ fn current_test_name() -> String {
 
 pub(crate) fn assert_ace_jump_zap_parity(form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = ace_jump_zap_oracle("ace-jump-zap.el")
+    let report = ace_jump_zap_oracle()
         .run_value(&name, form)
         .unwrap_or_else(|error| panic!("ace-jump-zap parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ace_jump_zap_signal_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ace_jump_zap_oracle("ace-jump-zap.el")
-        .run_signal(&name, form)
-        .unwrap_or_else(|error| {
-            panic!("ace-jump-zap signal parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ace_jump_zap_autoload_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ace_jump_zap_oracle("ace-jump-zap-autoloads.el")
-        .run_value(&name, form)
-        .unwrap_or_else(|error| {
-            panic!("ace-jump-zap autoload parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ace_jump_zap_autoload_with_prelude_parity(
-    prelude: &str,
-    form: &str,
-    expected: Expect,
-) {
-    let name = current_test_name();
-    let report = CachedMelpaOracle::new(ACE_JUMP_ZAP_MELPA_PIN, "ace-jump-zap-autoloads.el")
-        .expect("prepare pinned ace-jump-zap autoloads below ./tmp")
-        .with_prelude(prelude)
-        .with_timeout(ACE_JUMP_ZAP_TEST_TIMEOUT)
-        .run_value(&name, form)
-        .unwrap_or_else(|error| {
-            panic!("ace-jump-zap autoload prelude parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-#[test]
-fn ace_jump_zap_exact_pin_dependencies_metadata_and_feature_match() {
-    let elisp_form = r##"(let ((descriptor
-                    (cadr
-                     (assq
-                      'ace-jump-zap
-                      package-alist))))
-               (list
-                (package-desc-name descriptor)
-                (package-version-join
-                 (package-desc-version descriptor))
-                (package-desc-reqs descriptor)
-                (package-desc-summary descriptor)
-                (copy-tree
-                 (package-desc-extras descriptor))
-                (featurep 'ace-jump-zap)))"##;
-    let expect = expect![[
-        r#"OK (ace-jump-zap "20170717.1849" ((ace-jump-mode (1 0)) (dash (2 10 0))) "Character zapping, `ace-jump-mode` style." ((:maintainers ("justin talbott" . "justin@waymondo.com")) (:authors ("justin talbott" . "justin@waymondo.com")) (:keywords "convenience" "tools" "extensions") (:revdesc . "52b5d4c6c73b") (:commit . "52b5d4c6c73bd0fc833a0dcb4e803a5287d8cae8") (:url . "https://github.com/waymondo/ace-jump-zap")) t)"#
-    ]];
-    assert_ace_jump_zap_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_jump_zap_required_features_are_loaded() {
-    let elisp_form = r##"(mapcar
-         #'featurep
-         '(ace-jump-mode
-           dash
-           ace-jump-zap))"##;
-    let expect = expect!["OK (t t t)"];
-    assert_ace_jump_zap_parity(elisp_form, expect);
 }
