@@ -853,8 +853,9 @@ pub const APACHE_MODE_MELPA_PIN: (&str, &str) = ("apache-mode", "20210519.1931")
 /// `4883ab085811b85cc75c44b5af478ab8f7e98386`.
 pub const APDL_MODE_MELPA_PIN: (&str, &str) = ("apdl-mode", "20250508.908");
 
-/// The exact APEL package selected by the comprehensive API parity corpus.
-/// MELPA built this archive from upstream commit
+/// The exact APEL package selected by the practical legacy-package,
+/// message-routing, product, MIME, richtext, filesystem, and CCL parity
+/// corpus. MELPA built this archive from upstream commit
 /// `1b043cfea58ea146356c237a5286ead69e97417b`.
 pub const APEL_MELPA_PIN: (&str, &str) = ("apel", "20250608.1806");
 
