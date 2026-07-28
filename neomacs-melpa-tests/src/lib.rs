@@ -813,8 +813,9 @@ pub const ANSILOVE_MELPA_PIN: (&str, &str) = ("ansilove", "20250105.1853");
 /// corpus.
 pub const ANT_MELPA_PIN: (&str, &str) = ("ant", "20160211.1543");
 
-/// The exact Anti-Zenburn Theme package selected by the comprehensive theme
-/// parity corpus.
+/// The exact Anti-Zenburn Theme package selected by the practical editing,
+/// review, and build-output parity corpus. MELPA built this archive from
+/// upstream commit `dbafbaa86be67c1d409873f57a5c0bbe1e7ca158`.
 pub const ANTI_ZENBURN_THEME_MELPA_PIN: (&str, &str) = ("anti-zenburn-theme", "20180712.1838");
 
 /// The exact anx-api package selected by the comprehensive API workflow parity
