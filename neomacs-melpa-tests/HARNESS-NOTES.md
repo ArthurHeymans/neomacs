@@ -164,6 +164,14 @@ claiming to cover the feature — passing in both editors. Four found so far:
 Assert the gate itself in its own workflow, both open and closed, so the suite
 says which path it exercised.
 
+**SILENT — print characters with `%c`, not `%s`, when building event names.** A
+helper formatting keypad events as `(format "M-kp-%s" digit)` with `digit` bound
+to `?6` produced `M-kp-54`; the package takes the last character of the symbol
+name, so the code under test was "43" while the workflow was named and
+documented as ASCII 65. All six tests passed self-consistently, asserting codes
+nobody chose. Check one expectation against your own doc comment before trusting
+the set.
+
 **SILENT — a fixture must be able to tell the two answers apart.** Four buffers
 under 1k made `file-size-human-readable` return the same digits as the raw size,
 so the human-readable setting would have been asserted with a fixture that could

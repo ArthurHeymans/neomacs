@@ -529,18 +529,25 @@ Other errno-derived file errors agree in both editors, so this is specific to
 the network-process path rather than to error formatting generally. Affects:
 `adafruit-wisdom` (1).
 
-## 22. `format` reverses the text-property plist of its FORMAT string
+## 22. `format` reverses the plist of a propertized string used as the FORMAT
 
-The properties survive, but their plist order is reversed, so any comparison of
-a formatted propertized string against an expected one fails.
+Specific to the propertized string being the **FORMAT** argument. Passing one as
+a *value* reverses in both editors, and so does `concat` — those are not
+divergences, and a suite hunting this through a package will not find it there.
 
 ```elisp
-(let ((s (propertize "x" 'alpha 1 'beta 2)))
-  (list (text-properties-at 0 s)
-        (text-properties-at 0 (format s))))
-;; GNU     => ((alpha 1 beta 2) (alpha 1 beta 2))
-;; Neomacs => ((alpha 1 beta 2) (beta 2 alpha 1))
+(let ((p (propertize "x" 'alpha 1 'beta 2 'gamma 3)))
+  (list (text-properties-at 0 (format p))          ; p as the FORMAT
+        (text-properties-at 0 (format "%s-tail" p)) ; p as an argument
+        (text-properties-at 0 (concat p "-tail"))))
+;; property order in the source is (alpha beta gamma)
+;;              as FORMAT        as argument      concat
+;; GNU     =>   (alpha beta gamma)  (gamma beta alpha)  (gamma beta alpha)
+;; Neomacs =>   (gamma beta alpha)  (gamma beta alpha)  (gamma beta alpha)
 ```
+
+GNU *preserves* order only in the FORMAT position; everything else reverses in
+both.
 
 Reached in practice through any error message built with `format` from a
 propertized template — `ac-octave` sees it in inferior-octave's
@@ -725,6 +732,41 @@ returning — which leaves the collection showing in two windows — `next-error
 continues from the wrong window's position and visits the wrong match (the first
 collected line in GNU, the third here). Any package that shows a buffer twice and
 then acts "on the window the user is in" is affected. Affects: `all-ext` (1).
+
+## 28. An error signalled in `pre-command-hook` is not reported
+
+Both editors remove the failing hook; only GNU says why. Third member of the
+silent-diagnostic family, with entries 17 and 18 — but unlike the process-filter
+one this is assertable, because GNU logs and continues rather than dying.
+
+```elisp
+(add-hook 'pre-command-hook (lambda () (error "hook boom")) nil t)
+(execute-kbd-macro "x")
+(list (buffer-string) (copy-sequence pre-command-hook)
+      (with-current-buffer "*Messages*" (buffer-string)))
+;; GNU     => "x", (t), "Error in pre-command-hook (…): (error \"hook boom\")"
+;; Neomacs => "x", (t), ""
+```
+
+A mode whose hook has just been disabled by an error explains itself in GNU and
+goes quiet here. Affects: `alt-codes` (1).
+
+## 29. `function-key-map` holds a malformed translation for keypad digits
+
+The value must be a key vector; Neomacs wraps the character in a list, so the
+translation never fires.
+
+```elisp
+(lookup-key function-key-map [kp-6])
+;; GNU     => [54]
+;; Neomacs => [(54)]
+```
+
+`(key-binding (kbd "M-6"))` is `digit-argument` in both, so the binding is right
+and only the translation is wrong: `M-<kp-6>` reaches no binding at all
+("M-6 is undefined") where GNU dispatches `digit-argument`. Anything reached
+through a keypad key — numeric prefixes, `kp-add`, calc, any user binding on the
+keypad — is affected. Affects: `alt-codes` (1).
 
 ---
 
