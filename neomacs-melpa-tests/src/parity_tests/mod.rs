@@ -232,6 +232,7 @@ mod auto_compile;
 mod auto_complete;
 mod auto_dark;
 mod auto_dictionary;
+mod auto_dim_other_buffers;
 mod bind_key;
 mod compat;
 mod dash;

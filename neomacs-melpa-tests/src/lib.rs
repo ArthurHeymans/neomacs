@@ -1066,6 +1066,13 @@ pub const AUTO_DARK_MELPA_PIN: (&str, &str) = ("auto-dark", "20260313.2356");
 /// archive from upstream commit `b364e08009fe0062cf0927d8a0582fad5a12b8e7`.
 pub const AUTO_DICTIONARY_MELPA_PIN: (&str, &str) = ("auto-dictionary", "20150410.1610");
 
+/// The exact auto-dim-other-buffers package selected by the comprehensive
+/// face-remapping, window-selection, focus, customization, hook, advice, and
+/// global-mode lifecycle parity corpus. MELPA built this archive from upstream
+/// commit `cf0263073470190b85f6013066856126aac67d19`.
+pub const AUTO_DIM_OTHER_BUFFERS_MELPA_PIN: (&str, &str) =
+    ("auto-dim-other-buffers", "20260624.950");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
