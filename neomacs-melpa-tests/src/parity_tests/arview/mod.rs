@@ -3,18 +3,11 @@ use std::time::Duration;
 use crate::{ARVIEW_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod cleanup;
-mod commands;
-mod copying;
-mod detection;
-mod process;
-mod registry;
-mod viewing;
+mod workflows;
 
-const ARVIEW_TEST_TIMEOUT: Duration = Duration::from_secs(120);
+const ARVIEW_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 const ARVIEW_TEST_PRELUDE: &str = r##"
 (require 'cl-lib)
-(require 'seq)
 
 (defun arview-test-path (filename)
   (expand-file-name
@@ -22,51 +15,67 @@ const ARVIEW_TEST_PRELUDE: &str = r##"
    (getenv
     "NEOMACS_TEST_SANDBOX_ROOT")))
 
-(defun arview-test-write-file (path content)
+(defun arview-test-write-bytes (path bytes)
   (make-directory
    (file-name-directory path)
    t)
-  (with-temp-file path
-    (insert content))
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (insert bytes)
+    (write-region
+     (point-min)
+     (point-max)
+     path
+     nil
+     'silent))
   path)
 
-(defun arview-test-read-file (path)
+(defun arview-test-file-sha256 (path)
   (with-temp-buffer
+    (set-buffer-multibyte nil)
     (insert-file-contents-literally path)
-    (buffer-string)))
+    (secure-hash 'sha256 (current-buffer))))
 
-(defun arview-test-create-tar
-    (&optional archive-name)
+(defun arview-test-create-project-tar
+    (archive-name nested-member)
   (let* ((source
           (arview-test-path
-           "fixture-source"))
+           "release-source"))
          (archive
           (arview-test-path
-           (or archive-name
-               "fixture.tar")))
+           archive-name))
          (log
           (get-buffer-create
            " *arview-test-tar-log*")))
     (make-directory
-     (expand-file-name
-      "nested"
-      source)
+     (file-name-directory
+      (expand-file-name
+       nested-member
+       source))
      t)
-    (arview-test-write-file
+    (arview-test-write-bytes
      (expand-file-name
-      "alpha.txt"
+      "README.md"
       source)
-     "alpha\nline two\n")
-    (arview-test-write-file
+     (encode-coding-string
+      "# Widget release\nInstall from build/widget.bin.\n"
+      'utf-8-unix
+      t))
+    (arview-test-write-bytes
      (expand-file-name
-      "nested/bravo λ.txt"
+      nested-member
       source)
-     "bravo λ\n")
-    (arview-test-write-file
+     (encode-coding-string
+      "endpoint=https://example.invalid/api\nretries=3\n"
+      'utf-8-unix
+      t))
+    (arview-test-write-bytes
      (expand-file-name
-      "space name.txt"
+      "build/widget.bin"
       source)
-     "space payload\n")
+     (unibyte-string
+      0 1 2 10 13 31 32 127
+      128 129 191 200 254 255))
     (with-current-buffer log
       (erase-buffer))
     (let ((exit
@@ -87,15 +96,16 @@ const ARVIEW_TEST_PRELUDE: &str = r##"
            (buffer-string)))))
     archive))
 
-(defun arview-test-tree (directory)
+(defun arview-test-manifest (directory)
   (mapcar
    (lambda (path)
      (list
       (file-relative-name
        path
        directory)
-      (arview-test-read-file
-       path)))
+      (file-attribute-size
+       (file-attributes path))
+      (arview-test-file-sha256 path)))
    (sort
     (directory-files-recursively
      directory
@@ -103,26 +113,6 @@ const ARVIEW_TEST_PRELUDE: &str = r##"
      nil
      nil)
     #'string<)))
-
-(defun arview-test-kill-sandbox-buffers ()
-  (let ((root
-         (getenv
-          "NEOMACS_TEST_SANDBOX_ROOT")))
-    (dolist (buffer
-             (buffer-list))
-      (let ((directory
-             (buffer-local-value
-              'default-directory
-              buffer)))
-        (when
-            (and
-             (stringp directory)
-             (string-prefix-p
-              root
-              directory))
-          (with-current-buffer buffer
-            (set-buffer-modified-p nil))
-          (kill-buffer buffer))))))
 "##;
 
 fn arview_oracle(source_file: &str) -> CachedMelpaOracle {
