@@ -172,6 +172,26 @@ pub const YAXCEPTION_MELPA_PIN: (&str, &str) = ("yaxception", "20240107.504");
 /// upstream commit `4803ce41a96224e6fa54e6741a5b5f40ebed7351`.
 pub const AUTO_COMPLETE_RST_MELPA_PIN: (&str, &str) = ("auto-complete-rst", "20140225.944");
 
+/// The exact auto-complete-sage package selected by the comprehensive
+/// documentation-cache, REPL, edit-buffer, source, setup, and practical Sage
+/// completion workflow parity corpus. MELPA built this archive from upstream
+/// commit `51b8e3905196d266e1f8aa47881189833151b398`.
+pub const AUTO_COMPLETE_SAGE_MELPA_PIN: (&str, &str) = ("auto-complete-sage", "20160514.751");
+
+/// The exact current sage-shell-mode dependency selected for the
+/// auto-complete-sage integration corpus. MELPA built this archive from
+/// upstream commit `bb59cd559a9d7639d9ef16addbb0809ea4790392`.
+pub const SAGE_SHELL_MODE_MELPA_PIN: (&str, &str) = ("sage-shell-mode", "20260523.1504");
+
+/// The exact deferred dependency selected for the sage-shell-mode package
+/// graph. MELPA built this archive from upstream commit
+/// `2239671d94b38d92e9b28d4e12fd79814cfb9c16`.
+pub const DEFERRED_MELPA_PIN: (&str, &str) = ("deferred", "20170901.1330");
+
+/// The exact GNU ELPA let-alist dependency selected for the sage-shell-mode
+/// package graph.
+pub const LET_ALIST_GNU_ELPA_PIN: (&str, &str) = ("let-alist", "1.0.6");
+
 /// The exact audio-notes-mode package selected by the comprehensive
 /// filesystem, playback, process-control, mode-line, advice, and global-mode
 /// lifecycle parity corpus. MELPA built this archive from upstream commit

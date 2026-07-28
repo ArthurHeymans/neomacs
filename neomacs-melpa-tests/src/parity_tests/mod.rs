@@ -240,6 +240,7 @@ mod auto_complete_exuberant_ctags;
 mod auto_complete_nxml;
 mod auto_complete_pcmp;
 mod auto_complete_rst;
+mod auto_complete_sage;
 mod auto_dark;
 mod auto_dictionary;
 mod auto_dim_other_buffers;
