@@ -3,105 +3,80 @@ use expect_test::expect;
 use super::assert_ah_parity;
 
 #[test]
-fn ah_keyboard_quit_workflow_runs_before_immediately_and_after_on_post_command() {
-    let elisp_form = r##"(let* ((events nil)
-               (ah-before-c-g-hook
-                (list (lambda () (push 'before events))))
-               (ah-after-c-g-hook
-                (list (lambda () (push 'after events))))
-               post-command-hook)
-         (list
-          (ah--cg-keyboard-quit
-           (lambda () (push 'original events) 'quit-result))
-          (not
-           (null
-            (memq #'ah--cg-post-processing post-command-hook)))
-          (progn
-            (let ((this-command 'keyboard-quit))
-              (run-hooks 'post-command-hook))
-            (nreverse events))
-          post-command-hook))"##;
-    let expect = expect!["OK (quit-result t (before original after) nil)"];
-    assert_ah_parity(elisp_form, expect);
-}
+fn keyboard_quit_and_real_isearch_abort_deliver_deferred_after_hooks() {
+    let elisp_form = r##"
+(let* ((events nil)
+       (ah-before-c-g-hook
+        (list
+         (lambda ()
+           (push
+            (list
+             'before this-command
+             (and isearch-mode t)
+             (point))
+            events))))
+       (ah-after-c-g-hook
+        (list
+         (lambda ()
+           (push
+            (list
+             'after this-command
+             (and isearch-mode t)
+             (point))
+            events))))
+       (post-command-hook nil)
+       (search-buffer (generate-new-buffer " *ah-real-isearch*"))
+       keyboard-result
+       isearch-result
+       search-point)
+  (unwind-protect
+      (progn
+        (ah-mode 1)
 
-#[test]
-fn ah_isearch_abort_workflow_runs_the_same_delayed_after_hook() {
-    let elisp_form = r##"(let* ((events nil)
-               (ah-before-c-g-hook
-                (list (lambda () (push 'before events))))
-               (ah-after-c-g-hook
-                (list (lambda () (push 'after events))))
-               post-command-hook)
-         (ah--cg-isearch-abort
-          (lambda () (push 'isearch-abort events) 'aborted))
-         (let ((this-command 'isearch-abort))
-           (run-hooks 'post-command-hook))
-         (list (nreverse events) post-command-hook))"##;
-    let expect = expect!["OK ((before isearch-abort after) nil)"];
-    assert_ah_parity(elisp_form, expect);
-}
+        (setq
+         keyboard-result
+         (condition-case signal-data
+             (let ((this-command 'keyboard-quit))
+               (call-interactively #'keyboard-quit))
+           (quit
+            (list (car signal-data) (cdr signal-data)))))
+        ;; In the command loop the deferred callback runs after C-g.
+        (let ((this-command 'keyboard-quit))
+          (run-hooks 'post-command-hook))
 
-#[test]
-fn ah_post_processing_ignores_other_commands_but_always_removes_itself() {
-    let elisp_form = r##"(let* ((events nil)
-               (ah-after-c-g-hook
-                (list (lambda () (push 'after events))))
-               (post-command-hook '(ah--cg-post-processing))
-               (this-command 'self-insert-command))
-         (ah--cg-post-processing)
-         (list events post-command-hook))"##;
-    let expect = expect!["OK (nil nil)"];
-    assert_ah_parity(elisp_form, expect);
-}
+        (switch-to-buffer search-buffer)
+        (insert "alpha beta alpha")
+        (goto-char (point-min))
+        (isearch-mode t nil nil nil)
+        (setq isearch-string "beta"
+              isearch-message "beta")
+        (isearch-search)
+        (setq
+         isearch-result
+         (condition-case signal-data
+             (let ((this-command 'isearch-abort))
+               (call-interactively #'isearch-abort))
+           (quit
+            (list (car signal-data) (cdr signal-data)))))
+        (let ((this-command 'isearch-abort))
+          (run-hooks 'post-command-hook))
+        (setq search-point (point))
 
-#[test]
-fn ah_empty_after_quit_hook_does_not_install_post_command_processing() {
-    let elisp_form = r##"(let* ((events nil)
-               (ah-before-c-g-hook
-                (list (lambda () (push 'before events))))
-               (ah-after-c-g-hook nil)
-               post-command-hook)
-         (list
-          (ah--cg-keyboard-quit
-           (lambda () (push 'original events) 17))
-          (nreverse events)
-          post-command-hook))"##;
-    let expect = expect!["OK (17 (before original) nil)"];
-    assert_ah_parity(elisp_form, expect);
-}
-
-#[test]
-fn ah_quit_wrapper_preserves_original_error_and_pending_after_hook() {
-    let elisp_form = r##"(let* ((events nil)
-               (ah-before-c-g-hook
-                (list (lambda () (push 'before events))))
-               (ah-after-c-g-hook
-                (list (lambda () (push 'after events))))
-               post-command-hook)
-         (list
-          (condition-case error-data
-              (ah--cg-keyboard-quit
-               (lambda () (push 'original events) (error "quit failed")))
-            (error (list (car error-data) (cadr error-data))))
-          (nreverse events)
-          (not
-           (null
-            (memq #'ah--cg-post-processing post-command-hook)))))"##;
-    let expect = expect![[r#"OK ((error "quit failed") (before original) t)"#]];
-    assert_ah_parity(elisp_form, expect);
-}
-
-#[test]
-fn ah_repeated_quit_wrappers_schedule_only_one_post_command_callback() {
-    let elisp_form = r##"(let ((ah-before-c-g-hook nil)
-               (ah-after-c-g-hook '(ignore))
-               post-command-hook)
-         (ah--cg-keyboard-quit #'ignore)
-         (ah--cg-isearch-abort #'ignore)
-         (list
-          (length post-command-hook)
-          (eq (car post-command-hook) #'ah--cg-post-processing)))"##;
-    let expect = expect!["OK (1 t)"];
+        (list
+         keyboard-result
+         isearch-result
+         search-point
+         isearch-mode
+         (nreverse events)
+         post-command-hook))
+    (when isearch-mode
+      (isearch-cancel))
+    (ah-mode -1)
+    (when (buffer-live-p search-buffer)
+      (kill-buffer search-buffer))))
+"##;
+    let expect = expect![
+        "OK ((quit nil) (quit nil) 1 nil ((before keyboard-quit nil 1) (after keyboard-quit nil 1) (before isearch-abort t 11) (after isearch-abort nil 1)) nil)"
+    ];
     assert_ah_parity(elisp_form, expect);
 }

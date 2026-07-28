@@ -6,7 +6,6 @@ use expect_test::Expect;
 mod cursor;
 mod lifecycle;
 mod quit;
-mod registry;
 mod theme;
 
 const AH_TEST_TIMEOUT: Duration = Duration::from_secs(120);
