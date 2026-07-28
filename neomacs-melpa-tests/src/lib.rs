@@ -786,7 +786,9 @@ pub const ANNOTATION_MELPA_PIN: (&str, &str) = ("annotation", "20250805.1029");
 /// parity corpus.
 pub const ANNOYING_ARROWS_MODE_MELPA_PIN: (&str, &str) = ("annoying-arrows-mode", "20161024.646");
 
-/// The exact ansi package selected by the comprehensive API parity corpus.
+/// The exact ansi package selected by the practical terminal-rendering parity
+/// corpus. MELPA built this archive from upstream commit
+/// `a3aa9daa37a75fec22186399014a790a6c554311`.
 pub const ANSI_MELPA_PIN: (&str, &str) = ("ansi", "20251118.230");
 
 /// The exact Ansible package selected by the comprehensive playbook editing
