@@ -3,17 +3,47 @@ use std::time::Duration;
 use crate::{AIO_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod async_flow;
-mod boundaries;
-mod promise;
-mod select_sem;
-mod surface;
+mod workflows;
 
-const AIO_TEST_TIMEOUT: Duration = Duration::from_secs(60);
+const AIO_TEST_TIMEOUT: Duration = Duration::from_secs(180);
+
+/// aio gives Emacs async/await over promises, so every workflow runs a real
+/// asynchronous story: `aio-defun' functions awaiting each other, timers,
+/// `aio-select' racing promises, and a real subprocess feeding a callback
+/// chain.  Nothing is stood in.
+///
+/// The determinism rule for this package is narrower than usual.  Timer-based
+/// promises resolve in a defined order and can be pinned; process output
+/// cannot, because the number of chunks a filter receives is up to the
+/// kernel.  So the process workflow chains on every chunk but asserts the
+/// joined text and the sentinel's own event, never the chunk boundaries.
+const AIO_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+
+(defun aio-test-plain (value)
+  (cond ((stringp value) (substring-no-properties value))
+        ((consp value)
+         (cons (aio-test-plain (car value)) (aio-test-plain (cdr value))))
+        (t value)))
+
+(defun aio-test-path (name)
+  (expand-file-name name (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
+
+(defun aio-test-script (name text)
+  "Write an executable NAME below the sandbox and return its path."
+  (let ((path (aio-test-path name)))
+    (make-directory (file-name-directory path) t)
+    (with-temp-buffer
+      (insert text)
+      (write-region (point-min) (point-max) path nil 'silent))
+    (set-file-modes path #o755)
+    path))
+"##;
 
 fn aio_oracle() -> CachedMelpaOracle {
     CachedMelpaOracle::new(AIO_MELPA_PIN, "aio.el")
         .expect("prepare pinned aio source below ./tmp")
+        .with_prelude(AIO_TEST_PRELUDE)
         .with_timeout(AIO_TEST_TIMEOUT)
 }
 
