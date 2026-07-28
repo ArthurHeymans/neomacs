@@ -3,17 +3,11 @@ use std::time::Duration;
 use crate::{ARCHIVE_REGION_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod archiving;
-mod dispatch;
-mod headers;
-mod opening;
-mod paths;
-mod registry;
+mod workflows;
 
 const ARCHIVE_REGION_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 const ARCHIVE_REGION_TEST_PRELUDE: &str = r##"
 (require 'cl-lib)
-(require 'seq)
 
 (defun archive-region-test-path
     (filename)
@@ -44,10 +38,22 @@ const ARCHIVE_REGION_TEST_PRELUDE: &str = r##"
           (with-current-buffer buffer
             (set-buffer-modified-p nil))
           (kill-buffer buffer))))))
+
+(defun archive-region-test-cleanup
+    (source archive)
+  (archive-region-test-kill-file-buffers)
+  (cond
+   ((file-directory-p archive)
+    (delete-directory archive t))
+   ((file-exists-p archive)
+    (delete-file archive)))
+  (when
+      (file-exists-p source)
+    (delete-file source)))
 "##;
 
-fn archive_region_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ARCHIVE_REGION_MELPA_PIN, source_file)
+fn archive_region_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ARCHIVE_REGION_MELPA_PIN, "archive-region.el")
         .expect("prepare pinned archive-region source below ./tmp")
         .with_prelude(ARCHIVE_REGION_TEST_PRELUDE)
         .with_timeout(ARCHIVE_REGION_TEST_TIMEOUT)
@@ -61,18 +67,10 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_archive_region_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_archive_region_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = archive_region_oracle(source_file)
+    let report = archive_region_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("archive-region parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_archive_region_parity(elisp_form: &str, expected: Expect) {
-    assert_archive_region_source_parity("archive-region.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_archive_region_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_archive_region_source_parity("archive-region-autoloads.el", elisp_form, expected);
 }
