@@ -22,6 +22,20 @@ use neovm_core::buffer::{CharPos0, EmacsBytePos};
 
 use crate::display_text_run_measurement::DisplayTextRunMeasurement;
 
+/// Which axis a `(space …)` length measures — GNU's `width_p` argument to
+/// `calc_pixel_width_or_height`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PixelCalcAxis {
+    Horizontal,
+    Vertical,
+}
+
+impl PixelCalcAxis {
+    const fn is_horizontal(self) -> bool {
+        matches!(self, Self::Horizontal)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayRowLayout {
     pub(crate) role: GlyphRowRole,
@@ -1729,12 +1743,16 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         let pixel_height = stretch
             .height
             .as_ref()
-            .and_then(|length| self.length_pixels(length, self.layout.height_px))
+            .and_then(|length| {
+                self.length_pixels(length, self.layout.height_px, PixelCalcAxis::Vertical)
+            })
             .unwrap_or(0.0);
         let pixel_ascent = stretch
             .ascent
             .as_ref()
-            .and_then(|length| self.length_pixels(length, self.layout.ascent_px))
+            .and_then(|length| {
+                self.length_pixels(length, self.layout.ascent_px, PixelCalcAxis::Vertical)
+            })
             .unwrap_or(0.0);
 
         glyph_row_writer::push_stretch_to_area(
@@ -1869,7 +1887,11 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     fn stretch_width(&self, width: &DisplayStretchWidth) -> Option<(u16, f32)> {
         match width {
             DisplayStretchWidth::Length(length) => {
-                let pixels = self.length_pixels(length, self.layout.char_width_px)?;
+                let pixels = self.length_pixels(
+                    length,
+                    self.layout.char_width_px,
+                    PixelCalcAxis::Horizontal,
+                )?;
                 let cols = (pixels / self.layout.char_width_px.max(1.0))
                     .ceil()
                     .max(1.0) as u16;
@@ -1925,7 +1947,18 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         }
     }
 
-    fn length_pixels(&self, length: &DisplayLength, em_px: f32) -> Option<f32> {
+    /// Evaluate a `(space :width/:height/:ascent …)` length.
+    ///
+    /// `axis` selects GNU's `width_p`: `:width` is horizontal (xdisp.c:32794),
+    /// while `:height` (:32893) and `:ascent` (:32914) are vertical, so bare
+    /// numbers scale by `FRAME_LINE_HEIGHT` rather than `FRAME_COLUMN_WIDTH`
+    /// and `in`/`mm`/`cm` convert through the vertical resolution.
+    fn length_pixels(
+        &self,
+        length: &DisplayLength,
+        em_px: f32,
+        axis: PixelCalcAxis,
+    ) -> Option<f32> {
         match length {
             DisplayLength::Columns(cols) => Some(f32::from(*cols) * self.layout.char_width_px),
             DisplayLength::Pixels(px) => Some(*px),
@@ -1936,7 +1969,8 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             // authority scales bare numbers consistently with the explicit
             // `Em` arm above.
             DisplayLength::Expr(prop) => {
-                calc_pixel_width_or_height(&self.layout.pixel_calc, prop, true, None)
+                let pixel_calc = self.layout.pixel_calc_for_space_spec(prop);
+                calc_pixel_width_or_height(&pixel_calc, prop, axis.is_horizontal(), None)
                     .map(|pixels| pixels as f32)
             }
         }

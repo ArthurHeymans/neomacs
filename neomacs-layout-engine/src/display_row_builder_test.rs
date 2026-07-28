@@ -1498,6 +1498,45 @@ fn display_row_vertical_metrics_include_in_row_only_grows_extents() {
     assert_eq!(row.ascent_px, 20.0);
 }
 
+/// `(space :height EXPR)` and `:ascent EXPR` are vertical measurements: GNU
+/// evaluates both with `width_p = false` (xdisp.c:32893 and :32914), so a bare
+/// number scales by `FRAME_LINE_HEIGHT`, not `FRAME_COLUMN_WIDTH`.
+///
+/// The row builder evaluated every `DisplayLength::Expr` with `width_p = true`,
+/// so a height expression came out scaled by the character WIDTH. The
+/// buffer-text path (`DisplaySpaceHeightPolicy`/`DisplaySpaceAscentPolicy`)
+/// already passed `false` — the two paths had drifted.
+#[test]
+fn display_row_builder_scales_height_expressions_by_line_height() {
+    let mut eval = Context::new();
+    // `(+ 1 1)` is an arithmetic form, so it reaches the evaluator rather than
+    // the plain-number `Em` arm.
+    let expr = eval
+        .eval_str("(quote (+ 1 1))")
+        .expect("read height expression");
+
+    let mut builder = DisplayRowBuilder::new(layout());
+    builder.push_item(DisplayItem::new(
+        SourceSpan::synthetic(1, 0, 1),
+        RenderFaceRef::FaceId(FaceId::new(2)),
+        DisplayItemKind::Stretch(DisplayStretch {
+            width: DisplayStretchWidth::Length(DisplayLength::Pixels(8.0)),
+            height: Some(DisplayLength::Expr(expr)),
+            ascent: None,
+        }),
+    ));
+
+    let row = builder.finish();
+    let glyph = &row.glyphs[GlyphArea::Text.index()][0];
+
+    // The fixture row has char width 8 and line height 16, so the two scalings
+    // are distinguishable: 2 x 16 = 32, not 2 x 8 = 16.
+    assert_eq!(
+        glyph.pixel_height, 32.0,
+        "a `:height` expression must scale by line height, not char width"
+    );
+}
+
 #[test]
 fn display_row_builder_ceil_pixel_stretch_columns() {
     let mut builder = DisplayRowBuilder::new(layout());
