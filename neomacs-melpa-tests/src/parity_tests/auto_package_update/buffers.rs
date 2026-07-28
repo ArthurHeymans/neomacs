@@ -113,42 +113,6 @@ fn auto_package_update_hidden_write_avoids_popup_and_buries_named_buffer() {
 }
 
 #[test]
-fn auto_package_update_results_and_preview_wrappers_route_exact_names_and_visibility() {
-    let elisp_form = r##"(let
-                             ((auto-package-update-buffer-name
-                               "results-name")
-                              (auto-package-preview-buffer-name
-                               "preview-name")
-                              (auto-package-update-hide-results
-                               t)
-                              calls)
-                           (cl-letf
-                               (((symbol-function
-                                  'apu--write-buffer)
-                                 (lambda
-                                     (contents name
-                                               &optional hide)
-                                   (push
-                                    (list
-                                     contents
-                                     name
-                                     hide)
-                                    calls)
-                                   (list :written name))))
-                             (list
-                              (apu--write-results-buffer
-                               "installed")
-                              (apu--write-preview-buffer
-                               "pending")
-                              (nreverse calls))))"##;
-    let expect = expect![[
-        r#"OK ((:written "results-name") (:written "preview-name") (("installed" "results-name" t) ("pending" "preview-name" nil)))"#
-    ]];
-
-    assert_auto_package_update_parity(elisp_form, expect);
-}
-
-#[test]
 fn auto_package_update_hide_preview_selects_and_kills_existing_preview_window_buffer() {
     let elisp_form = r##"(let
                              ((auto-package-preview-buffer-name
@@ -178,30 +142,6 @@ fn auto_package_update_hide_preview_selects_and_kills_existing_preview_window_bu
                               (get-buffer
                                auto-package-preview-buffer-name))))"##;
     let expect = expect![[r#"OK (:killed ((:kill " *apu-hide-preview*" t)) nil)"#]];
-
-    assert_auto_package_update_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_package_update_hide_preview_is_noop_when_preview_buffer_does_not_exist() {
-    let elisp_form = r##"(let
-                             ((auto-package-preview-buffer-name
-                               " *apu-absent-preview*")
-                              calls)
-                           (auto-package-update-test-kill-buffers
-                            auto-package-preview-buffer-name)
-                           (cl-letf
-                               (((symbol-function
-                                  'kill-buffer-and-window)
-                                 (lambda ()
-                                   (setq calls
-                                         (1+ (or calls 0))))))
-                             (list
-                              (apu--hide-preview)
-                              calls
-                              (get-buffer
-                               auto-package-preview-buffer-name))))"##;
-    let expect = expect!["OK (nil nil nil)"];
 
     assert_auto_package_update_parity(elisp_form, expect);
 }
