@@ -1202,6 +1202,12 @@ pub const AUTO_READ_ONLY_MELPA_PIN: (&str, &str) = ("auto-read-only", "20260521.
 /// `9318338bdb7fe8bd698d88f3af89b2d6413efdd2`.
 pub const AUTO_ORG_MD_MELPA_PIN: (&str, &str) = ("auto-org-md", "20180213.2343");
 
+/// The exact auto-package-update package selected by the comprehensive update
+/// selection, scheduling, prompting, package transaction, results buffer, old
+/// version cleanup, and async lifecycle parity corpus. MELPA built this archive
+/// from upstream commit `e966c6c95de1742d867250dc15b1c6bd570b6ea5`.
+pub const AUTO_PACKAGE_UPDATE_MELPA_PIN: (&str, &str) = ("auto-package-update", "20260601.1804");
+
 /// The exact ht package selected as auto-highlight-symbol's hash-table
 /// dependency. MELPA built this archive from upstream commit
 /// `1c49aad1c820c86f7ee35bf9fff8429502f60fef`.

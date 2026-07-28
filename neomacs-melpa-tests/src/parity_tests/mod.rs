@@ -248,6 +248,7 @@ mod auto_highlight_symbol;
 mod auto_indent_mode;
 mod auto_minor_mode;
 mod auto_org_md;
+mod auto_package_update;
 mod auto_read_only;
 mod bind_key;
 mod compat;
