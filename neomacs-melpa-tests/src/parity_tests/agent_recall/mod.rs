@@ -3,35 +3,17 @@ use std::time::Duration;
 use crate::{AGENT_RECALL_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod backfill;
-mod browse;
-mod consult;
-mod index;
+mod interaction;
+mod matching;
 mod search;
-mod sessions;
-mod surface;
-mod tracking;
-mod transcripts;
+mod smoke;
+mod workflows;
 
 const AGENT_RECALL_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
 fn agent_recall_oracle(source_file: &str) -> CachedMelpaOracle {
-    let prelude = if source_file == "agent-recall-consult.el" {
-        r##"(unless (require 'agent-shell nil t)
-               (provide 'agent-shell))
-             (unless (featurep 'agent-recall)
-               (load
-                (expand-file-name
-                 "agent-recall.el"
-                 (file-name-directory
-                  (getenv "NEOMACS_PACKAGE_SOURCE")))
-                nil t t))"##
-    } else {
-        "(unless (require 'agent-shell nil t) (provide 'agent-shell))"
-    };
     CachedMelpaOracle::new(AGENT_RECALL_MELPA_PIN, source_file)
-        .expect("prepare pinned agent-recall source below ./tmp")
-        .with_prelude(prelude)
+        .expect("prepare pinned agent-recall source and dependency transaction below ./tmp")
         .with_timeout(AGENT_RECALL_TEST_TIMEOUT)
 }
 
@@ -55,6 +37,6 @@ pub(crate) fn assert_agent_recall_parity(elisp_form: &str, expected: Expect) {
     assert_agent_recall_source_parity("agent-recall.el", elisp_form, expected);
 }
 
-pub(crate) fn assert_agent_recall_consult_parity(elisp_form: &str, expected: Expect) {
-    assert_agent_recall_source_parity("agent-recall-consult.el", elisp_form, expected);
+pub(crate) fn assert_agent_recall_autoload_parity(elisp_form: &str, expected: Expect) {
+    assert_agent_recall_source_parity("agent-recall-autoloads.el", elisp_form, expected);
 }
