@@ -3,17 +3,89 @@ use std::time::Duration;
 use crate::{ANSILOVE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod conversion;
-mod filesystem;
-mod mode;
-mod registry;
-mod workflow;
+mod practical;
 
 const ANSILOVE_TEST_TIMEOUT: Duration = Duration::from_secs(180);
+const ANSILOVE_TEST_PRELUDE: &str = r##"
+(defun neomacs-ansilove-test-cleanup (root)
+  (dolist (buffer (buffer-list))
+    (let ((file (buffer-file-name buffer)))
+      (when
+          (and file
+               (string-prefix-p root file))
+        (with-current-buffer buffer
+          (set-buffer-modified-p nil))
+        (kill-buffer buffer))))
+  (when (get-buffer "*Ansilove-Output*")
+    (kill-buffer "*Ansilove-Output*"))
+  (when (file-exists-p root)
+    (delete-directory root t)))
 
-fn ansilove_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ANSILOVE_MELPA_PIN, source_file)
+(defun neomacs-ansilove-test-write-file (file contents)
+  (make-directory (file-name-directory file) t)
+  (with-temp-file file
+    (insert contents)))
+
+(defun neomacs-ansilove-test-read-bytes (file)
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (insert-file-contents-literally file)
+    (string-to-list (buffer-string))))
+
+(defun neomacs-ansilove-test-file-summary (file)
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (insert-file-contents-literally file)
+    (list
+     (buffer-size)
+     (string-to-list
+      (buffer-substring-no-properties
+       (point-min)
+       (+ (point-min) 8))))))
+
+(defun neomacs-ansilove-test-output-name (file root)
+  (let ((relative (file-relative-name file root)))
+    (setq relative
+          (replace-regexp-in-string
+           "ansilove_[0-9]+\\.png\\'"
+           "ansilove_<id>.png"
+           relative))
+    (replace-regexp-in-string
+     "\\.\\#ansilove_[0-9]+\\.txt\\'"
+     ".#ansilove_<id>.txt"
+     relative)))
+
+(defun neomacs-ansilove-test-write-converter (root)
+  (let ((converter
+         (expand-file-name "bin/ansilove-fixture" root)))
+    (neomacs-ansilove-test-write-file
+     converter
+     (concat
+      "#!/bin/sh\n"
+      "set -eu\n"
+      "if [ \"$#\" -ne 3 ] || [ \"$1\" != \"-o\" ]; then\n"
+      "  printf 'usage: ansilove-fixture -o OUTPUT INPUT\\n' >&2\n"
+      "  exit 64\n"
+      "fi\n"
+      "output=$2\n"
+      "input=$3\n"
+      "if [ ! -r \"$input\" ]; then\n"
+      "  printf 'unreadable input: %s\\n' \"$input\" >&2\n"
+      "  exit 66\n"
+      "fi\n"
+      "bytes=$(wc -c < \"$input\" | tr -d ' ')\n"
+      "printf 'ansilove-fixture: converted %s bytes\\n' \"$bytes\"\n"
+      "printf '%s' "
+      "'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=' "
+      "| base64 -d > \"$output\"\n"))
+    (set-file-modes converter #o755)
+    converter))
+"##;
+
+fn ansilove_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ANSILOVE_MELPA_PIN, "ansilove.el")
         .expect("prepare pinned ansilove source below ./tmp")
+        .with_prelude(ANSILOVE_TEST_PRELUDE)
         .with_timeout(ANSILOVE_TEST_TIMEOUT)
 }
 
@@ -25,26 +97,10 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_ansilove_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_ansilove_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = ansilove_oracle(source_file)
+    let report = ansilove_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("ansilove parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ansilove_parity(elisp_form: &str, expected: Expect) {
-    assert_ansilove_source_parity("ansilove.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_ansilove_signal_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ansilove_oracle("ansilove.el")
-        .run_signal(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("ansilove signal parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ansilove_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_ansilove_source_parity("ansilove-autoloads.el", elisp_form, expected);
 }
