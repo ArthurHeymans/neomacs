@@ -941,6 +941,12 @@ pub const ATL_LONG_LINES_MELPA_PIN: (&str, &str) = ("atl-long-lines", "20240101.
 /// `b616343ffe17060d521b214b8e90f5da1e880934`.
 pub const ATL_MARKUP_MELPA_PIN: (&str, &str) = ("atl-markup", "20240101.933");
 
+/// The exact audacious package selected by the comprehensive command,
+/// playlist, song-selection, metadata, and end-to-end playback parity corpus.
+/// MELPA built this archive from upstream commit
+/// `65c37f12a5c774a0ae434beee27ff7737006dd2f`.
+pub const AUDACIOUS_MELPA_PIN: (&str, &str) = ("audacious", "20210917.51");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
@@ -968,6 +974,10 @@ pub const GENERAL_MELPA_PIN: (&str, &str) = ("general", "20250612.2309");
 
 /// The exact goto-chg package selected by the comprehensive API parity corpus.
 pub const GOTO_CHG_MELPA_PIN: (&str, &str) = ("goto-chg", "20240407.1110");
+
+/// The exact Helm package selected as audacious' runtime user-interface
+/// dependency.
+pub const HELM_MELPA_PIN: (&str, &str) = ("helm", "20260727.857");
 
 /// The exact Magit package selected by the comprehensive API parity corpus.
 pub const MAGIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
