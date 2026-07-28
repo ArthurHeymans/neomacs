@@ -81,6 +81,12 @@ pub const ASYNCLOOP_MELPA_PIN: (&str, &str) = ("asyncloop", "20240818.1247");
 /// `2b3c7ad42bbcab3214a131f8957b92e717b36ad3`.
 pub const ATOM_DARK_THEME_MELPA_PIN: (&str, &str) = ("atom-dark-theme", "20220114.1902");
 
+/// The exact atom-one-dark-theme package selected by the comprehensive
+/// palette, face, variable, remapping, and lifecycle parity corpus. MELPA
+/// built this archive from upstream commit
+/// `bba02fb2672a4c439d71920d8e068a3ff2ed463e`.
+pub const ATOM_ONE_DARK_THEME_MELPA_PIN: (&str, &str) = ("atom-one-dark-theme", "20260119.1824");
+
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 
