@@ -923,8 +923,9 @@ pub const APT_SOURCES_LIST_MELPA_PIN: (&str, &str) = ("apt-sources-list", "20180
 /// and reporting parity corpus.
 pub const AQI_MELPA_PIN: (&str, &str) = ("aqi", "20230530.1204");
 
-/// The exact arch-packer package selected by the comprehensive API parity
-/// corpus. MELPA built this archive from upstream commit
+/// The exact arch-packer package selected by the practical package listing,
+/// detail, repository refresh, search, install, marking, upgrade, and removal
+/// parity corpus. MELPA built this archive from upstream commit
 /// `940e96f7d357c6570b675a0f942181c787f1bfd7`.
 pub const ARCH_PACKER_MELPA_PIN: (&str, &str) = ("arch-packer", "20170730.1321");
 
