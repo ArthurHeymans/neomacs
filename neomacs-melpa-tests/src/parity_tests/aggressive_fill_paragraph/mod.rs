@@ -3,17 +3,20 @@ use std::time::Duration;
 use crate::{AGGRESSIVE_FILL_PARAGRAPH_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod predicates;
-mod registry;
-mod selection;
-mod workflows;
+mod editing;
+mod lifecycle;
+mod smoke;
+mod suppression;
 
 const AGGRESSIVE_FILL_PARAGRAPH_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
-fn aggressive_fill_paragraph_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(AGGRESSIVE_FILL_PARAGRAPH_MELPA_PIN, source_file)
-        .expect("prepare pinned aggressive-fill-paragraph source below ./tmp")
-        .with_timeout(AGGRESSIVE_FILL_PARAGRAPH_TEST_TIMEOUT)
+fn aggressive_fill_paragraph_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(
+        AGGRESSIVE_FILL_PARAGRAPH_MELPA_PIN,
+        "aggressive-fill-paragraph.el",
+    )
+    .expect("prepare pinned aggressive-fill-paragraph source below ./tmp")
+    .with_timeout(AGGRESSIVE_FILL_PARAGRAPH_TEST_TIMEOUT)
 }
 
 fn current_test_name() -> String {
@@ -24,32 +27,12 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_aggressive_fill_paragraph_source_parity(
-    source_file: &str,
-    elisp_form: &str,
-    expected: Expect,
-) {
+pub(crate) fn assert_aggressive_fill_paragraph_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = aggressive_fill_paragraph_oracle(source_file)
+    let report = aggressive_fill_paragraph_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| {
             panic!("aggressive-fill-paragraph parity case `{name}` failed:\n{error}")
         });
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_aggressive_fill_paragraph_parity(elisp_form: &str, expected: Expect) {
-    assert_aggressive_fill_paragraph_source_parity(
-        "aggressive-fill-paragraph.el",
-        elisp_form,
-        expected,
-    );
-}
-
-pub(crate) fn assert_aggressive_fill_paragraph_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_aggressive_fill_paragraph_source_parity(
-        "aggressive-fill-paragraph-autoloads.el",
-        elisp_form,
-        expected,
-    );
 }

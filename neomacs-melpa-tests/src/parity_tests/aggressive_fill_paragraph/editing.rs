@@ -1,0 +1,125 @@
+use expect_test::expect;
+
+use super::assert_aggressive_fill_paragraph_parity;
+
+#[test]
+fn aggressive_fill_paragraph_real_space_command_reflows_and_undo_restores_prose() {
+    let elisp_form = r##"(with-temp-buffer
+                           (text-mode)
+                           (buffer-enable-undo)
+                           (setq
+                            fill-column
+                            38)
+                           (insert
+                            "Release notes explain how parser recovery prevents data loss while preserving request order across every retry.")
+                           (let ((original
+                                  (buffer-string)))
+                             (setq
+                              buffer-undo-list
+                              nil)
+                             (aggressive-fill-paragraph-mode
+                              1)
+                             (undo-boundary)
+                             (let ((last-command-event
+                                    ?\s)
+                                   (this-command
+                                    'self-insert-command)
+                                   (real-this-command
+                                    'self-insert-command))
+                               (self-insert-command
+                                1))
+                             (undo-boundary)
+                             (let ((filled
+                                    (buffer-string))
+                                   (filled-point
+                                    (point))
+                                   (filled-line
+                                    (line-number-at-pos))
+                                   (filled-column
+                                    (current-column))
+                                   (filled-character
+                                    (char-before)))
+                               (setq
+                                buffer-undo-list
+                                (primitive-undo
+                                 2
+                                 buffer-undo-list))
+                               (list
+                                aggressive-fill-paragraph-mode
+                                filled
+                                filled-point
+                                filled-line
+                                filled-column
+                                filled-character
+                                (buffer-string)
+                                (point)
+                                (equal
+                                 original
+                                 (buffer-string))
+                                buffer-undo-list))))"##;
+    let expect = expect![[
+        r#"OK (t "Release notes explain how parser\nrecovery prevents data loss while\npreserving request order across every\nretry. " 113 4 7 32 "Release notes explain how parser recovery prevents data loss while preserving request order across every retry." 112 t nil)"#
+    ]];
+
+    assert_aggressive_fill_paragraph_parity(elisp_form, expect);
+}
+
+#[test]
+fn aggressive_fill_paragraph_real_commands_fill_comments_without_reformatting_code() {
+    let elisp_form = r####"(with-temp-buffer
+                            (emacs-lisp-mode)
+                            (setq
+                             fill-column
+                             46)
+                            (aggressive-fill-paragraph-mode
+                             1)
+                            (insert
+                             "(defun publish-result (result)\n"
+                             "  ;; Explain why the parser retries the request while preserving the original ordering guarantee.\n"
+                             "  (message \"result=%S and this source form must remain on one line\" result))")
+                            (goto-char
+                             (point-min))
+                            (forward-line
+                             1)
+                            (end-of-line)
+                            (let ((last-command-event
+                                   ?\s)
+                                  (this-command
+                                   'self-insert-command)
+                                  (real-this-command
+                                   'self-insert-command))
+                              (self-insert-command
+                               1))
+                            (let ((comment-point
+                                   (point))
+                                  (comment-line
+                                   (line-number-at-pos))
+                                  (comment-column
+                                   (current-column)))
+                              (goto-char
+                               (point-max))
+                              (let ((last-command-event
+                                     ?\s)
+                                    (this-command
+                                     'self-insert-command)
+                                    (real-this-command
+                                     'self-insert-command))
+                                (self-insert-command
+                                 1))
+                              (list
+                               (buffer-string)
+                               (list
+                                comment-point
+                                comment-line
+                                comment-column)
+                               (list
+                                (point)
+                                (line-number-at-pos)
+                                (current-column))
+                               aggressive-fill-paragraph-mode)))"####;
+    let expect = expect![[
+        r#"OK ("(defun publish-result (result)\n  ;; Explain why the parser retries the\n  ;; request while preserving the original\n  ;; ordering guarantee. \n  (message \"result=%S and this source form must remain on one line\" result)) " (140 4 25) (218 5 77) t)"#
+    ]];
+
+    assert_aggressive_fill_paragraph_parity(elisp_form, expect);
+}
