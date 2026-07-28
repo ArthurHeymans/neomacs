@@ -212,11 +212,30 @@ const LAYOUT_DEFAULT_VALUE_SYMBOLS: &[&str] = &[
     "wrap-prefix",
 ];
 
+/// The `LAYOUT_DEFAULT_VALUE_SYMBOLS` names as interned ids, computed once.
+///
+/// `layout_default_values` runs per buffer snapshot per redisplay, and
+/// interning all 19 names each time (a hash + obarray probe per name) showed
+/// up in a typing profile under the redisplay callback. The names are a
+/// compile-time constant, so their ids are too. Caching `SymId`s in a
+/// process-global `OnceLock` is the established pattern here -- eval.rs's
+/// `cached_symbol_id!` does exactly this for `quote`/`let`/etc. across every
+/// Context the test suite creates.
+fn layout_default_value_sym_ids() -> &'static [neovm_core::emacs_core::intern::SymId] {
+    use std::sync::OnceLock;
+    static IDS: OnceLock<Vec<neovm_core::emacs_core::intern::SymId>> = OnceLock::new();
+    IDS.get_or_init(|| {
+        LAYOUT_DEFAULT_VALUE_SYMBOLS
+            .iter()
+            .map(|name| intern::intern(name))
+            .collect()
+    })
+}
+
 fn layout_default_values(obarray: &Obarray) -> Vec<(neovm_core::emacs_core::intern::SymId, Value)> {
-    LAYOUT_DEFAULT_VALUE_SYMBOLS
+    layout_default_value_sym_ids()
         .iter()
-        .filter_map(|name| {
-            let id = intern::intern(name);
+        .filter_map(|&id| {
             obarray
                 .default_value_id(id)
                 .copied()
