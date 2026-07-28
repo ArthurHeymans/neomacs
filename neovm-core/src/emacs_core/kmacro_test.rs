@@ -496,6 +496,48 @@ fn test_execute_kbd_macro_real_key_events_use_command_loop_dispatch() {
 }
 
 #[test]
+fn test_execute_kbd_macro_publishes_raw_event_before_menu_filter() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let results = eval.eval_str_each(
+        r#"(progn
+             (setq kmacro-menu-filter-observations nil
+                   kmacro-menu-filter-fallthrough-count 0)
+             (fset 'command-execute
+                   (lambda (command &optional _record _keys _special)
+                     (funcall command)))
+             (fset 'kmacro-capture-last-input-event
+                   (lambda (binding)
+                     (setq kmacro-menu-filter-observations
+                           (cons (list binding last-input-event)
+                                 kmacro-menu-filter-observations))
+                     nil))
+             (let ((map (make-sparse-keymap))
+                   (global (make-sparse-keymap)))
+               (use-global-map global)
+               (define-key
+                global " "
+                (lambda ()
+                  (setq kmacro-menu-filter-fallthrough-count
+                        (1+ kmacro-menu-filter-fallthrough-count))))
+               (define-key
+                map " "
+                '(menu-item "" ignore
+                            :filter kmacro-capture-last-input-event))
+               (let ((minor-mode-map-alist (list (cons t map)))
+                     (recent-before (append (recent-keys) nil)))
+                 (execute-kbd-macro " ")
+                 (list kmacro-menu-filter-observations
+                       kmacro-menu-filter-fallthrough-count
+                       last-input-event
+                       (equal recent-before
+                              (append (recent-keys) nil))))))"#,
+    );
+    assert_eq!(results.len(), 1);
+    assert_eq!(format_eval_result(&results[0]), "OK (((ignore 32)) 1 32 t)");
+}
+
+#[test]
 fn test_execute_kbd_macro_symbol_events_use_command_loop_dispatch() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();

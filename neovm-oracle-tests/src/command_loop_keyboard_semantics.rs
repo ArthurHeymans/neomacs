@@ -228,6 +228,37 @@ fn oracle_execute_kbd_macro_select_window_affects_following_key() {
 }
 
 #[test]
+fn oracle_execute_kbd_macro_publishes_raw_event_before_menu_filter() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let expect = expect_test::expect![[r#""OK (((ignore 32)) " " 32 t)""#]];
+    crate::common::assert_oracle_parity_expect(
+        r#"(progn
+             (setq oracle-menu-filter-observations nil)
+             (fset 'oracle-capture-last-input-event
+                   (lambda (binding)
+                     (push (list binding last-input-event)
+                           oracle-menu-filter-observations)
+                     nil))
+             (let ((map (make-sparse-keymap)))
+               (define-key
+                map " "
+               '(menu-item "" ignore
+                            :filter oracle-capture-last-input-event))
+               (with-temp-buffer
+                 (let ((minor-mode-map-alist (list (cons t map)))
+                       (recent-before (append (recent-keys) nil)))
+                   (execute-kbd-macro " ")
+                   (list (nreverse oracle-menu-filter-observations)
+                         (buffer-string)
+                         last-input-event
+                         (equal recent-before
+                                (append (recent-keys) nil))))))"#,
+        expect,
+    );
+}
+
+#[test]
 fn oracle_insert_special_event_file_notify_uses_special_event_map_handler() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

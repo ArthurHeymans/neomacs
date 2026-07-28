@@ -671,6 +671,31 @@ struct KeySequenceSuffixTranslation {
 struct CurrentKeySequenceTranslation {
     translated_events: Vec<Value>,
     has_pending_translation_prefix: bool,
+    application: KeySequenceTranslationApplication,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum KeySequenceTranslationApplication {
+    NotApplied,
+    Applied,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum CommandBindingResolution {
+    Current(crate::emacs_core::keymap::ActiveKeyBindingResolution),
+    Stale,
+}
+
+impl CommandBindingResolution {
+    fn invalidate(&mut self) {
+        *self = Self::Stale;
+    }
+
+    fn invalidate_if_applied(&mut self, application: KeySequenceTranslationApplication) {
+        if application == KeySequenceTranslationApplication::Applied {
+            self.invalidate();
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1515,7 +1540,21 @@ pub struct KeyboardRuntime {
     pub kboard: KBoard,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InputEventHistoryDisposition {
+    Record,
+    SuppressDuringMacroPlayback,
+}
+
 impl KeyboardRuntime {
+    fn input_event_history_disposition(&self) -> InputEventHistoryDisposition {
+        if self.kboard.executing_kbd_macro.is_some() {
+            InputEventHistoryDisposition::SuppressDuringMacroPlayback
+        } else {
+            InputEventHistoryDisposition::Record
+        }
+    }
+
     fn event_counts_as_pending_input(event: &Value) -> bool {
         !matches!(
             crate::emacs_core::value::list_to_vec(event).as_deref(),
@@ -1945,15 +1984,19 @@ impl CommandLoop {
     }
 
     pub fn record_input_event(&mut self, event: Value) {
-        // GNU `src/keyboard.c:11168-11175` (record_char) increments
-        // `num_nonmacro_input_events` only when the event did not
-        // come from an executing keyboard macro. We mirror that
-        // here so the command_loop_1 auto-save check (audit
-        // Finding 9) sees the same counter GNU does.
-        if self.keyboard.kboard.executing_kbd_macro.is_none() {
-            self.num_nonmacro_input_events = self.num_nonmacro_input_events.saturating_add(1);
+        // GNU `read_char` publishes every accepted event through
+        // `last-input-event`, but `record_char` excludes keyboard-macro
+        // playback from recent-keys, the dribble file, and
+        // `num_nonmacro_input_events` (keyboard.c:3385,3469-3590). Keep that
+        // history policy here rather than making callers skip the whole
+        // publication operation.
+        match self.keyboard.input_event_history_disposition() {
+            InputEventHistoryDisposition::Record => {
+                self.num_nonmacro_input_events = self.num_nonmacro_input_events.saturating_add(1);
+                self.keyboard.record_input_event(event);
+            }
+            InputEventHistoryDisposition::SuppressDuringMacroPlayback => {}
         }
-        self.keyboard.record_input_event(event);
     }
 
     pub fn record_recent_command(&mut self, command: Value) {
@@ -2627,12 +2670,14 @@ impl crate::emacs_core::eval::Context {
         prompt: Value,
     ) -> Result<CurrentKeySequenceTranslation, crate::emacs_core::error::Flow> {
         let mut has_pending_translation_prefix = false;
+        let mut application = KeySequenceTranslationApplication::NotApplied;
 
         if let Some(suffix_translation) =
             self.lookup_key_sequence_suffix_translation(map, &translated, prompt)?
         {
             translated.truncate(suffix_translation.start);
             translated.extend(suffix_translation.replacement);
+            application = KeySequenceTranslationApplication::Applied;
         }
         has_pending_translation_prefix |=
             self.translation_map_has_pending_suffix_prefix(map, &translated);
@@ -2640,6 +2685,7 @@ impl crate::emacs_core::eval::Context {
         Ok(CurrentKeySequenceTranslation {
             translated_events: translated,
             has_pending_translation_prefix,
+            application,
         })
     }
 
@@ -3542,19 +3588,11 @@ impl crate::emacs_core::eval::Context {
                     .push_key_sequence_input_event(emacs_event);
                 self.publish_current_key_sequence_as_command_keys();
 
-                // GNU `record_char' (keyboard.c) does not push events that come
-                // from a keyboard macro into recent-keys: it is guarded by
-                // `NILP (Vexecuting_kbd_macro)'. So `recent-keys' reflects only
-                // real input, not the replayed macro events.
-                if self
-                    .command_loop
-                    .keyboard
-                    .kboard
-                    .executing_kbd_macro
-                    .is_none()
-                {
-                    self.record_input_event(emacs_event);
-                }
+                // GNU `read_char` updates `last-input-event` for every accepted
+                // event before keymap lookup, including keyboard-macro events.
+                // The recording layer independently suppresses macro playback
+                // from recent-keys and the non-macro input counter.
+                self.record_input_event(emacs_event);
 
                 tracing::debug!(
                     "read_key_sequence: event={} starting translation",
@@ -3629,6 +3667,8 @@ impl crate::emacs_core::eval::Context {
                 &pre_function_key_resolution.lookup,
             )
             .is_some();
+            let mut command_binding_resolution =
+                CommandBindingResolution::Current(pre_function_key_resolution);
 
             let mut has_pending_translation_prefix =
                 input_decode_translation.has_pending_translation_prefix;
@@ -3647,6 +3687,8 @@ impl crate::emacs_core::eval::Context {
                 translated_events = function_key_translation.translated_events;
                 has_pending_translation_prefix |=
                     function_key_translation.has_pending_translation_prefix;
+                command_binding_resolution
+                    .invalidate_if_applied(function_key_translation.application);
                 self.command_loop
                     .keyboard
                     .rewrite_key_sequence_translation(translated_events.clone());
@@ -3667,6 +3709,7 @@ impl crate::emacs_core::eval::Context {
             };
             translated_events = key_translation.translated_events;
             has_pending_translation_prefix |= key_translation.has_pending_translation_prefix;
+            command_binding_resolution.invalidate_if_applied(key_translation.application);
             self.command_loop
                 .keyboard
                 .rewrite_key_sequence_translation(translated_events.clone());
@@ -3703,6 +3746,7 @@ impl crate::emacs_core::eval::Context {
                     self.restore_key_sequence_current_buffer(&mut saved_current_buffer);
                     return Err(err);
                 }
+                command_binding_resolution.invalidate();
             }
             let lookup_position = Self::key_sequence_lookup_position(&translated_events);
 
@@ -3713,18 +3757,23 @@ impl crate::emacs_core::eval::Context {
                     .map(crate::emacs_core::print::print_value)
                     .collect::<Vec<_>>()
             );
-            let mut resolved = match resolve_active_key_binding(
-                self,
-                &translated_events,
-                false,
-                false,
-                lookup_position.as_ref(),
-            ) {
-                Ok(resolved) => resolved,
-                Err(err) => {
-                    self.restore_delayed_selection_event(&mut delayed_selection_event);
-                    self.restore_key_sequence_current_buffer(&mut saved_current_buffer);
-                    return Err(err);
+            let mut resolved = match command_binding_resolution {
+                CommandBindingResolution::Current(resolved) => resolved,
+                CommandBindingResolution::Stale => {
+                    match resolve_active_key_binding(
+                        self,
+                        &translated_events,
+                        false,
+                        false,
+                        lookup_position.as_ref(),
+                    ) {
+                        Ok(resolved) => resolved,
+                        Err(err) => {
+                            self.restore_delayed_selection_event(&mut delayed_selection_event);
+                            self.restore_key_sequence_current_buffer(&mut saved_current_buffer);
+                            return Err(err);
+                        }
+                    }
                 }
             };
             let mut binding = resolved.binding;
