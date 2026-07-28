@@ -3157,7 +3157,7 @@ fn vm_call_interactively_builtin_forward_char_uses_default_prefix_arg() {
 }
 
 #[test]
-fn vm_call_interactively_instantiates_raw_lambda_commands_on_shared_runtime() {
+fn vm_call_interactively_executes_raw_lambda_commands_on_shared_runtime() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
         vm_eval_str(
@@ -3165,6 +3165,41 @@ fn vm_call_interactively_instantiates_raw_lambda_commands_on_shared_runtime() {
                (call-interactively '(lambda (n) (interactive \"p\") n)))"
         ),
         "OK 3"
+    );
+}
+
+#[test]
+fn vm_call_interactively_form_spec_uses_interpreted_closure_environment() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_lexical_str(
+            r#"(let ((command
+                       (let ((captured 37))
+                         (lambda (value)
+                           (interactive (list captured))
+                           value))))
+                 (call-interactively command))"#
+        ),
+        "OK 37"
+    );
+}
+
+#[test]
+fn vm_call_interactively_quoted_lambda_form_spec_uses_dynamic_environment() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_lexical_str(
+            r#"(let ((ambient-only 99))
+                 (call-interactively
+                  '(lambda (value)
+                     (interactive
+                      (list
+                       (condition-case nil
+                           ambient-only
+                         (void-variable 'dynamic))))
+                     value)))"#
+        ),
+        "OK dynamic"
     );
 }
 
@@ -3225,6 +3260,7 @@ fn vm_call_interactively_handles_k_k_capital_and_u_specs_on_shared_runtime() {
         vm_eval_str(
             r#"(list
                  (progn
+                   (use-global-map (make-sparse-keymap))
                    (fset 'mouse-drag-region (lambda (&rest _args) nil))
                    (fset 'mouse-set-point (lambda (&rest _args) nil))
                    (global-set-key [down-mouse-1] #'mouse-drag-region)

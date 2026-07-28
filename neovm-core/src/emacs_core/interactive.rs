@@ -1016,15 +1016,19 @@ fn command_object_needs_interactive_form_dispatch(value: Value) -> bool {
     }
 }
 
+fn quoted_lambda_body_values(value: &Value) -> Option<Vec<Value>> {
+    let mut items = value_list_to_vec(value)?;
+    if items.first().and_then(|v| v.as_symbol_name()) != Some("lambda") || items.len() < 2 {
+        return None;
+    }
+    Some(items.split_off(2))
+}
+
 fn quoted_lambda_has_interactive_form(value: &Value) -> bool {
-    let Some(items) = value_list_to_vec(value) else {
+    let Some(items) = quoted_lambda_body_values(value) else {
         return false;
     };
-    if items.first().and_then(|v| v.as_symbol_name()) != Some("lambda") {
-        return false;
-    }
-
-    let mut body_index = 2;
+    let mut body_index = 0;
     if items.get(body_index).is_some_and(|v| v.is_string()) {
         body_index += 1;
     }
@@ -1274,11 +1278,51 @@ impl InteractiveControlLetter {
     }
 }
 
+/// Environment in which GNU `call-interactively` evaluates a Lisp-form
+/// interactive specification.
+///
+/// `callint.c:Fcall_interactively` does not use the caller's ambient lexical
+/// environment.  It passes an interpreted closure's `CLOSURE_CONSTANTS` to
+/// `Feval`, and passes nil for every other callable representation.  Keeping
+/// that choice in the type prevents a form spec from being detached from the
+/// environment required to evaluate it.
+#[derive(Clone, Copy, Debug)]
+enum InteractiveFormEnvironment {
+    Dynamic,
+    InterpretedClosure(Value),
+}
+
+impl InteractiveFormEnvironment {
+    fn for_callable(callable: Value) -> Self {
+        if callable
+            .closure_body_value()
+            .is_some_and(|body| body.is_cons())
+        {
+            Self::InterpretedClosure(callable.closure_env().flatten().unwrap_or(Value::NIL))
+        } else {
+            Self::Dynamic
+        }
+    }
+
+    fn lexical_arg(self) -> Value {
+        match self {
+            Self::Dynamic => Value::NIL,
+            Self::InterpretedClosure(environment) => environment,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct InteractiveFormSpec {
+    form: Value,
+    environment: InteractiveFormEnvironment,
+}
+
 #[derive(Clone, Debug)]
 enum ParsedInteractiveSpec {
     NoArgs,
     StringCode(crate::heap_types::LispString),
-    Form(Value),
+    Form(InteractiveFormSpec),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -2353,13 +2397,16 @@ fn interactive_next_event_with_parameters(
     interactive_last_input_event_with_parameters(eval)
 }
 
-fn parse_interactive_spec_from_form_value(form: &Value) -> Option<ParsedInteractiveSpec> {
+fn parse_interactive_spec_from_form_value(
+    form: &Value,
+    environment: InteractiveFormEnvironment,
+) -> Option<ParsedInteractiveSpec> {
     if !value_is_interactive_form(form) {
         return None;
     }
     let items = value_list_to_vec(form)?;
     match items.get(1) {
-        Some(spec) => parse_interactive_spec_from_value(spec),
+        Some(spec) => parse_interactive_spec_from_value(spec, environment),
         None => Some(ParsedInteractiveSpec::NoArgs),
     }
 }
@@ -2375,11 +2422,14 @@ fn stored_interactive_spec_value(spec: Value) -> Value {
 
 /// Parse interactive spec from a Value (from LambdaData.interactive or bytecode).
 /// The value is the SPEC part (already extracted from `(interactive SPEC)`).
-fn parse_interactive_spec_from_value(spec: &Value) -> Option<ParsedInteractiveSpec> {
+fn parse_interactive_spec_from_value(
+    spec: &Value,
+    environment: InteractiveFormEnvironment,
+) -> Option<ParsedInteractiveSpec> {
     if value_is_interactive_form(spec) {
         let items = value_list_to_vec(spec)?;
         return match items.get(1) {
-            Some(nested_spec) => parse_interactive_spec_from_value(nested_spec),
+            Some(nested_spec) => parse_interactive_spec_from_value(nested_spec, environment),
             None => Some(ParsedInteractiveSpec::NoArgs),
         };
     }
@@ -2397,15 +2447,23 @@ fn parse_interactive_spec_from_value(spec: &Value) -> Option<ParsedInteractiveSp
             }
         }
         _ => {
-            // Could be a form to evaluate
-            Some(ParsedInteractiveSpec::Form(*spec))
+            // Could be a form to evaluate.  Preserve its evaluation
+            // environment as part of the parsed state so no caller can
+            // accidentally evaluate it in the ambient lexical scope.
+            Some(ParsedInteractiveSpec::Form(InteractiveFormSpec {
+                form: *spec,
+                environment,
+            }))
         }
     }
 }
 
-fn parsed_interactive_spec_from_body_values(body: &[Value]) -> Option<ParsedInteractiveSpec> {
+fn parsed_interactive_spec_from_body_values(
+    body: &[Value],
+    environment: InteractiveFormEnvironment,
+) -> Option<ParsedInteractiveSpec> {
     body.get(value_body_metadata_end(body))
-        .and_then(parse_interactive_spec_from_form_value)
+        .and_then(|form| parse_interactive_spec_from_form_value(form, environment))
 }
 
 fn interactive_form_value_to_args(value: Value) -> Result<Vec<Value>, Flow> {
@@ -2771,9 +2829,11 @@ fn resolve_interactive_invocation_args(
     kind: CommandInvocationKind,
     context: &mut InteractiveInvocationContext,
 ) -> Result<Vec<Value>, Flow> {
+    let form_environment = InteractiveFormEnvironment::for_callable(*func);
     if value_is_interactive_autoload(func)
         && let Ok(iform) = eval.apply(Value::symbol("interactive-form"), vec![invocation_function])
-        && let Some(args) = interactive_args_from_interactive_form(eval, iform, kind, context)?
+        && let Some(args) =
+            interactive_args_from_interactive_form(eval, iform, form_environment, kind, context)?
     {
         return Ok(args);
     }
@@ -2782,7 +2842,7 @@ fn resolve_interactive_invocation_args(
         .and_then(|symbol| eval.interactive.get_spec(symbol))
         .map(|spec| spec.spec)
     {
-        let Some(spec) = parse_interactive_spec_from_value(&spec_value) else {
+        let Some(spec) = parse_interactive_spec_from_value(&spec_value, form_environment) else {
             return Ok(Vec::new());
         };
         let maybe_args = match spec {
@@ -2790,10 +2850,23 @@ fn resolve_interactive_invocation_args(
             ParsedInteractiveSpec::StringCode(code) => {
                 interactive_args_from_string_code(eval, &code, kind, context)?
             }
-            ParsedInteractiveSpec::Form(form) => {
-                let value = eval.eval_value(&form)?;
-                Some(interactive_form_value_to_args(value)?)
+            ParsedInteractiveSpec::Form(form) => Some(eval_interactive_form_value(eval, form)?),
+        };
+        if let Some(args) = maybe_args {
+            return Ok(args);
+        }
+    }
+
+    if let Some(body) = quoted_lambda_body_values(func)
+        && let Some(spec) =
+            parsed_interactive_spec_from_body_values(&body, InteractiveFormEnvironment::Dynamic)
+    {
+        let maybe_args = match spec {
+            ParsedInteractiveSpec::NoArgs => Some(Vec::new()),
+            ParsedInteractiveSpec::StringCode(code) => {
+                interactive_args_from_string_code(eval, &code, kind, context)?
             }
+            ParsedInteractiveSpec::Form(form) => Some(eval_interactive_form_value(eval, form)?),
         };
         if let Some(args) = maybe_args {
             return Ok(args);
@@ -2809,7 +2882,7 @@ fn resolve_interactive_invocation_args(
         // body but preserved it in the iform parameter.
         if let Some(iform_val) = func.closure_interactive().flatten() {
             let spec_value = stored_interactive_spec_value(iform_val);
-            let spec = parse_interactive_spec_from_value(&spec_value);
+            let spec = parse_interactive_spec_from_value(&spec_value, form_environment);
             if let Some(spec) = spec {
                 let maybe_args = match spec {
                     ParsedInteractiveSpec::NoArgs => Some(Vec::new()),
@@ -2817,8 +2890,7 @@ fn resolve_interactive_invocation_args(
                         interactive_args_from_string_code(eval, &code, kind, context)?
                     }
                     ParsedInteractiveSpec::Form(form) => {
-                        let value = eval.eval_value(&form)?;
-                        Some(interactive_form_value_to_args(value)?)
+                        Some(eval_interactive_form_value(eval, form)?)
                     }
                 };
                 if let Some(args) = maybe_args {
@@ -2830,16 +2902,15 @@ fn resolve_interactive_invocation_args(
             }
         }
         // Fall back to scanning the body
-        if let Some(spec) = parsed_interactive_spec_from_body_values(&closure_body) {
+        if let Some(spec) =
+            parsed_interactive_spec_from_body_values(&closure_body, form_environment)
+        {
             let maybe_args = match spec {
                 ParsedInteractiveSpec::NoArgs => Some(Vec::new()),
                 ParsedInteractiveSpec::StringCode(code) => {
                     interactive_args_from_string_code(eval, &code, kind, context)?
                 }
-                ParsedInteractiveSpec::Form(form) => {
-                    let value = eval.eval_value(&form)?;
-                    Some(interactive_form_value_to_args(value)?)
-                }
+                ParsedInteractiveSpec::Form(form) => Some(eval_interactive_form_value(eval, form)?),
             };
             if let Some(args) = maybe_args {
                 return Ok(args);
@@ -2863,8 +2934,13 @@ fn resolve_interactive_invocation_args(
             return Ok(Vec::new());
         } else {
             // Non-string spec — evaluate as a form (like GNU Feval(specs, env))
-            let value = eval.eval_value(&spec_val)?;
-            return interactive_form_value_to_args(value);
+            return eval_interactive_form_value(
+                eval,
+                InteractiveFormSpec {
+                    form: spec_val,
+                    environment: form_environment,
+                },
+            );
         }
     }
 
@@ -2872,7 +2948,8 @@ fn resolve_interactive_invocation_args(
     // oclosures, advice wrappers, and other cl-generic dispatched interactivity.
     // This mirrors GNU callint.c which calls Finteractive_form to get the spec.
     if let Ok(iform) = eval.apply(Value::symbol("interactive-form"), vec![invocation_function])
-        && let Some(args) = interactive_args_from_interactive_form(eval, iform, kind, context)?
+        && let Some(args) =
+            interactive_args_from_interactive_form(eval, iform, form_environment, kind, context)?
     {
         return Ok(args);
     }
@@ -2890,6 +2967,7 @@ fn resolve_interactive_invocation_args(
 fn interactive_args_from_interactive_form(
     eval: &mut Context,
     iform: Value,
+    environment: InteractiveFormEnvironment,
     kind: CommandInvocationKind,
     context: &mut InteractiveInvocationContext,
 ) -> Result<Option<Vec<Value>>, Flow> {
@@ -2910,39 +2988,29 @@ fn interactive_args_from_interactive_form(
         return Ok(Some(Vec::new()));
     }
 
-    let value = eval.eval_value(&spec)?;
-    Ok(Some(interactive_form_value_to_args(value)?))
+    Ok(Some(eval_interactive_form_value(
+        eval,
+        InteractiveFormSpec {
+            form: spec,
+            environment,
+        },
+    )?))
 }
 
-fn eval_interactive_form_value_in_vm_runtime(
-    shared: &mut super::eval::Context,
-    form: Value,
+fn eval_interactive_form_value(
+    eval: &mut super::eval::Context,
+    spec: InteractiveFormSpec,
 ) -> Result<Vec<Value>, Flow> {
-    let roots = shared.save_specpdl_roots();
-    shared.push_specpdl_root(form);
+    let roots = eval.save_specpdl_roots();
+    eval.push_specpdl_root(spec.form);
+    eval.push_specpdl_root(spec.environment.lexical_arg());
     let result = (|| -> Result<Vec<Value>, Flow> {
-        let value = shared.eval_value(&form)?;
+        let value =
+            eval.eval_value_with_lexical_arg(spec.form, Some(spec.environment.lexical_arg()))?;
         interactive_form_value_to_args(value)
     })();
-    shared.restore_specpdl_roots(roots);
+    eval.restore_specpdl_roots(roots);
     result
-}
-
-pub(crate) fn callable_form_needs_instantiation(value: &Value) -> bool {
-    let Some(items) = value_list_to_vec(value) else {
-        return false;
-    };
-    matches!(
-        items.first().and_then(|v| v.as_symbol_name()),
-        Some("lambda" | "closure")
-    )
-}
-
-fn normalize_command_callable(eval: &mut Context, value: Value) -> Result<Value, Flow> {
-    if callable_form_needs_instantiation(&value) {
-        return eval.eval_value(&value);
-    }
-    Ok(value)
 }
 
 fn default_command_execute_args(
@@ -3091,7 +3159,7 @@ pub(crate) fn resolve_call_interactively_target_and_args_in_eval(
     eval: &mut Context,
     plan: &mut CallInteractivelyPlan,
 ) -> Result<(Value, Vec<Value>), Flow> {
-    let func = normalize_command_callable(eval, plan.func)?;
+    let func = plan.func;
     let call_args = resolve_interactive_invocation_args(
         eval,
         plan.invocation_function,
@@ -3115,6 +3183,7 @@ pub(crate) fn resolve_call_interactively_target_and_args_in_state(
     plan: &mut CallInteractivelyPlan,
 ) -> Result<Option<(Value, Vec<Value>)>, Flow> {
     let func = plan.func;
+    let form_environment = InteractiveFormEnvironment::for_callable(func);
     if value_is_interactive_autoload(&func) {
         return Ok(None);
     }
@@ -3123,7 +3192,7 @@ pub(crate) fn resolve_call_interactively_target_and_args_in_state(
         .and_then(|symbol| interactive.get_spec(symbol))
         .map(|spec| spec.spec)
     {
-        let Some(spec) = parse_interactive_spec_from_value(&spec_value) else {
+        let Some(spec) = parse_interactive_spec_from_value(&spec_value, form_environment) else {
             return Ok(Some((func, Vec::new())));
         };
         return match spec {
@@ -3143,9 +3212,30 @@ pub(crate) fn resolve_call_interactively_target_and_args_in_state(
         };
     }
 
+    if let Some(body) = quoted_lambda_body_values(&func)
+        && let Some(spec) =
+            parsed_interactive_spec_from_body_values(&body, InteractiveFormEnvironment::Dynamic)
+    {
+        return match spec {
+            ParsedInteractiveSpec::NoArgs => Ok(Some((func, Vec::new()))),
+            ParsedInteractiveSpec::StringCode(code) => interactive_args_from_string_code_in_state(
+                obarray,
+                dynamic,
+                buffers,
+                custom,
+                specpdl,
+                &code,
+                CommandInvocationKind::CallInteractively,
+                &mut plan.context,
+            )
+            .map(|maybe_args| maybe_args.map(|args| (func, args))),
+            ParsedInteractiveSpec::Form(_) => Ok(None),
+        };
+    }
+
     if let Some(iform_val) = func.closure_interactive().flatten() {
         let spec_value = stored_interactive_spec_value(iform_val);
-        let Some(spec) = parse_interactive_spec_from_value(&spec_value) else {
+        let Some(spec) = parse_interactive_spec_from_value(&spec_value, form_environment) else {
             return Ok(Some((func, Vec::new())));
         };
         return match spec {
@@ -3168,7 +3258,7 @@ pub(crate) fn resolve_call_interactively_target_and_args_in_state(
     if let Some(body) = func
         .closure_body_value()
         .and_then(|body| value_list_to_vec(&body))
-        && let Some(spec) = parsed_interactive_spec_from_body_values(&body)
+        && let Some(spec) = parsed_interactive_spec_from_body_values(&body, form_environment)
     {
         return match spec {
             ParsedInteractiveSpec::NoArgs => Ok(Some((func, Vec::new()))),
@@ -3229,6 +3319,7 @@ pub(crate) fn resolve_call_interactively_target_and_args_in_vm_runtime(
     plan: &mut CallInteractivelyPlan,
 ) -> Result<Option<(Value, Vec<Value>)>, Flow> {
     let func = plan.func;
+    let form_environment = InteractiveFormEnvironment::for_callable(func);
     if value_is_interactive_autoload(&func) {
         return Ok(None);
     }
@@ -3237,7 +3328,7 @@ pub(crate) fn resolve_call_interactively_target_and_args_in_vm_runtime(
         .and_then(|symbol| shared.interactive.get_spec(symbol))
         .map(|spec| spec.spec)
     {
-        let Some(spec) = parse_interactive_spec_from_value(&spec_value) else {
+        let Some(spec) = parse_interactive_spec_from_value(&spec_value, form_environment) else {
             return Ok(Some((func, Vec::new())));
         };
         return match spec {
@@ -3252,39 +3343,14 @@ pub(crate) fn resolve_call_interactively_target_and_args_in_vm_runtime(
                 .map(|maybe_args| maybe_args.map(|args| (func, args)))
             }
             ParsedInteractiveSpec::Form(form) => {
-                eval_interactive_form_value_in_vm_runtime(shared, form)
-                    .map(|args| Some((func, args)))
+                eval_interactive_form_value(shared, form).map(|args| Some((func, args)))
             }
         };
     }
 
-    if let Some(iform_val) = func.closure_interactive().flatten() {
-        let spec_value = stored_interactive_spec_value(iform_val);
-        let Some(spec) = parse_interactive_spec_from_value(&spec_value) else {
-            return Ok(Some((func, Vec::new())));
-        };
-        return match spec {
-            ParsedInteractiveSpec::NoArgs => Ok(Some((func, Vec::new()))),
-            ParsedInteractiveSpec::StringCode(code) => {
-                interactive_args_from_string_code_in_vm_runtime(
-                    shared,
-                    &code,
-                    CommandInvocationKind::CallInteractively,
-                    &mut plan.context,
-                )
-                .map(|maybe_args| maybe_args.map(|args| (func, args)))
-            }
-            ParsedInteractiveSpec::Form(_) => {
-                eval_interactive_form_value_in_vm_runtime(shared, spec_value)
-                    .map(|args| Some((func, args)))
-            }
-        };
-    }
-
-    if let Some(body) = func
-        .closure_body_value()
-        .and_then(|body| value_list_to_vec(&body))
-        && let Some(spec) = parsed_interactive_spec_from_body_values(&body)
+    if let Some(body) = quoted_lambda_body_values(&func)
+        && let Some(spec) =
+            parsed_interactive_spec_from_body_values(&body, InteractiveFormEnvironment::Dynamic)
     {
         return match spec {
             ParsedInteractiveSpec::NoArgs => Ok(Some((func, Vec::new()))),
@@ -3298,8 +3364,51 @@ pub(crate) fn resolve_call_interactively_target_and_args_in_vm_runtime(
                 .map(|maybe_args| maybe_args.map(|args| (func, args)))
             }
             ParsedInteractiveSpec::Form(form) => {
-                eval_interactive_form_value_in_vm_runtime(shared, form)
-                    .map(|args| Some((func, args)))
+                eval_interactive_form_value(shared, form).map(|args| Some((func, args)))
+            }
+        };
+    }
+
+    if let Some(iform_val) = func.closure_interactive().flatten() {
+        let spec_value = stored_interactive_spec_value(iform_val);
+        let Some(spec) = parse_interactive_spec_from_value(&spec_value, form_environment) else {
+            return Ok(Some((func, Vec::new())));
+        };
+        return match spec {
+            ParsedInteractiveSpec::NoArgs => Ok(Some((func, Vec::new()))),
+            ParsedInteractiveSpec::StringCode(code) => {
+                interactive_args_from_string_code_in_vm_runtime(
+                    shared,
+                    &code,
+                    CommandInvocationKind::CallInteractively,
+                    &mut plan.context,
+                )
+                .map(|maybe_args| maybe_args.map(|args| (func, args)))
+            }
+            ParsedInteractiveSpec::Form(form) => {
+                eval_interactive_form_value(shared, form).map(|args| Some((func, args)))
+            }
+        };
+    }
+
+    if let Some(body) = func
+        .closure_body_value()
+        .and_then(|body| value_list_to_vec(&body))
+        && let Some(spec) = parsed_interactive_spec_from_body_values(&body, form_environment)
+    {
+        return match spec {
+            ParsedInteractiveSpec::NoArgs => Ok(Some((func, Vec::new()))),
+            ParsedInteractiveSpec::StringCode(code) => {
+                interactive_args_from_string_code_in_vm_runtime(
+                    shared,
+                    &code,
+                    CommandInvocationKind::CallInteractively,
+                    &mut plan.context,
+                )
+                .map(|maybe_args| maybe_args.map(|args| (func, args)))
+            }
+            ParsedInteractiveSpec::Form(form) => {
+                eval_interactive_form_value(shared, form).map(|args| Some((func, args)))
             }
         };
     }
@@ -3322,8 +3431,14 @@ pub(crate) fn resolve_call_interactively_target_and_args_in_vm_runtime(
             }
             return Ok(None);
         }
-        return eval_interactive_form_value_in_vm_runtime(shared, spec_val)
-            .map(|args| Some((func, args)));
+        return eval_interactive_form_value(
+            shared,
+            InteractiveFormSpec {
+                form: spec_val,
+                environment: form_environment,
+            },
+        )
+        .map(|args| Some((func, args)));
     }
 
     Ok(Some((

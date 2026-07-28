@@ -5243,9 +5243,6 @@ impl<'a> Vm<'a> {
             self.ctx.read_command_keys(),
             args,
         )?;
-        if crate::emacs_core::interactive::callable_form_needs_instantiation(&plan.func) {
-            plan.func = self.ctx.instantiate_callable_cons_form(plan.func)?;
-        }
         self.with_vm_root_scope(|vm| {
             for value in args.iter().copied() {
                 vm.push_dynamic_vm_root(value);

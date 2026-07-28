@@ -59,3 +59,50 @@ fn oracle_prop_gnu_called_interactively_dynamic_gates() {
     let expect = expect_test::expect![r#""OK ((t (t nil) t) (t (t nil) t) (t (t nil) t))""#];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
+
+#[test]
+fn oracle_call_interactively_evaluates_form_spec_in_closure_environment() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU callint.c evaluates a non-string interactive form with the
+    // interpreted command closure's CLOSURE_CONSTANTS environment.  The
+    // ambient evaluator environment is intentionally unrelated here.
+    let form = r#"
+(eval
+ '(let ((command
+         (let ((captured 37))
+           (lambda (value)
+             (interactive (list captured))
+             value))))
+    (call-interactively command))
+ t)
+"#;
+
+    let expect = expect_test::expect![[r#""OK 37""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
+#[test]
+fn oracle_call_interactively_evaluates_quoted_lambda_form_spec_dynamically() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // A quoted lambda is a raw cons callable, not an interpreted closure.
+    // GNU callint.c therefore supplies nil, rather than the caller's lexical
+    // environment, as Feval's LEXICAL argument.
+    let form = r#"
+(eval
+ '(let ((ambient-only 99))
+    (call-interactively
+     '(lambda (value)
+        (interactive
+         (list
+          (condition-case nil
+              ambient-only
+            (void-variable 'dynamic))))
+        value)))
+ t)
+"#;
+
+    let expect = expect_test::expect![[r#""OK dynamic""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}

@@ -204,8 +204,6 @@ fn gnu_simple_command_execute_eval() -> Context {
         (fset 'where-is-internal (lambda (&rest _args) nil))
         (fset 'mouse-drag-region (lambda (&rest _args) nil))
         (fset 'mouse-set-point (lambda (&rest _args) nil))
-        (global-set-key [down-mouse-1] #'mouse-drag-region)
-        (global-set-key [mouse-1] #'mouse-set-point)
         "#,
     )
     .expect("eval command-execute test stubs");
@@ -226,6 +224,14 @@ fn gnu_simple_command_execute_eval() -> Context {
     eval_first_form_after_marker(&mut ev, &simple_source, "(defun activate-mark");
     eval_first_form_after_marker(&mut ev, &simple_source, "(defun set-mark (pos)");
     crate::test_utils::load_gnu_undo_auto_runtime(&mut ev);
+    ev.eval_str(
+        r#"
+        (use-global-map (make-sparse-keymap))
+        (global-set-key [down-mouse-1] #'mouse-drag-region)
+        (global-set-key [mouse-1] #'mouse-set-point)
+        "#,
+    )
+    .expect("select command-execute test global map");
     ev
 }
 
@@ -481,6 +487,45 @@ fn call_interactively_honors_function_cell_mutation_during_interactive_spec_eval
                    (fmakunbound 'neovm-ci-mutate)))"#
         ),
         "OK 42"
+    );
+}
+
+#[test]
+fn call_interactively_form_spec_uses_interpreted_closure_environment() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(eval
+                 '(let ((command
+                         (let ((captured 37))
+                           (lambda (value)
+                             (interactive (list captured))
+                             value))))
+                    (call-interactively command))
+                 t)"#
+        ),
+        "OK 37"
+    );
+}
+
+#[test]
+fn call_interactively_quoted_lambda_form_spec_uses_dynamic_environment() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(eval
+                 '(let ((ambient-only 99))
+                    (call-interactively
+                     '(lambda (value)
+                        (interactive
+                         (list
+                          (condition-case nil
+                              ambient-only
+                            (void-variable 'dynamic))))
+                        value)))
+                 t)"#
+        ),
+        "OK dynamic"
     );
 }
 
@@ -2161,7 +2206,7 @@ fn menu_bar_menu_at_x_y_uses_recursive_display_order_for_final_items() {
                  (define-key embedded [edit] (cons "Edit" edit-menu))
                  (define-key embedded [help-menu] (cons "Help" help-menu))
                  (define-key g [menu-bar] (list 'keymap embedded))
-                 (setq global-map g)
+                 (use-global-map g)
                  (setq menu-bar-final-items '(help-menu))
                  (list (menu-bar-menu-at-x-y 0 0)
                        (menu-bar-menu-at-x-y 5 0)
@@ -5431,7 +5476,8 @@ fn command_remapping_resolves_remap_bindings_on_keymap_handles() {
     );
     assert_eq!(
         eval_one(
-            r#"(let ((m (make-sparse-keymap)))
+            r#"(let ((g (make-sparse-keymap)))
+                 (use-global-map g)
                  (define-key (current-global-map) [remap ignore] 'self-insert-command)
                  (command-remapping 'ignore))"#
         ),
