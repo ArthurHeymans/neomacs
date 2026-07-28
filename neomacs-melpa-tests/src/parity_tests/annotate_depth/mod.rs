@@ -3,9 +3,7 @@ use std::time::Duration;
 use crate::{ANNOTATE_DEPTH_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod indentation;
-mod lifecycle;
-mod registry;
+mod workflows;
 
 const ANNOTATE_DEPTH_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -33,8 +31,4 @@ fn assert_annotate_depth_source_parity(source_file: &str, elisp_form: &str, expe
 
 pub(crate) fn assert_annotate_depth_parity(elisp_form: &str, expected: Expect) {
     assert_annotate_depth_source_parity("annotate-depth.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_annotate_depth_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_annotate_depth_source_parity("annotate-depth-autoloads.el", elisp_form, expected);
 }
