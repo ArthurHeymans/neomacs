@@ -1,26 +1,110 @@
 use std::time::Duration;
 
 use crate::{ACE_JUMP_MODE_MELPA_PIN, CachedMelpaOracle};
-use expect_test::{Expect, expect};
+use expect_test::Expect;
 
-mod advice;
-mod autoloads;
-mod candidates;
-mod commands;
-mod data;
-mod execution;
-mod marks;
-mod overlays;
-mod scopes;
-mod surface;
-mod trees;
-mod variables;
+mod workflows;
 
 const ACE_JUMP_MODE_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
-fn ace_jump_mode_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ACE_JUMP_MODE_MELPA_PIN, source_file)
+/// ace-jump-mode is driven entirely by keys: a command paints one labelled
+/// overlay per candidate, installs an `overriding-local-map', and the next key
+/// the command loop reads decides where point lands.  Every workflow therefore
+/// types real keys with `execute-kbd-macro' into a buffer that is displayed in
+/// the selected window, and observes the session through `post-command-hook',
+/// which sees the labels while they are still on screen.  Nothing in the
+/// package is stubbed.
+const ACE_JUMP_MODE_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+
+(defconst aj-test-prose
+  (concat
+   "The quick brown fox jumps over the lazy dog.\n"
+   "Pack my box with five dozen liquor jugs.\n"
+   "How vexingly quick daft zebras jump!\n"
+   "Quiet quails quibble by the Quarry gate.\n"))
+
+(defmacro aj-test-with-live-buffer (&rest body)
+  "Run BODY in a real, window-displayed buffer so typed keys reach it."
+  `(let ((buffer (generate-new-buffer "*ace-jump-workflow*")))
+     (unwind-protect
+         (progn
+           (set-window-buffer (selected-window) buffer)
+           (set-buffer buffer)
+           (global-set-key (kbd "C-c SPC") 'ace-jump-mode)
+           (global-set-key (kbd "C-x SPC") 'ace-jump-mode-pop-mark)
+           ,@body)
+       (kill-buffer buffer))))
+
+(defun aj-test-overlays ()
+  "Describe every overlay ace-jump put in the current buffer, ordered."
+  (sort
+   (mapcar
+    (lambda (overlay)
+      (list (overlay-start overlay)
+            (overlay-end overlay)
+            (overlay-get overlay 'display)
+            (overlay-get overlay 'face)))
+    (overlays-in (point-min) (point-max)))
+   (lambda (a b) (or (< (car a) (car b))
+                     (and (= (car a) (car b)) (< (cadr a) (cadr b)))))))
+
+(defun aj-test-workflow-buffers ()
+  (sort (cl-remove-if-not
+         (lambda (buffer) (string-prefix-p "*ace-jump-" (buffer-name buffer)))
+         (buffer-list))
+        (lambda (a b) (string< (buffer-name a) (buffer-name b)))))
+
+(defvar aj-test-labels nil)
+
+(defun aj-test-capture-labels ()
+  "Record the labels of every workflow buffer.
+Meant for `ace-jump-mode-before-jump-hook', which runs while the
+overlays of every visual area are still on screen."
+  (setq aj-test-labels
+        (mapcar (lambda (buffer)
+                  (cons (buffer-name buffer)
+                        (with-current-buffer buffer (aj-test-overlays))))
+                (aj-test-workflow-buffers))))
+
+(defun aj-test-mark-ring ()
+  "Describe `ace-jump-mode-mark-ring' as (OFFSET . BUFFER-NAME) entries."
+  (mapcar (lambda (position)
+            (cons (aj-position-offset position)
+                  (buffer-name (aj-position-buffer position))))
+          ace-jump-mode-mark-ring))
+
+(defvar aj-test-trace nil)
+
+(defun aj-test-record ()
+  "Record the ace-jump state after a command; for `post-command-hook'."
+  (push (list this-command
+              (key-description (this-command-keys))
+              (point)
+              ace-jump-current-mode
+              ace-jump-mode
+              (aj-test-overlays))
+        aj-test-trace))
+
+(defmacro aj-test-tracing (&rest body)
+  "Run BODY recording the ace-jump state after every command it executes."
+  `(let ((aj-test-trace nil)
+         (ace-jump-mode-mark-ring nil))
+     (add-hook 'post-command-hook #'aj-test-record)
+     (unwind-protect
+         (let ((result (progn ,@body)))
+           (cons (nreverse aj-test-trace) result))
+       (remove-hook 'post-command-hook #'aj-test-record))))
+
+(defun aj-test-last-message ()
+  (with-current-buffer (get-buffer-create "*Messages*")
+    (car (last (split-string (buffer-string) "\n" t)))))
+"##;
+
+fn ace_jump_mode_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ACE_JUMP_MODE_MELPA_PIN, "ace-jump-mode.el")
         .expect("prepare pinned ace-jump-mode source below ./tmp")
+        .with_prelude(ACE_JUMP_MODE_TEST_PRELUDE)
         .with_timeout(ACE_JUMP_MODE_TEST_TIMEOUT)
 }
 
@@ -34,60 +118,8 @@ fn current_test_name() -> String {
 
 pub(crate) fn assert_ace_jump_mode_parity(form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = ace_jump_mode_oracle("ace-jump-mode.el")
+    let report = ace_jump_mode_oracle()
         .run_value(&name, form)
         .unwrap_or_else(|error| panic!("ace-jump-mode parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ace_jump_mode_signal_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ace_jump_mode_oracle("ace-jump-mode.el")
-        .run_signal(&name, form)
-        .unwrap_or_else(|error| {
-            panic!("ace-jump-mode signal parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ace_jump_mode_autoload_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ace_jump_mode_oracle("ace-jump-mode-autoloads.el")
-        .run_value(&name, form)
-        .unwrap_or_else(|error| {
-            panic!("ace-jump-mode autoload parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-#[test]
-fn ace_jump_mode_exact_pin_metadata_and_feature_match() {
-    let elisp_form = r##"(let ((descriptor
-                    (cadr
-                     (assq
-                      'ace-jump-mode
-                      package-alist))))
-               (list
-                (package-desc-name descriptor)
-                (package-version-join
-                 (package-desc-version descriptor))
-                (package-desc-reqs descriptor)
-                (package-desc-summary descriptor)
-                (copy-tree
-                 (package-desc-extras descriptor))
-                (featurep 'ace-jump-mode)))"##;
-    let expect = expect![[
-        r#"OK (ace-jump-mode "20140616.815" nil "A quick cursor location minor mode for emacs." ((:maintainers ("winterTTr" . "winterTTr@gmail.com")) (:authors ("winterTTr" . "winterTTr@gmail.com")) (:keywords "motion" "location" "cursor") (:revdesc . "8351e2df4fbb") (:commit . "8351e2df4fbbeb2a4003f2fb39f46d33803f3dac") (:url . "https://github.com/winterTTr/ace-jump-mode/")) t)"#
-    ]];
-    assert_ace_jump_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_jump_mode_required_cl_feature_and_minor_mode_registration_match() {
-    let elisp_form = r##"(list
-               (featurep 'cl)
-               (featurep 'ace-jump-mode)
-               (assq 'ace-jump-mode minor-mode-alist))"##;
-    let expect = expect!["OK (t t (ace-jump-mode ace-jump-mode))"];
-    assert_ace_jump_mode_parity(elisp_form, expect);
 }
