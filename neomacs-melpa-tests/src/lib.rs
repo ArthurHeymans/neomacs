@@ -1060,6 +1060,12 @@ pub const AUTO_COMPILE_MELPA_PIN: (&str, &str) = ("auto-compile", "20260601.1449
 /// upstream commit `6d1e8d2fc493dccbf05c9191611805c7e7881c70`.
 pub const AUTO_DARK_MELPA_PIN: (&str, &str) = ("auto-dark", "20260313.2356");
 
+/// The exact auto-dictionary package selected by the comprehensive language
+/// scoring, dictionary switching, idle-timer, Flyspell filtering, conditional
+/// insertion, and multilingual workflow parity corpus. MELPA built this
+/// archive from upstream commit `b364e08009fe0062cf0927d8a0582fad5a12b8e7`.
+pub const AUTO_DICTIONARY_MELPA_PIN: (&str, &str) = ("auto-dictionary", "20150410.1610");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

@@ -231,6 +231,7 @@ mod auto_auto_indent;
 mod auto_compile;
 mod auto_complete;
 mod auto_dark;
+mod auto_dictionary;
 mod bind_key;
 mod compat;
 mod dash;
