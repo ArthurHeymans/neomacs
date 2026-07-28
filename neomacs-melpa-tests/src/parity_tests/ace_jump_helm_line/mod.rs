@@ -1,24 +1,150 @@
 use std::time::Duration;
 
 use crate::{ACE_JUMP_HELM_LINE_MELPA_PIN, CachedMelpaOracle};
-use expect_test::{Expect, expect};
+use expect_test::Expect;
 
-mod actions;
-mod autoloads;
-mod collection;
-mod dispatch;
-mod execution;
-mod idle;
-mod macro_hook;
-mod preview;
-mod surface;
-mod variables;
+mod workflows;
 
 const ACE_JUMP_HELM_LINE_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
-fn ace_jump_helm_line_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ACE_JUMP_HELM_LINE_MELPA_PIN, source_file)
+/// ace-jump-helm-line labels the candidate lines of a *live* helm session, so
+/// every workflow needs a real helm buffer, a real helm window, real
+/// `helm-alive-p' state and real keys: avy reads the label with `read-key' from
+/// the executing keyboard macro, and the package then drives helm's own
+/// selection movement and actions.  Nothing in the package is stubbed; the
+/// helm source below is an ordinary user source whose persistent action and
+/// action record what helm handed them.
+///
+/// `ajhl-test-with-helm-session' starts the session with helm's own startup
+/// sequence -- `helm-initialize', `helm-display-buffer', `select-window' of
+/// `helm-window' and the `helm-update' that `helm-read-from-minibuffer' runs --
+/// but stops short of the `read-from-minibuffer' call itself, because Neomacs
+/// reads stdin instead of the keyboard macro for any minibuffer prompt and a
+/// complete helm session therefore cannot be driven in batch there (see the
+/// first workflow, which does drive a complete `helm' session and is left
+/// failing on that divergence).
+const ACE_JUMP_HELM_LINE_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+(require 'helm)
+(require 'avy)
+
+(defvar ajhl-test-actions nil
+  "Everything the helm source was asked to do, newest first.")
+
+(defvar ajhl-test-result nil
+  "The value a complete `helm' session returned.")
+
+(defun ajhl-test-setup ()
+  "Pin avy's label alphabet and bind the package's commands to real keys."
+  (setq avy-keys '(?a ?s ?d ?f ?g ?h ?j ?k ?l)
+        avy-style 'at-full
+        avy-all-windows nil
+        ajhl-test-actions nil
+        ajhl-test-result nil)
+  (global-set-key (kbd "C-c j") 'ace-jump-helm-line)
+  (global-set-key (kbd "C-c s") 'ace-jump-helm-line-and-select)
+  (global-set-key (kbd "C-c h") 'ajhl-test-run-helm))
+
+(defun ajhl-test-source ()
+  "A realistic helm source: five deployment targets a user picks from."
+  (helm-build-sync-source "Deploy targets"
+    :candidates '("alpha-api" "bravo-worker" "charlie-cache" "delta-db" "echo-cdn")
+    :persistent-action (lambda (candidate)
+                         (push (list 'persistent candidate) ajhl-test-actions))
+    :action (list (cons "Deploy"
+                        (lambda (candidate)
+                          (push (list 'deploy candidate) ajhl-test-actions)
+                          (format "deployed %s" candidate))))))
+
+(defun ajhl-test-run-helm ()
+  "Start a complete helm session, exactly as a helm command does."
+  (interactive)
+  (setq ajhl-test-actions nil)
+  (setq ajhl-test-result
+        (helm :sources (list (ajhl-test-source)) :buffer "*helm ajhl*")))
+
+(defmacro ajhl-test-with-helm-session (&rest body)
+  "Run BODY with a live helm session, built by helm's own startup sequence."
+  `(let ((helm-buffer "*helm ajhl*"))
+     (setq ajhl-test-actions nil)
+     ;; Every workflow starts from the state a fresh editor is in.
+     (when (get-buffer helm-buffer)
+       (kill-buffer helm-buffer))
+     (unwind-protect
+         (progn
+           (helm-initialize nil nil nil (list (ajhl-test-source)))
+           (helm-display-buffer helm-buffer nil)
+           (select-window (helm-window))
+           (with-helm-buffer (helm-update))
+           ,@body)
+       (helm-cleanup)
+       (setq helm-alive-p nil))))
+
+(defun ajhl-test-state ()
+  "The helm state a jump is supposed to move."
+  (list :selection (helm-get-selection)
+        :point (with-helm-buffer (point))
+        :line (with-helm-buffer (line-number-at-pos))
+        :selection-overlay (list (overlay-start helm-selection-overlay)
+                                 (overlay-end helm-selection-overlay))
+        :alive helm-alive-p
+        :actions ajhl-test-actions))
+
+(defun ajhl-test-candidate-text ()
+  (with-helm-buffer (buffer-substring-no-properties (point-min) (point-max))))
+
+(defun ajhl-test-labels ()
+  "Return (START END LABEL FACE) for every avy label overlay, in line order."
+  (with-helm-buffer
+    (delq nil
+          (mapcar (lambda (overlay)
+                    (let ((display (overlay-get overlay 'display)))
+                      (when display
+                        (list (overlay-start overlay)
+                              (overlay-end overlay)
+                              (substring-no-properties display)
+                              (get-text-property 0 'face display)))))
+                  (sort (overlays-in (point-min) (point-max))
+                        (lambda (a b) (< (overlay-start a) (overlay-start b))))))))
+
+(defun ajhl-test-linum-labels ()
+  "Return (START MARGIN-STRING) for every linum overlay, in line order."
+  (with-helm-buffer
+    (delq nil
+          (mapcar (lambda (overlay)
+                    (let ((before (overlay-get overlay 'before-string)))
+                      (when before
+                        (list (overlay-start overlay)
+                              (let ((display (get-text-property 0 'display before)))
+                                (and display
+                                     (substring-no-properties (car (last display)))))))))
+                  (sort (overlays-in (point-min) (point-max))
+                        (lambda (a b) (< (overlay-start a) (overlay-start b))))))))
+
+(defun ajhl-test-idle-timers ()
+  "Return the pending idle-execution timers the package scheduled."
+  (delq nil
+        (mapcar (lambda (timer)
+                  (when (eq (timer--function timer) 'ace-jump-helm-line--do-if-empty)
+                    (let ((delay (float-time (time-subtract (timer--time timer)
+                                                            (current-time)))))
+                      (list (timer--function timer)
+                            (timer--args timer)
+                            (timer--repeat-delay timer)
+                            (and (> delay 0)
+                                 (<= delay ace-jump-helm-line-idle-delay))))))
+                timer-list)))
+
+(defun ajhl-test-cancel-idle-timers ()
+  (dolist (timer (copy-sequence timer-list))
+    (when (eq (timer--function timer) 'ace-jump-helm-line--do-if-empty)
+      (cancel-timer timer))))
+"##;
+
+fn ace_jump_helm_line_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ACE_JUMP_HELM_LINE_MELPA_PIN, "ace-jump-helm-line.el")
         .expect("prepare pinned ace-jump-helm-line source below ./tmp")
+        .with_prelude(ACE_JUMP_HELM_LINE_TEST_PRELUDE)
         .with_timeout(ACE_JUMP_HELM_LINE_TEST_TIMEOUT)
 }
 
@@ -32,76 +158,8 @@ fn current_test_name() -> String {
 
 pub(crate) fn assert_ace_jump_helm_line_parity(form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = ace_jump_helm_line_oracle("ace-jump-helm-line.el")
+    let report = ace_jump_helm_line_oracle()
         .run_value(&name, form)
         .unwrap_or_else(|error| panic!("ace-jump-helm-line parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ace_jump_helm_line_signal_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ace_jump_helm_line_oracle("ace-jump-helm-line.el")
-        .run_signal(&name, form)
-        .unwrap_or_else(|error| {
-            panic!("ace-jump-helm-line signal parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ace_jump_helm_line_with_prelude_parity(
-    prelude: &str,
-    form: &str,
-    expected: Expect,
-) {
-    let name = current_test_name();
-    let report = CachedMelpaOracle::new(ACE_JUMP_HELM_LINE_MELPA_PIN, "ace-jump-helm-line.el")
-        .expect("prepare pinned ace-jump-helm-line source below ./tmp")
-        .with_prelude(prelude)
-        .with_timeout(ACE_JUMP_HELM_LINE_TEST_TIMEOUT)
-        .run_value(&name, form)
-        .unwrap_or_else(|error| {
-            panic!("ace-jump-helm-line prelude parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ace_jump_helm_line_autoload_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ace_jump_helm_line_oracle("ace-jump-helm-line-autoloads.el")
-        .run_value(&name, form)
-        .unwrap_or_else(|error| {
-            panic!("ace-jump-helm-line autoload parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-#[test]
-fn ace_jump_helm_line_exact_pin_dependencies_feature_and_summary_match() {
-    let elisp_form = r##"(let ((descriptor
-                    (cadr
-                     (assq
-                      'ace-jump-helm-line
-                      package-alist))))
-               (list
-                (package-desc-name descriptor)
-                (package-version-join
-                 (package-desc-version descriptor))
-                (package-desc-reqs descriptor)
-                (package-desc-summary descriptor)
-                (copy-tree
-                 (package-desc-extras descriptor))
-                (featurep 'ace-jump-helm-line)))"##;
-    let expect = expect![[
-        r#"OK (ace-jump-helm-line "20160918.1836" ((avy (0 4 0)) (helm (1 6 3))) "Ace-jump to a candidate in helm window." ((:maintainers ("Junpeng Qiu" . "qjpchmail@gmail.com")) (:authors ("Junpeng Qiu" . "qjpchmail@gmail.com")) (:keywords "extensions") (:revdesc . "1483055255df") (:commit . "1483055255df3f8ae349f7520f05b1e43ea3ed37") (:url . "https://github.com/cute-jumper/ace-jump-helm-line")) t)"#
-    ]];
-    assert_ace_jump_helm_line_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_jump_helm_line_required_features_are_loaded() {
-    let elisp_form = r##"(mapcar
-               #'featurep
-               '(avy helm linum ace-jump-helm-line))"##;
-    let expect = expect!["OK (t t t t)"];
-    assert_ace_jump_helm_line_parity(elisp_form, expect);
 }
