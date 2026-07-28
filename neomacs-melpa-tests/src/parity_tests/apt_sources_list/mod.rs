@@ -3,18 +3,38 @@ use std::time::Duration;
 use crate::{APT_SOURCES_LIST_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod editing;
-mod mode;
-mod navigation;
-mod parsing;
-mod registry;
-mod upstream_workflows;
+mod workflows;
 
 const APT_SOURCES_LIST_TEST_TIMEOUT: Duration = Duration::from_secs(180);
+const APT_SOURCES_LIST_TEST_PRELUDE: &str = r##"
+(defun apt-sources-list-test-root (name)
+  (file-name-as-directory
+   (expand-file-name
+    name
+    (getenv "NEOMACS_TEST_SANDBOX_ROOT"))))
 
-fn apt_sources_list_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(APT_SOURCES_LIST_MELPA_PIN, source_file)
+(defun apt-sources-list-test-cleanup (root)
+  (dolist (buffer (buffer-list))
+    (let ((file (buffer-file-name buffer)))
+      (when
+          (and file (string-prefix-p root file))
+        (with-current-buffer buffer
+          (set-buffer-modified-p nil))
+        (kill-buffer buffer))))
+  (when
+      (file-exists-p root)
+    (delete-directory root t)))
+
+(defun apt-sources-list-test-read-file (path)
+  (with-temp-buffer
+    (insert-file-contents-literally path)
+    (buffer-string)))
+"##;
+
+fn apt_sources_list_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(APT_SOURCES_LIST_MELPA_PIN, "apt-sources-list.el")
         .expect("prepare pinned apt-sources-list source below ./tmp")
+        .with_prelude(APT_SOURCES_LIST_TEST_PRELUDE)
         .with_timeout(APT_SOURCES_LIST_TEST_TIMEOUT)
 }
 
@@ -26,28 +46,10 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_apt_sources_list_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_apt_sources_list_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = apt_sources_list_oracle(source_file)
+    let report = apt_sources_list_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("apt-sources-list parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_apt_sources_list_parity(elisp_form: &str, expected: Expect) {
-    assert_apt_sources_list_source_parity("apt-sources-list.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_apt_sources_list_signal_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = apt_sources_list_oracle("apt-sources-list.el")
-        .run_signal(&name, elisp_form)
-        .unwrap_or_else(|error| {
-            panic!("apt-sources-list signal parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_apt_sources_list_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_apt_sources_list_source_parity("apt-sources-list-autoloads.el", elisp_form, expected);
 }

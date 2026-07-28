@@ -913,8 +913,10 @@ pub const APPLESCRIPT_MODE_MELPA_PIN: (&str, &str) = ("applescript-mode", "20210
 /// `2b26eed7e2063ca93998a6807f5a4e602483a23d`.
 pub const APROPOSPRIATE_THEME_MELPA_PIN: (&str, &str) = ("apropospriate-theme", "20251010.121");
 
-/// The exact apt-sources-list package selected by the comprehensive API parity
-/// corpus.
+/// The exact apt-sources-list package selected by the practical repository
+/// authoring, interactive editing, suite migration, navigation, validation,
+/// fontification, and file-persistence parity corpus. MELPA built this archive
+/// from upstream commit `44112833b3fa7f4d7e43708e5996782e22bb2fa3`.
 pub const APT_SOURCES_LIST_MELPA_PIN: (&str, &str) = ("apt-sources-list", "20180527.1241");
 
 /// The exact AQI package selected by the comprehensive data, cache, request,
