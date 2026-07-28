@@ -24,11 +24,16 @@ const ANAKONDO_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 /// it with `jar cf', and the package's own scan and parse run against that
 /// jar.  `javac' and `jar' are checked for rather than assumed, and their
 /// absence is reported in the workflow's own output instead of being worked
-/// around.
+/// around.  The expectations were taken on OpenJDK 21.0.10; the version
+/// matters for reading them, because JDK 9 removed the `sun.boot.class.path'
+/// property anakondo relies on, which is why the default `java.lang' imports
+/// resolve to nothing.  Nothing derived from `jar' or `javap' is asserted in
+/// the order the tool emitted it - member and class lists are sorted first, so
+/// a JDK that orders them differently does not move a snapshot.
 ///
 /// clj-kondo is not installed here, so it is a recording stand-in that logs
 /// the exact argv anakondo built and the text it piped in.  What it replays is
-/// not invented: clj-kondo 2025.09.22 was run against this exact project with
+/// not invented: clj-kondo v2025.09.22 was run against this exact project with
 /// these exact command lines, and the JSON it printed is what
 /// `ak-test-project-analysis' and `ak-test-buffer-analysis' contain, minus the
 /// `var-usages' array that anakondo never reads.  `clojure -Spath' is a
@@ -114,7 +119,7 @@ public class Barcode {
 
 ;;; Analyses recorded from the real clj-kondo.
 ;;
-;; clj-kondo 2025.09.22 was run against this exact project with the exact
+;; clj-kondo v2025.09.22 was run against this exact project with the exact
 ;; command lines anakondo builds - `--lint <classpath>' for the project and
 ;; `--lint -' with the buffer on stdin for completion, both with
 ;; `{:output {:analysis true :format :json}}' and `--lang clj' - and the JSON it
