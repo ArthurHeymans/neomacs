@@ -234,6 +234,7 @@ mod auto_complete_c_headers;
 mod auto_dark;
 mod auto_dictionary;
 mod auto_dim_other_buffers;
+mod auto_highlight_symbol;
 mod bind_key;
 mod compat;
 mod dash;

@@ -1080,6 +1080,17 @@ pub const AUTO_DICTIONARY_MELPA_PIN: (&str, &str) = ("auto-dictionary", "2015041
 pub const AUTO_DIM_OTHER_BUFFERS_MELPA_PIN: (&str, &str) =
     ("auto-dim-other-buffers", "20260624.950");
 
+/// The exact auto-highlight-symbol package selected by the comprehensive
+/// symbol detection, overlay, navigation, edit, timer, lifecycle, and
+/// multi-buffer workflow parity corpus. MELPA built this archive from
+/// upstream commit `e84da32e7cf1baefb0a9eef42a2fc842cf18f8b3`.
+pub const AUTO_HIGHLIGHT_SYMBOL_MELPA_PIN: (&str, &str) = ("auto-highlight-symbol", "20260101.552");
+
+/// The exact ht package selected as auto-highlight-symbol's hash-table
+/// dependency. MELPA built this archive from upstream commit
+/// `1c49aad1c820c86f7ee35bf9fff8429502f60fef`.
+pub const HT_MELPA_PIN: (&str, &str) = ("ht", "20230703.558");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
