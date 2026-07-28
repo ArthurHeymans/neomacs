@@ -123,6 +123,71 @@ fn oracle_equal_including_properties_recurses_through_cycles() {
 }
 
 #[test]
+fn oracle_equal_compares_char_table_pseudovector_slots() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((a (make-char-table 'neomacs-equal nil))
+       (b (make-char-table 'neomacs-equal nil))
+       (different (make-char-table 'neomacs-equal nil))
+       (parent-a (make-char-table 'neomacs-equal-parent nil))
+       (parent-b (make-char-table 'neomacs-equal-parent nil))
+       (child-a (make-char-table 'neomacs-equal nil))
+       (child-b (make-char-table 'neomacs-equal nil))
+       (props-a (make-char-table 'neomacs-equal nil))
+       (props-b (make-char-table 'neomacs-equal nil))
+       (cycle-a (make-char-table 'neomacs-equal nil))
+       (cycle-b (make-char-table 'neomacs-equal nil)))
+  (set-char-table-range a #x1f600 'same)
+  (set-char-table-range b #x1f600 'same)
+  (set-char-table-range different #x1f600 'different)
+  (set-char-table-range parent-a ?a 'parent)
+  (set-char-table-range parent-b ?a 'parent)
+  (set-char-table-parent child-a parent-a)
+  (set-char-table-parent child-b parent-b)
+  (set-char-table-range props-a ?x (propertize "v" 'face 'bold))
+  (set-char-table-range props-b ?x (propertize "v" 'face 'italic))
+  (set-char-table-range cycle-a nil cycle-a)
+  (set-char-table-range cycle-b nil cycle-b)
+  (list
+   (equal (make-char-table 'neomacs-equal nil)
+          (make-char-table 'neomacs-equal nil))
+   (equal (make-char-table 'one nil)
+          (make-char-table 'two nil))
+   (equal a b)
+   (equal a different)
+   (equal child-a child-b)
+   (equal props-a props-b)
+   (equal-including-properties props-a props-b)
+   (equal cycle-a cycle-b)))
+"#;
+
+    let expect = expect_test::expect![[r#""OK (t nil t nil t t nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
+#[test]
+fn oracle_equal_char_tables_obey_structural_hash_contract() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((left (make-char-table 'neomacs-equal-hash nil))
+      (right (make-char-table 'neomacs-equal-hash nil))
+      (table (make-hash-table :test 'equal)))
+  (set-char-table-range left #x1f600 'same)
+  (set-char-table-range right #x1f600 'same)
+  (puthash left 'found table)
+  (list
+   (equal left right)
+   (= (sxhash-equal left) (sxhash-equal right))
+   (gethash right table 'missing)))
+"#;
+
+    let expect = expect_test::expect![[r#""OK (t t found)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
+#[test]
 fn oracle_sxhash_equal_invariants_for_properties_and_structures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

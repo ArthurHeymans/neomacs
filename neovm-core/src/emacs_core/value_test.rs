@@ -1,5 +1,6 @@
 use super::*;
 use crate::buffer::BufferId;
+use crate::emacs_core::eval::Context;
 use crate::emacs_core::intern::{intern, intern_uninterned, resolve_sym};
 use crate::heap_types::LispMarker;
 use crate::tagged::header::CLOSURE_ARGLIST;
@@ -210,6 +211,132 @@ fn equal_compares_bignums_by_numeric_value() {
         assert!(!eq_value(&left, &right));
         assert!(equal_value(&left, &right, 0));
         assert!(!equal_value(&left, &different, 0));
+    });
+}
+
+#[test]
+fn equal_compares_char_tables_by_gnu_pseudovector_slots() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"
+(let* ((a (make-char-table 'neomacs-equal nil))
+       (b (make-char-table 'neomacs-equal nil))
+       (different (make-char-table 'neomacs-equal nil))
+       (parent-a (make-char-table 'neomacs-equal-parent nil))
+       (parent-b (make-char-table 'neomacs-equal-parent nil))
+       (child-a (make-char-table 'neomacs-equal nil))
+       (child-b (make-char-table 'neomacs-equal nil))
+       (props-a (make-char-table 'neomacs-equal nil))
+       (props-b (make-char-table 'neomacs-equal nil))
+       (cycle-a (make-char-table 'neomacs-equal nil))
+       (cycle-b (make-char-table 'neomacs-equal nil)))
+  (set-char-table-range a #x1f600 'same)
+  (set-char-table-range b #x1f600 'same)
+  (set-char-table-range different #x1f600 'different)
+  (set-char-table-range parent-a ?a 'parent)
+  (set-char-table-range parent-b ?a 'parent)
+  (set-char-table-parent child-a parent-a)
+  (set-char-table-parent child-b parent-b)
+  (set-char-table-range props-a ?x (propertize "v" 'face 'bold))
+  (set-char-table-range props-b ?x (propertize "v" 'face 'italic))
+  (set-char-table-range cycle-a nil cycle-a)
+  (set-char-table-range cycle-b nil cycle-b)
+  (list
+   (equal (make-char-table 'neomacs-equal nil)
+          (make-char-table 'neomacs-equal nil))
+   (equal (make-char-table 'one nil)
+          (make-char-table 'two nil))
+   (equal a b)
+   (equal a different)
+   (equal child-a child-b)
+   (equal props-a props-b)
+   (equal-including-properties props-a props-b)
+   (equal cycle-a cycle-b)))"#,
+        )
+        .expect("char-table equality probe should evaluate");
+
+    assert_eq!(
+        result,
+        Value::list(vec![
+            Value::T,
+            Value::NIL,
+            Value::T,
+            Value::NIL,
+            Value::T,
+            Value::T,
+            Value::NIL,
+            Value::T,
+        ])
+    );
+}
+
+#[test]
+fn internal_equal_compares_char_table_and_sub_char_table_storage() {
+    crate::test_utils::init_test_tracing();
+    with_test_heap(|| {
+        let purpose = Value::symbol("neomacs-equal-internal");
+        let left = Value::make_char_table(purpose, Value::NIL, 1);
+        let right = Value::make_char_table(purpose, Value::NIL, 1);
+        let left_sub = Value::make_sub_char_table(3, 128, vec![Value::NIL; 128]);
+        let right_sub = Value::make_sub_char_table(3, 128, vec![Value::NIL; 128]);
+        left.with_char_table_mut(|table| table.contents[1] = left_sub)
+            .expect("left char-table");
+        right
+            .with_char_table_mut(|table| table.contents[1] = right_sub)
+            .expect("right char-table");
+
+        assert!(equal_value(&left, &right, 0));
+
+        right_sub
+            .with_sub_char_table_mut(|table| {
+                table.contents.ensure_owned()[17] = Value::T;
+            })
+            .expect("right sub-char-table");
+        assert!(!equal_value(&left, &right, 0));
+    });
+}
+
+#[test]
+fn equal_char_tables_share_hashes_and_equal_hash_table_keys() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"
+(let ((left (make-char-table 'neomacs-equal-hash nil))
+      (right (make-char-table 'neomacs-equal-hash nil))
+      (table (make-hash-table :test 'equal)))
+  (set-char-table-range left #x1f600 'same)
+  (set-char-table-range right #x1f600 'same)
+  (puthash left 'found table)
+  (list
+   (equal left right)
+   (= (sxhash-equal left) (sxhash-equal right))
+   (gethash right table 'missing)))"#,
+        )
+        .expect("char-table hash contract probe should evaluate");
+
+    assert_eq!(
+        result,
+        Value::list(vec![Value::T, Value::T, Value::symbol("found")])
+    );
+}
+
+#[test]
+fn equal_hash_keys_preserve_structural_pseudovector_types() {
+    crate::test_utils::init_test_tracing();
+    with_test_heap(|| {
+        let slots = vec![Value::symbol("kind"), Value::fixnum(1)];
+        let vector = Value::vector(slots.clone());
+        let record = Value::make_record(slots);
+
+        assert!(!equal_value(&vector, &record, 0));
+        assert_ne!(
+            vector.to_hash_key(&HashTableTest::Equal),
+            record.to_hash_key(&HashTableTest::Equal)
+        );
     });
 }
 

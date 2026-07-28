@@ -1052,7 +1052,7 @@ pub enum HashKey {
     Ptr(usize),
     /// Structural cons key for `equal`-test hash tables.
     EqualCons(Box<HashKey>, Box<HashKey>),
-    /// Structural vector/record key for `equal`-test hash tables.
+    /// Structural pseudovector key for `equal`-test hash tables.
     EqualVec(Box<[HashKey]>),
     /// Structural marker key for `equal`-test hash tables.
     Marker(Box<(Option<u64>, EmacsBytePos)>),
@@ -2525,7 +2525,15 @@ impl TaggedValue {
                 seen.pop();
                 HashKey::EqualCons(Box::new(car_key), Box::new(cdr_key))
             }
-            ValueKind::Veclike(VecLikeType::Vector) | ValueKind::Veclike(VecLikeType::Record) => {
+            ValueKind::Veclike(kind)
+                if matches!(
+                    kind,
+                    VecLikeType::Vector
+                        | VecLikeType::Record
+                        | VecLikeType::CharTable
+                        | VecLikeType::SubCharTable
+                ) =>
+            {
                 if self.is_vector()
                     && let Some(key) = bool_vector_equal_hash_key(&self)
                 {
@@ -2536,17 +2544,18 @@ impl TaggedValue {
                     return HashKey::Cycle(index as u32);
                 }
                 seen.push(ptr);
-                let items = if self.is_vector() {
-                    self.as_vector_data().unwrap().clone()
-                } else {
-                    self.as_record_data().unwrap().clone()
-                };
-                let keys: Vec<HashKey> = items
-                    .iter()
-                    .map(|item| {
-                        item.to_equal_key_depth_swp(depth + 1, seen, symbols_with_pos_enabled)
-                    })
-                    .collect();
+                let view = StructuralPseudovectorView::from_value(self, kind)
+                    .expect("structural pseudovector kind must expose its storage");
+                let mut keys = Vec::with_capacity(view.len() + 3);
+                keys.push(HashKey::Text(view.hash_tag().into()));
+                view.append_shape_hash_keys(&mut keys);
+                for index in 0..view.len() {
+                    keys.push(view.slot(index).to_equal_key_depth_swp(
+                        depth + 1,
+                        seen,
+                        symbols_with_pos_enabled,
+                    ));
+                }
                 seen.pop();
                 HashKey::EqualVec(keys.into_boxed_slice())
             }
@@ -2793,6 +2802,94 @@ impl EqualSeenPair {
     }
 }
 
+/// Borrowed GNU-visible storage for vectorlikes compared element-by-element.
+///
+/// GNU `internal_equal_1` treats normal vectors, records, char tables, and
+/// sub-char-tables as structural pseudovectors.  Their Rust layouts differ,
+/// so exposing one typed view keeps the two equality engines on the same
+/// exhaustive layout mapping without materializing temporary vectors.
+#[derive(Clone, Copy)]
+pub(crate) enum StructuralPseudovectorView<'a> {
+    Vector(&'a [Value]),
+    Record(&'a [Value]),
+    CharTable(&'a CharTableObj),
+    SubCharTable(&'a SubCharTableObj),
+}
+
+impl StructuralPseudovectorView<'_> {
+    pub(crate) fn from_value(value: Value, kind: VecLikeType) -> Option<Self> {
+        match kind {
+            VecLikeType::Vector => value
+                .as_vector_data()
+                .map(|slots| Self::Vector(slots.as_slice())),
+            VecLikeType::Record => value
+                .as_record_data()
+                .map(|slots| Self::Record(slots.as_slice())),
+            VecLikeType::CharTable => value.as_char_table_obj().map(Self::CharTable),
+            VecLikeType::SubCharTable => value.as_sub_char_table_obj().map(Self::SubCharTable),
+            _ => None,
+        }
+    }
+
+    fn same_shape(self, other: Self) -> bool {
+        match (self, other) {
+            (Self::Vector(left), Self::Vector(right))
+            | (Self::Record(left), Self::Record(right)) => left.len() == right.len(),
+            (Self::CharTable(left), Self::CharTable(right)) => {
+                left.extras.len() == right.extras.len()
+            }
+            (Self::SubCharTable(left), Self::SubCharTable(right)) => {
+                left.depth == right.depth
+                    && left.min_char == right.min_char
+                    && left.contents.len() == right.contents.len()
+            }
+            _ => false,
+        }
+    }
+
+    pub(crate) fn len(self) -> usize {
+        match self {
+            Self::Vector(slots) | Self::Record(slots) => slots.len(),
+            Self::CharTable(table) => 4 + CHAR_TABLE_TOP_SLOTS + table.extras.len(),
+            Self::SubCharTable(table) => table.contents.len(),
+        }
+    }
+
+    pub(crate) fn slot(self, index: usize) -> Value {
+        match self {
+            Self::Vector(slots) | Self::Record(slots) => slots[index],
+            Self::CharTable(table) => match index {
+                0 => table.defalt,
+                1 => table.parent,
+                2 => table.purpose,
+                3 => table.ascii,
+                index if index < 4 + CHAR_TABLE_TOP_SLOTS => table.contents[index - 4],
+                _ => table.extras.as_slice()[index - 4 - CHAR_TABLE_TOP_SLOTS],
+            },
+            // GNU stores DEPTH and MIN_CHAR in the packed, non-Lisp prefix of
+            // a sub-char-table. `same_shape` compares those typed fields;
+            // only CONTENTS are recursively interpreted as Lisp values.
+            Self::SubCharTable(table) => table.contents.as_slice()[index],
+        }
+    }
+
+    fn hash_tag(self) -> &'static str {
+        match self {
+            Self::Vector(_) => "#<vector>",
+            Self::Record(_) => "#<record>",
+            Self::CharTable(_) => "#<char-table>",
+            Self::SubCharTable(_) => "#<sub-char-table>",
+        }
+    }
+
+    fn append_shape_hash_keys(self, keys: &mut Vec<HashKey>) {
+        if let Self::SubCharTable(table) = self {
+            keys.push(HashKey::Int(i64::from(table.depth)));
+            keys.push(HashKey::Int(i64::from(table.min_char)));
+        }
+    }
+}
+
 fn equal_value_inner(
     left: &Value,
     right: &Value,
@@ -2919,26 +3016,38 @@ fn equal_value_inner(
                     kind,
                 )
         }
-        VecLikeType::Vector | VecLikeType::Record => {
+        VecLikeType::Vector
+        | VecLikeType::Record
+        | VecLikeType::CharTable
+        | VecLikeType::SubCharTable => {
+            let (Some(left_view), Some(right_view)) = (
+                StructuralPseudovectorView::from_value(left, left_type),
+                StructuralPseudovectorView::from_value(right, right_type),
+            ) else {
+                return false;
+            };
+            if !left_view.same_shape(right_view) {
+                return false;
+            }
             if depth > 10 {
                 let pair = EqualSeenPair::new(left, right);
                 if !seen.get_or_insert_with(HashSet::new).insert(pair) {
                     return true;
                 }
             }
-            let av = left.as_vector_data().or_else(|| left.as_record_data());
-            let bv = right.as_vector_data().or_else(|| right.as_record_data());
-            match (av, bv) {
-                (Some(a), Some(b)) => {
-                    if a.len() != b.len() {
-                        return false;
-                    }
-                    a.iter().zip(b.iter()).all(|(x, y)| {
-                        equal_value_inner(x, y, depth + 1, seen, symbols_with_pos_enabled, kind)
-                    })
+            for index in 0..left_view.len() {
+                if !equal_value_inner(
+                    &left_view.slot(index),
+                    &right_view.slot(index),
+                    depth + 1,
+                    seen,
+                    symbols_with_pos_enabled,
+                    kind,
+                ) {
+                    return false;
                 }
-                _ => false,
             }
+            true
         }
         VecLikeType::HashTable => false,
         VecLikeType::Lambda => {
@@ -3205,36 +3314,38 @@ fn try_equal_value_inner(
                     kind,
                 )?)
         }
-        VecLikeType::Vector | VecLikeType::Record => {
+        VecLikeType::Vector
+        | VecLikeType::Record
+        | VecLikeType::CharTable
+        | VecLikeType::SubCharTable => {
+            let (Some(left_view), Some(right_view)) = (
+                StructuralPseudovectorView::from_value(left, left_type),
+                StructuralPseudovectorView::from_value(right, right_type),
+            ) else {
+                return Ok(false);
+            };
+            if !left_view.same_shape(right_view) {
+                return Ok(false);
+            }
             if depth > 10 {
                 let pair = EqualSeenPair::new(left, right);
                 if !seen.get_or_insert_with(HashSet::new).insert(pair) {
                     return Ok(true);
                 }
             }
-            let av = left.as_vector_data().or_else(|| left.as_record_data());
-            let bv = right.as_vector_data().or_else(|| right.as_record_data());
-            match (av, bv) {
-                (Some(a), Some(b)) => {
-                    if a.len() != b.len() {
-                        return Ok(false);
-                    }
-                    for (x, y) in a.iter().zip(b.iter()) {
-                        if !try_equal_value_inner(
-                            x,
-                            y,
-                            depth + 1,
-                            seen,
-                            symbols_with_pos_enabled,
-                            kind,
-                        )? {
-                            return Ok(false);
-                        }
-                    }
-                    Ok(true)
+            for index in 0..left_view.len() {
+                if !try_equal_value_inner(
+                    &left_view.slot(index),
+                    &right_view.slot(index),
+                    depth + 1,
+                    seen,
+                    symbols_with_pos_enabled,
+                    kind,
+                )? {
+                    return Ok(false);
                 }
-                _ => Ok(false),
             }
+            Ok(true)
         }
         VecLikeType::HashTable => Ok(false),
         VecLikeType::Lambda => {

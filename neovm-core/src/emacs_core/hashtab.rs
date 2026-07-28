@@ -238,14 +238,24 @@ fn emacs_sxhash_list(value: &Value, depth: usize) -> u64 {
     hash
 }
 
-fn emacs_sxhash_vector(value: &Value, depth: usize) -> u64 {
-    let items = value.as_vector_data().unwrap();
-    let mut hash = items.len() as u64;
-    let count = items.len().min(SXHASH_MAX_LEN);
-    for item in items.iter().take(count) {
-        hash = sxhash_combine(hash, emacs_sxhash_obj_with_fallback(item, depth + 1));
+fn emacs_sxhash_structural_pseudovector(value: &Value, depth: usize) -> Option<u64> {
+    let kind = value.veclike_type()?;
+    // GNU deliberately does not traverse the packed prefix and deep tree of a
+    // sub-char-table. All such nodes use the same valid (collision-heavy)
+    // equal hash.
+    if kind == VecLikeType::SubCharTable {
+        return Some(42);
     }
-    hash
+    let view = StructuralPseudovectorView::from_value(*value, kind)?;
+    let mut hash = view.len() as u64;
+    let count = view.len().min(SXHASH_MAX_LEN);
+    for index in 0..count {
+        hash = sxhash_combine(
+            hash,
+            emacs_sxhash_obj_with_fallback(&view.slot(index), depth + 1),
+        );
+    }
+    Some(hash)
 }
 
 fn emacs_sxhash_marker(value: &Value) -> Option<u64> {
@@ -283,7 +293,12 @@ fn emacs_sxhash_obj(value: &Value, depth: usize) -> Option<u64> {
                 .as_bytes(),
         )),
         ValueKind::Cons => Some(emacs_sxhash_list(value, depth)),
-        ValueKind::Veclike(VecLikeType::Vector) => Some(emacs_sxhash_vector(value, depth)),
+        ValueKind::Veclike(VecLikeType::Vector)
+        | ValueKind::Veclike(VecLikeType::Record)
+        | ValueKind::Veclike(VecLikeType::CharTable)
+        | ValueKind::Veclike(VecLikeType::SubCharTable) => {
+            emacs_sxhash_structural_pseudovector(value, depth)
+        }
         ValueKind::Veclike(VecLikeType::Bignum) => sxhash_bignum(value),
         ValueKind::Veclike(VecLikeType::Marker) => emacs_sxhash_marker(value),
         ValueKind::Veclike(VecLikeType::Overlay) => emacs_sxhash_overlay(value, depth),
