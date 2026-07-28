@@ -868,8 +868,10 @@ pub const APHELEIA_MELPA_PIN: (&str, &str) = ("apheleia", "20260619.1935");
 /// The exact APIB Mode package selected by the comprehensive API parity corpus.
 pub const APIB_MODE_MELPA_PIN: (&str, &str) = ("apib-mode", "20200101.1017");
 
-/// The exact apiwrap package selected by the comprehensive generated-API
-/// workflow parity corpus.
+/// The exact apiwrap package selected by the practical generated-client
+/// lifecycle, policy, error-recovery, and discovery parity corpus. MELPA built
+/// this archive from upstream commit
+/// `e4c9c57d6620a788ec8a715ff1bb50542edea3a6`.
 pub const APIWRAP_MELPA_PIN: (&str, &str) = ("apiwrap", "20180602.2231");
 
 /// The exact app-monochrome-themes package selected by the comprehensive
