@@ -16,9 +16,12 @@ emacs -Q --batch --eval '<form>'
 
 **Every reduction below was executed in both editors and reproduces as
 written** (checked 2026-07-28 against GNU Emacs 31.0.50 and
-`target/release/neomacs`). The two that cannot be a one-liner — entry 15, an
-intermittent segfault, and entry 9, which needs two files on disk — are marked
-where they appear. The script that runs them all is `tmp/verify-divergences.sh`.
+`target/release/neomacs`), with three marked exceptions: entry 9 needs two files
+on disk rather than one form, entry 15 is an intermittent segfault not reduced
+below its package, and entry 25 is a **verified symptom whose reduction is not
+yet found** — its candidate one-liner does not reproduce and is recorded as such
+so nobody trusts it. The script that runs the rest is
+`tmp/verify-divergences.sh`.
 
 Entry 15 is a **memory fault**, not a behavioural difference; read it first if
 you are triaging by severity.
@@ -144,7 +147,11 @@ lossy. Saving a Shift_JIS, EUC-JP, GBK or ISO-2022-JP file destroys its content.
 ;; bytes on disk — GNU => (130 160 130 162 10)   Neomacs => (63 63 10)
 ```
 
-utf-8 and utf-8-unix are written correctly. Affects: `aa-edit-mode` (1).
+utf-8 and utf-8-unix are written correctly, and so is latin-1 — an address book
+written with `bookmark-file-coding-system` set to latin-1 keeps its accented
+names, with genuine single latin-1 bytes on disk and no `?` replacements
+(verified from the `addressbook-bookmark` suite). The damage is confined to the
+multi-byte legacy codings. Affects: `aa-edit-mode` (1).
 
 ## 6. `directory-files` returns undecoded bytes
 
@@ -355,11 +362,27 @@ takes probe/iterations/stdin-mode and tallies exit codes.
 
 Affects: `ac-helm` (2 of its 6 failures, when stdin is `/dev/null`).
 
-## 16. `real-last-command` is never updated
+## 16. `real-last-command` is set one command-loop iteration too late
 
-`last-command` is correct; `real-last-command` stays nil forever. GNU sets it
-from the previous iteration's `real-this-command` each time round the command
-loop (src/keyboard.c:1354 and 1580).
+`last-command` is correct throughout. `real-last-command` is *not* "never
+updated" — it is not updated in time for a command to read it. Both editors
+agree once the macro returns; they differ only during the command-loop
+iteration, which is exactly the window `pre-command-hook` and
+`post-command-hook` analytics live in.
+
+```elisp
+(defun probe-cmd () (interactive) (setq inside (list last-command real-last-command)))
+(global-set-key (kbd "C-c r") 'probe-cmd)
+(execute-kbd-macro (kbd "a C-c r"))
+;; read inside the command — GNU (self-insert-command self-insert-command)
+;;                          NEO (self-insert-command nil)
+;; read after the macro    — both (probe-cmd probe-cmd)
+```
+
+GNU sets it from the previous iteration's `real-this-command` each time round
+the command loop (src/keyboard.c:1354 and 1580).
+
+The same seen from a hook:
 
 ```elisp
 (add-hook 'pre-command-hook
@@ -514,6 +537,84 @@ propertized template — `ac-octave` sees it in inferior-octave's
 `(face help-key-binding font-lock-face help-key-binding)`.
 
 Affects: `ac-octave` (1).
+
+## 23. `write-file` leaves a stray lock file behind
+
+The lock survives the save *and* `kill-buffer`, while `buffer-modified-p` is
+nil — so Neomacs believes the buffer is clean but the lock stays on disk.
+
+```elisp
+(with-current-buffer (get-buffer-create " *scratch-write*")
+  (insert "data\n")
+  (write-file "<dir>/saved.txt"))
+(directory-files "<dir>")
+;; GNU     => ("." ".." "saved.txt")
+;; Neomacs => ("." ".#saved.txt" ".." "saved.txt")
+```
+
+`write-region` does not do this in either editor, and GNU's own lock for a
+modified visited buffer is released on save, so it is specific to the
+`write-file` path.
+
+Blast radius: `bookmark-save` writes through `write-file`, so a bookmark
+directory accumulates `.#` files that make other Emacs instances believe the
+data is being edited elsewhere. Anything else built on bookmark.el, and any
+package calling `write-file`, is affected. Affects: `addressbook-bookmark` (1).
+
+## 24. The `default` face ignores a display-conditional theme setting
+
+Ordinary faces take a display-conditional setting and `default` takes an
+unconditional `((t …))` one, but `default` with a display clause is dropped.
+Both editors agree the clause matches (`face-spec-set-match-display` returns
+`(color)`) and both store an identical spec.
+
+```elisp
+(set-frame-parameter nil 'display-type 'color)
+(deftheme probe)
+(custom-theme-set-faces 'probe
+  '(default ((((class color)) (:background "gray20"))))
+  '(font-lock-keyword-face ((((class color)) (:foreground "gray70")))))
+(enable-theme 'probe)
+(list (face-attribute 'default :background nil t)
+      (face-attribute 'font-lock-keyword-face :foreground nil t))
+;; GNU     => ("gray20" "gray70")
+;; Neomacs => ("unspecified-bg" "gray70")
+```
+
+In a real colour terminal this would mean every such theme's background and
+foreground stay at the terminal's while everything else gets themed. That
+consequence is **inferred, not observed** — batch reports a `mono` display, so
+the reduction sets `display-type` by hand. No suite witnesses this: it needs a
+theme whose `default` clause carries no `min-colors`, and `adwaita-dark-theme`'s
+does. Recorded from a verified reduction rather than a failing test.
+
+## 25. `(void-variable mode-name)` — symptom verified, reduction NOT found
+
+**Do not treat the one-liner below as reproducing.** The `ag` suite fails 0/5 on
+Neomacs with `ERR (void-variable mode-name)`, deterministically across runs,
+where GNU passes 5/5. That symptom is real. The reduction originally reported —
+
+```elisp
+(with-temp-buffer (let ((mode-name "Ag")) mode-name) mode-name)
+```
+
+— does **not** reproduce: both editors return `"Fundamental"`. Also tried and
+not reproducing: the same with `text-mode` or a `setq-local` first; a lambda
+whose argument is named `mode-name`, called directly and built by backquote as
+`ag.el` builds it; `compilation-start` with such a name-function; and
+`define-compilation-mode` followed by using the mode.
+
+One verified difference in the neighbourhood, which may or may not be the
+mechanism:
+
+```elisp
+(default-value 'mode-name)
+;; GNU => nil    Neomacs => "Fundamental"
+```
+
+`ag.el` reaches the failure through `compilation-start` with
+`` `(lambda (mode-name) ,(ag/buffer-name …)) ``. Needs re-reducing from the
+failing test. Affects: `ag` (5).
 
 ---
 
