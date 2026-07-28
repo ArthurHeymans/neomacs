@@ -3,11 +3,7 @@ use std::time::Duration;
 use crate::{ANKI_MODE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod cards;
-mod editing;
-mod menu;
-mod protocol;
-mod registry;
+mod workflows;
 
 const ANKI_MODE_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -33,10 +29,6 @@ fn assert_anki_mode_source_parity(source_file: &str, elisp_form: &str, expected:
     expected.assert_eq(&report.gnu_emacs.to_string());
 }
 
-pub(crate) fn assert_anki_mode_parity(elisp_form: &str, expected: Expect) {
+fn assert_anki_mode_parity(elisp_form: &str, expected: Expect) {
     assert_anki_mode_source_parity("anki-mode.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_anki_mode_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_anki_mode_source_parity("anki-mode-autoloads.el", elisp_form, expected);
 }
