@@ -22,6 +22,10 @@
   <a href="https://github.com/eval-exec/neomacs/releases"><img src="https://img.shields.io/github/downloads/eval-exec/neomacs/total?label=downloads" alt="Downloads"/></a>
   <a href="COPYING"><img src="https://img.shields.io/github/license/eval-exec/neomacs" alt="License: GPL-3.0"/></a>
   <a href="https://github.com/eval-exec/neomacs/discussions"><img src="https://img.shields.io/github/discussions/eval-exec/neomacs" alt="Discussions"/></a>
+  <a href="https://x.com/evil_exec"><img src="https://img.shields.io/badge/X-Eval%20Exec-000000?logo=x&logoColor=white" alt="X: Eval-Exec"></a>
+
+
+  
 </p>
 
 <p align="center">
