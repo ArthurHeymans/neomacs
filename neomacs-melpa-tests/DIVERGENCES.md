@@ -696,6 +696,36 @@ nothing to warn about. Affects: `agenix` (1).
 Read with entry 23: a `write-file` leaves a stale `.#` lock that is never
 removed, while an ordinary modified buffer takes no lock at all.
 
+## 27. `get-buffer-window` does not prefer the selected window
+
+When a buffer is showing in more than one window and the selected window is not
+the frame's first, GNU returns the *selected* window and Neomacs returns another
+one. GNU's `window_loop` `GET_BUFFER_WINDOW` case returns the selected window
+specifically.
+
+```elisp
+(let ((shared (generate-new-buffer "*shared*")))
+  (with-current-buffer shared (insert "one\ntwo\nthree\nfour\n"))
+  (set-window-buffer (selected-window) shared)
+  (let ((second (split-window)))
+    (set-window-buffer second shared)
+    (select-window second)
+    (eq (get-buffer-window shared) (selected-window))))
+;; GNU => t    Neomacs => nil
+```
+
+`window-list` reports the same order and the same selected window in both
+editors, so only the lookup differs. Note the obvious constructions all *agree* —
+`select-window` on the second window is what exposes it, which is why this took
+five attempts to reduce.
+
+User-visible effect in `all-ext`: `all-next-error` looks the `*All*` window up
+this way and steps from that window's point, so after jumping to a match and
+returning — which leaves the collection showing in two windows — `next-error`
+continues from the wrong window's position and visits the wrong match (the first
+collected line in GNU, the third here). Any package that shows a buffer twice and
+then acts "on the window the user is in" is affected. Affects: `all-ext` (1).
+
 ---
 
 ## Behaviour that is NOT a divergence
