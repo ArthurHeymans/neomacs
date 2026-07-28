@@ -144,13 +144,33 @@ hour because its indexer needs a PHP interpreter that does not exist here. An
 environment blocker is a legitimate answer — report it rather than working
 around it.
 
-**Protocol → implement it. Data format → blocked.** When the boundary is a
-documented wire protocol, stand up the counterparty for real: ac-sly had no
-Common Lisp, so the suite ran a `make-network-process :server t` speaking
-slynk's framing and connected with the real `sly-connect`. When the missing
-program generates the package's *own on-disk format*, standing it in means
-authoring the package's data structure — the standards' "reimplementing the
-package algorithm inside the expected value" anti-pattern.
+**Record what crossed the boundary, not what the tool can do.** "I ran the real
+tool" is weaker than "I ran the real integration and transcribed what came back".
+anaconda-mode's payloads are trustworthy because the pinned `anaconda-mode.py`
+was run as a real server and real `anaconda-mode-call` was driven at it over a
+real socket, so the fixtures carry the server's own serialisation rather than a
+reconstruction of it. For a package that *parses a tool's output* rather than
+speaking a protocol, that difference is the whole test. Record the tool's version
+in the commit beside the package pin — a recording is only as good as the version
+it came from.
+
+**A missing program is usually a dev-time problem, not a blocker.**
+`nix shell nixpkgs#<tool> --command …` obtains the real tool for the recording
+step without touching the dev shell, and the committed test does not depend on it
+afterwards, because the suite replays the recording through a stand-in. Verified
+obtainable this way, neither being on PATH: `clj-kondo` (v2025.09.22) and `php`
+(8.4.20). "The binary is not on this host" is a blocker only once you have tried
+this and it failed.
+
+**Protocol → implement it. Data format → blocked only if unrecordable.** When the
+boundary is a documented wire protocol, stand up the counterparty for real:
+ac-sly had no Common Lisp, so the suite ran a `make-network-process :server t`
+speaking slynk's framing and connected with the real `sly-connect`. When the
+missing program generates the package's *own on-disk format*, standing it in
+means authoring the package's data structure — the standards' "reimplementing the
+package algorithm inside the expected value" anti-pattern. That is the blocked
+case **only when the program cannot be obtained at all**; if it can be run once
+off to the side, its real output is a recording rather than a fiction.
 
 **comint/REPL stand-ins need two things.** The response shape the package parses
 — inf-ruby does `(butlast (split-string kept "\r?\n") 2)`, so print completions,
@@ -165,6 +185,34 @@ until the process is dead. Sort concurrently recorded requests before asserting
 — activity-watch's bucket and heartbeat curl processes finish in either order.
 
 ## Assertions
+
+**SILENT — the sandbox is inside a project, so "outside a project" is
+unreachable.** Every sandbox lives at `<workspace>/tmp/melpa/<label>-XXXXXX`,
+inside the neomacs worktree, so a fixture directory with no marker of its own is
+*not* outside a project — projectile and project.el walk up and find the neomacs
+repository:
+
+```elisp
+;; a plain sandbox directory: no .projectile, no .git
+(list (projectile-project-p) (projectile-project-root))
+;; => ("[ORACLE-WORKSPACE]/" "[ORACLE-WORKSPACE]/")
+```
+
+Three quiet consequences: a "not within a project" guard test asserts nothing,
+because the case cannot arise; `projectile-current-project-files` enumerates the
+whole neomacs tree instead of the fixture, which is slow and non-deterministic;
+and an assertion about the project root can be the workspace rather than the
+fixture and still pass. The third bites easily — reading `(projectile-project-root)`
+one `let` too late, after the fixture buffer was killed, returns the workspace and
+looks like a plausible value.
+
+Any project-based fixture must plant its own marker file, and every workflow must
+assert the project root, so that a fixture which failed to establish itself shows
+up as a wrong root instead of a silent test against the entire repository.
+`GIT_CEILING_DIRECTORIES` does not help: it stops git walking *above* the
+workspace, and the workspace is the problem. Compounds with the project-relative
+path note in Snapshots — a fixture that silently resolves to the workspace and a
+heading spelled relative to it will agree with each other while both are wrong.
 
 **SILENT — check the package is not silently a no-op in batch.** Several
 packages have a path that quietly does nothing on a non-graphical or
