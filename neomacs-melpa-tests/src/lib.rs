@@ -895,8 +895,11 @@ pub const APPLE_CONTAINER_TRAMP_MELPA_PIN: (&str, &str) =
 /// `83a9ab0d6ba82496e2f7df386909b1a55701fccb`.
 pub const APPLES_MODE_MELPA_PIN: (&str, &str) = ("apples-mode", "20110121.418");
 
-/// The exact AppleScript Mode package selected by the comprehensive editing
-/// and execution parity corpus.
+/// The exact AppleScript Mode package selected by the practical authoring,
+/// outline-navigation, file-saving, macOS execution-boundary, failure-state,
+/// one-off command, and structured-result parity corpus. MELPA built this
+/// archive from upstream commit
+/// `00c141bbff46c89a96598b605dee05dd1d89f624`.
 pub const APPLESCRIPT_MODE_MELPA_PIN: (&str, &str) = ("applescript-mode", "20210802.1715");
 
 /// The exact apropospriate-theme package selected by the comprehensive theme
