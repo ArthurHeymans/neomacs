@@ -16,9 +16,12 @@ emacs -Q --batch --eval '<form>'
 
 **Every reduction below was executed in both editors and reproduces as
 written** (checked 2026-07-28 against GNU Emacs 31.0.50 and
-`target/release/neomacs`). The two that cannot be a one-liner — entry 15, the
-intermittent crash, and entry 9, which needs two files on disk — are marked
+`target/release/neomacs`). The two that cannot be a one-liner — entry 15, an
+intermittent segfault, and entry 9, which needs two files on disk — are marked
 where they appear. The script that runs them all is `tmp/verify-divergences.sh`.
+
+Entry 15 is a **memory fault**, not a behavioural difference; read it first if
+you are triaging by severity.
 
 Reproduce a failing suite with:
 
