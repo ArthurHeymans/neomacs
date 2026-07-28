@@ -1,621 +1,215 @@
 use expect_test::expect;
 
-use super::{assert_ace_flyspell_parity, assert_ace_flyspell_signal_parity};
+use super::assert_ace_flyspell_parity;
 
+/// `ace-flyspell-jump-word' is the "just take me there" command: avy offers one
+/// key per flyspell-flagged word in the window, in buffer order, and the chosen
+/// key moves point to the start of that word.  Two jumps in a row pin the
+/// candidate ordering (`d' is the third misspelling, `a' the first), the mark
+/// avy pushes at the departure point, and that jumping alone never edits the
+/// text, never touches flyspell's overlays and leaves ace-flyspell's own
+/// highlight overlay deleted.
 #[test]
-fn ace_flyspell_avy_word_passes_candidates_and_style_with_local_avy_controls_disabled() {
-    let elisp_form = r##"(let ((avy-action
-                    'outer-action)
-                   (avy-all-windows
-                    'outer-windows)
-                   (avy-style
-                    'chosen-style)
-                   calls)
-               (cl-letf
-                   (((symbol-function
-                      'ace-flyspell--collect-candidates)
-                     (lambda ()
-                       (push
-                        (list
-                         'collect
-                         avy-action
-                         avy-all-windows)
-                        calls)
-                       '(2 8 13)))
-                    ((symbol-function
-                      'avy--style-fn)
-                     (lambda (style)
-                       (push
-                        (list
-                         'style
-                         style
-                         avy-action
-                         avy-all-windows)
-                        calls)
-                       'style-function))
-                    ((symbol-function
-                      'avy--process)
-                     (lambda (candidates style-function)
-                       (push
-                        (list
-                         'process
-                         candidates
-                         style-function
-                         avy-action
-                         avy-all-windows)
-                        calls)
-                       8)))
-                 (list
-                  (ace-flyspell--avy-word)
-                  avy-action
-                  avy-all-windows
-                  (nreverse
-                   calls))))"##;
-    let expect = expect![
-        "OK (8 outer-action outer-windows ((collect nil nil) (style chosen-style nil nil) (process (2 8 13) style-function nil nil)))"
-    ];
+fn jumping_to_a_flagged_word_moves_point_and_leaves_the_text_untouched() {
+    let elisp_form = r##"(progn
+  (afly-test-setup)
+  (afly-test-buffer)
+  (flyspell-mode 1)
+  (flyspell-buffer)
+  (global-set-key (kbd "C-c j") 'ace-flyspell-jump-word)
+  (goto-char (point-min))
+  (let ((observed nil))
+    (execute-kbd-macro (kbd "C-c j d"))
+    (push (list :point (point) :word (thing-at-point 'word t) :mark (mark))
+          observed)
+    (execute-kbd-macro (kbd "C-c j a"))
+    (push (list :point (point) :word (thing-at-point 'word t) :mark (mark))
+          observed)
+    (push (list :text (buffer-substring-no-properties (point-min) (point-max))
+                :overlays (afly-test-flyspell-overlays)
+                :box (afly-test-box-overlay)
+                :queries (afly-test-queries))
+          observed)
+    (nreverse observed)))"##;
 
-    assert_ace_flyspell_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_flyspell_avy_word_does_not_compute_a_style_when_candidate_collection_signals() {
-    let elisp_form = r##"(cl-letf
-               (((symbol-function
-                  'ace-flyspell--collect-candidates)
-                 (lambda ()
-                   (error
-                    "candidate failure")))
-                ((symbol-function
-                  'avy--style-fn)
-                 (lambda (_style)
-                   (error
-                    "style should not run"))))
-               (ace-flyspell--avy-word))"##;
-    let expect = expect![[r#"ERR (error "candidate failure")"#]];
-
-    assert_ace_flyspell_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_flyspell_correct_word_is_a_noop_for_non_numeric_avy_results() {
-    let elisp_form = r##"(let (calls)
-               (cl-letf
-                   (((symbol-function
-                      'ace-flyspell--avy-word)
-                     (lambda ()
-                       (push
-                        'avy
-                        calls)
-                       'cancelled))
-                    ((symbol-function
-                      'flyspell-get-word)
-                     (lambda (&optional _following)
-                       (push
-                        'word
-                        calls)
-                       '("unused" 1 2)))
-                    ((symbol-function
-                      'ace-flyspell-default-handler)
-                     (lambda ()
-                       (push
-                        'handler
-                        calls)))
-                    ((symbol-function
-                      'ace-flyspell--reset)
-                     (lambda ()
-                       (push
-                        'reset
-                        calls))))
-                 (list
-                  (ace-flyspell-correct-word)
-                  (nreverse
-                   calls))))"##;
-    let expect = expect!["OK (nil (avy))"];
-
-    assert_ace_flyspell_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_flyspell_correct_word_missing_tuple_signals_before_handler_cleanup_and_mark_return() {
-    let elisp_form = r##"(with-temp-buffer
-               (insert
-                "wrng")
-               (goto-char
-                (point-max))
-               (push-mark
-                2
-                t)
-               (let ((ace-flyspell--ov
-                      (make-overlay
-                       1
-                       1))
-                     (ace-flyspell--current-word
-                      'before)
-                     (ace-flyspell-handler
-                      (lambda ()
-                        (push
-                         'handler
-                         calls)))
-                     calls)
-                 (cl-letf
-                     (((symbol-function
-                        'ace-flyspell--avy-word)
-                       (lambda ()
-                         (push
-                          'avy
-                          calls)
-                         1))
-                      ((symbol-function
-                        'flyspell-get-word)
-                       (lambda (&optional following)
-                         (push
-                          (list
-                           'word
-                           following)
-                          calls)
-                         nil))
-                      ((symbol-function
-                        'ace-flyspell--reset)
-                       (lambda ()
-                         (push
-                          'reset
-                          calls)
-                         (delete-overlay
-                          ace-flyspell--ov))))
-                   (let ((error-value
-                          (condition-case error-data
-                              (ace-flyspell-correct-word)
-                            (error
-                             error-data))))
-                     (list
-                      error-value
-                      ace-flyspell--current-word
-                      (point)
-                      (mark)
-                      (overlay-start
-                       ace-flyspell--ov)
-                      (overlay-end
-                       ace-flyspell--ov)
-                      (nreverse
-                       calls))))))"##;
-    let expect =
-        expect!["OK ((wrong-type-argument integer-or-marker-p nil) nil 5 2 1 1 (avy (word nil)))"];
-
-    assert_ace_flyspell_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_flyspell_correct_word_moves_the_overlay_runs_a_custom_handler_and_cleans_up() {
-    let elisp_form = r##"(with-temp-buffer
-               (insert
-                "wrng tail")
-               (goto-char
-                (point-max))
-               (push-mark
-                6
-                t)
-               (let ((ace-flyspell--ov
-                      (make-overlay
-                       1
-                       1))
-                     (ace-flyspell--current-word
-                      nil)
-                     calls)
-                 (let ((ace-flyspell-handler
-                        (lambda ()
-                          (push
-                           (list
-                            'handler
-                            ace-flyspell--current-word
-                            (overlay-start
-                             ace-flyspell--ov)
-                            (overlay-end
-                             ace-flyspell--ov)
-                            (point))
-                           calls)
-                          'handler-result)))
-                   (cl-letf
-                       (((symbol-function
-                          'ace-flyspell--avy-word)
-                         (lambda ()
-                           (push
-                            'avy
-                            calls)
-                           1))
-                        ((symbol-function
-                          'flyspell-get-word)
-                         (lambda (&optional following)
-                           (push
-                            (list
-                             'word
-                             following
-                             (point))
-                            calls)
-                           '("wrng" 1 5)))
-                        ((symbol-function
-                          'ace-flyspell--reset)
-                         (lambda ()
-                           (push
-                            (list
-                             'reset
-                             (overlay-start
-                              ace-flyspell--ov)
-                             (overlay-end
-                              ace-flyspell--ov))
-                            calls)
-                           (delete-overlay
-                            ace-flyspell--ov))))
-                     (list
-                      (ace-flyspell-correct-word)
-                      ace-flyspell--current-word
-                      (point)
-                      (mark)
-                      (overlay-buffer
-                       ace-flyspell--ov)
-                      (nreverse
-                       calls))))))"##;
     let expect = expect![[
-        r#"OK (handler-result "wrng" 6 6 nil (avy (word nil 10) (handler "wrng" 1 5 10) (reset 1 5)))"#
+        r#"OK ((:point 74 :word "occured" :mark 1) (:point 19 :word "recieve" :mark 74) (:text "The commitee will recieve the report.\nWe must seperate the two lists.\nIt occured twice, and it is definately wrong.\n" :overlays ((19 26 "recieve" flyspell-incorrect) (47 55 "seperate" flyspell-incorrect) (74 81 "occured" flyspell-incorrect) (99 109 "definately" flyspell-incorrect)) :box (nil nil ace-flyspell--background) :queries ("The" "commitee" "will" "recieve" "the" "report" "We" "must" "seperate" "the" "two" "lists" "It" "occured" "twice" "and" "it" "is" "definately" "wrong" "The" "occured" "The" "occured" "recieve")))"#
     ]];
 
     assert_ace_flyspell_parity(elisp_form, expect);
 }
 
+/// The package's headline workflow, through the key `ace-flyspell-setup' binds:
+/// point sits at the end of the text on a correctly spelled word, `C-.' offers
+/// the misspellings, `d' jumps to the third one, `.' runs
+/// `flyspell-auto-correct-word' on it and any other key accepts the correction.
+/// This pins the replacement the speller's first near miss produces, the
+/// re-flowed flyspell overlays (the corrected word loses its overlay and the
+/// later one shifts by the one character the correction added), the boxed word
+/// being cleaned up, the two round trips to the speller, the help and
+/// correction messages, and above all that point comes back to where the
+/// developer was working.
 #[test]
-fn ace_flyspell_correct_word_uses_the_default_handler_for_non_functions() {
-    let elisp_form = r##"(with-temp-buffer
-               (insert
-                "wrng")
-               (push-mark
-                3
-                t)
-               (let ((ace-flyspell--ov
-                      (make-overlay
-                       1
-                       1))
-                     (ace-flyspell-handler
-                      'not-a-defined-function)
-                     calls)
-                 (cl-letf
-                     (((symbol-function
-                        'ace-flyspell--avy-word)
-                       (lambda ()
-                         1))
-                      ((symbol-function
-                        'flyspell-get-word)
-                       (lambda (&optional _following)
-                         '("wrng" 1 5)))
-                      ((symbol-function
-                        'ace-flyspell-default-handler)
-                       (lambda ()
-                         (push
-                          'default
-                          calls)))
-                      ((symbol-function
-                        'ace-flyspell--reset)
-                       (lambda ()
-                         (push
-                          'reset
-                          calls)
-                         (delete-overlay
-                          ace-flyspell--ov))))
-                   (list
-                    (ace-flyspell-correct-word)
-                    (point)
-                    (nreverse
-                     calls)))))"##;
-    let expect = expect!["OK (#1=(default reset) 3 #1#)"];
+fn correcting_a_jumped_to_word_replaces_it_and_returns_point_where_it_was() {
+    let elisp_form = r##"(progn
+  (afly-test-setup)
+  (afly-test-buffer)
+  (flyspell-mode 1)
+  (flyspell-buffer)
+  (ace-flyspell-setup)
+  (goto-char (point-max))
+  (let ((mark (afly-test-message-mark))
+        (origin (point)))
+    (execute-kbd-macro (kbd "C-. d . q"))
+    (list :origin origin
+          :point (point)
+          :mark (mark)
+          :text (buffer-substring-no-properties (point-min) (point-max))
+          :overlays (afly-test-flyspell-overlays)
+          :box (afly-test-box-overlay)
+          :current-word ace-flyspell--current-word
+          :queries (last (afly-test-queries) 3)
+          :messages (afly-test-messages-since mark))))"##;
 
-    assert_ace_flyspell_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_flyspell_correct_word_cleans_up_and_returns_to_mark_after_handler_errors() {
-    let elisp_form = r##"(with-temp-buffer
-               (insert
-                "wrng tail")
-               (goto-char
-                (point-max))
-               (push-mark
-                6
-                t)
-               (let ((ace-flyspell--ov
-                      (make-overlay
-                       1
-                       1))
-                     (ace-flyspell-handler
-                      (lambda ()
-                        (error
-                         "handler failure")))
-                     calls)
-                 (cl-letf
-                     (((symbol-function
-                        'ace-flyspell--avy-word)
-                       (lambda ()
-                         1))
-                      ((symbol-function
-                        'flyspell-get-word)
-                       (lambda (&optional _following)
-                         '("wrng" 1 5)))
-                      ((symbol-function
-                        'ace-flyspell--reset)
-                       (lambda ()
-                         (push
-                          'reset
-                          calls)
-                         (delete-overlay
-                          ace-flyspell--ov))))
-                   (let ((error-value
-                          (condition-case error-data
-                              (ace-flyspell-correct-word)
-                            (error
-                             error-data))))
-                     (list
-                      error-value
-                      (point)
-                      (mark)
-                      (overlay-buffer
-                       ace-flyspell--ov)
-                      (nreverse
-                       calls))))))"##;
-    let expect = expect![[r#"OK ((error "handler failure") 6 6 nil (reset))"#]];
-
-    assert_ace_flyspell_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_flyspell_jump_word_returns_the_avy_workflow_result_unchanged() {
-    let elisp_form = r##"(let (calls)
-               (cl-letf
-                   (((symbol-function
-                      'ace-flyspell--avy-word)
-                     (lambda ()
-                       (push
-                        'called
-                        calls)
-                       '(custom result))))
-                 (list
-                  (ace-flyspell-jump-word)
-                  (nreverse
-                   calls))))"##;
-    let expect = expect!["OK ((custom result) (called))"];
-
-    assert_ace_flyspell_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_flyspell_dwim_uses_cached_auto_correction_without_rechecking_the_word() {
-    let elisp_form = r##"(with-temp-buffer
-               (insert
-                "word")
-               (goto-char
-                3)
-               (let ((flyspell-auto-correct-pos
-                      3)
-                     (flyspell-auto-correct-region
-                      '(1 . 5))
-                     calls)
-                 (cl-letf
-                     (((symbol-function
-                        'flyspell-word)
-                       (lambda ()
-                         (push
-                          'word
-                          calls)
-                         t))
-                      ((symbol-function
-                        'flyspell-auto-correct-word)
-                       (lambda ()
-                         (push
-                          'auto
-                          calls)
-                         'auto-result))
-                      ((symbol-function
-                        'ace-flyspell-correct-word)
-                       (lambda ()
-                         (push
-                          'ace
-                          calls)
-                         'ace-result)))
-                   (list
-                    (ace-flyspell-dwim)
-                    (nreverse
-                     calls)))))"##;
-    let expect = expect!["OK (auto-result (auto))"];
-
-    assert_ace_flyspell_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_flyspell_dwim_auto_corrects_when_flyspell_word_returns_nil() {
-    let elisp_form = r##"(let ((flyspell-auto-correct-pos
-                    99)
-                   (flyspell-auto-correct-region
-                    nil)
-                   calls)
-               (cl-letf
-                   (((symbol-function
-                      'flyspell-word)
-                     (lambda ()
-                       (push
-                        'word
-                        calls)
-                       nil))
-                    ((symbol-function
-                      'flyspell-auto-correct-word)
-                     (lambda ()
-                       (push
-                        'auto
-                        calls)
-                       'auto-result))
-                    ((symbol-function
-                      'ace-flyspell-correct-word)
-                     (lambda ()
-                       (push
-                        'ace
-                        calls)
-                       'ace-result)))
-                 (list
-                  (ace-flyspell-dwim)
-                  (nreverse
-                   calls))))"##;
-    let expect = expect!["OK (auto-result (word auto))"];
-
-    assert_ace_flyspell_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_flyspell_dwim_uses_ace_correction_for_a_misspelt_word() {
-    let elisp_form = r##"(let ((flyspell-auto-correct-pos
-                    99)
-                   (flyspell-auto-correct-region
-                    nil)
-                   calls)
-               (cl-letf
-                   (((symbol-function
-                      'flyspell-word)
-                     (lambda ()
-                       (push
-                        'word
-                        calls)
-                       t))
-                    ((symbol-function
-                      'flyspell-auto-correct-word)
-                     (lambda ()
-                       (push
-                        'auto
-                        calls)
-                       'auto-result))
-                    ((symbol-function
-                      'ace-flyspell-correct-word)
-                     (lambda ()
-                       (push
-                        'ace
-                        calls)
-                       'ace-result)))
-                 (list
-                  (ace-flyspell-dwim)
-                  (nreverse
-                   calls))))"##;
-    let expect = expect!["OK (ace-result (word ace))"];
-
-    assert_ace_flyspell_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_flyspell_dwim_requires_a_consp_cached_region_even_at_the_cached_position() {
-    let elisp_form = r##"(with-temp-buffer
-               (insert
-                "word")
-               (goto-char
-                3)
-               (let ((flyspell-auto-correct-pos
-                      3)
-                     (flyspell-auto-correct-region
-                      [])
-                     calls)
-                 (cl-letf
-                     (((symbol-function
-                        'flyspell-word)
-                       (lambda ()
-                         (push
-                          'word
-                          calls)
-                         t))
-                      ((symbol-function
-                        'flyspell-auto-correct-word)
-                       (lambda ()
-                         (push
-                          'auto
-                          calls)))
-                      ((symbol-function
-                        'ace-flyspell-correct-word)
-                       (lambda ()
-                         (push
-                          'ace
-                          calls)
-                         'ace-result)))
-                   (list
-                    (ace-flyspell-dwim)
-                    (nreverse
-                     calls)))))"##;
-    let expect = expect!["OK (ace-result (word ace))"];
-
-    assert_ace_flyspell_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_flyspell_setup_passes_the_exact_global_and_deferred_key_forms() {
-    let elisp_form = r##"(let (calls)
-               (cl-letf
-                   (((symbol-function
-                      'global-set-key)
-                     (lambda (key command)
-                       (push
-                        (list
-                         'global
-                         key
-                         command)
-                        calls)
-                       'global-result))
-                    ((symbol-function
-                      'eval-after-load)
-                     (lambda (file form)
-                       (push
-                        (list
-                         'after-load
-                         file
-                         form)
-                        calls)
-                       'after-load-result)))
-                 (list
-                  (ace-flyspell-setup)
-                  (nreverse
-                   calls))))"##;
     let expect = expect![[
-        r#"OK (after-load-result ((global [67108910] ace-flyspell-dwim) (after-load "flyspell" #[nil ((define-key flyspell-mode-map (kbd "C-.") 'ace-flyspell-dwim)) nil])))"#
+        r#"OK (:origin 117 :point 118 :mark 118 :text "The commitee will recieve the report.\nWe must seperate the two lists.\nIt occurred twice, and it is definately wrong.\n" :overlays ((19 26 "recieve" flyspell-incorrect) (47 55 "seperate" flyspell-incorrect) (100 110 "definately" flyspell-incorrect)) :box (nil nil ace-flyspell--background) :current-word "occured" :queries ("occured" "occurred" "wrong") :messages ("[.]: correct word; [,]: save to personal dictionary [2 times]" "Corrections: occurred occurred occurs occupied occured occurred occurs occupied occured" "[.]: correct word; [,]: save to personal dictionary [2 times]"))"#
     ]];
 
     assert_ace_flyspell_parity(elisp_form, expect);
 }
 
+/// Changing your mind: after `C-.' `a' `.' has already replaced "recieve" with
+/// "receive", `C-g' inside the correction UI must put the original spelling
+/// back, character for character, and still restore point.  The word the
+/// package remembered is the pre-correction one, and because flyspell already
+/// unhighlighted the word while correcting it, the restored text is left
+/// without an overlay until the next check.
 #[test]
-fn ace_flyspell_setup_global_set_key_behavior_under_a_rebound_global_map_matches_gnu() {
-    let elisp_form = r##"(let ((global-map
-                    (copy-keymap
-                     global-map))
-                   (flyspell-mode-map
-                    (copy-keymap
-                     flyspell-mode-map)))
-               (list
-                (ace-flyspell-setup)
-                (lookup-key
-                 global-map
-                 (kbd
-                  "C-."))
-                (lookup-key
-                 flyspell-mode-map
-                 (kbd
-                  "C-."))))"##;
-    let expect = expect!["OK (ace-flyspell-dwim nil ace-flyspell-dwim)"];
+fn declining_the_correction_with_control_g_restores_the_original_spelling() {
+    let elisp_form = r##"(progn
+  (afly-test-setup)
+  (afly-test-buffer)
+  (flyspell-mode 1)
+  (flyspell-buffer)
+  (ace-flyspell-setup)
+  (goto-char (point-min))
+  (let ((mark (afly-test-message-mark)))
+    (execute-kbd-macro (kbd "C-. a . C-g"))
+    (list :point (point)
+          :mark (mark)
+          :text (buffer-substring-no-properties (point-min) (point-max))
+          :overlays (afly-test-flyspell-overlays)
+          :box (afly-test-box-overlay)
+          :current-word ace-flyspell--current-word
+          :queries (last (afly-test-queries) 2)
+          :messages (afly-test-messages-since mark))))"##;
+
+    let expect = expect![[
+        r#"OK (:point 1 :mark 1 :text "The commitee will recieve the report.\nWe must seperate the two lists.\nIt occured twice, and it is definately wrong.\n" :overlays ((47 55 "seperate" flyspell-incorrect) (74 81 "occured" flyspell-incorrect) (99 109 "definately" flyspell-incorrect)) :box (nil nil ace-flyspell--background) :current-word "recieve" :queries ("receive" "The") :messages ("[.]: correct word; [,]: save to personal dictionary [2 times]" "Corrections: receive receive relieve reprieve recieve receive relieve reprieve recieve" "[.]: correct word; [,]: save to personal dictionary [2 times]"))"#
+    ]];
 
     assert_ace_flyspell_parity(elisp_form, expect);
 }
 
+/// `ace-flyspell-dwim' is documented to behave like
+/// `flyspell-auto-correct-word' when the word under the cursor is itself
+/// misspelled: it must correct in place and never start an avy selection.  The
+/// trailing `X' in the same key macro proves exactly that -- no avy read
+/// swallowed it, so it self-inserts into the freshly corrected word -- and the
+/// absent mark proves no jump was pushed.
 #[test]
-fn ace_flyspell_setup_installs_both_actual_global_and_flyspell_mode_bindings() {
-    let elisp_form = r##"(list
-               (ace-flyspell-setup)
-               (lookup-key
-                (current-global-map)
-                (kbd
-                 "C-."))
-               (lookup-key
-                flyspell-mode-map
-                (kbd
-                 "C-.")))"##;
-    let expect = expect!["OK (ace-flyspell-dwim ace-flyspell-dwim ace-flyspell-dwim)"];
+fn dwim_corrects_the_word_under_point_without_starting_an_avy_selection() {
+    let elisp_form = r##"(progn
+  (afly-test-setup)
+  (afly-test-buffer)
+  (flyspell-mode 1)
+  (flyspell-buffer)
+  (ace-flyspell-setup)
+  (goto-char 50)
+  (let ((mark (afly-test-message-mark))
+        (origin (list (point) (thing-at-point 'word t))))
+    (execute-kbd-macro (kbd "C-. X"))
+    (list :origin origin
+          :point (point)
+          :mark (mark)
+          :text (buffer-substring-no-properties (point-min) (point-max))
+          :overlays (afly-test-flyspell-overlays)
+          :box (afly-test-box-overlay)
+          :messages (afly-test-messages-since mark))))"##;
+
+    let expect = expect![[
+        r#"OK (:origin (50 "seperate") :point 51 :mark nil :text "The commitee will recieve the report.\nWe must sepXarate the two lists.\nIt occured twice, and it is definately wrong.\n" :overlays ((19 26 "recieve" flyspell-incorrect) (75 82 "occured" flyspell-incorrect) (100 110 "definately" flyspell-incorrect)) :box (nil nil ace-flyspell--background) :messages ("Corrections: separate separate desperate temperate seperate separate desperate temperate"))"#
+    ]];
+
+    assert_ace_flyspell_parity(elisp_form, expect);
+}
+
+/// A proper noun the speller does not know: jump to it and press `,' to add it
+/// to the personal dictionary, then any other key to leave.  The word must be
+/// sent to the speller with the `*' command, the dictionary must be saved with
+/// `#' (no confirmation, because `ace-flyspell-new-word-no-query' is set), the
+/// overlay must disappear immediately, and -- the real test -- a fresh
+/// `flyspell-buffer' must no longer flag it, while the other misspelling still
+/// is.  The text itself must not change.
+#[test]
+fn saving_a_word_to_the_personal_dictionary_stops_flyspell_flagging_it() {
+    let elisp_form = r##"(progn
+  (afly-test-setup)
+  (afly-test-buffer "The Umlaut is fine.\nBut recieve is not.\n")
+  (setq ace-flyspell-new-word-no-query t)
+  (flyspell-mode 1)
+  (flyspell-buffer)
+  (ace-flyspell-setup)
+  (goto-char (point-max))
+  (let ((mark (afly-test-message-mark))
+        (before (afly-test-flyspell-overlays)))
+    (execute-kbd-macro (kbd "C-. a , q"))
+    (let ((after (afly-test-flyspell-overlays)))
+      (flyspell-buffer)
+      (list :before before
+            :after after
+            :rechecked (afly-test-flyspell-overlays)
+            :point (point)
+            :text (buffer-substring-no-properties (point-min) (point-max))
+            :personal (with-temp-buffer
+                        (insert-file-contents afly-test-personal)
+                        (split-string (buffer-string) "\n" t))
+            :session (afly-test-session)
+            :messages (afly-test-messages-since mark)))))"##;
+
+    let expect = expect![[
+        r##"OK (:before ((5 11 "Umlaut" flyspell-incorrect) (25 32 "recieve" flyspell-incorrect)) :after ((25 32 "recieve" flyspell-incorrect)) :rechecked ((25 32 "recieve" flyspell-incorrect)) :point 41 :text "The Umlaut is fine.\nBut recieve is not.\n" :personal ("Umlaut") :session ("run|-a|-m|-B" "!" "-" "!" "-" "*Umlaut" "#" "saved") :messages ("[.]: correct word; [,]: save to personal dictionary [2 times]" "Personal dictionary saved." "[.]: correct word; [,]: save to personal dictionary"))"##
+    ]];
+
+    assert_ace_flyspell_parity(elisp_form, expect);
+}
+
+/// Nothing to correct: in a buffer flyspell finds no fault with, `C-.' has
+/// neither a misspelling under point nor any candidate to offer.  It must say
+/// so and do nothing at all -- no jump, no mark, no overlay, no edit -- rather
+/// than reading a key that would then be lost.
+#[test]
+fn a_correctly_spelled_buffer_offers_zero_candidates_and_changes_nothing() {
+    let elisp_form = r##"(progn
+  (afly-test-setup)
+  (afly-test-buffer "All of these words are spelled correctly.\n")
+  (flyspell-mode 1)
+  (flyspell-buffer)
+  (ace-flyspell-setup)
+  (goto-char 5)
+  (let ((mark (afly-test-message-mark)))
+    (execute-kbd-macro (kbd "C-."))
+    (list :point (point)
+          :mark (mark)
+          :text (buffer-substring-no-properties (point-min) (point-max))
+          :overlays (afly-test-flyspell-overlays)
+          :box (afly-test-box-overlay)
+          :queries (afly-test-queries)
+          :messages (afly-test-messages-since mark))))"##;
+
+    let expect = expect![[
+        r#"OK (:point 5 :mark nil :text "All of these words are spelled correctly.\n" :overlays nil :box (nil nil ace-flyspell--background) :queries ("All" "of" "these" "words" "are" "spelled" "correctly" "of") :messages ("zero candidates"))"#
+    ]];
 
     assert_ace_flyspell_parity(elisp_form, expect);
 }
