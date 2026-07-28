@@ -8,7 +8,10 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("default-frame-scroll-bars", Value::symbol("right"));
     obarray.set_symbol_value("initial-frame-alist", Value::NIL);
     obarray.set_symbol_value("initial-window-system", Value::NIL);
-    obarray.set_symbol_value("window-system", Value::NIL);
+    // GNU `DEFVAR_KBOARD` both installs the forwarded value and declares the
+    // symbol special.  Neomacs models the selected-frame value separately,
+    // but Lisp bindings must retain the same dynamic-scope contract.
+    obarray.define_special_variable("window-system", Value::NIL);
     obarray.set_symbol_value("handle-args-function", Value::symbol("command-line-1"));
     obarray.set_symbol_value("handle-args-function-alist", Value::NIL);
     obarray.set_symbol_value("inhibit-x-resources", Value::NIL);

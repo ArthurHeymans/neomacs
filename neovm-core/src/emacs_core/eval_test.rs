@@ -11992,6 +11992,22 @@ fn throw_on_input_is_special_and_dynamically_bound() {
 }
 
 #[test]
+fn window_system_is_special_and_dynamically_bound_like_gnu_defvar_kboard() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            "(eval
+               '(let ((reader (lambda () window-system)))
+                  (let ((window-system 'w32))
+                    (list (special-variable-p 'window-system)
+                          (funcall reader))))
+               t)"
+        ),
+        "OK (t w32)"
+    );
+}
+
+#[test]
 fn fixnum_limit_constants_are_special_like_gnu_defvar_lisp() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(

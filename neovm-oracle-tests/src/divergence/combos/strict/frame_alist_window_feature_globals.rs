@@ -39,6 +39,23 @@ fn div_f9_window_system_and_type() {
 }
 
 #[test]
+fn div_f9_window_system_is_a_dynamic_defvar_kboard_binding() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t w32)""#]];
+    crate::common::assert_oracle_parity_expect(
+        r##"
+(eval
+ '(let ((reader (lambda () window-system)))
+    (let ((window-system 'w32))
+      (list (special-variable-p 'window-system)
+            (funcall reader))))
+ t)
+"##,
+        expect,
+    );
+}
+
+#[test]
 fn div_f9_buffer_local_variables_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[r#""OK (t nil nil t (buffer-read-only))""#]];
