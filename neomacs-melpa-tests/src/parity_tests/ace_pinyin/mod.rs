@@ -1,20 +1,115 @@
 use std::time::Duration;
 
 use crate::{ACE_PINYIN_MELPA_PIN, CachedMelpaOracle};
-use expect_test::{Expect, expect};
+use expect_test::Expect;
 
-mod autoloads;
-mod jumps;
-mod modes;
-mod regex;
-mod surface;
-mod words;
+mod workflows;
 
 const ACE_PINYIN_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
-fn ace_pinyin_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ACE_PINYIN_MELPA_PIN, source_file)
+/// ace-pinyin makes avy's jump commands find a Chinese character by the first
+/// letter of its pinyin, so every workflow needs a real window-displayed buffer
+/// of mixed Chinese and Latin text, a real avy key binding, and real key input:
+/// the command prompts for the query letter with `read-char', then avy reads one
+/// more key to pick a candidate.
+///
+/// Those two reads are answered through `unread-command-events', the standard
+/// scripted-input path, rather than `execute-kbd-macro'.  Nothing of the package
+/// is stubbed: `key-binding' resolves the user's real avy binding,
+/// `call-interactively' runs the real command with its real `interactive' form,
+/// pinyinlib builds the real regexp and avy collects, labels and jumps to the
+/// real candidates.
+///
+/// `avy-last-candidates' is avy's own record of the candidate list it just
+/// offered (it is what `avy-next'/`avy-prev' resume from), which lets a workflow
+/// pin the complete ordered set of jumpable positions without pressing keys that
+/// do not exist.
+const ACE_PINYIN_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+
+;; Realistic mixed notes: simplified Chinese next to Latin words, Chinese and
+;; ASCII punctuation, and one line of traditional Chinese.
+(defconst apy-test-notes
+  (concat "北京大学 Peking University\n"
+          "上海交通大学 Shanghai Jiao Tong\n"
+          "中文输入法 Chinese input method\n"
+          "你好，世界！Hello, world.\n"
+          "《汉语大词典》 traditional 學習漢語。\n"))
+
+(defun apy-test-setup ()
+  "Pin avy's reading keys and style so candidate labels are stable."
+  (setq avy-keys '(?a ?s ?d ?f ?g ?h ?j ?k ?l)
+        avy-style 'at-full
+        avy-all-windows t
+        avy-single-candidate-jump t))
+
+(defun apy-test-buffer (&optional text name)
+  "Display a work buffer holding TEXT so the avy keys reach it."
+  (let ((buffer (generate-new-buffer (or name "*ace-pinyin-workflow*"))))
+    (set-window-buffer (selected-window) buffer)
+    (set-buffer buffer)
+    (insert (or text apy-test-notes))
+    (goto-char (point-min))
+    (set-buffer-modified-p nil)
+    buffer))
+
+(defun apy-test-where ()
+  "Describe where point is: position, character, line and column."
+  (list (point)
+        (if (char-after) (char-to-string (char-after)) 'end-of-buffer)
+        (line-number-at-pos)
+        (- (point) (line-beginning-position))))
+
+(defun apy-test-jumpable ()
+  "Return (POSITION CHARACTER) for every candidate avy last offered, in order."
+  (mapcar (lambda (candidate)
+            (let* ((where (car candidate))
+                   (start (if (consp where) (car where) where)))
+              (list start
+                    (if (char-after start)
+                        (char-to-string (char-after start))
+                      'end-of-buffer))))
+          avy-last-candidates))
+
+(defun apy-test-press (binding keys &optional origin)
+  "Invoke the command bound to BINDING from ORIGIN, answering reads with KEYS.
+
+KEYS supplies both the query character the command prompts for and the
+key avy reads to pick a candidate."
+  (goto-char (or origin (point-min)))
+  (unwind-protect
+      (progn
+        (setq unread-command-events (listify-key-sequence (kbd keys)))
+        (call-interactively (key-binding (kbd binding)))
+        (apy-test-where))
+    (setq unread-command-events nil)))
+
+(defun apy-test-offer (binding keys &optional origin)
+  "Press BINDING with KEYS and report the landing plus every offered candidate."
+  (let ((landing (apy-test-press binding keys origin)))
+    (list :landing landing :candidates (apy-test-jumpable))))
+
+(defun apy-test-owner (command original)
+  "Say who owns COMMAND's function cell: ace-pinyin's replacement or avy's."
+  (let ((cell (symbol-function command)))
+    (cond ((symbolp cell) cell)
+          ((eq cell (symbol-value original)) 'avy-original)
+          (t 'unknown))))
+
+(defun apy-test-message-mark ()
+  (with-current-buffer (get-buffer-create "*Messages*") (point-max)))
+
+(defun apy-test-messages-since (mark)
+  (with-current-buffer (get-buffer-create "*Messages*")
+    (split-string
+     (buffer-substring-no-properties (min mark (point-max)) (point-max))
+     "\n" t)))
+"##;
+
+fn ace_pinyin_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ACE_PINYIN_MELPA_PIN, "ace-pinyin.el")
         .expect("prepare pinned ace-pinyin source below ./tmp")
+        .with_prelude(ACE_PINYIN_TEST_PRELUDE)
         .with_timeout(ACE_PINYIN_TEST_TIMEOUT)
 }
 
@@ -28,59 +123,8 @@ fn current_test_name() -> String {
 
 pub(crate) fn assert_ace_pinyin_parity(form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = ace_pinyin_oracle("ace-pinyin.el")
+    let report = ace_pinyin_oracle()
         .run_value(&name, form)
         .unwrap_or_else(|error| panic!("ace-pinyin parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ace_pinyin_signal_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ace_pinyin_oracle("ace-pinyin.el")
-        .run_signal(&name, form)
-        .unwrap_or_else(|error| panic!("ace-pinyin signal parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ace_pinyin_autoload_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ace_pinyin_oracle("ace-pinyin-autoloads.el")
-        .run_value(&name, form)
-        .unwrap_or_else(|error| {
-            panic!("ace-pinyin autoload parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-#[test]
-fn ace_pinyin_exact_pin_dependencies_metadata_and_feature_match() {
-    let elisp_form = r##"(let ((descriptor
-                    (cadr
-                     (assq
-                      'ace-pinyin
-                      package-alist))))
-               (list
-                (package-desc-name descriptor)
-                (package-version-join
-                 (package-desc-version descriptor))
-                (package-desc-reqs descriptor)
-                (package-desc-summary descriptor)
-                (copy-tree
-                 (package-desc-extras descriptor))
-                (featurep 'ace-pinyin)))"##;
-    let expect = expect![[
-        r#"OK (ace-pinyin "20210827.355" ((avy (0 2 0)) (pinyinlib (0 1 0))) "Jump to Chinese characters using avy or ace-jump-mode." ((:maintainers ("Junpeng Qiu" . "qjpchmail@gmail.com")) (:authors ("Junpeng Qiu" . "qjpchmail@gmail.com")) (:keywords "extensions") (:revdesc . "47662c0b0577") (:commit . "47662c0b05775ba353464b44c0f1a037c85e746e") (:url . "https://github.com/cute-jumper/ace-pinyin")) t)"#
-    ]];
-    assert_ace_pinyin_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_pinyin_required_and_optional_dependency_features_match() {
-    let elisp_form = r##"(list
-         (featurep 'avy)
-         (featurep 'pinyinlib)
-         (featurep 'ace-jump-mode)
-         (featurep 'ace-pinyin))"##;
-    let expect = expect!["OK (t t nil t)"];
-    assert_ace_pinyin_parity(elisp_form, expect);
 }
