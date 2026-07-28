@@ -3,11 +3,7 @@ use std::time::Duration;
 use crate::{ANKI_VOCABULARY_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod configuration;
-mod registry;
-mod text;
-mod workflow;
-mod youdao;
+mod workflows;
 
 const ANKI_VOCABULARY_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -33,10 +29,6 @@ fn assert_anki_vocabulary_source_parity(source_file: &str, elisp_form: &str, exp
     expected.assert_eq(&report.gnu_emacs.to_string());
 }
 
-pub(crate) fn assert_anki_vocabulary_parity(elisp_form: &str, expected: Expect) {
+fn assert_anki_vocabulary_parity(elisp_form: &str, expected: Expect) {
     assert_anki_vocabulary_source_parity("anki-vocabulary.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_anki_vocabulary_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_anki_vocabulary_source_parity("anki-vocabulary-autoloads.el", elisp_form, expected);
 }
