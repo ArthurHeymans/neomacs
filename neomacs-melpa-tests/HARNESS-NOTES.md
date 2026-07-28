@@ -107,6 +107,19 @@ against the in-memory record the value was written from.
 is buffered and lost when a hung probe is killed, so a hang looks like "no
 output at all" and you cannot tell which form blocked.
 
+**A real Gnus summary buffer is reachable in batch**, with no server and no
+network: write an mbox into the sandbox and open it as an `nndoc` ephemeral
+group —
+`(gnus-group-read-ephemeral-group NAME '(nndoc PATH (nndoc-address PATH) (nndoc-article-type mbox)))`
+— which gives a genuine `gnus-summary-mode` buffer with real articles and
+threading. Set `gnus-batch-mode`, and:
+
+**SILENT — set `gnus-use-byte-compile` to nil.** With it on, Gnus compiles the
+format spec at runtime and that compilation raises "Defining as dynamic an
+already lexical var" partway through building the summary. You get a
+*half-drawn* summary — first message rendered, second missing — and no error at
+the point you are testing.
+
 ## Test doubles
 
 **Check `executable-find` before building fixtures.** ac-php cost an agent an
