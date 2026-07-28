@@ -535,6 +535,15 @@ Do **not** run `cargo fmt --all` in a commit retry loop for a Markdown-only
 change: it rewrites peers' half-written `.rs` files. Wait for a fmt-clean tree
 instead.
 
+**And the same hazard applies to your own concurrent jobs.** A deferred commit
+reads both the file *and its message* at commit time, not when you queue it. Two
+background jobs sharing one scratch message path will land the second message on
+the first job's content — `96b446312` carries this note *and* the
+`.dir-locals.el` trap under a subject naming only the `min-colors` one, because a
+retry loop reached its commit after the message file had been overwritten. Give
+every deferred commit its own message file, and re-read `git show --stat` after
+it lands rather than trusting the job's own success line.
+
 ## Reducing a divergence
 
 **Re-run a candidate reduction on its own before reporting it.** Some bugs
