@@ -3,17 +3,39 @@ use std::time::Duration;
 use crate::{ANYINS_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod insertion;
-mod mode;
-mod positions;
-mod registry;
-mod upstream_features;
+mod practical;
 
 const ANYINS_TEST_TIMEOUT: Duration = Duration::from_secs(180);
+const ANYINS_TEST_PRELUDE: &str = r##"
+(defun neomacs-anyins-highlight-count ()
+  (let ((cursor (point-min))
+        (count 0))
+    (while (< cursor (point-max))
+      (when
+          (eq
+           (get-char-property cursor 'face)
+           'anyins-recorded-positions)
+        (setq count (1+ count)))
+      (setq cursor (1+ cursor)))
+    count))
 
-fn anyins_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ANYINS_MELPA_PIN, source_file)
+(defun neomacs-anyins-marker-state (points)
+  (list
+   :points points
+   :faces
+   (mapcar
+    (lambda (point)
+      (get-char-property point 'face))
+    points)
+   :highlight-count
+   (neomacs-anyins-highlight-count)
+   :read-only buffer-read-only))
+"##;
+
+fn anyins_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ANYINS_MELPA_PIN, "anyins.el")
         .expect("prepare pinned anyins source below ./tmp")
+        .with_prelude(ANYINS_TEST_PRELUDE)
         .with_timeout(ANYINS_TEST_TIMEOUT)
 }
 
@@ -22,26 +44,10 @@ fn current_test_name() -> String {
     thread.name().unwrap_or("unnamed anyins parity test").into()
 }
 
-fn assert_anyins_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_anyins_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = anyins_oracle(source_file)
+    let report = anyins_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("anyins parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_anyins_parity(elisp_form: &str, expected: Expect) {
-    assert_anyins_source_parity("anyins.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_anyins_signal_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = anyins_oracle("anyins.el")
-        .run_signal(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("anyins signal parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_anyins_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_anyins_source_parity("anyins-autoloads.el", elisp_form, expected);
 }
