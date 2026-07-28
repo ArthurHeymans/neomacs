@@ -9,6 +9,13 @@
 ;;
 ;; Editing in place is also what typing actually is: one line changes, and
 ;; redisplay updates that line.
+;;
+;; The fixture records the iteration count it ACTUALLY completed, and the
+;; runner exits non-zero if the sentinel never appears. Both exist because a
+;; run that stops early still burns a believable number of instructions: a
+;; baseline that quietly finished only part of its loop once read as a +16%
+;; regression in the code under test, consistent across repeats because it
+;; failed the same way each time. Always check the reported iters.
 (run-at-time 0 nil (lambda ()
   (let* ((root (expand-file-name default-directory))
          (log  (expand-file-name "tmp/reval/typing.out" root))

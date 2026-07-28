@@ -16,7 +16,7 @@ Original docstring: run a TTY neomacs, wait for a sentinel FILE
 (not terminal output), report status. `script` proved flaky as a driver --
 the same fixture completed on one run and timed out on the next -- so this
 removes `script` from the equation to see whether it was the cause."""
-import os, pty, sys, time, subprocess, signal
+import os, pty, select, sys, time, signal
 argv = sys.argv[1:]
 sentinel = os.environ.get("SENTINEL", "")
 timeout = float(os.environ.get("PTY_TIMEOUT", "120"))
@@ -30,13 +30,22 @@ out = b""
 while time.time() < deadline:
     if sentinel and os.path.exists(sentinel):
         break
-    try:
-        r = os.read(fd, 65536)
-        if not r:
-            break
-        out += r
-    except OSError:
+    # select() with the REMAINING time, so the deadline is actually
+    # enforced. A bare blocking os.read() ignores it -- the runner then waits
+    # for the child no matter what PTY_TIMEOUT says, which made the timeout
+    # decorative and the completion check below unreachable.
+    remaining = deadline - time.time()
+    if remaining <= 0:
         break
+    ready, _, _ = select.select([fd], [], [], min(remaining, 0.25))
+    if ready:
+        try:
+            r = os.read(fd, 65536)
+            if not r:
+                break
+            out += r
+        except OSError:
+            break
     done, _ = os.waitpid(pid, os.WNOHANG)
     if done:
         break
@@ -44,5 +53,14 @@ try:
     os.kill(pid, signal.SIGKILL)
 except ProcessLookupError:
     pass
+# A benchmark that dies partway is the dangerous case: it still produces a
+# plausible instruction count, just for less work than asked. Treat "did not
+# finish" as an ERROR (non-zero exit), never as a quiet result -- a silently
+# truncated baseline once looked like a convincing +16% regression that did
+# not exist.
 ok = bool(sentinel) and os.path.exists(sentinel)
-print("SENTINEL_WRITTEN" if ok else "NO_SENTINEL")
+if not ok:
+    print("PTY-RUN-INCOMPLETE: sentinel %r never appeared within %gs"
+          % (sentinel, timeout), file=sys.stderr)
+    sys.exit(2)
+print("SENTINEL_WRITTEN")
