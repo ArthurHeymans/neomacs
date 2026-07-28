@@ -9,6 +9,40 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
+// GNU's standard-table descriptors versus canonical string-to-syntax objects
+// ---------------------------------------------------------------------------
+
+#[test]
+fn oracle_standard_syntax_table_keeps_fresh_quote_and_escape_entries() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU `init_syntax_once` deliberately installs fresh cons cells for the
+    // standard table's string-quote and escape entries.  In contrast,
+    // `string-to-syntax` canonicalizes bare syntax codes, and
+    // `modify-syntax-entry` stores those canonical objects.  Syntax semantics
+    // are equal, but Lisp can observe the identity distinction with `eq`.
+    let form = r#"
+(let* ((standard (standard-syntax-table))
+       (quote-canonical (string-to-syntax (string 34)))
+       (escape-canonical (string-to-syntax (string 92)))
+       (table (make-syntax-table)))
+  (modify-syntax-entry 39 (string 34) table)
+  (modify-syntax-entry 33 (string 92) table)
+  (list
+   (eq (char-table-range standard 34) quote-canonical)
+   (eq (char-table-range standard 92) escape-canonical)
+   (eq (char-table-range table 39) quote-canonical)
+   (eq (char-table-range table 33) escape-canonical)
+   (eq (char-table-range table 39)
+       (char-table-range standard 34))
+   (eq (char-table-range table 33)
+       (char-table-range standard 92))))
+"#;
+    let expect = expect_test::expect![[r#""OK (nil nil t t nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
+// ---------------------------------------------------------------------------
 // Comprehensive modify-syntax-entry with comment flags (1, 2, 3, 4, b, n, p)
 // ---------------------------------------------------------------------------
 

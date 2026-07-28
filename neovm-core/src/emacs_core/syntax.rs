@@ -533,13 +533,29 @@ fn syntax_runtime_string(value: &Value) -> Result<String, Flow> {
         })
 }
 
-/// Convert a `SyntaxEntry` into the Emacs cons-cell representation
-/// returned by `string-to-syntax`: `(CODE . MATCHING-CHAR-OR-NIL)`.
+/// Whether a semantic [`SyntaxEntry`] may reuse GNU's canonical bare syntax
+/// object or must be materialized as a fresh Lisp cons.
 ///
-/// The CODE is computed as: `(class_code) | (flags << 16)`.
-pub fn syntax_entry_to_value(entry: &SyntaxEntry) -> Value {
+/// Lisp can observe this choice with `eq`, so object identity is distinct from
+/// the entry's syntax semantics.  GNU normally reuses `Vsyntax_code_object`
+/// for bare syntax codes, but deliberately allocates fresh objects for the
+/// standard table's string-quote and escape entries.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LispSyntaxObjectReuse {
+    CanonicalBare,
+    Fresh,
+}
+
+/// Convert a semantic syntax entry into its Lisp representation:
+/// `(CODE . MATCHING-CHAR-OR-NIL)`.
+///
+/// The CODE is computed as: `(class_code) | (flags << 16)`.  Keeping object
+/// reuse as a typed input prevents callers that construct identity-sensitive
+/// tables from accidentally conflating semantic equality with Lisp identity.
+fn materialize_syntax_entry(entry: &SyntaxEntry, object_reuse: LispSyntaxObjectReuse) -> Value {
     let code = entry.class.code() | ((entry.flags.bits() as i64) << 16);
-    if entry.matching_char.is_none()
+    if object_reuse == LispSyntaxObjectReuse::CanonicalBare
+        && entry.matching_char.is_none()
         && (0..SYNTAX_CLASS_COUNT as i64).contains(&code)
         && let Some(cached) = syntax_code_object(code as usize)
     {
@@ -550,6 +566,12 @@ pub fn syntax_entry_to_value(entry: &SyntaxEntry) -> Value {
         None => Value::NIL,
     };
     Value::cons(Value::fixnum(code), matching)
+}
+
+/// Convert a `SyntaxEntry` using GNU's ordinary `string-to-syntax` policy:
+/// reuse the canonical object for a bare, unflagged syntax code.
+pub fn syntax_entry_to_value(entry: &SyntaxEntry) -> Value {
+    materialize_syntax_entry(entry, LispSyntaxObjectReuse::CanonicalBare)
 }
 
 fn make_syntax_code_objects() -> Value {
@@ -2456,13 +2478,21 @@ fn ensure_standard_syntax_table_object() -> EvalResult {
         // Open/Close: paren/bracket/brace pairs with matching chars;
         // StringDelim: "; Escape: \; Symbol: _ - + * / & | < > =;
         // Punctuation: . , ; : ? ! # @ ~ ^ ' `.
-        let set = |ch: char, e: SyntaxEntry| -> Result<(), Flow> {
-            super::chartable::builtin_set_char_table_range(
-                vec![table, Value::fixnum(ch as i64), syntax_entry_to_value(&e)],
-                None,
-            )
-            .map(|_| ())
-        };
+        let set_with_reuse =
+            |ch: char, e: SyntaxEntry, object_reuse: LispSyntaxObjectReuse| -> Result<(), Flow> {
+                super::chartable::builtin_set_char_table_range(
+                    vec![
+                        table,
+                        Value::fixnum(ch as i64),
+                        materialize_syntax_entry(&e, object_reuse),
+                    ],
+                    None,
+                )
+                .map(|_| ())
+            };
+        use LispSyntaxObjectReuse::{CanonicalBare, Fresh};
+        let set = |ch, entry| set_with_reuse(ch, entry, CanonicalBare);
+        let set_fresh = |ch, entry| set_with_reuse(ch, entry, Fresh);
         for ch in [' ', '\t', '\n', '\r', '\u{000c}'] {
             set(ch, SyntaxEntry::simple(SyntaxClass::Whitespace))?;
         }
@@ -2483,8 +2513,11 @@ fn ensure_standard_syntax_table_object() -> EvalResult {
         set(']', SyntaxEntry::with_match(SyntaxClass::Close, '['))?;
         set('{', SyntaxEntry::with_match(SyntaxClass::Open, '}'))?;
         set('}', SyntaxEntry::with_match(SyntaxClass::Close, '{'))?;
-        set('"', SyntaxEntry::simple(SyntaxClass::StringDelim))?;
-        set('\\', SyntaxEntry::simple(SyntaxClass::Escape))?;
+        // GNU `init_syntax_once` bypasses `Vsyntax_code_object` for these
+        // standard-table entries even though their bare forms are otherwise
+        // canonicalizable.  Preserve that observable object ownership.
+        set_fresh('"', SyntaxEntry::simple(SyntaxClass::StringDelim))?;
+        set_fresh('\\', SyntaxEntry::simple(SyntaxClass::Escape))?;
         for ch in ['_', '-', '+', '*', '/', '&', '|', '<', '>', '='] {
             set(ch, SyntaxEntry::simple(SyntaxClass::Symbol))?;
         }

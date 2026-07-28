@@ -1261,6 +1261,25 @@ fn standard_syntax_table_returns_char_table() {
 }
 
 #[test]
+fn standard_quote_and_escape_entries_are_not_canonical_bare_objects() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    for character in [34, 92] {
+        let result = eval
+            .eval_str(&format!(
+                "(eq (char-table-range (standard-syntax-table) {character}) \
+                     (string-to-syntax (string {character})))"
+            ))
+            .unwrap();
+        assert!(
+            result.is_nil(),
+            "standard syntax entry for character {character} must be fresh"
+        );
+    }
+}
+
+#[test]
 fn copy_syntax_table_returns_fresh_syntax_table() {
     crate::test_utils::init_test_tracing();
     let source = builtin_make_syntax_table(vec![]).unwrap();
