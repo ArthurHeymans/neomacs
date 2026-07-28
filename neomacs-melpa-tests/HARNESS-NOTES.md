@@ -25,6 +25,21 @@ The recovery that works: replace the stale literal with an empty
 `expect![[r#""#]];` by hand and re-run. After any UPDATE_EXPECT pass, check that
 every snapshot you expected to change actually changed.
 
+**SILENT — `#N=` back references over *strings* are flaky by construction.**
+Two equal strings that happen to be the same object print as a back reference
+under `print-circle`, and whether that sharing survives the oracle's normaliser
+is not stable: the same workflow has produced both the shared and the unshared
+form from GNU Emacs on different runs. Have every test helper `copy-sequence`
+the strings it returns, so nothing can print as a back reference. This is why
+"transcribe from a harness run" is necessary but not sufficient.
+
+Sharing of *conses* is different and safe to pin: it is structural, not
+incidental. The `a` suite deliberately pins `#1=`/`#1#` markers because a.el's
+"immutable" operations really do share alist tails, and that suite is stable
+across repeated runs. The rule is: pin sharing you can explain from the
+package's data structure, never sharing that merely happens between two equal
+strings.
+
 **Transcribe expectations from a harness run, not a raw probe.** The oracle's
 normaliser breaks string identity, so probe output containing `#1=` sharing
 markers never matches. Applies whenever a value repeats.

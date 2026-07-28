@@ -145,11 +145,25 @@ lossy. Saving a Shift_JIS, EUC-JP, GBK or ISO-2022-JP file destroys its content.
 ;; bytes on disk — GNU => (130 160 130 162 10)   Neomacs => (63 63 10)
 ```
 
-utf-8 and utf-8-unix are written correctly, and so is latin-1 — an address book
-written with `bookmark-file-coding-system` set to latin-1 keeps its accented
-names, with genuine single latin-1 bytes on disk and no `?` replacements
-(verified from the `addressbook-bookmark` suite). The damage is confined to the
-multi-byte legacy codings. Affects: `aa-edit-mode` (1).
+utf-8 and utf-8-unix are written correctly.
+
+**latin-1 depends on what you write.** For genuine latin-1 *text* it round trips
+correctly in both editors — an address book written with
+`bookmark-file-coding-system` set to latin-1 keeps its accented names, with real
+single latin-1 bytes and no `?` replacements. For **arbitrary binary** the two
+editors disagree in the opposite direction from the shift_jis case: GNU performs
+a real conversion while Neomacs passes the bytes through untouched.
+
+```elisp
+;; payload (unibyte-string 216 205 183 128), written then read back binary
+;; japanese-shift-jis   GNU => (216 32 128)        Neomacs => (63 63 63 63)
+;; latin-1              GNU => (216 32 128)        Neomacs => (216 205 183 128)
+;; binary               byte-exact in both
+```
+
+For ciphertext Neomacs's pass-through is arguably the more useful behaviour and
+GNU is the reference, but either way **a file written by one editor cannot be
+read by the other**. Affects: `aa-edit-mode` (1), `aes` (1).
 
 ## 6. `directory-files` returns undecoded bytes
 
