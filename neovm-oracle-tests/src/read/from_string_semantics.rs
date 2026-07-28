@@ -166,3 +166,33 @@ fn oracle_read_from_string_preserves_text_properties_on_read_strings() {
     let expect = expect_test::expect![[r#""OK ((\"abc\" . 5) nil nil \"abc\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
+
+#[test]
+fn oracle_unibyte_reader_sources_do_not_decode_valid_utf8_byte_runs() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU lread.c source_string_get/source_buffer_get turn each high byte into
+    // BYTE8_TO_CHAR before parsing.  A byte sequence that happens to be valid
+    // UTF-8 therefore remains raw bytes; only file sources decode encodings.
+    let form = r#"
+(let* ((source (unibyte-string ?\" #xce #xbb ?\"))
+       (from-string (car (read-from-string source)))
+       (from-buffer
+        (with-temp-buffer
+          (set-buffer-multibyte nil)
+          (insert source)
+          (goto-char (point-min))
+          (read (current-buffer)))))
+  (list
+   (multibyte-string-p source)
+   (string-to-list source)
+   (multibyte-string-p from-string)
+   (string-to-list from-string)
+   (multibyte-string-p from-buffer)
+   (string-to-list from-buffer)))
+"#;
+
+    let expect =
+        expect_test::expect![[r#""OK (nil (34 206 187 34) nil (206 187) nil (206 187))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}

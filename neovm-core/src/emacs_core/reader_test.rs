@@ -313,6 +313,28 @@ fn read_from_string_preserves_unibyte_string_literals() {
 }
 
 #[test]
+fn read_from_string_preserves_valid_utf8_runs_as_unibyte_bytes() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let input = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
+        b'"', 0xCE, 0xBB, b'"',
+    ]));
+
+    let result = builtin_read_from_string(&mut ev, vec![input]).unwrap();
+    let text = result
+        .cons_car()
+        .as_lisp_string()
+        .expect("reader should return a string object");
+
+    assert!(
+        !text.is_multibyte(),
+        "GNU string sources preserve high bytes even when they form valid UTF-8"
+    );
+    assert_eq!(text.as_bytes(), &[0xCE, 0xBB]);
+    assert_eq!(result.cons_cdr().as_fixnum(), Some(4));
+}
+
+#[test]
 fn read_from_string_preserves_unibyte_char_literals() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -4279,6 +4301,40 @@ fn read_from_unibyte_buffer_preserves_unibyte_string_literals() {
             .point_emacs_byte_pos()
             .get(),
         3
+    );
+}
+
+#[test]
+fn read_from_unibyte_buffer_preserves_valid_utf8_runs_as_bytes() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let buf_id = ev.buffers.create_buffer(" *reader-unibyte-utf8-run*");
+    {
+        let buf = ev.buffers.get_mut(buf_id).expect("buffer");
+        buf.set_multibyte_value(false);
+        buf.insert_lisp_string(&crate::heap_types::LispString::from_unibyte(vec![
+            b'"', 0xCE, 0xBB, b'"',
+        ]));
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+    }
+
+    let value = builtin_read(&mut ev, vec![Value::make_buffer(buf_id)]).expect("read from buffer");
+    let text = value
+        .as_lisp_string()
+        .expect("reader should return a string object");
+
+    assert!(
+        !text.is_multibyte(),
+        "GNU unibyte buffer sources expose each high byte as BYTE8"
+    );
+    assert_eq!(text.as_bytes(), &[0xCE, 0xBB]);
+    assert_eq!(
+        ev.buffers
+            .get(buf_id)
+            .expect("buffer")
+            .point_emacs_byte_pos()
+            .get(),
+        4
     );
 }
 

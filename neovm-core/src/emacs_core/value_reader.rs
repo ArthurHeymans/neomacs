@@ -77,7 +77,11 @@ pub fn read_all_with_source_multibyte(
     source_multibyte: bool,
     obarray: &super::symbol::Obarray,
 ) -> Result<Vec<Value>, ReadError> {
-    let mut reader = Reader::new(input, source_multibyte, obarray);
+    let mut reader = Reader::new(
+        input,
+        ReaderSourceSemantics::for_lisp_object(source_multibyte),
+        obarray,
+    );
     let mut forms = Vec::new();
     while reader.skip_ws_and_comments() {
         forms.push(reader.read_form()?);
@@ -123,7 +127,11 @@ pub fn read_one_with_source_multibyte(
     start: usize,
     obarray: &super::symbol::Obarray,
 ) -> Result<Option<(Value, usize)>, ReadError> {
-    let mut reader = Reader::new(input, source_multibyte, obarray);
+    let mut reader = Reader::new(
+        input,
+        ReaderSourceSemantics::for_lisp_object(source_multibyte),
+        obarray,
+    );
     reader.pos = start;
     if !reader.skip_ws_and_comments() {
         return Ok(None);
@@ -132,14 +140,17 @@ pub fn read_one_with_source_multibyte(
     Ok(Some((value, reader.pos)))
 }
 
-pub(crate) fn read_one_with_source_multibyte_and_shorthands(
+/// Read one form from the Latin-1 envelope used for compiled-file bytes.
+///
+/// This is intentionally separate from the unibyte string API above.  GNU
+/// decodes file input but preserves each byte of unibyte Lisp objects.
+pub(crate) fn read_one_from_encoded_file_bytes(
     input: &str,
-    source_multibyte: bool,
     start: usize,
     obarray: &super::symbol::Obarray,
     shorthands: Option<&ReadSymbolShorthands>,
 ) -> Result<Option<(Value, usize)>, ReadError> {
-    let mut reader = Reader::new(input, source_multibyte, obarray);
+    let mut reader = Reader::new(input, ReaderSourceSemantics::EncodedFileBytes, obarray);
     reader.shorthands = shorthands;
     reader.pos = start;
     if !reader.skip_ws_and_comments() {
@@ -159,7 +170,11 @@ pub fn read_one_with_locate_syms(
     locate_syms: bool,
     obarray: &super::symbol::Obarray,
 ) -> Result<Option<(Value, usize)>, ReadError> {
-    let mut reader = Reader::new(input, source_multibyte, obarray);
+    let mut reader = Reader::new(
+        input,
+        ReaderSourceSemantics::for_lisp_object(source_multibyte),
+        obarray,
+    );
     reader.pos = start;
     reader.locate_syms = locate_syms;
     if !reader.skip_ws_and_comments() {
@@ -377,9 +392,43 @@ enum ReaderSource<'a> {
     Buffer(&'a Buffer),
 }
 
+/// How a reader source exposes non-ASCII input to the Lisp parser.
+///
+/// GNU `lread.c` has separate `source_*_get` functions, so these states cannot
+/// be confused there:
+///
+/// - multibyte strings/buffers yield decoded Emacs characters;
+/// - unibyte strings/buffers yield one BYTE8 character per high byte;
+/// - encoded file input decodes valid multibyte byte sequences.
+///
+/// Neomacs used to represent all three with one `source_multibyte` boolean.
+/// The compiled-file compatibility path then decoded valid UTF-8-looking byte
+/// runs for unibyte Lisp strings and buffers too.  Keep the third state
+/// explicit so file decoding cannot silently leak into object readers.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ReaderSourceSemantics {
+    MultibyteCharacters,
+    UnibyteCharacters,
+    EncodedFileBytes,
+}
+
+impl ReaderSourceSemantics {
+    const fn for_lisp_object(multibyte: bool) -> Self {
+        if multibyte {
+            Self::MultibyteCharacters
+        } else {
+            Self::UnibyteCharacters
+        }
+    }
+
+    const fn is_multibyte(self) -> bool {
+        matches!(self, Self::MultibyteCharacters)
+    }
+}
+
 struct Reader<'a> {
     source: ReaderSource<'a>,
-    source_multibyte: bool,
+    source_semantics: ReaderSourceSemantics,
     pos: usize,
     limit: usize,
     /// `#N=EXPR` / `#N#` read labels for shared structure in `.elc` files.
@@ -508,10 +557,14 @@ fn substitute_read_placeholder_recurse(
 }
 
 impl<'a> Reader<'a> {
-    fn new(input: &'a str, source_multibyte: bool, obarray: &'a super::symbol::Obarray) -> Self {
+    fn new(
+        input: &'a str,
+        source_semantics: ReaderSourceSemantics,
+        obarray: &'a super::symbol::Obarray,
+    ) -> Self {
         Self {
             source: ReaderSource::Runtime(input),
-            source_multibyte,
+            source_semantics,
             pos: 0,
             limit: input.len(),
             read_labels: std::collections::HashMap::new(),
@@ -536,7 +589,7 @@ impl<'a> Reader<'a> {
         );
         Self {
             source: ReaderSource::LispString(input),
-            source_multibyte: input.is_multibyte(),
+            source_semantics: ReaderSourceSemantics::for_lisp_object(input.is_multibyte()),
             pos: start,
             limit: end,
             read_labels: std::collections::HashMap::new(),
@@ -562,7 +615,7 @@ impl<'a> Reader<'a> {
         );
         Self {
             source: ReaderSource::Buffer(input),
-            source_multibyte: input.get_multibyte(),
+            source_semantics: ReaderSourceSemantics::for_lisp_object(input.get_multibyte()),
             pos: start,
             limit: end,
             read_labels: std::collections::HashMap::new(),
@@ -1209,13 +1262,23 @@ impl<'a> Reader<'a> {
         unibyte_buf: &mut Option<Vec<u8>>,
         code: u32,
     ) {
-        if !self.source_multibyte && (0x80..=0xFF).contains(&code) {
-            // Non-ASCII byte from .elc/unibyte loading.
-            //
-            // GNU lread reads raw bytes and decodes UTF-8 byte runs inside
-            // multibyte string constants, while still preserving genuine
-            // raw bytes as unibyte strings. Source bytes are represented as
-            // codes 0x80..0xFF on this path.
+        if self.source_semantics == ReaderSourceSemantics::UnibyteCharacters
+            && (0x80..=0xFF).contains(&code)
+        {
+            // GNU source_string_get/source_buffer_get expose high bytes as
+            // BYTE8 characters.  Feeding that domain value into the shared
+            // string builder preserves the raw byte and keeps the result
+            // unibyte, even when adjacent bytes happen to form valid UTF-8.
+            Self::push_string_char(buf, unibyte_buf, emacs_char::byte8_to_char(code as u8));
+            return;
+        }
+
+        if self.source_semantics == ReaderSourceSemantics::EncodedFileBytes
+            && (0x80..=0xFF).contains(&code)
+        {
+            // Compiled-file bytes arrive through a Latin-1 `&str` envelope.
+            // GNU's file source decodes valid multibyte byte runs before the
+            // string parser, so reconstruct those runs only in this state.
             let byte0 = code as u8;
             let decoded = if byte0 >= 0xC0 {
                 let expected_len = if byte0 < 0xE0 {
@@ -2278,13 +2341,13 @@ impl<'a> Reader<'a> {
         // path); only the cold paths materialize a LispString via to_lisp_string.
         ReaderToken {
             bytes,
-            multibyte: self.source_multibyte,
+            multibyte: self.source_semantics.is_multibyte(),
             had_escape,
         }
     }
 
     fn push_symbol_token_code(&self, bytes: &mut ReaderTokenBytes, code: u32) {
-        if !self.source_multibyte && code <= 0xFF {
+        if !self.source_semantics.is_multibyte() && code <= 0xFF {
             bytes.push(code as u8);
             return;
         }
@@ -2491,7 +2554,7 @@ impl<'a> Reader<'a> {
             return None;
         }
 
-        if !self.source_multibyte {
+        if !self.source_semantics.is_multibyte() {
             let byte = *bytes.get(pos)?;
             return Some((byte as u32, 1));
         }
@@ -2508,7 +2571,7 @@ impl<'a> Reader<'a> {
             return None;
         }
 
-        if !self.source_multibyte {
+        if !self.source_semantics.is_multibyte() {
             let byte = input.emacs_byte_at_pos(EmacsBytePos::new(pos))?;
             return Some((byte as u32, 1));
         }

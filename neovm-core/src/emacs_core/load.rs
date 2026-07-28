@@ -1734,7 +1734,6 @@ fn streaming_readevalloop(
     path: &Path,
     hist_file_name: &LispString,
     content: &str,
-    source_multibyte: bool,
     shorthands: Option<&ReadSymbolShorthands>,
     macroexpand_fn: Option<Value>,
 ) -> Result<Value, EvalError> {
@@ -1754,9 +1753,8 @@ fn streaming_readevalloop(
             load_specpdl_base,
             "streaming_readevalloop leaked specpdl entries before {file_name} form {form_idx}",
         );
-        let read_result = super::value_reader::read_one_with_source_multibyte_and_shorthands(
+        let read_result = super::value_reader::read_one_from_encoded_file_bytes(
             content,
-            source_multibyte,
             pos,
             &eval.obarray,
             shorthands,
@@ -2329,7 +2327,7 @@ fn load_file_body(
         let content = skip_elc_header(&raw_bytes);
         let lexical_binding = elc_has_lexical_binding(&raw_bytes);
         with_load_context(eval, &hist_file_name, found, lexical_binding, |eval| {
-            streaming_readevalloop(eval, path, &hist_file_name, &content, false, None, None)
+            streaming_readevalloop(eval, path, &hist_file_name, &content, None, None)
         })
     } else {
         // GNU `Fload` (`src/lread.c`) lets the coding system swallow a leading
