@@ -965,6 +965,12 @@ pub const ATL_MARKUP_MELPA_PIN: (&str, &str) = ("atl-markup", "20240101.933");
 /// `f1b077be7e414f457191d72dcf5eedb4371f9309`.
 pub const ATOMIC_CHROME_MELPA_PIN: (&str, &str) = ("atomic-chrome", "20230304.112");
 
+/// The exact auth-source-gopass package selected by the comprehensive path,
+/// process, backend-registration, cache, and credential-workflow parity
+/// corpus. MELPA built this archive from upstream commit
+/// `6f7f0cc0d682f66d11f7fac4fa5c1e79904232da`.
+pub const AUTH_SOURCE_GOPASS_MELPA_PIN: (&str, &str) = ("auth-source-gopass", "20230109.1213");
+
 /// The exact aurel package selected by the comprehensive AUR URL,
 /// parsing, filtering, package-management, and UI workflow parity corpus.
 /// MELPA built this archive from upstream commit
