@@ -127,6 +127,15 @@ colour strings plus the display clause — and record the display facts with
 `face-spec-set-match-display` so the reason is on the record. Themes using
 `((t …))` (abyss, acme) are unaffected.
 
+**Before concluding a theme is unassertable, check whether its display class is
+itself a customization.** `alect-themes` reads its clause from
+`alect-display-class`, which defaults to `((type graphic))` — unsatisfiable in
+batch however many colours the display claims — but documents nil, "All
+terminals", as a supported value, and a nil clause matches a batch display. So
+that family is assertable by *resolved* appearance with no faking at all: pin
+the stock graphical-only behaviour once, then set the documented option and read
+real colours back through `face-attribute … nil t`.
+
 **SILENT — compute fixture positions, do not eyeball them.** An afterglow
 workflow whose fixture had a deliberately empty line was one character short, so
 the empty-line guard case exercised a *non-empty* line and asserted an overlay

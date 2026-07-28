@@ -578,8 +578,16 @@ takes no lock at all. Locking is wrong in both directions.
 
 ## 24. The `default` face ignores a display-conditional theme setting
 
-Ordinary faces take a display-conditional setting and `default` takes an
-unconditional `((t …))` one, but `default` with a display clause is dropped.
+`default` is not special in general — it is display-*conditional* settings for
+`default` that are dropped. All three cases, verified:
+
+| `default` setting | GNU | Neomacs |
+|---|---|---|
+| unconditional `((t …))` | applied | applied |
+| nil display clause `((nil …))` | applied | applied |
+| conditional `((((class color)) …))` | applied | **dropped** |
+
+Ordinary faces take the conditional form fine; only `default` does not.
 Both editors agree the clause matches (`face-spec-set-match-display` returns
 `(color)`) and both store an identical spec.
 
@@ -601,7 +609,9 @@ foreground stay at the terminal's while everything else gets themed. That
 consequence is **inferred, not observed** — batch reports a `mono` display, so
 the reduction sets `display-type` by hand. No suite witnesses this: it needs a
 theme whose `default` clause carries no `min-colors`, and `adwaita-dark-theme`'s
-does. Recorded from a verified reduction rather than a failing test.
+does. Recorded from a verified reduction rather than a failing test — though two
+of the three rows above are now covered by *passing* tests: `abyss-theme` for the
+unconditional form and `alect-themes` for the nil-display form.
 
 ## 25. An interpreted lambda's parameter destroys a built-in buffer-local
 
