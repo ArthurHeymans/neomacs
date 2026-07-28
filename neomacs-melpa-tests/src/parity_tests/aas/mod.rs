@@ -3,17 +3,32 @@ use std::time::Duration;
 use crate::{AAS_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod expansion;
-mod formatting;
-mod keymaps;
-mod modes;
-mod surface;
+mod workflows;
 
 const AAS_TEST_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// aas expands snippets from `post-self-insert-hook`, so every workflow has to
+/// type real keys.  `execute-kbd-macro` delivers them to the buffer of the
+/// selected window, which is why the helper displays the work buffer instead of
+/// merely making it current.
+const AAS_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+
+(defmacro aas-test-with-live-buffer (&rest body)
+  "Run BODY in a real, window-displayed buffer so typed keys reach it."
+  `(let ((buffer (generate-new-buffer "*aas-workflow*")))
+     (unwind-protect
+         (progn
+           (set-window-buffer (selected-window) buffer)
+           (set-buffer buffer)
+           ,@body)
+       (kill-buffer buffer))))
+"##;
 
 fn aas_oracle() -> CachedMelpaOracle {
     CachedMelpaOracle::new(AAS_MELPA_PIN, "aas.el")
         .expect("prepare pinned aas source below ./tmp")
+        .with_prelude(AAS_TEST_PRELUDE)
         .with_timeout(AAS_TEST_TIMEOUT)
 }
 
@@ -27,13 +42,5 @@ pub(crate) fn assert_aas_parity(form: &str, expected: Expect) {
     let report = aas_oracle()
         .run_value(&name, form)
         .unwrap_or_else(|error| panic!("aas parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_aas_signal_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = aas_oracle()
-        .run_signal(&name, form)
-        .unwrap_or_else(|error| panic!("aas signal parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
 }
