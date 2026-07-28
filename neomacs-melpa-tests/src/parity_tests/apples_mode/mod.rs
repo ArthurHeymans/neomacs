@@ -1,21 +1,17 @@
 use std::time::Duration;
 
-use crate::{APPLES_MODE_MELPA_PIN, CachedMelpaOracle};
+use crate::{APPLES_MODE_MELPA_PIN, CachedMelpaOracle, YASNIPPET_MELPA_PIN};
 use expect_test::Expect;
 
-mod completion;
-mod execution;
-mod indentation;
-mod mode;
-mod results;
-mod surface;
-mod utilities;
+mod workflows;
 
 const APPLES_MODE_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
 fn apples_mode_oracle(source_file: &str) -> CachedMelpaOracle {
     CachedMelpaOracle::new(APPLES_MODE_MELPA_PIN, source_file)
         .expect("prepare pinned apples-mode source below ./tmp")
+        .with_melpa_dependency(YASNIPPET_MELPA_PIN)
+        .expect("prepare pinned Yasnippet dependency below ./tmp")
         .with_timeout(APPLES_MODE_TEST_TIMEOUT)
 }
 
@@ -32,13 +28,5 @@ pub(crate) fn assert_apples_mode_parity(elisp_form: &str, expected: Expect) {
     let report = apples_mode_oracle("apples-mode.el")
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("apples-mode parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_apples_mode_signal_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = apples_mode_oracle("apples-mode.el")
-        .run_signal(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("apples-mode signal parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
 }
