@@ -245,6 +245,7 @@ mod auto_dictionary;
 mod auto_dim_other_buffers;
 mod auto_highlight_symbol;
 mod auto_indent_mode;
+mod auto_minor_mode;
 mod bind_key;
 mod compat;
 mod dash;
