@@ -93,6 +93,12 @@ pub const ATOM_ONE_DARK_THEME_MELPA_PIN: (&str, &str) = ("atom-one-dark-theme", 
 /// `fa38350829c7e97257efc746a010471d33748a68`.
 pub const AUDIO_NOTES_MODE_MELPA_PIN: (&str, &str) = ("audio-notes-mode", "20170611.2159");
 
+/// The exact australia-holidays package selected by the comprehensive
+/// national, state, territory, customization, date-calculation, and calendar
+/// integration parity corpus. MELPA built this archive from upstream commit
+/// `a73bbc940bc953164b8ed77e61e65a7a3aff4da5`.
+pub const AUSTRALIA_HOLIDAYS_MELPA_PIN: (&str, &str) = ("australia-holidays", "20250706.1213");
+
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 
