@@ -531,6 +531,44 @@ fn autoload_do_load_passes_nomessage_to_load_source_file_function() {
 }
 
 #[test]
+fn require_passes_nomessage_to_load_source_file_function() {
+    crate::test_utils::init_test_tracing();
+
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system time")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!(
+        "neovm-require-nomessage-{}-{unique}",
+        std::process::id()
+    ));
+    fs::create_dir_all(&dir).expect("create require test directory");
+    fs::write(
+        dir.join("vm-require-file.el"),
+        ";; loaded via load-source-file-function\n",
+    )
+    .expect("write require source file");
+
+    let mut ev = Context::new();
+    ev.set_variable(
+        "load-path",
+        Value::list(vec![Value::string(dir.to_string_lossy().as_ref())]),
+    );
+    let result = ev.eval_str(
+        r#"(progn
+             (setq load-source-file-function
+                   (lambda (fullname file noerror nomessage)
+                     (setq vm-require-nomessage nomessage)
+                     (provide 'vm-require-feature)
+                     t))
+             (list (require 'vm-require-feature "vm-require-file")
+                   vm-require-nomessage))"#,
+    );
+
+    assert_eq!(format_eval_result(&result), "OK (vm-require-feature t)");
+}
+
+#[test]
 fn autoload_do_load_checks_funname_before_loading_macro_autoload() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(

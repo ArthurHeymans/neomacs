@@ -239,6 +239,37 @@ fn oracle_require_from_loaded_source_preserves_buffer_match_data() {
 }
 
 #[test]
+fn oracle_require_suppresses_implicit_load_progress_messages() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU fns.c:Frequire calls load_with_autoload_queue with NOMESSAGE=t.
+    // Capture `message' itself so this guards the public Lisp contract rather
+    // than relying on batch-mode stderr or the current message-log backend.
+    let form = r#"
+(let ((original-message (symbol-function 'message))
+      messages)
+  (unwind-protect
+      (progn
+        (fset 'message
+              (lambda (format-string &rest arguments)
+                (push (apply #'format format-string arguments)
+                      messages)))
+        (list (require 'require-message-probe)
+              (nreverse messages)))
+    (fset 'message original-message)
+    (setq features (delq 'require-message-probe features))))
+"#;
+
+    let expect = expect_test::expect![r#""OK (require-message-probe nil)""#];
+    crate::common::assert_oracle_parity_with_load_root_expect(
+        form,
+        &[],
+        &autoload_fixture_root(),
+        expect,
+    );
+}
+
+#[test]
 fn oracle_require_load_error_restores_buffer_match_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

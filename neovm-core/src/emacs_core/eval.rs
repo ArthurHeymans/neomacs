@@ -2323,6 +2323,7 @@ pub(crate) enum RequirePlan {
         sym_id: SymId,
         name: String,
         path: std::path::PathBuf,
+        missing_file: super::load::MissingFilePolicy,
     },
 }
 
@@ -2365,6 +2366,9 @@ pub(crate) fn plan_require_in_state(
 
     // GNU keys MUST-SUFFIX off whether a FILENAME was supplied, not off its value.
     let filename_given = matches!(&filename, Some(value) if !value.is_nil());
+    let missing_file = super::load::MissingFilePolicy::from_noerror(
+        noerror.as_ref().is_some_and(|value| value.is_truthy()),
+    );
     let filename = match filename {
         Some(v) if v.is_nil() => name.clone(),
         Some(v) if v.is_string() => v
@@ -2392,9 +2396,10 @@ pub(crate) fn plan_require_in_state(
             sym_id,
             name,
             path: super::load::load_path_buf(&path),
+            missing_file,
         }),
         None => {
-            if noerror.is_some_and(|value| value.is_truthy()) {
+            if missing_file == super::load::MissingFilePolicy::ReturnNil {
                 return Ok(RequirePlan::Return(Value::NIL));
             }
             Err(super::load::cannot_open_load_file_signal(&filename))
@@ -9036,20 +9041,14 @@ impl Context {
         self.interpreted_closure_filter_fn = filter_fn;
     }
 
-    /// Load a file, converting EvalError back to Flow for use in special forms.
-    pub fn load_file_internal(&mut self, path: &std::path::Path) -> EvalResult {
-        self.load_file_internal_with_flags(path, false, false)
-    }
-
-    /// Load a file with caller-visible `load` flags, converting EvalError
-    /// back to Flow for use in special forms.
-    pub fn load_file_internal_with_flags(
+    /// Load a file with a typed caller policy, converting EvalError back to
+    /// Flow for use in special forms.
+    pub(crate) fn load_file_internal_with_options(
         &mut self,
         path: &std::path::Path,
-        noerror: bool,
-        nomessage: bool,
+        options: super::load::LoadOptions,
     ) -> EvalResult {
-        super::load::load_file_with_flags(self, path, noerror, nomessage).map_err(|e| match e {
+        super::load::load_file_with_options(self, path, options).map_err(|e| match e {
             EvalError::Signal {
                 symbol,
                 data,
@@ -12574,7 +12573,12 @@ impl Context {
                 self.record_load_history_entry(LoadHistoryEntry::RequiredFeature(feature));
                 match plan {
                     RequirePlan::Return(value) => Ok(value),
-                    RequirePlan::Load { sym_id, name, path } => {
+                    RequirePlan::Load {
+                        sym_id,
+                        name,
+                        path,
+                        missing_file,
+                    } => {
                         // The nesting entry rides the specpdl (GNU fns.c
                         // Frequire: record_unwind_protect (require_unwind,
                         // ...)), so a panic contained at a module/JIT
@@ -12587,7 +12591,10 @@ impl Context {
                         });
                         self.require_stack.push(sym_id);
                         let result = super::autoload::with_implicit_load_state(self, |eval| {
-                            eval.load_file_internal(&path)?;
+                            eval.load_file_internal_with_options(
+                                &path,
+                                super::load::LoadOptions::implicit_dependency(missing_file),
+                            )?;
                             eval.refresh_features_from_variable();
                             finish_require_in_state(&eval.features, sym_id, &name, Some(&path))
                         });

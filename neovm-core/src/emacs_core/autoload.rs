@@ -515,7 +515,10 @@ fn execute_autoload_load(
         // GNU eval.c:Fautoload_do_load calls load_with_autoload_queue with
         // NOMESSAGE=t: autoloading is an implicit consequence of calling a
         // function, not an explicit user request to load a file.
-        eval.load_file_internal_with_flags(&path, false, true)
+        eval.load_file_internal_with_options(
+            &path,
+            super::load::LoadOptions::implicit_dependency(super::load::MissingFilePolicy::Signal),
+        )
     });
     let result = match load_result {
         Ok(_) => finish_autoload_do_load_in_state(&eval.obarray, funname, original_fundef.as_ref()),

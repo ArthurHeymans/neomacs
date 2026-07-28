@@ -691,13 +691,12 @@ pub(crate) fn builtin_load(eval: &mut super::eval::Context, args: Vec<Value>) ->
         super::load::LoadPlan::Return(value) => Ok(value),
         super::load::LoadPlan::Load { requested, found } => {
             let path = super::fileio::lisp_file_name_to_path_buf(&found);
-            super::load::load_file_with_requested_and_found_flags(
-                eval,
-                &path,
-                &requested,
-                &found,
+            let options = super::load::LoadOptions::from_lisp_flags(
                 args.get(1).is_some_and(|v| v.is_truthy()),
                 args.get(2).is_some_and(|v| v.is_truthy()),
+            );
+            super::load::load_file_with_requested_and_found_options(
+                eval, &path, &requested, &found, options,
             )
             .map_err(eval_error_to_flow)
         }
@@ -709,8 +708,13 @@ pub(crate) fn builtin_load_file(eval: &mut super::eval::Context, args: Vec<Value
     expect_args("load-file", &args, 1)?;
     let file = crate::emacs_core::builtins::expect_lisp_string(&args[0])?.clone();
     let path = super::fileio::lisp_file_name_to_path_buf(&file);
-    super::load::load_file_with_found_flags(eval, &path, &file, false, false)
-        .map_err(eval_error_to_flow)
+    super::load::load_file_with_found_options(
+        eval,
+        &path,
+        &file,
+        super::load::LoadOptions::EXPLICIT,
+    )
+    .map_err(eval_error_to_flow)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up

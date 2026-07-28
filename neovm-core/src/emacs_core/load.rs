@@ -1135,15 +1135,17 @@ pub(crate) fn builtin_load_in_vm_runtime(
         LoadPlan::Return(value) => Ok(value),
         LoadPlan::Load { requested, found } => {
             let extra_roots = args.to_vec();
-            let noerror = args.get(1).is_some_and(|v| v.is_truthy());
-            let nomessage = args.get(2).is_some_and(|v| v.is_truthy());
+            let options = LoadOptions::from_lisp_flags(
+                args.get(1).is_some_and(|v| v.is_truthy()),
+                args.get(2).is_some_and(|v| v.is_truthy()),
+            );
             let path = load_path_buf(&found);
             let root_scope = shared.save_specpdl_roots();
             for root in &extra_roots {
                 shared.push_specpdl_root(*root);
             }
-            let result = load_file_with_requested_and_found_flags(
-                shared, &path, &requested, &found, noerror, nomessage,
+            let result = load_file_with_requested_and_found_options(
+                shared, &path, &requested, &found, options,
             )
             .map_err(|e| match e {
                 EvalError::Signal {
@@ -2088,43 +2090,123 @@ fn streaming_readevalloop_eager_expand_eval_inner(
     result
 }
 
-/// Load and evaluate a file. Returns the last result.
-pub fn load_file(eval: &mut super::eval::Context, path: &Path) -> Result<Value, EvalError> {
-    load_file_with_flags(eval, path, false, false)
+/// Whether a missing load target signals or returns nil.
+///
+/// GNU exposes this as `load`'s NOERROR flag.  Give it a domain name instead
+/// of passing a positional boolean through the loader: it does not suppress
+/// evaluation errors, and confusing it with NOMESSAGE changes user-visible
+/// behavior.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MissingFilePolicy {
+    Signal,
+    ReturnNil,
 }
 
-/// Load and evaluate a file with the caller-visible `load` flags.
-pub fn load_file_with_flags(
+impl MissingFilePolicy {
+    pub(crate) const fn from_noerror(noerror: bool) -> Self {
+        if noerror {
+            Self::ReturnNil
+        } else {
+            Self::Signal
+        }
+    }
+
+    const fn as_noerror(self) -> bool {
+        matches!(self, Self::ReturnNil)
+    }
+}
+
+/// Whether a load reports its start and completion.
+///
+/// Explicit `(load ...)` calls normally report progress.  Autoload and
+/// `require` are implicit dependency loads and GNU always suppresses those
+/// messages.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum LoadMessagePolicy {
+    Report,
+    Suppress,
+}
+
+impl LoadMessagePolicy {
+    const fn from_nomessage(nomessage: bool) -> Self {
+        if nomessage {
+            Self::Suppress
+        } else {
+            Self::Report
+        }
+    }
+
+    const fn as_nomessage(self) -> bool {
+        matches!(self, Self::Suppress)
+    }
+}
+
+/// Caller-selected GNU `load` policy.
+///
+/// Keeping the two independent axes in a typed value prevents implicit
+/// dependency loads from silently inheriting the verbose explicit-load
+/// default, which was the source of the Advent-mode divergence.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct LoadOptions {
+    missing_file: MissingFilePolicy,
+    messages: LoadMessagePolicy,
+}
+
+impl LoadOptions {
+    pub(crate) const EXPLICIT: Self = Self {
+        missing_file: MissingFilePolicy::Signal,
+        messages: LoadMessagePolicy::Report,
+    };
+
+    pub(crate) const fn implicit_dependency(missing_file: MissingFilePolicy) -> Self {
+        Self {
+            missing_file,
+            messages: LoadMessagePolicy::Suppress,
+        }
+    }
+
+    pub(crate) const fn from_lisp_flags(noerror: bool, nomessage: bool) -> Self {
+        Self {
+            missing_file: MissingFilePolicy::from_noerror(noerror),
+            messages: LoadMessagePolicy::from_nomessage(nomessage),
+        }
+    }
+}
+
+/// Load and evaluate a file. Returns the last result.
+pub fn load_file(eval: &mut super::eval::Context, path: &Path) -> Result<Value, EvalError> {
+    load_file_with_options(eval, path, LoadOptions::EXPLICIT)
+}
+
+/// Load and evaluate a file with an explicit caller policy.
+pub(crate) fn load_file_with_options(
     eval: &mut super::eval::Context,
     path: &Path,
-    noerror: bool,
-    nomessage: bool,
+    options: LoadOptions,
 ) -> Result<Value, EvalError> {
     let expanded = expand_tilde(&path.to_string_lossy());
     let path = std::path::Path::new(&expanded);
     tracing::info!("load {}", path.display());
     let requested = load_path_lisp_string(path);
-    load_file_with_requested_and_found_flags(eval, path, &requested, &requested, noerror, nomessage)
+    load_file_with_requested_and_found_options(eval, path, &requested, &requested, options)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn load_file_with_found_flags(
+pub(crate) fn load_file_with_found_options(
     eval: &mut super::eval::Context,
     path: &Path,
     found: &LispString,
-    noerror: bool,
-    nomessage: bool,
+    options: LoadOptions,
 ) -> Result<Value, EvalError> {
-    load_file_with_requested_and_found_flags(eval, path, found, found, noerror, nomessage)
+    load_file_with_requested_and_found_options(eval, path, found, found, options)
 }
 
-pub(crate) fn load_file_with_requested_and_found_flags(
+pub(crate) fn load_file_with_requested_and_found_options(
     eval: &mut super::eval::Context,
     path: &Path,
     requested: &LispString,
     found: &LispString,
-    noerror: bool,
-    nomessage: bool,
+    options: LoadOptions,
 ) -> Result<Value, EvalError> {
     if is_unsupported_compiled_path(path) {
         return Err(EvalError::Signal {
@@ -2181,7 +2263,7 @@ pub(crate) fn load_file_with_requested_and_found_flags(
     eval.specbind(intern("load-in-progress"), Value::T);
 
     let result = stacker::maybe_grow(128 * 1024, 2 * 1024 * 1024, || {
-        load_file_body(eval, path, requested, found, noerror, nomessage)
+        load_file_body(eval, path, requested, found, options)
     });
 
     eval.unbind_to(spec_entry);
@@ -2193,8 +2275,7 @@ fn load_file_body(
     path: &Path,
     requested: &LispString,
     found: &LispString,
-    noerror: bool,
-    nomessage: bool,
+    options: LoadOptions,
 ) -> Result<Value, EvalError> {
     let is_elc = path.extension().and_then(|e| e.to_str()) == Some("elc");
     let hist_file_name = load_hist_file_name(eval, requested, found);
@@ -2216,8 +2297,8 @@ fn load_file_body(
                 vec![
                     full_name,
                     Value::heap_string(hist_file_name.clone()),
-                    Value::bool_val(noerror),
-                    Value::bool_val(nomessage),
+                    Value::bool_val(options.missing_file.as_noerror()),
+                    Value::bool_val(options.messages.as_nomessage()),
                 ],
             )
             .map_err(crate::emacs_core::error::map_flow);
