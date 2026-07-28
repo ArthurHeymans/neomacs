@@ -14,6 +14,12 @@ emacs -Q --batch --eval '<form>'
 ./target/release/neomacs -Q --batch --eval '<form>'
 ```
 
+**Every reduction below was executed in both editors and reproduces as
+written** (checked 2026-07-28 against GNU Emacs 31.0.50 and
+`target/release/neomacs`). The two that cannot be a one-liner — entry 15, the
+intermittent crash, and entry 9, which needs two files on disk — are marked
+where they appear. The script that runs them all is `tmp/verify-divergences.sh`.
+
 Reproduce a failing suite with:
 
 ```sh
@@ -255,16 +261,35 @@ rendering a buffer menu (bs, ibuffer, ace-jump-buffer) shows a different list,
 and any labelling of that list differs with it. Affects: `ace-jump-buffer` (4).
 
 **Contents.** In batch, Neomacs exposes internal echo-area buffers that GNU does
-not. After the same three commands GNU reports 6 buffers and Neomacs 8, the
-extras being `" *Echo Area 0*"` and `" *Echo Area 1*"`. Enough to push a
-"fewer than N buffers open" check past its threshold. Affects: `achievements`.
+not. Enough to push a "fewer than N buffers open" check past its threshold.
+
+```elisp
+(execute-kbd-macro (kbd "C-x C-b"))
+(sort (mapcar #'buffer-name (buffer-list)) #'string<)
+;; GNU     => (" *Minibuf-0*" " *load*" "*Buffer List*" "*Messages*" "*scratch*")
+;; Neomacs => (" *Echo Area 0*" " *Echo Area 1*" " *Minibuf-0*" " *load*"
+;;             "*Buffer List*" "*Messages*" "*scratch*")
+```
+
+Affects: `achievements`.
 
 ## 14. `delete-other-windows` does not move the surviving window
 
 After `C-x 1` from a window that is not at the frame's left edge, GNU relocates
 the surviving window to the frame origin and gives it the frame's width; Neomacs
 leaves its left edge where it was and grows it, so the right edge ends up past
-the frame. Affects: `ace-window` (1).
+the frame.
+
+```elisp
+(let ((right (split-window-right)))
+  (select-window right)
+  (delete-other-windows)
+  (list (window-edges) (frame-width)))
+;; GNU     => ((0 1 80 25) 80)     ; left edge 0, right edge == frame width
+;; Neomacs => ((40 0 120 24) 80)   ; left edge still 40, right edge 40 past it
+```
+
+Affects: `ace-window` (1).
 
 ## 15. Driving `ac-complete-with-helm` under a keyboard macro can dump core
 
