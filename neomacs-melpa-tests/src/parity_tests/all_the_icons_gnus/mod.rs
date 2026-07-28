@@ -3,37 +3,159 @@ use std::time::Duration;
 use crate::{ALL_THE_ICONS_GNUS_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod article;
-mod formats;
-mod registry;
-mod setup;
+mod workflows;
 
-const ALL_THE_ICONS_GNUS_TEST_TIMEOUT: Duration = Duration::from_secs(120);
-const DETERMINISTIC_PRELUDE: &str = r##"
+const ALL_THE_ICONS_GNUS_TEST_TIMEOUT: Duration = Duration::from_secs(180);
+
+/// The package rewrites Gnus's line formats to contain icon glyphs, so the
+/// honest test is a real Gnus summary buffer rendered through them.  That turns
+/// out to be reachable in batch without a server or a network: an `nndoc'
+/// ephemeral group over an mbox file in the sandbox gives a real
+/// `gnus-summary-mode' buffer with real articles.  Two settings make it
+/// deterministic and are both ordinary user options -- `gnus-batch-mode', and
+/// `gnus-use-byte-compile' nil, without which Gnus compiles the format spec at
+/// runtime and the compilation raises "Defining as dynamic an already lexical
+/// var" partway through building the summary.
+///
+/// Everything the workflows read they created: the mbox, the ephemeral group,
+/// and the buffers.  No `.newsrc', no server, no other group is consulted.
+///
+/// Icon glyphs are private-use characters, so a format string is reported with
+/// each glyph replaced by `<icon CODE>' and the glyphs listed separately with
+/// their font family -- readable in a snapshot, and still exact.  Which glyph a
+/// name maps to belongs to all-the-icons' own suite; what is pinned here is
+/// which formats the package rewrites and what it puts in them.
+const ALL_THE_ICONS_GNUS_TEST_PRELUDE: &str = r##"
 (require 'cl-lib)
-(require 'dash)
-(defun all-the-icons-gnus-test-properties-at (position)
-  (let* ((composition
-          (get-text-property position 'composition))
-         (component (and composition (car composition)))
-         (glyph (and component (cdr component))))
-    (list
-     :face
-     (copy-tree (get-text-property position 'face))
-     :composition
-     (and
-      glyph
-      (list
-       (car component)
-       (substring-no-properties glyph)
-       (copy-tree (get-text-property 0 'face glyph))
-       (copy-tree (get-text-property 0 'display glyph)))))))
+(require 'gnus-group)
+(require 'gnus-sum)
+(require 'gnus-topic)
+
+(defconst aig-test-mbox
+  (concat
+   "From alice@example.org Mon Jan  1 10:00:00 2024\n"
+   "From: Alice Adams <alice@example.org>\n"
+   "To: team@example.org\n"
+   "Subject: Release plan\n"
+   "Date: Mon, 1 Jan 2024 10:00:00 +0000\n"
+   "Message-ID: <one@example.org>\n"
+   "\n"
+   "Let us ship on Friday.\n"
+   "\n"
+   "From bob@example.org Tue Jan  2 11:30:00 2024\n"
+   "From: Bob Brown <bob@example.org>\n"
+   "To: team@example.org\n"
+   "Subject: Re: Release plan\n"
+   "Date: Tue, 2 Jan 2024 11:30:00 +0000\n"
+   "Message-ID: <two@example.org>\n"
+   "References: <one@example.org>\n"
+   "\n"
+   "Friday works for me.\n"
+   "\n")
+  "Two real messages, the second a reply, so the summary is threaded.")
+
+(defun aig-test-path (name)
+  (expand-file-name name (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
+
+(defun aig-test-write (name text)
+  (let ((path (aig-test-path name)))
+    (make-directory (file-name-directory path) t)
+    (with-temp-buffer
+      (insert text)
+      (write-region (point-min) (point-max) path nil 'silent))
+    path))
+
+(defun aig-test-render (value)
+  "Report VALUE with icon glyphs replaced by markers, plus their fonts."
+  (if (not (stringp value))
+      value
+    (let ((plain (substring-no-properties value))
+          (icons nil)
+          (rendered "")
+          (position 0))
+      (while (< position (length plain))
+        (let ((character (aref plain position))
+              (face (get-text-property position 'face value)))
+          (if (>= character #xE000)
+              (progn
+                (push (list position character
+                            (and (listp face) (plist-get face :family)))
+                      icons)
+                (setq rendered (concat rendered (format "<icon %d>" character))))
+            (setq rendered (concat rendered (string character)))))
+        (setq position (1+ position)))
+      (list rendered (nreverse icons)))))
+
+(defun aig-test-formats ()
+  "Report every Gnus format variable the package rewrites."
+  (list :summary (aig-test-render gnus-summary-line-format)
+        :group (aig-test-render gnus-group-line-format)
+        :topic (aig-test-render gnus-topic-line-format)
+        :user-date (aig-test-render (cdr (assq t gnus-user-date-format-alist)))
+        :tree-root (aig-test-render gnus-sum-thread-tree-root)
+        :tree-false-root (aig-test-render gnus-sum-thread-tree-false-root)
+        :tree-vertical (aig-test-render gnus-sum-thread-tree-vertical)
+        :tree-single-leaf (aig-test-render gnus-sum-thread-tree-single-leaf)))
+
+(defun aig-test-prepare-gnus ()
+  "Point Gnus entirely at the sandbox and make its output deterministic."
+  (setq gnus-home-directory (aig-test-path "")
+        gnus-directory (aig-test-path "News/")
+        message-directory (aig-test-path "Mail/")
+        gnus-startup-file (aig-test-path ".newsrc")
+        gnus-init-file (aig-test-path "gnus-init.el")
+        gnus-select-method '(nnnil "")
+        gnus-secondary-select-methods nil
+        gnus-verbose 0
+        gnus-batch-mode t
+        ;; Without this Gnus byte-compiles the format spec at runtime, and the
+        ;; compilation aborts partway through building the summary.
+        gnus-use-byte-compile nil))
+
+(defun aig-test-open-mbox (name path)
+  "Open the mbox at PATH as an ephemeral nndoc group."
+  (gnus-group-read-ephemeral-group
+   name
+   (list 'nndoc path (list 'nndoc-address path) '(nndoc-article-type mbox))))
+
+(defun aig-test-summary-buffer ()
+  (cl-find-if (lambda (buffer) (string-prefix-p "*Summary" (buffer-name buffer)))
+              (buffer-list)))
+
+(defun aig-test-summary-render ()
+  (let ((buffer (aig-test-summary-buffer)))
+    (if (null buffer)
+        'no-summary-buffer
+      (with-current-buffer buffer
+        (list :mode major-mode
+              :lines (mapcar #'aig-test-render
+                             (split-string (buffer-string) "\n" t)))))))
+
+(defun aig-test-kill-gnus-buffers ()
+  (dolist (buffer (buffer-list))
+    (when (string-match-p "\\*Summary\\|\\*Article\\|nndoc\\|nntpd\\|gnus"
+                          (buffer-name buffer))
+      (let ((kill-buffer-query-functions nil))
+        (ignore-errors (kill-buffer buffer))))))
+
+(defun aig-test-compositions ()
+  "Return the composed regions and their faces in the current buffer."
+  (let ((position (point-min))
+        (result nil))
+    (while (< position (point-max))
+      (let ((next (next-single-property-change position 'composition nil (point-max))))
+        (when (get-text-property position 'composition)
+          (push (list (buffer-substring-no-properties position next)
+                      (get-text-property position 'face))
+                result))
+        (setq position next)))
+    (nreverse result)))
 "##;
 
-fn all_the_icons_gnus_oracle(source_file: &str, prelude: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ALL_THE_ICONS_GNUS_MELPA_PIN, source_file)
+fn all_the_icons_gnus_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ALL_THE_ICONS_GNUS_MELPA_PIN, "all-the-icons-gnus.el")
         .expect("prepare pinned all-the-icons-gnus source below ./tmp")
-        .with_prelude(format!("{DETERMINISTIC_PRELUDE}\n{prelude}"))
+        .with_prelude(ALL_THE_ICONS_GNUS_TEST_PRELUDE)
         .with_timeout(ALL_THE_ICONS_GNUS_TEST_TIMEOUT)
 }
 
@@ -45,36 +167,10 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_all_the_icons_gnus_source_parity(
-    source_file: &str,
-    prelude: &str,
-    elisp_form: &str,
-    expected: Expect,
-) {
+pub(crate) fn assert_all_the_icons_gnus_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = all_the_icons_gnus_oracle(source_file, prelude)
+    let report = all_the_icons_gnus_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("all-the-icons-gnus parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_all_the_icons_gnus_parity(elisp_form: &str, expected: Expect) {
-    assert_all_the_icons_gnus_source_parity("all-the-icons-gnus.el", "", elisp_form, expected);
-}
-
-pub(crate) fn assert_all_the_icons_gnus_with_prelude_parity(
-    prelude: &str,
-    elisp_form: &str,
-    expected: Expect,
-) {
-    assert_all_the_icons_gnus_source_parity("all-the-icons-gnus.el", prelude, elisp_form, expected);
-}
-
-pub(crate) fn assert_all_the_icons_gnus_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_all_the_icons_gnus_source_parity(
-        "all-the-icons-gnus-autoloads.el",
-        "",
-        elisp_form,
-        expected,
-    );
 }
