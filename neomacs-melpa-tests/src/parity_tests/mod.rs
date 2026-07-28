@@ -214,6 +214,7 @@ mod atl_long_lines;
 mod atl_markup;
 mod atom_dark_theme;
 mod atom_one_dark_theme;
+mod atomic_chrome;
 mod audacious;
 mod bind_key;
 mod compat;

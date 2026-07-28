@@ -941,6 +941,12 @@ pub const ATL_LONG_LINES_MELPA_PIN: (&str, &str) = ("atl-long-lines", "20240101.
 /// `b616343ffe17060d521b214b8e90f5da1e880934`.
 pub const ATL_MARKUP_MELPA_PIN: (&str, &str) = ("atl-markup", "20240101.933");
 
+/// The exact atomic-chrome package selected by the comprehensive websocket,
+/// browser-buffer, HTTP protocol, process, and server-lifecycle parity corpus.
+/// MELPA built this archive from upstream commit
+/// `f1b077be7e414f457191d72dcf5eedb4371f9309`.
+pub const ATOMIC_CHROME_MELPA_PIN: (&str, &str) = ("atomic-chrome", "20230304.112");
+
 /// The exact audacious package selected by the comprehensive command,
 /// playlist, song-selection, metadata, and end-to-end playback parity corpus.
 /// MELPA built this archive from upstream commit
