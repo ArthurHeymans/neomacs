@@ -3,21 +3,89 @@ use std::time::Duration;
 use crate::{ALT_CODES_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod commands;
-mod data;
-mod hooks;
-mod modes;
-mod registry;
+mod workflows;
 
 const ALT_CODES_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
-fn alt_codes_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ALT_CODES_MELPA_PIN, source_file)
+/// Fixtures shared by the workflows.
+///
+/// alt-codes watches `pre-command-hook': when the key just pressed is the
+/// *symbol* `M-kp-N' it appends N to a pending code, and when it is any other
+/// symbol event it looks the pending code up and inserts the character.  Two
+/// consequences shape every workflow.
+///
+/// The commit only happens for a symbol event.  A letter arrives as a
+/// character, `(symbolp last-input-event)' is nil and the hook returns without
+/// doing anything, so a pending code survives ordinary typing.  The workflows
+/// commit with `<f5>' bound to `ignore', which keeps the assertion about the
+/// package rather than about whatever command the committing key happens to
+/// run -- the insertion happens in the hook, before that command.
+///
+/// The lookup is `(eval (cons 'pcase (cons code alt-codes--list)))' over 383
+/// clauses, which needs roughly 6400 `max-lisp-eval-depth' to expand.  At the
+/// default 1600 the first lookup of a session signals `excessive-lisp-nesting',
+/// identically in both editors; `pcase' memoises its expansion, so once one
+/// lookup has succeeded the rest are cheap.  Workflows that exercise the
+/// insertion therefore raise the limit, and one workflow pins the failure a
+/// user meets with the default.
+const ALT_CODES_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+
+(defmacro alt-codes-test-with-buffer (&rest body)
+  "A window-displayed buffer with the mode on and a harmless commit key."
+  `(let ((buffer (generate-new-buffer "*alt-codes-workflow*")))
+     (unwind-protect
+         (progn
+           (set-window-buffer (selected-window) buffer)
+           (set-buffer buffer)
+           (text-mode)
+           (setq prefix-arg nil current-prefix-arg nil)
+           (alt-codes-mode 1)
+           (local-set-key [f5] #'ignore)
+           ,@body)
+       (kill-buffer buffer))))
+
+(defun alt-codes-test-type (&rest events)
+  "Type EVENTS, clearing any numeric prefix the keypad digits accumulated."
+  (setq prefix-arg nil current-prefix-arg nil)
+  (execute-kbd-macro (vconcat events)))
+
+(defun alt-codes-test-code (&rest digits)
+  "The events for typing DIGITS on the keypad with Meta held."
+  (mapcar (lambda (digit) (intern (format "M-kp-%c" digit))) digits))
+
+(defun alt-codes-test-enter (digits)
+  "Type DIGITS on the keypad and commit them, returning what the buffer got."
+  (erase-buffer)
+  (apply #'alt-codes-test-type (append (apply #'alt-codes-test-code
+                                              (append digits nil))
+                                       (list 'f5)))
+  (list (copy-sequence (buffer-string)) (copy-sequence alt-codes--code)))
+
+(defun alt-codes-test-message-mark ()
+  (with-current-buffer (get-buffer-create "*Messages*") (point-max)))
+
+(defun alt-codes-test-messages-since (mark &optional matching)
+  "Messages logged since MARK, optionally only those containing MATCHING."
+  (with-current-buffer (get-buffer-create "*Messages*")
+    (let ((lines (mapcar #'copy-sequence
+                         (split-string
+                          (buffer-substring-no-properties (min mark (point-max)) (point-max))
+                          "\n" t))))
+      (if matching
+          (seq-filter (lambda (line) (string-match-p matching line)) lines)
+        lines))))
+
+(defun alt-codes-test-hook ()
+  (list (and (memq #'alt-codes--pre-command-hook pre-command-hook) t)
+        (local-variable-p 'pre-command-hook)
+        alt-codes-mode))
+"##;
+
+fn alt_codes_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ALT_CODES_MELPA_PIN, "alt-codes.el")
         .expect("prepare pinned alt-codes source below ./tmp")
-        // The package constructs a 383-arm `pcase` dynamically.  Loading the
-        // interpreted source, as this differential harness intentionally
-        // does, needs more than GNU Emacs's default evaluation depth.
-        .with_prelude("(setq max-lisp-eval-depth 10000)")
+        .with_prelude(ALT_CODES_TEST_PRELUDE)
         .with_timeout(ALT_CODES_TEST_TIMEOUT)
 }
 
@@ -29,18 +97,10 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_alt_codes_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_alt_codes_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = alt_codes_oracle(source_file)
+    let report = alt_codes_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("alt-codes parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_alt_codes_parity(elisp_form: &str, expected: Expect) {
-    assert_alt_codes_source_parity("alt-codes.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_alt_codes_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_alt_codes_source_parity("alt-codes-autoloads.el", elisp_form, expected);
 }
