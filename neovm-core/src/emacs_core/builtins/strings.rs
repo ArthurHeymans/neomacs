@@ -1704,27 +1704,49 @@ fn push_format_literal_code(
     result: &mut Vec<u8>,
     code: u32,
     quoting_style: FormatMessageQuotingStyle,
-) -> bool {
+) -> FormatLiteralPush {
     const BACKTICK: u32 = '`' as u32;
     const APOSTROPHE: u32 = '\'' as u32;
     match (quoting_style, code) {
         (FormatMessageQuotingStyle::Style(TextQuotingStyle::Curve), BACKTICK) => {
             push_emacs_char(result, '‘' as u32);
-            true
+            FormatLiteralPush {
+                multibyte: true,
+                translated: true,
+            }
         }
         (FormatMessageQuotingStyle::Style(TextQuotingStyle::Curve), APOSTROPHE) => {
             push_emacs_char(result, '’' as u32);
-            true
+            FormatLiteralPush {
+                multibyte: true,
+                translated: true,
+            }
         }
         (FormatMessageQuotingStyle::Style(TextQuotingStyle::Straight), BACKTICK) => {
             result.push(b'\'');
-            false
+            FormatLiteralPush {
+                multibyte: false,
+                translated: true,
+            }
         }
         _ => {
             push_emacs_char(result, code);
-            false
+            FormatLiteralPush {
+                multibyte: false,
+                translated: false,
+            }
         }
     }
+}
+
+/// Outcome of pushing one literal format-string character.
+///
+/// `translated` is GNU's `new_result` trigger for quote translation: it marks
+/// that the output genuinely differs from the format string, which decides
+/// whether `styled_format` builds a new string at all.
+struct FormatLiteralPush {
+    multibyte: bool,
+    translated: bool,
 }
 
 /// Issue #131: `do_format` builds its result directly as canonical Emacs
@@ -1841,7 +1863,16 @@ fn do_format(
     princ_fn: &dyn Fn(&Value) -> Vec<u8>,
     prin1_fn: &dyn Fn(&Value) -> Vec<u8>,
     quoting_style: FormatMessageQuotingStyle,
-) -> Result<(Vec<u8>, Vec<FormatPropSpan>, Vec<FormatSourceSpan>, bool), Flow> {
+) -> Result<
+    (
+        Vec<u8>,
+        Vec<FormatPropSpan>,
+        Vec<FormatSourceSpan>,
+        bool,
+        bool,
+    ),
+    Flow,
+> {
     // Issue #131: iterate the format string as its real Emacs characters and
     // build the result directly as canonical Emacs internal-encoding bytes —
     // no storage-string round-trip, so a real Private-Use glyph survives and
@@ -1863,6 +1894,10 @@ fn do_format(
     let mut spans: Vec<FormatPropSpan> = Vec::new();
     let mut source_spans: Vec<FormatSourceSpan> = Vec::new();
     let mut force_multibyte_result = false;
+    // GNU `styled_format`'s `new_result`: set by a `%` conversion, `%%`, quote
+    // translation, or a raw-byte conversion. While it stays false GNU returns
+    // the format string ITSELF and copies no properties (editfns.c:4289).
+    let mut new_result = false;
     let mut arg_idx = 1;
     let mut i = 0usize;
     let mut format_char_pos = 0usize;
@@ -1876,7 +1911,9 @@ fn do_format(
         i += 1;
         format_char_pos += 1;
         if code != '%' as u32 {
-            force_multibyte_result |= push_format_literal_code(&mut result, code, quoting_style);
+            let pushed = push_format_literal_code(&mut result, code, quoting_style);
+            force_multibyte_result |= pushed.multibyte;
+            new_result |= pushed.translated;
             source_spans.push(FormatSourceSpan {
                 source_char_start: source_start,
                 source_char_end: format_char_pos,
@@ -1892,6 +1929,8 @@ fn do_format(
         format_char_pos += parsed.consumed_chars;
         let spec_source_end = format_char_pos;
 
+        // Any conversion, `%%` included, makes the result genuinely new.
+        new_result = true;
         if spec.conversion == '%' {
             result.push(b'%');
             source_spans.push(FormatSourceSpan {
@@ -2013,7 +2052,13 @@ fn do_format(
         result.extend_from_slice(&formatted);
     }
 
-    Ok((result, spans, source_spans, force_multibyte_result))
+    Ok((
+        result,
+        spans,
+        source_spans,
+        force_multibyte_result,
+        new_result,
+    ))
 }
 
 fn build_format_result(
@@ -2089,12 +2134,20 @@ pub(crate) fn builtin_format_wrapper_strict_slice(
         if let Some(result) = exact_percent_s_string_result(args) {
             return Ok(result);
         }
-        let (bytes, spans, source_spans, force_multibyte_result) = do_format(
+        let (bytes, spans, source_spans, force_multibyte_result, new_result) = do_format(
             args,
             &|v| format_percent_s_in_state(ctx, v),
             &|v| super::error::print_value_bytes_escaped_with_eval(ctx, v),
             FormatMessageQuotingStyle::None,
         )?;
+        // GNU `styled_format`: `if (! new_result) { val = args[0]; goto return_val; }`
+        // (editfns.c:4289). Nothing was formatted, so GNU builds no new string and
+        // copies no properties — the format string's own plist keeps its supplied
+        // order. Rebuilding it here applied the additive transfer and reversed
+        // help-key plists on `(user-error (substitute-command-keys "…"))`.
+        if !new_result {
+            return Ok(args[0]);
+        }
         Ok(build_format_result(
             args,
             bytes,
@@ -2256,12 +2309,20 @@ pub(crate) fn builtin_format_message_slice(
         let quoting_style = TextQuotingStyle::from_symbol_value(quoting_style)
             .map(FormatMessageQuotingStyle::from_text_quoting_style)
             .expect("text-quoting-style builtin returns a GNU quoting style symbol");
-        let (bytes, spans, source_spans, force_multibyte_result) = do_format(
+        let (bytes, spans, source_spans, force_multibyte_result, new_result) = do_format(
             args,
             &|v| format_percent_s_in_state(ctx, v),
             &|v| super::error::print_value_bytes_escaped_with_eval(ctx, v),
             quoting_style,
         )?;
+        // GNU `styled_format`: `if (! new_result) { val = args[0]; goto return_val; }`
+        // (editfns.c:4289). Nothing was formatted, so GNU builds no new string and
+        // copies no properties — the format string's own plist keeps its supplied
+        // order. Rebuilding it here applied the additive transfer and reversed
+        // help-key plists on `(user-error (substitute-command-keys "…"))`.
+        if !new_result {
+            return Ok(args[0]);
+        }
         Ok(build_format_result(
             args,
             bytes,

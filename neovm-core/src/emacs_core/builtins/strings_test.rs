@@ -198,6 +198,61 @@ fn format_preserves_multibyte_text_properties_as_char_intervals() {
     );
 }
 
+/// GNU `styled_format` returns the format string ITSELF when nothing was
+/// formatted — `if (! new_result) { val = args[0]; goto return_val; }`
+/// (editfns.c) — so the property-copy block never runs and the plist keeps its
+/// supplied order. `new_result` is set only by a `%` conversion, `%%`, curly
+/// quote translation, or a raw-byte conversion.
+///
+/// Org reaches this path with `(user-error (substitute-command-keys "…"))`:
+/// the propertized string is the FORMAT STRING and there are no directives.
+/// Neomacs rebuilt the string and applied the (correct) additive transfer, so
+/// the help-key plist came out reversed and 14 oracle tests went red.
+///
+/// Verified against GNU Emacs 31.0.90 in `--batch -Q`:
+///
+///   (format (propertize "no directives here" 'f1 1 'f2 2 'f3 3))
+///     => properties (f1 1 f2 2 f3 3), and `eq` to the input string
+#[test]
+fn format_without_directives_returns_the_format_string_unchanged_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = crate::emacs_core::eval::Context::new();
+
+    let preserved = ctx
+        .eval_str(
+            r#"(format "%S" (text-properties-at
+                 0 (format (propertize "no directives here" 'f1 1 'f2 2 'f3 3))))"#,
+        )
+        .expect("format of a directive-free string should succeed");
+    assert_eq!(
+        preserved.as_utf8_str(),
+        Some("(f1 1 f2 2 f3 3)"),
+        "nothing was formatted, so GNU copies no properties and the supplied \
+         order survives"
+    );
+
+    // GNU returns the very same object in that case.
+    let identical = ctx
+        .eval_str(r#"(let ((s (propertize "no directives here" 'f1 1))) (eq s (format s)))"#)
+        .expect("eq check should succeed");
+    assert!(!identical.is_nil(), "GNU returns args[0] itself");
+
+    // The additive transfer that `4b6132cea` fixed must still reverse when the
+    // format actually formats something (ac-helm / ac-php parity).
+    let reversed = ctx
+        .eval_str(
+            r#"(format "%S" (text-properties-at
+                 0 (format (propertize "X%sY" 'f1 1 'f2 2 'f3 3) "a")))"#,
+        )
+        .expect("format with a directive should succeed");
+    assert_eq!(
+        reversed.as_utf8_str(),
+        Some("(f3 3 f2 2 f1 1)"),
+        "a real conversion still copies the format plist with GNU's \
+         additive-prepend order"
+    );
+}
+
 #[test]
 fn format_reverses_percent_s_text_property_plist_order_like_gnu_add_properties() {
     crate::test_utils::init_test_tracing();
