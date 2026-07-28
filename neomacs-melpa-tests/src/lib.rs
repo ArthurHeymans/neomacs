@@ -99,6 +99,12 @@ pub const AUDIO_NOTES_MODE_MELPA_PIN: (&str, &str) = ("audio-notes-mode", "20170
 /// `a73bbc940bc953164b8ed77e61e65a7a3aff4da5`.
 pub const AUSTRALIA_HOLIDAYS_MELPA_PIN: (&str, &str) = ("australia-holidays", "20250706.1213");
 
+/// The exact auth-source-kwallet package selected by the comprehensive
+/// backend, process, cache, customization, and authentication-workflow parity
+/// corpus. MELPA built this archive from upstream commit
+/// `1e1bff2403966c3a0683ee65fb28cb8d8ff2c389`.
+pub const AUTH_SOURCE_KWALLET_MELPA_PIN: (&str, &str) = ("auth-source-kwallet", "20250419.1330");
+
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 
