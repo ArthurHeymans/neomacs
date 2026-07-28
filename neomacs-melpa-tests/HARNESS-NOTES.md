@@ -190,6 +190,33 @@ and `set-process-query-on-exit-flag` nil so `kill-buffer` does not prompt.
 until the process is dead. Sort concurrently recorded requests before asserting
 — activity-watch's bucket and heartbeat curl processes finish in either order.
 
+**SILENT — waiting for the process to die is not waiting for its output.**
+`process-live-p` goes nil while the last output and the sentinel's own line are
+still queued, so a capture taken then sees a buffer that is about to change —
+and when the package reuses one buffer across invocations, the sentinel lands in
+whatever the *next* command put there. android-env's first logcat snapshot had an
+empty first capture and a stray `Process Android Logcat finished` at the top of
+the second, which reads exactly like a package bug about buffer erasure. Wait for
+the buffer text to stop changing across several `accept-process-output` rounds,
+not for the process to exit.
+
+**SILENT — a stand-in that answers the same thing regardless of input is a
+double for the package's own logic.** If the real tool's answer depends on its
+input, the stand-in must depend on it too, or the suite pins the stand-in. Two
+independent encounters, one per direction:
+
+- *Wrong answers look like package behaviour.* anakondo's first stand-in replayed
+  the `inventory.core` analysis for every buffer, so completing in
+  `inventory.util` returned nil — a plausible-looking assertion that was purely
+  the stand-in's limitation. Fixed by recording `util.clj` separately and keying
+  the stand-in on the `ns` form in the text actually piped to it.
+- *Right answers stop witnessing anything.* android-env's first logcat stand-in
+  printed identical text for the unfiltered, tag-filtered and crash invocations,
+  so "each call kills the previous process and erases what it printed" was
+  asserted by three identical strings. Making it answer per-argv turned that into
+  a real observation. Same family as the alignment-fixture rule — make each case
+  wrong by a different amount.
+
 ## Assertions
 
 **Read a theme's display clauses before deciding what the suite can assert.**
@@ -215,6 +242,20 @@ real user opening a Dired buffer, not a synthetic `defface`. Those four also
 carry attribute kinds nothing else in the theme reaches — `:strike-through` on a
 broken symlink, wave underlines naming their own colour, fractional heading
 scales.
+
+**A `min-colors` clause makes a theme unassertable only if it has no fallback.**
+Check for a second clause before concluding a theme cannot be read back. Where
+each conditional spec carries a `(t …)` clause — the zenburn construction does —
+a batch frame resolves that clause **for real**, and the fallback is precisely
+what a user on a low-colour terminal sees. ample-zen-theme is the mixed case that
+neither of the two previous rules covers: 412 of its 421 settings are `((t …))`,
+and the other nine are `((class color) (min-colors 89))` *with* fallbacks. Those
+nine are the most interesting faces in the package — below 89 colours the theme
+does not fail to apply, it applies something deliberately different. `mode-line`
+and `region` come out inverse video with no colours, `hl-line` bold with no
+background, an added diff line `#6abd50` rather than `#6a7550`. Pin both clauses
+side by side with `face-spec-set-match-display` for each, so the reason the
+fallback won sits beside what it produced.
 
 **A display that cannot satisfy a theme's clause is a finding, not an
 obstacle.** The tempting fix is to redefine `display-color-cells` and
@@ -242,6 +283,34 @@ The honest route, which is also more coverage rather than less:
 Generalises past themes: whenever a package's behaviour is gated on a capability
 the batch editor lacks, pin the gate's *answer* and the behaviour on both sides
 of it. Never synthesise the capability.
+
+**SILENT — the repository's own `.dir-locals.el` reaches every file the suite
+visits, and can never fail as a parity difference.** The sandbox lives inside the
+neomacs worktree, whose top-level `.dir-locals.el` (inherited from GNU Emacs)
+binds for *every* mode:
+
+```elisp
+((nil . ((tab-width . 8) (sentence-end-double-space . t) (fill-column . 72) …)))
+```
+
+Directory-local variables are applied **after** the major mode runs, so they
+overwrite what the mode set for itself. asn1-mode does `(setq-local tab-width 4)`
+and a visited `.asn1` file in the sandbox gets 8 — changing every indentation
+result in the suite. It bites only tests that **visit a file**; `with-temp-buffer`
+plus a direct mode call is unaffected, which is why a probe and a real run can
+disagree and why an old corpus never saw it. And because both editors read the
+same file, it can never surface as a parity failure — only as a suite that
+quietly measures the wrong configuration.
+
+Bind `enable-dir-local-variables` to nil around `find-file-noselect`. That
+restores the realistic configuration rather than removing one: a user editing an
+ASN.1 file in their own project has no such directory above them. Also watch that
+`emacs-lisp-mode` there gets `indent-tabs-mode nil`, and c/java/objc get
+`(mode . bug-reference-prog)` — so a file-visiting test can silently acquire a
+minor mode it never asked for.
+
+This is the second trap of the shape "the sandbox is inside the repository, and
+the repository has opinions". Expect more.
 
 **SILENT — the sandbox is inside a project, so "outside a project" is
 unreachable.** Every sandbox lives at `<workspace>/tmp/melpa/<label>-XXXXXX`,
@@ -374,6 +443,30 @@ and back when it is disabled. A theme that omits `:weight` on a stock-bold face
 silently un-bolds it — and a suite that reads only the attributes the theme
 *sets* is structurally unable to see that happen.
 
+**Caveat, and it is the difference between a true report and an alarming one:
+put `face-default-spec` in the report beside the before and after.** Two things
+that look identical in a before/after diff are not the same finding, and the
+standard spec is the only thing that tells them apart:
+
+- an attribute on a `default` clause or an **unconditional `(t …)`** was in force
+  on every display, so losing it is real for every user — in ample-theme,
+  `font-lock-warning-face`'s `:inherit error`, `button`'s `:inherit link`,
+  `header-line`'s `:inherit mode-line`, `error`'s `(default :weight bold)`;
+- an attribute on the `(t …)` **fallback of a colour-conditional spec** was only
+  in force because the batch frame reports zero colours, so a user on a real
+  terminal never had it — in ample-theme, `show-paren-match`'s
+  `:inherit underline`, which sits on the last clause after the colour-conditional
+  ones.
+
+Without the standard spec, a green test says "the theme destroys your
+matching-paren underline" when it does no such thing on the display the theme
+documents. And an attribute survives replacement whenever the theme happens to
+set it again — ample restates `:underline t` on `link` and `button`, and
+`:slant italic` on `completions-annotations`, so those are not losses at all.
+Measured properly, ample sets 550 faces, 34 already exist at bare startup, and
+**21 of the 34 lose at least one stock attribute** — that is the mechanism's real
+size.
+
 **If a measurement is not behaviour, do not pin it at all.** An amread-mode
 initial-delay assertion read 0 tenths in a probe and 17 under UPDATE_EXPECT on
 identical code, because the baseline is taken before the mode-enabling call
@@ -422,6 +515,25 @@ between fixture and expectation. align-cljlet's suite is built that way.
 `font-lock-ensure`.** actionscript-mode's `as3-count-scope-depth` decides whether
 a brace counts by looking at its face, so the indenter only works on a fontified
 buffer — a suite that always fontifies would silently depend on that.
+
+## Committing shared files
+
+**`git commit -- <path>` takes the working-tree copy, so a shared Markdown file
+sweeps up whatever a peer has written into it.** With several agents in one
+worktree, `DIVERGENCES.md` and this file are routinely dirty with someone else's
+in-progress additions, and the first commit to land takes them.
+
+The convention: **read the full diff of a shared file before committing it, and
+describe everything in it.** Attribution is not the real risk — the real risk is
+a commit whose message documents two entries while its diff contains four, which
+makes the history actively misleading to anyone bisecting later. If a sweep
+happens, say so in the message and name what came from where. Entries should also
+carry their own provenance in the text (the package that surfaced them), so
+attribution survives independently of which commit they landed in.
+
+Do **not** run `cargo fmt --all` in a commit retry loop for a Markdown-only
+change: it rewrites peers' half-written `.rs` files. Wait for a fmt-clean tree
+instead.
 
 ## Reducing a divergence
 
