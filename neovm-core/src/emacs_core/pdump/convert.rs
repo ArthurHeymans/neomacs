@@ -3736,6 +3736,7 @@ pub(crate) fn dump_evaluator(eval: &Context) -> DumpContextState {
         syntax_code_objects: encoder.dump_value(&eval.syntax_code_objects),
         standard_category_table: encoder.dump_value(&eval.standard_category_table),
         current_local_map: encoder.dump_value(&eval.current_local_map),
+        current_global_map: encoder.dump_value(&eval.current_global_map()),
         kmacro: dump_kmacro(&mut encoder, &eval.kmacro),
         registers: dump_register_manager(&mut encoder, &eval.registers),
         bookmarks: dump_bookmark_manager(&eval.bookmarks),

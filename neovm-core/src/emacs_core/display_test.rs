@@ -4007,6 +4007,7 @@ fn x_popup_menu_interactive_menu_bar_right_returns_next_menu_position() {
     );
     crate::emacs_core::keymap::list_keymap_define(global_map, Value::symbol("menu-bar"), menu_bar);
     eval.set_variable("global-map", global_map);
+    eval.select_global_map(global_map);
     eval.set_variable(
         "menu-bar-final-items",
         Value::list(vec![Value::symbol("help-menu")]),

@@ -1377,6 +1377,7 @@ pub struct DumpContextState {
     pub syntax_code_objects: DumpValue,
     pub standard_category_table: DumpValue,
     pub current_local_map: DumpValue,
+    pub current_global_map: DumpValue,
     pub kmacro: DumpKmacroManager,
     pub registers: DumpRegisterManager,
     pub bookmarks: DumpBookmarkManager,

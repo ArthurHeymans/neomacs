@@ -7,12 +7,12 @@ use crate::emacs_core::symbol::Obarray;
 use super::keymap::{
     KeyEvent, KeymapMarker, collect_minor_mode_map_entries_in_state,
     collect_minor_mode_maps_in_state, current_active_maps_for_position,
-    ensure_global_keymap_in_obarray, expand_meta_prefix_char_events_in_obarray,
-    get_keymap_in_obarray, get_keymap_in_runtime, is_list_keymap, key_event_to_emacs_event,
-    list_keymap_accessible, list_keymap_copy, list_keymap_define_seq_in_obarray,
-    list_keymap_define_seq_in_obarray_ex, list_keymap_inherits_from, list_keymap_parent,
-    list_keymap_set_parent, lookup_key_in_keymaps_in_obarray_runtime, make_list_keymap,
-    make_sparse_list_keymap, maybe_keymap_in_obarray, maybe_keymap_in_runtime,
+    expand_meta_prefix_char_events_in_obarray, get_keymap_in_obarray, get_keymap_in_runtime,
+    is_list_keymap, key_event_to_emacs_event, list_keymap_accessible, list_keymap_copy,
+    list_keymap_define_seq_in_obarray, list_keymap_define_seq_in_obarray_ex,
+    list_keymap_inherits_from, list_keymap_parent, list_keymap_set_parent,
+    lookup_key_in_keymaps_in_obarray_runtime, make_list_keymap, make_sparse_list_keymap,
+    maybe_keymap_in_obarray, maybe_keymap_in_runtime,
 };
 use super::symbols::cache_event_symbol_value_properties_in_obarray;
 
@@ -34,11 +34,6 @@ pub(crate) fn expect_keymap_in_obarray(obarray: &Obarray, value: &Value) -> Resu
 
 fn expect_keymap(eval: &mut super::eval::Context, value: &Value) -> EvalResult {
     get_keymap_in_runtime(eval, value, true, true)
-}
-
-/// Get the global keymap from obarray, creating one if needed.
-fn ensure_global_keymap(eval: &mut super::eval::Context) -> Value {
-    ensure_global_keymap_in_obarray(&mut eval.obarray)
 }
 
 #[allow(clippy::too_many_arguments)] // mirrors the Lisp helper's positional argument contract
@@ -472,7 +467,8 @@ pub(super) fn builtin_global_set_key(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("global-set-key", &args, 2)?;
-    let global = ensure_global_keymap(eval);
+    let selected_global_map = eval.current_global_map();
+    let global = get_keymap_in_runtime(eval, &selected_global_map, true, true)?;
     let events = expect_key_events(&args[0])?;
     cache_key_event_symbol_properties(eval, &events)?;
     let def = args[1];
@@ -526,7 +522,7 @@ pub(super) fn builtin_use_global_map(
 ) -> EvalResult {
     expect_args("use-global-map", &args, 1)?;
     let keymap = get_keymap_in_runtime(eval, &args[0], true, true)?;
-    eval.obarray.set_symbol_value("global-map", keymap);
+    eval.select_global_map(keymap);
     Ok(Value::NIL)
 }
 
@@ -552,7 +548,7 @@ pub(super) fn builtin_current_global_map(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("current-global-map", &args, 0)?;
-    Ok(ensure_global_keymap(eval))
+    Ok(eval.current_global_map())
 }
 
 pub(super) fn builtin_describe_buffer_bindings(
@@ -680,7 +676,7 @@ pub(super) fn builtin_describe_buffer_bindings(
         eval.push_specpdl_root(shadow);
     }
 
-    let global_map = ensure_global_keymap(eval);
+    let global_map = eval.current_global_map();
     call_help_describe_map_tree(
         eval,
         global_map,

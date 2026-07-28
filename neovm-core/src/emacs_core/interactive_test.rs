@@ -1804,7 +1804,7 @@ fn key_binding_global() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let km = make_list_keymap();
-    ev.obarray.set_symbol_value("global-map", km);
+    ev.select_global_map(km);
     // ctrl-f = char 6
     let ctrl_f = Value::fixnum(6);
     crate::emacs_core::keymap::list_keymap_define(km, ctrl_f, Value::symbol("forward-char"));
@@ -1939,7 +1939,12 @@ fn key_binding_unbound() {
 fn key_binding_empty_returns_keymap_list() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        eval_one(r#"(let ((m (key-binding ""))) (and (consp m) (keymapp (car m))))"#),
+        eval_one(
+            r#"(let ((g (make-sparse-keymap)))
+                 (use-global-map g)
+                 (let ((m (key-binding "")))
+                   (and (consp m) (keymapp (car m)))))"#
+        ),
         "OK t"
     );
 }

@@ -4041,11 +4041,22 @@ fn vm_eval_bridge_preserves_current_local_map_across_builtin_calls() {
 }
 
 #[test]
-fn vm_use_global_map_updates_shared_runtime_state() {
+fn vm_selected_global_map_is_independent_of_the_lisp_variable() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        vm_eval_str("(progn (use-global-map (make-sparse-keymap)) (keymapp (current-global-map)))"),
-        "OK t"
+        vm_eval_str(
+            r#"(let* ((selected (make-keymap))
+                      (rebound (copy-keymap selected))
+                      (key (vector 1)))
+                 (use-global-map selected)
+                 (let ((global-map rebound))
+                   (global-set-key key 'vm-selected-global-command)
+                   (list (eq (current-global-map) selected)
+                         (eq (current-global-map) global-map)
+                         (lookup-key selected key)
+                         (lookup-key global-map key))))"#
+        ),
+        "OK (t nil vm-selected-global-command nil)"
     );
 }
 

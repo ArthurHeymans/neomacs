@@ -1681,15 +1681,50 @@ pub fn list_keymap_inherits_from(keymap: &Value, target: &Value) -> bool {
     false
 }
 
-pub(crate) fn ensure_global_keymap_in_obarray(obarray: &mut Obarray) -> Value {
-    if let Some(val) = obarray.symbol_value("global-map").copied()
-        && is_list_keymap(&val)
-    {
-        return val;
+/// Runtime selection installed by GNU's `use-global-map`.
+///
+/// This is intentionally distinct from the Lisp variable `global-map`.
+/// Dynamically binding or assigning that variable does not select a new map;
+/// only `use-global-map` changes the runtime selection.
+#[derive(Clone, Copy, Debug, Default)]
+enum GlobalMapSelection {
+    #[default]
+    Uninitialized,
+    Selected(Value),
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct SelectedGlobalMap {
+    selection: GlobalMapSelection,
+}
+
+impl SelectedGlobalMap {
+    pub(crate) fn from_dump(value: Value) -> Option<Self> {
+        if value.is_nil() {
+            Some(Self::default())
+        } else if is_list_keymap(&value) {
+            Some(Self {
+                selection: GlobalMapSelection::Selected(value),
+            })
+        } else {
+            None
+        }
     }
-    let keymap = make_list_keymap();
-    obarray.set_symbol_value("global-map", keymap);
-    keymap
+
+    pub(crate) fn value(self) -> Value {
+        match self.selection {
+            GlobalMapSelection::Uninitialized => Value::NIL,
+            GlobalMapSelection::Selected(value) => value,
+        }
+    }
+
+    pub(crate) fn select(&mut self, value: Value) {
+        assert!(
+            is_list_keymap(&value),
+            "SelectedGlobalMap requires a resolved keymap"
+        );
+        self.selection = GlobalMapSelection::Selected(value);
+    }
 }
 
 fn dynamic_or_global_symbol_value_in_state(
@@ -2320,7 +2355,7 @@ pub(crate) fn current_active_maps_for_position(
     obey_overriding_local_maps: bool,
     position: Option<&Value>,
 ) -> Result<Vec<Value>, Flow> {
-    let global_map = ensure_global_keymap_in_obarray(&mut ctx.obarray);
+    let global_map = ctx.current_global_map();
     let overriding_local_map =
         dynamic_or_global_symbol_value_in_state(&ctx.obarray, &[], "overriding-local-map")
             .and_then(|value| maybe_keymap_in_obarray(&ctx.obarray, &value));
@@ -2347,12 +2382,7 @@ pub(crate) fn current_active_maps_for_position_read_only(
     obey_overriding_local_maps: bool,
     position: Option<&Value>,
 ) -> Result<Vec<Value>, Flow> {
-    let global_map = ctx
-        .obarray
-        .symbol_value("global-map")
-        .copied()
-        .filter(is_list_keymap)
-        .unwrap_or_else(make_list_keymap);
+    let global_map = ctx.current_global_map();
     let overriding_local_map =
         dynamic_or_global_symbol_value_in_state(&ctx.obarray, &[], "overriding-local-map")
             .and_then(|value| maybe_keymap_in_obarray(&ctx.obarray, &value));
@@ -2566,11 +2596,7 @@ fn where_is_explicit_keymaps_in_context(ctx: &Context, value: &Value) -> Result<
     if is_list_keymap(value) {
         let keymap = where_is_expect_keymap_in_obarray(&ctx.obarray, value)?;
         let mut keymaps = vec![keymap];
-        let global_map = ctx
-            .obarray
-            .symbol_value("global-map")
-            .copied()
-            .unwrap_or(Value::NIL);
+        let global_map = ctx.current_global_map();
         if is_list_keymap(&global_map) && global_map != keymap {
             keymaps.push(global_map);
         }
@@ -2595,11 +2621,7 @@ fn where_is_explicit_keymaps_in_context(ctx: &Context, value: &Value) -> Result<
         where_is_expect_keymap_in_obarray(&ctx.obarray, value)?
     };
     let mut keymaps = vec![keymap];
-    let global_map = ctx
-        .obarray
-        .symbol_value("global-map")
-        .copied()
-        .unwrap_or(Value::NIL);
+    let global_map = ctx.current_global_map();
     if is_list_keymap(&global_map) && global_map != keymap {
         keymaps.push(global_map);
     }

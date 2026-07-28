@@ -14,7 +14,7 @@ use super::types::{
 };
 
 const ROOTS_MAGIC: [u8; 16] = *b"NEOROOTS\0\0\0\0\0\0\0\0";
-const ROOTS_FORMAT_VERSION: u32 = 2;
+const ROOTS_FORMAT_VERSION: u32 = 3;
 
 #[derive(Debug, Clone)]
 pub(crate) struct DumpRootState {
@@ -27,6 +27,7 @@ pub(crate) struct DumpRootState {
     pub syntax_code_objects: DumpValue,
     pub standard_category_table: DumpValue,
     pub current_local_map: DumpValue,
+    pub current_global_map: DumpValue,
 }
 
 #[repr(C)]
@@ -72,6 +73,7 @@ pub(crate) fn roots_section_bytes(roots: &DumpRootState) -> Result<Vec<u8>, Dump
     write_value(&mut bytes, &roots.syntax_code_objects)?;
     write_value(&mut bytes, &roots.standard_category_table)?;
     write_value(&mut bytes, &roots.current_local_map)?;
+    write_value(&mut bytes, &roots.current_global_map)?;
 
     let payload_len = bytes.len() - HEADER_SIZE;
     let header = RootsHeader {
@@ -131,6 +133,7 @@ pub(crate) fn load_roots_section(section: &[u8]) -> Result<DumpRootState, DumpEr
     let syntax_code_objects = cursor.read_value()?;
     let standard_category_table = cursor.read_value()?;
     let current_local_map = cursor.read_value()?;
+    let current_global_map = cursor.read_value()?;
 
     if !cursor.is_empty() {
         return Err(DumpError::ImageFormatError(format!(
@@ -149,6 +152,7 @@ pub(crate) fn load_roots_section(section: &[u8]) -> Result<DumpRootState, DumpEr
         syntax_code_objects,
         standard_category_table,
         current_local_map,
+        current_global_map,
     })
 }
 
@@ -339,6 +343,7 @@ mod tests {
             syntax_code_objects: DumpValue::Vector(super::super::types::DumpHeapRef { index: 9 }),
             standard_category_table: DumpValue::Nil,
             current_local_map: DumpValue::Cons(super::super::types::DumpHeapRef { index: 8 }),
+            current_global_map: DumpValue::Cons(super::super::types::DumpHeapRef { index: 10 }),
         };
 
         let bytes = roots_section_bytes(&roots).expect("encode roots");
@@ -359,6 +364,7 @@ mod tests {
             syntax_code_objects: DumpValue::Nil,
             standard_category_table: DumpValue::Nil,
             current_local_map: DumpValue::Nil,
+            current_global_map: DumpValue::Nil,
         })
         .expect("encode roots");
         bytes[0] ^= 1;

@@ -41,6 +41,51 @@ fn test_pdump_round_trip_basic() {
 }
 
 #[test]
+fn pdump_round_trip_preserves_selected_global_map_separately_from_lisp_variable() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.eval_str(
+        "(progn
+           (setq pdump-selected-global-map (make-keymap))
+           (use-global-map pdump-selected-global-map)
+           (setq global-map (make-keymap)))",
+    )
+    .expect("global keymap setup should succeed");
+
+    let dir = tempfile::tempdir().unwrap();
+    let dump_path = dir.path().join("selected-global-map.pdump");
+    dump_to_file(&eval, &dump_path).expect("dump should succeed");
+    let mut loaded = load_from_dump(&dump_path).expect("load should succeed");
+
+    let restored = loaded.eval_str(
+        "(list
+           (eq (current-global-map) pdump-selected-global-map)
+           (eq (current-global-map) global-map)
+           (keymapp (current-global-map)))",
+    );
+    assert_eq!(format_eval_result(&restored), "OK (t nil t)");
+}
+
+#[test]
+fn restore_snapshot_rejects_non_keymap_selected_global_map() {
+    crate::test_utils::init_test_tracing();
+    let mut snapshot = snapshot_evaluator(&Context::new());
+    snapshot.current_global_map = types::DumpValue::Int(42);
+
+    let result = restore_snapshot(&snapshot);
+    match result {
+        Err(DumpError::DeserializationError(message)) => {
+            assert!(
+                message.contains("selected global map"),
+                "unexpected validation error: {message}"
+            );
+        }
+        Err(other) => panic!("unexpected restoration error: {other}"),
+        Ok(_) => panic!("non-keymap selected global map unexpectedly restored"),
+    }
+}
+
+#[test]
 fn test_pdump_bytecode_round_trips_through_the_arena_pages() {
     crate::test_utils::init_test_tracing();
     // task 03/3a: BOTH bytecode construction paths — the `#[...]` reader

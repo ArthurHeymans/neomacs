@@ -1,7 +1,7 @@
 //! Oracle parity tests for keymap accessors: `current-global-map`,
 //! `current-local-map`, `use-global-map`, `use-local-map`.
 //!
-//! GNU implements these in `src/keyboard.c`.
+//! GNU implements these in `src/keymap.c`.
 
 use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
@@ -14,6 +14,36 @@ fn oracle_current_global_map_returns_keymap() {
     let (oracle, neovm) =
         crate::common::eval_oracle_and_neovm_expect("(keymapp (current-global-map))", expect);
     assert_ok_eq("t", &oracle, &neovm);
+}
+
+#[test]
+fn oracle_current_global_map_is_independent_of_dynamic_global_map_binding() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((saved-map (current-global-map))
+       (installed-map (make-keymap))
+       (rebound-map (copy-keymap installed-map))
+       (key (kbd "C-.")))
+  (unwind-protect
+      (progn
+        (use-global-map installed-map)
+        (let ((global-map rebound-map))
+          (global-set-key key 'neomacs--oracle-global-map-command)
+          (list
+           (eq (current-global-map) installed-map)
+           (eq (current-global-map) global-map)
+           (lookup-key installed-map key)
+           (lookup-key global-map key))))
+    (use-global-map saved-map)))
+"#;
+    let expect = expect_test::expect![[r#""OK (t nil neomacs--oracle-global-map-command nil)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
+    assert_ok_eq(
+        "(t nil neomacs--oracle-global-map-command nil)",
+        &oracle,
+        &neovm,
+    );
 }
 
 #[test]

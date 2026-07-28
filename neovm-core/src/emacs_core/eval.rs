@@ -2044,6 +2044,12 @@ pub struct Context {
     pub(crate) standard_category_table: Value,
     /// Current buffer-local keymap (set by `use-local-map`).
     pub(crate) current_local_map: Value,
+    /// Global keymap selected by `use-global-map`.
+    ///
+    /// GNU stores this separately from the dynamically bindable Lisp variable
+    /// `global-map`; preserving that distinction is observable through
+    /// `current-global-map`, active key lookup, and legacy `global-set-key`.
+    selected_global_map: super::keymap::SelectedGlobalMap,
     /// Register manager — quick storage and retrieval of text, positions, etc.
     pub(crate) registers: RegisterManager,
     /// Bookmark manager — persistent named positions.
@@ -3090,6 +3096,14 @@ impl Default for Context {
 }
 
 impl Context {
+    pub(crate) fn current_global_map(&self) -> Value {
+        self.selected_global_map.value()
+    }
+
+    pub(crate) fn select_global_map(&mut self, keymap: Value) {
+        self.selected_global_map.select(keymap);
+    }
+
     #[inline]
     pub(crate) fn subr_dispatch_kind(&self, sym_id: SymId) -> Option<SubrDispatchKind> {
         lookup_global_subr_entry(sym_id).map(|e| e.dispatch_kind)
@@ -3182,6 +3196,7 @@ impl Context {
         ev.processes = ProcessManager::new();
         ev.watchers = VariableWatcherList::new();
         ev.current_local_map = Value::NIL;
+        ev.selected_global_map = super::keymap::SelectedGlobalMap::default();
         ev.registers = RegisterManager::new();
         ev.bookmarks = BookmarkManager::new();
         ev.abbrevs = AbbrevManager::new();
@@ -5618,6 +5633,7 @@ impl Context {
             syntax_code_objects,
             standard_category_table,
             current_local_map: Value::NIL,
+            selected_global_map: super::keymap::SelectedGlobalMap::default(),
             registers: RegisterManager::new(),
             bookmarks: BookmarkManager::new(),
             abbrevs: AbbrevManager::new(),
@@ -5735,6 +5751,7 @@ impl Context {
         syntax_code_objects: Value,
         standard_category_table: Value,
         current_local_map: Value,
+        selected_global_map: super::keymap::SelectedGlobalMap,
         kmacro: KmacroManager,
         registers: RegisterManager,
         bookmarks: BookmarkManager,
@@ -5805,6 +5822,7 @@ impl Context {
             syntax_code_objects,
             standard_category_table,
             current_local_map,
+            selected_global_map,
             registers,
             bookmarks,
             abbrevs,
@@ -6052,6 +6070,10 @@ impl Context {
         }
         if !self.current_local_map.is_nil() {
             visit(self.current_local_map);
+        }
+        let selected_global_map = self.selected_global_map.value();
+        if !selected_global_map.is_nil() {
+            visit(selected_global_map);
         }
         if self.standard_syntax_table.is_heap_object() {
             visit(self.standard_syntax_table);

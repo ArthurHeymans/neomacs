@@ -296,6 +296,7 @@ fn empty_context_state() -> DumpContextState {
         syntax_code_objects: types::DumpValue::Nil,
         standard_category_table: types::DumpValue::Nil,
         current_local_map: types::DumpValue::Nil,
+        current_global_map: types::DumpValue::Nil,
         kmacro: types::DumpKmacroManager {
             current_macro: Vec::new(),
             last_macro: None,
@@ -363,6 +364,7 @@ pub fn dump_to_file(eval: &Context, path: &Path) -> Result<(), DumpError> {
         syntax_code_objects: state.syntax_code_objects.clone(),
         standard_category_table: state.standard_category_table.clone(),
         current_local_map: state.current_local_map.clone(),
+        current_global_map: state.current_global_map.clone(),
     })?;
     let relocation_payload = mmap_image::relocation_section_bytes(&heap_payload.relocations);
 
@@ -520,6 +522,7 @@ pub fn load_from_dump(path: &Path) -> Result<Context, DumpError> {
     state.syntax_code_objects = roots.syntax_code_objects;
     state.standard_category_table = roots.standard_category_table;
     state.current_local_map = roots.current_local_map;
+    state.current_global_map = roots.current_global_map;
     let autoloads_payload = image
         .section(DumpSectionKind::Autoloads)
         .ok_or_else(|| DumpError::ImageFormatError("missing autoloads section".into()))?;
@@ -692,6 +695,13 @@ fn reconstruct_evaluator_after_symbol_table_with_decoder_and_value_fixups(
         .iter()
         .map(load_lisp_string)
         .collect();
+    let selected_global_map =
+        super::keymap::SelectedGlobalMap::from_dump(decoder.load_value(&state.current_global_map))
+            .ok_or_else(|| {
+                DumpError::DeserializationError(
+                    "selected global map is neither nil nor a resolved keymap".into(),
+                )
+            })?;
 
     let mut eval = Context::from_dump(
         tagged_heap,
@@ -713,6 +723,7 @@ fn reconstruct_evaluator_after_symbol_table_with_decoder_and_value_fixups(
         decoder.load_value(&state.syntax_code_objects),
         decoder.load_value(&state.standard_category_table),
         decoder.load_value(&state.current_local_map),
+        selected_global_map,
         load_kmacro(&mut decoder, &state.kmacro),
         load_register_manager(&mut decoder, &state.registers),
         load_bookmark_manager(&state.bookmarks),

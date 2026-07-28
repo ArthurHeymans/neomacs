@@ -3899,18 +3899,6 @@ impl<'a> Vm<'a> {
         }
     }
 
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn ensure_global_keymap(&mut self) -> Value {
-        if let Some(value) = self.ctx.obarray.symbol_value("global-map").copied()
-            && crate::emacs_core::keymap::is_list_keymap(&value)
-        {
-            return value;
-        }
-        let keymap = crate::emacs_core::keymap::make_list_keymap();
-        self.ctx.obarray.set_symbol_value("global-map", keymap);
-        keymap
-    }
-
     fn builtin_call_last_kbd_macro_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::kmacro::builtin_call_last_kbd_macro(&mut *self.ctx, args.to_vec())
     }

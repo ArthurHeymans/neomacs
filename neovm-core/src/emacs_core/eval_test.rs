@@ -29,6 +29,11 @@ fn eval_one_lexical(src: &str) -> String {
     format_eval_result(&result)
 }
 
+fn install_global_map_for_test(ev: &mut Context, global_map: Value) {
+    ev.assign("global-map", global_map);
+    ev.select_global_map(global_map);
+}
+
 #[test]
 fn c_level_defsym_hook_names_are_in_global_obarray() {
     let ev = Context::new();
@@ -1439,7 +1444,7 @@ fn read_key_sequence_translates_raw_tty_csi_through_input_decode_map() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     crate::emacs_core::keymap::list_keymap_define_seq(
         global_map,
         &[Value::symbol("up")],
@@ -2207,7 +2212,7 @@ fn command_loop_runs_initial_post_command_hook_before_first_command() {
     );
 
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     ev.eval_str(
         r#"(progn
              (setq neo-initial-post-command-count 0)
@@ -2878,7 +2883,7 @@ fn read_key_sequence_prefers_bound_gui_return_before_ascii_fallback() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
 
     crate::emacs_core::keymap::list_keymap_define_seq(
         global_map,
@@ -2919,7 +2924,7 @@ fn read_key_sequence_prefers_bound_gui_tab_before_ascii_fallback() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
 
     crate::emacs_core::keymap::list_keymap_define_seq(
         global_map,
@@ -2960,7 +2965,7 @@ fn read_key_sequence_falls_back_from_unbound_gui_return_to_ascii_ret() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
 
     crate::emacs_core::keymap::list_keymap_define_seq(
         global_map,
@@ -2995,7 +3000,7 @@ fn read_key_sequence_falls_back_from_unbound_gui_tab_to_ascii_tab() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
 
     crate::emacs_core::keymap::list_keymap_define_seq(
         global_map,
@@ -3030,7 +3035,7 @@ fn read_key_sequence_prefers_bound_gui_escape_before_ascii_fallback() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
 
     crate::emacs_core::keymap::list_keymap_define_seq(
         global_map,
@@ -3071,7 +3076,7 @@ fn read_key_sequence_falls_back_from_unbound_gui_escape_to_ascii_esc() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
 
     crate::emacs_core::keymap::list_keymap_define_seq(
         global_map,
@@ -3106,7 +3111,7 @@ fn read_key_sequence_function_translation_receives_prompt() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     ev.eval_str(
         r#"(progn
              (setq neomacs-test-read-key-sequence-prompt nil)
@@ -3168,7 +3173,7 @@ fn read_key_sequence_continues_through_pending_suffix_translation_prefix() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     ev.eval_str(
         r#"(fset 'neomacs-test-suffix-translation-command
                   (lambda () (interactive) 'ok))"#,
@@ -3219,7 +3224,7 @@ fn read_key_sequence_prefix_echo_does_not_log_to_messages_buffer() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     ev.eval_str(
         r#"(fset 'neomacs-test-prefix-target-command
                   (lambda () (interactive) 'ok))"#,
@@ -3268,7 +3273,7 @@ fn read_key_sequence_prefix_echo_matches_gnu_dash_and_help_hint() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     ev.assign("help-char", Value::fixnum(8));
     ev.assign("echo-keystrokes", Value::fixnum(1));
     ev.assign("echo-keystrokes-help", Value::T);
@@ -3302,7 +3307,7 @@ fn read_key_sequence_help_prefix_echo_matches_gnu_hint() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     ev.assign("help-char", Value::fixnum(8));
     ev.assign("echo-keystrokes", Value::fixnum(1));
     ev.eval_str(
@@ -3338,7 +3343,7 @@ fn read_key_sequence_shift_translates_uppercase_binding() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     ev.eval_str(
         r#"(fset 'neomacs-test-shift-translation-command
                   (lambda () (interactive) 'ok))"#,
@@ -3377,7 +3382,7 @@ fn read_key_sequence_dont_downcase_last_restores_original_event() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     ev.eval_str(
         r#"(fset 'neomacs-test-shift-translation-command
                   (lambda () (interactive) 'ok))"#,
@@ -3449,7 +3454,7 @@ fn read_key_sequence_shift_translates_shifted_function_key() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     ev.eval_str(
         r#"(fset 'neomacs-test-shifted-function-command
                   (lambda () (interactive) 'ok))"#,
@@ -3525,7 +3530,7 @@ fn read_key_sequence_defers_switch_frame_until_after_current_key_sequence() {
     let target_buffer = ev.buffers.create_buffer("focus-target");
     let target_frame = ev.frames.create_frame("F2", 960, 640, target_buffer).0;
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     ev.eval_str(
         r#"(fset 'neomacs-test-switch-frame-deferred-command
                   (lambda () (interactive) 'ok))"#,
@@ -3584,7 +3589,7 @@ fn read_key_sequence_can_return_switch_frame_at_sequence_start() {
     let target_buffer = ev.buffers.create_buffer("focus-target");
     let target_frame = ev.frames.create_frame("F2", 960, 640, target_buffer).0;
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     crate::emacs_core::keymap::list_keymap_define_seq(
         global_map,
         &[Value::symbol("switch-frame")],
@@ -3766,7 +3771,7 @@ fn read_key_sequence_defers_select_window_until_after_current_key_sequence() {
         .expect("split window");
 
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     ev.eval_str(
         r#"(fset 'neomacs-test-select-window-deferred-command
                   (lambda () (interactive) 'ok))"#,
@@ -3839,7 +3844,7 @@ fn read_key_sequence_can_return_select_window_at_sequence_start() {
         .expect("split window");
 
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     ev.eval_str(
         r#"(fset 'neomacs-test-handle-select-window
                   (lambda () (interactive) 'ok))"#,
@@ -4210,7 +4215,7 @@ fn read_key_sequence_drops_unbound_menu_bar_down_mouse_before_bound_click() {
     }
 
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     ev.eval_str(
         r#"(fset 'neomacs-menu-bar-click-command
                   (lambda () (interactive) 'ok))"#,
@@ -4270,7 +4275,7 @@ fn read_key_sequence_dispatches_gui_tool_bar_click_by_item_key() {
 
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
     let tool_bar_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     ev.obarray.set_symbol_value("tool-bar-map", tool_bar_map);
     ev.eval_str(
         r#"(fset 'neomacs-tool-bar-click-command
@@ -4328,7 +4333,7 @@ fn read_key_sequence_dispatches_gui_tool_bar_click_from_owning_frame() {
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
     let primary_tool_bar_map = crate::emacs_core::keymap::make_sparse_list_keymap();
     let secondary_tool_bar_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     ev.obarray
         .set_symbol_value("tool-bar-map", primary_tool_bar_map);
     ev.buffer_manager_mut()
@@ -4411,7 +4416,7 @@ fn read_key_sequence_gui_tool_bar_frame_fallback_ignores_current_buffer_local_ma
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
     let primary_local_tool_bar_map = crate::emacs_core::keymap::make_sparse_list_keymap();
     let default_tool_bar_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     ev.obarray
         .set_symbol_value("tool-bar-map", default_tool_bar_map);
     ev.buffer_manager_mut()
@@ -4484,7 +4489,7 @@ fn read_key_sequence_dispatches_gui_menu_bar_click_with_frame_id() {
     ev.frames.select_frame(primary);
 
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
     ev.eval_str(
         r#"(fset 'neomacs-menu-bar-click-command
                   (lambda () (interactive) 'ok))"#,
@@ -4552,7 +4557,7 @@ fn read_key_sequence_drops_unbound_down_mouse_without_losing_keyboard_prefix() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
 
     ev.eval_str(
         r#"(fset 'neomacs-prefixed-mouse-command
@@ -4606,7 +4611,7 @@ fn read_key_sequence_reduces_unbound_triple_mouse_to_bound_click() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
-    ev.assign("global-map", global_map);
+    install_global_map_for_test(&mut ev, global_map);
 
     ev.eval_str(
         r#"(fset 'neomacs-triple-mouse-command
