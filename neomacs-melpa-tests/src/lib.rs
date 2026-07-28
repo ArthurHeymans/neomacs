@@ -1011,8 +1011,10 @@ pub const ARJEN_GREY_THEME_MELPA_PIN: (&str, &str) = ("arjen-grey-theme", "20170
 /// `6fe401c7f996bcbc2f685e7971324c6f5e5eaf15`.
 pub const ARIADNE_MELPA_PIN: (&str, &str) = ("ariadne", "20131117.1711");
 
-/// The exact Art Bollocks Mode package selected by the comprehensive
-/// highlighting, search, and readability-metrics parity corpus.
+/// The exact Art Bollocks Mode package selected by the practical documented
+/// text-editing, comment/docstring review, customized editorial-policy, and
+/// readability-metrics workflow parity corpus. MELPA built this archive from
+/// upstream commit `63d20ed2846226f45b35eded69a776143a772ea4`.
 pub const ARTBOLLOCKS_MODE_MELPA_PIN: (&str, &str) = ("artbollocks-mode", "20251211.1624");
 
 /// The exact arview package selected by the comprehensive archive detection,
