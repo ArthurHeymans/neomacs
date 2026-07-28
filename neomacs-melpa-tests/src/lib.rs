@@ -821,8 +821,9 @@ pub const ANTI_ZENBURN_THEME_MELPA_PIN: (&str, &str) = ("anti-zenburn-theme", "2
 /// corpus.
 pub const ANX_API_MELPA_PIN: (&str, &str) = ("anx-api", "20140208.1514");
 
-/// The exact AnyBar package selected by the comprehensive API parity corpus.
-/// MELPA built this archive from upstream commit
+/// The exact AnyBar package selected by the practical indicator lifecycle,
+/// custom-image, and multi-instance parity corpus. MELPA built this archive
+/// from upstream commit
 /// `7a0743e0d31bcb36ab1bb2e351f3e7139c422ac5`.
 pub const ANYBAR_MELPA_PIN: (&str, &str) = ("anybar", "20160816.1421");
 
