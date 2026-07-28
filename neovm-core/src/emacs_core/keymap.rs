@@ -26,6 +26,34 @@ use super::symbol::Obarray;
 use super::value::{OrderedRuntimeBindingMap, Value, ValueKind, eq_value, list_to_vec};
 use strum::{EnumString, IntoStaticStr};
 
+/// Global keymap content-mutation epoch.
+///
+/// Bumped at the `define-key` and `set-keymap-parent` chokepoints so
+/// derived-from-keymaps caches (the TTY/GUI menu-bar item cache) can key on
+/// it and pick up interior mutations IMMEDIATELY -- which is stricter than
+/// GNU, whose frame menu-bar cache only refreshes on
+/// `windows_or_buffers_changed` / `update_mode_lines` /
+/// `window_buffer_changed` (xdisp.c `update_menu_bar`), so a bare
+/// `define-key` there stays stale until the next such trigger.
+///
+/// Same caveat as `SYNTAX_TABLE_MUTATION_EPOCH`: keymaps are ordinary
+/// conses, so raw `setcdr` surgery bypasses this. GNU's menu-bar cache has
+/// exactly that blind spot too (resolved by its broad triggers, which map
+/// to `Context::redisplay_generation` here), so consumers should key on
+/// BOTH.
+static KEYMAP_MUTATION_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Current keymap mutation epoch (see [`KEYMAP_MUTATION_EPOCH`]).
+pub fn keymap_mutation_epoch() -> u64 {
+    KEYMAP_MUTATION_EPOCH.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Record a keymap content mutation. Over-invalidation is harmless, so
+/// callers may bump before knowing whether the mutation succeeds.
+pub(crate) fn note_keymap_mutation() {
+    KEYMAP_MUTATION_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
 pub enum KeymapMarker {
@@ -1345,6 +1373,7 @@ pub(crate) fn lookup_key_in_keymaps_in_obarray_runtime(
 /// stores nil in char-table), matching GNU keymap.c `store_in_keymap` with
 /// `remove=true`.
 pub fn list_keymap_define(keymap: Value, event: Value, def: Value) {
+    note_keymap_mutation();
     store_in_keymap(keymap, event, def, false);
 }
 
@@ -1628,6 +1657,7 @@ pub(crate) fn list_keymap_sibling_keymaps(keymap: &Value) -> Vec<Value> {
 
 /// Set the parent keymap: walk to the last alist cons cell, set its CDR.
 pub fn list_keymap_set_parent(keymap: Value, parent: Value) {
+    note_keymap_mutation();
     if !keymap.is_cons() {
         return;
     };
@@ -3186,6 +3216,7 @@ pub(crate) fn lookup_keymap_with_partial(keymap: &Value, emacs_events: &[Value])
 /// Returns `Err` if an intermediate key is already bound to a non-prefix
 /// command (matching GNU Emacs behavior which signals an error).
 pub fn list_keymap_define_seq(keymap: Value, events: &[Value], def: Value) -> Result<(), String> {
+    note_keymap_mutation();
     if events.is_empty() {
         return Ok(());
     }
@@ -3237,6 +3268,7 @@ pub fn list_keymap_define_seq_in_obarray(
     events: &[Value],
     def: Value,
 ) -> Result<(), String> {
+    note_keymap_mutation();
     list_keymap_define_seq_in_obarray_ex(obarray, keymap, events, def, false)
 }
 
@@ -3248,6 +3280,7 @@ pub fn list_keymap_define_seq_in_obarray_ex(
     def: Value,
     remove: bool,
 ) -> Result<(), String> {
+    note_keymap_mutation();
     if events.is_empty() {
         return Ok(());
     }

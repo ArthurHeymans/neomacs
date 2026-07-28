@@ -2206,6 +2206,13 @@ pub struct Context {
     /// Explicit redisplay invalidation generation, used for state that GNU
     /// marks with update_mode_lines/window redisplay flags.
     redisplay_generation: u64,
+    /// Process-unique id for THIS evaluator instance. Lets thread-local
+    /// caches outside neovm-core (e.g. the layout engine's menu-bar item
+    /// cache) refuse entries from a previous Context: tests create many
+    /// evaluators per thread, and generation counters restart at 0 while
+    /// heap addresses recycle, so without this a cache key could collide
+    /// across instances.
+    context_instance_id: u64,
     /// Bumped when asynchronously decoded media (images) reaches a terminal
     /// state, so a completed decode escalates past the retained-matrix reuse
     /// key as well as the redisplay signature.
@@ -5703,6 +5710,7 @@ impl Context {
             materialized_face_table_source: None,
             display_var_change_count: 0,
             redisplay_generation: 0,
+            context_instance_id: next_context_instance_id(),
             media_generation: 0,
             last_redisplay_signature: None,
             depth: 0,
@@ -5893,6 +5901,7 @@ impl Context {
             materialized_face_table_source: None,
             display_var_change_count: 0,
             redisplay_generation: 0,
+            context_instance_id: next_context_instance_id(),
             media_generation: 0,
             last_redisplay_signature: None,
             depth: 0,
@@ -7631,6 +7640,19 @@ impl Context {
     pub fn invalidate_media(&mut self) {
         self.media_generation = self.media_generation.wrapping_add(1);
         self.invalidate_redisplay();
+    }
+
+    /// Monotonic redisplay-invalidation counter — the analogue of GNU's
+    /// `update_mode_lines || windows_or_buffers_changed` trigger family
+    /// (bumped by `force-mode-line-update`, display-variable writes, media
+    /// changes). Caches of redisplay-derived data key on it.
+    pub fn redisplay_generation(&self) -> u64 {
+        self.redisplay_generation
+    }
+
+    /// See the `context_instance_id` field.
+    pub fn context_instance_id(&self) -> u64 {
+        self.context_instance_id
     }
 
     pub(crate) fn invalidate_redisplay(&mut self) {
@@ -16982,3 +17004,9 @@ mod tests;
 #[cfg(test)]
 #[path = "jit_crash_repro_test.rs"]
 mod jit_crash_repro_tests;
+
+/// Allocator for [`Context::context_instance_id`].
+fn next_context_instance_id() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}

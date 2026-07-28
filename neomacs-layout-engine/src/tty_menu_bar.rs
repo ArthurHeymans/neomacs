@@ -39,6 +39,68 @@ use neovm_core::emacs_core::keymap::{
     menu_bar_active_keymaps_read_only,
 };
 use neovm_core::window::FrameId;
+use std::cell::RefCell;
+
+/// Per-frame cache of collected menu-bar items.
+///
+/// A typing profile put `collect_tty_menu_bar_items_for_frame` at 22.8% of
+/// the whole session: the full active-keymap walk ran on EVERY redisplay,
+/// per keystroke, for a menu bar whose content essentially never changes.
+/// GNU caches the result on the frame (`fset_menu_bar_items`, xdisp.c
+/// `update_menu_bar`) and recomputes only on `windows_or_buffers_changed`
+/// / `update_mode_lines` / `window_buffer_changed`.
+///
+/// Our key is those triggers translated, plus one GNU lacks:
+///
+/// * `redisplay_generation` — the `update_mode_lines` family
+///   (`force-mode-line-update`, which `define-minor-mode` always calls;
+///   display-variable writes; media changes);
+/// * the identity bits of the ACTIVE maps in order — catches buffer and
+///   window switches, `use-local-map`, global-map replacement, and
+///   minor-mode toggles that change the active-map list, all without any
+///   flag needing to fire;
+/// * `keymap_mutation_epoch` — `define-key`/`set-keymap-parent` interior
+///   mutations, which GNU's cache misses until the next broad trigger;
+/// * `menu-bar-final-items` value bits, read by the reorder step;
+/// * `context_instance_id` — refuses entries from a previous evaluator
+///   (tests create many per thread; generations restart and heap
+///   addresses recycle).
+///
+/// Remaining staleness (raw `setcdr` surgery on a keymap's interior)
+/// matches GNU's own cache exactly and is resolved by the same triggers.
+/// Items are plain data (`String`s + `u16`) — no Lisp values, so the
+/// cache is invisible to GC by construction, not by accident.
+struct MenuBarItemsCache {
+    context_id: u64,
+    frame_bits: u64,
+    generation: u64,
+    keymap_epoch: u64,
+    inputs_key: u64,
+    items: Vec<TtyMenuBarItem>,
+}
+
+thread_local! {
+    static MENU_BAR_ITEMS_CACHE: RefCell<Vec<MenuBarItemsCache>> =
+        const { RefCell::new(Vec::new()) };
+}
+
+/// Fold the identity bits of every cache input into one key (FNV-1a).
+fn menu_bar_inputs_key(eval: &Context, maps: &[Value]) -> u64 {
+    let mut key: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut fold = |bits: u64| {
+        key = (key ^ bits).wrapping_mul(0x0000_0100_0000_01b3);
+    };
+    for map in maps {
+        fold(map.bits() as u64);
+    }
+    fold(
+        eval.obarray()
+            .symbol_value("menu-bar-final-items")
+            .map(|v| v.bits() as u64)
+            .unwrap_or(0),
+    );
+    key
+}
 
 /// Walk the active `[menu-bar]` keymap(s) and return the items to draw.
 ///
@@ -65,13 +127,49 @@ pub fn collect_tty_menu_bar_items_for_frame(
     eval: &Context,
     frame_id: FrameId,
 ) -> Vec<TtyMenuBarItem> {
-    let mut items: Vec<TtyMenuBarItem> = Vec::new();
+    // Resolving the ACTIVE maps is cheap; the recursive walk below is what
+    // cost 22.8% of a typing session when run per redisplay. Key the cache
+    // on the walk's inputs (see `MenuBarItemsCache`) and skip the walk when
+    // none have changed.
+    let maps = menu_bar_active_keymaps_for_frame_read_only(eval, frame_id);
+    let context_id = eval.context_instance_id();
+    let frame_bits = frame_id.0;
+    let generation = eval.redisplay_generation();
+    let keymap_epoch = neovm_core::emacs_core::keymap::keymap_mutation_epoch();
+    let inputs_key = menu_bar_inputs_key(eval, &maps);
 
-    for keymap in menu_bar_active_keymaps_for_frame_read_only(eval, frame_id) {
-        collect_from_keymap(eval, &keymap, &mut items);
+    let cached = MENU_BAR_ITEMS_CACHE.with(|cache| {
+        cache.borrow().iter().find_map(|entry| {
+            (entry.context_id == context_id
+                && entry.frame_bits == frame_bits
+                && entry.generation == generation
+                && entry.keymap_epoch == keymap_epoch
+                && entry.inputs_key == inputs_key)
+                .then(|| entry.items.clone())
+        })
+    });
+    if let Some(items) = cached {
+        return items;
     }
 
+    let mut items: Vec<TtyMenuBarItem> = Vec::new();
+    for keymap in &maps {
+        collect_from_keymap(eval, keymap, &mut items);
+    }
     move_final_items_to_end(eval, &mut items);
+
+    MENU_BAR_ITEMS_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        cache.retain(|entry| entry.context_id == context_id && entry.frame_bits != frame_bits);
+        cache.push(MenuBarItemsCache {
+            context_id,
+            frame_bits,
+            generation,
+            keymap_epoch,
+            inputs_key,
+            items: items.clone(),
+        });
+    });
     items
 }
 
