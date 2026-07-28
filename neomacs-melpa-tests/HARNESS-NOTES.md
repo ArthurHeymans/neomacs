@@ -538,6 +538,13 @@ The fix is structural, not more careful counting — locate by content
 string and cannot drift apart. Where you can, do not compute a fixture position
 at all.
 
+**The *pairing* is what does the work, not the search.** A position found by
+machinery rather than by text is equally safe as long as the text is reported
+with it — ameba locates by `compilation-next-error` and returns
+`(buffer-name line column line-text)` in one tuple, so a miscount shows up as
+different text. Report the number and the text it names together; a number
+verified once can drift, a number beside its line cannot.
+
 **A package's compatibility fallback is the path least likely to have been run,
 and a bare batch session is exactly what takes it.** Three instances in one day,
 all the same mechanism: **the guard tests the *preferred* symbol's availability,
@@ -744,6 +751,20 @@ than one grab-bag return value.
 So: if a workflow fails only under the harness, only with a large aggregate
 return, and the error names the harness's own variables, suspect this before the
 package. Return per-story structures rather than one omnibus value.
+
+**compat elides its fallbacks at load time, so on a modern host they are not
+loaded at all.** Measured on GNU Emacs 31 with compat 31.0.0.2: exactly one
+`compat--` function is defined after load, and it is `compat--maybe-require`.
+`(compat-function assoc)` returns `assoc`, so `(compat-call assoc …)` *is*
+`assoc`. There is no second implementation to compare against and no
+configuration reaches one — the gating is on `emacs-version` at load. So the
+compatibility-fallback note above does **not** apply to compat itself: it is the
+one package where the fallback is not the least-run path but the never-loaded
+one. What a compat suite can assert is the *contract*: that each API compat
+claims for this generation is present **and behaves as documented under its
+extended arguments** — `assoc` with TESTFN, `plist-get` with a PREDICATE, `sort`
+with keyword arguments. That makes the package a specification of the host, which
+is worth more here than testing its dispatch.
 
 **A tight elisp loop ignores `with-timeout`, so some defects are describable but
 not assertable.** `f-uniquify` does not return on duplicate input — its docstring
