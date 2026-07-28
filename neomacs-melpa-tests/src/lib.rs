@@ -1026,6 +1026,12 @@ pub const KEYTAR_MELPA_PIN: (&str, &str) = ("keytar", "20251231.1727");
 pub const AUTO_ASYNC_BYTE_COMPILE_MELPA_PIN: (&str, &str) =
     ("auto-async-byte-compile", "20160916.454");
 
+/// The exact auto-compile package selected by the comprehensive source
+/// recognition, byte-compilation, mode-line, save/load advice, recursive
+/// toggle, and failure-recovery parity corpus. MELPA built this archive from
+/// upstream commit `4db3a0e497feecc8b3dbeeefacdf363ae60a6392`.
+pub const AUTO_COMPILE_MELPA_PIN: (&str, &str) = ("auto-compile", "20260601.1449");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
