@@ -1,886 +1,301 @@
-use super::assert_ace_link_parity;
 use expect_test::expect;
 
-#[test]
-fn ace_link_info_help_man_and_woman_commands_pass_collected_positions_through_avy() {
-    let elisp_form = r##"(let ((avy-style
-              'fixture-style)
-             events)
-         (cl-letf (((symbol-function 'ace-link--info-collect)
-                    (lambda ()
-                      '(("info" . 2)
-                        ("info-two" . 5))))
-                   ((symbol-function 'ace-link--help-collect)
-                    (lambda ()
-                      '(("help" . 3))))
-                   ((symbol-function 'ace-link--man-collect)
-                    (lambda ()
-                      '(("man" . 4))))
-                   ((symbol-function 'ace-link--woman-collect)
-                    (lambda ()
-                      '(("woman" . 6))))
-                   ((symbol-function 'avy--style-fn)
-                    (lambda (style)
-                      (list
-                       'style
-                       style)))
-                   ((symbol-function 'avy-process)
-                    (lambda (candidates &optional overlay)
-                      (push
-                       (list
-                        'avy
-                        candidates
-                        overlay)
-                       events)
-                      (car
-                       (last candidates))))
-                   ((symbol-function 'ace-link--info-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'info-action
-                        position)
-                       events)
-                      'info-result))
-                   ((symbol-function 'ace-link--help-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'help-action
-                        position)
-                       events)
-                      'help-result))
-                   ((symbol-function 'ace-link--man-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'man-action
-                        position)
-                       events)
-                      'man-result))
-                   ((symbol-function 'ace-link--woman-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'woman-action
-                        position)
-                       events)
-                      'woman-result)))
-           (list
-            (ace-link-info)
-            (ace-link-help)
-            (ace-link-man)
-            (ace-link-woman)
-            (nreverse events))))"##;
-    let expect = expect![
-        "OK (info-result help-result man-result woman-result ((avy (2 5) (style fixture-style)) (info-action 5) (avy (3) (style fixture-style)) (help-action 3) (avy (4) (style fixture-style)) (man-action 4) (avy (6) (style fixture-style)) (woman-action 6)))"
-    ];
-    assert_ace_link_parity(elisp_form, expect);
-}
+use super::assert_ace_link_parity;
 
+/// The package's headline workflow.  A user reads a manual in `Info-mode',
+/// runs `ace-link-setup-default' so that "o" is bound, presses "o" to label the
+/// two menu items and then the label key of the entry to open.  The second half
+/// lands in a node holding a single cross reference, where avy jumps without
+/// asking for a key at all.
+///
+/// DIVERGENCE: Neomacs signals `(wrong-type-argument fixnump nil)' on the
+/// cross-reference half, because `string-search' rejects a nil START:
+/// `(string-search " " "a b c" nil)' is 1 in GNU Emacs and an error in Neomacs.
+/// `Info-follow-reference' calls it that way with an uninitialised loop
+/// variable, so no `*note' cross reference can be followed at all -- with or
+/// without ace-link.
 #[test]
-fn ace_link_eww_w3m_and_compilation_commands_forward_prefix_and_selected_position() {
-    let elisp_form = r##"(let ((avy-style
-              'fixture-style)
-             events)
-         (provide 'w3m)
-         (cl-letf (((symbol-function 'ace-link--eww-collect)
-                    (lambda (&optional property)
-                      (push
-                       (list
-                        'collect
-                        property)
-                       events)
-                      '(("first" . 2)
-                        ("second" . 7))))
-                   ((symbol-function 'ace-link--w3m-collect)
-                    (lambda ()
-                      '(("w3m" . 4))))
-                   ((symbol-function 'avy--style-fn)
-                    (lambda (style)
-                      (list
-                       'style
-                       style)))
-                   ((symbol-function 'avy-process)
-                    (lambda (candidates &optional overlay)
-                      (push
-                       (list
-                        'avy
-                        candidates
-                        overlay)
-                       events)
-                      (car
-                       (last candidates))))
-                   ((symbol-function 'ace-link--eww-action)
-                    (lambda (position external)
-                      (push
-                       (list
-                        'eww-action
-                        position
-                        external)
-                       events)
-                      'eww-result))
-                   ((symbol-function 'ace-link--w3m-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'w3m-action
-                        position)
-                       events)
-                      'w3m-result))
-                   ((symbol-function 'ace-link--compilation-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'compilation-action
-                        position)
-                       events)
-                      'compilation-result)))
-           (list
-            (ace-link-eww '(16))
-            (ace-link-w3m)
-            (ace-link-compilation)
-            (nreverse events))))"##;
-    let expect = expect![
-        "OK (eww-result w3m-result compilation-result ((collect nil) (avy (2 7) (style fixture-style)) (eww-action 7 (16)) (avy (4) (style fixture-style)) (w3m-action 4) (collect help-echo) (avy (2 7) (style fixture-style)) (compilation-action 7)))"
-    ];
-    assert_ace_link_parity(elisp_form, expect);
-}
+fn ace_link_info_labels_visible_references_and_follows_the_chosen_one() {
+    let elisp_form = r##"(ace-link-test-session
+ (ace-link-setup-default)
+ (ace-link-test-open-manual)
+ (let ((top (list :node Info-current-node
+                  :key (lookup-key Info-mode-map "o")
+                  :style (assq 'ace-link-info avy-styles-alist)
+                  :where (ace-link-test-where))))
+   (execute-kbd-macro (kbd "o s"))
+   (let ((followed (list :node Info-current-node
+                         :where (ace-link-test-where)
+                         :text (buffer-substring-no-properties
+                                (point-min) (point-max)))))
+     (execute-kbd-macro (kbd "o"))
+     (list :top top
+           :followed followed
+           :single-candidate (list :node Info-current-node
+                                   :where (ace-link-test-where))
+           :keys (ace-link-test-pressed)))))"##;
 
-#[test]
-fn ace_link_widget_org_agenda_xref_custom_and_address_commands_compose_collect_avy_action() {
-    let elisp_form = r##"(let ((avy-style
-              'fixture-style)
-             events)
-         (cl-letf (((symbol-function 'ace-link--widget-collect)
-                    (lambda ()
-                      '(2 3)))
-                   ((symbol-function 'ace-link--org-collect)
-                    (lambda ()
-                      '(("org" . 4))))
-                   ((symbol-function 'ace-link--org-agenda-collect)
-                    (lambda ()
-                      '(("agenda" . 5))))
-                   ((symbol-function 'ace-link--xref-collect)
-                    (lambda ()
-                      '(6)))
-                   ((symbol-function 'ace-link--custom-collect)
-                    (lambda ()
-                      '(7)))
-                   ((symbol-function 'ace-link--addr-collect)
-                    (lambda ()
-                      '(8)))
-                   ((symbol-function 'avy--style-fn)
-                    (lambda (style)
-                      (list
-                       'style
-                       style)))
-                   ((symbol-function 'avy-process)
-                    (lambda (candidates &optional overlay)
-                      (push
-                       (list
-                        'avy
-                        candidates
-                        overlay)
-                       events)
-                      (car
-                       (last candidates))))
-                   ((symbol-function 'ace-link--widget-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'widget
-                        position)
-                       events)
-                      'widget-result))
-                   ((symbol-function 'ace-link--org-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'org
-                        position)
-                       events)
-                      'org-result))
-                   ((symbol-function 'ace-link--org-agenda-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'agenda
-                        position)
-                       events)
-                      'agenda-result))
-                   ((symbol-function 'ace-link--xref-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'xref
-                        position)
-                       events)
-                      'xref-result))
-                   ((symbol-function 'ace-link--custom-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'custom
-                        position)
-                       events)
-                      'custom-result))
-                   ((symbol-function 'ace-link--addr-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'addr
-                        position)
-                       events)
-                      'addr-result)))
-           (list
-            (ace-link-widget)
-            (ace-link-org)
-            (ace-link-org-agenda)
-            (ace-link-xref)
-            (ace-link-custom)
-            (ace-link-addr)
-            (nreverse events))))"##;
-    let expect = expect![
-        "OK (widget-result org-result agenda-result xref-result custom-result addr-result ((avy (2 3) (style fixture-style)) (widget 3) (avy (4) (style fixture-style)) (org 4) (avy (5) (style fixture-style)) (agenda 5) (avy (6) (style fixture-style)) (xref 6) (avy (7) (style fixture-style)) (custom 7) (avy (8) (style fixture-style)) (addr 8)))"
-    ];
-    assert_ace_link_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_link_sldb_slime_indium_and_cider_commands_compose_collect_avy_action() {
-    let elisp_form = r##"(let ((avy-style
-              'fixture-style)
-             events)
-         (cl-letf (((symbol-function 'ace-link--sldb-collect)
-                    (lambda ()
-                      '(2)))
-                   ((symbol-function 'ace-link--slime-xref-collect)
-                    (lambda ()
-                      '(3)))
-                   ((symbol-function 'ace-link--slime-inspector-collect)
-                    (lambda ()
-                      '(4)))
-                   ((symbol-function 'ace-link--indium-inspector-collect)
-                    (lambda ()
-                      '(5)))
-                   ((symbol-function 'ace-link--indium-debugger-frames-collect)
-                    (lambda ()
-                      '(6)))
-                   ((symbol-function 'ace-link--cider-inspector-collect)
-                    (lambda ()
-                      '(7)))
-                   ((symbol-function 'avy--style-fn)
-                    (lambda (style)
-                      (list
-                       'style
-                       style)))
-                   ((symbol-function 'avy-process)
-                    (lambda (candidates &optional overlay)
-                      (push
-                       (list
-                        'avy
-                        candidates
-                        overlay)
-                       events)
-                      (car candidates)))
-                   ((symbol-function 'ace-link--sldb-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'sldb
-                        position)
-                       events)
-                      'sldb-result))
-                   ((symbol-function 'ace-link--slime-xref-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'slime-xref
-                        position)
-                       events)
-                      'slime-xref-result))
-                   ((symbol-function 'ace-link--slime-inspector-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'slime-inspector
-                        position)
-                       events)
-                      'slime-inspector-result))
-                   ((symbol-function 'ace-link--indium-inspector-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'indium-inspector
-                        position)
-                       events)
-                      'indium-inspector-result))
-                   ((symbol-function 'ace-link--indium-debugger-frames-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'indium-frames
-                        position)
-                       events)
-                      'indium-frames-result))
-                   ((symbol-function 'ace-link--cider-inspector-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'cider
-                        position)
-                       events)
-                      'cider-result)))
-           (list
-            (ace-link-sldb)
-            (ace-link-slime-xref)
-            (ace-link-slime-inspector)
-            (ace-link-indium-inspector)
-            (ace-link-indium-debugger-frames)
-            (ace-link-cider-inspector)
-            (nreverse events))))"##;
-    let expect = expect![
-        "OK (sldb-result slime-xref-result slime-inspector-result indium-inspector-result indium-frames-result cider-result ((avy (2) (style fixture-style)) (sldb 2) (avy (3) (style fixture-style)) (slime-xref 3) (avy (4) (style fixture-style)) (slime-inspector 4) (avy (5) (style fixture-style)) (indium-inspector 5) (avy (6) (style fixture-style)) (indium-frames 6) (avy (7) (style fixture-style)) (cider 7)))"
-    ];
-    assert_ace_link_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_link_gnus_article_command_collects_then_acts_in_current_window() {
-    let elisp_form = r##"(let ((major-mode
-              'gnus-article-mode)
-             (avy-style
-              'fixture-style)
-             events)
-         (cl-letf (((symbol-function 'ace-link--gnus-collect)
-                    (lambda ()
-                      '(2 7)))
-                   ((symbol-function 'avy--style-fn)
-                    (lambda (style)
-                      (list
-                       'style
-                       style)))
-                   ((symbol-function 'avy-process)
-                    (lambda (candidates &optional overlay)
-                      (push
-                       (list
-                        'avy
-                        candidates
-                        overlay)
-                       events)
-                      7))
-                   ((symbol-function 'ace-link--gnus-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'action
-                        position)
-                       events)
-                      'gnus-result)))
-           (list
-            (ace-link-gnus)
-            (nreverse events))))"##;
-    let expect = expect!["OK (gnus-result ((avy (2 7) (style fixture-style)) (action 7)))"];
-    assert_ace_link_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_link_gnus_summary_signals_when_no_visible_article_window_exists() {
-    let elisp_form = r##"(cl-progv
-         '(gnus-article-buffer)
-         '(" *fixture-article*")
-         (let ((major-mode
-                'gnus-summary-mode))
-           (cl-letf (((symbol-function 'gnus-get-buffer-window)
-                      (lambda (&rest _)
-                        nil)))
-             (ace-link-gnus))))"##;
-    let expect = expect![[r#"ERR (user-error "No article window found")"#]];
-    super::assert_ace_link_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_link_mu4e_delegates_to_gnus_or_composes_html_collection_and_action() {
-    let elisp_form = r##"(let ((avy-style
-              'fixture-style)
-             events)
-         (cl-letf (((symbol-function 'ace-link-gnus)
-                    (lambda ()
-                      (push
-                       '(gnus)
-                       events)
-                      'gnus-result))
-                   ((symbol-function 'ace-link--email-view-html-collect)
-                    (lambda (&optional mu4e)
-                      (push
-                       (list
-                        'collect
-                        mu4e)
-                       events)
-                      '(("first" . 2)
-                        ("second" . 8))))
-                   ((symbol-function 'avy--style-fn)
-                    (lambda (style)
-                      (list
-                       'style
-                       style)))
-                   ((symbol-function 'avy-process)
-                    (lambda (candidates &optional overlay)
-                      (push
-                       (list
-                        'avy
-                        candidates
-                        overlay)
-                       events)
-                      8))
-                   ((symbol-function 'ace-link--mu4e-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'action
-                        position)
-                       events)
-                      'mu4e-result)))
-           (let ((gnus-result
-                  (cl-progv
-                      '(mu4e-view-use-gnus)
-                      '(t)
-                    (ace-link-mu4e)))
-                 (html-result
-                  (cl-progv
-                      '(mu4e-view-use-gnus)
-                      '(nil)
-                    (ace-link-mu4e))))
-             (list
-              gnus-result
-              html-result
-              (nreverse events)))))"##;
-    let expect = expect![
-        "OK (gnus-result mu4e-result ((gnus) (collect t) (avy (2 8) (style fixture-style)) (action 8)))"
-    ];
-    assert_ace_link_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_link_notmuch_plain_and_html_commands_cover_selection_and_gnus_delegation() {
-    let elisp_form = r##"(let ((avy-style
-              'fixture-style)
-             events)
-         (cl-letf (((symbol-function 'ace-link-gnus)
-                    (lambda ()
-                      (push
-                       '(gnus)
-                       events)
-                      'gnus-result))
-                   ((symbol-function 'ace-link--email-view-plain-collect)
-                    (lambda ()
-                      '(2 5)))
-                   ((symbol-function 'ace-link--email-view-html-collect)
-                    (lambda (&optional mu4e)
-                      (push
-                       (list
-                        'html-collect
-                        mu4e)
-                       events)
-                      '(("html" . 7))))
-                   ((symbol-function 'avy-process)
-                    (lambda (candidates &optional overlay)
-                      (push
-                       (list
-                        'avy
-                        candidates
-                        overlay)
-                       events)
-                      (car
-                       (last candidates))))
-                   ((symbol-function 'avy--style-fn)
-                    (lambda (style)
-                      (list
-                       'style
-                       style)))
-                   ((symbol-function 'avy--overlay-pre)
-                    (lambda (&rest arguments)
-                      (cons
-                       'overlay
-                       arguments)))
-                   ((symbol-function 'ace-link--notmuch-plain-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'plain-action
-                        position)
-                       events)
-                      'plain-result))
-                   ((symbol-function 'ace-link--mu4e-action)
-                    (lambda (position)
-                      (push
-                       (list
-                        'html-action
-                        position)
-                       events)
-                      'html-result)))
-           (let ((plain-result
-                  (ace-link-notmuch-plain))
-                 (html-result
-                  (cl-progv
-                      '(mu4e-view-use-gnus)
-                      '(nil)
-                    (ace-link-notmuch-html)))
-                 (gnus-result
-                  (cl-progv
-                      '(mu4e-view-use-gnus)
-                      '(t)
-                    (ace-link-notmuch-html))))
-             (list
-              plain-result
-              html-result
-              gnus-result
-              (nreverse events)))))"##;
-    let expect = expect![
-        "OK (plain-result html-result gnus-result ((avy (2 5) avy--overlay-pre) (plain-action 5) (html-collect nil) (avy (7) (style fixture-style)) (html-action 7) (gnus)))"
-    ];
-    assert_ace_link_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_link_notmuch_combined_command_dispatches_the_function_paired_with_avy_match() {
-    let elisp_form = r##"(let (events)
-         (cl-letf (((symbol-function 'ace-link--notmuch-collect)
-                    (lambda ()
-                      '((3 . fixture-plain)
-                        (8 . fixture-html))))
-                   ((symbol-function 'avy-process)
-                    (lambda (candidates &optional overlay)
-                      (push
-                       (list
-                        'avy
-                        candidates
-                        overlay)
-                       events)
-                      (cadr candidates)))
-                   ((symbol-function 'avy--overlay-pre)
-                    (lambda (&rest arguments)
-                      (cons
-                       'overlay
-                       arguments)))
-                   ((symbol-function 'fixture-plain)
-                    (lambda (position)
-                      (push
-                       (list
-                        'plain
-                        position)
-                       events)))
-                   ((symbol-function 'fixture-html)
-                    (lambda (position)
-                      (push
-                       (list
-                        'html
-                        position)
-                       events)
-                      'html-result)))
-           (list
-            (ace-link-notmuch)
-            (nreverse events))))"##;
-    let expect = expect![
-        "OK (html-result ((avy ((3 . fixture-plain) (8 . fixture-html)) avy--overlay-pre) (html 8)))"
-    ];
-    assert_ace_link_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_link_commit_collects_issue_numbers_selects_one_resolves_url_and_fetches_it() {
-    let elisp_form = r##"(with-temp-buffer
-         (insert
-          "Subject #12\nBody #345\nTail")
-         (let (events)
-           (provide 'counsel)
-           (provide 'ffap)
-           (cl-progv
-               '(ivy-ffap-url-functions
-                 ffap-url-fetcher)
-               (list
-                (list
-                 (lambda ()
-                   nil)
-                 (lambda ()
-                   (let ((url
-                          (and
-                           (looking-at
-                            "#\\([0-9]+\\)")
-                           (format
-                            "https://example.test/issue/%s"
-                            (match-string 1)))))
-                     (push
-                      (list
-                       'resolve
-                       (point)
-                       url)
-                      events)
-                     url)))
-                (lambda (url)
-                  (push
-                   (list
-                    'fetch
-                    url)
-                   events)
-                  'fetched))
-             (let ((major-mode
-                    'magit-commit-mode))
-               (cl-letf (((symbol-function 'magit-goto-next-section)
-                          (lambda ()
-                            (push
-                             '(next-section)
-                             events)))
-                         ((symbol-function 'magit-current-section)
-                          (lambda ()
-                            'fixture-section))
-                         ((symbol-function 'magit-section-end)
-                          (lambda (section)
-                            (push
-                             (list
-                              'section-end
-                              section)
-                             events)
-                            (point-max)))
-                         ((symbol-function 'avy-process)
-                          (lambda (positions &optional overlay)
-                            (push
-                             (list
-                             'avy
-                              positions
-                              overlay)
-                             events)
-                            (let ((selected
-                                   (car
-                                    (last positions))))
-                              (goto-char selected)
-                              selected))))
-                 (list
-                  (ace-link-commit)
-                  (nreverse events)))))))"##;
     let expect = expect![[
-        r#"OK (fetched ((next-section) (section-end fixture-section) (avy (9 18) nil) (resolve 18 "https://example.test/issue/345") (fetch "https://example.test/issue/345")))"#
+        r#"OK (:top (:node "Top" :key ace-link-info :style (ace-link-info . at) :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 58 :line 2 :column 0 :line-text "")) :followed (:node "Advanced" :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 61 :line 2 :column 0 :line-text "") :text "File: sandbox.info,  Node: Advanced,  Prev: Basics,  Up: Top\n\n2 Advanced\n==========\n\nBack to *note Basics::.\n") :single-candidate (:node "Basics" :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 73 :line 2 :column 0 :line-text "")) :keys (("s" ((101 "a" "Basics::      How to begin.") (131 "s" "Advanced::    Deeper water.")))))"#
     ]];
+
     assert_ace_link_parity(elisp_form, expect);
 }
 
+/// The two ways a user backs out: `C-g' while the labels are up, and a key that
+/// labels nothing.  Neither may move point, change the node or leave label
+/// overlays behind, and an unknown key must keep the same labels on screen and
+/// read another key rather than following anything.
 #[test]
-fn ace_link_help_real_button_workflow_collects_selects_and_invokes_button_action() {
-    let elisp_form = r##"(with-temp-buffer
-         (insert "aaFirst bbSecond ")
-         (let (events)
-           (make-text-button
-            3 8
-            'label "First"
-            'action
-            (lambda (button)
-              (push
-               (list
-                'pressed
-                (button-label button)
-                (point))
-               events)))
-           (make-text-button
-            11 17
-            'label "Second"
-            'action
-            (lambda (button)
-              (push
-               (list
-                'pressed
-                (button-label button)
-                (point))
-               events)))
-           (cl-letf (((symbol-function 'window-start)
-                      (lambda (&rest _)
-                        (point-min)))
-                     ((symbol-function 'window-end)
-                      (lambda (&rest _)
-                        (point-max)))
-                     ((symbol-function 'avy--style-fn)
-                      (lambda (style)
-                        (list
-                         'style
-                         style)))
-                     ((symbol-function 'avy-process)
-                      (lambda (positions &optional overlay)
-                        (push
-                         (list
-                          'selected-from
-                          positions
-                          overlay)
-                         events)
-                        (car positions))))
-             (list
-              (ace-link-help)
-              (nreverse events)
-              (point)))))"##;
-    let expect =
-        expect![[r#"OK (t ((selected-from (3 11) (style at-full)) (pressed "First" 4)) 4)"#]];
-    assert_ace_link_parity(elisp_form, expect);
-}
+fn ace_link_info_aborts_on_c_g_and_reports_an_unknown_label_key() {
+    let elisp_form = r##"(ace-link-test-session
+ (ace-link-setup-default)
+ (ace-link-test-open-manual)
+ (let ((before (ace-link-test-where)))
+   (execute-kbd-macro (kbd "o C-g"))
+   (let ((aborted (list :node Info-current-node
+                        :where (ace-link-test-where)
+                        :labels (ace-link-test-labels))))
+     (execute-kbd-macro (kbd "o z C-g"))
+     (list :before before
+           :aborted aborted
+           :after-unknown-key (list :node Info-current-node
+                                    :where (ace-link-test-where)
+                                    :labels (ace-link-test-labels))
+           :keys (ace-link-test-pressed)))))"##;
 
-#[test]
-fn ace_link_help_real_workflow_signals_when_the_final_button_reaches_buffer_end() {
-    let elisp_form = r##"(with-temp-buffer
-         (insert "aaFirst")
-         (make-text-button
-          3 8
-          'label "First"
-          'action
-          (lambda (_button)
-            'pressed))
-         (cl-letf (((symbol-function 'window-start)
-                    (lambda (&rest _)
-                      (point-min)))
-                   ((symbol-function 'window-end)
-                    (lambda (&rest _)
-                      (point-max))))
-           (ace-link-help)))"##;
-    let expect = expect!["ERR (wrong-type-argument integer-or-marker-p nil)"];
-    super::assert_ace_link_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_link_eww_real_property_workflow_skips_newlines_selects_and_forwards_prefix() {
-    let elisp_form = r##"(with-temp-buffer
-         (insert "aa\n\nFirst bb Second")
-         (add-text-properties
-          3 10
-          '(shr-url "first"))
-         (add-text-properties
-          13 19
-          '(shr-url "second"))
-         (let (events)
-           (cl-letf (((symbol-function 'window-start)
-                      (lambda (&rest _)
-                        (point-min)))
-                     ((symbol-function 'window-end)
-                      (lambda (&rest _)
-                        (point-max)))
-                     ((symbol-function 'avy--style-fn)
-                      (lambda (style)
-                        (list
-                         'style
-                         style)))
-                     ((symbol-function 'avy-process)
-                      (lambda (positions &optional overlay)
-                        (push
-                         (list
-                          'selected-from
-                          positions
-                          overlay)
-                         events)
-                        (car
-                         (last positions))))
-                     ((symbol-function 'eww-follow-link)
-                      (lambda (external)
-                        (push
-                         (list
-                          'follow
-                          (point)
-                          external
-                          (get-text-property
-                           (point)
-                           'shr-url))
-                         events)
-                        'followed)))
-             (list
-              (ace-link-eww
-               '(16))
-              (nreverse events)
-              (point)))))"##;
     let expect = expect![[
-        r#"OK (followed ((selected-from (5 13) (style at-full)) (follow 13 (16) "second")) 13)"#
+        r#"OK (:before (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 58 :line 2 :column 0 :line-text "") :aborted (:node "Top" :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 58 :line 2 :column 0 :line-text "") :labels nil) :after-unknown-key (:node "Top" :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 58 :line 2 :column 0 :line-text "") :labels nil) :keys (("C-g" ((101 "a" "Basics::      How to begin.") (131 "s" "Advanced::    Deeper water."))) ("z" ((101 "a" "Basics::      How to begin.") (131 "s" "Advanced::    Deeper water."))) ("C-g" ((101 "a" "Basics::      How to begin.") (131 "s" "Advanced::    Deeper water.")))))"#
     ]];
+
     assert_ace_link_parity(elisp_form, expect);
 }
 
+/// A user looks up a function they just wrote, then jumps from the `*Help*'
+/// buffer to its definition.  Every button in the help buffer is labelled --
+/// the type link, the source-file link and both symbols quoted in the
+/// docstring -- and following the source link visits the real sandbox file.
 #[test]
-fn ace_link_gnus_summary_selects_visible_article_window_then_restores_original_selection() {
-    let elisp_form = r##"(save-window-excursion
-         (let* ((original
-                 (selected-window))
-                (article
-                 (split-window
-                  original))
-                events)
-           (cl-progv
-               '(gnus-article-buffer)
-               '(" *fixture-article*")
-             (let ((major-mode
-                    'gnus-summary-mode))
-               (cl-letf (((symbol-function 'gnus-get-buffer-window)
-                          (lambda (buffer visibility)
-                            (push
-                             (list
-                              'find
-                              buffer
-                              visibility
-                              (eq
-                               (selected-window)
-                               original))
-                             events)
-                            article))
-                         ((symbol-function 'select-frame-set-input-focus)
-                          (lambda (frame)
-                            (push
-                             (list
-                              'focus
-                              (eq frame
-                                  (window-frame article))
-                              (eq
-                               (selected-window)
-                               article))
-                             events)))
-                         ((symbol-function 'ace-link--gnus-collect)
-                          (lambda ()
-                            (push
-                             (list
-                              'collect
-                              (eq
-                               (selected-window)
-                               article))
-                             events)
-                            '(4)))
-                         ((symbol-function 'avy--style-fn)
-                          (lambda (style)
-                            (list
-                             'style
-                             style)))
-                         ((symbol-function 'avy-process)
-                          (lambda (positions &optional overlay)
-                            (push
-                             (list
-                              'avy
-                              positions
-                              overlay
-                              (eq
-                               (selected-window)
-                               article))
-                             events)
-                            4))
-                         ((symbol-function 'ace-link--gnus-action)
-                          (lambda (position)
-                            (push
-                             (list
-                              'action
-                              position
-                              (eq
-                               (selected-window)
-                               article))
-                             events)
-                            'gnus-result)))
-                 (list
-                  (ace-link-gnus)
-                  (eq
-                   (selected-window)
-                   original)
-                  (window-live-p article)
-                  (nreverse events)))))))"##;
+fn ace_link_help_follows_the_source_button_to_the_defining_file() {
+    let elisp_form = r##"(ace-link-test-session
+ (ace-link-setup-default)
+ (load (ace-link-test-write
+        "lib/notes-util.el"
+        ";;; notes-util.el --- helpers  -*- lexical-binding: t; -*-\n(defun notes-util-render (entry)\n  \"Render ENTRY for the notebook.\nSee `notes-util-format' and `describe-function' for details.\"\n  entry)\n(defun notes-util-format (entry) entry)\n(provide 'notes-util)\n")
+       nil t t)
+ (describe-function 'notes-util-render)
+ (with-current-buffer "*Help*"
+   (set-window-buffer (selected-window) (current-buffer))
+   (goto-char (point-min))
+   (let ((help (list :mode major-mode
+                     :key (lookup-key help-mode-map "o")
+                     :style (assq 'ace-link-help avy-styles-alist)
+                     :text (buffer-substring-no-properties
+                            (point-min) (point-max)))))
+     (execute-kbd-macro (kbd "o s"))
+     (list :help help
+           :keys (ace-link-test-pressed)
+           :where (ace-link-test-where)
+           :help-text (with-current-buffer "*Help*"
+                        (buffer-substring-no-properties
+                         (point-min) (point-max)))))))"##;
+
     let expect = expect![[
-        r#"OK (gnus-result t t ((find " *fixture-article*" visible t) (focus t t) (collect t) (avy (4) (style at-full) t) (action 4 t)))"#
+        r#"OK (:help (:mode help-mode :key ace-link-help :style (ace-link-help . post) :text "notes-util-render is an interpreted-function in\n‘[ORACLE-SANDBOX]/lib/notes-util.el’.\n\n(notes-util-render ENTRY)\n\nRender ENTRY for the notebook.\nSee ‘notes-util-format’ and ‘describe-function’ for details.\n") :keys (("s" ((24 "ai" "interpreted-function in") (49 "s/" "[ORACLE-SANDBOX]/lib/notes-util.el’.") (303 "dn" "notes-util-format’ and ‘describe-function’ for details.") (327 "fd" "describe-function’ for details.")))) :where (:buffer "notes-util.el" :window-buffer "notes-util.el" :mode emacs-lisp-mode :point 59 :line 2 :column 0 :line-text "(defun notes-util-render (entry)") :help-text "notes-util-render is an interpreted-function in\n‘[ORACLE-SANDBOX]/lib/notes-util.el’.\n\n(notes-util-render ENTRY)\n\nRender ENTRY for the notebook.\nSee ‘notes-util-format’ and ‘describe-function’ for details.\n")"#
     ]];
+
+    assert_ace_link_parity(elisp_form, expect);
+}
+
+/// An org plan with four kinds of link in the visible subtree -- an https link,
+/// a `file:' link, an internal `*heading' link and a bare angle link -- plus a
+/// fifth link inside a subtree the user folds with TAB.  ace-link filters
+/// invisible links with `outline-invisible-p', which only knows the legacy
+/// `outline' invisibility spec, so with modern `org-fold' the folded link is
+/// still offered; that upstream behaviour is pinned here.  All three follow
+/// kinds are exercised: moving inside the buffer, opening another file, and
+/// handing a URL to the browser.
+#[test]
+fn ace_link_org_offers_every_visible_link_type_and_follows_each_kind() {
+    let elisp_form = r##"(ace-link-test-session
+ (ace-link-setup-default)
+ (ace-link-test-capture-browsers)
+ (ace-link-test-write "notes/appendix.org"
+                      "#+title: Appendix\n* Appendix top\nThe appendix body.\n")
+ (let ((buffer (find-file-noselect
+                (ace-link-test-write
+                 "notes/plan.org"
+                 (concat "#+title: Plan\n\n* Overview\nRead the [[https://example.org/manual][project manual]] and\n"
+                         "the [[file:appendix.org][appendix]].  Jump to [[*Milestones][milestones]].\n"
+                         "A bare link: <https://example.org/bare>\n\n"
+                         "* Milestones\nSee [[https://example.org/tracker][tracker]].\n\n"
+                         "* Archive\nHidden [[https://example.org/hidden][hidden link]].\n")))))
+   (set-buffer buffer)
+   (set-window-buffer (selected-window) buffer)
+   (define-key org-mode-map (kbd "M-o") #'ace-link-org)
+   (goto-char (point-max))
+   (re-search-backward "^\\* Archive" nil t)
+   (execute-kbd-macro (kbd "TAB"))
+   (let ((folded (list :mode major-mode
+                       :style (assq 'ace-link-org avy-styles-alist)
+                       :archive-invisible (get-char-property (- (point-max) 5)
+                                                            'invisible))))
+     (goto-char (point-min))
+     (execute-kbd-macro (kbd "M-o d"))
+     (let ((internal (ace-link-test-where)))
+       (goto-char (point-min))
+       (execute-kbd-macro (kbd "M-o a"))
+       (let ((remote (list :where (ace-link-test-where)
+                           :browsed (ace-link-test-browsed))))
+         (goto-char (point-min))
+         (execute-kbd-macro (kbd "M-o s"))
+         (list :folded folded
+               :internal internal
+               :remote remote
+               :file (ace-link-test-where)
+               :keys (ace-link-test-pressed)
+               :browsed (ace-link-test-browsed)))))))"##;
+
+    let expect = expect![[
+        r##"OK (:folded (:mode org-mode :style (ace-link-org . pre) :archive-invisible org-fold-outline) :internal (:buffer "plan.org" :window-buffer "plan.org" :mode org-mode :point 202 :line 8 :column 0 :line-text "* Milestones") :remote (:where (:buffer "plan.org" :window-buffer "plan.org" :mode org-mode :point 35 :line 4 :column 9 :line-text "Read the [[https://example.org/manual][project manual]] and") :browsed (#1=(browse "https://example.org/manual"))) :file (:buffer "appendix.org" :window-buffer "appendix.org" :mode org-mode :point 0 :line 1 :column 0 :line-text "#+title: Appendix") :keys (("d" ((35 "a[" "[[https://example.org/manual][project manual]] and") (90 "s[" "[[file:appendix.org][appendix]].  Jump to [[*Milestones][milestones]].") (132 "d[" "[[*Milestones][milestones]].") (174 "f<" "<https://example.org/bare>") (219 "g[" "[[https://example.org/tracker][tracker]].") (279 "h[" "[[https://example.org/hidden][hidden link]]."))) ("a" ((35 "a[" "[[https://example.org/manual][project manual]] and") (90 "s[" "[[file:appendix.org][appendix]].  Jump to [[*Milestones][milestones]].") (132 "d[" "[[*Milestones][milestones]].") (174 "f<" "<https://example.org/bare>") (219 "g[" "[[https://example.org/tracker][tracker]].") (279 "h[" "[[https://example.org/hidden][hidden link]]."))) ("s" ((35 "a[" "[[https://example.org/manual][project manual]] and") (90 "s[" "[[file:appendix.org][appendix]].  Jump to [[*Milestones][milestones]].") (132 "d[" "[[*Milestones][milestones]].") (174 "f<" "<https://example.org/bare>") (219 "g[" "[[https://example.org/tracker][tracker]].") (279 "h[" "[[https://example.org/hidden][hidden link]].")))) :browsed (#1#))"##
+    ]];
+
+    assert_ace_link_parity(elisp_form, expect);
+}
+
+/// A real `compilation-start' run over a real sandbox project: the shell prints
+/// a warning and an error, ace-link labels both locations from their
+/// `help-echo' property, and the chosen label runs `compile-goto-error', which
+/// visits the offending file at the reported line and column.
+#[test]
+fn ace_link_compilation_jumps_from_a_real_compile_run_to_the_error_site() {
+    let elisp_form = r##"(ace-link-test-session
+ (ace-link-setup-default)
+ (ace-link-test-write "src/parser.c" "int main(void) {\n  return 0;\n}\n")
+ (ace-link-test-write "src/lexer.c" "/* lexer */\nint lex(void) { return 1; }\n")
+ (let* ((default-directory (file-name-as-directory (ace-link-test-path "")))
+        (buffer (compilation-start
+                 "printf 'src/parser.c:2:3: warning: unused value\\nsrc/lexer.c:2:17: error: bad token\\n'"
+                 nil
+                 (lambda (&rest _) "*compile-fixture*"))))
+   (with-current-buffer buffer
+     (cl-loop repeat 200
+              while (get-buffer-process (current-buffer))
+              do (accept-process-output nil 0.05))
+     (set-window-buffer (selected-window) (current-buffer))
+     (goto-char (point-min))
+     (let ((compilation (list :mode major-mode
+                              :running (and (get-buffer-process (current-buffer)) t)
+                              :key (lookup-key compilation-mode-map "o")
+                              :style (assq 'ace-link-compilation avy-styles-alist)
+                              :dispatch (assq 'ace-link-compilation
+                                              ace-link-major-mode-actions))))
+       (execute-kbd-macro (kbd "o s"))
+       (list :compilation compilation
+             :keys (ace-link-test-pressed)
+             :where (ace-link-test-where)
+             :file-text (buffer-substring-no-properties
+                         (point-min) (point-max)))))))"##;
+
+    let expect = expect![[
+        r#"OK (:compilation (:mode compilation-mode :running nil :key ace-link-compilation :style (ace-link-compilation . post) :dispatch (ace-link-compilation compilation-mode grep-mode)) :keys (("s" ((358 "as" "src/parser.c:2:3: warning: unused value") (398 "ss" "src/lexer.c:2:17: error: bad token")))) :where (:buffer "lexer.c" :window-buffer "lexer.c" :mode c-mode :point 28 :line 2 :column 16 :line-text "int lex(void) { return 1; }") :file-text "/* lexer */\nint lex(void) { return 1; }\n")"#
+    ]];
+
+    assert_ace_link_parity(elisp_form, expect);
+}
+
+/// A small local site rendered by eww: three links, one of whose labels spans a
+/// rendered line break.  Following the first label renders the next local page,
+/// `l' goes back, and a prefix argument sends the external URL to the secondary
+/// browser instead of eww.
+#[test]
+fn ace_link_eww_follows_a_local_page_and_a_prefix_opens_the_external_browser() {
+    let elisp_form = r##"(ace-link-test-session
+ (require 'eww)
+ (ace-link-test-capture-browsers)
+ (ace-link-setup-default)
+ (ace-link-test-write
+  "site/index.html"
+  "<html><head><title>Field notes</title></head><body>\n<h1>Field notes</h1>\n<p>Start with the <a href=\"intro.html\">introduction</a>, then read the\n<a href=\"api.html\">API reference</a>.</p>\n<p>External: <a href=\"https://example.org/upstream\">upstream</a>.</p>\n</body></html>\n")
+ (ace-link-test-write
+  "site/intro.html"
+  "<html><head><title>Introduction</title></head><body>\n<h1>Introduction</h1>\n<p>Back to the <a href=\"index.html\">index</a>.</p>\n</body></html>\n")
+ (ace-link-test-write
+  "site/api.html"
+  "<html><head><title>API</title></head><body><h1>API</h1><p>Nothing here yet.</p></body></html>\n")
+ (eww-open-file (ace-link-test-path "site/index.html"))
+ (with-current-buffer "*eww*"
+   (set-window-buffer (selected-window) (current-buffer))
+   (let ((index (list :mode major-mode
+                      :title (plist-get eww-data :title)
+                      :key (lookup-key eww-mode-map "o")
+                      :style (assq 'ace-link-eww avy-styles-alist)
+                      :text (buffer-substring-no-properties
+                             (point-min) (point-max)))))
+     (execute-kbd-macro (kbd "o a"))
+     (let ((followed (list :title (plist-get eww-data :title)
+                           :url (plist-get eww-data :url)
+                           :where (ace-link-test-where))))
+       (execute-kbd-macro (kbd "l"))
+       (execute-kbd-macro (kbd "C-u o d"))
+       (list :index index
+             :followed followed
+             :external (list :title (plist-get eww-data :title)
+                             :where (ace-link-test-where))
+             :browsed (ace-link-test-browsed)
+             :keys (ace-link-test-pressed))))))"##;
+
+    let expect = expect![[
+        r#"OK (:index (:mode eww-mode :title "Field notes" :key ace-link-eww :style (ace-link-eww . post) :text "Field\nnotes\n\n\nStart\nwith\nthe\nintroduction,\nthen\nread\nthe\nAPI\nreference.\n\n\nExternal:\nupstream.\n") :followed (:title "Introduction" :url "file://[ORACLE-SANDBOX]/site/intro.html" :where (:buffer "*eww*" :window-buffer "*eww*" :mode eww-mode :point 0 :line 1 :column 0 :line-text "Introduction")) :external (:title "Field notes" :where (:buffer "*eww*" :window-buffer "*eww*" :mode eww-mode :point 84 :line 17 :column 0 :line-text "upstream.")) :browsed ((browse-external "https://example.org/upstream")) :keys (("a" ((29 "ai" "introduction,") (57 "sA" "API") (84 "du" "upstream."))) ("d" ((29 "ai" "introduction,") (57 "sA" "API") (84 "du" "upstream.")))))"#
+    ]];
+
+    assert_ace_link_parity(elisp_form, expect);
+}
+
+/// The mode-dispatching entry point.  In an unsupported buffer `ace-link'
+/// signals, unless the user installed an `ace-link-fallback-function'.  The
+/// minor-mode table promises that `compilation-shell-minor-mode' dispatches to
+/// `ace-link-compilation', but upstream tests it with `bound-and-true-p' applied
+/// to the loop variable's own name, so the lookup never succeeds and the same
+/// buffer errors -- while `ace-link-compilation' bound to a key works there, so
+/// the links themselves are real.
+#[test]
+fn ace_link_dispatches_on_major_mode_and_falls_back_when_unsupported() {
+    let elisp_form = r##"(ace-link-test-session
+ (ace-link-test-write "src/parser.c" "int main(void) {\n  return 0;\n}\n")
+ (global-set-key (kbd "M-o") #'ace-link)
+ (global-set-key (kbd "C-c o") #'ace-link-compilation)
+ (let ((buffer (generate-new-buffer "*shell-output*")))
+   (set-window-buffer (selected-window) buffer)
+   (set-buffer buffer)
+   (setq default-directory (file-name-as-directory (ace-link-test-path "")))
+   (let ((plain (list :mode major-mode
+                      :unsupported (condition-case failure
+                                       (execute-kbd-macro (kbd "M-o"))
+                                     (error failure))
+                      :fallback (let ((ace-link-fallback-function
+                                       (lambda ()
+                                         (list 'fallback major-mode (point)))))
+                                  (ace-link)))))
+     (insert "$ make\nsrc/parser.c:2:3: warning: unused value\nsrc/parser.c:3:1: error: stray brace\n")
+     (compilation-shell-minor-mode 1)
+     (font-lock-ensure)
+     (goto-char (point-min))
+     (let ((minor (list :minor-mode compilation-shell-minor-mode
+                        :table ace-link-minor-mode-actions
+                        :dispatch (condition-case failure
+                                      (execute-kbd-macro (kbd "M-o s"))
+                                    (error failure)))))
+       (goto-char (point-min))
+       (execute-kbd-macro (kbd "C-c o s"))
+       (list :plain plain
+             :minor minor
+             :keys (ace-link-test-pressed)
+             :where (ace-link-test-where))))))"##;
+
+    let expect = expect![[
+        r#"OK (:plain (:mode fundamental-mode :unsupported (error "fundamental-mode isn’t supported") :fallback (fallback fundamental-mode 1)) :minor (:minor-mode t :table ((ace-link-compilation compilation-shell-minor-mode)) :dispatch (error "fundamental-mode isn’t supported")) :keys (("s" ((7 "a" "src/parser.c:2:3: warning: unused value") (47 "s" "src/parser.c:3:1: error: stray brace")))) :where (:buffer "parser.c" :window-buffer "parser.c" :mode c-mode :point 29 :line 3 :column 0 :line-text "}"))"#
+    ]];
+
     assert_ace_link_parity(elisp_form, expect);
 }
