@@ -166,6 +166,12 @@ pub const LOG4E_MELPA_PIN: (&str, &str) = ("log4e", "20240123.1313");
 /// The exact yaxception dependency selected for the auto-complete-pcmp corpus.
 pub const YAXCEPTION_MELPA_PIN: (&str, &str) = ("yaxception", "20240107.504");
 
+/// The exact auto-complete-rst package selected by the comprehensive source
+/// generation, directive/option parsing, command, setup, and practical
+/// reStructuredText workflow parity corpus. MELPA built this archive from
+/// upstream commit `4803ce41a96224e6fa54e6741a5b5f40ebed7351`.
+pub const AUTO_COMPLETE_RST_MELPA_PIN: (&str, &str) = ("auto-complete-rst", "20140225.944");
+
 /// The exact audio-notes-mode package selected by the comprehensive
 /// filesystem, playback, process-control, mode-line, advice, and global-mode
 /// lifecycle parity corpus. MELPA built this archive from upstream commit
