@@ -1,18 +1,126 @@
 use std::time::Duration;
 
 use crate::{ACE_POPUP_MENU_MELPA_PIN, CachedMelpaOracle};
-use expect_test::{Expect, expect};
+use expect_test::Expect;
 
-mod autoloads;
-mod dispatch;
-mod mode;
-mod surface;
+mod workflows;
 
 const ACE_POPUP_MENU_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
-fn ace_popup_menu_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ACE_POPUP_MENU_MELPA_PIN, source_file)
+/// Fixtures shared by the workflows.
+///
+/// ace-popup-menu is a global minor mode that advises `x-popup-menu' to render
+/// the menu in a temporary window and let the user pick an entry with an avy
+/// label.  Nothing here is stubbed: the workflows call the real (advised)
+/// `x-popup-menu', avy reads real keys, and the menu is rendered into a real
+/// window.
+///
+/// Two details make that observable and deterministic.  The menu window is
+/// created by `with-current-buffer-window', which runs
+/// `temp-buffer-window-show-hook' with the menu buffer current and its window
+/// selected -- exactly after rendering and before the first key is read -- so
+/// `apm-test-record-rendering' can capture what the user is shown before the
+/// buffer is killed again.  And avy reads its selection key from `avy-keys',
+/// which is pinned here: a key outside that alphabet is not a candidate, avy
+/// only reports "No such candidate" and keeps reading, so every workflow feeds
+/// a key that is either a real label or one of `avy-escape-chars'.
+const ACE_POPUP_MENU_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+
+(defvar apm-test-renderings nil
+  "Every menu rendering captured while a popup menu was displayed.")
+
+(defun apm-test-face-runs ()
+  "Return the current buffer's text as (TEXT . FACE) runs."
+  (let ((position (point-min))
+        (runs nil))
+    (while (< position (point-max))
+      (let* ((next (next-single-property-change position 'face nil (point-max)))
+             (face (get-text-property position 'face)))
+        (push (cons (buffer-substring-no-properties position next) face) runs)
+        (setq position next)))
+    (nreverse runs)))
+
+(defun apm-test-record-rendering ()
+  "Record the popup menu exactly as the user sees it when it appears."
+  (push (list :buffer (buffer-name)
+              :text (buffer-substring-no-properties (point-min) (point-max))
+              :runs (apm-test-face-runs)
+              :cursor cursor-type
+              :window-buffer (buffer-name (window-buffer (selected-window))))
+        apm-test-renderings))
+
+(add-hook 'temp-buffer-window-show-hook #'apm-test-record-rendering)
+
+(defun apm-test-renderings ()
+  (reverse apm-test-renderings))
+
+(defvar apm-test-menu
+  '("Refactor"
+    ("Rename"
+     ("Rename symbol" . rename-symbol)
+     ("Rename file" . rename-file))
+    ("Extract"
+     ("Extract function" . extract-function)
+     ("Extract variable" . extract-variable)
+     ("Inline variable" . inline-variable)))
+  "A realistic two-pane menu in `x-popup-menu' format.")
+
+(defvar apm-test-result nil
+  "What the last `apm-test-popup' command selected.")
+
+(defun apm-test-popup ()
+  "Pop up `apm-test-menu' the way an ordinary command would."
+  (interactive)
+  (setq apm-test-result (x-popup-menu t apm-test-menu)))
+
+(defvar apm-test-orig-calls nil
+  "Every call ace-popup-menu forwarded to the ORIG-FUN it was given.")
+
+(defun apm-test-orig-fun (&rest arguments)
+  "Stand in for the original `x-popup-menu' and record ARGUMENTS."
+  (push (cons :orig arguments) apm-test-orig-calls)
+  'value-from-orig-fun)
+
+(defun apm-test-orig-calls ()
+  (reverse apm-test-orig-calls))
+
+(defun apm-test-advice-count ()
+  "Count how many times ace-popup-menu advises `x-popup-menu'."
+  (let ((count 0))
+    (advice-mapc (lambda (function _properties)
+                   (when (eq function #'ace-popup-menu)
+                     (setq count (1+ count))))
+                 'x-popup-menu)
+    count))
+
+(defun apm-test-mode-state ()
+  (list :advised (and (advice-member-p #'ace-popup-menu 'x-popup-menu) t)
+        :advice-count (apm-test-advice-count)
+        :mode ace-popup-menu-mode
+        :global-value (default-value 'ace-popup-menu-mode)
+        :buffer-local (local-variable-p 'ace-popup-menu-mode)))
+
+(defun apm-test-setup ()
+  "Create the work buffer the user is editing and pin avy's alphabet."
+  (setq apm-test-renderings nil
+        apm-test-result nil
+        apm-test-orig-calls nil
+        avy-keys '(?a ?s ?d ?f ?g ?h ?j ?k ?l)
+        avy-style 'pre
+        avy-all-windows nil)
+  (global-set-key (kbd "C-c m") #'apm-test-popup)
+  (switch-to-buffer (get-buffer-create "*apm-work*"))
+  (erase-buffer)
+  (insert "Editing buffer, untouched by the menu.\n")
+  (goto-char (point-min))
+  (current-buffer))
+"##;
+
+fn ace_popup_menu_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ACE_POPUP_MENU_MELPA_PIN, "ace-popup-menu.el")
         .expect("prepare pinned ace-popup-menu source below ./tmp")
+        .with_prelude(ACE_POPUP_MENU_TEST_PRELUDE)
         .with_timeout(ACE_POPUP_MENU_TEST_TIMEOUT)
 }
 
@@ -24,52 +132,10 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_ace_popup_menu_parity(elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_ace_popup_menu_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = ace_popup_menu_oracle("ace-popup-menu.el")
+    let report = ace_popup_menu_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("ace-popup-menu parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-fn assert_ace_popup_menu_autoload_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ace_popup_menu_oracle("ace-popup-menu-autoloads.el")
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| {
-            panic!("ace-popup-menu autoload parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-#[test]
-fn ace_popup_menu_exact_pin_dependencies_metadata_and_feature_match() {
-    let elisp_form = r##"(let ((descriptor
-                    (cadr
-                     (assq
-                      'ace-popup-menu
-                      package-alist))))
-               (list
-                (package-desc-name descriptor)
-                (package-version-join
-                 (package-desc-version descriptor))
-                (package-desc-reqs descriptor)
-                (package-desc-summary descriptor)
-                (copy-tree
-                 (package-desc-extras descriptor))
-                (featurep 'ace-popup-menu)))"##;
-    let expect = expect![[
-        r#"OK (ace-popup-menu "20230606.1445" ((emacs (24 4)) (avy-menu (0 1))) "Replace GUI popup menu with something more efficient." ((:maintainers ("Mark Karpov" . "markkarpov92@gmail.com")) (:authors ("Mark Karpov" . "markkarpov92@gmail.com")) (:keywords "convenience" "popup" "menu") (:revdesc . "a8b970d1b59e") (:commit . "a8b970d1b59efbe7e1e29ed16d71af257a22699f") (:url . "https://github.com/mrkkrp/ace-popup-menu")) t)"#
-    ]];
-    assert_ace_popup_menu_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_popup_menu_required_dependency_features_match() {
-    let elisp_form = r##"(list
-         (featurep 'avy-menu)
-         (featurep 'avy)
-         (featurep 'ace-popup-menu))"##;
-    let expect = expect!["OK (t t t)"];
-    assert_ace_popup_menu_parity(elisp_form, expect);
 }
