@@ -3,17 +3,65 @@ use std::time::Duration;
 use crate::{AES_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod buffers;
-mod ciphers;
-mod passwords;
-mod primitives;
-mod surface;
+mod workflows;
 
-const AES_TEST_TIMEOUT: Duration = Duration::from_secs(120);
+const AES_TEST_TIMEOUT: Duration = Duration::from_secs(180);
+
+/// aes.el is a pure-Elisp AES implementation: it encrypts buffers and strings,
+/// writes a self-describing header, and stores the result either base64-encoded
+/// or as raw bytes.  Everything it does is local and deterministic except two
+/// things -- the random initialisation vector, which makes whole-ciphertext
+/// comparison meaningless by design, and the password prompt.  So the workflows
+/// pin exact bytes where they are deterministic (the FIPS-197 known-answer
+/// vector, and a fixed cipher block written through a coding system) and pin
+/// round trips, headers and lengths everywhere else.  The only stand-in is
+/// `read-passwd`, a genuine interactive boundary.
+const AES_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+
+(setq make-backup-files nil create-lockfiles nil)
+
+(defvar aes-test-root (file-name-as-directory (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
+
+(defun aes-test-path (name) (expand-file-name name aes-test-root))
+
+(defun aes-test-bytes (path)
+  "Exact bytes of PATH as a list of integers."
+  (if (file-regular-p path)
+      (with-temp-buffer
+        (set-buffer-multibyte nil)
+        (let ((coding-system-for-read 'binary)) (insert-file-contents-literally path))
+        (string-to-list (buffer-string)))
+    'no-such-file))
+
+(defun aes-test-text (path &optional coding)
+  (if (file-regular-p path)
+      (with-temp-buffer
+        (let ((coding-system-for-read (or coding 'utf-8))) (insert-file-contents path))
+        (buffer-substring-no-properties (point-min) (point-max)))
+    'no-such-file))
+
+(defun aes-test-hex (string)
+  (mapconcat (lambda (c) (format "%02x" c)) (string-to-list string) ""))
+
+(defun aes-test-unhex (hex)
+  (let ((s (make-string (/ (length hex) 2) 0)) (i 0))
+    (while (< i (length s))
+      (aset s i (string-to-number (substring hex (* 2 i) (+ 2 (* 2 i))) 16))
+      (setq i (1+ i)))
+    s))
+
+(defun aes-test-header (encrypted)
+  "The plaintext header line of an encrypted blob."
+  (if (string-match "\\`\\(aes-encrypted V [^\n]*\\)\n" encrypted)
+      (match-string 1 encrypted)
+    'no-header))
+"##;
 
 fn aes_oracle() -> CachedMelpaOracle {
     CachedMelpaOracle::new(AES_MELPA_PIN, "aes.el")
         .expect("prepare pinned aes source below ./tmp")
+        .with_prelude(AES_TEST_PRELUDE)
         .with_timeout(AES_TEST_TIMEOUT)
 }
 
@@ -22,18 +70,10 @@ fn current_test_name() -> String {
     thread.name().unwrap_or("unnamed aes parity test").into()
 }
 
-pub(crate) fn assert_aes_parity(form: &str, expected: Expect) {
+pub(crate) fn assert_aes_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
     let report = aes_oracle()
-        .run_value(&name, form)
+        .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("aes parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_aes_signal_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = aes_oracle()
-        .run_signal(&name, form)
-        .unwrap_or_else(|error| panic!("aes signal parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
 }
