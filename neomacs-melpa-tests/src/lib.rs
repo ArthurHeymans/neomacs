@@ -1190,6 +1190,12 @@ pub const AUTO_INDENT_MODE_MELPA_PIN: (&str, &str) = ("auto-indent-mode", "20211
 /// `c62f4e04c7b73835c399f0348bea0ade2720bcbb`.
 pub const AUTO_MINOR_MODE_MELPA_PIN: (&str, &str) = ("auto-minor-mode", "20180527.1123");
 
+/// The exact auto-read-only package selected by the comprehensive filename
+/// matching, project suppression, hook, global-mode, and practical read-only
+/// workflow parity corpus. MELPA built this archive from upstream commit
+/// `206d4559762fe6ef9e91de8f9dc43e1e41c0f42c`.
+pub const AUTO_READ_ONLY_MELPA_PIN: (&str, &str) = ("auto-read-only", "20260521.1659");
+
 /// The exact ht package selected as auto-highlight-symbol's hash-table
 /// dependency. MELPA built this archive from upstream commit
 /// `1c49aad1c820c86f7ee35bf9fff8429502f60fef`.
