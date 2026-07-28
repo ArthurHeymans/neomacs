@@ -1032,6 +1032,12 @@ pub const AUTO_ASYNC_BYTE_COMPILE_MELPA_PIN: (&str, &str) =
 /// upstream commit `4db3a0e497feecc8b3dbeeefacdf363ae60a6392`.
 pub const AUTO_COMPILE_MELPA_PIN: (&str, &str) = ("auto-compile", "20260601.1449");
 
+/// The exact auto-dark package selected by the comprehensive metadata, theme,
+/// customization, platform-detection, command-adapter, listener, timer, hook,
+/// and global-mode lifecycle parity corpus. MELPA built this archive from
+/// upstream commit `6d1e8d2fc493dccbf05c9191611805c7e7881c70`.
+pub const AUTO_DARK_MELPA_PIN: (&str, &str) = ("auto-dark", "20260313.2356");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
