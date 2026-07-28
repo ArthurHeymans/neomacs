@@ -1246,11 +1246,15 @@ fn decode_iso2022_attaches_charset_property_for_designated_charset() {
     // "X" + ESC$B designation + two dim-2 chars + ESC(B (ascii) + "Y".
     let (bytes, runs) = decode_via_iso2022(b"X\x1b$B$3$s\x1b(BY", &spec);
     let text = crate::emacs_core::emacs_char::to_utf8_lossy(&bytes);
-    // X + 2 kanji + Y == 4 chars; the kanji run is [1,3).
+    // X + 2 kanji + Y == 4 chars.  The run starts at the first kanji and runs
+    // to the end of the text: re-designating G0 back to `ascii` does not close
+    // it, because GNU's `decode_coding_iso_2022` only moves `last_id` for a
+    // non-ASCII charset.  GNU Emacs 31 decoding the same bytes returns
+    // `#("XこんY" 1 4 (charset japanese-jisx0208))`.
     assert_eq!(text.chars().count(), 4);
     assert_eq!(runs.len(), 1);
     assert_eq!(runs[0].start, 1);
-    assert_eq!(runs[0].end, 3);
+    assert_eq!(runs[0].end, 4);
     assert_eq!(runs[0].plist, charset_prop("test-jis"));
 }
 
@@ -1308,6 +1312,64 @@ fn decode_sjis_attaches_charset_property() {
     assert_eq!((runs[1].start, runs[1].end), (2, 3));
     assert_eq!(runs[1].plist, charset_prop("test-jis"));
     let _ = &mut input;
+}
+
+#[test]
+fn decode_sjis_charset_runs_absorb_ascii_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::intern::intern;
+    // GNU's `decode_coding_sjis` only moves `last_id`/`last_offset` for a
+    // non-ASCII charset, so ASCII characters never close the run being
+    // accumulated.  A run ends only where the next *different* non-ASCII
+    // charset starts, or at the end of the decoded text - trailing ASCII
+    // included.  Real GNU Emacs 31 decoding the equivalent Shift-JIS bytes
+    // produces exactly three runs:
+    //
+    //   #("ABあCDｱｲEFいGH" 2 5 (charset japanese-jisx0208)
+    //                      5 9 (charset katakana-jisx0201)
+    //                      9 12 (charset japanese-jisx0208))
+    let mut kana_args = vec![Value::NIL; 17];
+    kana_args[0] = Value::symbol("test-katakana");
+    kana_args[1] = Value::fixnum(1);
+    kana_args[2] = Value::vector(vec![Value::fixnum(33), Value::fixnum(126)]);
+    kana_args[11] = Value::fixnum(0x20000);
+    crate::emacs_core::charset::builtin_define_charset_internal(kana_args).unwrap();
+    let jis = register_test_jis();
+    let charsets = vec![intern("ascii"), intern("test-katakana"), jis];
+
+    let kanji_one = jis_to_sjis(0x2433);
+    let kanji_two = jis_to_sjis(0x2434);
+    let input = vec![
+        b'A',
+        b'B',
+        kanji_one.0,
+        kanji_one.1,
+        b'C',
+        b'D',
+        0xA1,
+        0xA2,
+        b'E',
+        b'F',
+        kanji_two.0,
+        kanji_two.1,
+        b'G',
+        b'H',
+    ];
+    let (bytes, runs) = decode_via_sjis(&input, &charsets);
+    let text = crate::emacs_core::emacs_char::to_utf8_lossy(&bytes);
+    assert_eq!(text.chars().count(), 12);
+
+    assert_eq!(runs.len(), 3);
+    // The first kanji run swallows the following "CD" and stops where the
+    // katakana charset takes over.
+    assert_eq!((runs[0].start, runs[0].end), (2, 5));
+    assert_eq!(runs[0].plist, charset_prop("test-jis"));
+    // The katakana run swallows the following "EF".
+    assert_eq!((runs[1].start, runs[1].end), (5, 9));
+    assert_eq!(runs[1].plist, charset_prop("test-katakana"));
+    // The final kanji run reaches the end of the text, trailing "GH" included.
+    assert_eq!((runs[2].start, runs[2].end), (9, 12));
+    assert_eq!(runs[2].plist, charset_prop("test-jis"));
 }
 
 // ---------------------------------------------------------------------------

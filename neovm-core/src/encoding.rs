@@ -1711,22 +1711,37 @@ fn encode_via_charset_list(
 /// the list that yields an assigned code point and emit that character; a byte
 /// that no charset can decode becomes an eight-bit raw character, matching GNU.
 /// The result is Emacs internal multibyte bytes plus the `(charset NAME)`
-/// text-property runs GNU's `decode_coding_charset` attaches: each maximal run
-/// of consecutive characters decoded by the *same* non-ASCII charset gets one
-/// `charset` property naming that charset (`decode_coding_charset` /
-/// `produce_charset`, src/coding.c).  ASCII characters and eight-bit raw bytes
-/// carry no `charset` property (GNU keeps `last_id == charset_ascii` for them).
+/// text-property runs GNU's `decode_coding_charset` attaches (`produce_charset`,
+/// src/coding.c).
 /// Accumulates `(charset NAME)` text-property runs while a decoder emits
-/// characters, mirroring GNU's `decode_coding_*` charset annotation: each
-/// maximal run of consecutive characters decoded by the *same* non-ASCII
-/// charset gets one `charset` property naming that charset.  ASCII characters
-/// and eight-bit raw bytes carry no `charset` property (GNU keeps
-/// `last_id == charset_ascii` for them).
+/// characters, mirroring GNU's `decode_coding_*` charset annotation.  GNU only
+/// touches its `last_id`/`last_offset` pair for a non-ASCII charset:
+///
+/// ```c
+/// if (charset->id != charset_ascii && last_id != charset->id)
+///   {
+///     if (last_id != charset_ascii)
+///       ADD_CHARSET_DATA (charbuf, char_offset - last_offset, last_id);
+///     last_id = charset->id;
+///     last_offset = char_offset;
+///   }
+/// ```
+///
+/// so an ASCII character (or an eight-bit raw byte taken through the
+/// `invalid_code` path) never terminates the run being accumulated: it is
+/// absorbed into it.  A run therefore starts at the first character of a
+/// non-ASCII charset and ends only where the *next different* non-ASCII charset
+/// starts, or at the end of the decoded text — trailing ASCII included.
 struct CharsetRunBuilder {
     runs: Vec<StringTextPropertyRun>,
     /// The charset of the run currently being accumulated, with its start char
-    /// index.  `None` means we are inside an ASCII / eight-bit stretch.
+    /// index.  `None` means no non-ASCII charset has been seen yet, or the last
+    /// one was already flushed.
     current: Option<(SymId, usize)>,
+    /// GNU's `charset_ascii`: a decoder may hand us this charset explicitly
+    /// (an ISO 2022 register designated to `ascii`), and it must behave like an
+    /// unannotated ASCII character.
+    ascii: SymId,
 }
 
 impl CharsetRunBuilder {
@@ -1734,20 +1749,23 @@ impl CharsetRunBuilder {
         Self {
             runs: Vec::new(),
             current: None,
+            ascii: intern("ascii"),
         }
     }
 
     /// Record the source charset (`None` for ASCII / eight-bit) of the character
     /// at output position `char_index`.
     fn push(&mut self, char_index: usize, charset: Option<SymId>) {
-        match charset {
-            Some(cs) if self.current.map(|(c, _)| c) == Some(cs) => {}
-            Some(cs) => {
-                self.flush(char_index);
-                self.current = Some((cs, char_index));
-            }
-            None => self.flush(char_index),
+        // GNU's guard is `charset->id != charset_ascii && last_id !=
+        // charset->id`: ASCII characters and eight-bit raw bytes leave
+        // `last_id`/`last_offset` alone, so they extend the current run instead
+        // of ending it.
+        let Some(cs) = charset else { return };
+        if cs == self.ascii || self.current.map(|(c, _)| c) == Some(cs) {
+            return;
         }
+        self.flush(char_index);
+        self.current = Some((cs, char_index));
     }
 
     fn flush(&mut self, end: usize) {
