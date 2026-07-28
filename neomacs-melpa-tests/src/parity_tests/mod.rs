@@ -209,6 +209,7 @@ mod async_package;
 mod async_status;
 mod asyncloop;
 mod at_package;
+mod atcoder_tools;
 mod bind_key;
 mod compat;
 mod dash;

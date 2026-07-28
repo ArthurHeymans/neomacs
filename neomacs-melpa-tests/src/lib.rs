@@ -911,6 +911,12 @@ pub const ASYNC_JOB_QUEUE_MELPA_PIN: (&str, &str) = ("async-job-queue", "2023042
 /// `d2f5becc9850c26aa71fb581f9fc389eac740f52`.
 pub const ASYNC_STATUS_MELPA_PIN: (&str, &str) = ("async-status", "20230821.204");
 
+/// The exact atcoder-tools package selected by the comprehensive run
+/// configuration, command construction, metadata, filesystem, and contest
+/// workflow parity corpus. MELPA built this archive from upstream commit
+/// `cfe61ed18ea9b3b1bfb6f9e7d80a47599680cd1f`.
+pub const ATCODER_TOOLS_MELPA_PIN: (&str, &str) = ("atcoder-tools", "20200109.1236");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
@@ -1507,6 +1513,7 @@ pub struct CachedPackageOracle {
     package_name: String,
     package_user_dir: PathBuf,
     package_directory_list: Vec<PathBuf>,
+    package_load_list: Vec<(String, String)>,
     source_file: PathBuf,
     prelude: String,
     timeout: Duration,
@@ -1544,7 +1551,11 @@ impl CachedPackageOracle {
             MELPA_ARCHIVE,
             Some(dependency),
         )?;
-        Self::from_package_dir(package, source_file_name, package_dir)
+        let mut oracle = Self::from_package_dir(package, source_file_name, package_dir)?;
+        oracle
+            .package_load_list
+            .push((dependency.name.to_string(), dependency.version.to_string()));
+        Ok(oracle)
     }
 
     /// Prepare one pinned GNU ELPA package and select its Elisp source file.
@@ -1600,6 +1611,7 @@ impl CachedPackageOracle {
             package_name: package.0.to_string(),
             package_user_dir,
             package_directory_list: Vec::new(),
+            package_load_list: vec![(package.0.to_string(), package.1.to_string())],
             source_file,
             prelude: String::new(),
             timeout: DEFAULT_PROCESS_TIMEOUT,
@@ -1622,6 +1634,21 @@ impl CachedPackageOracle {
             .to_path_buf();
         if !self.package_directory_list.contains(&package_directory) {
             self.package_directory_list.push(package_directory);
+        }
+        if let Some((_, pinned_version)) = self
+            .package_load_list
+            .iter()
+            .find(|(pinned_name, _)| pinned_name == package.0)
+        {
+            if pinned_version != package.1 {
+                return Err(format!(
+                    "package `{}` is already pinned to version `{pinned_version}`, cannot also pin `{}`",
+                    package.0, package.1
+                ));
+            }
+        } else {
+            self.package_load_list
+                .push((package.0.to_string(), package.1.to_string()));
         }
         Ok(self)
     }
@@ -1667,6 +1694,18 @@ impl CachedPackageOracle {
             .map(|directory| elisp_string(&directory.to_string_lossy()))
             .collect::<Vec<_>>()
             .join(" ");
+        let package_load_list = self
+            .package_load_list
+            .iter()
+            .map(|(name, version)| {
+                format!(
+                    "(list (intern {}) {})",
+                    elisp_string(name),
+                    elisp_string(version)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
         let setup = format!(
             r##"(progn
                    (require 'package)
@@ -1674,6 +1713,8 @@ impl CachedPackageOracle {
                          (getenv "NEOMACS_PACKAGE_USER_DIR")
                          package-directory-list
                          (list {package_directory_list})
+                         package-load-list
+                         (list 'all {package_load_list})
                          load-suffixes '(".el"))
                    (package-initialize)
                    {}

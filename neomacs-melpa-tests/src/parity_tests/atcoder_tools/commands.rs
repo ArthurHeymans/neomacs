@@ -1,0 +1,429 @@
+use expect_test::expect;
+
+use super::assert_atcoder_tools_parity;
+
+#[test]
+fn atcoder_tools_expands_every_placeholder_repetition_and_preserves_order() {
+    let elisp_form = r##"(atcoder-tools--expand-cmd-templates
+          '("compile %s -o %e"
+            "test -d %d -e %e"
+            "%d|%s|%e|%d|%s|%e"
+            "literal %% %x")
+          "/workspace/contest"
+          "/workspace/contest/main.cpp"
+          "/workspace/contest/main")"##;
+    let expect = expect![[
+        r#"OK ("compile /workspace/contest/main.cpp -o /workspace/contest/main" "test -d /workspace/contest -e /workspace/contest/main" "/workspace/contest|/workspace/contest/main.cpp|/workspace/contest/main|/workspace/contest|/workspace/contest/main.cpp|/workspace/contest/main" "literal %% %x")"#
+    ]];
+    assert_atcoder_tools_parity(elisp_form, expect);
+}
+
+#[test]
+fn atcoder_tools_command_expansion_shell_quotes_spaces_quotes_unicode_and_metacharacters() {
+    let elisp_form = r##"(atcoder-tools--expand-cmd-templates
+          '("cd %d && compiler %s -o %e")
+          "/work/AtCoder Finals; echo owned"
+          "/work/AtCoder Finals/it's λ.cpp"
+          "/work/AtCoder Finals/it's λ")"##;
+    let expect = expect![[
+        r#"OK ("cd /work/AtCoder\\ Finals\\;\\ echo\\ owned && compiler /work/AtCoder\\ Finals/it\\'s\\ \\λ.cpp -o /work/AtCoder\\ Finals/it\\'s\\ \\λ")"#
+    ]];
+    assert_atcoder_tools_parity(elisp_form, expect);
+}
+
+#[test]
+fn atcoder_tools_replacement_is_nonrecursive_for_placeholder_text_inside_quoted_paths() {
+    let elisp_form = r##"(atcoder-tools--expand-cmd-templates
+          '("dir=%d src=%s exec=%e")
+          "/contest/%s/%e"
+          "/source/%e/main.c"
+          "/bin/%d/main")"##;
+    let expect =
+        expect![[r#"OK ("dir=/contest/\\%s/\\%e src=/source/\\%e/main.c exec=/bin/\\%d/main")"#]];
+    assert_atcoder_tools_parity(elisp_form, expect);
+}
+
+#[test]
+fn atcoder_tools_command_expansion_handles_empty_templates_and_surfaces_bad_values() {
+    let elisp_form = r##"(list
+          (atcoder-tools--expand-cmd-templates
+           nil
+           "/work"
+           "/work/main.c"
+           "/work/main")
+          (atcoder-tools--expand-cmd-templates
+           '()
+           "/work"
+           "/work/main.c"
+           "/work/main")
+          (atcoder-tools--expand-cmd-templates
+           '("")
+           ""
+           ""
+           "")
+          (mapcar
+           (lambda (templates)
+             (atcoder-tools-test-error-data
+              (lambda ()
+                (atcoder-tools--expand-cmd-templates
+                 templates
+                 "/work"
+                 "/work/main.c"
+                 "/work/main"))))
+           '((nil)
+             (42)
+             (symbol)
+             ("ok" nil))))"##;
+    let expect = expect![[
+        r#"OK (nil nil ("") ((:error wrong-type-argument (arrayp nil)) (:error wrong-type-argument (sequencep 42)) (:error wrong-type-argument (sequencep symbol)) (:error wrong-type-argument (arrayp nil))))"#
+    ]];
+    assert_atcoder_tools_parity(elisp_form, expect);
+}
+
+#[test]
+fn atcoder_tools_c_gcc_test_builds_exact_command_environment_and_deletes_stale_executable() {
+    let elisp_form = r##"(let* ((root
+                (atcoder-tools-test-root))
+               (source
+                (atcoder-tools-test-write-file
+                 root
+                 "abc321/A/main.c"
+                 "int main(void) { return 0; }\n"))
+               (executable
+                (file-name-sans-extension source))
+               compilation)
+          (atcoder-tools-test-write-file
+           root
+           "abc321/A/main"
+           "stale executable")
+          (let ((atcoder-tools-c-compiler
+                 'gcc))
+            (cl-letf
+                (((symbol-function 'compile)
+                  (lambda (command &optional comint)
+                    (setq compilation
+                          (list
+                           (atcoder-tools-test-normalize
+                            command root)
+                           comint
+                           (and
+                            (boundp
+                             'comint-terminfo-terminal)
+                            comint-terminfo-terminal)
+                           (file-exists-p source)
+                           (file-exists-p executable)))
+                    :started)))
+              (list
+               (atcoder-tools--test
+                'c-mode
+                source)
+               compilation
+               (file-exists-p source)
+               (file-exists-p executable)
+               (atcoder-tools-test-tree root)))))"##;
+    let expect = expect![[
+        r#"OK (nil ("gcc -x c -std=gnu11 -o [ROOT]/abc321/A/main -lm -O2 [ROOT]/abc321/A/main.c && atcoder-tools test -e [ROOT]/abc321/A/main -d [ROOT]/abc321/A" t nil t t) t nil (("abc321/A/main.c" 29 "2ad75d95660563887d8d3f1d0ae1dcf18c2379cbd83a5c72f5ab276351ee6949")))"#
+    ]];
+    assert_atcoder_tools_parity(elisp_form, expect);
+}
+
+#[test]
+fn atcoder_tools_preloaded_compilation_lifecycle_binds_ansi_terminal_only_during_compile() {
+    let elisp_form = r##"(progn
+         (require 'compile)
+         (let* ((comint-terminfo-terminal
+                "fixture-outer")
+                (root
+                 (atcoder-tools-test-root))
+               (source
+                (atcoder-tools-test-write-file
+                 root
+                 "abc321/B/main.c"
+                 "source"))
+               (executable
+                (atcoder-tools-test-write-file
+                 root
+                 "abc321/B/main"
+                 "old"))
+               observed)
+          (let ((before
+                 comint-terminfo-terminal))
+            (cl-letf
+                (((symbol-function 'compile)
+                  (lambda (_command &optional _comint)
+                    (setq observed
+                          comint-terminfo-terminal)
+                    :started)))
+              (list
+               before
+               (atcoder-tools--test
+                'c-mode
+                source)
+               observed
+               comint-terminfo-terminal
+               (file-exists-p executable))))))"##;
+    let expect = expect![[r#"OK ("fixture-outer" nil "ansi" "fixture-outer" nil)"#]];
+    assert_atcoder_tools_parity(elisp_form, expect);
+}
+
+#[test]
+fn atcoder_tools_c_and_cxx_compiler_variants_construct_exact_practical_commands() {
+    let elisp_form = r##"(let* ((root
+                (atcoder-tools-test-root))
+               (c-source
+                (atcoder-tools-test-write-file
+                 root
+                 "round 1/C task/main file.c"
+                 "int main(void) { return 0; }\n"))
+               (cxx-source
+                (atcoder-tools-test-write-file
+                 root
+                 "round 1/C task/main file.cpp"
+                 "int main() { return 0; }\n"))
+               commands)
+          (dolist (file (list
+                         (file-name-sans-extension
+                          c-source)
+                         (file-name-sans-extension
+                          cxx-source)))
+            (atcoder-tools-test-write-file
+             (file-name-directory file)
+             (file-name-nondirectory file)
+             "old"))
+          (cl-letf
+              (((symbol-function 'compile)
+                (lambda (command &optional comint)
+                  (push
+                   (list
+                    (atcoder-tools-test-normalize
+                     command root)
+                    comint
+                    (and
+                     (boundp
+                      'comint-terminfo-terminal)
+                     comint-terminfo-terminal))
+                   commands)
+                  :started)))
+            (let ((atcoder-tools-c-compiler
+                   'clang))
+              (atcoder-tools--test
+               'c-mode
+               c-source))
+            (let ((atcoder-tools-c-compiler
+                   'clang)
+                  (atcoder-tools-c++-compiler
+                   'gcc))
+              (atcoder-tools--test
+               'c++-mode
+               cxx-source)))
+          (list
+           (nreverse commands)
+           (file-exists-p
+            (file-name-sans-extension
+             c-source))
+           (file-exists-p
+            (file-name-sans-extension
+             cxx-source))
+           (mapcar
+            #'car
+            (atcoder-tools-test-tree root))))"##;
+    let expect = expect![[
+        r#"OK ((("clang -x c -lm -O2 -o [ROOT]/round\\ 1/C\\ task/main\\ file [ROOT]/round\\ 1/C\\ task/main\\ file.c && atcoder-tools test -e [ROOT]/round\\ 1/C\\ task/main\\ file -d [ROOT]/round\\ 1/C\\ task" t nil) ("clang++ -std=c++14 -stdlib=libc++ -O2 -o [ROOT]/round\\ 1/C\\ task/main\\ file [ROOT]/round\\ 1/C\\ task/main\\ file.cpp && atcoder-tools test -e [ROOT]/round\\ 1/C\\ task/main\\ file -d [ROOT]/round\\ 1/C\\ task" t nil)) nil nil ("round 1/C task/main file.c" "round 1/C task/main file.cpp"))"#
+    ]];
+    assert_atcoder_tools_parity(elisp_form, expect);
+}
+
+#[test]
+fn atcoder_tools_rust_rustc_and_rustup_workflows_build_and_clean_exact_paths() {
+    let elisp_form = r##"(let* ((root
+                (atcoder-tools-test-root))
+               (source
+                (atcoder-tools-test-write-file
+                 root
+                 "abc133/A/main.rs"
+                 "fn main() { println!(\"8\"); }\n"))
+               (executable
+                (file-name-sans-extension source))
+               commands)
+          (cl-letf
+              (((symbol-function 'compile)
+                (lambda (command &optional comint)
+                  (push
+                   (list
+                    (atcoder-tools-test-normalize
+                     command root)
+                    comint
+                    (and
+                     (boundp
+                      'comint-terminfo-terminal)
+                     comint-terminfo-terminal))
+                   commands)
+                  :started)))
+            (dolist (rustup '(nil t))
+              (atcoder-tools-test-write-file
+               root
+               "abc133/A/main"
+               "stale")
+              (let ((atcoder-tools-rust-use-rustup
+                     rustup))
+                (atcoder-tools--test
+                 'rust-mode
+                 source))
+              (push
+               (list
+                :exists-after
+                rustup
+                (file-exists-p executable))
+               commands)))
+          (nreverse commands))"##;
+    let expect = expect![[
+        r#"OK (("rustc -Oo [ROOT]/abc133/A/main [ROOT]/abc133/A/main.rs && env RUST_BACKTRACE=1 atcoder-tools test -e [ROOT]/abc133/A/main -d [ROOT]/abc133/A" t nil) (:exists-after nil nil) ("rustup run --install 1.15.1 rustc -Oo [ROOT]/abc133/A/main [ROOT]/abc133/A/main.rs && env RUST_BACKTRACE=1 atcoder-tools test -e [ROOT]/abc133/A/main -d [ROOT]/abc133/A" t nil) (:exists-after t nil))"#
+    ]];
+    assert_atcoder_tools_parity(elisp_form, expect);
+}
+
+#[test]
+fn atcoder_tools_custom_run_configuration_can_keep_executable_and_join_many_commands() {
+    let elisp_form = r##"(let* ((root
+                (atcoder-tools-test-root))
+               (source
+                (atcoder-tools-test-write-file
+                 root
+                 "practice/A/solution.xyz"
+                 "source"))
+               (executable
+                (file-name-sans-extension source))
+               (atcoder-tools--run-config-alist
+                '((c-gcc
+                   (cmd-templates
+                    . ("prepare %d"
+                       "build %s %e"
+                       "verify %e"))
+                   (remove-exec . nil))))
+               observed)
+          (atcoder-tools-test-write-file
+           root
+           "practice/A/solution"
+           "keep")
+          (cl-letf
+              (((symbol-function 'compile)
+                (lambda (command &optional comint)
+                  (setq observed
+                        (list
+                         (atcoder-tools-test-normalize
+                          command root)
+                         comint
+                         (and
+                          (boundp
+                           'comint-terminfo-terminal)
+                          comint-terminfo-terminal)))
+                  :started)))
+            (list
+             (atcoder-tools--test
+              'c-mode
+              source)
+             observed
+             (file-exists-p executable)
+             (atcoder-tools-test-read-file
+              executable))))"##;
+    let expect = expect![[
+        r#"OK (nil ("prepare [ROOT]/practice/A && build [ROOT]/practice/A/solution.xyz [ROOT]/practice/A/solution && verify [ROOT]/practice/A/solution" t nil) t "keep")"#
+    ]];
+    assert_atcoder_tools_parity(elisp_form, expect);
+}
+
+#[test]
+fn atcoder_tools_compile_signal_preserves_existing_executable_and_propagates() {
+    let elisp_form = r##"(let* ((root
+                (atcoder-tools-test-root))
+               (source
+                (atcoder-tools-test-write-file
+                 root
+                 "abc999/Z/main.cpp"
+                 "source"))
+               (executable
+                (atcoder-tools-test-write-file
+                 root
+                 "abc999/Z/main"
+                 "existing")))
+          (cl-letf
+              (((symbol-function 'compile)
+                (lambda (&rest _)
+                  (error "compilation refused"))))
+            (list
+             (atcoder-tools-test-error-data
+              (lambda ()
+                (atcoder-tools--test
+                 'c++-mode
+                 source)))
+             (file-exists-p executable)
+             (atcoder-tools-test-read-file
+              executable))))"##;
+    let expect = expect![[r#"OK ((:error error ("compilation refused")) t "existing")"#]];
+    assert_atcoder_tools_parity(elisp_form, expect);
+}
+
+#[test]
+fn atcoder_tools_missing_executable_is_tolerated_after_compile_was_started() {
+    let elisp_form = r##"(let* ((root
+                (atcoder-tools-test-root))
+               (source
+                (atcoder-tools-test-write-file
+                 root
+                 "abc777/B/main.c"
+                 "source"))
+               observed)
+          (cl-letf
+              (((symbol-function 'compile)
+                (lambda (command &optional comint)
+                  (setq observed
+                        (list
+                         (atcoder-tools-test-normalize
+                          command root)
+                         comint))
+                  :started)))
+            (list
+             (atcoder-tools-test-normalize-tree
+              (atcoder-tools-test-error-data
+               (lambda ()
+                 (atcoder-tools--test
+                  'c-mode
+                  source)))
+              root)
+             observed
+             (file-exists-p source)
+             (file-exists-p
+              (file-name-sans-extension
+               source)))))"##;
+    let expect = expect![[
+        r#"OK ((:ok nil) ("gcc -x c -std=gnu11 -o [ROOT]/abc777/B/main -lm -O2 [ROOT]/abc777/B/main.c && atcoder-tools test -e [ROOT]/abc777/B/main -d [ROOT]/abc777/B" t) t nil)"#
+    ]];
+    assert_atcoder_tools_parity(elisp_form, expect);
+}
+
+#[test]
+fn atcoder_tools_public_test_command_forwards_live_buffer_mode_and_file() {
+    let elisp_form = r##"(let (calls)
+          (cl-letf
+              (((symbol-function
+                 'atcoder-tools--test)
+                (lambda (mode file)
+                  (push
+                   (list mode file)
+                   calls)
+                  :delegated)))
+            (with-temp-buffer
+              (setq
+               major-mode 'rust-mode
+               buffer-file-name
+               "/contest/abc133/A/main.rs")
+              (list
+               (atcoder-tools-test)
+               (call-interactively
+                #'atcoder-tools-test)
+               (nreverse calls)))))"##;
+    let expect = expect![[
+        r#"OK (:delegated :delegated ((rust-mode "/contest/abc133/A/main.rs") (rust-mode "/contest/abc133/A/main.rs")))"#
+    ]];
+    assert_atcoder_tools_parity(elisp_form, expect);
+}
