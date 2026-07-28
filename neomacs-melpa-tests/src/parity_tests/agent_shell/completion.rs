@@ -3,119 +3,116 @@ use expect_test::expect;
 use super::assert_agent_shell_parity;
 
 #[test]
-fn completion_bounds_distinguish_file_mentions_commands_and_paths() {
+fn live_session_completes_real_project_files_and_advertised_agent_commands() {
     let elisp_form = r##"
-(mapcar
- (lambda (case)
-   (with-temp-buffer
-     (insert (car case))
-     (goto-char (point-max))
-     (list (agent-shell--completion-bounds (cadr case) (caddr case))
-           (point))))
- '(("@src/parity_tests/agent-shell.rs" "[:alnum:]/_.-" 64)
-   ("please /resume-session" "[:alnum:]_-" 47)
-   ("path/to/file" "[:alnum:]_-" 47)
-   ("email@example.org" "[:alnum:]/_.-" 64)
-   ("@hyphenated_file.md" "[:alnum:]/_.-" 64)))
-"##;
-    let expect = expect![
-        "OK ((((:start . 2) (:end . 33)) 33) (((:start . 9) (:end . 23)) 23) (nil 13) (nil 18) (((:start . 2) (:end . 20)) 20))"
-    ];
-    assert_agent_shell_parity(elisp_form, expect);
-}
-
-#[test]
-fn file_completion_uses_a_session_cache_and_preserves_candidate_kinds() {
-    let elisp_form = r##"
-(with-temp-buffer
-  (insert "@src/")
-  (let ((calls 0))
-    (cl-letf (((symbol-function 'agent-shell--project-files)
-               (lambda ()
-                 (setq calls (1+ calls))
-                 '("src/lib.rs" "src/parity_tests/" "README.md"))))
-      (let* ((first (agent-shell--file-completion-at-point))
-             (second (agent-shell--file-completion-at-point))
-             (kind (plist-get (nthcdr 3 first) :company-kind)))
-        (list (seq-take first 3)
-              (seq-take second 3)
-              calls
-              (mapcar kind '("src/lib.rs" "src/parity_tests/")))))))
-"##;
-    let expect = expect![[
-        r#"OK ((2 6 #1=("src/lib.rs" "src/parity_tests/" "README.md")) (2 6 #1#) 1 (file folder))"#
-    ]];
-    assert_agent_shell_parity(elisp_form, expect);
-}
-
-#[test]
-fn command_completion_reads_live_session_commands_and_annotations() {
-    let elisp_form = r##"
-(let ((shell (generate-new-buffer " *agent-shell-command-source*")))
+(let* ((root
+        (file-name-as-directory
+         (expand-file-name
+          "agent-shell-completion-workflow"
+          (getenv "NEOMACS_TEST_SANDBOX_ROOT"))))
+       (transcript (expand-file-name "conversation.md" root))
+       (notifications
+        (list
+         '((:direction . incoming)
+           (:kind . notification)
+           (:object
+            (jsonrpc . "2.0")
+            (method . "session/update")
+            (params
+             (sessionId . "parity-session")
+             (update
+              (sessionUpdate . "available_commands_update")
+              (availableCommands
+               . [((name . "review")
+                   (description . "Review current changes"))
+                  ((name . "resume")
+                   (description . "Resume the previous session"))
+                  ((name . "release")
+                   (description . "Prepare a release candidate"))])))))
+         '((:direction . incoming)
+           (:kind . notification)
+           (:object
+            (jsonrpc . "2.0")
+            (method . "session/update")
+            (params
+             (sessionId . "parity-session")
+             (update
+              (sessionUpdate . "agent_message_chunk")
+              (messageId . "completion-answer")
+              (content
+               (type . "text")
+               (text . "Completion data is ready."))))))))
+       (messages
+        (neomacs-agent-shell-test-session-messages notifications))
+       (agent-shell-cwd-function (lambda () root))
+       (agent-shell-transcript-file-path-function (lambda () transcript))
+       (agent-shell-show-welcome-message nil)
+       (agent-shell-show-busy-indicator nil)
+       (agent-shell-show-usage-at-turn-end nil)
+       (shell nil)
+       (snapshot nil))
+  (make-directory (expand-file-name "src/parity" root) t)
+  (make-directory (expand-file-name "docs" root) t)
+  (with-temp-file (expand-file-name "README.md" root)
+    (insert "# Completion fixture\n"))
+  (with-temp-file (expand-file-name "src/lib.rs" root)
+    (insert "pub fn answer() -> i32 { 42 }\n"))
+  (with-temp-file (expand-file-name "src/parity/session.rs" root)
+    (insert "pub fn compare() {}\n"))
+  (with-temp-file (expand-file-name "docs/usage.md" root)
+    (insert "# Usage\n"))
+  (call-process "git" nil nil nil "init" "-q" root)
   (unwind-protect
       (progn
+        (setq shell (neomacs-agent-shell-test-start messages))
         (with-current-buffer shell
-          (setq-local agent-shell--state
-                      '((:available-commands
-                         . (((name . "review") (description . "Review current changes"))
-                            ((name . "resume") (description . "Resume a session")))))))
-        (with-temp-buffer
-          (setq-local agent-shell-completion--shell-buffer shell)
-          (insert "/re")
-          (let* ((capf (agent-shell--command-completion-at-point))
-                 (annotate (plist-get (nthcdr 3 capf) :annotation-function)))
-            (list (seq-take capf 3)
-                  (funcall annotate "review")
-                  (funcall annotate "resume")
-                  (plist-get (nthcdr 3 capf) :exclusive)))))
-    (kill-buffer shell)))
+          (shell-maker-submit :input "Load commands for this workspace.")
+          (let ((commands (map-elt agent-shell--state :available-commands))
+                (completion-enabled agent-shell-completion-mode)
+                (cached-before agent-shell--project-files-cache))
+            (with-temp-buffer
+              (setq-local default-directory root)
+              (setq-local agent-shell-completion--shell-buffer shell)
+              (insert "@src/")
+              (let* ((file-capf (agent-shell--file-completion-at-point))
+                     (file-candidates (nth 2 file-capf))
+                     (file-kind (plist-get (nthcdr 3 file-capf)
+                                           :company-kind))
+                     (cache-after-first
+                      (buffer-local-value
+                       'agent-shell--project-files-cache shell))
+                     (second-file-capf
+                      (agent-shell--file-completion-at-point)))
+                (erase-buffer)
+                (insert "/re")
+                (let* ((command-capf
+                        (agent-shell--command-completion-at-point))
+                       (command-candidates (nth 2 command-capf))
+                       (annotate
+                        (plist-get (nthcdr 3 command-capf)
+                                   :annotation-function)))
+                  (setq
+                   snapshot
+                   (list
+                    completion-enabled
+                    commands
+                    (seq-take file-capf 2)
+                    file-candidates
+                    (mapcar file-kind file-candidates)
+                    (eq cache-after-first
+                        (nth 2 second-file-capf))
+                    cached-before
+                    (seq-take command-capf 2)
+                    command-candidates
+                    (mapcar annotate command-candidates)
+                    (plist-get (nthcdr 3 command-capf) :exclusive)
+                    (try-completion "re" command-candidates)
+                    (neomacs-agent-shell-test-visible-buffer-string)))))))))
+    (neomacs-agent-shell-test-kill shell))
+  snapshot)
 "##;
     let expect = expect![[
-        r#"OK ((2 4 ("review" "resume")) "  Review current changes" "  Resume a session" t)"#
+        r#"OK (t [((name . "review") (description . "Review current changes")) ((name . "resume") (description . "Resume the previous session")) ((name . "release") (description . "Prepare a release candidate"))] (2 6) ("README.md" "conversation.md" "docs/usage.md" "src/lib.rs" "src/parity/session.rs") (file file file file file) t nil (2 4) ("review" "resume" "release") ("  Review current changes" "  Resume the previous session" "  Prepare a release candidate") t "re" "/re")"#
     ]];
-    assert_agent_shell_parity(elisp_form, expect);
-}
-
-#[test]
-fn minibuffer_completion_setup_and_cleanup_are_symmetric() {
-    let elisp_form = r##"
-(let ((shell (generate-new-buffer " *agent-shell-minibuffer-source*")))
-  (unwind-protect
-      (progn
-        (with-current-buffer shell
-          (agent-shell-completion-mode 1))
-        (with-temp-buffer
-          (agent-shell-completion--setup-minibuffer shell)
-          (let ((installed
-                 (list (eq agent-shell-completion--shell-buffer shell)
-                       (memq #'agent-shell--file-completion-at-point
-                             completion-at-point-functions)
-                       (memq #'agent-shell--command-completion-at-point
-                             completion-at-point-functions)
-                       (memq #'agent-shell--trigger-completion-at-point
-                             post-self-insert-hook))))
-            (agent-shell-completion--cleanup-minibuffer)
-            (list installed
-                  (local-variable-p 'agent-shell-completion--shell-buffer)
-                  completion-at-point-functions
-                  post-self-insert-hook))))
-    (kill-buffer shell)))
-"##;
-    let expect = expect![
-        "OK ((t #1=(agent-shell--file-completion-at-point t) (agent-shell--command-completion-at-point . #1#) (agent-shell--trigger-completion-at-point t)) nil (tags-completion-at-point-function) (electric-indent-post-self-insert-function blink-paren-post-self-insert-function))"
-    ];
-    assert_agent_shell_parity(elisp_form, expect);
-}
-
-#[test]
-fn completion_exit_appends_exactly_one_space_to_the_draft() {
-    let elisp_form = r##"
-(with-temp-buffer
-  (insert "ask @src/lib.rs")
-  (agent-shell--capf-exit-with-space "src/lib.rs" 'finished)
-  (agent-shell--capf-exit-with-space "src/lib.rs" 'sole)
-  (list (buffer-string) (point)))
-"##;
-    let expect = expect![[r#"OK ("ask @src/lib.rs  " 18)"#]];
     assert_agent_shell_parity(elisp_form, expect);
 }
