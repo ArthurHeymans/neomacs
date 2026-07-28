@@ -844,7 +844,10 @@ pub const AOZORA_VIEW_MELPA_PIN: (&str, &str) = ("aozora-view", "20140310.1317")
 /// corpus.
 pub const APACHE_MODE_MELPA_PIN: (&str, &str) = ("apache-mode", "20210519.1931");
 
-/// The exact APDL Mode package selected by the comprehensive API parity corpus.
+/// The exact APDL Mode package selected by the practical authoring, inspection,
+/// help, solver, artifact, and license-operation parity corpus. MELPA built
+/// this archive from upstream commit
+/// `4883ab085811b85cc75c44b5af478ab8f7e98386`.
 pub const APDL_MODE_MELPA_PIN: (&str, &str) = ("apdl-mode", "20250508.908");
 
 /// The exact APEL package selected by the comprehensive API parity corpus.
