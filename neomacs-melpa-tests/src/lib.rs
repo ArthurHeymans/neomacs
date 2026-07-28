@@ -981,8 +981,10 @@ pub const ARCHIVE_PHAR_MELPA_PIN: (&str, &str) = ("archive-phar", "20221009.2129
 /// filesystem workflow parity corpus.
 pub const ARCHIVE_REGION_MELPA_PIN: (&str, &str) = ("archive-region", "20200316.1425");
 
-/// The exact archive-rpm package selected by the comprehensive API parity
-/// corpus.
+/// The exact archive-rpm package selected by the practical archive browsing,
+/// extraction, metadata, compression, and binary-fidelity workflow parity
+/// corpus. MELPA built this archive from upstream commit
+/// `cb48fee04cb0cbb26f760a3b95649f7dac78c6ec`.
 pub const ARCHIVE_RPM_MELPA_PIN: (&str, &str) = ("archive-rpm", "20220527.632");
 
 /// The exact arduino-cli-mode package selected by the practical sketch,
