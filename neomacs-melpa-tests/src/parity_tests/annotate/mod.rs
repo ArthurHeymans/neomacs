@@ -3,11 +3,7 @@ use std::time::Duration;
 use crate::{ANNOTATE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod database;
-mod editing;
-mod queries;
-mod registry;
-mod text;
+mod workflows;
 
 const ANNOTATE_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -35,8 +31,4 @@ fn assert_annotate_source_parity(source_file: &str, elisp_form: &str, expected: 
 
 pub(crate) fn assert_annotate_parity(elisp_form: &str, expected: Expect) {
     assert_annotate_source_parity("annotate.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_annotate_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_annotate_source_parity("annotate-autoloads.el", elisp_form, expected);
 }
