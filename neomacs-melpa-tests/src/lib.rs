@@ -1292,7 +1292,7 @@ pub const MAGIT_SECTION_MELPA_PIN: (&str, &str) = ("magit-section", "20260722.21
 
 /// The exact Projectile package selected by the comprehensive API parity
 /// corpus.
-pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260725.1657");
+pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260727.2157");
 
 /// The exact s package selected by the live lifecycle and comprehensive API
 /// parity corpora.

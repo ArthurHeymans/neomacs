@@ -10,7 +10,7 @@ fn projectile_version_and_platform_helpers_are_stable() {
               (projectile-parent "/alpha/beta/gamma/")
               (projectile-default-project-name "/alpha/beta/")
               (projectile-uniquify-dirname-transform "/alpha/beta/"))"##;
-    let expect = expect![[r#"OK ("3.3.0-snapshot" t "/alpha/beta" "beta" "/alpha/beta/")"#]];
+    let expect = expect![[r#"OK ("3.4.0-snapshot" t "/alpha/beta" "beta" "/alpha/beta/")"#]];
 
     assert_projectile_parity(elisp_form, expect);
 }
