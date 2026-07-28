@@ -887,8 +887,10 @@ pub const APP_MONOCHROME_THEMES_MELPA_PIN: (&str, &str) =
 /// `b0e4bbcd30aafd71f484c74164351af40ef885bf`.
 pub const APPARMOR_MODE_MELPA_PIN: (&str, &str) = ("apparmor-mode", "20260515.454");
 
-/// The exact Apple Container TRAMP package selected by the comprehensive API
-/// parity corpus.
+/// The exact Apple Container TRAMP package selected by the practical
+/// interactive completion, optional-user remote editing, and cleanup lifecycle
+/// parity corpus. MELPA built this archive from upstream commit
+/// `f47d58d029c594f4c9e9b1cfff79630de68a9cb5`.
 pub const APPLE_CONTAINER_TRAMP_MELPA_PIN: (&str, &str) =
     ("apple-container-tramp", "20260504.1350");
 
