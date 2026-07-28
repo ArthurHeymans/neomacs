@@ -982,8 +982,10 @@ pub const ARCHIVE_REGION_MELPA_PIN: (&str, &str) = ("archive-region", "20200316.
 /// corpus.
 pub const ARCHIVE_RPM_MELPA_PIN: (&str, &str) = ("archive-rpm", "20220527.632");
 
-/// The exact arduino-cli-mode package selected by the comprehensive API parity
-/// corpus.
+/// The exact arduino-cli-mode package selected by the practical sketch,
+/// compilation, upload, dependency, menu, and serial-monitor workflow parity
+/// corpus. MELPA built this archive from upstream commit
+/// `d5614acdca80871cf4db65843227223b5a0e3a2c`.
 pub const ARDUINO_CLI_MODE_MELPA_PIN: (&str, &str) = ("arduino-cli-mode", "20260628.2219");
 
 /// The exact aria2 package selected by the comprehensive RPC, process,
