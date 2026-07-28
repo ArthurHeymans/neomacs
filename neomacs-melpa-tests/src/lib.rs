@@ -971,6 +971,12 @@ pub const ATOMIC_CHROME_MELPA_PIN: (&str, &str) = ("atomic-chrome", "20230304.11
 /// `6f7f0cc0d682f66d11f7fac4fa5c1e79904232da`.
 pub const AUTH_SOURCE_GOPASS_MELPA_PIN: (&str, &str) = ("auth-source-gopass", "20230109.1213");
 
+/// The exact auth-source-xoauth2 package selected by the comprehensive token,
+/// credential-provider, transport, protocol, and auth-source-workflow parity
+/// corpus. MELPA built this archive from upstream commit
+/// `99a03f8ce835412943d311b2746e77fcf5a1b500`.
+pub const AUTH_SOURCE_XOAUTH2_MELPA_PIN: (&str, &str) = ("auth-source-xoauth2", "20220804.2219");
+
 /// The exact aurel package selected by the comprehensive AUR URL,
 /// parsing, filtering, package-management, and UI workflow parity corpus.
 /// MELPA built this archive from upstream commit
