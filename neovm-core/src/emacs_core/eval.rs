@@ -2206,6 +2206,18 @@ pub struct Context {
     /// Explicit redisplay invalidation generation, used for state that GNU
     /// marks with update_mode_lines/window redisplay flags.
     redisplay_generation: u64,
+    /// Bumped when asynchronously decoded media (images) reaches a terminal
+    /// state, so a completed decode escalates past the retained-matrix reuse
+    /// key as well as the redisplay signature.
+    ///
+    /// Redisplay has two independent gates: `redisplay_generation` decides
+    /// whether to redisplay at all, while `RetainedWindowKey` decides whether a
+    /// window may reuse its retained matrix. An image finishing its decode
+    /// changed neither the buffer ticks nor the geometry in that key, so
+    /// redisplay ran and then reused the matrix that had captured the image's
+    /// 1x1 `Pending` placeholder — every async-decoded buffer image stayed one
+    /// pixel for the lifetime of the buffer.
+    media_generation: u64,
     /// Last visible state submitted to redisplay.  Mirrors GNU's fast
     /// `needs_no_redisplay` path by skipping layout when none of the visible
     /// inputs changed.
@@ -3236,6 +3248,7 @@ impl Context {
         ev.face_change_count = 0;
         ev.display_var_change_count = 0;
         ev.redisplay_generation = 0;
+        ev.media_generation = 0;
         ev.last_redisplay_signature = None;
         ev.depth = 0;
         ev.max_depth = 1600;
@@ -5690,6 +5703,7 @@ impl Context {
             materialized_face_table_source: None,
             display_var_change_count: 0,
             redisplay_generation: 0,
+            media_generation: 0,
             last_redisplay_signature: None,
             depth: 0,
             eval_counter: 0,
@@ -5879,6 +5893,7 @@ impl Context {
             materialized_face_table_source: None,
             display_var_change_count: 0,
             redisplay_generation: 0,
+            media_generation: 0,
             last_redisplay_signature: None,
             depth: 0,
             eval_counter: 0,
@@ -7602,6 +7617,20 @@ impl Context {
 
     pub(crate) fn redisplay_for_input_wait(&mut self) {
         self.redisplay_with_force(false);
+    }
+
+    /// Generation of asynchronously decoded media state; see
+    /// [`Self::invalidate_media`].
+    pub fn media_generation(&self) -> u64 {
+        self.media_generation
+    }
+
+    /// Record that async media reached a terminal state (an image finished
+    /// decoding), forcing the next redisplay to rebuild rather than reuse a
+    /// retained matrix holding the placeholder geometry.
+    pub fn invalidate_media(&mut self) {
+        self.media_generation = self.media_generation.wrapping_add(1);
+        self.invalidate_redisplay();
     }
 
     pub(crate) fn invalidate_redisplay(&mut self) {

@@ -2395,7 +2395,10 @@ impl crate::emacs_core::eval::Context {
                     crate::frontend_events::InternalEventEffects::default()
                 }
                 crate::frontend_events::InternalFrontendEvent::LayoutInvalidated => {
-                    self.invalidate_redisplay();
+                    // Emitted for `DisplayEvent::ImageStateChanged`: async media
+                    // reached a terminal state, so the retained matrix that
+                    // captured its placeholder geometry must not be reused.
+                    self.invalidate_media();
                     crate::frontend_events::InternalEventEffects {
                         redisplay_needed: true,
                     }
