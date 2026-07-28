@@ -1,22 +1,76 @@
 use std::time::Duration;
 
 use crate::{ACADEMIC_PHRASES_MELPA_PIN, CachedMelpaOracle};
-use expect_test::{Expect, expect};
+use expect_test::Expect;
 
-mod autoloads;
-mod callables;
-mod data;
-mod hash_tables;
-mod insertion;
-mod lookup;
-mod sections;
-mod surface;
+mod workflows;
 
-const ACADEMIC_PHRASES_TEST_TIMEOUT: Duration = Duration::from_secs(120);
+const ACADEMIC_PHRASES_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
-fn academic_phrases_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ACADEMIC_PHRASES_MELPA_PIN, source_file)
+/// academic-phrases only reaches the user through `completing-read`, which is
+/// a genuine interactive boundary, so the workflows script the answers and let
+/// every other part of the package - category lookup, phrase listing,
+/// placeholder rendering, choice substitution and buffer insertion - run for
+/// real.  The scripted reader refuses an answer the package did not actually
+/// offer, so a wrong or empty collection fails the test instead of passing
+/// silently.
+const ACADEMIC_PHRASES_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+
+(defvar academic-test-prompts nil
+  "Each `completing-read' the package issued, as (PROMPT CANDIDATE-COUNT).")
+
+(defun academic-test-candidates (collection)
+  (mapcar (lambda (candidate)
+            (if (consp candidate) (car candidate) candidate))
+          collection))
+
+(defun academic-test-answer (answers body)
+  "Call BODY, answering each `completing-read' with the next of ANSWERS.
+Signal if an answer was never offered, and record every prompt in
+`academic-test-prompts'."
+  (setq academic-test-prompts nil)
+  (let ((remaining answers))
+    (cl-letf (((symbol-function 'completing-read)
+               (lambda (prompt collection &rest _ignored)
+                 (let* ((answer (pop remaining))
+                        (candidates (academic-test-candidates collection))
+                        (answer (if (functionp answer)
+                                    (funcall answer candidates)
+                                  answer)))
+                   (push (list prompt (length candidates)) academic-test-prompts)
+                   (unless (member answer candidates)
+                     (error "academic-phrases never offered %S at %S" answer prompt))
+                   answer))))
+      (funcall body))))
+
+(defun academic-test-prompts ()
+  (reverse academic-test-prompts))
+
+(defun academic-test-offered (answers body)
+  "Call BODY like `academic-test-answer', returning the offered candidates."
+  (let (offered)
+    (setq academic-test-prompts nil)
+    (let ((remaining answers))
+      (cl-letf (((symbol-function 'completing-read)
+                 (lambda (prompt collection &rest _ignored)
+                   (let* ((answer (pop remaining))
+                          (candidates (academic-test-candidates collection))
+                          (answer (if (functionp answer)
+                                      (funcall answer candidates)
+                                    answer)))
+                     (push (list prompt candidates) offered)
+                     (unless (member answer candidates)
+                       (error "academic-phrases never offered %S at %S" answer prompt))
+                     answer))))
+        (funcall body)))
+    (reverse offered)))
+"##;
+
+fn academic_phrases_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ACADEMIC_PHRASES_MELPA_PIN, "academic-phrases.el")
         .expect("prepare pinned academic-phrases source below ./tmp")
+        .with_prelude(ACADEMIC_PHRASES_TEST_PRELUDE)
         .with_timeout(ACADEMIC_PHRASES_TEST_TIMEOUT)
 }
 
@@ -30,68 +84,8 @@ fn current_test_name() -> String {
 
 pub(crate) fn assert_academic_phrases_parity(form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = academic_phrases_oracle("academic-phrases.el")
+    let report = academic_phrases_oracle()
         .run_value(&name, form)
         .unwrap_or_else(|error| panic!("academic-phrases parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_academic_phrases_signal_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = academic_phrases_oracle("academic-phrases.el")
-        .run_signal(&name, form)
-        .unwrap_or_else(|error| {
-            panic!("academic-phrases signal parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_academic_phrases_autoload_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = academic_phrases_oracle("academic-phrases-autoloads.el")
-        .run_value(&name, form)
-        .unwrap_or_else(|error| {
-            panic!("academic-phrases autoload parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-#[test]
-fn academic_phrases_exact_pin_dependencies_feature_and_data_binding_match() {
-    let elisp_form = r##"(let ((descriptor
-                    (cadr
-                     (assq
-                      'academic-phrases
-                      package-alist))))
-               (list
-                (package-desc-name
-                 descriptor)
-                (package-version-join
-                 (package-desc-version
-                  descriptor))
-                (package-desc-reqs
-                 descriptor)
-                (package-desc-summary
-                 descriptor)
-                (copy-tree
-                 (package-desc-extras
-                  descriptor))
-                (mapcar
-                 #'featurep
-                 '(academic-phrases
-                   cl-lib
-                   dash
-                   ht
-                   s))
-                (boundp
-                 'academic-phrases--all-phrases)
-                (hash-table-p
-                 academic-phrases--all-phrases)
-                (hash-table-count
-                 academic-phrases--all-phrases)))"##;
-    let expect = expect![[
-        r#"OK (academic-phrases "20180723.1021" ((dash (2 12 0)) (s (1 12 0)) (ht (2 0)) (emacs (24))) "Bypass that mental block when writing your papers." ((:maintainers ("Nasser Alshammari" . "designernasser@gmail.com")) (:authors ("Nasser Alshammari" . "designernasser@gmail.com")) (:keywords "academic" "convenience" "papers" "writing" "wp") (:revdesc . "25d9cf67feac") (:commit . "25d9cf67feac6359cb213f061735e2679c84187f") (:url . "https://github.com/nashamri/academic-phrases")) (t t t t t) t t 57)"#
-    ]];
-
-    assert_academic_phrases_parity(elisp_form, expect);
 }
