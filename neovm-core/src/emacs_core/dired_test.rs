@@ -1127,23 +1127,6 @@ fn test_system_groups_wrong_args() {
     assert!(builtin_system_groups(vec![Value::NIL]).is_err());
 }
 
-// -----------------------------------------------------------------------
-// Time helper
-// -----------------------------------------------------------------------
-
-#[test]
-fn test_time_to_emacs_tuple() {
-    crate::test_utils::init_test_tracing();
-    let val = time_to_emacs_tuple(1_234_567_890, 123_456_789);
-    let items = list_to_vec(&val).unwrap();
-    assert_eq!(items.len(), 4);
-    let high = items[0].as_int().unwrap();
-    let low = items[1].as_int().unwrap();
-    assert_eq!((high << 16) | low, 1_234_567_890);
-    assert_eq!(items[2].as_int(), Some(123_456));
-    assert_eq!(items[3].as_int(), Some(789_000));
-}
-
 #[cfg(unix)]
 #[test]
 fn test_format_mode_string() {

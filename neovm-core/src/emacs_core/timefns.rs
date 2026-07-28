@@ -36,6 +36,38 @@ enum TimeConvertForm {
     ExplicitHz(Integer),
 }
 
+/// Output representation selected by the dynamically bound
+/// `current-time-list`.
+///
+/// Keep this as a semantic enum rather than passing a boolean between modules:
+/// callers cannot accidentally invert what `true` means, and all producers of
+/// Lisp timestamps share the same GNU-compatible constructor.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum LispTimeOutput {
+    LegacyList,
+    TicksHz,
+}
+
+impl LispTimeOutput {
+    pub(crate) fn from_context(eval: &Context) -> Result<Self, Flow> {
+        eval.eval_symbol_by_id(intern("current-time-list"))
+            .map(|value| {
+                if value.is_truthy() {
+                    Self::LegacyList
+                } else {
+                    Self::TicksHz
+                }
+            })
+    }
+
+    fn encode(self, time: TimeMicros) -> Value {
+        match self {
+            Self::LegacyList => time.to_list(),
+            Self::TicksHz => time.to_ticks_hz(1_000_000_000),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, strum::EnumString, strum::IntoStaticStr)]
 enum TimeZoneSymbol {
     #[strum(serialize = "wall")]
@@ -96,6 +128,16 @@ struct TimeMicros {
 }
 
 impl TimeMicros {
+    fn from_timespec(secs: i64, nanos: i64) -> Self {
+        let secs = secs + nanos.div_euclid(1_000_000_000);
+        let nanos = nanos.rem_euclid(1_000_000_000);
+        Self {
+            secs,
+            usecs: nanos / 1_000,
+            psecs: (nanos % 1_000) * 1_000,
+        }
+    }
+
     fn now() -> Self {
         // GNU `current_timespec` has nanosecond resolution; `Ftime_convert`
         // projects it as USEC = ns / 1000 and PSEC = (ns % 1000) * 1000
@@ -1675,20 +1717,15 @@ fn invalid_time_frequency_error(hz: &Value) -> Flow {
     signal("error", vec![Value::string("Invalid time frequency"), *hz])
 }
 
-fn current_time_list_enabled(eval: &Context) -> Result<bool, Flow> {
-    eval.eval_symbol_by_id(intern("current-time-list"))
-        .map(|value| value.is_truthy())
-}
-
-fn parse_time_convert_form(form: &Value, current_time_list: bool) -> Result<TimeConvertForm, Flow> {
+fn parse_time_convert_form(
+    form: &Value,
+    default_output: LispTimeOutput,
+) -> Result<TimeConvertForm, Flow> {
     match form.kind() {
-        ValueKind::Nil => {
-            if current_time_list {
-                Ok(TimeConvertForm::List)
-            } else {
-                Ok(TimeConvertForm::InputHz)
-            }
-        }
+        ValueKind::Nil => match default_output {
+            LispTimeOutput::LegacyList => Ok(TimeConvertForm::List),
+            LispTimeOutput::TicksHz => Ok(TimeConvertForm::InputHz),
+        },
         ValueKind::T => Ok(TimeConvertForm::InputHz),
         ValueKind::Fixnum(hz) if hz > 0 => Ok(TimeConvertForm::ExplicitHz(Integer::from(hz))),
         ValueKind::Fixnum(_) => Err(invalid_time_frequency_error(form)),
@@ -1712,24 +1749,25 @@ fn parse_time_convert_form(form: &Value, current_time_list: bool) -> Result<Time
     }
 }
 
-fn current_time_value(current_time_list: bool) -> Value {
-    let now = TimeMicros::now();
-    if current_time_list {
-        now.to_list()
-    } else {
-        now.to_ticks_hz(1_000_000_000)
-    }
+fn current_time_value(output: LispTimeOutput) -> Value {
+    output.encode(TimeMicros::now())
+}
+
+/// Convert a system `(seconds, nanoseconds)` timestamp to the representation
+/// selected by `current-time-list`, matching GNU `timefns.c:make_lisp_time`.
+pub(crate) fn make_lisp_time(secs: i64, nanos: i64, output: LispTimeOutput) -> Value {
+    output.encode(TimeMicros::from_timespec(secs, nanos))
 }
 
 /// `(current-time)` -> `(HIGH LOW USEC PSEC)` or `(TICKS . HZ)`.
 pub(crate) fn builtin_current_time(args: Vec<Value>) -> EvalResult {
     expect_args("current-time", &args, 0)?;
-    Ok(current_time_value(true))
+    Ok(current_time_value(LispTimeOutput::LegacyList))
 }
 
 pub(crate) fn builtin_current_time_in_context(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("current-time", &args, 0)?;
-    Ok(current_time_value(current_time_list_enabled(eval)?))
+    Ok(current_time_value(LispTimeOutput::from_context(eval)?))
 }
 
 /// `(float-time &optional TIME)` -> float seconds since epoch.
@@ -2039,17 +2077,17 @@ pub(crate) fn builtin_decode_time(args: Vec<Value>) -> EvalResult {
 ///   - `t`             -> `(TICKS . HZ)` (highest precision cons cell)
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_time_convert(args: Vec<Value>) -> EvalResult {
-    builtin_time_convert_with_current_time_list(args, true)
+    builtin_time_convert_with_default_output(args, LispTimeOutput::LegacyList)
 }
 
 pub(crate) fn builtin_time_convert_in_context(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    let current_time_list = current_time_list_enabled(eval)?;
-    builtin_time_convert_with_current_time_list(args, current_time_list)
+    let default_output = LispTimeOutput::from_context(eval)?;
+    builtin_time_convert_with_default_output(args, default_output)
 }
 
-fn builtin_time_convert_with_current_time_list(
+fn builtin_time_convert_with_default_output(
     args: Vec<Value>,
-    current_time_list: bool,
+    default_output: LispTimeOutput,
 ) -> EvalResult {
     expect_min_max_args("time-convert", &args, 1, 2)?;
     // Decode exactly so bignum TICKS (e.g. the high-resolution timestamps timer
@@ -2064,7 +2102,7 @@ fn builtin_time_convert_with_current_time_list(
         &Value::NIL
     };
 
-    match parse_time_convert_form(form, current_time_list)? {
+    match parse_time_convert_form(form, default_output)? {
         TimeConvertForm::List => Ok(ticks_hz_list4(&t.ticks, &t.hz)),
         TimeConvertForm::Integer => {
             // GNU returns the input unchanged if it was already an integer.

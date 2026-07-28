@@ -9,6 +9,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::intern::{intern, resolve_sym};
+use super::timefns::{LispTimeOutput, make_lisp_time};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
 use crate::heap_types::LispString;
@@ -188,36 +189,6 @@ fn parse_wholenump_count(arg: Option<&Value>) -> Result<Option<usize>, Flow> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Time helpers
-// ---------------------------------------------------------------------------
-
-/// Convert UNIX seconds + nanoseconds to Emacs (HIGH LOW USEC PSEC) format.
-fn time_to_emacs_tuple(secs: i64, nanos: i64) -> Value {
-    let mut s = secs;
-    let mut ns = nanos;
-    if ns < 0 {
-        let borrow = ((-ns) + 999_999_999) / 1_000_000_000;
-        s -= borrow;
-        ns += borrow * 1_000_000_000;
-    } else if ns >= 1_000_000_000 {
-        s += ns / 1_000_000_000;
-        ns %= 1_000_000_000;
-    }
-
-    let high = s >> 16;
-    let low = s & 0xFFFF;
-    let usec = ns / 1_000;
-    let psec = (ns % 1_000) * 1_000;
-
-    Value::list(vec![
-        Value::fixnum(high),
-        Value::fixnum(low),
-        Value::fixnum(usec),
-        Value::fixnum(psec),
-    ])
-}
-
 /// Get UNIX seconds + nanoseconds from SystemTime.
 #[cfg(not(unix))]
 fn system_time_to_secs_nanos(time: std::time::SystemTime) -> Option<(i64, i64)> {
@@ -295,9 +266,13 @@ fn gid_to_name(gid: u32) -> Option<String> {
 ///   nil      for a regular file
 ///   string   for a symlink (the link target)
 ///
-/// Times are in Emacs (HIGH LOW) format.
+/// Times use the representation selected by `time_output`.
 /// If ID-FORMAT is non-nil and not 'integer, UID/GID are returned as strings.
-fn build_file_attributes(filename: &LispString, id_format: FileIdFormat) -> Option<Value> {
+fn build_file_attributes(
+    filename: &LispString,
+    id_format: FileIdFormat,
+    time_output: LispTimeOutput,
+) -> Option<Value> {
     let path = super::fileio::lisp_file_name_to_path_buf(filename);
 
     // Use symlink_metadata first to detect symlinks.
@@ -359,42 +334,42 @@ fn build_file_attributes(filename: &LispString, id_format: FileIdFormat) -> Opti
     #[cfg(unix)]
     let atime = {
         use std::os::unix::fs::MetadataExt;
-        time_to_emacs_tuple(sym_meta.atime(), sym_meta.atime_nsec())
+        make_lisp_time(sym_meta.atime(), sym_meta.atime_nsec(), time_output)
     };
     #[cfg(not(unix))]
     let atime = meta
         .accessed()
         .ok()
         .and_then(system_time_to_secs_nanos)
-        .map(|(secs, nanos)| time_to_emacs_tuple(secs, nanos))
+        .map(|(secs, nanos)| make_lisp_time(secs, nanos, time_output))
         .unwrap_or(Value::NIL);
 
     // Modification time.
     #[cfg(unix)]
     let mtime = {
         use std::os::unix::fs::MetadataExt;
-        time_to_emacs_tuple(meta.mtime(), meta.mtime_nsec())
+        make_lisp_time(meta.mtime(), meta.mtime_nsec(), time_output)
     };
     #[cfg(not(unix))]
     let mtime = meta
         .modified()
         .ok()
         .and_then(system_time_to_secs_nanos)
-        .map(|(secs, nanos)| time_to_emacs_tuple(secs, nanos))
+        .map(|(secs, nanos)| make_lisp_time(secs, nanos, time_output))
         .unwrap_or(Value::NIL);
 
     // Status change time (ctime on Unix, creation time on other platforms).
     #[cfg(unix)]
     let ctime = {
         use std::os::unix::fs::MetadataExt;
-        time_to_emacs_tuple(sym_meta.ctime(), sym_meta.ctime_nsec())
+        make_lisp_time(sym_meta.ctime(), sym_meta.ctime_nsec(), time_output)
     };
     #[cfg(not(unix))]
     let ctime = meta
         .created()
         .ok()
         .and_then(system_time_to_secs_nanos)
-        .map(|(secs, nanos)| time_to_emacs_tuple(secs, nanos))
+        .map(|(secs, nanos)| make_lisp_time(secs, nanos, time_output))
         .unwrap_or(Value::NIL);
 
     // Size.
@@ -518,10 +493,15 @@ pub(crate) fn builtin_directory_files_and_attributes(
     let dir = expect_lisp_string("directory-files-and-attributes", &args[0])?;
     let dir =
         super::fileio::resolve_filename_lisp_in_state(&eval.obarray, &[], &eval.buffers, &dir);
-    directory_files_and_attributes_with_dir(&args, &dir)
+    let time_output = LispTimeOutput::from_context(eval)?;
+    directory_files_and_attributes_with_dir(&args, &dir, time_output)
 }
 
-fn directory_files_and_attributes_with_dir(args: &[Value], dir: &LispString) -> EvalResult {
+fn directory_files_and_attributes_with_dir(
+    args: &[Value],
+    dir: &LispString,
+    time_output: LispTimeOutput,
+) -> EvalResult {
     let full_name = args.get(1).is_some_and(|v| v.is_truthy());
     let match_regexp = match args.get(2) {
         Some(v) if v.is_truthy() => Some(expect_lisp_string("directory-files-and-attributes", v)?),
@@ -590,7 +570,8 @@ fn directory_files_and_attributes_with_dir(args: &[Value], dir: &LispString) -> 
     let result: Vec<Value> = items
         .into_iter()
         .map(|(display_name, full_path)| {
-            let attrs = build_file_attributes(&full_path, id_format).unwrap_or(Value::NIL);
+            let attrs =
+                build_file_attributes(&full_path, id_format, time_output).unwrap_or(Value::NIL);
             Value::cons(file_name_value(display_name), attrs)
         })
         .collect();
@@ -1240,8 +1221,9 @@ pub(crate) fn builtin_file_attributes(eval: &mut Context, args: Vec<Value>) -> E
 
     // GNU Emacs: return string names unless ID-FORMAT is nil or 'integer.
     let id_format = FileIdFormat::from_id_format_arg(args.get(1));
+    let time_output = LispTimeOutput::from_context(eval)?;
 
-    match build_file_attributes(&filename_lisp, id_format) {
+    match build_file_attributes(&filename_lisp, id_format, time_output) {
         Some(attrs) => Ok(attrs),
         None => Ok(Value::NIL),
     }

@@ -943,6 +943,22 @@ fn current_time_and_time_convert_respect_current_time_list() {
 }
 
 #[test]
+fn make_lisp_time_uses_typed_output_representation() {
+    let list = make_lisp_time(1_234_567_890, 123_456_789, LispTimeOutput::LegacyList);
+    let items = list_to_vec(&list).expect("legacy time must be a list");
+    assert_eq!(items.len(), 4);
+    let high = items[0].as_int().expect("high seconds");
+    let low = items[1].as_int().expect("low seconds");
+    assert_eq!((high << 16) | low, 1_234_567_890);
+    assert_eq!(items[2].as_int(), Some(123_456));
+    assert_eq!(items[3].as_int(), Some(789_000));
+
+    let ticks_hz = make_lisp_time(1_000, 123_456_789, LispTimeOutput::TicksHz);
+    assert_eq!(ticks_hz.cons_car().as_int(), Some(1_000_123_456_789));
+    assert_eq!(ticks_hz.cons_cdr().as_int(), Some(1_000_000_000));
+}
+
+#[test]
 fn builtin_time_convert_float_preserves_gnu_binary_precision() {
     crate::test_utils::init_test_tracing();
 
