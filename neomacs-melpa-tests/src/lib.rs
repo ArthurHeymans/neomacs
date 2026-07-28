@@ -93,6 +93,16 @@ pub const ATOM_ONE_DARK_THEME_MELPA_PIN: (&str, &str) = ("atom-one-dark-theme", 
 /// `07f9915e08342410b933145d7934998709753a29`.
 pub const AUTO_COMPLETE_MELPA_PIN: (&str, &str) = ("auto-complete", "20251231.1622");
 
+/// The exact auto-complete-auctex package selected by the comprehensive
+/// argument-expansion, candidate, action, source, setup, and real LaTeX
+/// workflow parity corpus. MELPA built this archive from upstream commit
+/// `855633f668bcc4b9408396742a7cb84e0c4a2f77`.
+pub const AUTO_COMPLETE_AUCTEX_MELPA_PIN: (&str, &str) = ("auto-complete-auctex", "20140223.1758");
+
+/// The exact AUCTeX release selected from GNU ELPA for the
+/// auto-complete-auctex integration parity corpus.
+pub const AUCTEX_GNU_ELPA_PIN: (&str, &str) = ("auctex", "14.1.2");
+
 /// The exact auto-complete-c-headers package selected by the comprehensive
 /// include-path, filesystem-cache, documentation, candidate-source, and
 /// completion workflow parity corpus. MELPA built this archive from upstream
@@ -1812,10 +1822,11 @@ impl CachedPackageOracle {
         self
     }
 
-    /// Make another exact package cache visible as a system-wide package
-    /// directory while loading the package under test.
-    pub fn with_melpa_dependency(mut self, package: (&str, &str)) -> Result<Self, String> {
-        let package_dir = prepare_cached_melpa_package(&EmacsRuntime::gnu_emacs(), package)?;
+    fn with_prepared_dependency(
+        mut self,
+        package: (&str, &str),
+        package_dir: PathBuf,
+    ) -> Result<Self, String> {
         let package_directory = package_dir
             .parent()
             .expect("cached package directory is below an ELPA directory")
@@ -1839,6 +1850,20 @@ impl CachedPackageOracle {
                 .push((package.0.to_string(), package.1.to_string()));
         }
         Ok(self)
+    }
+
+    /// Make another exact MELPA package cache visible as a system-wide
+    /// package directory while loading the package under test.
+    pub fn with_melpa_dependency(self, package: (&str, &str)) -> Result<Self, String> {
+        let package_dir = prepare_cached_melpa_package(&EmacsRuntime::gnu_emacs(), package)?;
+        self.with_prepared_dependency(package, package_dir)
+    }
+
+    /// Make another exact GNU ELPA package cache visible as a system-wide
+    /// package directory while loading the package under test.
+    pub fn with_gnu_elpa_dependency(self, package: (&str, &str)) -> Result<Self, String> {
+        let package_dir = prepare_cached_gnu_elpa_package(&EmacsRuntime::gnu_emacs(), package)?;
+        self.with_prepared_dependency(package, package_dir)
     }
 
     pub fn with_timeout(mut self, timeout: Duration) -> Self {

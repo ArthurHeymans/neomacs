@@ -230,6 +230,7 @@ mod auto_async_byte_compile;
 mod auto_auto_indent;
 mod auto_compile;
 mod auto_complete;
+mod auto_complete_auctex;
 mod auto_complete_c_headers;
 mod auto_complete_chunk;
 mod auto_dark;
