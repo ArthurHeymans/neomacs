@@ -1,23 +1,112 @@
 use std::time::Duration;
 
 use crate::{ACE_WINDOW_MELPA_PIN, CachedMelpaOracle};
-use expect_test::{Expect, expect};
+use expect_test::Expect;
 
-mod autoloads;
-mod commands;
-mod dispatch;
-mod display_mode;
-mod filtering;
-mod overlays;
-mod posframe;
-mod selection;
-mod surface;
+mod workflows;
 
 const ACE_WINDOW_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
-fn ace_window_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ACE_WINDOW_MELPA_PIN, source_file)
+/// ace-window's user value is window state, so every workflow builds a real
+/// multi-window layout with distinct buffers and then presses the label keys
+/// through `execute-kbd-macro'.  avy reads those keys with `read-key', which a
+/// keyboard macro feeds, so nothing about the selection is stubbed.
+/// `aw-test-layout' renders the whole frame in `aw-window<' order -- the same
+/// order ace-window numbers its labels in -- so the snapshots read as a
+/// picture of the frame.
+const ACE_WINDOW_TEST_PRELUDE: &str = r####"
+(require 'cl-lib)
+
+;; `aw-window-list' drops every window whose frame lives on the terminal named
+;; "initial_terminal".  That is exactly the terminal a --batch job runs on, so
+;; without this the package would see zero candidate windows and the workflows
+;; would observe the absence of a terminal rather than ace-window.  Answer the
+;; terminal's name the way a real session answers it, and nothing else.
+(fset 'terminal-name
+      (lambda (&optional _terminal)
+        "/dev/pts/0"))
+
+(defvar aw-test-buffers nil)
+
+(defun aw-test-layout ()
+  "Render every window in `aw-window<' order, which is also label order."
+  (let ((selected (selected-window)))
+    (mapcar
+     (lambda (w)
+       (list :edges (window-edges w)
+             :buffer (buffer-name (window-buffer w))
+             :point (window-point w)
+             :selected (and (eq w selected) t)))
+     (sort (window-list nil 'no-minibuffer) #'aw-window<))))
+
+(defun aw-test-labels ()
+  "The label a user would press for each window ace-window is offering."
+  (cl-mapcar
+   (lambda (key w)
+     (list :key (char-to-string key)
+           :edges (window-edges w)
+           :buffer (buffer-name (window-buffer w))))
+   aw-keys
+   (aw-window-list)))
+
+(defun aw-test-buffer (name text)
+  (let ((buffer (generate-new-buffer name)))
+    (push buffer aw-test-buffers)
+    (with-current-buffer buffer
+      (insert text)
+      (goto-char (point-min))
+      (set-buffer-modified-p nil))
+    buffer))
+
+(defun aw-test-kill-buffers ()
+  (dolist (buffer aw-test-buffers)
+    (when (buffer-live-p buffer)
+      (with-current-buffer buffer (set-buffer-modified-p nil))
+      (kill-buffer buffer)))
+  (setq aw-test-buffers nil))
+
+(defun aw-test-session ()
+  "Build the three-window editing session every workflow starts from.
+
+  +---------------+-----------+
+  | ledger.el     |           |
+  +---------------+ notes.org |
+  | *build-log*   |           |
+  +---------------+-----------+"
+  (aw-test-kill-buffers)
+  (delete-other-windows)
+  (let* ((ledger
+          (aw-test-buffer
+           "ledger.el"
+           "(defun settle (invoice)\n  (message \"settled %s\" invoice))\n"))
+         (log
+          (aw-test-buffer
+           "*build-log*"
+           "make check\nsrc/settle.el:12:7: error: invoice mismatch\n"))
+         (notes
+          (aw-test-buffer
+           "notes.org"
+           "* Release\n** TODO cut the branch\n")))
+    (set-window-buffer (selected-window) ledger)
+    (let* ((left (selected-window))
+           (right (split-window-right))
+           (bottom (split-window-below nil left)))
+      (set-window-buffer right notes)
+      (set-window-buffer bottom log)
+      (select-window left)
+      (list left bottom right))))
+
+(defun aw-test-cleanup ()
+  (when ace-window-display-mode
+    (ace-window-display-mode -1))
+  (aw-test-kill-buffers)
+  (delete-other-windows))
+"####;
+
+fn ace_window_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ACE_WINDOW_MELPA_PIN, "ace-window.el")
         .expect("prepare pinned ace-window source below ./tmp")
+        .with_prelude(ACE_WINDOW_TEST_PRELUDE)
         .with_timeout(ACE_WINDOW_TEST_TIMEOUT)
 }
 
@@ -29,63 +118,10 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_ace_window_parity(elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_ace_window_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = ace_window_oracle("ace-window.el")
+    let report = ace_window_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("ace-window parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-fn assert_ace_window_autoload_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ace_window_oracle("ace-window-autoloads.el")
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| {
-            panic!("ace-window autoload parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-fn assert_ace_window_posframe_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ace_window_oracle("ace-window-posframe.el")
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| {
-            panic!("ace-window posframe parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-#[test]
-fn ace_window_exact_pin_dependencies_metadata_and_feature_match() {
-    let elisp_form = r##"(let ((descriptor
-                    (cadr
-                     (assq
-                      'ace-window
-                      package-alist))))
-               (list
-                (package-desc-name descriptor)
-                (package-version-join
-                 (package-desc-version descriptor))
-                (package-desc-reqs descriptor)
-                (package-desc-summary descriptor)
-                (copy-tree
-                 (package-desc-extras descriptor))
-                (featurep 'ace-window)))"##;
-    let expect = expect![[
-        r#"OK (ace-window "20220911.358" ((avy (0 5 0))) "Quickly switch windows." ((:maintainers ("Oleh Krehel" . "ohwoeowho@gmail.com")) (:authors ("Oleh Krehel" . "ohwoeowho@gmail.com")) (:keywords "window" "location") (:revdesc . "77115afc1b0b") (:commit . "77115afc1b0b9f633084cf7479c767988106c196") (:url . "https://github.com/abo-abo/ace-window")) t)"#
-    ]];
-    assert_ace_window_parity(elisp_form, expect);
-}
-
-#[test]
-fn ace_window_required_dependency_and_registered_minor_mode_match() {
-    let elisp_form = r##"(list
-         (featurep 'avy)
-         (featurep 'ace-window)
-         (assq 'ace-window-mode
-               minor-mode-alist))"##;
-    let expect = expect!["OK (t t (ace-window-mode ace-window-mode))"];
-    assert_ace_window_parity(elisp_form, expect);
 }
