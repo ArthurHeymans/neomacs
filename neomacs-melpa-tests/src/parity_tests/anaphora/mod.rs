@@ -3,16 +3,51 @@ use std::time::Duration;
 use crate::{ANAPHORA_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod arithmetic;
-mod control_flow;
-mod dispatch;
-mod registry;
+mod workflows;
 
 const ANAPHORA_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
-fn anaphora_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ANAPHORA_MELPA_PIN, source_file)
+/// Fixture data shared by the workflows.
+///
+/// anaphora is a macro library, so the user value is what the macros mean:
+/// what `it' is bound to, where it is visible, how often the tested form is
+/// evaluated, and what the whole form returns.  The workflows therefore write
+/// the kind of code the macros exist for -- reading a nested project structure,
+/// walking into it, classifying its records, summing a tree -- and pin the
+/// complete result, the evaluation order recorded by a counter, and the errors
+/// the edges produce.
+///
+/// `anaphora-test-projects' is the data every workflow works over: two
+/// projects, one fully populated and one with a missing owner e-mail and no
+/// tasks, so that both the found and the missing path through every macro is a
+/// real lookup rather than a literal nil.
+const ANAPHORA_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+
+(defconst anaphora-test-projects
+  '((:name "neomacs"
+     :owner (:login "eval-exec" :email "exec@example.com")
+     :tasks ((:id 1 :title "port isearch" :points 5 :state done)
+             (:id 2 :title "fix the collector" :points 8 :state open)
+             (:id 3 :title "write docs" :points nil :state open)))
+    (:name "scratch"
+     :owner (:login "nobody")
+     :tasks nil)))
+
+(defun anaphora-test-project (name)
+  "Find the project called NAME, the way a caller would."
+  (cl-find name anaphora-test-projects
+           :key (lambda (project) (plist-get project :name))
+           :test #'equal))
+
+(defun anaphora-test-tasks (name)
+  (plist-get (anaphora-test-project name) :tasks))
+"##;
+
+fn anaphora_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ANAPHORA_MELPA_PIN, "anaphora.el")
         .expect("prepare pinned anaphora source below ./tmp")
+        .with_prelude(ANAPHORA_TEST_PRELUDE)
         .with_timeout(ANAPHORA_TEST_TIMEOUT)
 }
 
@@ -24,18 +59,10 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_anaphora_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_anaphora_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = anaphora_oracle(source_file)
+    let report = anaphora_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("anaphora parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_anaphora_parity(elisp_form: &str, expected: Expect) {
-    assert_anaphora_source_parity("anaphora.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_anaphora_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_anaphora_source_parity("anaphora-autoloads.el", elisp_form, expected);
 }
