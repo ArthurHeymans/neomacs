@@ -200,6 +200,27 @@ and `set-process-query-on-exit-flag` nil so `kill-buffer` does not prompt.
 until the process is dead. Sort concurrently recorded requests before asserting
 — activity-watch's bucket and heartbeat curl processes finish in either order.
 
+**Capture the package's output, not the echo area.** Anything asynchronous the
+package merely runs *through* — url.el's `Contacting host: …` progress reports, a
+mode's own status chatter — lands in `*Messages*` at a time nobody controls, and
+a suite that scoops up the whole region manufactures editor-shaped disagreements
+out of scheduling. angry-police-captain was green on GNU and red on Neomacs twice
+in a row on exactly this, which reads like a missing-diagnostic divergence and is
+a near neighbour of entry 24. A second GNU run produced the *other* answer: GNU
+disagreed with itself. Excluding foreign output is not weakening the assertion —
+it makes the captured value exactly the package's own `message`.
+
+**So run the GNU side twice before believing a Neomacs mismatch.** The standards
+already say to re-run a candidate reduction before reporting it; this is the same
+discipline against a different failure. A flaky *reference* is far more
+convincing than a flaky subject, because the asymmetry looks like a finding.
+
+**Fixed-duration waits are both the slow answer and the wrong one.** 200 polling
+rounds per fetch took angry-police-captain's suite to 100 seconds and *still*
+captured too early on one case. Waiting for the observed state to stop changing
+took it under 3 seconds and made it correct. There is no duration that is both
+long enough and not wasteful; wait on the condition.
+
 **SILENT — with `compile`, the last writer *is* the sentinel.** So output
 arriving is not completion: the sentinel appends `Compilation finished at …`
 after everything the build printed. A capture taken when the expected output
@@ -446,6 +467,21 @@ one-match regexp look as though it offered two entries — so the symptom points
 at the *package*, not at the test, and reads as a divergence worth filing. Bind
 each capture in the `let*` immediately after its own call. Same family as the
 `copy-tree` note, but the mechanism is ordering rather than sharing.
+
+**SILENT — a fixture that cannot fail for the reason the test is named after.**
+android-mode's `android-project-main-activities` uses `cl-member-if`, so it
+returns the tail from the first match rather than the matches. The workflow
+pinned the list correctly and proved nothing: the fixture's launcher activity was
+*first*, so the tail was the whole list, and "returns everything after the first
+match" and "filters correctly, all three match" produce the same answer. Adding a
+query that exactly one activity satisfies made it visible — a correct filter
+returns 1, the recorded answer is 2.
+
+**A count is what exposes this class.** Three and three look like agreement; one
+and two cannot. When a test is named for a *discrimination*, construct the input
+so the wrong behaviour and the right behaviour give different-sized answers, and
+pin the size a correct implementation would give beside the recorded one so the
+expectation reads without the fixture in hand.
 
 **SILENT — a multi-key sort fixture must tie on the primary key.** Two records
 that differ in the field being sorted on are not enough: if the primary
