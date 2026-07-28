@@ -39,12 +39,18 @@ form from GNU Emacs on different runs. Have every test helper `copy-sequence`
 the strings it returns, so nothing can print as a back reference. This is why
 "transcribe from a harness run" is necessary but not sufficient.
 
-Sharing of *conses* is different and safe to pin: it is structural, not
-incidental. The `a` suite deliberately pins `#1=`/`#1#` markers because a.el's
-"immutable" operations really do share alist tails, and that suite is stable
-across repeated runs. The rule is: pin sharing you can explain from the
-package's data structure, never sharing that merely happens between two equal
-strings.
+Sharing of *conses* is different and stable: it is structural, not incidental.
+But stable is not the same as worth pinning. **Pin sharing only when the sharing
+is the thing under test.** The `a` suite pins `#1=`/`#1#` markers because a.el's
+"immutable" operations really do share alist tails — the aliasing *is* the
+feature. A list you are merely using as a value should be `copy-sequence`d.
+`custom-enabled-themes` is the cautionary case: `enable-theme` conses onto the
+existing list and `disable-theme` returns the same tail, so a workflow capturing
+it at four points renders three as back references into the first. That passes,
+and it is stable — but it is a claim about cons identity that a theme-layering
+workflow does not mean to make, and if Neomacs ever allocated a fresh list there
+the red test would say nothing about themes. Copying keeps the order-and-
+membership assertion, which is the part carrying the precedence meaning.
 
 **SILENT — `print-circle` leaks into text the *package* writes for the user.**
 The notes above concern sharing inside a value you capture; this is the other
@@ -185,6 +191,30 @@ until the process is dead. Sort concurrently recorded requests before asserting
 — activity-watch's bucket and heartbeat curl processes finish in either order.
 
 ## Assertions
+
+**Read a theme's display clauses before deciding what the suite can assert.**
+The two ancient-* themes are the same package category with opposite correct
+suites. ancient-one-dark gates every spec on `(min-colors 89)`, so on the batch
+frame it paints exactly two faces and the display facts are part of the finding.
+ancient-theme writes all 236 specs as `((t …))` with no clause at all, so it
+paints every one and resolved `face-attribute` is the right assertion throughout
+— all 73 themed faces that exist, every token of a fontified buffer, and the
+faces dired/org/flymake/pulse bring in. Getting this backwards in either
+direction produces a suite that looks fine and means little: resolved assertions
+on a gated theme measure a frame you do not have, and spec-only assertions on an
+ungated theme leave the whole product untested.
+
+Two corollaries from the pair. **A gated theme cannot override an ungated one on
+a low-colour terminal** — loading wombat over ancient changes nothing while
+manoj-dark, which is also ungated, takes over; pin both clauses beside the
+resolved colours so the snapshot says *why* rather than only what, and give the
+no-op case a control that really does take over. And **prefer built-in libraries
+as the late-loading case**: 163 of ancient-theme's styled faces belong to
+libraries that are not loaded, and requiring dired, org, flymake and pulse is a
+real user opening a Dired buffer, not a synthetic `defface`. Those four also
+carry attribute kinds nothing else in the theme reaches — `:strike-through` on a
+broken symlink, wave underlines naming their own colour, fractional heading
+scales.
 
 **A display that cannot satisfy a theme's clause is a finding, not an
 obstacle.** The tempting fix is to redefine `display-color-cells` and
