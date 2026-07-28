@@ -3,59 +3,21 @@ use std::time::Duration;
 use crate::{ANSIBLE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod assets;
-mod discovery;
-mod mode;
-mod registry;
-mod vault;
+mod workflows;
 
 const ANSIBLE_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 const ANSIBLE_TEST_PRELUDE: &str = r##"
 (require 'cl-lib)
 
-(defun ansible-test-write-file
-    (root relative content)
+(defun neomacs-ansible-write-file (root relative content)
   (let ((path
          (expand-file-name relative root)))
-    (make-directory
-     (file-name-directory path)
-     t)
+    (make-directory (file-name-directory path) t)
     (with-temp-file path
       (insert content))
     path))
 
-(defun ansible-test-make-project ()
-  (let ((root
-         (make-temp-file
-          "ansible-parity-project-"
-          t)))
-    (make-directory
-     (expand-file-name "roles" root)
-     t)
-    (ansible-test-write-file
-     root
-     "site.yml"
-     "---\n- hosts: all\n")
-    (ansible-test-write-file
-     root
-     "playbooks/deploy.yml"
-     "---\n- hosts: production\n")
-    (ansible-test-write-file
-     root
-     "playbooks/rollback.yml.backup"
-     "---\n- hosts: production\n")
-    (ansible-test-write-file
-     root
-     "playbooks/inventory.yaml"
-     "all:\n  hosts:\n")
-    (ansible-test-write-file
-     root
-     "notes/notayml.txt"
-     "not a playbook\n")
-    root))
-
-(defun ansible-test-face-at
-    (needle)
+(defun neomacs-ansible-face-at (needle)
   (save-excursion
     (goto-char (point-min))
     (search-forward needle)
@@ -63,11 +25,91 @@ const ANSIBLE_TEST_PRELUDE: &str = r##"
      (- (point) (length needle))
      'face)))
 
-(defun ansible-test-read-file
-    (path)
+(defun neomacs-ansible-read-file (path)
   (with-temp-buffer
     (insert-file-contents-literally path)
     (buffer-string)))
+
+(defun neomacs-ansible-fixture ()
+  (let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+         (root
+          (file-name-as-directory
+           (expand-file-name "ansible-project" sandbox)))
+         (site (expand-file-name "site.yml" root))
+         (deploy
+          (expand-file-name
+           "playbooks/production/deploy.yml"
+           root))
+         (rollback
+          (expand-file-name
+           "playbooks/production/rollback.yml"
+           root))
+         (vault
+          (expand-file-name
+           "group_vars/production/vault.yml"
+           root))
+         (password-file
+          (expand-file-name "credentials/vault-pass" root))
+         (bin (expand-file-name "bin" sandbox))
+         (vault-command
+          (expand-file-name "ansible-vault" bin))
+         (vault-log
+          (expand-file-name "ansible-vault.log" sandbox)))
+    (make-directory (expand-file-name "roles/api/tasks" root) t)
+    (neomacs-ansible-write-file
+     root
+     "site.yml"
+     "---\n- name: Deploy storefront\n  hosts: production\n  roles:\n    - api\n")
+    (neomacs-ansible-write-file
+     root
+     "playbooks/production/deploy.yml"
+     "---\n- hosts: production\n  tasks:\n    - name: Publish release\n      copy:\n        src: \"{{ artifact_path }}\"\n        dest: /srv/storefront/app.tar\n      when: release_ready\n")
+    (neomacs-ansible-write-file
+     root
+     "playbooks/production/rollback.yml"
+     "---\n- hosts: production\n  tasks:\n    - name: Restore previous release\n      command: /srv/storefront/rollback\n")
+    (neomacs-ansible-write-file
+     root
+     "group_vars/production/vault.yml"
+     "$ANSIBLE_VAULT;1.1;AES256\nENC:api_token: initial-secret\nENC:release_channel: stable")
+    (neomacs-ansible-write-file
+     root
+     "credentials/vault-pass"
+     "team-secret")
+    (make-directory bin t)
+    (with-temp-file vault-command
+      (insert
+       "#!/bin/sh\n"
+       "mode=$1\n"
+       "shift\n"
+       "password_file=\n"
+       "while [ \"$#\" -gt 1 ]; do\n"
+       "  case \"$1\" in\n"
+       "    --vault-password-file=*) password_file=${1#*=} ;;\n"
+       "  esac\n"
+       "  shift\n"
+       "done\n"
+       "input=$1\n"
+       "password=$(sed -n '1p' \"$password_file\")\n"
+       "printf '%s|%s\\n' \"$mode\" \"$password\" >> \"$NEOMACS_ANSIBLE_VAULT_LOG\"\n"
+       "case \"$password\" in\n"
+       "  release-secret|team-secret) ;;\n"
+       "  *) printf 'invalid vault password\\n' >&2; exit 23 ;;\n"
+       "esac\n"
+       "case \"$mode\" in\n"
+       "  encrypt)\n"
+       "    printf '$ANSIBLE_VAULT;1.1;AES256\\n'\n"
+       "    sed 's/^/ENC:/' \"$input\"\n"
+       "    ;;\n"
+       "  decrypt)\n"
+       "    sed '1d; s/^ENC://' \"$input\"\n"
+       "    ;;\n"
+       "  *) exit 9 ;;\n"
+       "esac\n"))
+    (set-file-modes vault-command #o755)
+    (setenv "NEOMACS_ANSIBLE_VAULT_LOG" vault-log)
+    (setq exec-path (cons bin exec-path))
+    (list root site deploy rollback vault password-file vault-log)))
 "##;
 
 fn ansible_oracle(source_file: &str) -> CachedMelpaOracle {
@@ -95,8 +137,4 @@ fn assert_ansible_source_parity(source_file: &str, elisp_form: &str, expected: E
 
 pub(crate) fn assert_ansible_parity(elisp_form: &str, expected: Expect) {
     assert_ansible_source_parity("ansible.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_ansible_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_ansible_source_parity("ansible-autoloads.el", elisp_form, expected);
 }
