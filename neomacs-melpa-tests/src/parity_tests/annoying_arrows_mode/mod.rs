@@ -3,9 +3,7 @@ use std::time::Duration;
 use crate::{ANNOYING_ARROWS_MODE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod behavior;
-mod registry;
-mod suggestions;
+mod workflows;
 
 const ANNOYING_ARROWS_MODE_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -23,28 +21,12 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_annoying_arrows_mode_source_parity(
-    source_file: &str,
-    elisp_form: &str,
-    expected: Expect,
-) {
+pub(crate) fn assert_annoying_arrows_mode_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = annoying_arrows_mode_oracle(source_file)
+    let report = annoying_arrows_mode_oracle("annoying-arrows-mode.el")
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| {
             panic!("annoying-arrows-mode parity case `{name}` failed:\n{error}")
         });
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_annoying_arrows_mode_parity(elisp_form: &str, expected: Expect) {
-    assert_annoying_arrows_mode_source_parity("annoying-arrows-mode.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_annoying_arrows_mode_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_annoying_arrows_mode_source_parity(
-        "annoying-arrows-mode-autoloads.el",
-        elisp_form,
-        expected,
-    );
 }
