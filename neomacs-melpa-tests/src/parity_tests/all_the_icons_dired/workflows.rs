@@ -58,6 +58,13 @@ fn reverting_the_listing_reapplies_every_icon() {
 /// placeholder, because the package compares the name Dired reports -- here
 /// "subdir/." -- against the literal strings "." and "..", so the guard misses
 /// and they are given real icons.
+///
+/// Which icon they are given is decided one step further down, in
+/// all-the-icons: its regexp alist is also matched against the whole
+/// "subdir/." string, so these entries miss the dotfile entry that plain "."
+/// and ".." hit and fall through to the default file icon.  That mapping is
+/// pinned on the all-the-icons side (b8985c300); this workflow pins only the
+/// consequence in the Dired listing.
 #[test]
 fn inserting_a_subdirectory_gets_icons_on_its_lines_and_its_dot_entries() {
     let elisp_form = r##"(atid-test-in-dired
