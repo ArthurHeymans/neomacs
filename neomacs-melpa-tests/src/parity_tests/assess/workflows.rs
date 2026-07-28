@@ -1,0 +1,235 @@
+use expect_test::expect;
+
+use super::assert_assess_parity;
+
+/// The library's whole reason to exist: a test that compares a string against
+/// a file, and what the author is shown when it does not match.
+///
+/// Two real ERT tests are defined and run, one that passes and one that does
+/// not, so the boolean and the explanation are asserted together -- a
+/// predicate that always failed would produce an explanation too.  The
+/// explanation is a `diff -c` between the two sides, and it is asserted
+/// exactly apart from the two header lines carrying generated file names and
+/// modification times.
+///
+/// The third case is the short-input branch: when the strings are small enough
+/// assess still shells out to diff, and the "No newline at end of file" marker
+/// in the output is a real consequence of how it writes them.
+#[test]
+fn a_failing_comparison_explains_itself_with_a_real_diff() {
+    let elisp_form = r##"
+(let ((path (assess-test-path "greeting.txt")))
+  (with-temp-buffer
+    (insert "Grüße\nzweite Zeile\n")
+    (write-region (point-min) (point-max) path nil 'silent))
+  (assess-test-deftest assess-probe-pass
+    (should (assess= "Grüße\nzweite Zeile\n" (assess-file path))))
+  (assess-test-deftest assess-probe-fail
+    (should (assess= "Grüße\nandere Zeile\n" (assess-file path))))
+  (list :passing (assess-test-run 'assess-probe-pass)
+        :failing (assess-test-run 'assess-probe-fail)
+        :explain-when-equal (assess-explain= "same" "same")
+        :explain-short-strings (assess-test-scrub (assess-explain= "a" "b"))))
+"##;
+
+    let expect = expect![[
+        r#"OK (:passing (:name assess-probe-pass :passed t) :failing (:name assess-probe-fail :passed nil :error ert-test-failed :explanation "Strings:\nGrüße\nandere Zeile\n\nand\nGrüße\nzweite Zeile\n\nDiffer at:*** <FILE> <TIME>\n--- <FILE> <TIME>\n***************\n*** 1,2 ****\n  Grüße\n! andere Zeile\n--- 1,2 ----\n  Grüße\n! zweite Zeile\n\n" :value nil) :explain-when-equal t :explain-short-strings "Strings:\na\nand\nb\nDiffer at:*** <FILE> <TIME>\n--- <FILE> <TIME>\n***************\n*** 1 ****\n! a\n\\ No newline at end of file\n--- 1 ----\n! b\n\\ No newline at end of file\n\n")"#
+    ]];
+    assert_assess_parity(elisp_form, expect);
+}
+
+/// Building a file hierarchy from a description, which is how a test that
+/// needs files on disk gets them.
+///
+/// The specification exercises every form the macro documents: a bare file
+/// name, a directory named by its trailing slash, a file with content, a
+/// nested path whose parent directories have to be created, and a recursive
+/// (directory contents) pair.  The names are realistic rather than minimal --
+/// one has a space in it and the contents are not ASCII -- and the whole tree
+/// is listed rather than spot-checked, so a parent directory created in the
+/// wrong place would show up.
+///
+/// The directory is asserted to be gone afterwards.  That is the half of the
+/// contract a test author relies on without ever looking at it.
+#[test]
+fn the_filesystem_macro_builds_the_described_tree_and_removes_it_afterwards() {
+    let elisp_form = r##"
+(let (inside root)
+  (assess-with-filesystem
+   '("leer.txt"
+     "unter/verzeichnis/"
+     ("notiz mit leerzeichen.txt" "Grüße aus München\n")
+     ("unter/tief/inhalt.txt" "zweite Datei\n")
+     ("paket" ("a.txt" ("b.txt" "b hat Inhalt\n") "c/d.txt")))
+   (setq root default-directory)
+   (setq inside
+         (list :directory-name-prefix
+               (string-prefix-p "temp-fs-"
+                                (file-name-nondirectory
+                                 (directory-file-name default-directory)))
+               :tree (sort (mapcar (lambda (file)
+                                     (file-relative-name file default-directory))
+                                   (directory-files-recursively default-directory "" t))
+                           #'string<)
+               :file-with-a-space (assess-test-read "notiz mit leerzeichen.txt")
+               :nested-file (assess-test-read "unter/tief/inhalt.txt")
+               :file-in-recursive-spec (assess-test-read "paket/b.txt")
+               :empty-file (assess-test-read "leer.txt"))))
+  (list :inside inside
+        :removed-afterwards (not (file-exists-p root))))
+"##;
+
+    let expect = expect![[
+        r#"OK (:inside (:directory-name-prefix t :tree ("leer.txt" "notiz mit leerzeichen.txt" "paket" "paket/a.txt" "paket/b.txt" "paket/c" "paket/c/d.txt" "unter" "unter/tief" "unter/tief/inhalt.txt" "unter/verzeichnis") :file-with-a-space "Grüße aus München\n" :nested-file "zweite Datei\n" :file-in-recursive-spec "b hat Inhalt\n" :empty-file "") :removed-afterwards t)"#
+    ]];
+    assert_assess_parity(elisp_form, expect);
+}
+
+/// Throwaway buffers, and the promise that they do not survive the form.
+///
+/// `assess-with-temp-buffers` binds each variable to a fresh buffer and
+/// evaluates its forms with that buffer current, so the two buffers here end
+/// up with different contents.  The interesting half is the cleanup: the
+/// buffer list is asserted to be identical before and after, and then asserted
+/// again around a body that signals, because a test that fails is exactly the
+/// case where leaked buffers would accumulate and contaminate the next test.
+///
+/// `assess-as-temp-buffer` is the single-buffer form; it leaves point at the
+/// end of the inserted text, which is worth pinning because a test written
+/// against it will assume one end or the other.
+#[test]
+fn temp_buffers_carry_their_own_contents_and_die_even_when_the_body_signals() {
+    let elisp_form = r##"
+(let ((before (assess-test-buffers)) contents)
+  (assess-with-temp-buffers
+   ((one (insert "erste"))
+    (two (insert "zweite")))
+   (setq contents (list (with-current-buffer one (buffer-string))
+                        (with-current-buffer two (buffer-string))
+                        (buffer-name one))))
+  (let ((after-normal (assess-test-buffers))
+        (signalled (assess-test-outcome
+                    (assess-with-temp-buffers ((one (insert "x")))
+                      (error "boom")))))
+    (list :contents contents
+          :restored-after-normal-exit (equal before after-normal)
+          :signal signalled
+          :restored-after-signal (equal before (assess-test-buffers))
+          :as-temp-buffer (assess-as-temp-buffer "Zeile eins\nZeile zwei\n"
+                            (list (buffer-string) (point) (buffer-name))))))
+"##;
+
+    let expect = expect![[
+        r#"OK (:contents ("erste" "zweite" " *assess-with-temp-buffers*") :restored-after-normal-exit t :signal (:error error ("boom")) :restored-after-signal t :as-temp-buffer ("Zeile eins\nZeile zwei\n" 23 " *temp*"))"#
+    ]];
+    assert_assess_parity(elisp_form, expect);
+}
+
+/// Checking that a mode indents source the way the author expects.
+///
+/// `assess-indentation=` takes unindented text, indents it with the mode, and
+/// compares against the expected result; `assess-roundtrip-indentation=` takes
+/// already-indented text, strips the indentation and puts it back.  Both are
+/// asserted in the matching and the mismatching direction, because a predicate
+/// stuck at `t` passes the first half of either pair.
+///
+/// The explanation for a mismatch is the same diff machinery as a plain string
+/// comparison, so a test author sees which line moved and where to.
+#[test]
+fn indentation_is_checked_against_the_mode_and_the_mismatch_shows_the_line() {
+    let elisp_form = r##"
+(let ((unindented "(defun greet (name)\n(message \"Hallo\"))\n")
+      (indented "(defun greet (name)\n  (message \"Hallo\"))\n"))
+  (list :matches (assess-indentation= 'emacs-lisp-mode unindented indented)
+        :does-not-match (assess-indentation= 'emacs-lisp-mode unindented unindented)
+        :explanation (assess-test-scrub
+                      (assess-explain-indentation= 'emacs-lisp-mode unindented unindented))
+        :roundtrip-of-indented (assess-roundtrip-indentation= 'emacs-lisp-mode indented)
+        :roundtrip-of-unindented (assess-roundtrip-indentation= 'emacs-lisp-mode unindented)))
+"##;
+
+    let expect = expect![[
+        r#"OK (:matches t :does-not-match nil :explanation "Strings:\n(defun greet (name)\n  (message \"Hallo\"))\n\nand\n(defun greet (name)\n(message \"Hallo\"))\n\nDiffer at:*** <FILE> <TIME>\n--- <FILE> <TIME>\n***************\n*** 1,2 ****\n  (defun greet (name)\n!   (message \"Hallo\"))\n--- 1,2 ----\n  (defun greet (name)\n! (message \"Hallo\"))\n\n" :roundtrip-of-indented t :roundtrip-of-unindented nil)"#
+    ]];
+    assert_assess_parity(elisp_form, expect);
+}
+
+/// Checking which face lands where, which is how a test for a major mode's
+/// font-lock is written.
+///
+/// The locations are given as strings rather than positions -- assess searches
+/// for each in the fontified buffer -- and three different faces are checked
+/// in one call, so cycling the face list against the location list has to line
+/// up correctly.
+///
+/// The mismatching case asserts the explanation, which names the expected
+/// face, the face actually found, the position and the line of context.  The
+/// explanation is stripped of its own text properties before being asserted:
+/// assess propertizes the face names inside it, and printing that would encode
+/// the property list instead of the message.
+#[test]
+fn faces_are_checked_at_named_locations_and_a_mismatch_names_both_faces() {
+    let elisp_form = r##"
+(let ((source "(defun greet (name)\n  ;; a comment\n  (message \"Hallo %s\" name))\n"))
+  (list :all-three-match
+        (assess-face-at= source 'emacs-lisp-mode
+                         '("greet" "a comment" "Hallo %s")
+                         '(font-lock-function-name-face
+                           font-lock-comment-face
+                           font-lock-string-face))
+        :wrong-face
+        (assess-face-at= source 'emacs-lisp-mode '("greet") '(font-lock-string-face))
+        :explanation
+        (assess-test-plain
+         (assess-explain-face-at= source 'emacs-lisp-mode
+                                  '("greet") '(font-lock-string-face)))))
+"##;
+
+    let expect = expect![[
+        r#"OK (:all-three-match t :wrong-face nil :explanation "Face does not match expected value\n\11Expected: font-lock-string-face\n\11Actual: font-lock-function-name-face\n\11Location: 8\n\11Line Context:   (message \"Hallo %s\" name))\n\n\11bol Position: 1\n")"#
+    ]];
+    assert_assess_parity(elisp_form, expect);
+}
+
+/// Editing a file from a test without editing the file in the repository.
+///
+/// `assess-make-related-file` copies a file somewhere disposable and
+/// `assess-with-find-file` visits it, runs the body and kills the buffer.  The
+/// workflow saves a change through the copy and then asserts all three things
+/// a test author is relying on: the copy really changed on disk, the original
+/// did not, and no buffer was left visiting anything afterwards.
+///
+/// The copy does not keep the original's name, only its extension, which is
+/// worth pinning: a test that located the copy by base name would work by
+/// accident or not at all.
+#[test]
+fn a_related_file_is_edited_and_saved_without_touching_the_original() {
+    let elisp_form = r##"
+(let ((original (assess-test-path "quelle.el")))
+  (with-temp-buffer
+    (insert "(defun greet (name)\n(message \"Hallo %s\" name))\n")
+    (write-region (point-min) (point-max) original nil 'silent))
+  (let* ((before (assess-test-buffers))
+         (related (assess-make-related-file original))
+         (in-buffer (assess-with-find-file related
+                      (goto-char (point-max))
+                      (insert ";; angehängt\n")
+                      (basic-save-buffer)
+                      (assess-test-plain (buffer-string)))))
+    (list :keeps-the-extension (equal (file-name-extension original)
+                                      (file-name-extension related))
+          :keeps-the-base-name (equal (file-name-nondirectory original)
+                                      (file-name-nondirectory related))
+          :lives-elsewhere (not (equal (file-name-directory original)
+                                       (file-name-directory related)))
+          :buffer-contents in-buffer
+          :copy-on-disk (assess-test-read related)
+          :original-on-disk (assess-test-read original)
+          :no-buffer-left-behind (equal before (assess-test-buffers)))))
+"##;
+
+    let expect = expect![[
+        r#"OK (:keeps-the-extension t :keeps-the-base-name nil :lives-elsewhere t :buffer-contents "(defun greet (name)\n(message \"Hallo %s\" name))\n;; angehängt\n" :copy-on-disk "(defun greet (name)\n(message \"Hallo %s\" name))\n;; angehängt\n" :original-on-disk "(defun greet (name)\n(message \"Hallo %s\" name))\n" :no-buffer-left-behind t)"#
+    ]];
+    assert_assess_parity(elisp_form, expect);
+}
