@@ -538,6 +538,32 @@ The fix is structural, not more careful counting — locate by content
 string and cannot drift apart. Where you can, do not compute a fixture position
 at all.
 
+**A package's compatibility fallback is the path least likely to have been run,
+and a bare batch session is exactly what takes it.** Three instances in one day,
+all the same mechanism: **the guard tests the *preferred* symbol's availability,
+not the fallback's**, so the fallback is entered unchecked and names something no
+one loaded.
+
+| package | guard | fallback that breaks |
+|---|---|---|
+| `apiwrap` | config value is not a function/macro | `byte-compile-warn` — lives in `bytecomp`, unloaded |
+| `ac-php-core` | `xref-push-marker-stack` not autoloaded | `find-tag-marker-ring` — only exists once `etags` loads |
+| `attrap` | — | the elisp backends ship with Emacs, so the *preferred* path is the safe one |
+
+A full user session loads these libraries incidentally, which is why the paths
+survive in the wild untested. Drive them deliberately: assert the failure in a
+bare session, then load the library and assert it working. Note this is also why
+a probe driver that calls `package-initialize` hides the defect — see the
+probe-is-more-forgiving note.
+
+**An error far from its cause is the finding, not an obstacle.**
+`ac-php-get-tags-data` treats an absent index as "not built yet", starts a
+rebuild, and returns *the rebuild's* value — the symbol
+`ac-php-phptags-index-process-filter`. The next caller then signals
+`(wrong-type-argument listp ac-php-phptags-index-process-filter)` a long way from
+anything to do with a missing file. When a probe fails somewhere implausible,
+consider that the implausible error *is* what a user gets.
+
 **The recurring species: a repair or transform whose output is wrong in a way
 the surrounding machinery cannot notice.** Three packages running, and it is the
 strongest evidence this campaign has produced for why workflows assert the
