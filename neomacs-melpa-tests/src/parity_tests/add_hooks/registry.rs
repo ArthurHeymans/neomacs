@@ -117,9 +117,12 @@ fn add_hooks_installed_package_inventory_sizes_and_sha256_match_exactly() {
                (file-attribute-size
                 (file-attributes
                  path))
-               (secure-hash
-                'sha256
-                path))))
+               (with-temp-buffer
+                 (set-buffer-multibyte nil)
+                 (insert-file-contents-literally path)
+                 (secure-hash
+                  'sha256
+                  (current-buffer))))))
           (sort
            (seq-filter
             (lambda (file)
@@ -133,7 +136,7 @@ fn add_hooks_installed_package_inventory_sizes_and_sha256_match_exactly() {
              "\\`[^.]"))
            #'string-lessp)))"##;
     let expect = expect![[
-        r#"OK (("README-elpa" 550 "4da49295fa6d067152d1aad532a52716588f0553b10f72162a6d748389c2132e") ("add-hooks-autoloads.el" 1776 "48388d74383a6ee22ca86ddc0c55127487f8062422910bb06095a705df7f7abd") ("add-hooks-pkg.el" 410 "8e0cdb22b7c8fe1cb3804bbe8609c8a4db4908a18cc4c38e80fb54af29b7be02") ("add-hooks.el" 3510 "2dae8420edddc92f0e3e2015c6a02199791ce2f43ab12fb7f766cd4c4eb952c9") ("add-hooks.elc" 1923 "c4c624e719a4b049ae9b37b8bf7790f51ae74deb5c4c99280d89873c789723aa"))"#
+        r#"OK (("README-elpa" 550 "cb98e99a8524f03a6575c643b10239c8a1690c700a679319dc1bb6f77572c68c") ("add-hooks-autoloads.el" 1776 "ae6583b17dd7a593dbf1628eab243474b6b6b7e1b2008831fda44b5320d2897e") ("add-hooks-pkg.el" 410 "794fbaf363e26e685e88828eda459dad4270717f7131db8f0214a7a8affe8afd") ("add-hooks.el" 3510 "1c0674fafbeacb94ae3b27be92685d29664a5a70b7e636cc0767dffd322d3fef") ("add-hooks.elc" 1923 "7aa0d0df48921c45c752181d9b6441c2c1289a396144be4f60ecb5dae3e55303"))"#
     ]];
     assert_add_hooks_parity(elisp_form, expect);
 }

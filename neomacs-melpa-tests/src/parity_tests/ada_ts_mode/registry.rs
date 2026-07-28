@@ -626,9 +626,12 @@ fn ada_ts_mode_installed_elisp_sources_and_generated_metadata_sha256_match_exact
                (file-attribute-size
                 (file-attributes
                  path))
-               (secure-hash
-                'sha256
-                path))))
+               (with-temp-buffer
+                 (set-buffer-multibyte nil)
+                 (insert-file-contents-literally path)
+                 (secure-hash
+                  'sha256
+                  (current-buffer))))))
           '("ada-ts-als.el"
             "ada-ts-casing.el"
             "ada-ts-common.el"
@@ -641,7 +644,7 @@ fn ada_ts_mode_installed_elisp_sources_and_generated_metadata_sha256_match_exact
             "ada-ts-mode-autoloads.el"
             "ada-ts-mode-pkg.el")))"##;
     let expect = expect![[
-        r#"OK (("ada-ts-als.el" 15332 "93835d0b5b98c4479ce152e2251cea5af11dfe23d1d19050efe1d409d97b7035") ("ada-ts-casing.el" 21043 "bf20a785655488b515522f3f9984f9bcec6fe5a44a60c7018f5c127ad313e50c") ("ada-ts-common.el" 11376 "308284f686d58f104311c796c8b0871b2d6ce6b0d3606bb107384f02a497642e") ("ada-ts-imenu.el" 10419 "b6f69a1923f3ed90b75b93d5cfaf4760fb7c4ec8de0b04390169a93d33013ff0") ("ada-ts-indentation.el" 86979 "cb2edb983f1b9a8b84563801cd9754ea1c60e31b9db0aae068b770a3ab56c3f7") ("ada-ts-lspclient-eglot.el" 11773 "c866a0121275a30287428b8430046a0e1604cebb7a93b1372f01fc625744837d") ("ada-ts-lspclient-lsp-mode.el" 8052 "4422c7d503a718f8d99aaebceb1934cea5f3ed3c74cee3bbc45b84e0257a5828") ("ada-ts-lspclient.el" 3383 "8cfdbad95495ee404566b4d2e1cc475321894c1518d743598210cd8f29444d96") ("ada-ts-mode.el" 37313 "e5a17bf59b85cdf5a7d4710ad654bba0f1d407b87f479230a91d5f35689316e0") ("ada-ts-mode-autoloads.el" 2888 "425af299e816d69206f268a3f15a7752d236657a1b6a752eee75fc628e946e06") ("ada-ts-mode-pkg.el" 449 "2cf080bbd42620e3e630ff4748e2511cfb53a6fbda2510fa350d857bb519fce1"))"#
+        r#"OK (("ada-ts-als.el" 15332 "179dbbf71a8e1bc2b2462f1f3c13db2047eea4d68e9f79720c07b5dba7a5be72") ("ada-ts-casing.el" 21043 "28057f1b7943eba8827f5ac6c68563caf9a336bff50b670556acdf7e0c17d144") ("ada-ts-common.el" 11376 "de05c62eacb08efbd12f5a0cfa37a5fdc44abad238a9a26e80904eda898abd9d") ("ada-ts-imenu.el" 10419 "5aa5e65e3bada21477ed8131561f2c41fc228c6ebd4fb6642ec1edb6d4ee5470") ("ada-ts-indentation.el" 86979 "456e47f11ece5630c42351bf2b711b804cc05b861ca19411ea7774a2bf1036f6") ("ada-ts-lspclient-eglot.el" 11773 "ec513acd2db5edb7026fcfa70688098f699d4bfad910b6cb53dc22a3eb3cccb9") ("ada-ts-lspclient-lsp-mode.el" 8052 "330dd5ee96937a6c2d9c0132078b26f69177963eef1a70e2e7560f9590028733") ("ada-ts-lspclient.el" 3383 "8149c7ecab96417782ec84589c2cb251838b690e0f978eb584f650cae9900c10") ("ada-ts-mode.el" 37313 "92d32039a47f1a6536fc498f39632989605b2305b98227670c72ab420ab4c5f1") ("ada-ts-mode-autoloads.el" 2888 "d73385a2af7cf234cb98f0f3a94ff2190f0dea31a2ba472452674d74af59644e") ("ada-ts-mode-pkg.el" 449 "b7dc012339720a5357e6e9b7655da567fd82b9e37a9ea5d743de846adf51cc30"))"#
     ]];
     assert_ada_ts_mode_parity(elisp_form, expect);
 }

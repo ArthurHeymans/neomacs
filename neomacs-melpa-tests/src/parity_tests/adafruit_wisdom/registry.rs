@@ -136,9 +136,12 @@ fn adafruit_wisdom_installed_package_inventory_sizes_and_sha256_match_exactly() 
                (file-attribute-size
                 (file-attributes
                  path))
-               (secure-hash
-                'sha256
-                path))))
+               (with-temp-buffer
+                 (set-buffer-multibyte nil)
+                 (insert-file-contents-literally path)
+                 (secure-hash
+                  'sha256
+                  (current-buffer))))))
           (sort
            (seq-filter
             (lambda (file)
@@ -152,7 +155,7 @@ fn adafruit_wisdom_installed_package_inventory_sizes_and_sha256_match_exactly() 
              "\\`[^.]"))
            #'string-lessp)))"##;
     let expect = expect![[
-        r#"OK (("README-elpa" 249 "54fe21f9892d1f8f64d28f4c317527358ba22da49916c2ad863306959cd1a7ac") ("adafruit-wisdom-autoloads.el" 1259 "e17b957194a4334fd0f261bed070e013671d1e4111e26ef0c9d201bc9be3f36c") ("adafruit-wisdom-pkg.el" 476 "1950f138e1272eda5128e9c1b397afef62b578e511c5fdf061ff3d3c26b0dac5") ("adafruit-wisdom.el" 3919 "06130c9962feebee230a7f59ddc3a2257e4a6521e4ee4144baa4530bd48b573c") ("adafruit-wisdom.elc" 2776 "8b45a5a0a6c8d564384e3894d25207ea6bd137938164844ea85dbd4d12d342c6"))"#
+        r#"OK (("README-elpa" 249 "9a3cb7c84f85ed88e4319694b37796403e8eca87d002bb7fee1121f982f1c20f") ("adafruit-wisdom-autoloads.el" 1259 "0f07ae834ee455182f09cd6b129d4788daf303b53e31f20e028c48bd1e8e1832") ("adafruit-wisdom-pkg.el" 476 "68d021b7ada3f721594054b28ff37bd4f54d45be3d149a975dade72493580202") ("adafruit-wisdom.el" 3919 "5b5aec0a2d55908cfa3343b4889f0ddd14087ba9f5c01b1212aa3dcd9ee6b452") ("adafruit-wisdom.elc" 2776 "934c46f7537a5d3b05b84e8d6c574f692f8b42cdd9768583205d6d386bda847f"))"#
     ]];
     assert_adafruit_wisdom_parity(elisp_form, expect);
 }
