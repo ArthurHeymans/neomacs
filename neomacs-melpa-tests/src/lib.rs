@@ -122,6 +122,13 @@ pub const AUTO_COMPLETE_CHUNK_MELPA_PIN: (&str, &str) = ("auto-complete-chunk", 
 /// upstream commit `a195db1d0593b4fb97efe50885e12aa6764d998c`.
 pub const AUTO_COMPLETE_CLANG_MELPA_PIN: (&str, &str) = ("auto-complete-clang", "20140409.752");
 
+/// The exact auto-complete-clang-async package selected by the comprehensive
+/// completion parsing, template, client/server protocol, asynchronous process,
+/// syntax-check, and C/C++ workflow parity corpus. MELPA built this archive
+/// from upstream commit `a5114e3477793ccb9420acc5cd6a1cb26be65964`.
+pub const AUTO_COMPLETE_CLANG_ASYNC_MELPA_PIN: (&str, &str) =
+    ("auto-complete-clang-async", "20130526.1527");
+
 /// The exact auto-complete-distel package selected by the comprehensive
 /// prefix, source, Distel bridge, documentation, and practical Erlang
 /// completion workflow parity corpus. MELPA built this archive from upstream
