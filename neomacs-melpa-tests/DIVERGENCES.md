@@ -379,6 +379,54 @@ Surfaced by `ack-menu`, whose SGR parser reads `ansi-color-drop-regexp`, deleted
 from ansi-color.el in Emacs 26.1 (commit 35ed01dfb3f), so every search it runs
 raises inside the filter on a current Emacs.
 
+## 19. Word boundaries at a script change are not honoured
+
+GNU ends a word where the script changes — kanji/latin, hiragana/katakana,
+kana/latin (src/category.c, `word-separating-categories`). Neomacs treats the
+whole run as one word, so `\<` and `\b` never match inside mixed-script text and
+word motion runs to the end of it.
+
+```elisp
+(list (string-match "\\<my" "変数名myVariable")
+      (string-match "\\bmy" "変数名myVariable")
+      (with-temp-buffer (insert "変数名myVariable") (goto-char (point-min)) (forward-word 1) (point))
+      (with-temp-buffer (insert "myVariable変数名") (goto-char (point-min)) (forward-word 1) (point))
+      (with-temp-buffer (insert "ひらがなカタカナ") (goto-char (point-min)) (forward-word 1) (point))
+      (with-temp-buffer (insert "かなkana")        (goto-char (point-min)) (forward-word 1) (point)))
+;; GNU     => (3 3 4 11 5 3)
+;; Neomacs => (nil nil 14 14 9 7)
+```
+
+Widest blast radius of anything in this file: `M-f`/`M-b`, `forward-word` and
+`backward-word`, every `\<`/`\b` regexp, and any word-based motion, kill or
+completion in text that mixes scripts — all Japanese editing, and any identifier
+embedded in CJK prose.
+
+This is the same root cause as the long-standing `word-boundary` oracle cluster
+(~40 tests); the reduction above is its user-facing form.
+
+Affects: `ac-mozc` (1) — `ac-source-ascii-words-in-same-mode-buffers` offers
+`("myVariable" "myFunction")` in GNU and only `("myFunction")` in Neomacs,
+because `変数名myVariable` is indexed as one word while `ac-mozc-partial-match`
+searches for `\<my`.
+
+## 20. `*Messages*` does not replace a progress line with its "...done"
+
+GNU overwrites the previous log entry when the new message is the old one with
+`done` appended; Neomacs appends a second line.
+
+```elisp
+(message "Working...")
+(message "Working...done")
+(with-current-buffer "*Messages*" (buffer-string))
+;; GNU     => "Working...done\n"
+;; Neomacs => "Working...\nWorking...done\n"
+```
+
+Affects: `ac-mozc` (1) — mozc.el reports "…Starting mozc-helper-process…" then
+"…done". Hits any package using the `"..."` / `"...done"` progress idiom, which
+is most of them.
+
 ---
 
 ## Behaviour that is NOT a divergence
