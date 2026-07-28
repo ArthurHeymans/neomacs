@@ -100,6 +100,12 @@ pub const AUTO_COMPLETE_MELPA_PIN: (&str, &str) = ("auto-complete", "20251231.16
 pub const AUTO_COMPLETE_C_HEADERS_MELPA_PIN: (&str, &str) =
     ("auto-complete-c-headers", "20150912.323");
 
+/// The exact auto-complete-chunk package selected by the comprehensive
+/// chunk-boundary, candidate, source, dictionary, and practical completion
+/// workflow parity corpus. MELPA built this archive from upstream commit
+/// `a9aa77ffb84a1037984a7ce4dda25074272f13fe`.
+pub const AUTO_COMPLETE_CHUNK_MELPA_PIN: (&str, &str) = ("auto-complete-chunk", "20140225.946");
+
 /// The exact audio-notes-mode package selected by the comprehensive
 /// filesystem, playback, process-control, mode-line, advice, and global-mode
 /// lifecycle parity corpus. MELPA built this archive from upstream commit

@@ -231,6 +231,7 @@ mod auto_auto_indent;
 mod auto_compile;
 mod auto_complete;
 mod auto_complete_c_headers;
+mod auto_complete_chunk;
 mod auto_dark;
 mod auto_dictionary;
 mod auto_dim_other_buffers;
