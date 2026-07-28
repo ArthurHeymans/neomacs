@@ -1,24 +1,94 @@
 use std::time::Duration;
 
 use crate::{ACHIEVEMENTS_MELPA_PIN, CachedMelpaOracle};
-use expect_test::{Expect, expect};
+use expect_test::Expect;
 
-mod autoloads;
-mod catalogs;
-mod display;
-mod frequency;
-mod lifecycle;
-mod macros;
-mod mode;
-mod persistence;
-mod scoring;
-mod surface;
+mod workflows;
 
 const ACHIEVEMENTS_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
-fn achievements_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ACHIEVEMENTS_MELPA_PIN, source_file)
+/// achievements watches which commands are actually run - through `keyfreq',
+/// its recommended companion - and unlocks records that it persists to a file.
+/// The workflows therefore type real keys with `execute-kbd-macro' into a
+/// buffer displayed in the selected window, let the real `keyfreq-mode' record
+/// them, and then use the package's own commands.  `keyfreq' counts the
+/// *previous* command from `pre-command-hook', so each key sequence ends with
+/// one extra command to flush the one before it.  The achievements file is
+/// redirected into the per-case sandbox; nothing else is stubbed.
+const ACHIEVEMENTS_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+
+(defun ach-test-path (name)
+  (expand-file-name name (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
+
+(defmacro ach-test-with-live-buffer (&rest body)
+  "Run BODY in a real, window-displayed buffer so typed keys reach it."
+  `(let ((buffer (generate-new-buffer "*achievements-workflow*")))
+     (unwind-protect
+         (progn
+           (set-window-buffer (selected-window) buffer)
+           (set-buffer buffer)
+           ,@body)
+       (kill-buffer buffer))))
+
+(defun ach-test-earned ()
+  "Names of every earned achievement, sorted."
+  (sort (delq nil
+              (mapcar (lambda (achievement)
+                        (and (achievements-earned-p achievement)
+                             (emacs-achievement-name achievement)))
+                      achievements-list))
+        #'string<))
+
+(defun ach-test-record (name)
+  "Return NAME's stored record, with its predicate reduced to a state."
+  (let ((achievement (achievements-get-achievements-by-name name)))
+    (and achievement
+         (list (emacs-achievement-name achievement)
+               (emacs-achievement-description achievement)
+               (let ((predicate (emacs-achievement-predicate achievement)))
+                 (cond ((eq predicate t) t)
+                       ((null predicate) nil)
+                       (t :pending)))
+               (emacs-achievement-points achievement)
+               (emacs-achievement-transient achievement)
+               (achievements-earned-p achievement)))))
+
+(defun ach-test-log ()
+  "Text of the achievements log buffer, or a marker when there is none."
+  (let ((buffer (get-buffer "*achievements-log*")))
+    (if buffer
+        (with-current-buffer buffer
+          (buffer-substring-no-properties (point-min) (point-max)))
+      'no-log-buffer)))
+
+(defun ach-test-unlock-messages ()
+  "Every ACHIEVEMENT UNLOCKED line the session produced, in order."
+  (with-current-buffer (get-buffer-create "*Messages*")
+    (let ((lines nil))
+      (dolist (line (split-string (buffer-string) "\n" t) (nreverse lines))
+        (when (string-prefix-p "ACHIEVEMENT UNLOCKED" line)
+          (push line lines))))))
+
+(defun ach-test-rows (&rest names)
+  "Return (NAME . ROW) for each NAME in the *Achievements* buffer.
+ROW is nil when the achievement is not listed at all."
+  (with-current-buffer "*Achievements*"
+    (mapcar
+     (lambda (name)
+       (cons name
+             (save-excursion
+               (goto-char (point-min))
+               (and (re-search-forward (concat "^.*" (regexp-quote name)) nil t)
+                    (buffer-substring-no-properties
+                     (line-beginning-position) (line-end-position))))))
+     names)))
+"##;
+
+fn achievements_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ACHIEVEMENTS_MELPA_PIN, "achievements.el")
         .expect("prepare pinned achievements source below ./tmp")
+        .with_prelude(ACHIEVEMENTS_TEST_PRELUDE)
         .with_timeout(ACHIEVEMENTS_TEST_TIMEOUT)
 }
 
@@ -30,66 +100,10 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_achievements_parity(elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_achievements_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = achievements_oracle("achievements.el")
+    let report = achievements_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("achievements parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-fn assert_achievements_functions_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = achievements_oracle("achievements-functions.el")
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| {
-            panic!("achievements-functions parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-fn assert_achievements_autoload_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = achievements_oracle("achievements-autoloads.el")
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| {
-            panic!("achievements autoload parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-fn assert_advanced_achievements_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = achievements_oracle("advanced-achievements.el")
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| {
-            panic!("advanced-achievements parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-#[test]
-fn achievements_exact_pin_dependencies_metadata_and_features_match() {
-    let elisp_form = r##"(let ((descriptor
-                    (cadr
-                     (assq
-                      'achievements
-                      package-alist))))
-               (list
-                (package-desc-name descriptor)
-                (package-version-join
-                 (package-desc-version descriptor))
-                (package-desc-reqs descriptor)
-                (package-desc-summary descriptor)
-                (copy-tree
-                 (package-desc-extras descriptor))
-                (mapcar
-                 #'featurep
-                 '(achievements-functions
-                   basic-achievements
-                   achievements))))"##;
-    let expect = expect![[
-        r#"OK (achievements "20240703.318" ((keyfreq (0 0 3))) "Achievements for emacs usage." ((:maintainers ("Ivan Andrus" . "darthandrus@gmail.com")) (:authors ("Ivan Andrus" . "darthandrus@gmail.com")) (:keywords "games") (:revdesc . "c229d21ad5d1") (:commit . "c229d21ad5d1e13be08e087ab498800b2b9b7c97") (:url . "https://gitlab.com/gvol/emacs-achievements")) (t t t))"#
-    ]];
-    assert_achievements_parity(elisp_form, expect);
 }
