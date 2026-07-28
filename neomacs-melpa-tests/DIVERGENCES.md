@@ -475,6 +475,25 @@ Affects: `ac-mozc` (1) — mozc.el reports "…Starting mozc-helper-process…" 
 "…done". Hits any package using the `"..."` / `"...done"` progress idiom, which
 is most of them.
 
+## 21. A refused connection reports a different error
+
+Two differences in one reduction: Neomacs's message is Rust's
+`std::io::Error` Display text, which appends the raw errno as
+`" (os error 111)"`, where GNU uses the plain `strerror` string; and Neomacs
+drops the connection parameters GNU appends to the error data.
+
+```elisp
+(condition-case e (make-network-process :name "probe" :host "127.0.0.1" :service 1)
+  (error e))
+;; GNU     => (file-error "make client process failed" "Connection refused"
+;;             :name "probe" :host "127.0.0.1" :service 1)
+;; Neomacs => (file-error "make client process failed" "Connection refused (os error 111)")
+```
+
+Other errno-derived file errors agree in both editors, so this is specific to
+the network-process path rather than to error formatting generally. Affects:
+`adafruit-wisdom` (1).
+
 ---
 
 ## Behaviour that is NOT a divergence
