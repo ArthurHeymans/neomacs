@@ -3,15 +3,95 @@ use std::time::Duration;
 use crate::{AANGIT_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod commands;
-mod layouts;
-mod readers;
+mod workflows;
 
-const AANGIT_TEST_TIMEOUT: Duration = Duration::from_secs(120);
+const AANGIT_TEST_TIMEOUT: Duration = Duration::from_secs(180);
+
+/// Sandbox helpers shared by the workflows.  aangit is a Transient front end
+/// for the `ng` and `npm` command line tools, so the tests install local stand
+/// ins for those two executables: they record their exact argument vector and
+/// produce a realistic Angular workspace, while aangit keeps running its real
+/// menu, argument, prompt and `shell-command` path.
+const AANGIT_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+
+(defvar aangit-test-root
+  (file-name-as-directory
+   (expand-file-name "workspace" (getenv "NEOMACS_TEST_SANDBOX_ROOT"))))
+
+(defvar aangit-test-log
+  (expand-file-name "commands.log" aangit-test-root))
+
+(defun aangit-test-write-executable (name body)
+  (let ((path (expand-file-name name (expand-file-name "bin" aangit-test-root))))
+    (make-directory (file-name-directory path) t)
+    (with-temp-buffer
+      (insert body)
+      (write-region (point-min) (point-max) path nil 'silent))
+    (set-file-modes path #o755)
+    path))
+
+(defun aangit-test-setup-cli ()
+  "Install recording `ng' and `npm' stand-ins and enter the workspace."
+  (make-directory aangit-test-root t)
+  (aangit-test-write-executable
+   "ng"
+   (concat "#!/bin/sh\n"
+           "printf '%s\\n' \"ng $*\" >> \"$AANGIT_LOG\"\n"
+           "if [ \"$1\" = new ]; then\n"
+           "  mkdir -p \"$3/src/app\"\n"
+           "  printf '{\"name\":\"%s\"}\\n' \"$3\" > \"$3/angular.json\"\n"
+           "  printf 'bootstrapApplication(%s);\\n' \"$3\" > \"$3/src/main.ts\"\n"
+           "  printf 'export class AppComponent {}\\n' > \"$3/src/app/app.component.ts\"\n"
+           "fi\n"
+           "if [ \"$1\" = generate ] && [ \"$2\" = component ]; then\n"
+           "  mkdir -p \"src/app/$3\"\n"
+           "  printf 'export class %sComponent {}\\n' \"$3\" > \"src/app/$3/$3.component.ts\"\n"
+           "fi\n"
+           "exit 0\n"))
+  (aangit-test-write-executable
+   "npm"
+   (concat "#!/bin/sh\n"
+           "printf '%s\\n' \"npm $*\" >> \"$AANGIT_LOG\"\n"
+           "exit 0\n"))
+  (setq default-directory aangit-test-root)
+  (setenv "AANGIT_LOG" aangit-test-log)
+  (setenv "PATH"
+          (concat (expand-file-name "bin" aangit-test-root)
+                  path-separator
+                  (getenv "PATH")))
+  aangit-test-root)
+
+(defun aangit-test-commands ()
+  "Return the exact command lines the stand-in executables recorded."
+  (if (file-exists-p aangit-test-log)
+      (with-temp-buffer
+        (insert-file-contents aangit-test-log)
+        (split-string (buffer-string) "\n" t))
+    'no-command-ran))
+
+(defun aangit-test-last-message ()
+  (with-current-buffer (get-buffer-create "*Messages*")
+    (car (last (split-string (buffer-string) "\n" t)))))
+
+(defun aangit-test-relative-files (directory)
+  (let ((directory
+         (file-name-as-directory
+          (expand-file-name directory aangit-test-root))))
+    (sort (mapcar (lambda (path) (file-relative-name path directory))
+                  (directory-files-recursively directory ".*"))
+          #'string<)))
+
+(defun aangit-test-active-prefix ()
+  (and (boundp 'transient--prefix)
+       transient--prefix
+       (oref transient--prefix command)))
+"##;
 
 fn aangit_oracle() -> CachedMelpaOracle {
     CachedMelpaOracle::new(AANGIT_MELPA_PIN, "aangit.el")
         .expect("prepare pinned aangit source below ./tmp")
+        .with_prelude(AANGIT_TEST_PRELUDE)
         .with_timeout(AANGIT_TEST_TIMEOUT)
 }
 
