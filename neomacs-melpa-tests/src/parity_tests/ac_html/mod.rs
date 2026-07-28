@@ -13,6 +13,24 @@ const AC_HTML_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 /// its sources on `ac-sources' -- and then completes through `ac-start' /
 /// `ac-update' / `ac-complete' in a window-displayed buffer.  Nothing is
 /// stubbed; the candidate lists and the documentation both come off disk.
+///
+/// Read this before adding a workflow: **with the documented source order,
+/// attribute completion never fires.**  `ac-html-tag-prefix' matches from just
+/// after the `<' whatever follows it, so in `<div cl' the tag source claims the
+/// prefix "div cl", matches no tag, and auto-complete stops there -- zero
+/// candidates, and it looks like the data provider is broken.  To drive
+/// attributes, narrow `ac-sources' for that case:
+///
+/// ```elisp
+/// (let ((ac-sources '(ac-source-html-attr)))
+///   (aht-test-offer "<div cl"))
+/// ;; => (:typed "<div cl" :prefix "cl" :count 1 :candidates ("class"))
+/// ```
+///
+/// This is upstream behaviour, pinned by
+/// `the_tag_sources_prefix_shadows_attribute_completion'.  The sources this
+/// version defines are `ac-source-html-tag', `ac-source-html-attr' and
+/// `ac-source-html-attrv'.
 const AC_HTML_TEST_PRELUDE: &str = r####"
 (require 'cl-lib)
 (require 'auto-complete)
