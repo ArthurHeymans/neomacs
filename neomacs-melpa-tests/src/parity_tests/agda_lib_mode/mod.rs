@@ -3,10 +3,7 @@ use std::time::Duration;
 use crate::{AGDA_LIB_MODE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod editing;
-mod font_lock;
-mod mode;
-mod registry;
+mod workflows;
 
 const AGDA_LIB_MODE_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
