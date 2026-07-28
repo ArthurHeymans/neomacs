@@ -881,8 +881,10 @@ pub const APIWRAP_MELPA_PIN: (&str, &str) = ("apiwrap", "20180602.2231");
 pub const APP_MONOCHROME_THEMES_MELPA_PIN: (&str, &str) =
     ("app-monochrome-themes", "20250710.2315");
 
-/// The exact apparmor-mode package selected by the comprehensive policy
-/// editing and diagnostics parity corpus.
+/// The exact apparmor-mode package selected by the practical policy authoring,
+/// fontification, completion, and live-diagnostics parity corpus. MELPA built
+/// this archive from upstream commit
+/// `b0e4bbcd30aafd71f484c74164351af40ef885bf`.
 pub const APPARMOR_MODE_MELPA_PIN: (&str, &str) = ("apparmor-mode", "20260515.454");
 
 /// The exact Apple Container TRAMP package selected by the comprehensive API
