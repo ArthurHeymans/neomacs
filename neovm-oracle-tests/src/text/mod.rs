@@ -11,3 +11,4 @@ mod property_comprehensive;
 mod property_manipulation;
 mod property_order_semantics;
 mod property_search;
+mod replace_region_contents_semantics;

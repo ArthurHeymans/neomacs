@@ -175,6 +175,27 @@ fn replace_buffer_contents_preserves_point_minimally() {
 }
 
 #[test]
+fn replace_region_contents_relocates_point_across_multiple_change_runs() {
+    // GNU `replace_range` relocates point as an insert-before marker for each
+    // change run.  This compact-to-pretty JSON replacement contains several
+    // separate insertions.  Every possible starting point exercises the
+    // cumulative mapping; in particular, point at the original END must finish
+    // at the replacement END so callers can continue parsing from there.
+    let result = eval_one(
+        r#"(mapcar
+             (lambda (position)
+               (with-temp-buffer
+                 (insert "{\"x\":1}")
+                 (goto-char position)
+                 (replace-region-contents
+                  (point-min) (point-max) "{\n  \"x\": 1\n}")
+                 (point)))
+             '(1 2 3 4 5 6 7 8))"#,
+    );
+    assert_eq!(result, "OK (1 5 6 7 8 10 12 13)");
+}
+
+#[test]
 fn replace_buffer_contents_multi_run_marker_placement_matches_gnu() {
     // Two separate insertions (X before b, Y before c) — a case with multiple
     // change runs.  GNU markers 1..4 => 1 2 4 6.

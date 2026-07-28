@@ -1760,27 +1760,14 @@ pub(crate) fn builtin_replace_region_contents(
     // insert wholesale.  This also covers the trivial cases GNU handles up
     // front (both empty -> nothing to do).
     if comparison_disabled || a_codes.is_empty() || b_codes.is_empty() {
-        let source_pieces = collect_insert_pieces(&[source_value], target_multibyte)?;
-        let new_extent = insert_pieces_extent(&source_pieces);
+        let replacement = buffer_insert_piece_from_string(source_value, target_multibyte)?
+            .into_replacement_text();
+        let new_extent = super::editfns::lisp_string_text_extent(&replacement);
         let change = TextChange::new(old_range, new_extent);
         super::editfns::signal_before_text_change(eval, change)?;
-        let _ = eval
-            .buffers
-            .delete_buffer_measured_region(current_id, old_range);
-        let _ = eval
-            .buffers
-            .goto_buffer_emacs_byte_pos(current_id, byte_range.start());
-        // The insert builtins already call signal hooks internally, but the
-        // surrounding before/after pair covers the whole replace operation.
-        // To avoid double-firing, we use insert_pieces_in_state directly.
-        insert_pieces_in_state(
-            &eval.obarray,
-            &[],
-            &mut eval.buffers,
-            source_pieces,
-            InsertPieceMarkerPlacement::AfterMarkers,
-            InsertPiecePropertyMode::SourceOnly,
-        )?;
+        eval.buffers
+            .replace_buffer_measured_region_lisp_string(current_id, old_range, &replacement)
+            .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
         super::editfns::signal_after_text_change(eval, change)?;
         eval.restore_specpdl_roots(source_root_scope);
         return Ok(Value::T);
@@ -1822,24 +1809,11 @@ pub(crate) fn builtin_replace_region_contents(
                 Value::fixnum(run.b_end as i64),
             ])?
         };
-        let pieces = collect_insert_pieces(&[replacement], target_multibyte)?;
-
-        let _ = eval
-            .buffers
-            .delete_buffer_emacs_byte_range(current_id, del_range);
-        let _ = eval
-            .buffers
-            .goto_buffer_emacs_byte_pos(current_id, del_start);
-        if !pieces.is_empty() {
-            insert_pieces_in_state(
-                &eval.obarray,
-                &[],
-                &mut eval.buffers,
-                pieces,
-                InsertPieceMarkerPlacement::AfterMarkers,
-                InsertPiecePropertyMode::SourceOnly,
-            )?;
-        }
+        let replacement =
+            buffer_insert_piece_from_string(replacement, target_multibyte)?.into_replacement_text();
+        eval.buffers
+            .replace_buffer_emacs_byte_range_lisp_string(current_id, del_range, &replacement)
+            .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
     }
 
     super::editfns::signal_after_text_change(eval, change)?;
@@ -3108,6 +3082,18 @@ pub(crate) fn builtin_goto_char_1(eval: &mut super::eval::Context, arg: Value) -
 struct InsertPiece {
     text: crate::heap_types::LispString,
     text_props: Option<crate::buffer::text_props::TextPropertyTable>,
+}
+
+impl InsertPiece {
+    /// Reassemble converted text and properties for the typed replacement
+    /// pipeline. Lisp string properties normally live beside a tagged Value;
+    /// `ReplaceTextPlan` deliberately owns both in one `LispString`.
+    fn into_replacement_text(mut self) -> crate::heap_types::LispString {
+        if let Some(properties) = self.text_props {
+            *self.text.intervals_mut() = properties;
+        }
+        self.text
+    }
 }
 
 fn insert_pieces_extent(pieces: &[InsertPiece]) -> TextExtent {

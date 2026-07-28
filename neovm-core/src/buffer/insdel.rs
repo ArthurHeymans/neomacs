@@ -463,8 +463,24 @@ impl BufferManager {
         text: &LispString,
     ) -> Option<()> {
         if range.is_empty() {
-            self.goto_buffer_emacs_byte_pos(id, range.byte_start())?;
-            return self.insert_lisp_string_into_buffer(id, text);
+            if text.is_empty() {
+                return Some(());
+            }
+            return self.execute_shared_text_edit(id, |buffer| {
+                let plan = InsertTextPlan::from_lisp_string(
+                    text,
+                    buffer.get_multibyte(),
+                    range.start_anchor(),
+                    InsertMarkerPlacement::AfterMarkers,
+                    InsertMarkerAdjustment::ByInsertionType,
+                );
+                let edit = plan.edit();
+                let _ = buffer.execute_insert_text_plan(plan);
+                Some(SharedTextEditOutcome::edited(
+                    (),
+                    SharedTextEditMetadata::Insert(edit),
+                ))
+            });
         }
 
         self.execute_shared_text_edit(id, |buffer| {

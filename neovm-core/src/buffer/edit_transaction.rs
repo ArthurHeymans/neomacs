@@ -232,9 +232,8 @@ impl Buffer {
         let old_range = plan.old_range();
 
         if old_range.is_empty() {
-            self.goto_emacs_byte_pos(old_range.byte_start());
             let insertion_plan = plan.into_insert_plan(
-                self.point_anchor(),
+                old_range.start_anchor(),
                 InsertMarkerPlacement::AfterMarkers,
                 InsertMarkerAdjustment::ByInsertionType,
             );
