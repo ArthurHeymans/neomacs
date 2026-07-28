@@ -831,8 +831,10 @@ pub const ANYBAR_MELPA_PIN: (&str, &str) = ("anybar", "20160816.1421");
 /// The exact Anyins package selected by the comprehensive API parity corpus.
 pub const ANYINS_MELPA_PIN: (&str, &str) = ("anyins", "20131229.1041");
 
-/// The exact anzu package selected by the comprehensive search and replace
-/// parity corpus.
+/// The exact Anzu package selected by the practical incremental-search,
+/// scoped-rename, selective-replacement, and global-mode parity corpus. MELPA
+/// built this archive from upstream commit
+/// `bc3a0032bb6aa7f5886f10460cd53eb7b8b020af`.
 pub const ANZU_MELPA_PIN: (&str, &str) = ("anzu", "20240929.201");
 
 /// The exact aozora-view package selected by the practical reading, bookmark,
