@@ -1,13 +1,9 @@
 use std::time::Duration;
 
-use crate::{ARJEN_GREY_THEME_MELPA_PIN, CachedMelpaOracle};
+use crate::{ARJEN_GREY_THEME_MELPA_PIN, CachedMelpaOracle, HELM_MELPA_PIN};
 use expect_test::Expect;
 
-mod faces;
-mod lifecycle;
-mod practical;
-mod registry;
-mod variables;
+mod workflows;
 
 const ARJEN_GREY_THEME_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -58,4 +54,18 @@ pub(crate) fn assert_arjen_grey_theme_autoload_parity(elisp_form: &str, expected
         elisp_form,
         expected,
     );
+}
+
+pub(crate) fn assert_arjen_grey_theme_with_helm_parity(elisp_form: &str, expected: Expect) {
+    let name = current_test_name();
+    let report = CachedMelpaOracle::new(ARJEN_GREY_THEME_MELPA_PIN, "arjen-grey-theme.el")
+        .expect("prepare pinned arjen-grey-theme source below ./tmp")
+        .with_melpa_dependency(HELM_MELPA_PIN)
+        .expect("prepare pinned Helm dependency below ./tmp")
+        .with_timeout(ARJEN_GREY_THEME_TEST_TIMEOUT)
+        .run_value(&name, elisp_form)
+        .unwrap_or_else(|error| {
+            panic!("arjen-grey-theme Helm parity case `{name}` failed:\n{error}")
+        });
+    expected.assert_eq(&report.gnu_emacs.to_string());
 }

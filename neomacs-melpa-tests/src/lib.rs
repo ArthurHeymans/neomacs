@@ -995,8 +995,10 @@ pub const ARDUINO_CLI_MODE_MELPA_PIN: (&str, &str) = ("arduino-cli-mode", "20260
 /// tabulated-list, and command workflow parity corpus.
 pub const ARIA2_MELPA_PIN: (&str, &str) = ("aria2", "20230314.2131");
 
-/// The exact Arjen Grey Theme package selected by the comprehensive theme
-/// definition, rendering, and lifecycle parity corpus.
+/// The exact Arjen Grey Theme package selected by the practical editor,
+/// installed-loading, Helm selection, stacking, and restoration workflow
+/// parity corpus. MELPA built this archive from upstream commit
+/// `4cd0be72b65d42390e2105cfdaa408a1ead8d8d1`.
 pub const ARJEN_GREY_THEME_MELPA_PIN: (&str, &str) = ("arjen-grey-theme", "20170522.2047");
 
 /// The exact Ariadne package selected by the comprehensive protocol,
