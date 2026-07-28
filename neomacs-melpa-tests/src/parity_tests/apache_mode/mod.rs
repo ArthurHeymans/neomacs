@@ -3,57 +3,54 @@ use std::time::Duration;
 use crate::{APACHE_MODE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod font_lock;
-mod indentation;
-mod mode;
-mod navigation;
-mod registry;
+mod workflows;
 
 const APACHE_MODE_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 const APACHE_MODE_TEST_PRELUDE: &str = r##"
-(require 'cl-lib)
-
-(defvar apache-mode-test-events nil)
-
-(defun apache-mode-test-face-at
-    (needle &optional occurrence)
+(defun neomacs-apache-test-face-at (needle)
   (save-excursion
     (let ((case-fold-search nil))
       (goto-char (point-min))
-      (dotimes (_ (or occurrence 1))
-        (search-forward needle))
-      (get-text-property
-       (- (point) (length needle))
-       'face))))
+      (search-forward needle)
+      (get-text-property (match-beginning 0) 'face))))
 
-(defun apache-mode-test-point-at
-    (needle &optional offset)
-  (let ((case-fold-search nil))
-    (goto-char (point-min))
-    (search-forward needle)
-    (+ (- (point) (length needle))
-       (or offset 0))))
-
-(defun apache-mode-test-line-indents ()
+(defun neomacs-apache-test-lines ()
   (save-excursion
     (goto-char (point-min))
-    (let (result)
-      (while (not (eobp))
-        (setq result
-              (append
-               result
-               (list
-                (list
-                 (buffer-substring-no-properties
-                  (line-beginning-position)
-                  (line-end-position))
-                 (current-indentation)))))
+    (let (lines)
+      (while
+          (< (point) (point-max))
+        (push
+         (list
+          (line-number-at-pos)
+          (current-indentation)
+          (buffer-substring-no-properties
+           (line-beginning-position)
+           (line-end-position)))
+         lines)
         (forward-line 1))
-      result)))
+      (nreverse lines))))
+
+(defun neomacs-apache-test-file-string (file)
+  (with-temp-buffer
+    (insert-file-contents-literally file)
+    (buffer-string)))
+
+(defun neomacs-apache-test-cleanup (root)
+  (dolist (buffer (buffer-list))
+    (let ((file (buffer-file-name buffer)))
+      (when
+          (and file (string-prefix-p root file))
+        (with-current-buffer buffer
+          (set-buffer-modified-p nil))
+        (kill-buffer buffer))))
+  (when
+      (file-exists-p root)
+    (delete-directory root t)))
 "##;
 
-fn apache_mode_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(APACHE_MODE_MELPA_PIN, source_file)
+fn apache_mode_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(APACHE_MODE_MELPA_PIN, "apache-mode.el")
         .expect("prepare pinned apache-mode source below ./tmp")
         .with_prelude(APACHE_MODE_TEST_PRELUDE)
         .with_timeout(APACHE_MODE_TEST_TIMEOUT)
@@ -67,18 +64,10 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_apache_mode_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_apache_mode_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = apache_mode_oracle(source_file)
+    let report = apache_mode_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("apache-mode parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_apache_mode_parity(elisp_form: &str, expected: Expect) {
-    assert_apache_mode_source_parity("apache-mode.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_apache_mode_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_apache_mode_source_parity("apache-mode-autoloads.el", elisp_form, expected);
 }
