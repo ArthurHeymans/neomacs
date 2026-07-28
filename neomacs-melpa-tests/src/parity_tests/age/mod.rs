@@ -3,12 +3,7 @@ use std::time::Duration;
 use crate::{AGE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod configuration;
-mod context;
-mod decoding;
-mod file_handler;
-mod process;
-mod registry;
+mod workflows;
 
 const AGE_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
