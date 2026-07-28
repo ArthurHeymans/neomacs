@@ -1,12 +1,9 @@
 use std::time::Duration;
 
 use crate::{ARCHIVE_PHAR_MELPA_PIN, CachedMelpaOracle};
-use expect_test::{Expect, expect};
+use expect_test::Expect;
 
-mod detection;
-mod extraction;
-mod registry;
-mod summary;
+mod workflows;
 
 const ARCHIVE_PHAR_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -30,16 +27,4 @@ pub(crate) fn assert_archive_phar_parity(elisp_form: &str, expected: Expect) {
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("archive-phar parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-#[test]
-fn archive_phar_harness_contract_reports_expected_package_identity() {
-    let elisp_form = r##"(list
-         (featurep 'archive-phar)
-         (locate-library "archive-phar")
-         (package-installed-p 'archive-phar '(20221009 2129)))"##;
-    let expect = expect![[
-        r#"OK (t "[ORACLE-WORKSPACE]/tmp/melpa/package-cache/archive-phar/20221009.2129/home/.emacs.d/elpa/archive-phar-20221009.2129/archive-phar.el" t)"#
-    ]];
-    assert_archive_phar_parity(elisp_form, expect);
 }
