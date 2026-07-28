@@ -1,19 +1,172 @@
 use std::time::Duration;
 
-use crate::{ANDROID_ENV_MELPA_PIN, CachedMelpaOracle};
+use crate::{ANDROID_ENV_MELPA_PIN, CachedMelpaOracle, S_MELPA_PIN};
 use expect_test::Expect;
 
-mod android;
-mod gradle;
-mod logcat;
-mod refactor;
-mod registry;
+mod workflows;
 
 const ANDROID_ENV_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
-fn android_env_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ANDROID_ENV_MELPA_PIN, source_file)
+/// android-env drives gradle, adb and avdmanager, none of which exist on this
+/// host.  It never links against them though: every call is a command line it
+/// builds and hands to a shell, at a path it computes from `ANDROID_SDK_ROOT'
+/// or from `locate-dominating-file'.  So the boundary is an argv, and the
+/// workflows put a real executable where the package looks for one --
+/// recording its arguments, printing realistic output and exiting with a
+/// realistic status -- while the package's own path building, quoting,
+/// process handling and output parsing all run for real.
+///
+/// `android-env-refactor' and `android-env-recursive-refactor' need no
+/// external tool at all and work on real files in the sandbox.
+const ANDROID_ENV_TEST_PRELUDE: &str = r##"
+(require 'cl-lib)
+
+(defun aenv-test-plain (value)
+  (cond ((stringp value) (substring-no-properties value))
+        ((consp value)
+         (cons (aenv-test-plain (car value)) (aenv-test-plain (cdr value))))
+        (t value)))
+
+(defun aenv-test-path (name)
+  (expand-file-name name (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
+
+(defun aenv-test-write (name text &optional executable)
+  "Write TEXT to NAME below the sandbox and return its absolute path."
+  (let ((path (aenv-test-path name)))
+    (make-directory (file-name-directory path) t)
+    (with-temp-buffer
+      (insert text)
+      (write-region (point-min) (point-max) path nil 'silent))
+    (when executable (set-file-modes path #o755))
+    path))
+
+(defun aenv-test-read (path)
+  (if (file-exists-p path)
+      (with-temp-buffer (insert-file-contents path) (buffer-string))
+    ""))
+
+(defvar aenv-test-argv-log nil
+  "Absolute path the stand-in executables append their argv to.")
+
+(defun aenv-test-install-sdk ()
+  "Install a recording adb and avdmanager where android-env looks for them.
+Return the SDK root, which is also left in `ANDROID_SDK_ROOT'."
+  (setq aenv-test-argv-log (aenv-test-path "sdk/argv.log"))
+  (aenv-test-write
+   "sdk/platform-tools/adb"
+   (concat "#!/bin/sh\n"
+           "{ printf 'adb'; for a in \"$@\"; do printf ' [%s]' \"$a\"; done;"
+           " printf '\\n'; } >> '" aenv-test-argv-log "'\n"
+           "case \"$1 $2 $3\" in\n"
+           "  'shell ps '*) printf '  PID CMD\\n"
+           "  911 com.example.checkout\\n"
+           " 1024 com.example.tools:remote\\n' ;;\n"
+           "  'logcat -c '*) printf 'logcat cleared\\n' ;;\n"
+           "  'logcat -b crash') printf"
+           " 'F/libc( 911): Fatal signal 11 in tid 911\\n' ;;\n"
+           "  'logcat *:S Checkout') printf"
+           " 'I/Checkout( 911): charge accepted\\n' ;;\n"
+           "  'logcat  ') printf 'I/Checkout( 911): charge accepted\\n"
+           "D/Gateway( 911): retrying\\n"
+           "I/Sync( 1024): idle\\n' ;;\n"
+           "  *) printf 'ok\\n' ;;\n"
+           "esac\n")
+   t)
+  (aenv-test-write
+   "sdk/tools/bin/avdmanager"
+   (concat "#!/bin/sh\n"
+           "{ printf 'avdmanager'; for a in \"$@\"; do printf ' [%s]' \"$a\";"
+           " done; printf '\\n'; } >> '" aenv-test-argv-log "'\n"
+           "printf 'Pixel_6_API_33\\000Pixel_Tablet_API_34\\000"
+           "Nexus_5X_API_29\\000'\n")
+   t)
+  ;; `android-env-emulator-command' is a defcustom precisely so the emulator
+  ;; can live somewhere other than PATH, so point it at a real script too.
+  (setq android-env-emulator-command
+        (aenv-test-write
+         "sdk/emulator/emulator"
+         (concat "#!/bin/sh\n"
+                 "{ printf 'emulator'; for a in \"$@\"; do"
+                 " printf ' [%s]' \"$a\"; done; printf '\\n'; } >> '"
+                 aenv-test-argv-log "'\n"
+                 "printf 'boot completed: %s\\n' \"$1\"\n")
+         t))
+  (setenv "ANDROID_SDK_ROOT" (aenv-test-path "sdk"))
+  (aenv-test-path "sdk"))
+
+(defun aenv-test-argv ()
+  "Return each recorded command line, oldest first."
+  (split-string (aenv-test-read aenv-test-argv-log) "\n" t))
+
+(defun aenv-test-await (buffer)
+  "Wait for BUFFER's process to finish, then return how the wait ended."
+  (let ((waited 0))
+    (while (and (< waited 600)
+                (get-buffer-process buffer)
+                (process-live-p (get-buffer-process buffer)))
+      (accept-process-output nil 0.05)
+      (setq waited (1+ waited)))
+    (if (< waited 600) :finished :timed-out)))
+
+(defun aenv-test-settle (buffer)
+  "Wait for BUFFER's process to die and its output and sentinel to land.
+A process that has just exited still has output queued and its sentinel
+still to run, so waiting only for `process-live-p' captures a buffer that
+is about to change -- and leaves the sentinel's line to appear in
+whatever the next command puts in the buffer."
+  (aenv-test-await buffer)
+  (let ((stable 0) (previous nil) (rounds 0))
+    (while (and (< rounds 600) (< stable 5))
+      (accept-process-output nil 0.02)
+      (let ((now (with-current-buffer buffer (buffer-string))))
+        (setq stable (if (equal now previous) (1+ stable) 0))
+        (setq previous now))
+      (setq rounds (1+ rounds)))
+    (if (< rounds 600) :settled :timed-out)))
+
+(defun aenv-test-compilation-text (buffer)
+  "Return BUFFER's text with the wall-clock parts replaced.
+`compilation-start' stamps a start time and a duration into the buffer;
+everything else about the run is deterministic."
+  (let ((text (with-current-buffer buffer
+                (buffer-substring-no-properties (point-min) (point-max)))))
+    (setq text (replace-regexp-in-string
+                "started at .*$" "started at <TIME>" text))
+    (setq text (replace-regexp-in-string
+                "\\(finished\\|exited abnormally with code [0-9]+\\) at .*$"
+                "\\1 at <TIME>" text))
+    text))
+
+(defun aenv-test-locations (buffer)
+  "Walk BUFFER's compilation errors and return where each one points."
+  (with-current-buffer buffer
+    (goto-char (point-min))
+    (let (locations (done nil))
+      (while (not done)
+        (condition-case nil
+            (progn
+              (compilation-next-error 1)
+              (let* ((message (get-text-property (point) 'compilation-message))
+                     (loc (and message (compilation--message->loc message))))
+                (setq locations
+                      (append locations
+                              (list (list :file
+                                          (aenv-test-plain
+                                           (caar (compilation--loc->file-struct
+                                                  loc)))
+                                          :line (compilation--loc->line loc)
+                                          :column
+                                          (compilation--loc->col loc)))))))
+          (error (setq done t))))
+      locations)))
+"##;
+
+fn android_env_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ANDROID_ENV_MELPA_PIN, "android-env.el")
         .expect("prepare pinned android-env source below ./tmp")
+        .with_melpa_dependency(S_MELPA_PIN)
+        .expect("prepare pinned s source below ./tmp")
+        .with_prelude(ANDROID_ENV_TEST_PRELUDE)
         .with_timeout(ANDROID_ENV_TEST_TIMEOUT)
 }
 
@@ -25,33 +178,10 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_android_env_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_android_env_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = android_env_oracle(source_file)
+    let report = android_env_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("android-env parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_android_env_parity(elisp_form: &str, expected: Expect) {
-    assert_android_env_source_parity("android-env.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_android_env_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_android_env_source_parity("android-env-autoloads.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_android_env_hydra_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let prelude = r##"(progn
-  (defvar android-env-test-hydra-definition nil)
-  (defmacro defhydra (name properties &rest body)
-    `(setq android-env-test-hydra-definition
-           ',(list name properties body)))
-  (provide 'hydra))"##;
-    let report = android_env_oracle("android-env.el")
-        .with_prelude(prelude)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("android-env hydra parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
 }
