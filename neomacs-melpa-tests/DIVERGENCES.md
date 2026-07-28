@@ -799,7 +799,119 @@ and only the translation is wrong: `M-<kp-6>` reaches no binding at all
 through a keypad key — numeric prefixes, `kp-add`, calc, any user binding on the
 keypad — is affected. Affects: `alt-codes` (1).
 
+## 30. `*Messages*` keeps a `...` progress line that GNU replaces
+
+GNU deletes the previous log line when the new message diverges from it *after* a
+`...` in the previous line — the near-universal `"Working..."` → `"Working...done"`
+progress idiom collapses to a single line. Neomacs logs both.
+
+```elisp
+(message "Analysing project for completion...")
+(message "Analysing project for completion...done")
+(with-current-buffer "*Messages*" (buffer-string))
+;; GNU     => "Analysing project for completion...done\n"
+;; Neomacs => "Analysing project for completion...\nAnalysing project for completion...done\n"
+```
+
+**Not general prefix collapsing**, which is what makes it easy to misdiagnose:
+`"Plain"` → `"Plain extended"` keeps both lines in *both* editors. The rule is
+specifically the `...`. The mechanism is `message_log_check_duplicate`
+(GNU `src/xdisp.c:12501`), which walks the two lines together tracking a
+`seen_dots` flag set once the previous line has had `...` behind it, and on the
+first differing byte returns that flag; a nonzero return makes `message_dolog`
+`del_range_both` the previous line.
+
+Neomacs has the *exact*-duplicate half of the same function — `"Same"` twice
+gives `"Same [2 times]"` in both editors — so what is missing is the `seen_dots`
+branch rather than the duplicate machinery.
+
+Blast radius is wide: `...`/`...done` is the standard Emacs progress idiom, so
+any workflow that asserts `*Messages*` content around a long operation sees an
+extra line. Affects: `anakondo` (1).
+
 ---
+
+## 31. `self-insert-command` never expands an abbrev
+
+`abbrev-mode` is on, the abbrev is in the buffer's local table, and
+`expand-abbrev` called directly expands it — but typing the character that
+should trigger the expansion just inserts it. GNU expands the word before
+point whenever the self-inserted character is not a word constituent, in
+`internal_self_insert` (`src/cmds.c`), which calls `Fexpand_abbrev` before
+inserting.
+
+```elisp
+(define-abbrev-table 'probe-abbrev-table '(("se" "SEQUENCE")))
+(with-temp-buffer
+  (setq local-abbrev-table probe-abbrev-table)
+  (abbrev-mode 1)
+  (insert "se")
+  (let ((last-command-event ?\s)) (call-interactively 'self-insert-command))
+  (buffer-string))
+;; GNU     => "SEQUENCE "
+;; Neomacs => "se "
+```
+
+Not a keyboard-macro artefact and not a display artefact: it fails identically
+whether the character arrives through `execute-kbd-macro` or through a direct
+`call-interactively`, and whether or not the buffer is shown in a window. SPC,
+`,` and RET all fail the same way. `(abbrev-expansion "se" probe-abbrev-table)`
+is `"SEQUENCE"` in both editors, so the table itself is correct — only the
+trigger is missing.
+
+Blast radius is every abbrev, which is the whole point of the feature: abbrev
+tables are how major modes offer keyword completion without a completion
+framework, and `abbrev-mode` is also what `skeleton`, `expand.el` and many
+language modes build on. Affects: `asn1-mode` (1).
+
+## 32. Backward `forward-comment` ignores a comment with a two-character ender
+
+Moving backward over a comment works for `;`-style and `/* */`-style comments,
+but not when the comment's *opening* characters also carry the comment-end
+flags 3 and 4 — the `--` of ASN.1, Ada, SQL, Lua and Haskell, where `--` both
+opens a comment and can close one. When such a comment is in fact terminated by
+a newline, Neomacs refuses to move back over it.
+
+```elisp
+(let ((table (make-syntax-table)))
+  (modify-syntax-entry ?-  ". 1234" table)   ; -- opens a comment and -- closes one
+  (modify-syntax-entry ?\n ">" table)        ; a newline closes one too
+  (with-temp-buffer
+    (set-syntax-table table)
+    (insert "AB\n-- C\nDE\n")
+    (goto-char 9)                            ; start of "DE", just past the comment
+    (list (forward-comment -100) (point))))
+;; GNU     => (nil 3)   ; skipped the comment, stopped before the newline at 3
+;; Neomacs => (nil 8)   ; stopped on the comment's closing newline
+```
+
+The flags are what matters, not the character class: `". 1234"` and `"w 1234"`
+both fail, and dropping the ender flags to `". 12"` makes both editors return
+`(nil 3)`. Forward motion is correct — `(goto-char 4) (forward-comment 100)`
+lands at 9 in both — so only the backward scan is affected. `syntax-ppss`
+agrees with GNU at every position in the buffer, including inside the comment,
+so the comment is being *parsed* correctly and only `forward-comment`'s
+backward walk mishandles it.
+
+The visible damage is indentation. Any SMIE-based mode calls
+`forward-comment` with a negative argument from its backward tokenizer, so a
+comment line makes the tokenizer stop inside the comment and report a word from
+the comment text as the previous token. `smie-indent-keyword` then computes a
+virtual indentation at a position inside the comment, `smie-indent-comment-inside`
+returns `noindent` from there, and that propagates out through
+`smie-indent-calculate`: the comment line and the line after it are left
+untouched at column 0. In asn1-mode:
+
+```elisp
+;; buffer: "Bestellung DEFINITIONS ::=\nBEGIN\n-- 1.2 Zustaende\nZustand ::= INTEGER\nEND\n"
+;; point at the indentation of line 3
+(smie-indent-calculate)
+;; GNU     => 0
+;; Neomacs => noindent
+```
+
+Affects: `asn1-mode` (1).
+
 
 ## Behaviour that is NOT a divergence
 
