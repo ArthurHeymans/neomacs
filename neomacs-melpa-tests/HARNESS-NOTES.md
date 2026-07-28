@@ -194,6 +194,22 @@ added".** If the command re-sorts, the head is whichever entry sorts first.
 workflows agreed with themselves and reported the same alarm three times. Look
 the record up by a field you set.
 
+**SILENT — assert at the granularity that separates the mechanisms you are
+claiming, not at the granularity of the observable.** `all-the-icons` reaches
+`icon-for-file` or `icon-for-dir` depending on `file-directory-p`, and the two
+return the *same* codepoint 61462 for their respective fallbacks, differing only
+in `:family` and `:v-adjust`. A codepoint-only comparison therefore confirmed a
+wrong causal story — whole-string regexp matching in the wrong function —
+because it predicted the right observable for the wrong reason. Two agents held
+that story between them until the dispatcher was instrumented. Reading each text
+property separately is what would have caught it.
+
+**Instrument the dispatcher rather than inferring it from the source.** Advising
+both candidate entry points and reporting per input which one fires settled two
+wrong attributions that reading the code had not — the second being that a guard
+"short-circuits before the call", when the call is made three lines earlier and
+its result discarded.
+
 **If a measurement is not behaviour, do not pin it at all.** An amread-mode
 initial-delay assertion read 0 tenths in a probe and 17 under UPDATE_EXPECT on
 identical code, because the baseline is taken before the mode-enabling call
