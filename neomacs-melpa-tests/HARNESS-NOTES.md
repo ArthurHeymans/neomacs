@@ -69,6 +69,17 @@ only, so two runs disagree on `...-YwrfNK` vs `...-IAgVWA` and it reads as a
 divergence. Any suite whose assertions pass through xref, project.el, or
 `file-relative-name` must normalise the workspace-relative spelling too.
 
+**SILENT — scrub a string as a string, before anything formats or prints it.**
+A normaliser applied to the *printed* form of a value silently matches nothing,
+and **fails open rather than closed**: the volatile data stays in the
+expectation. assess's explanation carries a `diff -c` header with a generated
+filename and a modification time; the scrubber ran after `(format "%S" …)`, where
+`print-escape-control-characters` had turned the header's TAB into the two
+characters `\011`, so a regexp looking for a real tab matched nothing. The test
+passed on the run that created it and was red on the next one, with two
+timestamps baked in. Same family as the `#N=` back-reference entry — the
+printer's representation is not the value.
+
 **Transcribe expectations from a harness run, not a raw probe.** The oracle's
 normaliser breaks string identity, so probe output containing `#1=` sharing
 markers never matches. Applies whenever a value repeats.
