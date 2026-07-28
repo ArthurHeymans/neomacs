@@ -265,6 +265,13 @@ you asked for is present. Worth knowing that an agent holding the note below
 still got this wrong, because "the output I asked for is here" feels like the
 natural stopping condition.
 
+**`flymake-running-backends` is not a completion signal.** It stays non-nil long
+after the diagnostics have landed, so a wait loop keyed on it runs to its cap
+every time and tells you nothing — slow *and* uninformative. Wait for the
+diagnostic list to appear and then stop changing. Same shape as the process and
+`compile` notes: the state that sounds like "still working" is not the state that
+means "not finished".
+
 **SILENT — waiting for the process to die is not waiting for its output.**
 `process-live-p` goes nil while the last output and the sentinel's own line are
 still queued, so a capture taken then sees a buffer that is about to change —
@@ -521,6 +528,24 @@ The fix is structural, not more careful counting — locate by content
 (`ahk-test-faces-where "::btw::"`), so the label and the subject are the same
 string and cannot drift apart. Where you can, do not compute a fixture position
 at all.
+
+**The recurring species: a repair or transform whose output is wrong in a way
+the surrounding machinery cannot notice.** Three packages running, and it is the
+strongest evidence this campaign has produced for why workflows assert the
+*product* rather than that the operation ran:
+
+| package | what completes normally | what is actually wrong |
+|---|---|---|
+| `angular-snippets` | `yas-expand` returns, snippet inserted | `<div ng-hide=""class="card">` — attributes jammed, invalid markup |
+| `attrap` (footer) | repair applies, file byte-compiles | checkdoc's message carries `’`, so the file provides a symbol named `’sample`, not the feature `sample` |
+| `attrap` (LaTeX) | fixer runs, buffer edited | it edits while only *listing* options, returns none, and the user is told "No fixer applies" **after** their buffer changed |
+
+In every case the package's own control flow completes without error, so nothing
+in the call, the return value, or the absence of a signal can catch it. Only the
+resulting text — or the resulting *symbol* — can. When a package's job is to
+produce or change something, the assertion must read what it produced, from the
+buffer, after the public command. A test that checks the operation ran is
+compatible with all three of these.
 
 **SILENT — a helper whose effect is invisible in its caller's output must be
 exercised on both sides.** Every angular-snippets html snippet ends by calling
