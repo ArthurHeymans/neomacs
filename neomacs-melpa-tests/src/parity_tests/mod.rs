@@ -216,6 +216,7 @@ mod atom_dark_theme;
 mod atom_one_dark_theme;
 mod atomic_chrome;
 mod audacious;
+mod audio_notes_mode;
 mod bind_key;
 mod compat;
 mod dash;
