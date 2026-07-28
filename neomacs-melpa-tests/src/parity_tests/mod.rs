@@ -218,6 +218,7 @@ mod atomic_chrome;
 mod attrap;
 mod audacious;
 mod audio_notes_mode;
+mod aurel;
 mod bind_key;
 mod compat;
 mod dash;

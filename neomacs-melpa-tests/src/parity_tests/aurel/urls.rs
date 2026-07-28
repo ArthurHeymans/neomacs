@@ -1,0 +1,213 @@
+use expect_test::expect;
+
+use super::assert_aurel_parity;
+
+#[test]
+fn aurel_form_encodes_mixed_field_values_in_order() {
+    let elisp_form = r##"(aurel-get-fields-string
+         '(("plain" . "value")
+           ("space" . "a b")
+           ("symbol" . symbolic)
+           ("number" . 42)
+           ("nothing")
+           ("unicode" . "λ/β?")))"##;
+    let expect = expect![[
+        r#"OK "plain=value&space=a%20b&symbol=symbolic&number=42&nothing=nil&unicode=%CE%BB%2F%CE%B2%3F""#
+    ]];
+    assert_aurel_parity(elisp_form, expect);
+}
+
+#[test]
+fn aurel_rpc_builder_covers_info_search_and_invalid_methods() {
+    let elisp_form = r##"(list
+         (aurel-get-rpc-url
+          "info"
+          '(("arg[]" . "ripgrep")
+            ("arg[]" . "emacs-git")))
+         (aurel-get-rpc-url
+          "search"
+          '(("by" . "name-desc")
+            ("arg" . "editor")))
+         (aurel-test-error-data
+          (lambda ()
+            (aurel-get-rpc-url
+             "delete"
+             '(("arg" . "unsafe"))))))"##;
+    let expect = expect![[
+        r#"OK ("https://aur.archlinux.org/rpc/v5/info?arg[]=ripgrep&arg[]=emacs-git" "https://aur.archlinux.org/rpc/v5/search/editor?by=name-desc" (:error error ("Unknown search type: delete")))"#
+    ]];
+    assert_aurel_parity(elisp_form, expect);
+}
+
+#[test]
+fn aurel_package_info_url_preserves_repeated_arguments_and_escaping() {
+    let elisp_form = r##"(mapcar
+         (lambda (names)
+           (apply
+            #'aurel-get-package-info-url
+            names))
+         '(nil
+           ("one")
+           ("one" "two words" "c++")))"##;
+    let expect = expect![[
+        r#"OK ("https://aur.archlinux.org/rpc/v5/info?" "https://aur.archlinux.org/rpc/v5/info?arg[]=one" "https://aur.archlinux.org/rpc/v5/info?arg[]=one&arg[]=two%20words&arg[]=c%2B%2B")"#
+    ]];
+    assert_aurel_parity(elisp_form, expect);
+}
+
+#[test]
+fn aurel_search_url_helpers_select_exact_rpc_fields() {
+    let elisp_form = r##"(list
+         (aurel-get-package-search-url "common lisp")
+         (aurel-get-package-search-url "clang++" "name")
+         (aurel-get-package-name-search-url "emacs")
+         (aurel-get-maintainer-search-url "alice@example")
+         (aurel-get-maintainer-account-url "Alice Smith")
+         (aurel-get-aur-package-url "emacs-git")
+         (aurel-get-package-base-url "emacs")
+         (aurel-get-package-action-url "emacs" "vote")
+         (aurel-get-package-git-url "emacs-git")
+         (aurel-get-package-cgit-url "emacs-git"))"##;
+    let expect = expect![[
+        r#"OK ("https://aur.archlinux.org/rpc/v5/search/commonlisp?by=name-desc" "https://aur.archlinux.org/rpc/v5/search/clang++?by=name" "https://aur.archlinux.org/rpc/v5/search/emacs?by=name" "https://aur.archlinux.org/rpc/v5/search/alice@example?by=maintainer" "https://aur.archlinux.org/account/AliceSmith" "https://aur.archlinux.org/packages/emacs-git" "https://aur.archlinux.org/pkgbase/emacs" "https://aur.archlinux.org/pkgbase/emacs/vote" "https://aur.archlinux.org/emacs-git.git" "https://aur.archlinux.org/cgit/aur.git/?h=emacs-git")"#
+    ]];
+    assert_aurel_parity(elisp_form, expect);
+}
+
+#[test]
+fn aurel_search_dispatch_forwards_each_public_search_contract() {
+    let elisp_form = r##"(let (calls)
+         (cl-letf
+             (((symbol-function
+                'aurel-get-packages-by-name)
+               (lambda (&rest values)
+                 (push
+                  (cons :name values)
+                  calls)
+                 :by-name))
+              ((symbol-function
+                'aurel-get-packages-by-string)
+               (lambda (&rest values)
+                 (push
+                  (cons :string values)
+                  calls)
+                 :by-string))
+              ((symbol-function
+                'aurel-get-packages-by-name-string)
+               (lambda (&rest values)
+                 (push
+                  (cons :name-string values)
+                  calls)
+                 :by-name-string))
+              ((symbol-function
+                'aurel-get-packages-by-maintainer)
+               (lambda (&rest values)
+                 (push
+                  (cons :maintainer values)
+                  calls)
+                 :by-maintainer)))
+           (list
+            (aurel-search-packages
+             'name
+             "one"
+             "two")
+            (aurel-search-packages
+             'string
+             "long phrase"
+             "short")
+            (aurel-search-packages
+             'name-string
+             "emacs")
+            (aurel-search-packages
+             'maintainer
+             "alice")
+            (aurel-test-error-data
+             (lambda ()
+               (aurel-search-packages
+                'unsupported
+                "value")))
+            (nreverse calls))))"##;
+    let expect = expect![[
+        r#"OK (:by-name :by-string :by-name-string :by-maintainer (:error error ("Wrong search type ‘unsupported’")) ((:name "one" "two") (:string "long phrase" "short") (:name-string "emacs") (:maintainer "alice")))"#
+    ]];
+    assert_aurel_parity(elisp_form, expect);
+}
+
+#[test]
+fn aurel_public_search_commands_forward_real_user_inputs() {
+    let elisp_form = r##"(let (calls)
+         (cl-letf
+             (((symbol-function
+                'aurel-search-show-packages)
+               (lambda (&rest arguments)
+                 (push arguments calls)
+                 (cons :displayed arguments)))
+              ((symbol-function
+                'aurel-get-foreign-packages)
+               (lambda ()
+                 '("local-one"
+                   "local-two"))))
+           (list
+            (aurel-package-info "exact-package")
+            (aurel-package-search
+             "font \"programming language\" terminal")
+            (aurel-package-search-by-name
+             "emacs")
+            (aurel-maintainer-search
+             "alice")
+            (aurel-installed-packages)
+            (nreverse calls))))"##;
+    let expect = expect![[
+        r#"OK ((:displayed . #1=(name "exact-package")) (:displayed . #2=(string "font" "programming language" "terminal")) (:displayed . #3=(name-string "emacs")) (:displayed . #4=(maintainer "alice")) (:displayed . #5=(name "local-one" "local-two")) (#1# #2# #3# #4# #5#))"#
+    ]];
+    assert_aurel_parity(elisp_form, expect);
+}
+
+#[test]
+fn aurel_multi_string_search_uses_longest_term_and_filters_the_rest() {
+    let elisp_form = r##"(let (captured)
+         (cl-letf
+             (((symbol-function
+                'aurel-receive-packages-info)
+               (lambda (url)
+                 (setq captured
+                       (list
+                        url
+                        aurel-filter-params
+                        aurel-filter-strings))
+                 :received)))
+           (list
+            (aurel-get-packages-by-string
+             "tiny"
+             "longest phrase"
+             "medium")
+            captured)))"##;
+    let expect = expect![[
+        r#"OK (:received ("https://aur.archlinux.org/rpc/v5/search/longestphrase?by=name-desc" (name description) ("medium" "tiny")))"#
+    ]];
+    assert_aurel_parity(elisp_form, expect);
+}
+
+#[test]
+fn aurel_get_package_wrappers_construct_url_then_receive_once() {
+    let elisp_form = r##"(let (calls)
+         (cl-letf
+             (((symbol-function
+                'aurel-receive-packages-info)
+               (lambda (url)
+                 (push url calls)
+                 (list :received url))))
+           (list
+            (aurel-get-packages-by-name
+             "one"
+             "two")
+            (aurel-get-packages-by-name-string
+             "editor")
+            (aurel-get-packages-by-maintainer
+             "alice")
+            (nreverse calls))))"##;
+    let expect = expect![[
+        r#"OK ((:received "https://aur.archlinux.org/rpc/v5/info?arg[]=one&arg[]=two") (:received "https://aur.archlinux.org/rpc/v5/search/editor?by=name") (:received "https://aur.archlinux.org/rpc/v5/search/alice?by=maintainer") ("https://aur.archlinux.org/rpc/v5/info?arg[]=one&arg[]=two" "https://aur.archlinux.org/rpc/v5/search/editor?by=name" "https://aur.archlinux.org/rpc/v5/search/alice?by=maintainer"))"#
+    ]];
+    assert_aurel_parity(elisp_form, expect);
+}

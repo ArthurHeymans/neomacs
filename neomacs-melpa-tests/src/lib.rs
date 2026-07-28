@@ -959,6 +959,12 @@ pub const ATL_MARKUP_MELPA_PIN: (&str, &str) = ("atl-markup", "20240101.933");
 /// `f1b077be7e414f457191d72dcf5eedb4371f9309`.
 pub const ATOMIC_CHROME_MELPA_PIN: (&str, &str) = ("atomic-chrome", "20230304.112");
 
+/// The exact aurel package selected by the comprehensive AUR URL,
+/// parsing, filtering, package-management, and UI workflow parity corpus.
+/// MELPA built this archive from upstream commit
+/// `c571cc44ea3b9aa96399056bff22919efffbbb06`.
+pub const AUREL_MELPA_PIN: (&str, &str) = ("aurel", "20260429.458");
+
 /// The exact audacious package selected by the comprehensive command,
 /// playlist, song-selection, metadata, and end-to-end playback parity corpus.
 /// MELPA built this archive from upstream commit
@@ -975,6 +981,10 @@ pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
 /// The exact Bind-Key release selected from GNU ELPA by the comprehensive API
 /// parity corpus.
 pub const BIND_KEY_GNU_ELPA_PIN: (&str, &str) = ("bind-key", "2.4.1");
+
+/// The exact BUI package selected as aurel's runtime buffer-interface
+/// dependency.
+pub const BUI_MELPA_PIN: (&str, &str) = ("bui", "20260502.730");
 
 /// The exact Compat release selected from GNU ELPA by the comprehensive API
 /// parity corpus.
