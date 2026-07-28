@@ -3,18 +3,138 @@ use std::time::Duration;
 use crate::{ADDRESSBOOK_BOOKMARK_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod completion;
-mod display;
-mod mail;
-mod model;
-mod records;
-mod registry;
+mod workflows;
 
 const ADDRESSBOOK_BOOKMARK_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
-fn addressbook_bookmark_oracle(source_file: &str) -> CachedMelpaOracle {
-    CachedMelpaOracle::new(ADDRESSBOOK_BOOKMARK_MELPA_PIN, source_file)
+/// addressbook-bookmark keeps contacts in Emacs's own bookmark machinery, so
+/// these workflows use real bookmark files below the per-case sandbox and let
+/// the package write, render, edit and reload them for real.
+///
+/// The one faked boundary is the human at the keyboard: every contact field is
+/// read with `read-string' and every confirmation with `y-or-n-p', so
+/// `ab-test-with-answers' hands those two a scripted queue and records what was
+/// asked - including the initial input, which is how the edit command offers
+/// the current value of each field.  Contact data is deliberately not ASCII,
+/// and one workflow puts the bookmark file itself under an accented name, so
+/// that a file-name or coding-system defect shows up as what it would be for a
+/// user: a corrupted address book.
+const ADDRESSBOOK_BOOKMARK_TEST_PRELUDE: &str = r##"(require 'cl-lib)
+
+(defvar ab-test-answers nil
+  "Queue of answers the scripted minibuffer hands out, in order.")
+
+(defvar ab-test-prompts nil
+  "Every prompt the package asked, in order.")
+
+(defmacro ab-test-with-answers (answers &rest body)
+  "Run BODY answering each `read-string' prompt from ANSWERS.
+The human at the keyboard is the one boundary these workflows fake:
+the package reads every contact field with `read-string' and asks to
+continue with `y-or-n-p'."
+  `(let ((ab-test-answers ,answers)
+         (ab-test-prompts nil))
+     (cl-letf (((symbol-function 'read-string)
+                (lambda (prompt &optional initial &rest _)
+                  (push (cons prompt (or initial "")) ab-test-prompts)
+                  (or (pop ab-test-answers) "")))
+               ((symbol-function 'y-or-n-p)
+                (lambda (prompt)
+                  (push (cons prompt :y-or-n-p) ab-test-prompts)
+                  (equal (pop ab-test-answers) "yes"))))
+       ,@body)))
+
+(defun ab-test-asked ()
+  "Return the prompts the package asked, oldest first."
+  (reverse ab-test-prompts))
+
+(defun ab-test-path (name)
+  (expand-file-name name (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
+
+(defconst ab-test-zoe
+  '("Zoë Müller"                        ; Name
+    "Freunde" ""                        ; Group (read until empty)
+    "zoe@example.org" "z.mueller@example.net" "" ; Mail
+    "+49 221 4711" ""                   ; Phone
+    "https://zoë.example" ""            ; Web
+    "Hauptstraße 7"                     ; Street
+    "Köln"                              ; City
+    "NRW"                               ; State
+    "50667"                             ; Zipcode
+    "Deutschland"                       ; Country
+    "Grüße aus Köln"                    ; Note
+    ""                                  ; Image path
+    "no")                               ; Add another contact?
+  "Scripted answers creating one contact whose data is not ASCII.")
+
+(defconst ab-test-ann
+  '("Ann Smith"                         ; Name
+    "Work" ""                           ; Group
+    "ann@example.com" ""                ; Mail
+    ""                                  ; Phone
+    ""                                  ; Web
+    "12 Main Street"                    ; Street
+    "Springfield"                       ; City
+    "IL"                                ; State
+    "62704"                             ; Zipcode
+    "USA"                               ; Country
+    ""                                  ; Note
+    ""                                  ; Image path
+    "no")                               ; Add another contact?
+  "Scripted answers creating a second, plain ASCII contact.")
+
+(defun ab-test-record (name)
+  "Return NAME's bookmark record with its fields in a stable order."
+  (let ((record (assoc name bookmark-alist)))
+    (and record
+         (cons (car record)
+               (sort (copy-sequence (cdr record))
+                     (lambda (a b) (string< (format "%S" a) (format "%S" b))))))))
+
+(defun ab-test-file-contents (path)
+  (with-temp-buffer
+    (insert-file-contents path)
+    (buffer-substring-no-properties (point-min) (point-max))))
+
+(defun ab-test-file-bytes (path)
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (insert-file-contents-literally path)
+    (buffer-string)))
+
+(defun ab-test-normalize (text)
+  "Replace the volatile parts of TEXT: the record's last-modified stamp."
+  (replace-regexp-in-string
+   "(last-modified [0-9 .]+)" "(last-modified <TIME>)" text t t))
+
+(defun ab-test-record-text (name)
+  "Return NAME's bookmark record printed, with volatile fields normalised."
+  (let ((record (ab-test-record name)))
+    (and record (ab-test-normalize (prin1-to-string record)))))
+
+(defconst ab-test-zoe-edit
+  '("Zoë Müller"                        ; Name
+    "Freunde"                           ; Group
+    "zoe@example.org"                   ; Mail (dropped the second address)
+    "+49 221 4711"                      ; Phone
+    "https://zoë.example"               ; Web
+    "Sendlinger Straße 1"               ; Street
+    "München"                           ; City
+    "Bayern"                            ; State
+    "80331"                             ; Zipcode
+    "Deutschland"                       ; Country
+    "Umgezogen"                         ; Note
+    ""                                  ; Image path
+    "yes")                              ; Save changes?
+  "Scripted answers for editing the first contact.
+`addressbook-bookmark-edit' offers the current value of each field as
+the minibuffer's initial input, which the recorded prompts show.")
+"##;
+
+fn addressbook_bookmark_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(ADDRESSBOOK_BOOKMARK_MELPA_PIN, "addressbook-bookmark.el")
         .expect("prepare pinned addressbook-bookmark source below ./tmp")
+        .with_prelude(ADDRESSBOOK_BOOKMARK_TEST_PRELUDE)
         .with_timeout(ADDRESSBOOK_BOOKMARK_TEST_TIMEOUT)
 }
 
@@ -26,28 +146,12 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_addressbook_bookmark_source_parity(
-    source_file: &str,
-    elisp_form: &str,
-    expected: Expect,
-) {
+pub(crate) fn assert_addressbook_bookmark_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = addressbook_bookmark_oracle(source_file)
+    let report = addressbook_bookmark_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| {
             panic!("addressbook-bookmark parity case `{name}` failed:\n{error}")
         });
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_addressbook_bookmark_parity(elisp_form: &str, expected: Expect) {
-    assert_addressbook_bookmark_source_parity("addressbook-bookmark.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_addressbook_bookmark_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_addressbook_bookmark_source_parity(
-        "addressbook-bookmark-autoloads.el",
-        elisp_form,
-        expected,
-    );
 }
