@@ -64,6 +64,17 @@ fn c_level_defsym_hook_names_are_in_global_obarray() {
 }
 
 #[test]
+fn erase_buffer_is_disabled_by_c_level_initialization() {
+    let mut ev = Context::new();
+
+    assert_eq!(
+        ev.eval_str("(get 'erase-buffer 'disabled)")
+            .expect("erase-buffer disabled property probe"),
+        Value::T
+    );
+}
+
+#[test]
 fn x_selection_hooks_match_gnu_xselect_startup_bindings() {
     let mut ev = Context::new();
     let result = ev

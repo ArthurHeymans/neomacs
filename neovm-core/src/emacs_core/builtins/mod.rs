@@ -867,6 +867,18 @@ fn defsubr_set_terminal_coding_system_internal(
 
 type BuiltinFn = fn(&mut super::eval::Context, Vec<Value>) -> EvalResult;
 
+/// Initial command-enablement policy installed with a builtin's function cell.
+///
+/// GNU C code can attach the `disabled` property in the same `syms_of_*`
+/// function that registers a subr.  Model that relationship in the builtin
+/// descriptor so the function and its startup policy cannot drift into
+/// unrelated initialization paths.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BuiltinCommandDefault {
+    Enabled,
+    Disabled,
+}
+
 #[derive(Clone, Copy)]
 struct BuiltinRegistration {
     name: &'static str,
@@ -874,6 +886,7 @@ struct BuiltinRegistration {
     min_args: u16,
     max_args: Option<u16>,
     no_eval_policy: BuiltinNoEvalPolicy,
+    command_default: BuiltinCommandDefault,
 }
 
 impl BuiltinRegistration {
@@ -889,6 +902,7 @@ impl BuiltinRegistration {
             min_args,
             max_args,
             no_eval_policy: BuiltinNoEvalPolicy::RequiresEvalState,
+            command_default: BuiltinCommandDefault::Enabled,
         }
     }
 
@@ -905,6 +919,23 @@ impl BuiltinRegistration {
             min_args,
             max_args,
             no_eval_policy: BuiltinNoEvalPolicy::Placeholder(placeholder),
+            command_default: BuiltinCommandDefault::Enabled,
+        }
+    }
+
+    const fn disabled_command(
+        name: &'static str,
+        func: BuiltinFn,
+        min_args: u16,
+        max_args: Option<u16>,
+    ) -> Self {
+        Self {
+            name,
+            func,
+            min_args,
+            max_args,
+            no_eval_policy: BuiltinNoEvalPolicy::Native,
+            command_default: BuiltinCommandDefault::Disabled,
         }
     }
 }
@@ -956,6 +987,13 @@ fn register_builtin(ctx: &mut super::eval::Context, builtin: BuiltinRegistration
         builtin.min_args,
         builtin.max_args,
     );
+    match builtin.command_default {
+        BuiltinCommandDefault::Enabled => {}
+        BuiltinCommandDefault::Disabled => ctx
+            .obarray_mut()
+            .put_property(builtin.name, "disabled", Value::T)
+            .expect("freshly registered builtin must have a valid property list"),
+    }
 }
 
 /// Register all builtins via defsubr — function pointer dispatch.
@@ -1442,11 +1480,14 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(1),
     );
-    ctx.defsubr(
-        "erase-buffer",
-        super::editfns::builtin_erase_buffer,
-        0,
-        Some(0),
+    register_builtin(
+        ctx,
+        BuiltinRegistration::disabled_command(
+            "erase-buffer",
+            super::editfns::builtin_erase_buffer,
+            0,
+            Some(0),
+        ),
     );
     ctx.defsubr("buffer-enable-undo", builtin_buffer_enable_undo, 0, Some(1));
     ctx.defsubr("buffer-size", builtin_buffer_size, 0, Some(1));

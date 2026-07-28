@@ -63,6 +63,15 @@ fn oracle_erase_buffer_clears() {
 }
 
 #[test]
+fn oracle_erase_buffer_starts_disabled() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect("(get 'erase-buffer 'disabled)", expect);
+    assert_ok_eq("t", &o, &n);
+}
+
+#[test]
 fn oracle_delete_char_removes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[r#""OK \"abe\"""#]];
