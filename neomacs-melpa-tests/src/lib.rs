@@ -1196,6 +1196,12 @@ pub const AUTO_MINOR_MODE_MELPA_PIN: (&str, &str) = ("auto-minor-mode", "2018052
 /// `206d4559762fe6ef9e91de8f9dc43e1e41c0f42c`.
 pub const AUTO_READ_ONLY_MELPA_PIN: (&str, &str) = ("auto-read-only", "20260521.1659");
 
+/// The exact auto-org-md package selected by the comprehensive export,
+/// hook-lifecycle, global-state, and practical Org-to-Markdown workflow parity
+/// corpus. MELPA built this archive from upstream commit
+/// `9318338bdb7fe8bd698d88f3af89b2d6413efdd2`.
+pub const AUTO_ORG_MD_MELPA_PIN: (&str, &str) = ("auto-org-md", "20180213.2343");
+
 /// The exact ht package selected as auto-highlight-symbol's hash-table
 /// dependency. MELPA built this archive from upstream commit
 /// `1c49aad1c820c86f7ee35bf9fff8429502f60fef`.

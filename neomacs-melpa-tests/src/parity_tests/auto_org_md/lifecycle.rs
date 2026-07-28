@@ -1,0 +1,262 @@
+use expect_test::expect;
+
+use super::assert_auto_org_md_parity;
+
+#[test]
+fn auto_org_md_on_installs_one_local_after_save_hook_and_message() {
+    let elisp_form = r##"(with-temp-buffer
+         (let (messages)
+           (cl-letf (((symbol-function 'message)
+                      (lambda (format-string &rest arguments)
+                        (push
+                         (apply #'format
+                                format-string
+                                arguments)
+                         messages))))
+             (list
+              (auto-org-md-on)
+              (local-variable-p 'after-save-hook)
+              (memq 'auto-org-md-export
+                    after-save-hook)
+              (auto-org-md-test-hook-count
+               'auto-org-md-export
+               after-save-hook)
+              (nreverse messages)))))"##;
+    let expect = expect![[r#"OK (#1=("auto-org-md-mode is on.") t (auto-org-md-export t) 1 #1#)"#]];
+    assert_auto_org_md_parity(elisp_form, expect);
+}
+
+#[test]
+fn auto_org_md_off_removes_local_hook_and_reports_message() {
+    let elisp_form = r##"(with-temp-buffer
+         (let (messages)
+           (add-hook
+            'after-save-hook
+            #'auto-org-md-export
+            nil t)
+           (cl-letf (((symbol-function 'message)
+                      (lambda (format-string &rest arguments)
+                        (push
+                         (apply #'format
+                                format-string
+                                arguments)
+                         messages))))
+             (list
+              (auto-org-md-off)
+              (local-variable-p 'after-save-hook)
+              (memq 'auto-org-md-export
+                    after-save-hook)
+              (nreverse messages)))))"##;
+    let expect = expect![[r#"OK (#1=("auto-org-md-mode is off.") nil nil #1#)"#]];
+    assert_auto_org_md_parity(elisp_form, expect);
+}
+
+#[test]
+fn auto_org_md_on_is_idempotent_for_hook_registration() {
+    let elisp_form = r##"(with-temp-buffer
+         (cl-letf (((symbol-function 'message)
+                    (lambda (&rest _arguments) nil)))
+           (auto-org-md-on)
+           (auto-org-md-on)
+           (auto-org-md-on)
+           (list
+            (auto-org-md-test-hook-count
+             'auto-org-md-export
+             after-save-hook)
+            after-save-hook)))"##;
+    let expect = expect!["OK (1 (auto-org-md-export t))"];
+    assert_auto_org_md_parity(elisp_form, expect);
+}
+
+#[test]
+fn auto_org_md_hook_is_buffer_local_and_does_not_leak_to_sibling() {
+    let elisp_form = r##"(let ((first (generate-new-buffer " *auto-org-first*"))
+         (second (generate-new-buffer " *auto-org-second*")))
+         (unwind-protect
+             (progn
+               (with-current-buffer first
+                 (cl-letf (((symbol-function 'message)
+                            (lambda (&rest _arguments) nil)))
+                   (auto-org-md-on)))
+               (list
+                (with-current-buffer first
+                  (list
+                   (local-variable-p 'after-save-hook)
+                   (memq 'auto-org-md-export
+                         after-save-hook)))
+                (with-current-buffer second
+                  (list
+                   (local-variable-p 'after-save-hook)
+                   (memq 'auto-org-md-export
+                         after-save-hook)))
+                (memq 'auto-org-md-export
+                      (default-value
+                       'after-save-hook))))
+           (kill-buffer first)
+           (kill-buffer second)))"##;
+    let expect = expect!["OK ((t (auto-org-md-export t)) (nil nil) nil)"];
+    assert_auto_org_md_parity(elisp_form, expect);
+}
+
+#[test]
+fn auto_org_md_off_preserves_same_function_on_global_hook() {
+    let elisp_form = r##"(let ((original
+                                (default-value
+                                 'after-save-hook)))
+         (unwind-protect
+             (progn
+               (add-hook 'after-save-hook
+                         #'auto-org-md-export)
+               (with-temp-buffer
+                 (add-hook 'after-save-hook
+                           #'auto-org-md-export
+                           nil t)
+                 (cl-letf (((symbol-function 'message)
+                            (lambda (&rest _arguments) nil)))
+                   (auto-org-md-off))
+                 (list
+                  (memq 'auto-org-md-export
+                        after-save-hook)
+                  (memq
+                   'auto-org-md-export
+                   (default-value
+                    'after-save-hook)))))
+           (set-default 'after-save-hook original)))"##;
+    let expect = expect!["OK (#1=(auto-org-md-export) #1#)"];
+    assert_auto_org_md_parity(elisp_form, expect);
+}
+
+#[test]
+fn auto_org_md_mode_first_positive_enable_sets_mode_property_and_hook() {
+    let elisp_form = r##"(progn
+         (auto-org-md-test-reset-state)
+         (with-temp-buffer
+           (let (messages)
+             (cl-letf (((symbol-function 'message)
+                        (lambda (format-string &rest arguments)
+                          (push
+                           (apply #'format
+                                  format-string
+                                  arguments)
+                           messages))))
+               (auto-org-md-mode 1)
+               (list
+                auto-org-md-mode
+                (get 'auto-org-md-mode 'state)
+                (memq 'auto-org-md-export
+                      after-save-hook)
+                (nreverse messages))))))"##;
+    let expect = expect![[r#"OK (t t (auto-org-md-export t) ("auto-org-md-mode is on."))"#]];
+    assert_auto_org_md_parity(elisp_form, expect);
+}
+
+#[test]
+fn auto_org_md_mode_repeated_positive_argument_toggles_internal_property_off() {
+    let elisp_form = r##"(progn
+         (auto-org-md-test-reset-state)
+         (with-temp-buffer
+           (let (messages)
+             (cl-letf (((symbol-function 'message)
+                        (lambda (format-string &rest arguments)
+                          (push
+                           (apply #'format
+                                  format-string
+                                  arguments)
+                           messages))))
+               (auto-org-md-mode 1)
+               (let ((first
+                      (list
+                       auto-org-md-mode
+                       (get 'auto-org-md-mode 'state)
+                       (memq 'auto-org-md-export
+                             after-save-hook))))
+                 (auto-org-md-mode 1)
+                 (list
+                  first
+                  (list
+                   auto-org-md-mode
+                   (get 'auto-org-md-mode 'state)
+                   (memq 'auto-org-md-export
+                         after-save-hook))
+                  (nreverse messages)))))))"##;
+    let expect = expect![[
+        r#"OK ((t t (auto-org-md-export t)) (t nil nil) ("auto-org-md-mode is on." "auto-org-md-mode is off."))"#
+    ]];
+    assert_auto_org_md_parity(elisp_form, expect);
+}
+
+#[test]
+fn auto_org_md_mode_negative_argument_can_turn_hook_on_due_to_property_state() {
+    let elisp_form = r##"(progn
+         (auto-org-md-test-reset-state)
+         (with-temp-buffer
+           (cl-letf (((symbol-function 'message)
+                      (lambda (&rest _arguments) nil)))
+             (auto-org-md-mode -1)
+             (list
+              auto-org-md-mode
+              (get 'auto-org-md-mode 'state)
+              (memq 'auto-org-md-export
+                    after-save-hook)))))"##;
+    let expect = expect!["OK (nil t (auto-org-md-export t))"];
+    assert_auto_org_md_parity(elisp_form, expect);
+}
+
+#[test]
+fn auto_org_md_mode_symbol_property_is_shared_across_buffers() {
+    let elisp_form = r##"(progn
+         (auto-org-md-test-reset-state)
+         (let ((first (generate-new-buffer " *auto-org-one*"))
+               (second (generate-new-buffer " *auto-org-two*")))
+           (unwind-protect
+               (cl-letf (((symbol-function 'message)
+                          (lambda (&rest _arguments) nil)))
+                 (with-current-buffer first
+                   (auto-org-md-mode 1))
+                 (with-current-buffer second
+                   (auto-org-md-mode 1))
+                 (list
+                  (with-current-buffer first
+                    (list
+                     auto-org-md-mode
+                     (memq 'auto-org-md-export
+                           after-save-hook)))
+                  (with-current-buffer second
+                    (list
+                     auto-org-md-mode
+                     (memq 'auto-org-md-export
+                           after-save-hook)))
+                  (get 'auto-org-md-mode 'state)))
+             (kill-buffer first)
+             (kill-buffer second))))"##;
+    let expect = expect!["OK ((t (auto-org-md-export t)) (t nil) nil)"];
+    assert_auto_org_md_parity(elisp_form, expect);
+}
+
+#[test]
+fn auto_org_md_mode_hook_observes_final_variable_property_and_save_hook_state() {
+    let elisp_form = r##"(progn
+         (auto-org-md-test-reset-state)
+         (with-temp-buffer
+           (let (observed)
+             (add-hook
+              'auto-org-md-mode-hook
+              (lambda ()
+                (push
+                 (list
+                  auto-org-md-mode
+                  (get 'auto-org-md-mode 'state)
+                  (not
+                   (null
+                    (memq 'auto-org-md-export
+                          after-save-hook))))
+                 observed))
+              nil t)
+             (cl-letf (((symbol-function 'message)
+                        (lambda (&rest _arguments) nil)))
+               (auto-org-md-mode 1)
+               (auto-org-md-mode -1))
+             (nreverse observed))))"##;
+    let expect = expect!["OK ((t t t) (nil nil nil))"];
+    assert_auto_org_md_parity(elisp_form, expect);
+}
