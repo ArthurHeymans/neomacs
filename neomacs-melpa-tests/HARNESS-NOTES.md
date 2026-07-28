@@ -263,6 +263,16 @@ captured too early on one case. Waiting for the observed state to stop changing
 took it under 3 seconds and made it correct. There is no duration that is both
 long enough and not wasteful; wait on the condition.
 
+**"What is safe to assert" is a separate question from "when to stop waiting",
+and the same signal often answers both.** aio draws it precisely. Timer promises
+resolve in a defined order, so a select race gives `(fast slow)` every run and is
+safely pinnable. Process output is not: **how many chunks a filter receives is
+the kernel's choice**, so chunk counts and chunk boundaries are never assertable
+even when your wait is correct. Chain on every chunk if the package does, but
+wait on the **sentinel** — it fires exactly once — and assert the *joined* text
+plus the exit status. The sentinel is both the right thing to wait on and the
+only part of the process story deterministic enough to pin.
+
 **SILENT — with `compile`, the last writer *is* the sentinel.** So output
 arriving is not completion: the sentinel appends `Compilation finished at …`
 after everything the build printed. A capture taken when the expected output
