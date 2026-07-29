@@ -2687,73 +2687,6 @@ fn prepend_lexical_binding_in_specpdl_rooted_env(
     }
 }
 
-fn begin_lambda_call_in_state(
-    obarray: &mut Obarray,
-    specpdl: &mut Vec<SpecBinding>,
-    lexenv: &mut Value,
-    fun: Value,
-    arglist: Value,
-    env: Option<Value>,
-    args: &[Value],
-) -> Result<ActiveLambdaCallState, Flow> {
-    let specpdl_count = specpdl.len();
-
-    if let Some(env) = env {
-        let old = std::mem::replace(lexenv, env);
-        // Mirrors GNU funcall_lambda:
-        //   specbind(Qinternal_interpreter_environment, lexenv);
-        specpdl.push(SpecBinding::LexicalEnv { old_lexenv: old });
-
-        let env_root_index = specpdl.len();
-        specpdl.push(SpecBinding::GcRoot { value: env });
-        bind_lambda_args_from_arglist(
-            obarray,
-            specpdl,
-            lexenv,
-            Some(env_root_index),
-            specpdl_count,
-            fun,
-            arglist,
-            args,
-        )?;
-    } else if !lexenv.is_nil() {
-        let old = std::mem::replace(lexenv, Value::NIL);
-        // GNU funcall_lambda computes a local `lexenv = Qnil` for dynamic
-        // lambdas and, before evaluating the body, specbinds
-        // Qinternal_interpreter_environment when that differs from the
-        // caller's environment.
-        specpdl.push(SpecBinding::LexicalEnv { old_lexenv: old });
-        bind_lambda_args_from_arglist(
-            obarray,
-            specpdl,
-            lexenv,
-            None,
-            specpdl_count,
-            fun,
-            arglist,
-            args,
-        )?;
-    } else {
-        bind_lambda_args_from_arglist(
-            obarray,
-            specpdl,
-            lexenv,
-            None,
-            specpdl_count,
-            fun,
-            arglist,
-            args,
-        )?;
-    }
-
-    // GNU never writes `lexical-binding` during lambda/closure calls.
-    // The closure's captured env is installed in self.lexenv (above),
-    // which is the single source of truth for "is lexical mode active?"
-    // via lexical_binding() -> !self.lexenv.is_nil().
-
-    Ok(ActiveLambdaCallState { specpdl_count })
-}
-
 fn bare_lambda_arg_symbol_id(value: Value) -> Option<SymId> {
     let value = if value.is_symbol_with_pos() {
         value.as_symbol_with_pos_sym().unwrap()
@@ -2767,141 +2700,10 @@ fn bare_lambda_arg_symbol_id(value: Value) -> Option<SymId> {
     }
 }
 
-fn unwind_lambda_bindings_after_error(
-    obarray: &mut Obarray,
-    specpdl: &mut Vec<SpecBinding>,
-    lexenv: &mut Value,
-    specpdl_count: usize,
-) {
-    finish_lambda_call_in_state(
-        obarray,
-        specpdl,
-        lexenv,
-        ActiveLambdaCallState { specpdl_count },
-    );
-}
-
-#[allow(clippy::too_many_arguments)] // keeps the evaluator's independently borrowed state split
-fn bind_lambda_args_from_arglist(
-    obarray: &mut Obarray,
-    specpdl: &mut Vec<SpecBinding>,
-    lexenv: &mut Value,
-    env_root_index: Option<usize>,
-    specpdl_count: usize,
-    fun: Value,
-    arglist: Value,
-    args: &[Value],
-) -> Result<(), Flow> {
-    let optional_sym = intern("&optional");
-    let rest_sym = intern("&rest");
-    let mut syms_left = arglist;
-    let mut arg_index = 0;
-    let mut optional = false;
-    let mut rest = false;
-    let mut previous_rest = false;
-
-    while syms_left.is_cons() {
-        let next = syms_left.cons_car();
-        syms_left = syms_left.cons_cdr();
-        let Some(next_id) = bare_lambda_arg_symbol_id(next) else {
-            unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
-            return Err(signal(LispCondition::InvalidFunction, vec![fun]));
-        };
-
-        if next_id == rest_sym {
-            if rest || previous_rest {
-                unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
-                return Err(signal(LispCondition::InvalidFunction, vec![fun]));
-            }
-            rest = true;
-            previous_rest = true;
-        } else if next_id == optional_sym {
-            if optional || rest || previous_rest {
-                unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
-                return Err(signal(LispCondition::InvalidFunction, vec![fun]));
-            }
-            optional = true;
-        } else {
-            let arg = if rest {
-                let rest_value = Value::list_from_slice(&args[arg_index..]);
-                arg_index = args.len();
-                rest_value
-            } else if arg_index < args.len() {
-                let arg = args[arg_index];
-                arg_index += 1;
-                arg
-            } else if !optional {
-                unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
-                return Err(signal(
-                    LispCondition::WrongNumberOfArguments,
-                    vec![fun, Value::fixnum(args.len() as i64)],
-                ));
-            } else {
-                Value::NIL
-            };
-
-            if let Some(env_root_index) = env_root_index {
-                prepend_lexical_binding_in_specpdl_rooted_env(
-                    lexenv,
-                    specpdl,
-                    env_root_index,
-                    next_id,
-                    arg,
-                );
-            } else {
-                specbind_in_state(obarray, specpdl, next_id, arg);
-            }
-            previous_rest = false;
-        }
-    }
-
-    if !syms_left.is_nil() || previous_rest {
-        unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
-        return Err(signal(LispCondition::InvalidFunction, vec![fun]));
-    }
-    if arg_index < args.len() {
-        unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![fun, Value::fixnum(args.len() as i64)],
-        ));
-    }
-
-    Ok(())
-}
-
-fn finish_lambda_call_in_state(
-    obarray: &mut Obarray,
-    specpdl: &mut Vec<SpecBinding>,
-    lexenv: &mut Value,
-    state: ActiveLambdaCallState,
-) {
-    // Unwind all specpdl entries back to the count saved at begin.
-    // For lexical closures, this pops the SpecBinding::LexicalEnv
-    // entry (restoring self.lexenv) plus any dynamic bindings.
-    // For dynamic lambdas, this pops the specbind entries and, when the
-    // caller was lexical, the temporary nil lexical environment.
-    // Mirrors GNU: unbind_to(count, val) in funcall_lambda.
-    while specpdl.len() > state.specpdl_count {
-        let binding = specpdl.pop().unwrap();
-        match binding {
-            SpecBinding::LexicalEnv { old_lexenv } => {
-                *lexenv = old_lexenv;
-            }
-            SpecBinding::Let { sym_id, old_value } => match old_value {
-                Some(val) => obarray.set_symbol_value_id(sym_id, val),
-                None => obarray.makunbound_id(sym_id),
-            },
-            SpecBinding::GcRoot { .. } => {}
-            SpecBinding::Backtrace { .. } => {}
-            other => {
-                // LetLocal/LetDefault shouldn't appear here in the
-                // standalone path, but handle gracefully.
-                specpdl.push(other);
-                break;
-            }
-        }
-    }
+#[derive(Clone, Copy, Debug)]
+enum LambdaArgumentBinding {
+    Dynamic,
+    Lexical { env_root_index: usize },
 }
 
 /// Panic-safe scope for [`Context::gc_inhibit_depth`]: construction increments
@@ -9215,24 +9017,126 @@ impl Context {
         env: Option<Value>,
         args: &[Value],
     ) -> Result<ActiveLambdaCallState, Flow> {
-        begin_lambda_call_in_state(
-            &mut self.obarray,
-            &mut self.specpdl,
-            &mut self.lexenv,
-            fun,
-            arglist,
-            env,
-            args,
-        )
+        let specpdl_count = self.specpdl.len();
+        let argument_binding = if let Some(env) = env {
+            let old_lexenv = std::mem::replace(&mut self.lexenv, env);
+            // Mirrors GNU funcall_lambda:
+            //   specbind (Qinternal_interpreter_environment, lexenv);
+            self.specpdl.push(SpecBinding::LexicalEnv { old_lexenv });
+
+            let env_root_index = self.specpdl.len();
+            self.specpdl.push(SpecBinding::GcRoot { value: env });
+            LambdaArgumentBinding::Lexical { env_root_index }
+        } else {
+            if !self.lexenv.is_nil() {
+                let old_lexenv = std::mem::replace(&mut self.lexenv, Value::NIL);
+                // GNU funcall_lambda computes a nil local `lexenv` for a
+                // dynamically scoped lambda and saves the caller's lexical
+                // environment before evaluating its body.
+                self.specpdl.push(SpecBinding::LexicalEnv { old_lexenv });
+            }
+            LambdaArgumentBinding::Dynamic
+        };
+
+        if let Err(flow) = self.bind_lambda_args_from_arglist(argument_binding, fun, arglist, args)
+        {
+            self.unbind_to(specpdl_count);
+            return Err(flow);
+        }
+
+        // GNU never writes `lexical-binding` during lambda/closure calls.
+        // The closure's captured env is installed in self.lexenv (above),
+        // which is the single source of truth for "is lexical mode active?"
+        // via lexical_binding() -> !self.lexenv.is_nil().
+        Ok(ActiveLambdaCallState { specpdl_count })
     }
 
     pub(crate) fn finish_lambda_call(&mut self, state: ActiveLambdaCallState) {
-        finish_lambda_call_in_state(
-            &mut self.obarray,
-            &mut self.specpdl,
-            &mut self.lexenv,
-            state,
-        );
+        // Dynamic arguments must unwind through the same typed specpdl path
+        // as every other special binding. In particular, LetLocal records the
+        // buffer whose slot was shadowed and LetDefault records a localized
+        // variable's shared default.
+        self.unbind_to(state.specpdl_count);
+    }
+
+    fn bind_lambda_args_from_arglist(
+        &mut self,
+        binding: LambdaArgumentBinding,
+        fun: Value,
+        arglist: Value,
+        args: &[Value],
+    ) -> Result<(), Flow> {
+        let optional_sym = intern("&optional");
+        let rest_sym = intern("&rest");
+        let mut syms_left = arglist;
+        let mut arg_index = 0;
+        let mut optional = false;
+        let mut rest = false;
+        let mut previous_rest = false;
+
+        while syms_left.is_cons() {
+            let next = syms_left.cons_car();
+            syms_left = syms_left.cons_cdr();
+            let Some(next_id) = bare_lambda_arg_symbol_id(next) else {
+                return Err(signal(LispCondition::InvalidFunction, vec![fun]));
+            };
+
+            if next_id == rest_sym {
+                if rest || previous_rest {
+                    return Err(signal(LispCondition::InvalidFunction, vec![fun]));
+                }
+                rest = true;
+                previous_rest = true;
+            } else if next_id == optional_sym {
+                if optional || rest || previous_rest {
+                    return Err(signal(LispCondition::InvalidFunction, vec![fun]));
+                }
+                optional = true;
+            } else {
+                let arg = if rest {
+                    let rest_value = Value::list_from_slice(&args[arg_index..]);
+                    arg_index = args.len();
+                    rest_value
+                } else if arg_index < args.len() {
+                    let arg = args[arg_index];
+                    arg_index += 1;
+                    arg
+                } else if !optional {
+                    return Err(signal(
+                        LispCondition::WrongNumberOfArguments,
+                        vec![fun, Value::fixnum(args.len() as i64)],
+                    ));
+                } else {
+                    Value::NIL
+                };
+
+                match binding {
+                    LambdaArgumentBinding::Dynamic => self.try_specbind(next_id, arg)?,
+                    LambdaArgumentBinding::Lexical { env_root_index } => {
+                        prepend_lexical_binding_in_specpdl_rooted_env(
+                            &mut self.lexenv,
+                            &mut self.specpdl,
+                            env_root_index,
+                            next_id,
+                            arg,
+                        );
+                    }
+                }
+                previous_rest = false;
+            }
+        }
+
+        if !syms_left.is_nil() || previous_rest {
+            return Err(signal(LispCondition::InvalidFunction, vec![fun]));
+        }
+        if arg_index < args.len() {
+            return Err(signal(
+                LispCondition::WrongNumberOfArguments,
+                vec![fun, Value::fixnum(args.len() as i64)],
+            ));
+        }
+
+        Ok(())
     }
 
     /// Keep the Lisp-visible `features` variable in sync with the evaluator's
@@ -15604,83 +15508,6 @@ impl Context {
             self.set_quit_flag_value(quitf);
         }
         Ok(())
-    }
-}
-
-/// Save the current value of a special variable and set a new value (standalone version).
-/// Used by bytecode VM and other split-state paths.
-/// Follows variable aliases like GNU's specbind().
-pub(crate) fn specbind_in_state(
-    obarray: &mut Obarray,
-    specpdl: &mut Vec<SpecBinding>,
-    sym_id: SymId,
-    value: Value,
-) {
-    let resolved =
-        super::builtins::resolve_variable_alias_id_in_obarray(obarray, sym_id).unwrap_or(sym_id);
-    let old_value = obarray.symbol_value_id(resolved).copied();
-    specpdl.push(SpecBinding::Let {
-        sym_id: resolved,
-        old_value,
-    });
-    obarray.set_symbol_value_id(resolved, value);
-}
-
-/// Restore all specpdl bindings back to `count` (standalone version).
-/// Used by bytecode VM and other split-state paths.
-/// Note: LetLocal bindings require a buffer manager; the standalone version
-/// only handles Let bindings. LetLocal in the VM is not expected since
-/// the VM's VarBind opcode doesn't produce buffer-local bindings.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn unbind_to_in_state(
-    obarray: &mut Obarray,
-    specpdl: &mut Vec<SpecBinding>,
-    count: usize,
-) {
-    while specpdl.len() > count {
-        let binding = specpdl.pop().unwrap();
-        match binding {
-            SpecBinding::Let { sym_id, old_value } => match old_value {
-                Some(val) => obarray.set_symbol_value_id(sym_id, val),
-                None => obarray.makunbound_id(sym_id),
-            },
-            SpecBinding::LetLocal {
-                sym_id, old_value, ..
-            } => {
-                // Standalone path doesn't have buffer manager access.
-                // Fall back to setting the obarray default value.
-                tracing::warn!(
-                    "unbind_to_in_state: LetLocal for {} without buffer manager",
-                    resolve_sym(sym_id)
-                );
-                obarray.set_symbol_value_id(sym_id, old_value);
-            }
-            SpecBinding::LetDefault {
-                sym_id, old_value, ..
-            } => match old_value {
-                Some(val) => obarray.set_symbol_value_id(sym_id, val),
-                None => obarray.makunbound_id(sym_id),
-            },
-            SpecBinding::LexicalEnv { .. } => {
-                // Standalone path doesn't have self.lexenv access.
-                // This variant should not appear on the standalone
-                // specpdl (used by bytecode VM which has its own
-                // LexicalEnv / specbind mechanism).
-                tracing::warn!("unbind_to_in_state: LexicalEnv without Context");
-            }
-            SpecBinding::GcRoot { .. } => {}
-            SpecBinding::Backtrace { .. }
-            | SpecBinding::Nop
-            | SpecBinding::UnwindProtect { .. }
-            | SpecBinding::SaveExcursion { .. }
-            | SpecBinding::SaveCurrentBuffer { .. }
-            | SpecBinding::SaveRestriction { .. }
-            | SpecBinding::LoadsInProgress { .. }
-            | SpecBinding::RequireStack { .. } => {
-                // These should not appear in standalone unbind_to_in_state.
-                // Once the VM is fully migrated, this function may be removed.
-            }
-        }
     }
 }
 

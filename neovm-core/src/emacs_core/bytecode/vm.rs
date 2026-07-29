@@ -1405,12 +1405,14 @@ impl<'a> Vm<'a> {
                 } else {
                     Value::NIL
                 };
-                crate::emacs_core::eval::specbind_in_state(
-                    &mut self.ctx.obarray,
-                    &mut self.ctx.specpdl,
-                    *param,
-                    val,
-                );
+                if let Err(flow) = self.ctx.try_specbind(*param, val) {
+                    return self.cleanup_bytecode_frame(
+                        Err(flow),
+                        condition_stack_base,
+                        specpdl_base,
+                        frame_base,
+                    );
+                }
                 arg_idx += 1;
             }
             for param in &func.params.optional {
@@ -1419,12 +1421,14 @@ impl<'a> Vm<'a> {
                 } else {
                     Value::NIL
                 };
-                crate::emacs_core::eval::specbind_in_state(
-                    &mut self.ctx.obarray,
-                    &mut self.ctx.specpdl,
-                    *param,
-                    val,
-                );
+                if let Err(flow) = self.ctx.try_specbind(*param, val) {
+                    return self.cleanup_bytecode_frame(
+                        Err(flow),
+                        condition_stack_base,
+                        specpdl_base,
+                        frame_base,
+                    );
+                }
                 arg_idx += 1;
             }
             if let Some(rest_name) = func.params.rest {
@@ -1435,12 +1439,14 @@ impl<'a> Vm<'a> {
                 } else {
                     Value::NIL
                 };
-                crate::emacs_core::eval::specbind_in_state(
-                    &mut self.ctx.obarray,
-                    &mut self.ctx.specpdl,
-                    rest_name,
-                    rest_list,
-                );
+                if let Err(flow) = self.ctx.try_specbind(rest_name, rest_list) {
+                    return self.cleanup_bytecode_frame(
+                        Err(flow),
+                        condition_stack_base,
+                        specpdl_base,
+                        frame_base,
+                    );
+                }
             }
             let result = self.run_loop(
                 func,
@@ -5221,18 +5227,12 @@ impl<'a> Vm<'a> {
         f: impl FnOnce(&mut Self) -> Result<T, Flow>,
     ) -> Result<T, Flow> {
         let specpdl_count = self.ctx.specpdl.len();
-        crate::emacs_core::eval::specbind_in_state(
-            &mut self.ctx.obarray,
-            &mut self.ctx.specpdl,
+        self.ctx.try_specbind(
             intern("default-directory"),
             Value::heap_string(directory.clone()),
-        );
+        )?;
         let result = f(self);
-        crate::emacs_core::eval::unbind_to_in_state(
-            &mut self.ctx.obarray,
-            &mut self.ctx.specpdl,
-            specpdl_count,
-        );
+        self.ctx.unbind_to(specpdl_count);
         result
     }
 

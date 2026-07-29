@@ -5868,6 +5868,35 @@ fn let_buffer_local_does_not_corrupt_other_buffers() {
     );
 }
 
+#[test]
+fn dynamic_lambda_parameter_uses_and_restores_forwarded_buffer_slot() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_all(
+        r#"(with-temp-buffer
+             (setq mode-name "Outer")
+             (let ((during (funcall '(lambda (mode-name) mode-name) "Inner")))
+               (list during mode-name
+                     (boundp 'mode-name)
+                     (local-variable-p 'mode-name))))"#,
+    );
+    assert_eq!(result[0], r#"OK ("Inner" "Outer" t t)"#);
+}
+
+#[test]
+fn dynamic_bytecode_parameter_uses_and_restores_forwarded_buffer_slot() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_all(
+        r#"(with-temp-buffer
+             (setq mode-name "Outer")
+             (let* ((fn (byte-compile '(lambda (mode-name) mode-name)))
+                    (during (funcall fn "Inner")))
+               (list during mode-name
+                     (boundp 'mode-name)
+                     (local-variable-p 'mode-name))))"#,
+    );
+    assert_eq!(result[0], r#"OK ("Inner" "Outer" t t)"#);
+}
+
 /// Regression for the printer side of audit §1.1: bignums must
 /// round-trip through prin1, number-to-string, format %d/%x/%o, and
 /// string-to-number. Mirrors GNU Emacs's bignum print/parse symmetry.

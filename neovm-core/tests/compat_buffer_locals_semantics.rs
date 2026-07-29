@@ -100,6 +100,35 @@ fn compat_kill_all_local_variables_resets_current_buffer_matches_gnu_emacs() {
 }
 
 #[test]
+fn compat_dynamic_lambda_parameter_preserves_forwarded_buffer_slot_matches_gnu_emacs() {
+    run_case(BufferLocalsCase {
+        name: "dynamic_lambda_parameter_preserves_forwarded_buffer_slot",
+        form: r#"(with-temp-buffer
+  (setq mode-name "Outer")
+  (let ((during (funcall '(lambda (mode-name) mode-name) "Inner")))
+    (list during
+          (condition-case err mode-name (error (car err)))
+          (boundp 'mode-name)
+          (local-variable-p 'mode-name))))"#,
+    });
+}
+
+#[test]
+fn compat_dynamic_bytecode_parameter_preserves_forwarded_buffer_slot_matches_gnu_emacs() {
+    run_case(BufferLocalsCase {
+        name: "dynamic_bytecode_parameter_preserves_forwarded_buffer_slot",
+        form: r#"(with-temp-buffer
+  (setq mode-name "Outer")
+  (let* ((fn (byte-compile '(lambda (mode-name) mode-name)))
+         (during (funcall fn "Inner")))
+    (list during
+          (condition-case err mode-name (error (car err)))
+          (boundp 'mode-name)
+          (local-variable-p 'mode-name))))"#,
+    });
+}
+
+#[test]
 fn compat_kill_all_local_variables_preserves_partial_permanent_local_hooks_matches_gnu_emacs() {
     run_case(BufferLocalsCase {
         name: "kill_all_local_variables_preserves_partial_permanent_local_hooks",
