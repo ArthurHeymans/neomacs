@@ -9,6 +9,7 @@ mod mode_line;
 mod registry;
 mod style_text;
 mod utils;
+mod workflows;
 
 const ANJU_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 const ANJU_TEST_PRELUDE: &str = r##"

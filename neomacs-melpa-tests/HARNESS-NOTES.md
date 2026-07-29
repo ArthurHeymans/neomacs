@@ -795,6 +795,44 @@ it and find out why it was failing before assuming the new value is right: the
 first of the two above still failed after being rewritten, and the second
 recorded a behavioural change nobody had explained.
 
+**SILENT — a whole-buffer assertion does not witness that the buffer changed
+for the reason the test is named after.** This is the sharpest instance of the
+class so far, because the failing test was the *strongest-looking* assertion in
+its suite — a whole-buffer snapshot, which is what these notes tell everyone to
+prefer. An asm-blox workflow named for typing a program into a code box typed at
+point 1, which is board chrome. The board it recorded was correct, the test
+passed, and the typing had done nothing at all: before and after were
+byte-identical and the typed text appeared nowhere.
+
+Two mechanisms hid it, and both are ordinary. `asm-blox-self-insert-command`
+gates on `asm-blox-in-box-p` and silently `ding`s outside a box, so a refused
+keystroke looks like a keystroke. And `asm-blox-next-cell` cannot rescue you
+from the top of the buffer, because its fallback branch walks *backward* toward
+`bobp` while point starts before every box — so the obvious "navigate to a cell
+first" also does nothing.
+
+The fix is structural, not a better cursor position: assert several things that
+cannot all hold unless the change really happened. That workflow now pins
+`:typing-changed-the-board`, `:typed-text-visible` and `:line-count-unchanged`
+beside the board text — a character was inserted, it is visible, and the chrome
+survived. Whenever a test's name claims a *cause*, assert something only that
+cause produces, not only the state you expect afterwards.
+
+**SILENT — a name-based sweep finds the tests someone remembered to name
+consistently, which is exactly the population least likely to contain the bug.**
+Four suites computed a payload digest as `(secure-hash 'sha256 path)`, where
+`path` is a filename: `secure-hash` on a string hashes the string, so they
+hashed the *path* and never read a byte of content, while also pinning a harness
+path in a form nobody can read when it moves. The repair swept for the test name
+`..._content_digests_match` and reported the family closed. It was not: `aider`
+names its test `..._inventory_and_source_hashes_match` and still had the bug.
+
+The one that got named differently is the one that got written differently.
+Sweep the *pattern* — read the argument of every call site, `grep -rn
+"secure-hash"` and look at what each one is actually hashing — which takes about
+a minute across ninety sites and does not depend on what anyone chose to call
+the test.
+
 **SILENT — a wrong buffer name is a no-op in this harness, not an error.** A
 workflow that looks for `*hg log:*` when the package creates `*hg log (details):*`
 records "no such buffer" and **passes**, because both editors agree a missing
