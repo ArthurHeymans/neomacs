@@ -121,7 +121,9 @@ fn aidermacs_prompt_file_creation_is_repeatable_and_auto_enables_minor_mode() {
                              (lookup-key
                               aidermacs-minor-mode-map
                               (kbd "C-c C-c")))))))"##;
-    let expect = expect![[r#""#]];
+    let expect = expect![[
+        r##"OK (".aider.prompt.org" "# aidermacs Prompt File - Command Reference:\n# C-c C-n or C-<return>: Send current line or selected region line by line\n# C-c C-c: Send current block or selected region as a whole\n# C-c C-z: Switch to aidermacs buffer\n\n* Sample task:\n\n/ask what this repo is about?\n" "# aidermacs Prompt File - Command Reference:\n# C-c C-n or C-<return>: Send current line or selected region line by line\n# C-c C-c: Send current block or selected region as a whole\n# C-c C-z: Switch to aidermacs buffer\n\n* Sample task:\n\n/ask what this repo is about?\n" nil aidermacs-send-block-or-region)"##
+    ]];
     assert_aidermacs_parity(elisp_form, expect);
 }
 

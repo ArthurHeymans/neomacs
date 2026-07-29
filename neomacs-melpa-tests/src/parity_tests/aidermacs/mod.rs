@@ -9,6 +9,7 @@ mod files;
 mod models;
 mod session;
 mod surface;
+mod workflows;
 
 const AIDERMACS_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 

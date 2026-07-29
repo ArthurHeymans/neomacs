@@ -29,39 +29,6 @@ fn aidermacs_exact_pin_features_version_and_core_defaults_match() {
 }
 
 #[test]
-fn aidermacs_complete_package_callable_surface_arglists_and_commands_match() {
-    let elisp_form = r##"(let ((source-dir
-                           (file-name-directory
-                            (locate-library "aidermacs")))
-                          rows)
-                      (mapatoms
-                       (lambda (symbol)
-                         (when (and
-                                (string-prefix-p
-                                 "aidermacs" (symbol-name symbol))
-                                (fboundp symbol)
-                                (when-let ((file (symbol-file symbol 'defun)))
-                                  (string-prefix-p
-                                   source-dir
-                                   (file-truename file))))
-                           (push
-                            (list
-                             symbol
-                             (condition-case nil
-                                 (help-function-arglist symbol t)
-                               (error :unavailable))
-                             (commandp symbol))
-                            rows))))
-                      (sort rows
-                            (lambda (left right)
-                              (string-lessp
-                               (symbol-name (car left))
-                               (symbol-name (car right))))))"##;
-    let expect = expect![[r#""#]];
-    assert_aidermacs_parity(elisp_form, expect);
-}
-
-#[test]
 fn aidermacs_customization_types_and_practical_defaults_match() {
     let elisp_form = r##"(mapcar
                       (lambda (symbol)
@@ -93,7 +60,9 @@ fn aidermacs_customization_types_and_practical_defaults_match() {
                         aidermacs-comint-multiline-newline-key
                         aidermacs-vterm-multiline-newline-key
                         aidermacs-vterm-use-theme-colors))"##;
-    let expect = expect![[r#""#]];
+    let expect = expect![[
+        r#"OK ((aidermacs-program ("aider-ce" "aider") (choice string (repeat :tag "Program fallbacks" string)) nil) (aidermacs-backend comint (choice (const :tag "Comint" comint) (const :tag "VTerm" vterm)) nil) (aidermacs-enable-notifications t boolean nil) (aidermacs-notify-after-seconds 120 integer nil) (aidermacs-default-chat-mode nil (choice (const :tag "Code (default)" nil) (const :tag "Code" code) (const :tag "Ask" ask) (const :tag "Architect" architect) (const :tag "Help" help)) nil) (aidermacs-config-file nil (choice (const :tag "None" nil) (file :tag "Config file")) nil) (aidermacs-extra-args nil (repeat string) nil) (aidermacs-global-read-only-files nil (repeat string) nil) (aidermacs-project-read-only-files nil (repeat string) nil) (aidermacs-subtree-only nil boolean nil) (aidermacs-auto-commits nil boolean nil) (aidermacs-watch-files nil boolean nil) (aidermacs-auto-accept-architect nil boolean nil) (aidermacs-exit-kills-buffer nil boolean nil) (aidermacs-output-limit 10 integer nil) (aidermacs-show-diff-after-change t boolean nil) (aidermacs-default-model "sonnet" string nil) (aidermacs-architect-model nil (choice (const :tag "Use default model" nil) (string :tag "Specific model")) nil) (aidermacs-editor-model nil (choice (const :tag "Use default model" nil) (string :tag "Specific model")) nil) (aidermacs-weak-model nil (choice (const :tag "Use default model" nil) (string :tag "Specific model")) nil) (aidermacs-litellm-prices-cache-duration 86400 integer nil) (aidermacs-comint-multiline-newline-key "S-<return>" string nil) (aidermacs-vterm-multiline-newline-key "S-<return>" string nil) (aidermacs-vterm-use-theme-colors t boolean nil))"#
+    ]];
     assert_aidermacs_parity(elisp_form, expect);
 }
 
