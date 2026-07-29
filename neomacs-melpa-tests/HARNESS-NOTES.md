@@ -1223,6 +1223,37 @@ it does, and a smaller claim still looks like a passing result. Print the number
 of workflows the harness found and check it against the number in the file.
 
 
+## A per-case timeout that is nearly enough
+
+**SILENT — a marginal timeout produces a test that passes when you
+investigate it and fails in the suite.** `ai_code`'s cap was 30 seconds and
+one workflow needed about 56, so it passed run alone, failed at 50/52 under
+package load, and passed again at 51/52 on the next run. Nothing about that
+pattern points at the harness; it reads as non-determinism in the package,
+which is the most expensive thing it could be mistaken for.
+
+The distinguishing signal is what the failure does **not** contain: a
+timeout has no mismatch text. A value disagreement prints both sides. If a
+case fails with no diff, check the suite's `Duration::from_secs` before
+touching the package.
+
+**But raise the cap second, not first.** The instinct is to compare against
+what other suites allow and move on. Look at what the case is *waiting for*
+before doing that: two of that workflow's five arms were negative cases —
+the helper is supposed to emit nothing when it has no frame prefix and no
+file arguments — and each sat out its entire polling budget waiting for
+output that by design never came. Twenty of the fifty-six seconds were
+spent proving nothing, in exactly the arms that were working.
+
+Waiting on the process **sentinel as well as** the output took the case from
+56s to 8.9s, a sixth of the time, with the recorded values unchanged — which
+also confirmed they were never timing-dependent. The cap went up too, as
+defence in depth, but on its own it would have preserved a test that wasted
+most of its runtime and stayed one slow machine away from red. Same rule as
+the fixed-duration-wait note: wait on the condition, and for a case that
+expects nothing, "the process exited" is the condition.
+
+
 ## Reducing a divergence
 
 **Re-run a candidate reduction on its own before reporting it.** Some bugs

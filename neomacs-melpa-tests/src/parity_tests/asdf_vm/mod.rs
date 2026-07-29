@@ -13,6 +13,7 @@ mod process;
 mod registry;
 mod tool_versions;
 mod util;
+mod workflows;
 
 const ASDF_VM_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 const ASDF_VM_TEST_PRELUDE: &str = r##"
@@ -84,6 +85,134 @@ const ASDF_VM_TEST_PRELUDE: &str = r##"
      (list :error
            (car error-data)
            (cdr error-data)))))
+
+
+;;; --- Real asdf 0.15.0 replay ------------------------------------------------
+
+(defvar asdf-vm-test-records
+  (file-name-as-directory
+   (expand-file-name "asdf-records" (getenv "NEOMACS_TEST_SANDBOX_ROOT"))))
+
+(defvar asdf-vm-test-calls
+  (expand-file-name "asdf-calls.log" (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
+
+(defvar asdf-vm-test-misses
+  (expand-file-name "asdf-misses.log" (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
+
+(defconst asdf-vm-test-recordings
+  '(
+    (("current") 0 "" "No plugins installed\n")
+    (("list-all" "nodejs") 1 "" "No such plugin: nodejs\n")
+    (("list" "all" "nodejs") 1 "" "No such plugin: nodejs\n")
+    (("plugin" "list") 0 "" "No plugins installed\n")
+    (("set" "nodejs" "20.0.0") 1 "" "Unknown command: `asdf set nodejs 20.0.0`\nNo plugin named set\n")
+    (("version") 0 "v0.15.0\n" "")))
+
+(defun asdf-vm-test-key (arguments)
+  "Return the record key for ARGUMENTS.  Must match the shell stand-in."
+  (mapconcat
+   (lambda (argument)
+     (let ((base (if (string-match-p "/" argument)
+                     (file-name-nondirectory (directory-file-name argument))
+                   argument)))
+       (concat "~" (replace-regexp-in-string "[^A-Za-z0-9._-]" "_" base))))
+   arguments ""))
+
+(defun asdf-vm-test-write-raw (path content)
+  (make-directory (file-name-directory path) t)
+  (let ((coding-system-for-write 'utf-8-unix))
+    (with-temp-buffer
+      (insert content)
+      (write-region (point-min) (point-max) path nil 'silent)))
+  path)
+
+(defconst asdf-vm-test-stand-in
+  (string-join
+   (list
+    "#!/bin/sh"
+    "# Replay stand-in for asdf 0.15.0.  Every reply below was recorded from the"
+    "# real binary; this script only looks one up and refuses to invent one."
+    "key=\"\""
+    "for a in \"$@\"; do"
+    "  case \"$a\" in */) a=${a%/} ;; esac"
+    "  case \"$a\" in */*) a=${a##*/} ;; esac"
+    "  key=\"$key~$(printf '%s' \"$a\" | tr -c 'A-Za-z0-9._-' '_')\""
+    "done"
+    "printf '%s\\n' \"$*\" >> \"$ASDF_VM_TEST_CALLS\""
+    "d=\"$ASDF_VM_TEST_RECORDS/$key\""
+    "if [ ! -f \"$d/rc\" ]; then"
+    "  printf '%s\\n' \"$*\" >> \"$ASDF_VM_TEST_MISSES\""
+    "  printf 'UNRECORDED asdf invocation: %s\\n' \"$*\" >&2"
+    "  exit 99"
+    "fi"
+    "cat \"$d/out\""
+    "cat \"$d/err\" >&2"
+    "exit \"$(cat \"$d/rc\")\""
+    "")
+   "\n"))
+
+(defun asdf-vm-test-install ()
+  "Install the recorded asdf 0.15.0 stand-in and point the package at it."
+  (let ((installed nil)
+        (bin (expand-file-name "bin" (getenv "NEOMACS_TEST_SANDBOX_ROOT"))))
+    (dolist (recording asdf-vm-test-recordings)
+      (let* ((key (asdf-vm-test-key (nth 0 recording)))
+             (path (expand-file-name key asdf-vm-test-records)))
+        (when (member path installed)
+          (error "Record key collision for %S" (nth 0 recording)))
+        (push path installed)
+        (asdf-vm-test-write-raw (expand-file-name "rc" path)
+                                (format "%d\n" (nth 1 recording)))
+        (asdf-vm-test-write-raw (expand-file-name "out" path) (nth 2 recording))
+        (asdf-vm-test-write-raw (expand-file-name "err" path) (nth 3 recording))))
+    (setenv "ASDF_VM_TEST_RECORDS" (directory-file-name asdf-vm-test-records))
+    (setenv "ASDF_VM_TEST_CALLS" asdf-vm-test-calls)
+    (setenv "ASDF_VM_TEST_MISSES" asdf-vm-test-misses)
+    (let ((path (expand-file-name "asdf" bin)))
+      (asdf-vm-test-write-raw path asdf-vm-test-stand-in)
+      (set-file-modes path #o755)
+      (setq asdf-vm-process-executable path))
+    (length installed)))
+
+(defun asdf-vm-test-settle (&optional seconds)
+  "Wait for the package's asynchronous asdf process and its sentinel.
+
+Waits on the process itself, not on a fixed duration: several of these calls
+are expected to produce no stdout at all, and a polling budget spent proving
+that is the marginal-timeout trap."
+  (let ((deadline (+ (float-time) (or seconds 20.0))))
+    (while (and (< (float-time) deadline)
+                (seq-some (lambda (p)
+                            (and (process-live-p p)
+                                 (string-prefix-p "asdf" (process-name p))))
+                          (process-list)))
+      (accept-process-output nil 0.02))
+    (accept-process-output nil 0.05)))
+
+(defun asdf-vm-test-calls-made ()
+  (if (not (file-exists-p asdf-vm-test-calls))
+      'asdf-was-never-run
+    (with-temp-buffer
+      (insert-file-contents asdf-vm-test-calls)
+      (split-string (buffer-string) "\n" t))))
+
+(defun asdf-vm-test-unrecorded ()
+  "Invocations the stand-in had no recording for; asserted empty everywhere.
+
+asdf reports most failures on stderr with an empty stdout, so a stand-in
+answering nothing looks exactly like a command that ran and printed nothing."
+  (if (not (file-exists-p asdf-vm-test-misses))
+      nil
+    (with-temp-buffer
+      (insert-file-contents asdf-vm-test-misses)
+      (split-string (buffer-string) "\n" t))))
+
+(defun asdf-vm-test-buffer (name)
+  (let ((buffer (get-buffer name)))
+    (if (not buffer)
+        'no-such-buffer
+      (with-current-buffer buffer
+        (buffer-substring-no-properties (point-min) (point-max))))))
 "##;
 
 fn asdf_vm_oracle(source_file: &str) -> CachedMelpaOracle {
