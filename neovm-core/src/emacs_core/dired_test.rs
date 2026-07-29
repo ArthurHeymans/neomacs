@@ -884,31 +884,37 @@ fn test_file_attributes_symlink_size_is_link_string_length_like_gnu() {
 #[test]
 fn test_file_attributes_lessp() {
     crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
     let f1 = Value::cons(Value::string("alpha.txt"), Value::NIL);
     let f2 = Value::cons(Value::string("beta.txt"), Value::NIL);
 
-    let result = builtin_file_attributes_lessp(vec![f1, f2]).unwrap();
+    let result = builtin_file_attributes_lessp(&mut eval, vec![f1, f2]).unwrap();
     assert!(result.is_truthy());
 
-    let result = builtin_file_attributes_lessp(vec![f2, f1]).unwrap();
+    let result = builtin_file_attributes_lessp(&mut eval, vec![f2, f1]).unwrap();
     assert!(result.is_nil());
 }
 
 #[test]
 fn test_file_attributes_lessp_equal() {
     crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
     let f1 = Value::cons(Value::string("same.txt"), Value::NIL);
     let f2 = Value::cons(Value::string("same.txt"), Value::NIL);
 
-    let result = builtin_file_attributes_lessp(vec![f1, f2]).unwrap();
+    let result = builtin_file_attributes_lessp(&mut eval, vec![f1, f2]).unwrap();
     assert!(result.is_nil()); // not less than
 }
 
 #[test]
 fn test_file_attributes_lessp_bad_args_match_gnu_order() {
     crate::test_utils::init_test_tracing();
-    let err = builtin_file_attributes_lessp(vec![Value::string("alpha"), Value::string("beta")])
-        .unwrap_err();
+    let mut eval = Context::new();
+    let err = builtin_file_attributes_lessp(
+        &mut eval,
+        vec![Value::string("alpha"), Value::string("beta")],
+    )
+    .unwrap_err();
     match err {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "wrong-type-argument");
@@ -927,24 +933,25 @@ fn test_file_attributes_lessp_bad_args_match_gnu_order() {
 #[test]
 fn test_file_attributes_lessp_coerces_nil_car_like_gnu() {
     crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
     // Both cars are nil -> string-lessp "nil" "nil" -> nil (no error).
     let f1 = Value::cons(Value::NIL, Value::cons(Value::fixnum(1), Value::NIL));
     let f2 = Value::cons(Value::NIL, Value::cons(Value::fixnum(2), Value::NIL));
-    let result = builtin_file_attributes_lessp(vec![f1, f2]).unwrap();
+    let result = builtin_file_attributes_lessp(&mut eval, vec![f1, f2]).unwrap();
     assert!(result.is_nil());
 
     // A symbol car is likewise coerced via SYMBOL_NAME: "abc" < "xyz" -> t.
     let g1 = Value::cons(Value::symbol("abc"), Value::NIL);
     let g2 = Value::cons(Value::symbol("xyz"), Value::NIL);
     assert!(
-        builtin_file_attributes_lessp(vec![g1, g2])
+        builtin_file_attributes_lessp(&mut eval, vec![g1, g2])
             .unwrap()
             .is_truthy()
     );
 
     // A nil argument (not a cons) -> Fcar(nil) = nil -> string-lessp nil nil -> nil.
     assert!(
-        builtin_file_attributes_lessp(vec![Value::NIL, Value::NIL])
+        builtin_file_attributes_lessp(&mut eval, vec![Value::NIL, Value::NIL])
             .unwrap()
             .is_nil()
     );
@@ -952,7 +959,7 @@ fn test_file_attributes_lessp_coerces_nil_car_like_gnu() {
     // A fixnum car is still rejected, exactly like GNU's string-lessp.
     let h1 = Value::cons(Value::fixnum(1), Value::NIL);
     let h2 = Value::cons(Value::fixnum(2), Value::NIL);
-    let err = builtin_file_attributes_lessp(vec![h1, h2]).unwrap_err();
+    let err = builtin_file_attributes_lessp(&mut eval, vec![h1, h2]).unwrap_err();
     match err {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
         other => panic!("expected signal, got {other:?}"),

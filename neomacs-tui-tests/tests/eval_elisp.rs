@@ -12551,6 +12551,41 @@ fn string_comparison_functions_accept_symbols_like_gnu() {
 }
 
 #[test]
+fn string_comparison_positioned_symbol_designators_match_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    // GNU src/lisp.h:SYMBOLP treats a symbol-with-pos as its bare symbol only
+    // while `symbols-with-pos-enabled' is non-nil.  GNU
+    // src/fns.c:Fstring_lessp/Fstring_equal use SYMBOLP before extracting the
+    // print name, so the dynamic flag governs both interpreted calls and the
+    // corresponding byte-code operations.
+    let expr = r#"(message "cmpsympos:%S" (let ((a (position-symbol 'alpha 17)) (b (position-symbol 'beta 23)) (v2 (position-symbol 'alpha2 31)) (v10 (position-symbol 'alpha10 37))) (list (let ((symbols-with-pos-enabled nil)) (list (symbolp a) (condition-case e (string-lessp a b) (error (list (car e) (cadr e)))) (condition-case e (string-equal a "alpha") (error (list (car e) (cadr e)))))) (let ((symbols-with-pos-enabled t)) (list (symbolp a) (string-lessp a b) (string< a "beta") (string-lessp "alpha" b) (string-equal a "alpha") (string= "beta" b) (string-greaterp b a) (string> b a) (string-version-lessp v2 v10) (string-collate-lessp a b) (string-collate-equalp a "alpha") (funcall (byte-compile (lambda (x y) (list (string-lessp x y) (string-equal x "alpha")))) a b))) (funcall (byte-compile (lambda (x y) (let ((symbols-with-pos-enabled t)) (list symbols-with-pos-enabled (symbolp x) (string-lessp x y))))) a b))))"#;
+    support::eval_expression(&mut gnu, &mut neo, expr);
+
+    let expected = "cmpsympos:((nil (wrong-type-argument stringp) (wrong-type-argument stringp)) (t t t t t t t t t t t (t t)) (t t t))";
+    let ready = |grid: &[String]| grid.iter().rev().take(4).any(|row| row.contains(expected));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            ready(&grid),
+            "{label}: positioned symbol string designators should follow GNU's dynamic flag\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "string_comparison_positioned_symbol_designators_match_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn compare_strings_bounds_and_ignore_case_match_gnu_semantics() {
     let (mut gnu, mut neo) = boot_pair("");
 

@@ -169,6 +169,25 @@ fn string_designator_accepts_symbols() {
 }
 
 #[test]
+fn string_designator_honors_positioned_symbol_dynamic_view() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let positioned = eval
+        .tagged_heap
+        .alloc_symbol_with_pos(Value::symbol("alpha"), Value::fixnum(17));
+
+    assert_wrong_type(
+        StringDesignator::from_value(&mut eval, positioned).unwrap_err(),
+        "stringp",
+        positioned,
+    );
+
+    eval.set_variable("symbols-with-pos-enabled", Value::T);
+    let designator = StringDesignator::from_value(&mut eval, positioned).unwrap();
+    assert_eq!(designator.0.as_bytes(), b"alpha");
+}
+
+#[test]
 fn number_or_marker_reads_live_marker_position() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();

@@ -7678,32 +7678,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
 
     // -- String --
-    ctx.defsubr(
-        "string-equal",
-        |_ctx, args| builtin_string_equal(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr("string=", |_ctx, args| builtin_string_equal(args), 0, None);
-    ctx.defsubr(
-        "string-lessp",
-        |_ctx, args| builtin_string_lessp(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr("string<", |_ctx, args| builtin_string_lessp(args), 0, None);
-    ctx.defsubr(
-        "string-greaterp",
-        |_ctx, args| builtin_string_greaterp(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "string>",
-        |_ctx, args| builtin_string_greaterp(args),
-        0,
-        None,
-    );
+    ctx.defsubr_2("string-equal", builtin_string_equal_2, 2);
+    ctx.defsubr_2("string=", builtin_string_equal_2, 2);
+    ctx.defsubr_2("string-lessp", builtin_string_lessp_2, 2);
+    ctx.defsubr_2("string<", builtin_string_lessp_2, 2);
+    ctx.defsubr_2("string-greaterp", builtin_string_greaterp_2, 2);
+    ctx.defsubr_2("string>", builtin_string_greaterp_2, 2);
     ctx.defsubr_slice(
         "substring",
         |_ctx, args| builtin_substring_slice(args),
@@ -7757,19 +7737,19 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "string-version-lessp",
-        |_ctx, args| super::fns::builtin_string_version_lessp(args),
+        super::fns::builtin_string_version_lessp,
         2,
         Some(2),
     );
     ctx.defsubr(
         "string-collate-lessp",
-        |_ctx, args| super::fns::builtin_string_collate_lessp(args),
+        super::fns::builtin_string_collate_lessp,
         2,
         Some(4),
     );
     ctx.defsubr(
         "string-collate-equalp",
-        |_ctx, args| super::fns::builtin_string_collate_equalp(args),
+        super::fns::builtin_string_collate_equalp,
         2,
         Some(4),
     );
@@ -8043,7 +8023,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     // -- File I/O --
     ctx.defsubr(
         "file-attributes-lessp",
-        |_ctx, args| super::dired::builtin_file_attributes_lessp(args),
+        super::dired::builtin_file_attributes_lessp,
         2,
         Some(2),
     );

@@ -1839,11 +1839,22 @@ fn compare_strings_ignore_case_uses_upcase_like_gnu() {
 
 // ---- string-version-lessp ----
 
+fn call_string_version_lessp(args: Vec<Value>) -> EvalResult {
+    builtin_string_version_lessp(&mut Context::new(), args)
+}
+
+fn call_string_collate_lessp(args: Vec<Value>) -> EvalResult {
+    builtin_string_collate_lessp(&mut Context::new(), args)
+}
+
+fn call_string_collate_equalp(args: Vec<Value>) -> EvalResult {
+    builtin_string_collate_equalp(&mut Context::new(), args)
+}
+
 #[test]
 fn version_lessp_basic() {
     crate::test_utils::init_test_tracing();
-    let r =
-        builtin_string_version_lessp(vec![Value::string("foo2"), Value::string("foo10")]).unwrap();
+    let r = call_string_version_lessp(vec![Value::string("foo2"), Value::string("foo10")]).unwrap();
     assert!(r.is_truthy());
 }
 
@@ -1851,21 +1862,21 @@ fn version_lessp_basic() {
 fn version_lessp_equal() {
     crate::test_utils::init_test_tracing();
     let r =
-        builtin_string_version_lessp(vec![Value::string("foo10"), Value::string("foo10")]).unwrap();
+        call_string_version_lessp(vec![Value::string("foo10"), Value::string("foo10")]).unwrap();
     assert!(r.is_nil());
 }
 
 #[test]
 fn version_lessp_alpha() {
     crate::test_utils::init_test_tracing();
-    let r = builtin_string_version_lessp(vec![Value::string("abc"), Value::string("abd")]).unwrap();
+    let r = call_string_version_lessp(vec![Value::string("abc"), Value::string("abd")]).unwrap();
     assert!(r.is_truthy());
 }
 
 #[test]
 fn version_lessp_numeric_segments() {
     crate::test_utils::init_test_tracing();
-    let r = builtin_string_version_lessp(vec![
+    let r = call_string_version_lessp(vec![
         Value::string("emacs-27.1"),
         Value::string("emacs-27.2"),
     ])
@@ -1876,13 +1887,12 @@ fn version_lessp_numeric_segments() {
 #[test]
 fn version_lessp_leading_zero_runs_match_gnu() {
     crate::test_utils::init_test_tracing();
-    let equal_numeric =
-        builtin_string_version_lessp(vec![Value::string("1"), Value::string("001")])
-            .expect("string-version-lessp should evaluate");
+    let equal_numeric = call_string_version_lessp(vec![Value::string("1"), Value::string("001")])
+        .expect("string-version-lessp should evaluate");
     assert!(equal_numeric.is_nil());
 
     let reverse_equal_numeric =
-        builtin_string_version_lessp(vec![Value::string("001"), Value::string("1")])
+        call_string_version_lessp(vec![Value::string("001"), Value::string("1")])
             .expect("string-version-lessp should evaluate");
     assert!(reverse_equal_numeric.is_nil());
 }
@@ -1892,14 +1902,14 @@ fn version_lessp_leading_zero_runs_match_gnu() {
 #[test]
 fn collate_lessp_basic() {
     crate::test_utils::init_test_tracing();
-    let r = builtin_string_collate_lessp(vec![Value::string("abc"), Value::string("abd")]).unwrap();
+    let r = call_string_collate_lessp(vec![Value::string("abc"), Value::string("abd")]).unwrap();
     assert!(r.is_truthy());
 }
 
 #[test]
 fn collate_lessp_ignore_case() {
     crate::test_utils::init_test_tracing();
-    let r = builtin_string_collate_lessp(vec![
+    let r = call_string_collate_lessp(vec![
         Value::string("ABC"),
         Value::string("abd"),
         Value::NIL, // locale
@@ -1912,7 +1922,7 @@ fn collate_lessp_ignore_case() {
 #[test]
 fn collate_lessp_rejects_non_string_locale() {
     crate::test_utils::init_test_tracing();
-    let err = builtin_string_collate_lessp(vec![
+    let err = call_string_collate_lessp(vec![
         Value::string("a"),
         Value::string("b"),
         Value::fixnum(42),
@@ -1933,7 +1943,7 @@ fn collate_lessp_rejects_non_string_locale() {
 #[test]
 fn collate_lessp_invalid_locale_signals_error() {
     crate::test_utils::init_test_tracing();
-    let err = builtin_string_collate_lessp(vec![
+    let err = call_string_collate_lessp(vec![
         Value::string("a"),
         Value::string("b"),
         Value::string("neomacs-invalid-locale"),
@@ -1952,15 +1962,14 @@ fn collate_lessp_invalid_locale_signals_error() {
 #[test]
 fn collate_equalp_basic() {
     crate::test_utils::init_test_tracing();
-    let r =
-        builtin_string_collate_equalp(vec![Value::string("abc"), Value::string("abc")]).unwrap();
+    let r = call_string_collate_equalp(vec![Value::string("abc"), Value::string("abc")]).unwrap();
     assert!(r.is_truthy());
 }
 
 #[test]
 fn collate_equalp_ignore_case() {
     crate::test_utils::init_test_tracing();
-    let r = builtin_string_collate_equalp(vec![
+    let r = call_string_collate_equalp(vec![
         Value::string("ABC"),
         Value::string("abc"),
         Value::NIL,
@@ -1973,15 +1982,14 @@ fn collate_equalp_ignore_case() {
 #[test]
 fn collate_equalp_different() {
     crate::test_utils::init_test_tracing();
-    let r =
-        builtin_string_collate_equalp(vec![Value::string("abc"), Value::string("abd")]).unwrap();
+    let r = call_string_collate_equalp(vec![Value::string("abc"), Value::string("abd")]).unwrap();
     assert!(r.is_nil());
 }
 
 #[test]
 fn collate_equalp_rejects_non_string_locale() {
     crate::test_utils::init_test_tracing();
-    let err = builtin_string_collate_equalp(vec![
+    let err = call_string_collate_equalp(vec![
         Value::string("a"),
         Value::string("a"),
         Value::symbol("not-a-locale"),

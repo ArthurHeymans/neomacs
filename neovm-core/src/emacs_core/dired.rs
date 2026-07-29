@@ -1234,7 +1234,10 @@ pub(crate) fn builtin_file_attributes(eval: &mut Context, args: Vec<Value>) -> E
 /// Return t if the first element (filename) of F1 is less than that of F2.
 /// F1 and F2 are each (NAME . ATTRIBUTES) cons cells as returned by
 /// `directory-files-and-attributes`.
-pub(crate) fn builtin_file_attributes_lessp(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_file_attributes_lessp(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_range_args("file-attributes-lessp", &args, 2, 2)?;
 
     // GNU (src/dired.c): `return Fstring_lessp (Fcar (f1), Fcar (f2));`.
@@ -1246,7 +1249,7 @@ pub(crate) fn builtin_file_attributes_lessp(args: Vec<Value>) -> EvalResult {
     let car2 = file_attributes_lessp_car(&args[1])?;
     let car1 = file_attributes_lessp_car(&args[0])?;
 
-    super::builtins::builtin_string_lessp(vec![car1, car2])
+    super::builtins::builtin_string_lessp_2(eval, car1, car2)
 }
 
 /// Take the car of a `file-attributes-lessp` argument with GNU `Fcar`

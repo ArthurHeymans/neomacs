@@ -24,11 +24,6 @@ fn string_char_range(start: usize, end: usize) -> CharRange {
     )
 }
 
-pub(crate) fn builtin_string_equal(args: Vec<Value>) -> EvalResult {
-    expect_args("string-equal", &args, 2)?;
-    builtin_string_equal_values(args[0], args[1])
-}
-
 typed_subr! {
     pub(crate) fn builtin_string_equal_2(_eval, a: StringDesignator, b: StringDesignator) -> EvalResult {
         string_equal_designators(&a.0, &b.0)
@@ -55,12 +50,6 @@ fn string_comparison_codes(value: &crate::heap_types::LispString) -> Vec<u32> {
     }
 }
 
-fn builtin_string_equal_values(a_value: Value, b_value: Value) -> EvalResult {
-    let a = expect_string_comparison_operand(&a_value)?;
-    let b = expect_string_comparison_operand(&b_value)?;
-    string_equal_designators(&a, &b)
-}
-
 fn string_equal_designators(
     a: &crate::heap_types::LispString,
     b: &crate::heap_types::LispString,
@@ -77,11 +66,6 @@ fn string_equal_designators(
     ))
 }
 
-pub(crate) fn builtin_string_lessp(args: Vec<Value>) -> EvalResult {
-    expect_args("string-lessp", &args, 2)?;
-    builtin_string_lessp_values(args[0], args[1])
-}
-
 typed_subr! {
     pub(crate) fn builtin_string_lessp_2(_eval, a: StringDesignator, b: StringDesignator) -> EvalResult {
         Ok(Value::bool_val(
@@ -90,21 +74,12 @@ typed_subr! {
     }
 }
 
-fn builtin_string_lessp_values(a_value: Value, b_value: Value) -> EvalResult {
-    let a = expect_string_comparison_operand(&a_value)?;
-    let b = expect_string_comparison_operand(&b_value)?;
-    Ok(Value::bool_val(
-        string_comparison_codes(&a) < string_comparison_codes(&b),
-    ))
-}
-
-pub(crate) fn builtin_string_greaterp(args: Vec<Value>) -> EvalResult {
-    expect_args("string-greaterp", &args, 2)?;
-    let a = expect_string_comparison_operand(&args[0])?;
-    let b = expect_string_comparison_operand(&args[1])?;
-    Ok(Value::bool_val(
-        string_comparison_codes(&a) > string_comparison_codes(&b),
-    ))
+typed_subr! {
+    pub(crate) fn builtin_string_greaterp_2(_eval, a: StringDesignator, b: StringDesignator) -> EvalResult {
+        Ok(Value::bool_val(
+            string_comparison_codes(&a.0) > string_comparison_codes(&b.0),
+        ))
+    }
 }
 
 fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResult {

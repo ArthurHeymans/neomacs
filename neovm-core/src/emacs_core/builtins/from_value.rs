@@ -168,11 +168,17 @@ impl FromValue for CharacterCode {
 /// `stringp` — a string designator: strings pass through, symbols
 /// contribute their name (mirrors `expect_string_comparison_operand`,
 /// GNU `string-equal`/`string-lessp` operand coercion).
+///
+/// GNU's `SYMBOLP` also accepts a symbol-with-pos while
+/// `symbols-with-pos-enabled` is non-nil.  Resolve that dynamic view here so
+/// every typed string-designator builtin has the same interpreter, bytecode,
+/// and JIT contract.
 #[derive(Clone, Debug)]
 pub(crate) struct StringDesignator(pub(crate) LispString);
 
 impl FromValue for StringDesignator {
-    fn from_value(_eval: &mut eval::Context, value: Value) -> Result<Self, Flow> {
+    fn from_value(eval: &mut eval::Context, value: Value) -> Result<Self, Flow> {
+        let value = eval.unwrap_symbol(value);
         expect_string_comparison_operand(&value).map(StringDesignator)
     }
 }

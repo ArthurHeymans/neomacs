@@ -6,7 +6,9 @@
 //! compare-strings, string-version-lessp, string-collate-lessp/equalp.
 
 use super::error::{EvalResult, Flow, signal};
+use super::eval::Context;
 use super::intern::{intern, resolve_sym};
+use crate::emacs_core::builtins::{FromValue, StringDesignator};
 use crate::emacs_core::error::LispCondition;
 // bytes_to_unibyte_storage_string and encode_nonunicode_char_for_storage
 // imports removed — using emacs_char + LispString directly
@@ -117,19 +119,11 @@ fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Resu
     }
 }
 
-fn require_string_or_symbol_name(val: &Value) -> Result<String, Flow> {
-    val.as_symbol_name()
-        .map(str::to_owned)
-        .or_else(|| {
-            val.as_lisp_string()
-                .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
-        })
-        .ok_or_else(|| {
-            signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("stringp"), *val],
-            )
-        })
+fn string_designator_text(eval: &mut Context, val: Value) -> Result<String, Flow> {
+    let string = StringDesignator::from_value(eval, val)?.0;
+    Ok(crate::emacs_core::emacs_char::to_utf8_lossy(
+        string.as_bytes(),
+    ))
 }
 
 fn require_int(val: &Value) -> Result<i64, Flow> {
@@ -1598,19 +1592,16 @@ fn require_lisp_string(value: &Value) -> Result<crate::heap_types::LispString, F
 }
 
 /// (string-version-lessp S1 S2) -- version-aware string comparison.
-pub(crate) fn builtin_string_version_lessp(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_string_version_lessp(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("string-version-lessp", &args, 2)?;
-    // Symbols are allowed; their print names are used instead (like official Emacs).
-    let s1 = if let Some(name) = args[0].as_symbol_name() {
-        name.as_bytes().to_vec()
-    } else {
-        require_lisp_string(&args[0])?.as_bytes().to_vec()
-    };
-    let s2 = if let Some(name) = args[1].as_symbol_name() {
-        name.as_bytes().to_vec()
-    } else {
-        require_lisp_string(&args[1])?.as_bytes().to_vec()
-    };
+    let s1 = StringDesignator::from_value(eval, args[0])?
+        .0
+        .as_bytes()
+        .to_vec();
+    let s2 = StringDesignator::from_value(eval, args[1])?
+        .0
+        .as_bytes()
+        .to_vec();
 
     Ok(Value::bool_val(filenvercmp(&s1, &s2) < 0))
 }
@@ -1880,10 +1871,10 @@ fn string_collate_compare(
 }
 
 /// (string-collate-lessp S1 S2 &optional LOCALE IGNORE-CASE)
-pub(crate) fn builtin_string_collate_lessp(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_string_collate_lessp(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_range_args("string-collate-lessp", &args, 2, 4)?;
-    let s1 = require_string_or_symbol_name(&args[0])?;
-    let s2 = require_string_or_symbol_name(&args[1])?;
+    let s1 = string_designator_text(eval, args[0])?;
+    let s2 = string_designator_text(eval, args[1])?;
     let locale = require_optional_locale(args.get(2))?;
     let ignore_case = args.get(3).is_some_and(|v| v.is_truthy());
 
@@ -1893,10 +1884,10 @@ pub(crate) fn builtin_string_collate_lessp(args: Vec<Value>) -> EvalResult {
 }
 
 /// (string-collate-equalp S1 S2 &optional LOCALE IGNORE-CASE)
-pub(crate) fn builtin_string_collate_equalp(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_string_collate_equalp(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_range_args("string-collate-equalp", &args, 2, 4)?;
-    let s1 = require_string_or_symbol_name(&args[0])?;
-    let s2 = require_string_or_symbol_name(&args[1])?;
+    let s1 = string_designator_text(eval, args[0])?;
+    let s2 = string_designator_text(eval, args[1])?;
     let locale = require_optional_locale(args.get(2))?;
     let ignore_case = args.get(3).is_some_and(|v| v.is_truthy());
 
