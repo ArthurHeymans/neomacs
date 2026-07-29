@@ -1107,6 +1107,76 @@ before handing the line to `comint-send-string`; when IEx echoes it back, GNU
 carries that marker past the echo and Neomacs leaves it at 39 where GNU has 77.
 
 
+## 37. Killing a windowed buffer leaves the current buffer out of sync
+
+After `kill-buffer` on a buffer that is displayed in the selected window, GNU
+leaves the current buffer and the selected window's buffer the same. Neomacs
+gives the *window* the right replacement and leaves a *different* buffer
+current.
+
+```elisp
+(save-window-excursion
+  (find-file FILE)
+  (kill-buffer)
+  (list (buffer-name)
+        (buffer-name (window-buffer (selected-window)))
+        (eq (current-buffer) (window-buffer (selected-window)))))
+;; GNU     => ("*scratch*"  "*scratch*" t)
+;; Neomacs => ("*Messages*" "*scratch*" nil)
+```
+
+**This is not entry 13**, and all three ways it could have been were checked:
+`buffer-list` returns the same buffers in the same order in both editors here;
+the window agrees; and `kill-buffer` with *no window displaying the victim*
+agrees too — both editors land on `*Messages*`. Only the current buffer
+diverges, and only when a window displayed the buffer being killed.
+
+The damage is that `default-directory` comes with the current buffer. Any
+command that kills a buffer and then resolves a path is working from a
+directory the user never chose. In `aidermacs`, `aidermacs-project-root` reads
+`default-directory` after the prompt buffer is killed, so a second
+`M-x aidermacs-open-prompt-file` creates `.aider.prompt.org` four directories
+*above* the project instead of inside it — a file written outside the
+repository the user is working in. Affects: `aidermacs` (1).
+
+## 38. A quantifier after the `` \` `` anchor is not treated as literal
+
+GNU treats `*`, `+` and `?` as literal characters wherever they have nothing to
+repeat. Neomacs implements that rule at the start of a pattern, after `\(` and
+after `\|`, but **not after the `` \` `` string/buffer-start anchor**, where it
+applies the quantifier to the anchor itself.
+
+```elisp
+(list (string-match "\\`+a\\'" "+a")     ; GNU 0   Neomacs nil
+      (string-match "\\`*a\\'" "*a")     ; GNU 0   Neomacs 1
+      (string-match "\\`?a\\'" "?a"))    ; GNU 0   Neomacs 1
+```
+
+Everything around it agrees, which is what makes the entry narrow:
+
+| pattern | GNU | Neomacs |
+|---|---|---|
+| `+a` (no anchor) | 0 | 0 ✓ |
+| `\(+a\)` | 0 | 0 ✓ |
+| `\`\|+\`` after `\|` | 0 | 0 ✓ |
+| `\<+a` | 1 | 1 ✓ |
+| `\+a` (escaped) | 0 | 0 ✓ |
+| `` \`+a `` | 0 | **nil** ✗ |
+| `` \`*a `` | 0 | **1** ✗ |
+
+The `*` and `?` rows are the dangerous ones: they do not fail, they match at the
+**wrong offset**, because "zero or more start-anchors" succeeds on the empty
+string and the rest of the pattern then matches one character late.
+
+Blast radius: anchoring a literal `+`, `*` or `?` at string start is the normal
+way to recognise an `emacsclient`-style `+LINE:COL` argument, a diff hunk
+marker, or a leading option character. Affects: `ai-code` (1) —
+`ai-code-editor-viewport--parse-file-arguments` matches
+``"\\`+\\([0-9]+\\)\\(?::\\([0-9]+\\)\\)?\\'"``, so `+12:4 src/api.el` opens
+`api.el` at line 12 column 4 in GNU, while Neomacs takes `+12:4` to be a
+filename of its own and opens no file at any position.
+
+
 ## Behaviour that is NOT a divergence
 
 Recorded so nobody re-investigates them:

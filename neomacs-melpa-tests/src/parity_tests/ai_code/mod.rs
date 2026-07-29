@@ -11,8 +11,14 @@ mod mcp;
 mod prompts;
 mod sessions;
 mod viewport;
+mod workflows;
 
-const AI_CODE_TEST_TIMEOUT: Duration = Duration::from_secs(30);
+// The editor-helper workflow starts several real pty processes, so the
+// 30s this used to allow was marginal: the case passed when run alone and
+// timed out under package load, which reads as flakiness in the package
+// rather than as a harness cap.  The other long-running suites allow
+// 120-240s.
+const AI_CODE_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 const AI_CODE_PRELUDE: &str = r##"
 (require 'cl-lib)
 (require 'map)
