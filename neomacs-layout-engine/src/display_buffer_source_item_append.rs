@@ -1,4 +1,3 @@
-use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendKind, DisplayRowAppendSurface,
@@ -102,6 +101,33 @@ impl BufferSourceResolvedItemFace {
     }
 }
 
+#[derive(Clone, Copy)]
+enum BufferSourceItemFace<'a> {
+    Active(&'a DisplayRowActiveFaceState),
+    Resolved(&'a BufferSourceResolvedItemFace),
+}
+
+impl<'a> BufferSourceItemFace<'a> {
+    fn face_id(self) -> FaceId {
+        match self {
+            Self::Active(face) => face.face_id(),
+            Self::Resolved(face) => face.face_id,
+        }
+    }
+
+    fn resolved_face(self) -> &'a ResolvedFace {
+        match self {
+            Self::Active(face) => face.resolved_face(),
+            Self::Resolved(face) => &face.face,
+        }
+    }
+
+    fn bind_item(self, mut item: DisplayItem) -> DisplayItem {
+        item.face = RenderFaceRef::FaceId(self.face_id());
+        item
+    }
+}
+
 impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     BufferSourceRowAppendContext<'source, 'surface, B>
 {
@@ -201,17 +227,16 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         )
     }
 
-    fn source_item_face<'a>(&'a self, item: &DisplayItem) -> (&'a ResolvedFace, FaceId) {
-        let item_face_id = render_face_ref_id(item.face, self.active_face.face_id());
-        if item_face_id == self.active_face.face_id() {
-            return (self.active_face.resolved_face(), self.active_face.face_id());
-        }
+    fn source_item_face(&self, item: &DisplayItem) -> BufferSourceItemFace<'_> {
+        let RenderFaceRef::FaceId(item_face_id) = item.face else {
+            return BufferSourceItemFace::Active(self.active_face);
+        };
         if let Some(face) = &self.resolved_item_face
             && face.face_id == item_face_id
         {
-            return (&face.face, face.face_id);
+            return BufferSourceItemFace::Resolved(face);
         }
-        (self.active_face.resolved_face(), item_face_id)
+        BufferSourceItemFace::Active(self.active_face)
     }
 
     fn source_display_item_for_special_source_char(
@@ -433,16 +458,18 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         render_policy: &mut DisplaySourceAppendRenderPolicy,
     ) -> Option<DisplayRowAppendProgress> {
         let frame = self.active_face_context(geometry).active_face_frame();
-        let (base_face, face_id) = self.source_item_face(&item);
+        let item_face = self.source_item_face(&item);
+        let item = item_face.bind_item(item);
         let mut face_ids = self.face_attempt.clone();
-        SingleDisplayItemAppendContext::new(base_face, face_id, frame).render_with_policy(
-            state,
-            &mut face_ids,
-            item,
-            position,
-            fallback_kind,
-            render_policy,
-        )
+        SingleDisplayItemAppendContext::new(item_face.resolved_face(), item_face.face_id(), frame)
+            .render_with_policy(
+                state,
+                &mut face_ids,
+                item,
+                position,
+                fallback_kind,
+                render_policy,
+            )
     }
 
     pub(crate) fn measure_source_display_item_width_naturally(
@@ -454,13 +481,14 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         fallback_kind: DisplayRowAppendKind,
     ) -> Option<f32> {
         let frame = self.active_face_context(geometry).active_face_frame();
-        let (base_face, face_id) = self.source_item_face(item);
-        SingleDisplayItemAppendContext::new(base_face, face_id, frame).measure_width_naturally(
-            state,
-            item.clone(),
-            position,
-            fallback_kind,
-        )
+        let item_face = self.source_item_face(item);
+        SingleDisplayItemAppendContext::new(item_face.resolved_face(), item_face.face_id(), frame)
+            .measure_width_naturally(
+                state,
+                item_face.bind_item(item.clone()),
+                position,
+                fallback_kind,
+            )
     }
 
     fn append_source_char_plan_to_text_row(

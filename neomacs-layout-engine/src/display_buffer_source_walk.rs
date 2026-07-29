@@ -149,6 +149,16 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         self.source_resolve_state.resolved_face(face_id)
     }
 
+    pub(crate) fn remember_resolved_source_face_if_absent(
+        &mut self,
+        face_id: FaceId,
+        face: &ResolvedFace,
+    ) {
+        if self.source_resolve_state.resolved_face(face_id).is_none() {
+            self.source_resolve_state.remember_face(face_id, face);
+        }
+    }
+
     pub(crate) fn prepend_pending_render_items<I>(&mut self, items: I)
     where
         I: IntoIterator<Item = DisplaySourceStepItem>,

@@ -300,14 +300,20 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
                 nobreak_hint,
             );
         let item_face_id = render_face_ref_id(source_item.item().face, active_face_state.face_id());
-        let resolved_item_face = (item_face_id != active_face_state.face_id())
-            .then(|| {
-                source_walk
-                    .resolved_source_face(item_face_id)
-                    .cloned()
-                    .map(|face| (item_face_id, face))
-            })
-            .flatten();
+        if item_face_id == active_face_state.face_id() {
+            // Layout-only face transforms (height, escape-glyph and nobreak
+            // highlighting) happen after source-property resolution. Preserve
+            // their complete identity here before this item can be split and
+            // its suffix queued for a later row/iteration.
+            source_walk.remember_resolved_source_face_if_absent(
+                active_face_state.face_id(),
+                active_face_state.resolved_face(),
+            );
+        }
+        let resolved_item_face = source_walk
+            .resolved_source_face(item_face_id)
+            .cloned()
+            .map(|face| (item_face_id, face));
         let row_extend_fill = resolved_item_face
             .as_ref()
             .and_then(|(face_id, face)| face.extend.then(|| (Color::from_pixel(face.bg), *face_id)))
