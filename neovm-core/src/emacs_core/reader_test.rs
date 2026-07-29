@@ -1691,11 +1691,19 @@ fn minibuffer_input_source_distinguishes_stdin_macros_and_live_input() {
         batch.minibuffer_input_source(),
         MinibufferInputSource::StandardInput
     );
+    assert_eq!(
+        batch.command_event_input_source(),
+        CommandEventInputSource::Unavailable
+    );
 
     batch.begin_executing_kbd_macro_runtime(vec![Value::fixnum(b'a' as i64)]);
     assert_eq!(
         batch.minibuffer_input_source(),
         MinibufferInputSource::CommandLoop
+    );
+    assert_eq!(
+        batch.command_event_input_source(),
+        CommandEventInputSource::Runtime
     );
 
     let mut interactive = Context::new();
@@ -1704,6 +1712,41 @@ fn minibuffer_input_source_distinguishes_stdin_macros_and_live_input() {
     assert_eq!(
         interactive.minibuffer_input_source(),
         MinibufferInputSource::CommandLoop
+    );
+    assert_eq!(
+        interactive.command_event_input_source(),
+        CommandEventInputSource::Runtime
+    );
+
+    let mut queued = Context::new();
+    queued
+        .command_loop
+        .keyboard
+        .unread_event(Value::symbol("file-notify"));
+    assert_eq!(
+        queued.minibuffer_input_source(),
+        MinibufferInputSource::StandardInput
+    );
+    assert_eq!(
+        queued.command_event_input_source(),
+        CommandEventInputSource::Runtime
+    );
+}
+
+#[test]
+fn read_char_consumes_executing_keyboard_macro_event_without_input_receiver() {
+    crate::test_utils::init_test_tracing();
+    let mut batch = Context::new();
+    let prefix = vec![Value::char('C'), Value::char('c')];
+    batch.set_read_command_keys(prefix.clone());
+    batch.begin_executing_kbd_macro_runtime(vec![Value::char('a')]);
+
+    let result = builtin_read_char(&mut batch, vec![]).expect("read-char");
+
+    assert_eq!(result, Value::fixnum('a' as i64));
+    assert_eq!(
+        batch.read_command_keys(),
+        &[prefix[0], prefix[1], Value::char('a')]
     );
 }
 

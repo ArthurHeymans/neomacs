@@ -2115,6 +2115,19 @@ pub(crate) enum MinibufferInputSource {
     StandardInput,
 }
 
+/// Whether a character/event reader can obtain input from the command runtime.
+///
+/// Unlike minibuffer readers, `read-char`, `read-event`, and
+/// `read-char-exclusive` never fall back to standard input.  They can still
+/// read without a live frontend when a keyboard macro is executing or a
+/// low-level event is queued.  Centralizing that distinction prevents each
+/// builtin from recognizing a different subset of GNU `read_char`'s sources.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CommandEventInputSource {
+    Runtime,
+    Unavailable,
+}
+
 pub(crate) trait KeyboardInputRuntime {
     fn pop_unread_command_event(&mut self) -> Option<Value>;
     fn peek_unread_command_event(&self) -> Option<Value>;
@@ -2137,6 +2150,16 @@ pub(crate) trait KeyboardInputRuntime {
     }
     fn has_pending_low_level_events(&self) -> bool {
         false
+    }
+    fn command_event_input_source(&self) -> CommandEventInputSource {
+        if self.has_input_receiver()
+            || self.is_executing_keyboard_macro()
+            || self.has_pending_low_level_events()
+        {
+            CommandEventInputSource::Runtime
+        } else {
+            CommandEventInputSource::Unavailable
+        }
     }
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn read_char_blocking(&mut self) -> Result<Value, Flow>;
@@ -2479,10 +2502,9 @@ pub(crate) fn builtin_read_char_in_runtime(
         return Err(non_character_input_event_error());
     }
 
-    if runtime.has_input_receiver() {
-        Ok(None)
-    } else {
-        Ok(Some(Value::NIL))
+    match runtime.command_event_input_source() {
+        CommandEventInputSource::Runtime => Ok(None),
+        CommandEventInputSource::Unavailable => Ok(Some(Value::NIL)),
     }
 }
 
@@ -2775,24 +2797,25 @@ pub(crate) fn finish_read_char_interactive_in_runtime(
     runtime: &mut impl KeyboardInputRuntime,
     args: &[Value],
 ) -> EvalResult {
-    if runtime.has_input_receiver() {
-        let timeout = parse_optional_read_seconds_arg(args.get(2))?;
-        let Some(event) = runtime.read_char_with_timeout(timeout)? else {
-            return Ok(Value::NIL);
-        };
-        let seconds_is_nil_or_omitted = args.get(2).is_none_or(|v| v.is_nil());
-        if let Some(n) = event_to_int(&event) {
-            if runtime.read_command_keys().is_empty() && seconds_is_nil_or_omitted {
-                runtime.set_read_command_keys(vec![event]);
+    match runtime.command_event_input_source() {
+        CommandEventInputSource::Runtime => {
+            let timeout = parse_optional_read_seconds_arg(args.get(2))?;
+            let Some(event) = runtime.read_char_with_timeout(timeout)? else {
+                return Ok(Value::NIL);
+            };
+            let seconds_is_nil_or_omitted = args.get(2).is_none_or(|v| v.is_nil());
+            if let Some(n) = event_to_int(&event) {
+                if runtime.read_command_keys().is_empty() && seconds_is_nil_or_omitted {
+                    runtime.set_read_command_keys(vec![event]);
+                }
+                return Ok(Value::fixnum(n));
             }
-            return Ok(Value::fixnum(n));
+            runtime.replace_unread_command_event_with_singleton(event);
+            runtime.record_input_event(event);
+            Err(non_character_input_event_error())
         }
-        runtime.replace_unread_command_event_with_singleton(event);
-        runtime.record_input_event(event);
-        return Err(non_character_input_event_error());
+        CommandEventInputSource::Unavailable => Ok(Value::NIL),
     }
-
-    Ok(Value::NIL)
 }
 
 /// `(read-key &optional PROMPT)`

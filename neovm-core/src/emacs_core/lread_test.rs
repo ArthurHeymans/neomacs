@@ -702,6 +702,18 @@ fn read_event_returns_nil() {
 }
 
 #[test]
+fn read_event_consumes_executing_keyboard_macro_event_without_input_receiver() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.begin_executing_kbd_macro_runtime(vec![Value::char('a')]);
+
+    let result = builtin_read_event(&mut ev, vec![]).expect("read-event");
+
+    assert_eq!(result, Value::fixnum('a' as i64));
+    assert_eq!(ev.read_command_keys(), &[Value::char('a')]);
+}
+
+#[test]
 fn read_event_rejects_non_string_prompt() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -910,6 +922,18 @@ fn read_char_exclusive_returns_nil() {
     let mut ev = Context::new();
     let result = builtin_read_char_exclusive(&mut ev, vec![]).unwrap();
     assert!(result.is_nil());
+}
+
+#[test]
+fn read_char_exclusive_consumes_executing_keyboard_macro_event_without_input_receiver() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.begin_executing_kbd_macro_runtime(vec![Value::char('a')]);
+
+    let result = builtin_read_char_exclusive(&mut ev, vec![]).expect("read-char-exclusive");
+
+    assert_eq!(result, Value::fixnum('a' as i64));
+    assert_eq!(ev.read_command_keys(), &[Value::char('a')]);
 }
 
 #[test]

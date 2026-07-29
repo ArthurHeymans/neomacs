@@ -594,13 +594,29 @@ impl ReadKeySequenceState {
 struct ReadCharEvent {
     event: Value,
     allow_input_method: bool,
+    command_key_recording: CommandKeyRecording,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum CommandKeyRecording {
+    Append,
+    AppendIfEmpty,
 }
 
 impl ReadCharEvent {
-    fn input_method_candidate(event: Value) -> Self {
+    fn fresh_input_method_candidate(event: Value) -> Self {
         Self {
             event,
             allow_input_method: true,
+            command_key_recording: CommandKeyRecording::Append,
+        }
+    }
+
+    fn reread_input_method_candidate(event: Value) -> Self {
+        Self {
+            event,
+            allow_input_method: true,
+            command_key_recording: CommandKeyRecording::AppendIfEmpty,
         }
     }
 
@@ -608,6 +624,7 @@ impl ReadCharEvent {
         Self {
             event,
             allow_input_method: false,
+            command_key_recording: CommandKeyRecording::AppendIfEmpty,
         }
     }
 }
@@ -1367,6 +1384,11 @@ impl KBoard {
     pub fn set_read_command_keys(&mut self, keys: Vec<Value>) {
         self.command_keys = keys.clone();
         self.raw_command_keys = keys;
+    }
+
+    pub fn append_read_command_key(&mut self, key: Value) {
+        self.command_keys.push(key);
+        self.raw_command_keys.push(key);
     }
 
     pub fn clear_read_command_keys(&mut self) {
@@ -4024,17 +4046,17 @@ impl crate::emacs_core::eval::Context {
         }
         if let Some(event) = self.pop_unread_command_event_unrecorded() {
             return Ok(QueuedReadCharEvent::Event(
-                ReadCharEvent::input_method_candidate(event),
+                ReadCharEvent::reread_input_method_candidate(event),
             ));
         }
         if let Some(event) = self.pop_unread_input_method_event_unrecorded() {
             return Ok(QueuedReadCharEvent::Event(
-                ReadCharEvent::input_method_candidate(event),
+                ReadCharEvent::reread_input_method_candidate(event),
             ));
         }
         if let Some(event) = self.command_loop.keyboard.take_unread_selection_event() {
             return Ok(QueuedReadCharEvent::Event(
-                ReadCharEvent::input_method_candidate(event),
+                ReadCharEvent::fresh_input_method_candidate(event),
             ));
         }
 
@@ -4046,7 +4068,7 @@ impl crate::emacs_core::eval::Context {
                 return Ok(QueuedReadCharEvent::HandledInternally);
             }
             return Ok(QueuedReadCharEvent::Event(
-                ReadCharEvent::input_method_candidate(event),
+                ReadCharEvent::fresh_input_method_candidate(event),
             ));
         }
 
@@ -4056,7 +4078,7 @@ impl crate::emacs_core::eval::Context {
                 Value::fixnum(self.command_loop.keyboard.kboard.kbd_macro_index as i64),
             );
             return Ok(QueuedReadCharEvent::Event(
-                ReadCharEvent::input_method_candidate(event),
+                ReadCharEvent::fresh_input_method_candidate(event),
             ));
         }
 
@@ -4512,7 +4534,7 @@ impl crate::emacs_core::eval::Context {
             }
             if let Some(event) = self.drain_ready_input_event_for_read_char() {
                 if let Some(value) = self.handle_read_char_input_event(event)? {
-                    return Ok(Some(ReadCharEvent::input_method_candidate(value)));
+                    return Ok(Some(ReadCharEvent::fresh_input_method_candidate(value)));
                 }
                 continue;
             }
@@ -4552,7 +4574,7 @@ impl crate::emacs_core::eval::Context {
 
             if let Some(event) = self.drain_ready_input_event_for_read_char() {
                 if let Some(value) = self.handle_read_char_input_event(event)? {
-                    return Ok(Some(ReadCharEvent::input_method_candidate(value)));
+                    return Ok(Some(ReadCharEvent::fresh_input_method_candidate(value)));
                 }
                 continue;
             }
@@ -4689,9 +4711,26 @@ impl crate::emacs_core::eval::Context {
         &mut self,
         timeout: Option<std::time::Duration>,
     ) -> Result<Option<Value>, crate::emacs_core::error::Flow> {
-        Ok(self
-            .read_char_event_with_timeout(timeout)?
-            .map(|read_event| read_event.event))
+        let Some(read_event) = self.read_char_event_with_timeout(timeout)? else {
+            return Ok(None);
+        };
+        if timeout.is_none() {
+            match read_event.command_key_recording {
+                CommandKeyRecording::Append => self
+                    .command_loop
+                    .keyboard
+                    .kboard
+                    .append_read_command_key(read_event.event),
+                CommandKeyRecording::AppendIfEmpty
+                    if self.command_loop.read_command_keys().is_empty() =>
+                {
+                    self.command_loop
+                        .set_read_command_keys(vec![read_event.event]);
+                }
+                CommandKeyRecording::AppendIfEmpty => {}
+            }
+        }
+        Ok(Some(read_event.event))
     }
 
     pub(crate) fn read_char(&mut self) -> Result<Value, crate::emacs_core::error::Flow> {
