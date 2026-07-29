@@ -2920,6 +2920,21 @@ fn effective_syntax_entry_for_char_at_byte(
     syntax_entry_from_table(table, ch)
 }
 
+/// Syntax class seen by GNU's regexp `SYNTAX` macro at a buffer byte.
+///
+/// Regexp matching differs from plain `char-syntax`: when
+/// `parse-sexp-lookup-properties` is active it consults the positional
+/// `syntax-table` property before falling back to the buffer's table.
+pub(crate) fn regexp_syntax_class_at_emacs_byte(
+    buf: &Buffer,
+    table: &SyntaxTable,
+    ch: char,
+    byte_pos: EmacsBytePos,
+    honor_properties: bool,
+) -> SyntaxClass {
+    effective_syntax_entry_for_char_at_byte(buf, table, ch, byte_pos, honor_properties).class
+}
+
 /// The syntax entry governing the character at `abs_char`.
 ///
 /// Reads the `syntax-table` property through a per-scan run cache (GNU
@@ -2967,7 +2982,7 @@ fn parse_sexp_ignore_comments_enabled(ctx: &super::eval::Context) -> bool {
         .is_truthy()
 }
 
-fn maybe_syntax_propertize_for_scan(
+pub(crate) fn maybe_syntax_propertize_for_scan(
     eval: &mut super::eval::Context,
     target_char_pos: usize,
 ) -> EvalResult {

@@ -3,7 +3,8 @@ use crate::buffer::{
     BufferId, CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, LispCharPos1,
 };
 use crate::emacs_core::regex::{
-    MatchDataSource, MatchGroup, char_pos_to_byte, char_pos_to_byte_lisp_string,
+    BufferRegexpSyntaxProperties, MatchDataSource, MatchGroup, char_pos_to_byte,
+    char_pos_to_byte_lisp_string,
 };
 use crate::emacs_core::value::ValueKind;
 
@@ -343,6 +344,61 @@ fn handle_search_failure_in_manager(
     }
 }
 
+fn prepare_current_buffer_regexp_syntax(
+    eval: &mut super::eval::Context,
+    pattern: &crate::heap_types::LispString,
+    case_fold: bool,
+    posix: bool,
+) -> Result<BufferRegexpSyntaxProperties, Flow> {
+    let dependency = {
+        let buf = eval
+            .buffers
+            .current_buffer()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        super::regex::buffer_regexp_syntax_dependency(buf, pattern, case_fold, posix)
+            .map_err(regex_error_signal)?
+    };
+    let syntax_properties = if crate::emacs_core::syntax::parse_sexp_lookup_properties_enabled(eval)
+    {
+        BufferRegexpSyntaxProperties::Honor
+    } else {
+        BufferRegexpSyntaxProperties::Ignore
+    };
+
+    if dependency.is_buffer_syntax_dependent() && syntax_properties.is_honor() {
+        let target = eval
+            .buffers
+            .current_buffer()
+            .map(|buf| buf.accessible_char_region().end().get().saturating_add(1))
+            .unwrap_or(1);
+        crate::emacs_core::syntax::maybe_syntax_propertize_for_scan(eval, target)?;
+    }
+
+    Ok(syntax_properties)
+}
+
+fn prepare_buffer_regexp_search(
+    eval: &mut super::eval::Context,
+    args: &[Value],
+    kind: SearchKind,
+    case_fold: bool,
+    posix: bool,
+) -> Result<BufferRegexpSyntaxProperties, Flow> {
+    let pattern = expect_lisp_string(&args[0])?;
+    let (_, opts, _, _) = current_search_context_in_manager(&eval.buffers, args, kind)?;
+    if opts.steps == 0 {
+        return Ok(
+            if crate::emacs_core::syntax::parse_sexp_lookup_properties_enabled(eval) {
+                BufferRegexpSyntaxProperties::Honor
+            } else {
+                BufferRegexpSyntaxProperties::Ignore
+            },
+        );
+    }
+
+    prepare_current_buffer_regexp_syntax(eval, pattern, case_fold, posix)
+}
+
 pub(crate) fn builtin_search_backward(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -424,13 +480,22 @@ pub(crate) fn builtin_re_search_forward(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    expect_range_args("re-search-forward", &args, 1, 4)?;
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
+    let syntax_properties =
+        prepare_buffer_regexp_search(eval, &args, SearchKind::ForwardRegexp, case_fold, false)?;
     let inhibit_changing = read_inhibit_changing_match_data(eval);
     let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
-    let result =
-        builtin_re_search_forward_with_state(case_fold, &mut eval.buffers, match_data, &args);
+    let result = re_search_forward_with_state_posix_and_syntax_properties(
+        case_fold,
+        false,
+        syntax_properties,
+        &mut eval.buffers,
+        match_data,
+        &args,
+    );
     // Mirrors GNU `search.c:1247,1291`: poll quit after each search
     // call so a `C-g` that set `tls_quit_pending()` during the match
     // surfaces as a `quit` signal rather than being interpreted as
@@ -440,23 +505,15 @@ pub(crate) fn builtin_re_search_forward(
     result
 }
 
-pub(crate) fn builtin_re_search_forward_with_state(
-    case_fold: bool,
-    buffers: &mut crate::buffer::BufferManager,
-    match_data: Option<&mut Option<super::regex::MatchData>>,
-    args: &[Value],
-) -> EvalResult {
-    re_search_forward_with_state_posix(case_fold, false, buffers, match_data, args)
-}
-
 /// Shared body for `re-search-forward` and `posix-search-forward`.
 /// When `posix` is true, the matcher runs the GNU POSIX longest-match
 /// algorithm (regex-emacs.c:4143-4344). See audit #2 in
 /// `drafts/regex-search-audit.md`; before this fix the posix builtins
 /// were silent aliases.
-pub(crate) fn re_search_forward_with_state_posix(
+fn re_search_forward_with_state_posix_and_syntax_properties(
     case_fold: bool,
     posix: bool,
+    syntax_properties: BufferRegexpSyntaxProperties,
     buffers: &mut crate::buffer::BufferManager,
     mut match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
@@ -488,6 +545,7 @@ pub(crate) fn re_search_forward_with_state_posix(
                     false,
                     case_fold,
                     posix,
+                    syntax_properties,
                 ),
                 SearchDirection::Backward => super::regex::re_search_backward_lisp_with_posix(
                     buf,
@@ -496,6 +554,7 @@ pub(crate) fn re_search_forward_with_state_posix(
                     false,
                     case_fold,
                     posix,
+                    syntax_properties,
                 ),
             }
         };
@@ -536,33 +595,34 @@ pub(crate) fn builtin_re_search_backward(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    expect_range_args("re-search-backward", &args, 1, 4)?;
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
+    let syntax_properties =
+        prepare_buffer_regexp_search(eval, &args, SearchKind::BackwardRegexp, case_fold, false)?;
     let inhibit_changing = read_inhibit_changing_match_data(eval);
     let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
-    let result =
-        builtin_re_search_backward_with_state(case_fold, &mut eval.buffers, match_data, &args);
+    let result = re_search_backward_with_state_posix_and_syntax_properties(
+        case_fold,
+        false,
+        syntax_properties,
+        &mut eval.buffers,
+        match_data,
+        &args,
+    );
     // See `builtin_re_search_forward`: promote a TLS-detected quit.
     eval.maybe_quit()?;
     result
 }
 
-pub(crate) fn builtin_re_search_backward_with_state(
-    case_fold: bool,
-    buffers: &mut crate::buffer::BufferManager,
-    match_data: Option<&mut Option<super::regex::MatchData>>,
-    args: &[Value],
-) -> EvalResult {
-    re_search_backward_with_state_posix(case_fold, false, buffers, match_data, args)
-}
-
 /// Shared body for `re-search-backward` and `posix-search-backward`.
-/// See [`re_search_forward_with_state_posix`] for the POSIX longest-
+/// See [`re_search_forward_with_state_posix_and_syntax_properties`] for the POSIX longest-
 /// match rationale (audit #2).
-pub(crate) fn re_search_backward_with_state_posix(
+fn re_search_backward_with_state_posix_and_syntax_properties(
     case_fold: bool,
     posix: bool,
+    syntax_properties: BufferRegexpSyntaxProperties,
     buffers: &mut crate::buffer::BufferManager,
     mut match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
@@ -594,6 +654,7 @@ pub(crate) fn re_search_backward_with_state_posix(
                     false,
                     case_fold,
                     posix,
+                    syntax_properties,
                 ),
                 SearchDirection::Backward => super::regex::re_search_backward_lisp_with_posix(
                     buf,
@@ -602,6 +663,7 @@ pub(crate) fn re_search_backward_with_state_posix(
                     false,
                     case_fold,
                     posix,
+                    syntax_properties,
                 ),
             }
         };
@@ -642,41 +704,71 @@ pub(crate) fn builtin_posix_search_forward(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    expect_range_args("posix-search-forward", &args, 1, 4)?;
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
+    let syntax_properties =
+        prepare_buffer_regexp_search(eval, &args, SearchKind::ForwardRegexp, case_fold, true)?;
     let inhibit_changing = read_inhibit_changing_match_data(eval);
     let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
-    re_search_forward_with_state_posix(case_fold, true, &mut eval.buffers, match_data, &args)
+    re_search_forward_with_state_posix_and_syntax_properties(
+        case_fold,
+        true,
+        syntax_properties,
+        &mut eval.buffers,
+        match_data,
+        &args,
+    )
 }
 
 pub(crate) fn builtin_posix_search_backward(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    expect_range_args("posix-search-backward", &args, 1, 4)?;
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
+    let syntax_properties =
+        prepare_buffer_regexp_search(eval, &args, SearchKind::BackwardRegexp, case_fold, true)?;
     let inhibit_changing = read_inhibit_changing_match_data(eval);
     let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
-    re_search_backward_with_state_posix(case_fold, true, &mut eval.buffers, match_data, &args)
+    re_search_backward_with_state_posix_and_syntax_properties(
+        case_fold,
+        true,
+        syntax_properties,
+        &mut eval.buffers,
+        match_data,
+        &args,
+    )
 }
 
 pub(crate) fn builtin_looking_at(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    expect_range_args("looking-at", &args, 1, 2)?;
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
+    let pattern = expect_lisp_string(&args[0])?;
+    let syntax_properties = prepare_current_buffer_regexp_syntax(eval, pattern, case_fold, false)?;
     let inhibit_changing = read_inhibit_changing_match_data(eval);
     let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
-    let result = builtin_looking_at_with_state(case_fold, &eval.buffers, match_data, &args);
+    let result = builtin_looking_at_with_state_and_syntax_properties(
+        case_fold,
+        syntax_properties,
+        &eval.buffers,
+        match_data,
+        &args,
+    );
     // Promote a TLS-detected quit to a `quit` signal (see
     // `builtin_re_search_forward`).
     eval.maybe_quit()?;
     result
 }
 
-pub(crate) fn builtin_looking_at_with_state(
+fn builtin_looking_at_with_state_and_syntax_properties(
     case_fold: bool,
+    syntax_properties: BufferRegexpSyntaxProperties,
     buffers: &crate::buffer::BufferManager,
     match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
@@ -688,7 +780,8 @@ pub(crate) fn builtin_looking_at_with_state(
     let buf = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let result = super::regex::looking_at_lisp_with_posix(buf, pattern, case_fold, false);
+    let result =
+        super::regex::looking_at_lisp_with_posix(buf, pattern, case_fold, false, syntax_properties);
 
     match result {
         Ok(published_match_data) => {
@@ -710,15 +803,37 @@ pub(crate) fn builtin_looking_at_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    expect_args("looking-at-p", &args, 1)?;
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
-    builtin_looking_at_p_with_state(case_fold, &eval.buffers, &args)
+    let pattern = expect_lisp_string(&args[0])?;
+    let syntax_properties = prepare_current_buffer_regexp_syntax(eval, pattern, case_fold, false)?;
+    builtin_looking_at_p_with_state_and_syntax_properties(
+        case_fold,
+        syntax_properties,
+        &eval.buffers,
+        &args,
+    )
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_looking_at_p_with_state(
     case_fold: bool,
+    buffers: &crate::buffer::BufferManager,
+    args: &[Value],
+) -> EvalResult {
+    builtin_looking_at_p_with_state_and_syntax_properties(
+        case_fold,
+        BufferRegexpSyntaxProperties::Ignore,
+        buffers,
+        args,
+    )
+}
+
+fn builtin_looking_at_p_with_state_and_syntax_properties(
+    case_fold: bool,
+    syntax_properties: BufferRegexpSyntaxProperties,
     buffers: &crate::buffer::BufferManager,
     args: &[Value],
 ) -> EvalResult {
@@ -729,7 +844,13 @@ pub(crate) fn builtin_looking_at_p_with_state(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
 
-    match super::regex::looking_at_lisp_with_posix(buf, pattern, case_fold, false) {
+    match super::regex::looking_at_lisp_with_posix(
+        buf,
+        pattern,
+        case_fold,
+        false,
+        syntax_properties,
+    ) {
         Ok(published_match_data) => Ok(Value::bool_val(published_match_data.is_some())),
         Err(msg) => Err(regex_error_signal(msg)),
     }
@@ -739,16 +860,26 @@ pub(crate) fn builtin_posix_looking_at(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    expect_range_args("posix-looking-at", &args, 1, 2)?;
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
+    let pattern = expect_lisp_string(&args[0])?;
+    let syntax_properties = prepare_current_buffer_regexp_syntax(eval, pattern, case_fold, true)?;
     let inhibit_changing = read_inhibit_changing_match_data(eval);
     let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
-    builtin_posix_looking_at_with_state(case_fold, &eval.buffers, match_data, &args)
+    builtin_posix_looking_at_with_state_and_syntax_properties(
+        case_fold,
+        syntax_properties,
+        &eval.buffers,
+        match_data,
+        &args,
+    )
 }
 
-pub(crate) fn builtin_posix_looking_at_with_state(
+fn builtin_posix_looking_at_with_state_and_syntax_properties(
     case_fold: bool,
+    syntax_properties: BufferRegexpSyntaxProperties,
     buffers: &crate::buffer::BufferManager,
     match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
@@ -766,7 +897,8 @@ pub(crate) fn builtin_posix_looking_at_with_state(
     let buf = buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let result = super::regex::looking_at_lisp_with_posix(buf, pattern, case_fold, true);
+    let result =
+        super::regex::looking_at_lisp_with_posix(buf, pattern, case_fold, true, syntax_properties);
 
     match result {
         Ok(published_match_data) => {

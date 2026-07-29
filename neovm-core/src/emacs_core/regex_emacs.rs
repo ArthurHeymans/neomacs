@@ -3287,6 +3287,16 @@ pub(crate) trait SyntaxLookup {
     /// Return the syntax class of character `c` in the current syntax table.
     fn char_syntax(&self, c: char) -> SyntaxClass;
 
+    /// Return the syntax class at byte `input_pos` in the matcher input.
+    ///
+    /// String matching and compile-time fastmaps use the position-independent
+    /// default.  Buffer matching overrides this to honor `syntax-table` text
+    /// properties at the corresponding absolute buffer byte.
+    fn char_syntax_at(&self, c: char, input_pos: usize) -> SyntaxClass {
+        let _ = input_pos;
+        self.char_syntax(c)
+    }
+
     /// Return true if character `c` belongs to category `cat`.
     fn char_has_category(&self, c: char, cat: u8) -> bool;
 
@@ -3552,9 +3562,20 @@ fn regex_char_to_unibyte(code: u32) -> Option<u8> {
 /// a fixed predicate.  Shared by the matcher (per-character class test)
 /// and `compile_fastmap` (baking the ASCII members of a leading class
 /// into the fastmap).
-fn posix_class_matches(code: u32, bits: u32, syntax: &dyn SyntaxLookup) -> bool {
+fn posix_class_matches(
+    code: u32,
+    bits: u32,
+    input_pos: Option<usize>,
+    syntax: &dyn SyntaxLookup,
+) -> bool {
     let byte = regex_char_to_unibyte(code);
     let ch = regex_syntax_char(code);
+    let char_syntax = || {
+        input_pos.map_or_else(
+            || syntax.char_syntax(ch),
+            |position| syntax.char_syntax_at(ch, position),
+        )
+    };
     let is_real_ascii = code < 0x80;
     let ascii_alnum = |b: u8| b.is_ascii_alphabetic() || b.is_ascii_digit();
     let ascii_alpha = |b: u8| b.is_ascii_alphabetic();
@@ -3595,16 +3616,15 @@ fn posix_class_matches(code: u32, bits: u32, syntax: &dyn SyntaxLookup) -> bool 
                 let b = code as u8;
                 b > b' ' && b < 0x7f && !ascii_alnum(b)
             } else {
-                syntax.char_syntax(ch) != SyntaxClass::Word
+                char_syntax() != SyntaxClass::Word
             })
-        || (bits & CHARSET_CLASS_BIT_SPACE != 0
-            && syntax.char_syntax(ch) == SyntaxClass::Whitespace)
+        || (bits & CHARSET_CLASS_BIT_SPACE != 0 && char_syntax() == SyntaxClass::Whitespace)
         || (bits & CHARSET_CLASS_BIT_UPPER != 0 && ch.is_uppercase())
         || (bits & CHARSET_CLASS_BIT_XDIGIT != 0
             && is_real_ascii
             && (code as u8).is_ascii_hexdigit())
         || (bits & CHARSET_CLASS_BIT_ASCII != 0 && is_real_ascii)
-        || (bits & CHARSET_CLASS_BIT_WORD != 0 && syntax.char_syntax(ch) == SyntaxClass::Word)
+        || (bits & CHARSET_CLASS_BIT_WORD != 0 && char_syntax() == SyntaxClass::Word)
         || (bits & CHARSET_CLASS_BIT_NONASCII != 0 && !is_real_ascii)
         || (bits & CHARSET_CLASS_BIT_UNIBYTE != 0 && byte.is_some())
         || (bits & CHARSET_CLASS_BIT_MULTIBYTE != 0 && byte.is_none())
@@ -3798,7 +3818,7 @@ fn match_charset_at(
                     .charset_class_bits
                     .get(&charset_op_pos)
                     .copied()
-                    .map(|bits| posix_class_matches(orig_ch, bits, syntax))
+                    .map(|bits| posix_class_matches(orig_ch, bits, Some(d), syntax))
                     .unwrap_or(false))
     } else {
         let range_hit = pattern
@@ -3814,7 +3834,7 @@ fn match_charset_at(
                 .charset_class_bits
                 .get(&charset_op_pos)
                 .copied()
-                .map(|bits| posix_class_matches(orig_ch, bits, syntax))
+                .map(|bits| posix_class_matches(orig_ch, bits, Some(d), syntax))
                 .unwrap_or(false)
     };
 
@@ -3837,7 +3857,7 @@ fn match_syntaxspec_at(
         return None;
     }
     let (c, len) = re_text_char(text, d, target_multibyte)?;
-    let is = syntax.char_syntax(regex_syntax_char(c)) as u8 == class_byte;
+    let is = syntax.char_syntax_at(regex_syntax_char(c), d) as u8 == class_byte;
     if is != negate { Some(len) } else { None }
 }
 
@@ -3855,7 +3875,7 @@ fn match_syntaxspecset_at(
         return None;
     }
     let (c, len) = re_text_char(text, d, target_multibyte)?;
-    let class = syntax.char_syntax(regex_syntax_char(c)) as u16;
+    let class = syntax.char_syntax_at(regex_syntax_char(c), d) as u16;
     if (mask >> class) & 1 != 0 {
         Some(len)
     } else {
@@ -3891,7 +3911,7 @@ fn re_char_is_word(
     syntax: &dyn SyntaxLookup,
 ) -> bool {
     re_text_char(text, pos, target_multibyte)
-        .map(|(c, _)| syntax.char_syntax(regex_syntax_char(c)) == SyntaxClass::Word)
+        .map(|(c, _)| syntax.char_syntax_at(regex_syntax_char(c), pos) == SyntaxClass::Word)
         .unwrap_or(false)
 }
 
@@ -3905,7 +3925,7 @@ fn re_char_is_symbol(
 ) -> bool {
     re_text_char(text, pos, target_multibyte)
         .map(|(c, _)| {
-            let s = syntax.char_syntax(regex_syntax_char(c));
+            let s = syntax.char_syntax_at(regex_syntax_char(c), pos);
             s == SyntaxClass::Word || s == SyntaxClass::Symbol
         })
         .unwrap_or(false)
@@ -6188,7 +6208,7 @@ fn compile_fastmap(pattern: &mut CompiledPattern, syntax: &dyn SyntaxLookup) {
                     // any multibyte characters" (analyze_first).
                     if let Some(&bits) = pattern.charset_class_bits.get(&charset_op_pos) {
                         for c in 0u8..0x80 {
-                            if posix_class_matches(c as u32, bits, syntax) {
+                            if posix_class_matches(c as u32, bits, None, syntax) {
                                 pattern.fastmap[c as usize] = true;
                                 if let Some(table) = &pattern.translate {
                                     pattern.fastmap[table.translate_byte(c) as usize] = true;

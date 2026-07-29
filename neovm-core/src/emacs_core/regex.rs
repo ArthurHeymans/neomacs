@@ -103,6 +103,57 @@ fn buffer_syntax_lookup(buf: &Buffer) -> BufferSyntaxLookup {
     }
 }
 
+/// Position-aware syntax lookup for regexp matching over an accessible buffer.
+///
+/// `BufferSyntaxLookup` intentionally remains position-independent because it
+/// is also used by `string-match`, where GNU consults the current buffer's
+/// base syntax table but cannot apply buffer text properties to the string.
+/// This wrapper is only constructed for buffer input and translates matcher
+/// offsets back to absolute buffer bytes.
+struct BufferRegexpSyntaxLookup<'a> {
+    base: BufferSyntaxLookup,
+    buffer: &'a Buffer,
+    input_start: EmacsBytePos,
+    property_lookup: BufferRegexpSyntaxProperties,
+}
+
+impl SyntaxLookup for BufferRegexpSyntaxLookup<'_> {
+    fn char_syntax(&self, c: char) -> crate::emacs_core::syntax::SyntaxClass {
+        self.base.char_syntax(c)
+    }
+
+    fn char_syntax_at(&self, c: char, input_pos: usize) -> crate::emacs_core::syntax::SyntaxClass {
+        crate::emacs_core::syntax::regexp_syntax_class_at_emacs_byte(
+            self.buffer,
+            &self.base.syntax_table,
+            c,
+            EmacsBytePos::new(self.input_start.get().saturating_add(input_pos)),
+            self.property_lookup.is_honor(),
+        )
+    }
+
+    fn char_has_category(&self, c: char, cat: u8) -> bool {
+        self.base.char_has_category(c, cat)
+    }
+
+    fn cache_key(&self) -> SyntaxCacheKey {
+        self.base.cache_key()
+    }
+}
+
+fn buffer_regexp_syntax_lookup(
+    buf: &Buffer,
+    input_start: EmacsBytePos,
+    property_lookup: BufferRegexpSyntaxProperties,
+) -> BufferRegexpSyntaxLookup<'_> {
+    BufferRegexpSyntaxLookup {
+        base: buffer_syntax_lookup(buf),
+        buffer: buf,
+        input_start,
+        property_lookup,
+    }
+}
+
 /// Convert GNU engine registers into private zero-based Emacs-byte ranges.
 ///
 /// This type cannot be stored in evaluator state.  Buffer and string search
@@ -156,6 +207,29 @@ enum CompiledSearchPattern {
     /// Simple literal search. Holds the literal as Emacs internal-encoding bytes
     /// (issue #131: no storage round-trip).
     Literal(Vec<u8>),
+}
+
+/// Whether matching a compiled regexp depends on the current buffer's syntax.
+///
+/// Keep this as a semantic enum instead of leaking `CompiledPattern::uses_syntax`
+/// to evaluator code.  A buffer-syntax-dependent pattern may need to call Lisp
+/// to prepare `syntax-table` text properties before the matcher takes an
+/// immutable buffer borrow; an independent pattern must not trigger that
+/// observable work.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::EnumIs)]
+pub(crate) enum BufferRegexpSyntaxDependency {
+    SyntaxIndependent,
+    BufferSyntaxDependent,
+}
+
+/// Whether a buffer regexp may read positional `syntax-table` properties.
+///
+/// A semantic enum keeps this evaluator decision distinct from regexp syntax
+/// dependency and prevents boolean argument swaps at the search/matcher seam.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::EnumIs)]
+pub(crate) enum BufferRegexpSyntaxProperties {
+    Ignore,
+    Honor,
 }
 
 pub(crate) struct IteratedStringMatches {
@@ -1438,6 +1512,35 @@ fn compile_lisp_pattern_with_posix_translation(
     Ok(compiled)
 }
 
+/// Classify a Lisp regexp using the same compilation and cache path as a
+/// subsequent buffer search.
+///
+/// GNU's matcher can call `internal--syntax-propertize` lazily from
+/// `UPDATE_SYNTAX_TABLE_*`.  Neomacs cannot run re-entrant Lisp while its Rust
+/// matcher holds a buffer borrow, so evaluator-facing search builtins use this
+/// classification to prepare syntax properties before entering the matcher.
+pub(crate) fn buffer_regexp_syntax_dependency(
+    buf: &Buffer,
+    pattern: &LispString,
+    case_fold: bool,
+    posix: bool,
+) -> Result<BufferRegexpSyntaxDependency, String> {
+    let syntax = buffer_syntax_lookup(buf);
+    let compiled = compile_lisp_pattern_with_posix_translation(
+        pattern,
+        case_fold,
+        posix,
+        buf.get_multibyte(),
+        buffer_search_translation(buf, case_fold),
+        &syntax,
+    )?;
+    Ok(if compiled.uses_syntax {
+        BufferRegexpSyntaxDependency::BufferSyntaxDependent
+    } else {
+        BufferRegexpSyntaxDependency::SyntaxIndependent
+    })
+}
+
 fn compiled_capture_count(compiled: &CompiledSearchPattern) -> usize {
     match compiled {
         CompiledSearchPattern::Literal(_) => 1,
@@ -2471,6 +2574,7 @@ pub(crate) fn re_search_forward_lisp_with_posix(
     noerror: bool,
     case_fold: bool,
     posix: bool,
+    syntax_properties: BufferRegexpSyntaxProperties,
 ) -> Result<Option<BufferSearchSuccess>, String> {
     // GNU `re-search-forward` on a buffer drives the matcher with raw buffer
     // byte positions (`PT_BYTE`, `BEGV_BYTE`, `ZV_BYTE`), even when the
@@ -2493,7 +2597,7 @@ pub(crate) fn re_search_forward_lisp_with_posix(
     let start_rel = start.get() - region_start.get();
     let limit_rel = limit.get() - region_start.get();
     let translation = buffer_search_translation(buf, case_fold);
-    let syn = buffer_syntax_lookup(buf);
+    let syn = buffer_regexp_syntax_lookup(buf, region_start, syntax_properties);
     let compiled = compile_lisp_pattern_with_posix_translation(
         pattern,
         case_fold,
@@ -2534,6 +2638,7 @@ pub(crate) fn re_search_backward_lisp_with_posix(
     noerror: bool,
     case_fold: bool,
     posix: bool,
+    syntax_properties: BufferRegexpSyntaxProperties,
 ) -> Result<Option<BufferSearchSuccess>, String> {
     // GNU `re-search-backward` likewise uses buffer byte positions
     // throughout, not character positions.
@@ -2554,7 +2659,7 @@ pub(crate) fn re_search_backward_lisp_with_posix(
     let region_start = accessible.start();
     let start_rel = end.get() - region_start.get();
     let limit_rel = limit.get() - region_start.get();
-    let syn = buffer_syntax_lookup(buf);
+    let syn = buffer_regexp_syntax_lookup(buf, region_start, syntax_properties);
     let compiled = compile_lisp_pattern_with_posix_translation(
         pattern,
         case_fold,
@@ -2650,6 +2755,7 @@ pub(crate) fn looking_at_lisp_with_posix(
     pattern: &LispString,
     case_fold: bool,
     posix: bool,
+    syntax_properties: BufferRegexpSyntaxProperties,
 ) -> Result<Option<MatchData>, String> {
     // GNU `Flooking_at` (`src/search.c:fast_looking_at`) operates on
     // byte offsets throughout: `BEGV_BYTE`, `PT_BYTE`, `ZV_BYTE`, and
@@ -2667,7 +2773,7 @@ pub(crate) fn looking_at_lisp_with_posix(
 
     let region_start = accessible.start();
     let start_rel = start.get() - region_start.get();
-    let syn = buffer_syntax_lookup(buf);
+    let syn = buffer_regexp_syntax_lookup(buf, region_start, syntax_properties);
     let compiled = compile_lisp_pattern_with_posix_translation(
         pattern,
         case_fold,

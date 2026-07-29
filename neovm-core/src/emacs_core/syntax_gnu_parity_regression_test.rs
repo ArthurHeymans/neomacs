@@ -76,6 +76,115 @@ fn forward_sexp_syntax_propertize_reads_buffer_local_lookup_flag() {
     assert_eq!(result, "OK (t t 19 nil \"(foo bar|baz quux)\")");
 }
 
+#[test]
+fn regexp_syntax_class_search_prepares_syntax_properties_before_matching() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (with-temp-buffer
+          (setq-local syntax-propertize-function
+                      (syntax-propertize-rules ("x" (0 (ignore)))))
+          (setq-local parse-sexp-lookup-properties t)
+          (insert "a b\n")
+          (goto-char (point-min))
+          (list (re-search-forward "\\s-" nil t)
+                syntax-propertize--done))
+        "#,
+    );
+    assert_eq!(result, "OK (3 5)");
+}
+
+#[test]
+fn regexp_syntax_class_search_reads_syntax_table_text_properties() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (with-temp-buffer
+          (setq-local parse-sexp-lookup-properties t)
+          (insert "x")
+          (put-text-property 1 2 'syntax-table (string-to-syntax " "))
+          (goto-char (point-min))
+          (list (re-search-forward "\\s-" nil t)
+                (point)))
+        "#,
+    );
+    assert_eq!(result, "OK (2 2)");
+}
+
+#[test]
+fn regexp_syntax_class_search_ignores_properties_when_lookup_is_disabled() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (with-temp-buffer
+          (setq-local parse-sexp-lookup-properties nil)
+          (insert "x")
+          (put-text-property 1 2 'syntax-table (string-to-syntax " "))
+          (goto-char (point-min))
+          (list (re-search-forward "\\s-" nil t)
+                (point)))
+        "#,
+    );
+    assert_eq!(result, "OK (nil 1)");
+}
+
+#[test]
+fn syntax_independent_regexp_does_not_trigger_propertization() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (with-temp-buffer
+          (setq-local syntax-propertize-function
+                      (syntax-propertize-rules ("x" (0 (ignore)))))
+          (setq-local parse-sexp-lookup-properties t)
+          (insert "abc")
+          (goto-char (point-min))
+          (list (re-search-forward "a" nil t)
+                syntax-propertize--done))
+        "#,
+    );
+    assert_eq!(result, "OK (2 -1)");
+}
+
+#[test]
+fn looking_at_prepares_and_reads_syntax_table_properties() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (with-temp-buffer
+          (setq-local syntax-propertize-function
+                      (syntax-propertize-rules ("x" (0 " "))))
+          (setq-local parse-sexp-lookup-properties t)
+          (insert "x")
+          (goto-char (point-min))
+          (list (looking-at "\\s-")
+                syntax-propertize--done))
+        "#,
+    );
+    assert_eq!(result, "OK (t 2)");
+}
+
+#[test]
+fn regexp_syntax_preparation_preserves_later_string_match_data() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (with-temp-buffer
+          (setq-local syntax-propertize-function
+                      (syntax-propertize-rules ("x" (0 (ignore)))))
+          (setq-local parse-sexp-lookup-properties t)
+          (insert "a b c d e f g h i j k l m n o p q r s t u v w x y z\n")
+          (goto-char (point-min))
+          (re-search-forward "\\s-" nil t)
+          (let ((subject "'zeta'"))
+            (string-match "'[^']+'" subject 0)
+            (syntax-ppss)
+            (match-string 0 subject)))
+        "#,
+    );
+    assert_eq!(result, "OK \"'zeta'\"");
+}
+
 // --- char-syntax --------------------------------------------------------
 
 #[test]
