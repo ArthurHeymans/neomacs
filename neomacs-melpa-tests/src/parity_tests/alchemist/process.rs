@@ -155,7 +155,21 @@ fn alchemist_server_start_in_environment_uses_project_cwd_quoted_command_and_non
                                 'start
                                 (file-relative-name
                                  default-directory sandbox)
-                                name buffer command)
+                                name buffer
+                                ;; Mask the installed package's own
+                                ;; directory.  Pinning it spelled out the
+                                ;; harness's acquisition layout, so this
+                                ;; expectation broke when the cache moved
+                                ;; from package-cache/ to the
+                                ;; revision-pinned source-install-cache/ --
+                                ;; a failure about the harness wearing the
+                                ;; shape of a package regression.
+                                (let ((package-directory
+                                       (file-name-directory
+                                        (getenv "NEOMACS_PACKAGE_SOURCE"))))
+                                  (replace-regexp-in-string
+                                   (regexp-quote package-directory)
+                                   "[PACKAGE]/" command t t)))
                                events)
                               'server-process))
                            ((symbol-function
@@ -176,7 +190,7 @@ fn alchemist_server_start_in_environment_uses_project_cwd_quoted_command_and_non
                          (alchemist-server-start-in-env "shared env")
                          (nreverse events))))"##;
     let expect = expect![[
-        r#"OK (stored ((start "server app/" "[ORACLE-SANDBOX]/server app/" "*alchemist-server*" "/tools/elixir runtime [ORACLE-WORKSPACE]/tmp/melpa/package-cache/alchemist/20180312.1304/home/.emacs.d/elpa/alchemist-20180312.1304/alchemist-server/run.exs shared\\ env") (query server-process nil) (store server-process)))"#
+        r#"OK (stored ((start "server app/" "[ORACLE-SANDBOX]/server app/" "*alchemist-server*" "/tools/elixir runtime [PACKAGE]/alchemist-server/run.exs shared\\ env") (query server-process nil) (store server-process)))"#
     ]];
     assert_alchemist_parity(elisp_form, expect);
 }
