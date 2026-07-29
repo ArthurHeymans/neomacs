@@ -961,6 +961,64 @@ form and take this path. Any `M-x`-reachable autoload stub whose real definition
 is loaded on demand.
 
 
+## 34. A regexp using a syntax class does not trigger `syntax-propertize`
+
+GNU's regexp engine propertizes the buffer before matching a syntax class
+(`\s-`, `\sw`, `\s(` …) when `parse-sexp-lookup-properties` is non-nil and a
+`syntax-propertize-function` is installed — the search calls
+`internal--syntax-propertize`, which is wrapped in `save-match-data`
+(`lisp/emacs-lisp/syntax.el:480`). Neomacs's engine matches the syntax class
+without propertizing, leaving the work to whatever calls `syntax-ppss` next.
+
+```elisp
+(with-temp-buffer
+  (setq-local syntax-propertize-function
+              (syntax-propertize-rules ("x" (0 (ignore)))))
+  (setq-local parse-sexp-lookup-properties t)
+  (insert "a b\n")
+  (goto-char (point-min))
+  (list (re-search-forward "\\s-" nil t) syntax-propertize--done))
+;; GNU     => (3 5)     ; the search propertized the whole buffer
+;; Neomacs => (3 -1)    ; nothing was propertized
+```
+
+**The damage is not the deferral, it is where the deferred work lands.**
+`syntax-ppss` reaches `syntax-propertize` on a path that is *not*
+`save-match-data`-protected, so the propertization destroys the match data of
+an interleaved `string-match`. Code that alternates `string-match` on a string
+with `syntax-ppss` on the buffer — a completely ordinary "is this match inside
+a comment?" loop — then indexes the string with buffer positions:
+
+```elisp
+(with-temp-buffer
+  (setq-local syntax-propertize-function
+              (syntax-propertize-rules ("x" (0 (ignore)))))
+  (setq-local parse-sexp-lookup-properties t)
+  (insert "a b c d e f g h i j k l m n o p q r s t u v w x y z\n")
+  (goto-char (point-min))
+  (re-search-forward "\\s-" nil t)
+  (let ((subject "'zeta'"))
+    (string-match "'[^']+'" subject 0)
+    (syntax-ppss)
+    (match-string 0 subject)))
+;; GNU     => "'zeta'"
+;; Neomacs => (args-out-of-range "'zeta'" 47 48)
+```
+
+In GNU the search has already propertized, so the later `syntax-ppss` is a
+cache hit and touches nothing. Both editors clobber match data if the
+propertization really happens inside `syntax-ppss` — that part is shared, and
+GNU only escapes it because the search got there first. So the fix is in the
+regexp engine, not in `syntax-ppss`.
+
+Blast radius: any major mode with a `syntax-propertize-function` whose commands
+mix string matching with syntactic queries. Affects: `alan-mode` (1) —
+`alan-grammar-update-keyword` searches for keyword groups with a `\s-`-bearing
+regexp, then loops `string-match` over each group calling `syntax-ppss` to skip
+commented-out entries, so `M-x alan-grammar-update-keyword` rewrites the
+keywords section in GNU and signals `args-out-of-range` in Neomacs.
+
+
 ## Behaviour that is NOT a divergence
 
 Recorded so nobody re-investigates them:
@@ -995,3 +1053,11 @@ Recorded so nobody re-investigates them:
   whatever comes back against the project root, so picking `main.c` visits a
   `<root>/main.c` that does not exist and the user gets an empty buffer.
   Upstream, identical in both editors.
+- `alan-mode` never `require`s `thingatpt`, but
+  `alan-documentation-include-link-p` calls `thing-at-point-looking-at`, which
+  the library does not autoload. In a bare session `C-c '`-adjacent
+  documentation-link handling signals `(void-function
+  thing-at-point-looking-at)`; a full session survives because
+  `thing-at-point` *is* autoloaded and the package's own xref backend calls it,
+  which loads the library as a side effect. Upstream defect, identical in both
+  editors, and asserted from both sides in the suite.

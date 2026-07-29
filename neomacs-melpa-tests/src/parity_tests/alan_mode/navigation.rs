@@ -90,41 +90,61 @@ fn alan_xref_backend_finds_real_definitions_across_open_buffers_and_formats_cont
 }
 
 #[test]
-fn alan_documentation_include_links_detect_follow_and_report_missing_real_files() {
+fn alan_documentation_include_links_need_thingatpt_which_alan_mode_never_requires() {
+    // `alan-documentation-include-link-p' calls `thing-at-point-looking-at',
+    // which lives in `thingatpt' and is NOT autoloaded -- and alan-mode.el
+    // never requires the library.  A full session loads it incidentally,
+    // because `thing-at-point' itself is autoloaded and the xref backend uses
+    // it, which is why the defect survives untested in the wild.  Both arms
+    // are asserted: the bare session that a user of `M-x alan-mode' in a
+    // fresh Emacs really gets, and the working command once the library is
+    // present.  Upstream defect, identical in GNU Emacs and Neomacs.
     let elisp_form = r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
-                           (target (expand-file-name "included.alan" root))
-                           visited missing)
-                      (with-temp-file target
-                        (insert "'included': text\n"))
-                      (with-temp-buffer
-                        (insert
-                         (format "prefix <<INCLUDE-ALAN[%s]>> suffix" target))
-                        (goto-char (point-min))
-                        (search-forward "INCLUDE")
-                        (cl-letf (((symbol-function 'find-file)
-                                   (lambda (file)
-                                     (setq visited file)
-                                     'visited)))
-                          (let ((detected
-                                 (alan-documentation-include-link-p)))
-                            (alan-documentation-follow-include-link-at-point)
-                            (erase-buffer)
-                            (insert
-                             "<<INCLUDE-ALAN[missing-file.alan]>>")
-                            (goto-char 20)
-                            (setq missing
-                                  (condition-case error
-                                      (alan-documentation-follow-include-link-at-point)
-                                    (user-error
-                                     (list
-                                      (car error)
-                                      (cadr error)))))
-                            (list
-                             (and detected t)
-                             (equal visited target)
-                             missing))))
-                      )"##;
-    let expect = expect![[r#"OK (t t (user-error "File not found missing-file.alan"))"#]];
+       (target (expand-file-name "included.alan" root))
+       visited missing)
+  (with-temp-file target
+    (insert "'included': text\n"))
+  (cl-flet
+      ((follow-a-link ()
+         (with-temp-buffer
+           (insert (format "prefix <<INCLUDE-ALAN[%s]>> suffix" target))
+           (goto-char (point-min))
+           (search-forward "INCLUDE")
+           (condition-case error
+               (list :detected (and (alan-documentation-include-link-p) t))
+             (error (list :signalled (car error) (cadr error)))))))
+    (list
+     ;; Nothing has loaded `thingatpt' yet.
+     :library-loaded-first (featurep 'thingatpt)
+     :autoloaded (list (and (fboundp 'thing-at-point) t)
+                       (and (fboundp 'thing-at-point-looking-at) t))
+     :bare-session (follow-a-link)
+     ;; The same command once the library the package forgot to require is
+     ;; present, which is the state every real session is in.
+     :after-require
+     (progn
+       (require 'thingatpt)
+       (cl-letf (((symbol-function 'find-file)
+                  (lambda (file) (setq visited file) 'visited)))
+         (let ((detected (follow-a-link)))
+           (with-temp-buffer
+             (insert (format "prefix <<INCLUDE-ALAN[%s]>> suffix" target))
+             (goto-char (point-min))
+             (search-forward "INCLUDE")
+             (alan-documentation-follow-include-link-at-point))
+           (with-temp-buffer
+             (insert "<<INCLUDE-ALAN[missing-file.alan]>>")
+             (goto-char 20)
+             (setq missing
+                   (condition-case error
+                       (alan-documentation-follow-include-link-at-point)
+                     (user-error (list (car error) (cadr error))))))
+           (list detected
+                 :visited-the-target (equal visited target)
+                 :missing missing)))))))"##;
+    let expect = expect![[
+        r#"OK (:library-loaded-first nil :autoloaded (t nil) :bare-session (:signalled void-function thing-at-point-looking-at) :after-require ((:detected t) :visited-the-target t :missing (user-error "File not found missing-file.alan")))"#
+    ]];
     assert_alan_mode_parity(elisp_form, expect);
 }
 
