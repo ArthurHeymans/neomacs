@@ -139,6 +139,17 @@ fn asdf_vm_plugin_name_and_url_readers_forward_completion_options_and_repository
     assert_asdf_vm_parity(elisp_form, expect);
 }
 
+/// RED ON NEOMACS ON PURPOSE: this is DIVERGENCES.md entry 6,
+/// "`directory-files` returns undecoded bytes".
+///
+/// `asdf-vm-plugin.el:73` lists installed plugins with
+/// `(directory-files plugins-directory t ...)', so a plugin directory whose
+/// name is non-ASCII comes back as raw bytes: GNU reports
+/// `("ruby" "standalone" "資料")' where Neomacs reports
+/// `("ruby" "standalone" "...")'.  The second list in the same value is
+/// correct in both editors, because it is built from a parsed alist rather
+/// than from the filesystem -- that asymmetry is the signature of entry 6
+/// and is why this is not a new finding.  GNU's answer is the expectation.
 #[test]
 fn asdf_vm_plugin_installed_and_available_lists_reflect_real_filesystem_and_messages() {
     let elisp_form = r##"(let* ((asdf-vm--plugins-directory

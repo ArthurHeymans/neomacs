@@ -10,6 +10,7 @@ mod puzzles;
 mod registry;
 mod runtime;
 mod sources_sinks;
+mod workflows;
 mod yaml_cells;
 
 const ASM_BLOX_TEST_TIMEOUT: Duration = Duration::from_secs(120);

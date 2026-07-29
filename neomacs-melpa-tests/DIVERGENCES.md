@@ -177,7 +177,15 @@ name comes back as raw bytes and sorts differently.
 ;; Neomacs => ("." ".." "L\303\266sung.pdf" …)   (multibyte-string-p => nil)
 ```
 
-Affects: `abgaben` (1).
+Affects: `abgaben` (1), `asdf-vm` (1).
+
+`asdf-vm` reaches it by a completely different route, which is worth
+recording: `asdf-vm-plugin.el:73` lists installed plugins with
+`(directory-files plugins-directory t …)`, so a plugin whose directory name
+is non-ASCII comes back as raw bytes — `("ruby" "standalone" "資料")` in GNU
+against `("ruby" "standalone" "������������")` in Neomacs. The *second*
+list in the same value is correct because it is built from a parsed alist
+rather than from the filesystem, which is the signature to look for.
 
 ## 7. `completing-read` forwards 7 arguments instead of 8
 
