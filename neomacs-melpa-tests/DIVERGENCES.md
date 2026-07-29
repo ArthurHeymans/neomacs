@@ -1239,6 +1239,84 @@ splices it with `easy-menu-add-item`; all six of that package's Neomacs-only
 failures are menus built that way — four in `context_menu.rs`, two in
 `initialization.rs`.
 
+
+## 40. `window-body-width` keeps the tty vertical-bar column
+
+On a terminal frame a window that has another window to its right gives up one
+column to the vertical bar drawn between them. GNU subtracts that column from
+the body width; Neomacs reports the full total width, so every window except
+the rightmost is reported one column wider than the text it can hold.
+
+```elisp
+(let ((right (split-window-right)))
+  (list (window-total-width) (window-body-width)
+        (window-total-width right) (window-body-width right)))
+;; GNU     => (40 39 40 40)
+;; Neomacs => (40 40 40 40)
+```
+
+**The split itself is right; only the body measurement is wrong.** The controls
+were run in both editors and pin the failure to one term:
+
+| | GNU | Neomacs |
+|---|---|---|
+| `window-total-width`, every window | `(20 20 40)` | same |
+| `window-body-width`, rightmost window | `40` | same |
+| `window-body-width`, non-rightmost, three-way split | **`(19 19 40)`** | `(20 20 40)` |
+| `window-text-width`, every window | `(20 20 40)` | same |
+
+GNU's rule is `src/window.c:1096` `window_body_width`, which subtracts a
+one-column vertical bar when `!FRAME_WINDOW_P (f) && !WINDOW_RIGHTMOST_P (w)
+&& !WINDOW_RIGHT_DIVIDER_WIDTH (w)`. Neomacs's
+`window_body_width_pixels` (`neovm-core/src/emacs_core/window_cmds/mod.rs:991`)
+subtracts scroll bars, fringes and margins by way of
+`window_body_horizontal_offsets_pixels`, and has no term for the bar at all.
+The condition is `!FRAME_WINDOW_P`, so this is a terminal-frame divergence
+only.
+
+The consequence is off-by-one overflow rather than a visible error: any package
+that asks how much text fits and then fills the line to that width will run one
+column past the text area of a split tty window, and the last character wraps.
+
+Affects: `ascii-table` (2). Both `workflows.rs` tests split an 80-column batch
+frame at 50 and read the window back: GNU reports 49, Neomacs 50. Every
+decision `ascii-table` itself makes from that number agrees — same layout, same
+rendered text, same narrowest-window choice — so the two tests are red on the
+measurement alone.
+
+
+## 41. `ceiling` and friends accept a marker as the divisor
+
+`ceiling`, `floor`, `truncate` and `round` take an optional DIVISOR that GNU
+requires to be a number. Neomacs checks `integer-or-marker-p` instead, which
+both admits a marker GNU rejects and names the wrong predicate when it does
+signal.
+
+```elisp
+(list (condition-case e (ceiling 5 (point-marker)) (error e))
+      (condition-case e (ceiling 128 "8") (error e)))
+;; GNU     => ((wrong-type-argument numberp #<marker at 1 in *scratch*>)
+;;             (wrong-type-argument numberp "8"))
+;; Neomacs => (5
+;;             (wrong-type-argument integer-or-marker-p "8"))
+```
+
+The marker case is the one that matters: GNU signals, Neomacs silently divides
+by the marker's position, so `(ceiling 5 (point-marker))` returns 5 at
+point-min and a different answer everywhere else in the buffer.
+
+The single-argument form is unaffected — `(ceiling "8")` signals
+`(wrong-type-argument numberp "8")` in both — and a float divisor is accepted
+by both, so the divergence is confined to the DIVISOR type check. GNU reaches
+it through `rounding_driver` in `src/floatfns.c`, which applies `CHECK_NUMBER`
+to the divisor, and `CHECK_NUMBER` does not admit markers.
+
+Affects: `ascii-table` (1).
+`formatting.rs:295 ascii_table_table_invalid_radix_control_and_row_counts_signal_exact_errors`
+passes `"8"` as codepoints-per-row, which reaches `(ceiling 128 "8")` inside
+`ascii-table--table`. That test predates this catalogue entry and was already
+red.
+
 ## Behaviour that is NOT a divergence
 
 Recorded so nobody re-investigates them:

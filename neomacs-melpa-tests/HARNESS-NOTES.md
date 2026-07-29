@@ -394,6 +394,31 @@ itself. Pass the key through the environment and read it with
 whole output against the recording before building assertions on it**, the same
 discipline the ac-php entry prescribes for fixture files that land on disk.
 
+**A batch frame has real windows — do not fake window geometry.** `--batch`
+gives an 80x25 terminal frame whose windows split, resize and delete like any
+other, so `split-window-horizontally`, `set-window-buffer`, `delete-window`,
+`window-list` and `window-width` all work, and a package that decides what to
+draw from the width it is given can be driven end to end with nothing replaced.
+ascii-table's corpus faked it in every file — `ascii-table--width-limit` bound
+to a constant in eleven tests, and `walk-windows`, `window-buffer` and
+`window-width` replaced together by a list of invented `(name . width)` pairs in
+the two tests that were about window geometry specifically — which pinned the
+arithmetic exactly and never once witnessed the package's whole purpose, that
+the table fits the window. Two real windows recovered three things the fakes
+could not reach: that narrowing a window does **not** relayout until something
+reverts the buffer (a fake width is only read at render time, so the stale-text
+window between the two is invisible to it); that the narrowest of several
+windows wins over the *selected* one, which is a distinction only real geometry
+forces you to set up; and catalogue entry 40, a one-column error in
+`window-body-width` that no invented width pair could have contained.
+
+The reason to reach for a fake here is the opposite of the usual one: not that
+the capability is missing but that the real widths are awkward. They are not
+awkward, they are just not round — the frame is 80 columns and
+`split-window-horizontally 50` leaves 49 usable, because the vertical bar costs
+a column. Capture the width in the snapshot beside the result and the number
+explains itself.
+
 ## Assertions
 
 **Read a theme's display clauses before deciding what the suite can assert.**
