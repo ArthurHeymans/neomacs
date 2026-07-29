@@ -226,6 +226,21 @@ redundant `begin`. Read the recording against the fixture before building
 assertions on it; a rule you were sure would fire and did not is the cheapest
 possible warning that you are reasoning from documentation.
 
+**SILENT — check what a package manager actually gave you, not that it gave you
+something.** `nix shell nixpkgs#alan` resolves. It is not the Alan platform
+compiler that `alan-mode` drives; it is ALAN 3.0beta8, the *interactive fiction*
+language, which shares the name **and** the `.alan` file extension
+(`Usage: ALAN <adventure>`). Recording from it would have been real output, from
+a real tool, run for real — and completely wrong, while reading as the strongest
+possible provenance in a commit message.
+
+This is the **inverse** of the invented-fixture trap: there, fabricated input
+flatters the package's parser; here, a name collision makes a wrong recording
+look like a right one, and the usual defence — "I ran the real thing" — is
+exactly what fails. Read the package description and `--help` output and confirm
+it is the tool your package drives, not merely a tool with the right name. An
+exit code of 0 proves nothing.
+
 **A missing program is usually a dev-time problem, not a blocker.**
 `nix shell nixpkgs#<tool> --command …` obtains the real tool for the recording
 step without touching the dev shell, and the committed test does not depend on it
@@ -982,6 +997,27 @@ So: **always re-state the pathspec when amending** — `git commit --amend
 --no-edit -- <the same paths>` — and afterwards check `git show --stat` names
 only what you meant. The same rule that applies to shared Markdown applies to the
 shared index, and amending is where it is easiest to forget.
+
+**And the restore leaves dead files that still look like tests.** This is the
+second-order form, and it is worse than the sweep. When a swept deletion is
+restored, the files come back **on disk** while the `mod.rs` that no longer
+declares them is unchanged — and **Rust silently ignores an undeclared module**.
+`cargo check` passes, the suite runs its expected count, and two files that read
+exactly like live parity tests contribute nothing at all. Nobody is warned.
+
+After any sweep-and-restore, check that every `.rs` in the package directory is
+declared and every declaration has a file:
+
+```sh
+d=neomacs-melpa-tests/src/parity_tests/<pkg>
+grep -o '^mod [a-z_]*' $d/mod.rs | sed 's/mod //' | while read m; do
+  test -f "$d/$m.rs" || echo "declared, missing: $m"; done
+ls $d/*.rs | xargs -n1 basename | sed 's/\.rs$//' | while read f; do
+  test "$f" = mod || grep -q "^mod $f;" $d/mod.rs || echo "on disk, undeclared: $f"; done
+```
+
+The agent who hit this noticed only because `git status` stopped showing the
+deletions it had staged.
 
 Related, and worth knowing before you reach for it: a repair commit for an
 unbuildable `main` is one of the few legitimate uses of `--no-verify`, when the
