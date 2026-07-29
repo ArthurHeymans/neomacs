@@ -806,6 +806,29 @@ failure correctly" and was luck. Wait for every process matching the package's
 name prefix, not the one handle you happen to hold. Green and right for the wrong
 reason, with the wrong reason in the *fixture* rather than the assertion.
 
+**A MELPA recipe glob can ship a package's own test file, and installing the
+package then runs it.** alectryon's recipe is
+`:files ("etc/elisp/alectryon*.el")`, which matches `alectryon.el` **and**
+`alectryon-tests.el`. That test file contains
+`(use-package proof-general :ensure t)` and two more, and `:ensure` expands at
+*byte-compile* time — so `package-install-file` reaches for three packages the
+recipe never declares, and dies in `package--save-selected-packages` before any
+test runs.
+
+Nothing local is at fault: both editors fail identically, and both install the
+same tarball fine when the dependencies are reachable. The package's
+`Package-Requires` says only `flycheck` and `emacs 25.1`, so a dependency lock
+derived from the header — which is the correct way to derive it — cannot predict
+this. **A `Package-Requires` header is a claim about what the package needs to
+*run*, not about what installing it will *do*.**
+
+Before concluding a package is unbuildable, read its recipe in
+`tmp/melpa/build-tools/melpa/recipes/<name>` and check whether `:files` pulls in
+anything that executes at compile time. If it does, the honest report is that
+the recipe is wider than the author's intent — a user running
+`M-x package-install` gets the same file — rather than that the harness or the
+lock is wrong.
+
 **haskell-mode's process command queue does not drain in batch.** A real session
 starts and the GHCi process runs, but `haskell-process-cmd` never returns to nil,
 so `haskell-process-queue-sync-request` — and therefore
