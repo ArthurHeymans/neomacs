@@ -542,6 +542,52 @@ pub(crate) fn signal_after_text_change(
     signal_after_change(ctx, change.after_byte_range(), change.old_char_len())
 }
 
+/// Insert process or subsystem output into BUFFER-ID as one semantic edit.
+///
+/// This is the ownership boundary for non-Lisp producers that already hold a
+/// decoded `LispString`: select the buffer whose hooks and read-only state
+/// govern the edit, signal the paired change notifications, perform the raw
+/// storage mutation, and restore the caller's current buffer on every exit.
+pub(crate) fn insert_lisp_string_with_change_hooks_in_buffer(
+    ctx: &mut crate::emacs_core::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    text: &LispString,
+) -> Result<(), Flow> {
+    if text.is_empty() {
+        return Ok(());
+    }
+
+    let saved_current = ctx.buffers.current_buffer_id();
+    let result = (|| {
+        ctx.set_current_buffer_unrecorded(buffer_id)?;
+        let insert_pos = ctx
+            .buffers
+            .get(buffer_id)
+            .map(|buffer| buffer.point_emacs_byte_pos())
+            .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
+        let change = text_change_for_empty_insertion_at_emacs_byte_pos(
+            &ctx.buffers,
+            buffer_id,
+            insert_pos,
+            lisp_string_text_extent(text),
+        )?;
+
+        signal_before_text_change(ctx, change)?;
+        // A before-change function may select another buffer. The mutation and
+        // after-change notification still belong to the declared edit target.
+        ctx.set_current_buffer_unrecorded(buffer_id)?;
+        ctx.buffers
+            .insert_lisp_string_into_buffer(buffer_id, text)
+            .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
+        signal_after_text_change(ctx, change)
+    })();
+
+    if let Some(saved) = saved_current {
+        ctx.restore_current_buffer_if_live(saved);
+    }
+    result
+}
+
 /// Delete overlays that a deletion left empty and whose `evaporate` property is
 /// non-nil. Unlike the low-level direct-plist evaporation in
 /// `OverlayList::adjust_for_delete_emacs_byte_range`, this resolves `evaporate`

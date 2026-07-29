@@ -122,8 +122,15 @@ fn maybe_redisplay_sync_output(
 #[derive(Clone, Debug)]
 enum OutputTarget {
     Discard,
-    Buffer(Value),
+    Buffer(BufferOutputTarget),
     File(LispString),
+}
+
+#[derive(Clone, Debug)]
+enum BufferOutputTarget {
+    Current,
+    Named(LispString),
+    Existing(crate::buffer::BufferId),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -146,15 +153,6 @@ fn signal_wrong_type_string(value: Value) -> Flow {
         LispCondition::WrongTypeArgument,
         vec![Value::symbol("stringp"), value],
     )
-}
-
-fn callproc_owned_runtime_string(value: Value) -> String {
-    // The sole caller looks up a destination buffer by name; names are
-    // ASCII/Unicode, for which to_utf8_lossy is exact.
-    value
-        .as_lisp_string()
-        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
-        .expect("ValueKind::String must carry LispString payload")
 }
 
 fn lisp_string_to_os_string(string: &LispString) -> OsString {
@@ -539,15 +537,28 @@ fn parse_real_buffer_destination_in_state(
     match value.kind() {
         ValueKind::Fixnum(_) => Ok((OutputTarget::Discard, true)),
         ValueKind::Nil => Ok((OutputTarget::Discard, false)),
-        ValueKind::T | ValueKind::String => Ok((OutputTarget::Buffer(*value), false)),
+        ValueKind::T => Ok((OutputTarget::Buffer(BufferOutputTarget::Current), false)),
+        ValueKind::String => Ok((
+            OutputTarget::Buffer(BufferOutputTarget::Named(
+                value
+                    .as_lisp_string()
+                    .expect("ValueKind::String must carry LispString payload")
+                    .clone(),
+            )),
+            false,
+        )),
         ValueKind::Veclike(VecLikeType::Buffer) => {
-            if buffers.get(value.as_buffer_id().unwrap()).is_none() {
+            let buffer_id = value.as_buffer_id().unwrap();
+            if buffers.get(buffer_id).is_none() {
                 Err(signal(
                     "error",
                     vec![Value::string("Selecting deleted buffer")],
                 ))
             } else {
-                Ok((OutputTarget::Buffer(*value), false))
+                Ok((
+                    OutputTarget::Buffer(BufferOutputTarget::Existing(buffer_id)),
+                    false,
+                ))
             }
         }
         ValueKind::Cons => {
@@ -630,43 +641,29 @@ fn destination_writes_to_buffer_in_state(
 }
 
 fn insert_process_output_in_state(
-    buffers: &mut BufferManager,
-    destination: &Value,
+    eval: &mut super::eval::Context,
+    destination: &BufferOutputTarget,
     output: &crate::heap_types::LispString,
 ) -> Result<(), Flow> {
-    match destination.kind() {
-        ValueKind::String => {
-            let name_str = callproc_owned_runtime_string(*destination);
-            let id = buffers
+    let buffer_id = match destination {
+        BufferOutputTarget::Current => eval
+            .buffers
+            .current_buffer_id()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?,
+        BufferOutputTarget::Named(name) => {
+            let name_str = crate::emacs_core::emacs_char::to_utf8_lossy(name.as_bytes());
+            eval.buffers
                 .find_buffer_by_name(&name_str)
-                .unwrap_or_else(|| buffers.create_buffer(&name_str));
-            buffers
-                .insert_lisp_string_into_buffer(id, output)
-                .ok_or_else(|| {
-                    signal(
-                        "error",
-                        vec![Value::string("No such live buffer for process output")],
-                    )
-                })?;
-            Ok(())
+                .unwrap_or_else(|| eval.buffers.create_buffer(&name_str))
         }
-        ValueKind::Veclike(VecLikeType::Buffer) => {
-            buffers
-                .insert_lisp_string_into_buffer(destination.as_buffer_id().unwrap(), output)
-                .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-            Ok(())
-        }
-        _ => {
-            if let Some(current_id) = buffers.current_buffer_id() {
-                let _ = buffers.insert_lisp_string_into_buffer(current_id, output);
-            }
-            Ok(())
-        }
-    }
+        BufferOutputTarget::Existing(buffer_id) => *buffer_id,
+    };
+
+    super::editfns::insert_lisp_string_with_change_hooks_in_buffer(eval, buffer_id, output)
 }
 
 fn write_output_target_in_state(
-    buffers: &mut BufferManager,
+    eval: &mut super::eval::Context,
     target: &OutputTarget,
     output: &[u8],
     append: bool,
@@ -678,7 +675,7 @@ fn write_output_target_in_state(
             // process output keeps real PUA glyphs / eight-bit bytes (the old
             // decode_bytes->insert_into_buffer storage path corrupted them).
             let text = crate::encoding::decode_bytes_to_lisp_string(output, "utf-8-unix");
-            insert_process_output_in_state(buffers, destination, &text)
+            insert_process_output_in_state(eval, destination, &text)
         }
         OutputTarget::File(path) => {
             // GNU opens the `(:file DEST)` output file at spawn time with
@@ -710,16 +707,16 @@ fn write_output_target_in_state(
 }
 
 fn route_captured_output_in_state(
-    buffers: &mut BufferManager,
+    eval: &mut super::eval::Context,
     destination: &DestinationSpec,
     stdout: &[u8],
     stderr: &[u8],
 ) -> Result<(), Flow> {
-    write_output_target_in_state(buffers, &destination.stdout, stdout, false)?;
+    write_output_target_in_state(eval, &destination.stdout, stdout, false)?;
     match destination.stderr {
         StderrTarget::Discard => Ok(()),
         StderrTarget::ToStdoutTarget => {
-            write_output_target_in_state(buffers, &destination.stdout, stderr, true)
+            write_output_target_in_state(eval, &destination.stdout, stderr, true)
         }
         StderrTarget::File => {
             let path = destination
@@ -727,7 +724,7 @@ fn route_captured_output_in_state(
                 .as_ref()
                 .ok_or_else(|| signal("error", vec![Value::string("Missing stderr file target")]))?
                 .clone();
-            write_output_target_in_state(buffers, &OutputTarget::File(path), stderr, false)
+            write_output_target_in_state(eval, &OutputTarget::File(path), stderr, false)
         }
     }
 }
@@ -877,12 +874,7 @@ fn run_process_command_in_state(
         .output()
         .map_err(|e| super::process::signal_process_io("Searching for program", None, e))?;
 
-    route_captured_output_in_state(
-        &mut eval.buffers,
-        &destination_spec,
-        &output.stdout,
-        &output.stderr,
-    )?;
+    route_captured_output_in_state(eval, &destination_spec, &output.stdout, &output.stderr)?;
     Ok(call_process_status_value(output.status))
 }
 
@@ -1114,19 +1106,18 @@ fn builtin_call_process_region_impl(
     // the mutable buffers borrow below.
     let write_coding = resolve_call_process_region_write_coding(eval);
 
-    let buffers = &mut eval.buffers;
-
     let destination = if args.len() > 4 {
         &args[4]
     } else {
         &Value::NIL
     };
-    let destination_spec = parse_call_process_destination(buffers, destination)?;
+    let destination_spec = parse_call_process_destination(&eval.buffers, destination)?;
 
     let region_text = match args[0].kind() {
         ValueKind::Nil => {
             let (text, maybe_delete_range) = {
-                let buf = buffers
+                let buf = eval
+                    .buffers
                     .current_buffer()
                     .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
                 let range = buf.full_emacs_byte_range();
@@ -1139,10 +1130,13 @@ fn builtin_call_process_region_impl(
                 )
             };
             if delete {
-                let current_id = buffers
+                let current_id = eval
+                    .buffers
                     .current_buffer_id()
                     .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-                let _ = buffers.delete_buffer_emacs_byte_range(current_id, maybe_delete_range);
+                let _ = eval
+                    .buffers
+                    .delete_buffer_emacs_byte_range(current_id, maybe_delete_range);
             }
             text
         }
@@ -1162,9 +1156,10 @@ fn builtin_call_process_region_impl(
         }
         _ => {
             let region_args =
-                super::position::LispRegionArgs::from_values(&*buffers, args[0], args[1])?;
+                super::position::LispRegionArgs::from_values(&eval.buffers, args[0], args[1])?;
             let (text, region) = {
-                let buf = buffers
+                let buf = eval
+                    .buffers
                     .current_buffer()
                     .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
                 let region = super::process::checked_region_bytes(buf, region_args)?;
@@ -1178,10 +1173,13 @@ fn builtin_call_process_region_impl(
             };
 
             if delete {
-                let current_id = buffers
+                let current_id = eval
+                    .buffers
                     .current_buffer_id()
                     .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-                let _ = buffers.delete_buffer_emacs_byte_range(current_id, region);
+                let _ = eval
+                    .buffers
+                    .delete_buffer_emacs_byte_range(current_id, region);
             }
 
             text
@@ -1254,7 +1252,7 @@ fn builtin_call_process_region_impl(
         .wait_with_output()
         .map_err(|e| super::process::signal_process_io("Process error", None, e))?;
 
-    route_captured_output_in_state(buffers, &destination_spec, &output.stdout, &output.stderr)?;
+    route_captured_output_in_state(eval, &destination_spec, &output.stdout, &output.stderr)?;
     Ok(call_process_status_value(output.status))
 }
 

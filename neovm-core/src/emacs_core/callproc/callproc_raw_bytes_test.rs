@@ -65,6 +65,50 @@ fn builtin_call_process_preserves_raw_unibyte_argument_and_output_path_bytes() {
 
 #[cfg(unix)]
 #[test]
+fn builtin_call_process_buffer_output_signals_one_semantic_change() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let setup = eval.eval_str(
+        r#"(progn
+             (setq hook-log nil)
+             (setq before-change-functions
+                   (list (lambda (beg end)
+                           (setq hook-log
+                                 (cons (list :before beg end) hook-log)))))
+             (setq after-change-functions
+                   (list (lambda (beg end old-len)
+                           (setq hook-log
+                                 (cons (list :after beg end old-len) hook-log)))))
+             t)"#,
+    );
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&setup),
+        "OK t",
+        "install change hooks"
+    );
+
+    let status = builtin_call_process(
+        &mut eval,
+        vec![
+            Value::string(find_bin("printf")),
+            Value::NIL,
+            Value::T,
+            Value::NIL,
+            Value::string("abc"),
+        ],
+    )
+    .expect("call-process");
+    assert_eq!(status.as_fixnum(), Some(0));
+
+    let observed = eval.eval_str("(list (buffer-string) (nreverse hook-log))");
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&observed),
+        r#"OK ("abc" ((:before 1 1) (:after 1 4 0)))"#
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn builtin_call_process_preserves_raw_unibyte_infile_path_bytes() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();

@@ -23,6 +23,27 @@ fn div_proc_call_process_output() {
 }
 
 #[test]
+fn div_proc_call_process_output_signals_one_buffer_change() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 \"abc\" ((:before 1 1) (:after 1 4 0)))""#]];
+    crate::common::assert_oracle_parity_expect(
+        r##"
+(with-temp-buffer
+  (let ((events nil))
+    (setq before-change-functions
+          (list (lambda (beg end)
+                  (push (list :before beg end) events))))
+    (setq after-change-functions
+          (list (lambda (beg end old-len)
+                  (push (list :after beg end old-len) events))))
+    (let ((status (call-process "printf" nil t nil "abc")))
+      (list status (buffer-string) (nreverse events)))))
+"##,
+        expect,
+    );
+}
+
+#[test]
 fn div_proc_call_process_printf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp 42)""#]];
