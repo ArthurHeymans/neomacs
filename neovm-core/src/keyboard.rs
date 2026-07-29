@@ -1456,6 +1456,10 @@ impl KBoard {
         self.executing_kbd_macro_iterations = 0;
     }
 
+    pub fn is_executing_kbd_macro(&self) -> bool {
+        self.executing_kbd_macro.is_some()
+    }
+
     pub fn finish_executing_kbd_macro(&mut self) {
         self.executing_kbd_macro = None;
         self.kbd_macro_index = 0;
@@ -1548,7 +1552,7 @@ enum InputEventHistoryDisposition {
 
 impl KeyboardRuntime {
     fn input_event_history_disposition(&self) -> InputEventHistoryDisposition {
-        if self.kboard.executing_kbd_macro.is_some() {
+        if self.kboard.is_executing_kbd_macro() {
             InputEventHistoryDisposition::SuppressDuringMacroPlayback
         } else {
             InputEventHistoryDisposition::Record
@@ -1857,6 +1861,10 @@ impl KeyboardRuntime {
         self.kboard.begin_executing_kbd_macro(events);
     }
 
+    pub fn is_executing_kbd_macro(&self) -> bool {
+        self.kboard.is_executing_kbd_macro()
+    }
+
     pub fn finish_executing_kbd_macro(&mut self) {
         self.kboard.finish_executing_kbd_macro();
     }
@@ -2044,6 +2052,10 @@ impl CommandLoop {
 
     pub fn begin_executing_kbd_macro(&mut self, events: Vec<Value>) {
         self.keyboard.begin_executing_kbd_macro(events);
+    }
+
+    pub fn is_executing_kbd_macro(&self) -> bool {
+        self.keyboard.is_executing_kbd_macro()
     }
 
     pub fn finish_executing_kbd_macro(&mut self) {

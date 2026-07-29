@@ -1155,13 +1155,12 @@ pub(crate) fn builtin_read_from_minibuffer_in_runtime(
         expect_initial_input_stringish(initial)?;
     }
 
-    if runtime.has_input_receiver() {
-        Ok(None)
-    } else {
-        read_from_stdin_noninteractive(&crate::emacs_core::emacs_char::to_utf8_lossy(
-            prompt.as_bytes(),
-        ))
-        .map(Some)
+    match runtime.minibuffer_input_source() {
+        MinibufferInputSource::CommandLoop => Ok(None),
+        MinibufferInputSource::StandardInput => read_from_stdin_noninteractive(
+            &crate::emacs_core::emacs_char::to_utf8_lossy(prompt.as_bytes()),
+        )
+        .map(Some),
     }
 }
 
@@ -1454,15 +1453,16 @@ pub(crate) fn builtin_read_string_in_runtime(
         expect_initial_input_stringish(initial)?;
     }
 
-    if runtime.has_input_receiver() {
-        return Ok(None);
+    match runtime.minibuffer_input_source() {
+        MinibufferInputSource::CommandLoop => Ok(None),
+        MinibufferInputSource::StandardInput => {
+            let prompt_str = expect_lisp_string(&prompt)?;
+            read_from_stdin_noninteractive(&crate::emacs_core::emacs_char::to_utf8_lossy(
+                prompt_str.as_bytes(),
+            ))
+            .map(Some)
+        }
     }
-
-    let prompt_str = expect_lisp_string(&prompt)?;
-    read_from_stdin_noninteractive(&crate::emacs_core::emacs_char::to_utf8_lossy(
-        prompt_str.as_bytes(),
-    ))
-    .map(Some)
 }
 
 pub(crate) fn finish_read_string_with_minibuffer(
@@ -1516,10 +1516,9 @@ pub(crate) fn builtin_read_number_in_runtime(
     {
         expect_number(default)?;
     }
-    if runtime.has_input_receiver() {
-        Ok(())
-    } else {
-        Err(stdin_end_of_file_error())
+    match runtime.minibuffer_input_source() {
+        MinibufferInputSource::CommandLoop => Ok(()),
+        MinibufferInputSource::StandardInput => Err(stdin_end_of_file_error()),
     }
 }
 
@@ -1636,18 +1635,19 @@ pub(crate) fn builtin_completing_read_in_runtime(
         expect_completing_read_initial_input(initial)?;
     }
 
-    if runtime.has_input_receiver() {
-        Ok(None)
-    } else {
-        // Batch/noninteractive: GNU's `Fcompleting_read` routes through
-        // `read_minibuf` -> `read_minibuf_noninteractive` (minibuf.c), which
-        // writes the prompt to stdout and reads the answer from stdin, exactly
-        // like `read-from-minibuffer`.  Mirror that so the prompt is emitted
-        // before the (likely) end-of-file signal on empty stdin.
-        read_from_stdin_noninteractive(&crate::emacs_core::emacs_char::to_utf8_lossy(
-            prompt.as_bytes(),
-        ))
-        .map(Some)
+    match runtime.minibuffer_input_source() {
+        MinibufferInputSource::CommandLoop => Ok(None),
+        MinibufferInputSource::StandardInput => {
+            // Batch/noninteractive: GNU's `Fcompleting_read` routes through
+            // `read_minibuf` -> `read_minibuf_noninteractive` (minibuf.c), which
+            // writes the prompt to stdout and reads the answer from stdin, exactly
+            // like `read-from-minibuffer`.  Mirror that so the prompt is emitted
+            // before the (likely) end-of-file signal on empty stdin.
+            read_from_stdin_noninteractive(&crate::emacs_core::emacs_char::to_utf8_lossy(
+                prompt.as_bytes(),
+            ))
+            .map(Some)
+        }
     }
 }
 
@@ -2102,6 +2102,19 @@ fn non_character_input_event_error() -> Flow {
     signal("error", vec![Value::string("Non-character input-event")])
 }
 
+/// Where a minibuffer read obtains its input.
+///
+/// GNU Emacs does not use `noninteractive` alone to select stdin:
+/// `read_minibuf` enters the command loop while a keyboard macro is executing,
+/// even in batch mode.  Keeping that semantic decision separate from the
+/// presence of a live terminal receiver prevents individual reader builtins
+/// from accidentally disagreeing about batch keyboard macros.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MinibufferInputSource {
+    CommandLoop,
+    StandardInput,
+}
+
 pub(crate) trait KeyboardInputRuntime {
     fn pop_unread_command_event(&mut self) -> Option<Value>;
     fn peek_unread_command_event(&self) -> Option<Value>;
@@ -2114,6 +2127,14 @@ pub(crate) trait KeyboardInputRuntime {
     fn clear_read_command_keys(&mut self);
     fn read_command_keys(&self) -> &[Value];
     fn has_input_receiver(&self) -> bool;
+    fn is_executing_keyboard_macro(&self) -> bool;
+    fn minibuffer_input_source(&self) -> MinibufferInputSource {
+        if self.has_input_receiver() || self.is_executing_keyboard_macro() {
+            MinibufferInputSource::CommandLoop
+        } else {
+            MinibufferInputSource::StandardInput
+        }
+    }
     fn has_pending_low_level_events(&self) -> bool {
         false
     }
@@ -2162,6 +2183,10 @@ impl KeyboardInputRuntime for super::eval::Context {
 
     fn has_input_receiver(&self) -> bool {
         super::eval::Context::has_input_receiver(self)
+    }
+
+    fn is_executing_keyboard_macro(&self) -> bool {
+        self.command_loop.is_executing_kbd_macro()
     }
 
     fn has_pending_low_level_events(&self) -> bool {
@@ -2640,23 +2665,24 @@ pub(crate) fn builtin_yes_or_no_p_in_runtime(
 ) -> Result<Option<Value>, Flow> {
     validate_yes_or_no_p_args(args)?;
 
-    if runtime.has_input_receiver() {
-        Ok(None)
-    } else {
-        // Batch/noninteractive: GNU's `read_minibuf_noninteractive` (minibuf.c)
-        // writes the prompt to stdout and reads the answer from stdin. Mirror
-        // that — including the yes/no re-prompt loop — instead of failing before
-        // the prompt is ever shown, so batch `yes-or-no-p` emits the prompt
-        // exactly like GNU (and still signals end-of-file on empty stdin).
-        finish_yes_or_no_p_with_minibuffer(args, |minibuffer_args| {
-            let prompt = minibuffer_args[0]
-                .as_lisp_string()
-                .expect("yes-or-no-p minibuffer prompt is a string");
-            read_from_stdin_noninteractive(&crate::emacs_core::emacs_char::to_utf8_lossy(
-                prompt.as_bytes(),
-            ))
-        })
-        .map(Some)
+    match runtime.minibuffer_input_source() {
+        MinibufferInputSource::CommandLoop => Ok(None),
+        MinibufferInputSource::StandardInput => {
+            // Batch/noninteractive: GNU's `read_minibuf_noninteractive` (minibuf.c)
+            // writes the prompt to stdout and reads the answer from stdin. Mirror
+            // that — including the yes/no re-prompt loop — instead of failing before
+            // the prompt is ever shown, so batch `yes-or-no-p` emits the prompt
+            // exactly like GNU (and still signals end-of-file on empty stdin).
+            finish_yes_or_no_p_with_minibuffer(args, |minibuffer_args| {
+                let prompt = minibuffer_args[0]
+                    .as_lisp_string()
+                    .expect("yes-or-no-p minibuffer prompt is a string");
+                read_from_stdin_noninteractive(&crate::emacs_core::emacs_char::to_utf8_lossy(
+                    prompt.as_bytes(),
+                ))
+            })
+            .map(Some)
+        }
     }
 }
 

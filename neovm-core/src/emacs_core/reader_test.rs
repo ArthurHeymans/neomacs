@@ -1683,6 +1683,31 @@ fn completing_read_signals_end_of_file() {
 }
 
 #[test]
+fn minibuffer_input_source_distinguishes_stdin_macros_and_live_input() {
+    crate::test_utils::init_test_tracing();
+
+    let mut batch = Context::new();
+    assert_eq!(
+        batch.minibuffer_input_source(),
+        MinibufferInputSource::StandardInput
+    );
+
+    batch.begin_executing_kbd_macro_runtime(vec![Value::fixnum(b'a' as i64)]);
+    assert_eq!(
+        batch.minibuffer_input_source(),
+        MinibufferInputSource::CommandLoop
+    );
+
+    let mut interactive = Context::new();
+    let (_input_tx, input_rx) = crossbeam_channel::unbounded();
+    interactive.init_input_system(input_rx);
+    assert_eq!(
+        interactive.minibuffer_input_source(),
+        MinibufferInputSource::CommandLoop
+    );
+}
+
+#[test]
 fn completing_read_calls_completing_read_function_before_interactive_read() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -3375,6 +3400,10 @@ impl KeyboardInputRuntime for BlockingKeySequenceRuntime {
 
     fn has_input_receiver(&self) -> bool {
         true
+    }
+
+    fn is_executing_keyboard_macro(&self) -> bool {
+        false
     }
 
     fn read_char_blocking(&mut self) -> Result<Value, Flow> {

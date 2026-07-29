@@ -15,7 +15,7 @@ use crate::heap_types::LispString;
 use super::error::{EvalResult, Flow, signal};
 use super::hashtab::hash_key_to_visible_value;
 use super::intern::{SymId, resolve_sym};
-use super::reader::KeyboardInputRuntime;
+use super::reader::{KeyboardInputRuntime, MinibufferInputSource};
 use super::symbol::Obarray;
 use super::value::{Value, ValueKind, VecLikeType};
 
@@ -947,10 +947,9 @@ pub(crate) fn builtin_read_file_name_in_runtime(
     args: &[Value],
 ) -> Result<(), Flow> {
     validate_file_name_reader_args("read-file-name", args, 6)?;
-    if runtime.has_input_receiver() {
-        Ok(())
-    } else {
-        Err(end_of_file_stdin_error())
+    match runtime.minibuffer_input_source() {
+        MinibufferInputSource::CommandLoop => Ok(()),
+        MinibufferInputSource::StandardInput => Err(end_of_file_stdin_error()),
     }
 }
 
@@ -986,10 +985,9 @@ pub(crate) fn builtin_read_directory_name_in_runtime(
     args: &[Value],
 ) -> Result<(), Flow> {
     validate_file_name_reader_args("read-directory-name", args, 5)?;
-    if runtime.has_input_receiver() {
-        Ok(())
-    } else {
-        Err(end_of_file_stdin_error())
+    match runtime.minibuffer_input_source() {
+        MinibufferInputSource::CommandLoop => Ok(()),
+        MinibufferInputSource::StandardInput => Err(end_of_file_stdin_error()),
     }
 }
 
