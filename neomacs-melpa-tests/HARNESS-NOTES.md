@@ -581,6 +581,20 @@ rebuild, and returns *the rebuild's* value — the symbol
 anything to do with a missing file. When a probe fails somewhere implausible,
 consider that the implausible error *is* what a user gets.
 
+**Run the hook, do not read it — and in general prefer observable behaviour to
+internal representation.** add-hooks' only real decision is whether it was handed
+a list of functions or one function, and a lambda is both
+(`(and (listp object) (not (functionp object)))`). Asserting the hook's
+*contents* would mean pinning a closure's printed form — an implementation detail
+where the two editors may differ for reasons that say nothing about the package,
+manufacturing a divergence out of a representation choice. Asserting **how many
+times something fires and in what order** is the behaviour, and it is portable.
+
+This matters more in a parity suite than in an ordinary test suite: every
+internal representation you pin is a place the oracle can go red without anyone
+having a bug. Pin representation only when the representation is the subject —
+the same rule as structural sharing.
+
 **The recurring species: a repair or transform whose output is wrong in a way
 the surrounding machinery cannot notice.** Three packages running, and it is the
 strongest evidence this campaign has produced for why workflows assert the
