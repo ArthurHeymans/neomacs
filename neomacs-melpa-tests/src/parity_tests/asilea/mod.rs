@@ -9,6 +9,7 @@ mod engine;
 mod options;
 mod process;
 mod registry;
+mod workflows;
 
 const ASILEA_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 const ASILEA_TEST_PRELUDE: &str = r##"

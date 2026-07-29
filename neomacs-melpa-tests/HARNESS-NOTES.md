@@ -795,6 +795,37 @@ it and find out why it was failing before assuming the new value is right: the
 first of the two above still failed after being rewritten, and the second
 recorded a behavioural change nobody had explained.
 
+**SILENT — an ineffective display fake is worse than no fake, because it looks
+like the question was already asked and answered.** The existing note says not
+to manufacture a display so a gated theme clause will match. This is the case
+where somebody tried and it did not even work, and the attempt is what stopped
+anyone looking again.
+
+alabaster-themes' suite runs every test under a prelude named
+`TRUE_COLOR_PRELUDE` that redefines `display-color-cells` to return 16777216.
+It reads as though the min-colors problem had been handled. It has not been:
+the package's specs are gated on `((class color) (min-colors 256))`, and a
+batch frame's visual class is `static-gray`, so the clause fails on
+`(class color)` and never on the colour count. Measured both ways,
+`face-spec-set-match-display` returns nil with the fake in place exactly as
+without it — and 15 tests across `rendering.rs` and `lifecycle.rs` record
+`"unspecified-fg"` for every colour under names like "resolves titles todos
+links blocks and metadata faces".
+
+The claim is unfalsifiable without the measurement, so make the snapshot carry
+it. Pin the clause's halves separately rather than a single boolean:
+
+```elisp
+:gate (:matches                   (face-spec-set-match-display '((class color) (min-colors 256)) nil)
+       :colour-count-alone-matches (face-spec-set-match-display '((min-colors 256)) nil)
+       :class-alone-matches        (face-spec-set-match-display '((class color)) nil))
+;; => (:matches nil :colour-count-alone-matches t :class-alone-matches nil)
+```
+
+That reads as "the fake works, and it cannot help", which a reader can act on.
+Before trusting any display fake already in a suite, run the gate with it and
+without it and check the answer actually differs.
+
 **SILENT — a whole-buffer assertion does not witness that the buffer changed
 for the reason the test is named after.** This is the sharpest instance of the
 class so far, because the failing test was the *strongest-looking* assertion in
