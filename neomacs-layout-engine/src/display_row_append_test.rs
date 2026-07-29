@@ -7522,6 +7522,12 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
     assert_eq!(captured.col, 3);
     assert_eq!(x, 32.0);
     assert_eq!(col, 4);
+    let eob = context
+        .output_emitter
+        .point_for_lisp_buffer_pos(LispCharPos1::new(4))
+        .expect("visible EOB insertion boundary");
+    assert_eq!((eob.x, eob.y, eob.width, eob.height), (24, 0, 8, 18));
+    assert_eq!((eob.row, eob.col), (0, 3));
     context
         .builder
         .edit_current_row_for_test(|row| {

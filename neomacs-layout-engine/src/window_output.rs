@@ -1321,6 +1321,22 @@ impl WindowOutputEmitter {
         );
     }
 
+    /// Publish a visible insertion boundary that has row geometry but no
+    /// source glyph of its own, such as end-of-buffer.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_text_insertion_boundary(
+        &mut self,
+        buffer_pos: LispCharPos1,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        row: usize,
+        col: usize,
+    ) {
+        self.push_text_display_point(buffer_pos, x, y, width, height, row, col);
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_text_span(
         &mut self,

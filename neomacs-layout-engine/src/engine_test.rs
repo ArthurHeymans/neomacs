@@ -7645,9 +7645,9 @@ fn implemented_text_backends_match_hscroll_cursor_and_position_output() {
         baseline.visible_span,
         Some(WindowVisibleBufferSpan::new(
             LispCharPos1::new(4),
-            LispCharPos1::new(7)
+            LispCharPos1::new(8)
         )),
-        "baseline should publish the visible hscrolled buffer span"
+        "baseline should include the visible EOB insertion boundary"
     );
 
     for kind in implemented_text_backends() {
@@ -15767,6 +15767,56 @@ fn layout_active_minibuffer_rows(
         .find(|entry| entry.window_id.get() == minibuffer_window_id.0 as i64)
         .expect("minibuffer matrix entry");
     enabled_window_row_texts(entry)
+}
+
+#[test]
+fn visible_gui_minibuffer_reports_positive_posn_at_point_height() {
+    let mut eval = Context::new();
+    let root_buffer = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("root buffer")
+        .id();
+    let minibuffer = eval.buffer_manager_mut().create_buffer(" *Minibuf-1*");
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("minibuffer-posn-at-point", 640, 200, root_buffer);
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    let minibuffer_window = eval
+        .activate_minibuffer_window_for_buffer(
+            minibuffer,
+            LispString::from_utf8(":"),
+            Some(LispString::from_utf8("e ~/")),
+        )
+        .expect("activate minibuffer")
+        .expect("minibuffer window");
+    eval.eval_form(Value::list(vec![
+        Value::symbol("select-window"),
+        Value::make_window(minibuffer_window.0),
+    ]))
+    .expect("select active minibuffer window");
+
+    let mut engine = LayoutEngine::new();
+    engine.enable_cosmic_metrics();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+
+    let result = eval
+        .eval_str(
+            r##"(let ((posn (posn-at-point (point-max))))
+                   (and posn
+                        (consp (nth 9 posn))
+                        (> (cdr (nth 9 posn)) 0)))"##,
+        )
+        .expect("query visible minibuffer position");
+    assert_eq!(
+        result,
+        Value::T,
+        "Corfu requires positive object height at visible minibuffer EOB"
+    );
 }
 
 /// An active minibuffer holding a prompt line plus several candidate lines

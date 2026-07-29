@@ -4,6 +4,7 @@
 //! source walking and generic row/source append rendering: hscroll skip,
 //! selective display, invisible text, line breaks, and end-of-buffer tails.
 
+use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_cursor::{
@@ -268,8 +269,12 @@ impl BufferSourceEndOfBufferCursorAction {
         }
     }
 
+    fn is_at_accessible_end(self) -> bool {
+        self.charpos == self.accessible_end
+    }
+
     fn point_is_visible_eob(self) -> bool {
-        self.point_charpos == self.accessible_end && self.charpos == self.accessible_end
+        self.point_charpos == self.accessible_end && self.is_at_accessible_end()
     }
 
     pub(crate) fn capture_cursor_if_point(
@@ -334,6 +339,10 @@ impl BufferSourceEndOfBufferTailAction {
         self.cursor.point_is_visible_eob()
     }
 
+    fn is_at_accessible_end(self) -> bool {
+        self.cursor.is_at_accessible_end()
+    }
+
     pub(crate) fn capture_cursor_if_point(
         self,
         target: &mut CursorCaptureState,
@@ -396,6 +405,19 @@ impl<'a> BufferSourceEndOfBufferTailRenderContext<'a> {
             row_progress.x(),
             row_progress.col(),
         );
+
+        if tail.is_at_accessible_end() {
+            let face_metrics = self.active_face_state.metrics();
+            source_render.output_emitter().push_text_insertion_boundary(
+                layout_i64_char_pos_to_lisp_char_pos(self.charpos),
+                row_progress.x(),
+                row_geometry.glyph_y(0.0),
+                face_metrics.char_width(),
+                row_geometry.height().max(face_metrics.row_height()),
+                row_geometry.row(),
+                row_progress.col(),
+            );
+        }
 
         if self.overlay_context.should_render(row_geometry) {
             let (x, col) = row_progress.coordinates_mut();

@@ -1257,25 +1257,27 @@ impl Window {
 // Last Display Snapshot
 // ---------------------------------------------------------------------------
 
-/// Authoritative glyph geometry for a single visible buffer position.
+/// Authoritative display geometry for a single visible buffer position.
 ///
 /// These records are published by redisplay after layout so editor-side
 /// queries like `posn-at-point` can answer from the actual rendered result.
+/// A position can describe either a source glyph or a visible insertion
+/// boundary such as end-of-buffer.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DisplayPointSnapshot {
-    /// 1-based buffer position of the source character.
+    /// 1-based visible buffer position.
     pub buffer_pos: LispCharPos1,
     /// X relative to the text area's left edge, in pixels.
     pub x: i64,
     /// Y relative to the window's top edge, in pixels.
     pub y: i64,
-    /// Rendered advance/width in pixels.
+    /// Rendered glyph or insertion-slot width in pixels.
     pub width: i64,
-    /// Rendered glyph height in pixels.
+    /// Rendered glyph or insertion-slot height in pixels.
     pub height: i64,
     /// Visual row number in the window (0-based).
     pub row: i64,
-    /// Visual column start for this source position.
+    /// Visual column start for this position.
     pub col: i64,
 }
 
