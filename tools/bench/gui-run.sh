@@ -42,7 +42,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
   # all app threads: Lisp, render, wpe). Wrapping the whole script would
   # also count Weston's compositing, muddying attribution.
   if [ -n "${GUI_PERF_RECORD:-}" ]; then
-    WAYLAND_DISPLAY="$SOCKET" timeout "$GUI_TIMEOUT"       taskset -c 0-15 perf record -F 999 -o "$GUI_PERF_RECORD"       "$BIN" "$@" >/tmp/neomacs-gui-$$.log 2>&1
+    WAYLAND_DISPLAY="$SOCKET" timeout "$GUI_TIMEOUT"       taskset -c 0-15 perf record -F 999 --call-graph=lbr -o "$GUI_PERF_RECORD"       "$BIN" "$@" >/tmp/neomacs-gui-$$.log 2>&1
   elif [ -n "${GUI_PERF_OUT:-}" ]; then
     WAYLAND_DISPLAY="$SOCKET" timeout "$GUI_TIMEOUT"       taskset -c 0-15 perf stat -o "$GUI_PERF_OUT" -e cycles:u,instructions:u       "$BIN" "$@" >/tmp/neomacs-gui-$$.log 2>&1
   else
