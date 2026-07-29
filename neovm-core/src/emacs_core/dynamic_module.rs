@@ -1533,8 +1533,13 @@ unsafe extern "C" fn module_make_time(env: *mut emacs_env, time: emacs_time) -> 
         if !module_function_begin(env) {
             return std::ptr::null_mut();
         }
+        // `tv_nsec` is `libc::c_long`, which is `i64` on Linux/macOS but
+        // `i32` on Windows MSVC (LLP64). Widen to `i64` so the arithmetic
+        // matches `Value::fixnum`'s `i64` parameter on every target. The
+        // `#[repr(C)]` `emacs_time` struct itself mirrors `struct timespec`
+        // and must keep its platform-ABI field widths.
         let seconds = time.tv_sec;
-        let nanoseconds = time.tv_nsec;
+        let nanoseconds = time.tv_nsec as i64;
         let list = Value::list(vec![
             Value::fixnum((seconds >> 16) & 0xFFFF),
             Value::fixnum(seconds & 0xFFFF),
