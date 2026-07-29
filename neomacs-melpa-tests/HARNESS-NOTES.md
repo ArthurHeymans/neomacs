@@ -776,6 +776,25 @@ missed. Store recorded arguments NUL-separated. The same ambiguity fragments a
 call *log*: fold newlines to a placeholder there, or one invocation appears as
 several.
 
+**SILENT — `UPDATE_EXPECT=1` with a package-wide filter rewrites *stale peer
+snapshots*, turning pre-existing failures into passes.** The update pass does
+not distinguish "this snapshot is empty because I am writing it" from "this
+snapshot has been failing since somebody changed the harness". Adding two
+workflows to airline-themes and running the update over
+`test(~parity_tests::airline_themes::)` silently rewrote two tests in files that
+had not been opened: a package path that commit `26124b65b` had moved from
+`package-cache/` to `source-install-cache/<sha>/<sha>/<sha>/`, and a git branch
+that had gone from `nil` to `"main"`. Both had been red before the session
+started, and the rewrite would have erased the evidence inside a commit whose
+message said nothing about them.
+
+Scope the update pass to the file being written -- `test(~<pkg>::workflows::)`
+-- and afterwards run `git status` over the package directory and confirm only
+files you meant to touch are modified. If something else was rewritten, revert
+it and find out why it was failing before assuming the new value is right: the
+first of the two above still failed after being rewritten, and the second
+recorded a behavioural change nobody had explained.
+
 **SILENT — a wrong buffer name is a no-op in this harness, not an error.** A
 workflow that looks for `*hg log:*` when the package creates `*hg log (details):*`
 records "no such buffer" and **passes**, because both editors agree a missing
