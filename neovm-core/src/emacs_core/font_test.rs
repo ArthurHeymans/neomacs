@@ -1325,6 +1325,53 @@ fn internal_lisp_face_p_symbol_returns_face_vector() {
 }
 
 #[test]
+fn internal_lisp_face_p_resolves_face_alias_chains() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let target = Value::symbol("__neovm_face_alias_target");
+    let intermediate = Value::symbol("__neovm_face_alias_intermediate");
+    let alias = Value::symbol("__neovm_face_alias");
+
+    builtin_internal_make_lisp_face(&mut eval, vec![target]).unwrap();
+    eval.obarray_mut()
+        .put_property("__neovm_face_alias_intermediate", "face-alias", target)
+        .unwrap();
+    eval.obarray_mut()
+        .put_property("__neovm_face_alias", "face-alias", intermediate)
+        .unwrap();
+
+    let target_vector = builtin_internal_lisp_face_p(&mut eval, vec![target]).unwrap();
+    let alias_vector = builtin_internal_lisp_face_p(&mut eval, vec![alias]).unwrap();
+    assert!(
+        crate::emacs_core::value::eq_value(&alias_vector, &target_vector),
+        "a face alias chain must return the canonical target's live face vector",
+    );
+}
+
+#[test]
+fn internal_lisp_face_p_rejects_circular_face_aliases() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let first = Value::symbol("__neovm_circular_face_alias_a");
+    let second = Value::symbol("__neovm_circular_face_alias_b");
+
+    eval.obarray_mut()
+        .put_property("__neovm_circular_face_alias_a", "face-alias", second)
+        .unwrap();
+    eval.obarray_mut()
+        .put_property("__neovm_circular_face_alias_b", "face-alias", first)
+        .unwrap();
+
+    match builtin_internal_lisp_face_p(&mut eval, vec![first]) {
+        Err(Flow::Signal(signal)) => {
+            assert_eq!(signal.symbol_name(), "circular-list");
+            assert_eq!(signal.data, vec![first]);
+        }
+        other => panic!("expected circular-list for a face alias cycle, got {other:?}"),
+    }
+}
+
+#[test]
 fn internal_lisp_face_p_non_symbol() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
@@ -2548,33 +2595,48 @@ fn set_face_attribute_accepts_only_gnu_box_style_symbols() {
 #[test]
 fn internal_lisp_face_empty_p_selected_frame_default_is_not_empty() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_internal_lisp_face_empty_p(vec![Value::symbol("default")]).unwrap();
+    let result = call_font_builtin!(
+        builtin_internal_lisp_face_empty_p,
+        vec![Value::symbol("default")]
+    )
+    .unwrap();
     assert!(result.is_nil());
 }
 
 #[test]
 fn internal_lisp_face_empty_p_accepts_string_face_name() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_internal_lisp_face_empty_p(vec![Value::string("default")]).unwrap();
+    let result = call_font_builtin!(
+        builtin_internal_lisp_face_empty_p,
+        vec![Value::string("default")]
+    )
+    .unwrap();
     assert!(result.is_nil());
 }
 
 #[test]
 fn internal_lisp_face_empty_p_defaults_frame_is_empty() {
     crate::test_utils::init_test_tracing();
-    let result =
-        builtin_internal_lisp_face_empty_p(vec![Value::symbol("default"), Value::T]).unwrap();
+    let result = call_font_builtin!(
+        builtin_internal_lisp_face_empty_p,
+        vec![Value::symbol("default"), Value::T]
+    )
+    .unwrap();
     assert!(result.is_truthy());
 }
 
 #[test]
 fn internal_lisp_face_empty_p_rejects_non_nil_non_t_frame_designator() {
     crate::test_utils::init_test_tracing();
-    let result =
-        builtin_internal_lisp_face_empty_p(vec![Value::symbol("default"), Value::fixnum(1)]);
+    let result = call_font_builtin!(
+        builtin_internal_lisp_face_empty_p,
+        vec![Value::symbol("default"), Value::fixnum(1)]
+    );
     assert!(result.is_err());
-    let frame_result =
-        builtin_internal_lisp_face_empty_p(vec![Value::symbol("default"), Value::make_frame(1)]);
+    let frame_result = call_font_builtin!(
+        builtin_internal_lisp_face_empty_p,
+        vec![Value::symbol("default"), Value::make_frame(1)]
+    );
     assert!(frame_result.is_err());
 }
 
@@ -2582,15 +2644,17 @@ fn internal_lisp_face_empty_p_rejects_non_nil_non_t_frame_designator() {
 fn internal_lisp_face_comparators_accept_frame_handles() {
     crate::test_utils::init_test_tracing();
     let frame = Value::make_frame(FRAME_ID_BASE);
-    let empty_result =
-        builtin_internal_lisp_face_empty_p(vec![Value::symbol("default"), frame]).unwrap();
+    let empty_result = call_font_builtin!(
+        builtin_internal_lisp_face_empty_p,
+        vec![Value::symbol("default"), frame]
+    )
+    .unwrap();
     assert!(empty_result.is_nil());
 
-    let equal_result = builtin_internal_lisp_face_equal_p(vec![
-        Value::symbol("default"),
-        Value::symbol("mode-line"),
-        frame,
-    ])
+    let equal_result = call_font_builtin!(
+        builtin_internal_lisp_face_equal_p,
+        vec![Value::symbol("default"), Value::symbol("mode-line"), frame,]
+    )
     .unwrap();
     assert!(equal_result.is_nil());
 }
@@ -2598,10 +2662,10 @@ fn internal_lisp_face_comparators_accept_frame_handles() {
 #[test]
 fn internal_lisp_face_equal_p_selected_frame_distinguishes_faces() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_internal_lisp_face_equal_p(vec![
-        Value::symbol("default"),
-        Value::symbol("mode-line"),
-    ])
+    let result = call_font_builtin!(
+        builtin_internal_lisp_face_equal_p,
+        vec![Value::symbol("default"), Value::symbol("mode-line")]
+    )
     .unwrap();
     assert!(result.is_nil());
 }
@@ -2609,11 +2673,14 @@ fn internal_lisp_face_equal_p_selected_frame_distinguishes_faces() {
 #[test]
 fn internal_lisp_face_equal_p_defaults_frame_treats_faces_as_equal() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_internal_lisp_face_equal_p(vec![
-        Value::symbol("default"),
-        Value::symbol("mode-line"),
-        Value::T,
-    ])
+    let result = call_font_builtin!(
+        builtin_internal_lisp_face_equal_p,
+        vec![
+            Value::symbol("default"),
+            Value::symbol("mode-line"),
+            Value::T,
+        ]
+    )
     .unwrap();
     assert!(result.is_truthy());
 }
@@ -2621,10 +2688,10 @@ fn internal_lisp_face_equal_p_defaults_frame_treats_faces_as_equal() {
 #[test]
 fn internal_lisp_face_equal_p_accepts_string_face_names() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_internal_lisp_face_equal_p(vec![
-        Value::string("default"),
-        Value::string("default"),
-    ])
+    let result = call_font_builtin!(
+        builtin_internal_lisp_face_equal_p,
+        vec![Value::string("default"), Value::string("default")]
+    )
     .unwrap();
     assert!(result.is_truthy());
 }

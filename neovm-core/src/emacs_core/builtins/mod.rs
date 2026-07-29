@@ -8187,13 +8187,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "internal-lisp-face-equal-p",
-        |_ctx, args| super::font::builtin_internal_lisp_face_equal_p(args),
+        super::font::builtin_internal_lisp_face_equal_p,
         0,
         None,
     );
     ctx.defsubr(
         "internal-lisp-face-empty-p",
-        |_ctx, args| super::font::builtin_internal_lisp_face_empty_p(args),
+        super::font::builtin_internal_lisp_face_empty_p,
         0,
         None,
     );

@@ -4083,31 +4083,170 @@ fn require_symbol_face_name(face: &Value) -> Result<String, Flow> {
     })
 }
 
-fn known_face_name(face: &Value) -> Option<String> {
-    let name = match face.kind() {
-        ValueKind::String => font_string_text(face).expect("checked string"),
-        _ => symbol_name_for_face_value(face)?,
+/// An interned face name after following every `face-alias` edge.
+///
+/// Keeping this distinct from an arbitrary Lisp `Value` prevents face-table
+/// callers from accidentally looking up an unresolved alias.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ResolvedFaceName(SymId);
+
+impl ResolvedFaceName {
+    fn from_symbol(value: Value) -> Option<Self> {
+        value.as_symbol_id().map(Self)
+    }
+
+    fn symbol(self) -> Value {
+        Value::from_sym_id(self.0)
+    }
+
+    fn name(self) -> &'static str {
+        resolve_sym(self.0)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ResolvedFaceDesignator {
+    Symbol(ResolvedFaceName),
+    String(ResolvedFaceName),
+    Other(Value),
+}
+
+impl ResolvedFaceDesignator {
+    fn name(self) -> Option<ResolvedFaceName> {
+        match self {
+            Self::Symbol(name) | Self::String(name) => Some(name),
+            Self::Other(_) => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FaceDesignatorKind {
+    Symbol,
+    String,
+}
+
+impl FaceDesignatorKind {
+    fn resolved(self, name: ResolvedFaceName) -> ResolvedFaceDesignator {
+        match self {
+            Self::Symbol => ResolvedFaceDesignator::Symbol(name),
+            Self::String => ResolvedFaceDesignator::String(name),
+        }
+    }
+}
+
+/// GNU's `resolve_face_name` uses two different cycle contracts: predicates and
+/// attribute access signal, while create-on-miss paths fall back to `default`.
+/// Make callers choose instead of hiding that semantic difference in a bool.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FaceAliasCyclePolicy {
+    Signal,
+    UseDefault,
+}
+
+fn face_alias_target(
+    eval: &super::eval::Context,
+    face: ResolvedFaceName,
+) -> Option<ResolvedFaceName> {
+    if face.symbol().is_nil() {
+        return None;
+    }
+    let target = eval.obarray().get_property(face.name(), "face-alias")?;
+    if target.is_nil() {
+        return None;
+    }
+    ResolvedFaceName::from_symbol(target)
+}
+
+/// Follow `face-alias` properties exactly like GNU xfaces.c
+/// `resolve_face_name`, including constant-space cycle detection.
+fn resolve_face_designator(
+    eval: &super::eval::Context,
+    face: Value,
+    cycle_policy: FaceAliasCyclePolicy,
+) -> Result<ResolvedFaceDesignator, Flow> {
+    let (kind, origin) = match face.kind() {
+        ValueKind::String => {
+            let name = font_string_text(&face).expect("checked string");
+            (
+                FaceDesignatorKind::String,
+                ResolvedFaceName(
+                    Value::symbol(&name)
+                        .as_symbol_id()
+                        .expect("interned face name must be a symbol"),
+                ),
+            )
+        }
+        _ => {
+            let Some(name) = ResolvedFaceName::from_symbol(face) else {
+                return Ok(ResolvedFaceDesignator::Other(face));
+            };
+            (FaceDesignatorKind::Symbol, name)
+        }
     };
-    if is_known_lisp_face_name(&name) || is_created_lisp_face(&name) {
+
+    let mut tortoise = origin;
+    let mut hare = origin;
+    loop {
+        let face_name = hare;
+        let Some(first_hop) = face_alias_target(eval, hare) else {
+            return Ok(kind.resolved(face_name));
+        };
+
+        let face_name = first_hop;
+        let Some(second_hop) = face_alias_target(eval, first_hop) else {
+            return Ok(kind.resolved(face_name));
+        };
+
+        hare = second_hop;
+        tortoise = face_alias_target(eval, tortoise)
+            .expect("hare cannot advance twice unless tortoise can advance once");
+        if hare == tortoise {
+            return match cycle_policy {
+                FaceAliasCyclePolicy::Signal => {
+                    Err(signal(LispCondition::CircularList, vec![origin.symbol()]))
+                }
+                FaceAliasCyclePolicy::UseDefault => Ok(kind.resolved(ResolvedFaceName(
+                    Value::symbol("default")
+                        .as_symbol_id()
+                        .expect("default must be an interned symbol"),
+                ))),
+            };
+        }
+    }
+}
+
+fn known_resolved_face_name(resolved: ResolvedFaceDesignator) -> Option<ResolvedFaceName> {
+    let name = resolved.name()?;
+    if is_known_lisp_face_name(name.name()) || is_created_lisp_face(name.name()) {
         Some(name)
     } else {
         None
     }
 }
 
-fn resolve_copy_source_face_symbol(face: &Value) -> Result<String, Flow> {
-    let name = symbol_name_for_face_value(face).expect("checked symbol before resolve");
-    if is_known_lisp_face_name(&name) || is_created_lisp_face(&name) {
-        return Ok(name);
+fn resolve_copy_source_face_symbol(
+    eval: &super::eval::Context,
+    face: &Value,
+) -> Result<String, Flow> {
+    let _ = require_symbol_face_name(face)?;
+    let name = resolve_face_designator(eval, *face, FaceAliasCyclePolicy::Signal)?
+        .name()
+        .expect("a required symbol resolves to a named face");
+    if is_known_lisp_face_name(name.name()) || is_created_lisp_face(name.name()) {
+        return Ok(name.name().to_owned());
     }
     Err(invalid_face_error(*face))
 }
 
-fn resolve_face_name_for_domain(face: &Value, defaults_frame: bool) -> Result<String, Flow> {
-    match face.kind() {
-        ValueKind::String => {
-            let name = font_string_text(face).expect("checked string");
-            if face_exists_for_domain(&name, defaults_frame) {
+fn resolve_face_name_for_domain(
+    eval: &super::eval::Context,
+    face: &Value,
+    defaults_frame: bool,
+) -> Result<String, Flow> {
+    match resolve_face_designator(eval, *face, FaceAliasCyclePolicy::Signal)? {
+        ResolvedFaceDesignator::String(name) => {
+            if face_exists_for_domain(name.name(), defaults_frame) {
                 Err(signal(
                     LispCondition::WrongTypeArgument,
                     vec![Value::symbol("symbolp"), *face],
@@ -4115,44 +4254,41 @@ fn resolve_face_name_for_domain(face: &Value, defaults_frame: bool) -> Result<St
             } else {
                 Err(signal(
                     "error",
-                    vec![Value::string("Invalid face"), Value::symbol(&name)],
+                    vec![Value::string("Invalid face"), Value::symbol(name.name())],
                 ))
             }
         }
-        ValueKind::Nil | ValueKind::T | ValueKind::Symbol(_) => {
-            let name = symbol_name_for_face_value(face).expect("symbol-like");
-            if face_exists_for_domain(&name, defaults_frame) {
-                Ok(name)
+        ResolvedFaceDesignator::Symbol(name) => {
+            if face_exists_for_domain(name.name(), defaults_frame) {
+                Ok(name.name().to_owned())
             } else {
                 Err(invalid_face_error(*face))
             }
         }
-        _ => Err(invalid_face_error(*face)),
+        ResolvedFaceDesignator::Other(_) => Err(invalid_face_error(*face)),
     }
 }
 
-fn resolve_face_name_for_merge(face: &Value) -> Result<String, Flow> {
-    match face.kind() {
-        ValueKind::String => {
-            let name = font_string_text(face).expect("checked string");
-            if face_exists_for_domain(&name, true) {
-                Ok(name)
+fn resolve_face_name_for_merge(eval: &super::eval::Context, face: &Value) -> Result<String, Flow> {
+    match resolve_face_designator(eval, *face, FaceAliasCyclePolicy::Signal)? {
+        ResolvedFaceDesignator::String(name) => {
+            if face_exists_for_domain(name.name(), true) {
+                Ok(name.name().to_owned())
             } else {
                 Err(signal(
                     "error",
-                    vec![Value::string("Invalid face"), Value::symbol(&name)],
+                    vec![Value::string("Invalid face"), Value::symbol(name.name())],
                 ))
             }
         }
-        ValueKind::Nil | ValueKind::T | ValueKind::Symbol(_) => {
-            let name = symbol_name_for_face_value(face).expect("symbol-like");
-            if face_exists_for_domain(&name, true) {
-                Ok(name)
+        ResolvedFaceDesignator::Symbol(name) => {
+            if face_exists_for_domain(name.name(), true) {
+                Ok(name.name().to_owned())
             } else {
                 Err(invalid_face_error(*face))
             }
         }
-        _ => Err(invalid_face_error(*face)),
+        ResolvedFaceDesignator::Other(_) => Err(invalid_face_error(*face)),
     }
 }
 
@@ -4524,19 +4660,6 @@ fn lookup_frame_lisp_face_vector_by_symbol(
     crate::emacs_core::xfaces::lookup_frame_face_hash_entry(table, key)
 }
 
-/// Resolve a face argument to the interned symbol used as the face-table key,
-/// mirroring GNU's `resolve_face_name`: strings are interned, symbols pass
-/// through unchanged. Returns None for values that can never key a lisp face
-/// (numbers, conses, and the self-evaluating `nil`/`t`), for which the lookup
-/// yields nil anyway. No heap `String` is allocated on the symbol fast path.
-fn face_lookup_key(face: &Value) -> Option<Value> {
-    match face.kind() {
-        ValueKind::Symbol(_) => Some(*face),
-        ValueKind::String => font_string_text(face).map(|name| Value::symbol(&name)),
-        _ => None,
-    }
-}
-
 fn ensure_frame_lisp_face_vector(
     eval: &mut super::eval::Context,
     frame_id: FrameId,
@@ -4847,20 +4970,23 @@ fn lisp_face_attribute_value(face: &str, attr: LFaceAttr, defaults_frame: bool) 
     lisp_face_attribute_base_value(face, attr, defaults_frame)
 }
 
-fn resolve_known_face_name_for_compare(face: &Value, defaults_frame: bool) -> Result<String, Flow> {
-    match face.kind() {
-        ValueKind::String => {
-            let name = font_string_text(face).expect("checked string");
-            if face_exists_for_domain(&name, defaults_frame) {
-                Ok(name)
+fn resolve_known_face_name_for_compare(
+    eval: &super::eval::Context,
+    face: &Value,
+    defaults_frame: bool,
+) -> Result<String, Flow> {
+    match resolve_face_designator(eval, *face, FaceAliasCyclePolicy::Signal)? {
+        ResolvedFaceDesignator::Symbol(name) | ResolvedFaceDesignator::String(name) => {
+            if face_exists_for_domain(name.name(), defaults_frame) {
+                Ok(name.name().to_owned())
             } else {
                 Err(signal(
                     "error",
-                    vec![Value::string("Invalid face"), Value::symbol(&name)],
+                    vec![Value::string("Invalid face"), Value::symbol(name.name())],
                 ))
             }
         }
-        _ => resolve_face_name_for_domain(face, defaults_frame),
+        ResolvedFaceDesignator::Other(_) => Err(invalid_face_error(*face)),
     }
 }
 
@@ -5219,14 +5345,14 @@ pub(crate) fn builtin_internal_lisp_face_p(
     expect_min_args("internal-lisp-face-p", &args, 1)?;
     expect_max_args("internal-lisp-face-p", &args, 2)?;
 
-    // Fast path mirroring GNU's `Finternal_lisp_face_p`: resolve the argument to
-    // its interned face symbol and do a single allocation-free, symbol-keyed
-    // hash lookup -- in the frame face table (2-arg live frame) or the global
+    // Fast path mirroring GNU's `Finternal_lisp_face_p`: resolve the
+    // `face-alias` chain, then perform an allocation-free, symbol-keyed lookup
+    // in the frame face table (2-arg live frame) or the global
     // `face--new-frame-defaults` table (null frame). GNU never allocates, seeds,
-    // or creates here; neither does this path. The `known_face_name`/`ensure`
-    // gate is retained only as a cold fallback for a table miss, so results are
-    // identical to the old form while the common hit case allocates nothing.
-    let key = face_lookup_key(&args[0]);
+    // or creates here; neither does this path. The known-face/ensure gate is
+    // retained only as a cold fallback for a table miss.
+    let resolved = resolve_face_designator(eval, args[0], FaceAliasCyclePolicy::Signal)?;
+    let key = resolved.name().map(ResolvedFaceName::symbol);
 
     if let Some(frame) = args.get(1)
         && !frame.is_nil()
@@ -5244,10 +5370,9 @@ pub(crate) fn builtin_internal_lisp_face_p(
         {
             return Ok(vector);
         }
-        return Ok(match known_face_name(&args[0]) {
-            Some(face_name) => {
-                lookup_frame_lisp_face_vector(eval, frame_id, &face_name).unwrap_or(Value::NIL)
-            }
+        return Ok(match known_resolved_face_name(resolved) {
+            Some(face_name) => lookup_frame_lisp_face_vector(eval, frame_id, face_name.name())
+                .unwrap_or(Value::NIL),
             None => Value::NIL,
         });
     }
@@ -5258,8 +5383,10 @@ pub(crate) fn builtin_internal_lisp_face_p(
     {
         return Ok(vector);
     }
-    Ok(match known_face_name(&args[0]) {
-        Some(face_name) => ensure_global_lisp_face_vector(eval, &face_name).unwrap_or(Value::NIL),
+    Ok(match known_resolved_face_name(resolved) {
+        Some(face_name) => {
+            ensure_global_lisp_face_vector(eval, face_name.name()).unwrap_or(Value::NIL)
+        }
         None => Value::NIL,
     })
 }
@@ -5272,7 +5399,12 @@ pub(crate) fn builtin_internal_make_lisp_face(
 ) -> EvalResult {
     expect_min_args("internal-make-lisp-face", &args, 1)?;
     expect_max_args("internal-make-lisp-face", &args, 2)?;
-    let face_name = require_symbol_face_name(&args[0])?;
+    let _ = require_symbol_face_name(&args[0])?;
+    let face_name = resolve_face_designator(eval, args[0], FaceAliasCyclePolicy::UseDefault)?
+        .name()
+        .expect("a required symbol resolves to a named face")
+        .name()
+        .to_owned();
     if let Some(frame) = args.get(1)
         && !frame.is_nil()
         && !live_frame_designator_in_state(&eval.frames, frame)
@@ -5316,7 +5448,12 @@ pub(crate) fn builtin_internal_copy_lisp_face(
 ) -> EvalResult {
     expect_args("internal-copy-lisp-face", &args, 4)?;
     let _ = require_symbol_face_name(&args[0])?;
-    let to_name = require_symbol_face_name(&args[1])?;
+    let _ = require_symbol_face_name(&args[1])?;
+    let to_name = resolve_face_designator(eval, args[1], FaceAliasCyclePolicy::UseDefault)?
+        .name()
+        .expect("a required symbol resolves to a named face")
+        .name()
+        .to_owned();
     let copy_defaults_domain = args[2].is_t();
     if !copy_defaults_domain && !live_frame_designator_in_state(&eval.frames, &args[2]) {
         return Err(signal(
@@ -5333,7 +5470,7 @@ pub(crate) fn builtin_internal_copy_lisp_face(
             vec![Value::symbol("frame-live-p"), args[3]],
         ));
     }
-    let from_name = resolve_copy_source_face_symbol(&args[0])?;
+    let from_name = resolve_copy_source_face_symbol(eval, &args[0])?;
     mark_created_lisp_face(&to_name);
     ensure_lisp_face_id_property(eval, &to_name)?;
     let _ = ensure_global_lisp_face_vector(eval, &to_name);
@@ -5388,7 +5525,12 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
     expect_min_args("internal-set-lisp-face-attribute", &args, 3)?;
     expect_max_args("internal-set-lisp-face-attribute", &args, 4)?;
     let face = &args[0];
-    let face_name = require_symbol_face_name(face)?;
+    let _ = require_symbol_face_name(face)?;
+    let resolved_face = resolve_face_designator(eval, *face, FaceAliasCyclePolicy::Signal)?
+        .name()
+        .expect("a required symbol resolves to a named face");
+    let face_name = resolved_face.name().to_owned();
+    let face_symbol = resolved_face.symbol();
     let attr_name = normalize_set_face_attribute_name(&args[1])?;
     let value = args[2];
     if let Some(frame) = args.get(3)
@@ -5410,7 +5552,10 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
                     if face.is_nil() {
                         return Err(signal("error", vec![Value::string("Invalid face")]));
                     }
-                    return Err(signal("error", vec![Value::string("Invalid face"), *face]));
+                    return Err(signal(
+                        "error",
+                        vec![Value::string("Invalid face"), face_symbol],
+                    ));
                 }
             } else if !face_exists_for_domain(&face_name, false) {
                 mark_selected_created_lisp_face(&face_name);
@@ -5493,17 +5638,14 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
         }
     }
 
-    let result = *face;
+    let result = face_symbol;
 
     // Preserve GNU-visible live-frame font/default-parameter side effects,
     // but leave conversion to render-facing face attributes to redisplay.
     if args.len() >= 3 {
         let value = args[2];
 
-        if let (Ok(face_name), Ok(attr_name)) = (
-            require_symbol_face_name(&args[0]),
-            normalize_set_face_attribute_name(&args[1]),
-        ) {
+        if let Ok(attr_name) = normalize_set_face_attribute_name(&args[1]) {
             let (canonical_attr, canonical_value) =
                 normalize_face_attr_for_set_with_eval(Some(eval), &face_name, attr_name, value)?;
             let attr_name_str = canonical_attr.keyword();
@@ -5812,7 +5954,7 @@ pub(crate) fn builtin_internal_get_lisp_face_attribute(
         false
     };
 
-    let face_name = resolve_face_name_for_domain(&args[0], defaults_frame)?;
+    let face_name = resolve_face_name_for_domain(eval, &args[0], defaults_frame)?;
     let attr_name = normalize_face_attribute_name(&args[1])?;
 
     if defaults_frame {
@@ -5889,12 +6031,15 @@ pub(crate) fn builtin_internal_lisp_face_attribute_values(args: Vec<Value>) -> E
 /// `(internal-lisp-face-equal-p FACE1 FACE2 &optional FRAME)` -- return t if
 /// FACE1 and FACE2 resolve to equal face attributes in the selected frame or in
 /// default face definitions when FRAME is t.
-pub(crate) fn builtin_internal_lisp_face_equal_p(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_internal_lisp_face_equal_p(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_min_args("internal-lisp-face-equal-p", &args, 2)?;
     expect_max_args("internal-lisp-face-equal-p", &args, 3)?;
     let defaults_frame = frame_defaults_flag(args.get(2))?;
-    let face1 = resolve_known_face_name_for_compare(&args[0], defaults_frame)?;
-    let face2 = resolve_known_face_name_for_compare(&args[1], defaults_frame)?;
+    let face1 = resolve_known_face_name_for_compare(eval, &args[0], defaults_frame)?;
+    let face2 = resolve_known_face_name_for_compare(eval, &args[1], defaults_frame)?;
     for attr in LFACE_ATTRS {
         let v1 = lisp_face_attribute_value(&face1, attr, defaults_frame);
         let v2 = lisp_face_attribute_value(&face2, attr, defaults_frame);
@@ -5907,11 +6052,14 @@ pub(crate) fn builtin_internal_lisp_face_equal_p(args: Vec<Value>) -> EvalResult
 
 /// `(internal-lisp-face-empty-p FACE &optional FRAME)` -- return t if FACE has
 /// only unspecified attributes in selected/default face definitions.
-pub(crate) fn builtin_internal_lisp_face_empty_p(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_internal_lisp_face_empty_p(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_min_args("internal-lisp-face-empty-p", &args, 1)?;
     expect_max_args("internal-lisp-face-empty-p", &args, 2)?;
     let defaults_frame = frame_defaults_flag(args.get(1))?;
-    let face = resolve_known_face_name_for_compare(&args[0], defaults_frame)?;
+    let face = resolve_known_face_name_for_compare(eval, &args[0], defaults_frame)?;
     for attr in LFACE_ATTRS {
         let v = lisp_face_attribute_value(&face, attr, defaults_frame);
         if !v.is_symbol_named("unspecified") {
@@ -5932,7 +6080,7 @@ pub(crate) fn builtin_internal_merge_in_global_face(
             vec![Value::symbol("frame-live-p"), args[1]],
         ));
     }
-    let face_name = resolve_face_name_for_merge(&args[0])?;
+    let face_name = resolve_face_name_for_merge(eval, &args[0])?;
     if !is_known_lisp_face_name(&face_name) {
         mark_created_lisp_face(&face_name);
         mark_selected_created_lisp_face(&face_name);
@@ -6545,7 +6693,7 @@ pub(crate) fn builtin_face_font(eval: &mut super::eval::Context, args: Vec<Value
 
     let defaults_frame = args.get(1).is_some_and(|v| v.is_t());
     if defaults_frame {
-        let face_name = resolve_face_name_for_domain(&args[0], true)?;
+        let face_name = resolve_face_name_for_domain(eval, &args[0], true)?;
         let mut styles = Vec::new();
         let weight = lisp_face_attribute_value(&face_name, LFaceAttr::Weight, true);
         if matches!(weight.as_symbol_name(), Some(name) if name != "normal" && name != "unspecified")
@@ -6589,43 +6737,26 @@ pub(crate) fn builtin_face_font(eval: &mut super::eval::Context, args: Vec<Value
         // valid (but on a TTY frame, unrealized) face, so it must return nil
         // rather than error. Use the full existence check, not just the
         // bootstrap built-in table.
-        return match args[0].kind() {
-            ValueKind::String => {
-                let name = font_string_text(&args[0]).expect("checked string");
-                if face_exists_for_domain(&name, false) {
+        return match resolve_face_designator(eval, args[0], FaceAliasCyclePolicy::Signal)? {
+            ResolvedFaceDesignator::Symbol(name) | ResolvedFaceDesignator::String(name) => {
+                if face_exists_for_domain(name.name(), false) {
                     Ok(Value::NIL)
+                } else if name.symbol().is_nil() {
+                    Err(signal("error", vec![Value::string("Invalid face")]))
                 } else {
-                    let payload = if name.is_empty() {
-                        Value::symbol("")
-                    } else {
-                        Value::symbol(&name)
-                    };
                     Err(signal(
                         "error",
-                        vec![Value::string("Invalid face"), payload],
+                        vec![Value::string("Invalid face"), name.symbol()],
                     ))
                 }
             }
-            ValueKind::Nil => Err(signal("error", vec![Value::string("Invalid face")])),
-            ValueKind::T | ValueKind::Symbol(_) => {
-                if let Some(name) = symbol_name_for_face_value(&args[0])
-                    && face_exists_for_domain(&name, false)
-                {
-                    return Ok(Value::NIL);
-                }
-                Err(signal(
-                    "error",
-                    vec![Value::string("Invalid face"), args[0]],
-                ))
+            ResolvedFaceDesignator::Other(value) => {
+                Err(signal("error", vec![Value::string("Invalid face"), value]))
             }
-            _ => Err(signal(
-                "error",
-                vec![Value::string("Invalid face"), args[0]],
-            )),
         };
     }
 
-    let face_name = resolve_face_name_for_domain(&args[0], false)?;
+    let face_name = resolve_face_name_for_domain(eval, &args[0], false)?;
     let remapping = face_remapping_for_current_buffer(eval);
     let face = if remapping.is_empty() {
         eval.face_table.resolve(&face_name)

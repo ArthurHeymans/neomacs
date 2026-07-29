@@ -47,6 +47,44 @@ fn compat_face_semantics_matches_gnu_emacs() {
      (internal-merge-in-global-face face f)
      (equal (internal-get-lisp-face-attribute face :foreground f) "blue"))))"##,
         },
+        FaceCase {
+            name: "obsolete_face_aliases_resolve_through_public_face_operations",
+            form: r#"(progn
+  (defface compat-face-alias-target
+    '((t :foreground "red"))
+    "Oracle target face.")
+  (define-obsolete-face-alias
+    'compat-face-alias-intermediate
+    'compat-face-alias-target
+    "1.0")
+  (define-obsolete-face-alias
+    'compat-face-alias
+    'compat-face-alias-intermediate
+    "1.0")
+  (list
+   (and (facep 'compat-face-alias) t)
+   (get 'compat-face-alias 'face-alias)
+   (face-attribute 'compat-face-alias :foreground nil t)
+   (face-equal 'compat-face-alias 'compat-face-alias-target)
+   (face-font 'compat-face-alias)
+   (progn
+     (set-face-attribute 'compat-face-alias nil :background "blue")
+     (face-attribute 'compat-face-alias-target :background nil t))
+   (face-differs-from-default-p 'compat-face-alias)))"#,
+        },
+        FaceCase {
+            name: "circular_face_aliases_signal",
+            form: r#"(progn
+  (put 'compat-circular-face-alias-a
+       'face-alias
+       'compat-circular-face-alias-b)
+  (put 'compat-circular-face-alias-b
+       'face-alias
+       'compat-circular-face-alias-a)
+  (condition-case err
+      (facep 'compat-circular-face-alias-a)
+    (error err)))"#,
+        },
     ];
 
     for case in cases {
