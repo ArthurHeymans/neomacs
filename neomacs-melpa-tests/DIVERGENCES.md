@@ -925,6 +925,41 @@ untouched at column 0. In asn1-mode:
 
 Affects: `asn1-mode` (1).
 
+## 33. `call-interactively` on a non-interactive autoload never resolves it
+
+An autoload declared **without** the interactive flag: GNU loads the file (here
+reporting that it is missing), Neomacs signals `commandp` against the still
+unresolved autoload object.
+
+```elisp
+(autoload 'probe-plain "no-such-library-xyz")
+(call-interactively 'probe-plain)
+;; GNU     => (file-missing "Cannot open load file" … "no-such-library-xyz")
+;; Neomacs => (wrong-type-argument commandp probe-plain)
+```
+
+**The fix is confined to `call-interactively`'s ordering — `interactive-form`
+already agrees.** Everything around it matches:
+
+| probe | GNU | Neomacs |
+|---|---|---|
+| `(interactive-form 'probe-plain)` | `file-missing` | `file-missing` ✓ |
+| `(probe-plain)` — ordinary call | `file-missing` | `file-missing` ✓ |
+| `(commandp 'probe-plain)` | nil | nil ✓ |
+| `(commandp 'probe-interactive)` | t | t ✓ |
+| `(call-interactively 'probe-interactive)` | `file-missing` | `file-missing` ✓ |
+| `(call-interactively 'probe-plain)` | `file-missing` | **`commandp`** ✗ |
+
+GNU's `Fcall_interactively` (`src/callint.c:312`) obtains the form *first* —
+`Lisp_Object form = calln (Qinteractive_form, function);` — and only then barfs
+`wrong_type_argument (Qcommandp, function)` if it is not a cons. Since
+`interactive-form` resolves an autoload in **both** editors, Neomacs must be
+testing `commandp` before asking for the form. Reordering is the whole fix.
+
+Affects: `airplay` (1) — five of its eight entry points lack an `interactive`
+form and take this path. Any `M-x`-reachable autoload stub whose real definition
+is loaded on demand.
+
 
 ## Behaviour that is NOT a divergence
 
