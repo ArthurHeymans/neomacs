@@ -2972,6 +2972,30 @@ fn eval_x_display_pixel_queries_use_selected_gui_display() {
 }
 
 #[test]
+fn eval_x_display_mm_queries_accept_selected_gui_display() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_window_system(Some(Value::symbol(gui_window_system_symbol())));
+
+    for result in [
+        builtin_x_display_mm_width(&mut eval, vec![]),
+        builtin_x_display_mm_height(&mut eval, vec![]),
+        builtin_x_display_mm_width(&mut eval, vec![Value::make_frame(frame_id.0)]),
+        builtin_x_display_mm_height(&mut eval, vec![Value::make_frame(frame_id.0)]),
+    ] {
+        let dimension = result.expect("a live GUI display is a valid millimeter query target");
+        assert!(
+            dimension.is_nil() || dimension.as_fixnum().is_some(),
+            "an unavailable physical dimension is nil; an available one is an integer"
+        );
+    }
+}
+
+#[test]
 fn x_focus_frame_accepts_live_neomacs_gui_frame() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::Context::new();

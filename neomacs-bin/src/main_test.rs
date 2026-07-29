@@ -2362,6 +2362,22 @@ fn gui_startup_ediff_window_parameters_use_live_display_pixels() {
 }
 
 #[test]
+fn gui_startup_display_mm_width_accepts_selected_frame() {
+    let mut eval = create_bootstrap_evaluator_cached_with_features(BOOTSTRAP_CORE_FEATURES)
+        .expect("cached bootstrap evaluator");
+    let _frame_id = bootstrap_runtime_gui_startup(&mut eval);
+
+    let result = eval
+        .eval_str("(display-mm-width (selected-frame))")
+        .expect("display-mm-width should accept an explicit live GUI frame");
+
+    assert!(
+        result.is_nil() || result.as_fixnum().is_some(),
+        "GNU returns either the display width in millimeters or nil when it is unknown"
+    );
+}
+
+#[test]
 fn cl_generic_context_dispatch_uses_neo_window_system_method() {
     let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
         .expect("cached bootstrap evaluator");

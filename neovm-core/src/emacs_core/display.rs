@@ -2554,6 +2554,13 @@ pub(crate) fn builtin_x_display_mm_height(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    if gui_x_query_target_eval(eval, "x-display-mm-height", &args)? {
+        // The generic `display-mm-height` contract permits nil when the
+        // backend cannot report a trustworthy physical size. Winit exposes
+        // pixel size and scale factor, but not monitor dimensions in
+        // millimeters, so do not invent a physical measurement.
+        return Ok(Value::NIL);
+    }
     x_optional_display_query_error_eval(eval, "x-display-mm-height", args)
 }
 
@@ -2562,6 +2569,11 @@ pub(crate) fn builtin_x_display_mm_width(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    if gui_x_query_target_eval(eval, "x-display-mm-width", &args)? {
+        // See `builtin_x_display_mm_height`: unavailable physical monitor
+        // dimensions are represented as nil, not as an X-frame error.
+        return Ok(Value::NIL);
+    }
     x_optional_display_query_error_eval(eval, "x-display-mm-width", args)
 }
 
