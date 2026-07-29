@@ -43,7 +43,11 @@ fn astute_installed_payload_inventory_sizes_and_content_digests_match() {
                file
                (file-attribute-size
                 (file-attributes path))
-               (secure-hash 'sha256 path))))
+               (with-temp-buffer
+                 (insert-file-contents-literally path)
+                 (secure-hash
+                  'sha256
+                  (current-buffer))))))
           (sort
            (seq-filter
             (lambda (file)
@@ -52,7 +56,7 @@ fn astute_installed_payload_inventory_sizes_and_content_digests_match() {
             (directory-files directory nil "\\`[^.]"))
            #'string<)))"##;
     let expect = expect![[
-        r#"OK (("README-elpa" 382 "58a702d7fcada39d00c0b9079e2fee0182d770234217f178795701010835020b") ("astute-autoloads.el" 1298 "ca018ee727960b71c68bf048e042b3579c080a533c4d3273f45254257351bd22") ("astute-pkg.el" 416 "c37692eed1993d5cb0b52366a6eba38a39b98475f7cc695aea777e3e3a24f45e") ("astute.el" 6226 "67efc7a4a469e95aac61138817f09cf96336b9d98e7919e58657253a82f67fd9") ("astute.elc" 5749 "0762a218fad28e781b9a9bacfec5d2b984ac3c06cbb8a1db6f097b686984ce39"))"#
+        r#"OK (("astute-autoloads.el" 1298 "41b026cc15c61d538e81a3e4200756cbc306f8bab5269a5a9ea4d4711e795086") ("astute-pkg.el" 416 "ae4040cd38dbf88c61af593e942170ee8abf7bb48643bc2be459c589e0d410ce") ("astute.el" 6226 "28d2d8762125e26c005639a3089d9f31020b9a2a4ef73d6b5202edc0400781c9") ("astute.elc" 5749 "ce9f2fb2bdff030afae0f4ce6a5488e1857c6974fa8fa01e5b0662f609e61941"))"#
     ]];
 
     assert_astute_parity(elisp_form, expect);
@@ -220,7 +224,7 @@ fn astute_generated_autoload_registers_mode_without_eagerly_loading_package() {
          (boundp 'astute-transform-list)
          (assoc 'astute-mode minor-mode-alist))"##;
     let expect = expect![[
-        r#"OK (nil t t "[ORACLE-WORKSPACE]/tmp/melpa/package-cache/astute/20241015.444/home/.emacs.d/elpa/astute-20241015.444/astute.el" nil nil nil nil)"#
+        r#"OK (nil t t "[ORACLE-WORKSPACE]/tmp/melpa/source-install-cache/astute/20241015.444/69d413c952771c0d06cda161fb25fe495fb895b0/517749e477c16c0437cae029be71e672061a6c19/d31dec67631f14ef8be3ad6438e172a07298082b/home/.emacs.d/elpa/astute-20241015.444/astute.el" nil nil nil nil)"#
     ]];
 
     assert_astute_autoload_parity(elisp_form, expect);

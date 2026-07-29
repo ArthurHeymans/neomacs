@@ -40,7 +40,11 @@ fn ascii_table_installed_payload_inventory_sizes_and_content_digests_match() {
                file
                (file-attribute-size
                 (file-attributes path))
-               (secure-hash 'sha256 path))))
+               (with-temp-buffer
+                 (insert-file-contents-literally path)
+                 (secure-hash
+                  'sha256
+                  (current-buffer))))))
           (sort
            (seq-filter
             (lambda (file)
@@ -49,7 +53,7 @@ fn ascii_table_installed_payload_inventory_sizes_and_content_digests_match() {
             (directory-files directory nil "\\`[^.]"))
            #'string<)))"##;
     let expect = expect![[
-        r#"OK (("README-elpa" 294 "84516ebeb61b4ea947d78ebd33eba7c669e0baeb61c787a883f956a176164ae0") ("ascii-table-autoloads.el" 796 "1cae4dc052c308990a3e8a6e6090cc096a1b33103b99492dbd9d149d57b7edd8") ("ascii-table-pkg.el" 416 "140068182a3001099a62bd194a9478ae98cff5335dfd0492eb54b24f785f26c9") ("ascii-table.el" 10566 "55a067b709e9a925cfc95cc47546b3f91a824acd6918b05e27b2cbdad7bf7cf4") ("ascii-table.elc" 10565 "dfcf6cd35c154f9d85dfd7a0338e6c7a5781e8f1d1cc27f48a260876676777c7"))"#
+        r#"OK (("ascii-table-autoloads.el" 796 "aeb50ebef24754a49da0510c41a5e94c3a8aa3012c4496a9174b510aed0081d5") ("ascii-table-pkg.el" 416 "3d55cf0d7d4b3fea3212f024153b31c1c05cacc94ecdad4c5e1f7ae06c000aff") ("ascii-table.el" 10566 "8e20cb770d349783841fbcc2148c966c150d3ef028effa1c72848e17ac344b45") ("ascii-table.elc" 10565 "56612a442ca393462fadf6772a5ef127e827c0a2a15a6611847a78d13d6ae534"))"#
     ]];
 
     assert_ascii_table_parity(elisp_form, expect);

@@ -40,7 +40,11 @@ fn asm_blox_installed_payload_inventory_sizes_and_content_digests_match() {
                file
                (file-attribute-size
                 (file-attributes path))
-               (secure-hash 'sha256 path))))
+               (with-temp-buffer
+                 (insert-file-contents-literally path)
+                 (secure-hash
+                  'sha256
+                  (current-buffer))))))
           (sort
            (seq-filter
             (lambda (file)
@@ -49,7 +53,7 @@ fn asm_blox_installed_payload_inventory_sizes_and_content_digests_match() {
             (directory-files directory nil "\\`[^.]"))
            #'string<)))"##;
     let expect = expect![[
-        r#"OK (("README-elpa" 482 "83200436072095689bb302367d8c35e2468aa8c04fb442744edc6e29ceed8664") ("asm-blox-autoloads.el" 952 "90dacef18a53fd9df49203c3562652ff6c3659f5ba152f73278df6a9d8ac4216") ("asm-blox-pkg.el" 316 "aef7245e75406428ca9da5a43ea1f8424537e0e25242f6055b2a489c8a0ac4af") ("asm-blox-puzzles.el" 51075 "950550424484d1a64b53addd1671a0c9aeaae133630bbaa282a4ddcfdeaceabc") ("asm-blox-puzzles.elc" 32187 "6b48f704ccf83a23c8a3c5712893383da336bd0deae3b588eedfbc64b773a0de") ("asm-blox.el" 159389 "1b0d9279fde266e644bf8411132512c131c6279d6461f7b365b3088fe1873561") ("asm-blox.elc" 176059 "62cd6b3653e6725fb78d083bfa557af495aad13371a7b5de9c24b9f39cca19d6") ("asm-blox.info" 25413 "1b6dd172a8a1948198dea03644f69d05e60573b503dd4e15db3672465788e1b1") ("dir" 541 "1074f3cd749d397dbddbccf84eaabd2ffb9f62c6f2871a8e86f3a824daabae5c"))"#
+        r#"OK (("asm-blox-autoloads.el" 952 "2feebea65a2d99cf3ab0b1ebcae3878465f957781d8ff89d5a461fd25ddac49f") ("asm-blox-pkg.el" 316 "e66b987e19b09ce5d2c9b447a5b90491d88ffb982ed78bf1410f35854364049c") ("asm-blox-puzzles.el" 51075 "fb7d70d6d8e8057c5ac7712e3b7fcdd4f04243f739fb3c828e1cd4561c7773b9") ("asm-blox-puzzles.elc" 32187 "6953a8b047cabca0f349ee24a8f56d1ae9846c3ba719d994b32c49a82bbc7fa6") ("asm-blox.el" 159389 "25d33612f757c4d682cf8d13112460682668dda06c63b234bebfa14c937153a7") ("asm-blox.elc" 176059 "99fc3783ccf8f2fee157de04ccb7ad60df0194403cdb3b22c214547078b9a46a") ("asm-blox.info" 25413 "22d1301c320c68b7609115a07e5e028a92321590cd3559793216652f096e7b91") ("dir" 541 "1d727514971d5b4b2c807ee0d6b892a3714d3a631fe14fbf54c97617fa5bc027"))"#
     ]];
 
     assert_asm_blox_parity(elisp_form, expect);

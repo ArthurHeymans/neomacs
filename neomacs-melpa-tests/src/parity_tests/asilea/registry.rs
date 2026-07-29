@@ -38,7 +38,11 @@ fn asilea_installed_payload_inventory_sizes_and_content_digests_match() {
                file
                (file-attribute-size
                 (file-attributes path))
-               (secure-hash 'sha256 path))))
+               (with-temp-buffer
+                 (insert-file-contents-literally path)
+                 (secure-hash
+                  'sha256
+                  (current-buffer))))))
           (sort
            (seq-filter
             (lambda (file)
@@ -47,7 +51,7 @@ fn asilea_installed_payload_inventory_sizes_and_content_digests_match() {
             (directory-files directory nil "\\`[^.]"))
            #'string<)))"##;
     let expect = expect![[
-        r#"OK (("README-elpa" 1056 "34a3f1739f12e36ae3a1a2aef37cb9c443f63208b78ddfea2d9b1865630429a5") ("asilea-autoloads.el" 671 "806b33b0403cf53c3e0c0ef597de739b4d0b5f7493f340fdba39118ed35272e8") ("asilea-pkg.el" 429 "7d5ac025b87cd05011801dc135824994390fa8beac1378199873c38a30a1db17") ("asilea.el" 16326 "a39e6b071ba3c7f424d62b1a7f40a964f85ebe2ab16b3a2d567cede682670108") ("asilea.elc" 10931 "bbe4f4fc0476ecace99705b35cf91d9e2a9138f7a740d551933278355cd101e4"))"#
+        r#"OK (("asilea-autoloads.el" 671 "789051238f361972d0a74e61b8caef971bee13faf8a67119316ab1f3110e8714") ("asilea-pkg.el" 429 "5086c0efc627fe6981ca743c3671370c03fbe0b4328e9ffeefc264da4ae5373e") ("asilea.el" 16326 "ea0a4b390818cd780c323eb1e44a082c29fc153bff6a7681370aa7fe0bf41a5b") ("asilea.elc" 10931 "edd8d3d3137c47cd7086e96c26c6d9b04b2ff6268d71b3711f74011cd51cebd3"))"#
     ]];
 
     assert_asilea_parity(elisp_form, expect);
