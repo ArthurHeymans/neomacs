@@ -17,6 +17,7 @@ use libloading::Library;
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::intern::{intern, intern_lisp_string, resolve_sym};
+use super::timefns::{LispTimeOutput, make_lisp_time};
 use super::value::Value;
 use crate::heap_types::LispString;
 use crate::tagged::gc::{HeapWriteKind, note_heap_write};
@@ -1533,20 +1534,23 @@ unsafe extern "C" fn module_make_time(env: *mut emacs_env, time: emacs_time) -> 
         if !module_function_begin(env) {
             return std::ptr::null_mut();
         }
-        // `tv_nsec` is `libc::c_long`, which is `i64` on Linux/macOS but
-        // `i32` on Windows MSVC (LLP64). Widen to `i64` so the arithmetic
-        // matches `Value::fixnum`'s `i64` parameter on every target. The
-        // `#[repr(C)]` `emacs_time` struct itself mirrors `struct timespec`
-        // and must keep its platform-ABI field widths.
-        let seconds = time.tv_sec;
-        let nanoseconds = time.tv_nsec as i64;
-        let list = Value::list(vec![
-            Value::fixnum((seconds >> 16) & 0xFFFF),
-            Value::fixnum(seconds & 0xFFFF),
-            Value::fixnum(nanoseconds / 1000),
-            Value::fixnum((nanoseconds % 1000) * 1000),
-        ]);
-        lisp_to_value(env, list)
+        // Route through the shared time-encoding seam (GNU
+        // `timefns.c:timespec_to_lisp`, which `module_make_time` calls)
+        // instead of inlining the list arithmetic. Two divergences retire
+        // at once:
+        //   * width -- `tv_nsec` is `libc::c_long` (`i64` on Linux/macOS,
+        //     `i32` on Windows MSVC under LLP64); the seam takes fixed
+        //     `i64`, so the `as i64` cast is the single FFI/domain
+        //     crossing rather than smeared across four `Value::fixnum`
+        //     calls that only compiled where `c_long == i64`.
+        //   * shape -- the module `make_time` API contracts the canonical
+        //     `(TICKS . HZ)` form (Hz = TIMESPEC_HZ = 1_000_000_000),
+        //     which `LispTimeOutput::TicksHz` produces. The inlined code
+        //     instead emitted the legacy `(HIGH LOW USEC PSEC)` list.
+        // `make_lisp_time` reduces, sign-safely, to exactly
+        // `tv_sec*1e9 + tv_nsec` ticks -- byte-identical to `timespec_ticks`.
+        let lisp_time = make_lisp_time(time.tv_sec, time.tv_nsec as i64, LispTimeOutput::TicksHz);
+        lisp_to_value(env, lisp_time)
     })
 }
 
