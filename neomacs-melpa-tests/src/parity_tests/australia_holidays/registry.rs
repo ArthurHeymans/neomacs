@@ -10,7 +10,20 @@ fn australia_holidays_exact_package_descriptor_origin_and_dependency_contract_ma
                                    'australia-holidays
                                    package-alist)))
                                 (extras
-                                 (package-desc-extras descriptor)))
+                                 (package-desc-extras descriptor))
+                                ;; Mask the installed package's own
+                                ;; directory.  Spelling it out pinned the
+                                ;; harness's acquisition layout, so this
+                                ;; expectation broke when the cache moved
+                                ;; from package-cache/ to the
+                                ;; revision-pinned source-install-cache/ --
+                                ;; a harness change wearing the shape of a
+                                ;; package regression.
+                                (installed
+                                 (directory-file-name
+                                  (file-name-directory
+                                   (getenv
+                                    "NEOMACS_PACKAGE_SOURCE")))))
                            (list
                             (package-desc-name descriptor)
                             (package-version-join
@@ -25,7 +38,11 @@ fn australia_holidays_exact_package_descriptor_origin_and_dependency_contract_ma
                              (package-desc-reqs descriptor))
                             (package-desc-kind descriptor)
                             (package-desc-archive descriptor)
-                            (package-desc-dir descriptor)
+                            (replace-regexp-in-string
+                             (regexp-quote installed)
+                             "[PACKAGE]"
+                             (package-desc-dir descriptor)
+                             t t)
                             (alist-get :commit extras)
                             (alist-get :revdesc extras)
                             (alist-get :url extras)
@@ -33,7 +50,7 @@ fn australia_holidays_exact_package_descriptor_origin_and_dependency_contract_ma
                             (alist-get :authors extras)
                             (alist-get :maintainers extras)))"##;
     let expect = expect![[
-        r#"OK (australia-holidays "20250706.1213" "Australian holidays for calendar." ((emacs "24.1")) nil nil "[ORACLE-WORKSPACE]/tmp/melpa/package-cache/australia-holidays/20250706.1213/home/.emacs.d/elpa/australia-holidays-20250706.1213" "a73bbc940bc953164b8ed77e61e65a7a3aff4da5" "a73bbc940bc9" "https://github.com/jmibanez/australia-holidays.el" ("calendar") (("JM Ibañez" . "jm@jmibanez.com")) (("JM Ibañez" . "jm@jmibanez.com")))"#
+        r#"OK (australia-holidays "20250706.1213" "Australian holidays for calendar." ((emacs "24.1")) nil nil "[PACKAGE]" "a73bbc940bc953164b8ed77e61e65a7a3aff4da5" "a73bbc940bc9" "https://github.com/jmibanez/australia-holidays.el" ("calendar") (("JM Ibañez" . "jm@jmibanez.com")) (("JM Ibañez" . "jm@jmibanez.com")))"#
     ]];
 
     assert_australia_holidays_parity(elisp_form, expect);
@@ -83,7 +100,7 @@ fn australia_holidays_installed_payload_inventory_and_exact_archive_hashes_match
                                "\\`[^.]"))
                              #'string<)))"##;
     let expect = expect![[
-        r#"OK (("README-elpa" :generated t) ("australia-holidays-autoloads.el" :generated t) ("australia-holidays-pkg.el" :archive 430 "c6c4fd234e27f0f8bbd52d482ba1295b259a46c87db30f7298a4bd1ec266c6d4") ("australia-holidays.el" :archive 5909 "ad2e5eb3bcbcef956f624107ab6bd8904218f20f4a3ab647627bf85b36217bf4") ("australia-holidays.elc" :generated t))"#
+        r#"OK (("australia-holidays-autoloads.el" :generated t) ("australia-holidays-pkg.el" :archive 430 "c6c4fd234e27f0f8bbd52d482ba1295b259a46c87db30f7298a4bd1ec266c6d4") ("australia-holidays.el" :archive 5909 "ad2e5eb3bcbcef956f624107ab6bd8904218f20f4a3ab647627bf85b36217bf4") ("australia-holidays.elc" :generated t))"#
     ]];
 
     assert_australia_holidays_parity(elisp_form, expect);
@@ -244,17 +261,30 @@ fn australia_holidays_generated_autoloads_define_all_options_and_rule_lists_with
                              australia-holidays-for-tas
                              australia-holidays-for-vic
                              australia-holidays-for-wa))
-                          (seq-filter
+                          ;; Mask the installed package's own directory;
+                          ;; see the note in the descriptor case above.
+                          (mapcar
                            (lambda (entry)
-                             (string-match-p
-                              "australia-holidays"
-                              entry))
-                           load-path)
+                             (replace-regexp-in-string
+                              (regexp-quote
+                               (directory-file-name
+                                (file-name-directory
+                                 (getenv
+                                  "NEOMACS_PACKAGE_SOURCE"))))
+                              "[PACKAGE]"
+                              entry
+                              t t))
+                           (seq-filter
+                            (lambda (entry)
+                              (string-match-p
+                               "australia-holidays"
+                               entry))
+                            load-path))
                           (get
                            'australia-holidays
                            'definition-prefixes))"##;
     let expect = expect![[
-        r#"OK (t nil ((australia-holidays-january-26-label t "Australia Day" nil) (australia-holidays-include-january-26 t t nil) (australia-holidays t (#1=(holiday-fixed 1 1 "New Year") #2=(if australia-holidays-include-january-26 (holiday-fixed 1 26 australia-holidays-january-26-label)) #3=(holiday-easter-etc -2 "Good Friday") #4=(holiday-easter-etc 1 "Easter Monday") #5=(holiday-fixed 4 25 "ANZAC Day") #6=(holiday-fixed 12 25 "Christmas Day")) nil) (australia-holidays-for-act t (australia-holidays (holiday-float 3 1 2 "Canberra Day") (holiday-easter-etc -1 "Easter Saturday") (holiday-easter-etc 0 "Easter Sunday") (holiday-float 5 1 1 "Reconciliation Day" 26) (holiday-float 6 1 2 "King's Birthday") (holiday-float 10 1 1 "Labour Day") (holiday-fixed 12 26 "Boxing Day")) nil) (australia-holidays-for-nsw t (#1# #2# #3# #4# #5# #6# (holiday-easter-etc -1 "Easter Saturday") (holiday-easter-etc 0 "Easter Sunday") (holiday-fixed 4 25 "ANZAC Day") (holiday-float 6 1 2 "King's Birthday") (holiday-float 10 1 1 "Labour Day") (holiday-fixed 12 26 "Boxing Day")) nil) (australia-holidays-for-nt t (#1# #2# #3# #4# #5# #6# (holiday-easter-etc -1 "Easter Saturday") (holiday-easter-etc 0 "Easter Sunday") (holiday-float 5 1 1 "May Day") (holiday-float 6 1 2 "King's Birthday") (holiday-float 8 1 1 "Picnic Day") (holiday-fixed 12 24 "Christmas Eve") (holiday-fixed 12 26 "Boxing Day") (holiday-fixed 12 31 "New Year's Eve")) nil) (australia-holidays-for-qld t (#1# #2# #3# #4# #5# #6# (holiday-easter-etc -1 "The Day After Good Friday") (holiday-easter-etc 0 "Easter Sunday") (holiday-float 5 1 1 "Labour Day") (holiday-float 8 3 1 "Royal Queensland Show" 9) (holiday-float 10 1 1 "King's Birthday") (holiday-fixed 12 24 "Christmas Eve") (holiday-fixed 12 26 "Boxing Day")) nil) (australia-holidays-for-sa t (#1# #2# #3# #4# #5# #6# (holiday-float 3 1 2 "Adelaide Cup Day") (holiday-easter-etc -1 "Easter Saturday") (holiday-easter-etc 0 "Easter Sunday") (holiday-float 6 1 2 "King's Birthday") (holiday-float 10 1 1 "Labour Day") (holiday-fixed 12 24 "Christmas Eve") (holiday-fixed 12 26 "Proclamation Day") (holiday-fixed 12 31 "New Year's Eve")) nil) (australia-holidays-for-tas t (#1# #2# #3# #4# #5# #6# (holiday-float 2 1 2 "Royal Hobart Regatta") (holiday-float 3 1 2 "Eight Hours Day") (holiday-easter-etc 2 "Easter Tuesday") (holiday-float 6 1 2 "King's Birthday") (holiday-float 11 1 1 "Recreation Day") (holiday-fixed 12 26 "Boxing Day")) nil) (australia-holidays-for-vic t (#1# #2# #3# #4# #5# #6# (holiday-float 3 1 2 "Labour Day") (holiday-easter-etc -1 "Saturday Before Easter Sunday") (holiday-easter-etc 0 "Easter Sunday") (holiday-float 6 1 2 "King's Birthday") (holiday-float 11 2 1 "Melbourne Cup") (holiday-float 9 5 -1 "Friday before AFL Grand Final" 29) (holiday-fixed 12 26 "Boxing Day")) nil) (australia-holidays-for-wa t (#1# #2# #3# #4# #5# #6# (holiday-float 3 1 1 "Labour Day") (holiday-easter-etc 0 "Easter Sunday") (holiday-float 6 1 1 "Western Australia Day") (holiday-fixed 12 26 "Boxing Day")) nil)) ("[ORACLE-WORKSPACE]/tmp/melpa/package-cache/australia-holidays/20250706.1213/home/.emacs.d/elpa/australia-holidays-20250706.1213") nil)"#
+        r#"OK (t nil ((australia-holidays-january-26-label t "Australia Day" nil) (australia-holidays-include-january-26 t t nil) (australia-holidays t (#1=(holiday-fixed 1 1 "New Year") #2=(if australia-holidays-include-january-26 (holiday-fixed 1 26 australia-holidays-january-26-label)) #3=(holiday-easter-etc -2 "Good Friday") #4=(holiday-easter-etc 1 "Easter Monday") #5=(holiday-fixed 4 25 "ANZAC Day") #6=(holiday-fixed 12 25 "Christmas Day")) nil) (australia-holidays-for-act t (australia-holidays (holiday-float 3 1 2 "Canberra Day") (holiday-easter-etc -1 "Easter Saturday") (holiday-easter-etc 0 "Easter Sunday") (holiday-float 5 1 1 "Reconciliation Day" 26) (holiday-float 6 1 2 "King's Birthday") (holiday-float 10 1 1 "Labour Day") (holiday-fixed 12 26 "Boxing Day")) nil) (australia-holidays-for-nsw t (#1# #2# #3# #4# #5# #6# (holiday-easter-etc -1 "Easter Saturday") (holiday-easter-etc 0 "Easter Sunday") (holiday-fixed 4 25 "ANZAC Day") (holiday-float 6 1 2 "King's Birthday") (holiday-float 10 1 1 "Labour Day") (holiday-fixed 12 26 "Boxing Day")) nil) (australia-holidays-for-nt t (#1# #2# #3# #4# #5# #6# (holiday-easter-etc -1 "Easter Saturday") (holiday-easter-etc 0 "Easter Sunday") (holiday-float 5 1 1 "May Day") (holiday-float 6 1 2 "King's Birthday") (holiday-float 8 1 1 "Picnic Day") (holiday-fixed 12 24 "Christmas Eve") (holiday-fixed 12 26 "Boxing Day") (holiday-fixed 12 31 "New Year's Eve")) nil) (australia-holidays-for-qld t (#1# #2# #3# #4# #5# #6# (holiday-easter-etc -1 "The Day After Good Friday") (holiday-easter-etc 0 "Easter Sunday") (holiday-float 5 1 1 "Labour Day") (holiday-float 8 3 1 "Royal Queensland Show" 9) (holiday-float 10 1 1 "King's Birthday") (holiday-fixed 12 24 "Christmas Eve") (holiday-fixed 12 26 "Boxing Day")) nil) (australia-holidays-for-sa t (#1# #2# #3# #4# #5# #6# (holiday-float 3 1 2 "Adelaide Cup Day") (holiday-easter-etc -1 "Easter Saturday") (holiday-easter-etc 0 "Easter Sunday") (holiday-float 6 1 2 "King's Birthday") (holiday-float 10 1 1 "Labour Day") (holiday-fixed 12 24 "Christmas Eve") (holiday-fixed 12 26 "Proclamation Day") (holiday-fixed 12 31 "New Year's Eve")) nil) (australia-holidays-for-tas t (#1# #2# #3# #4# #5# #6# (holiday-float 2 1 2 "Royal Hobart Regatta") (holiday-float 3 1 2 "Eight Hours Day") (holiday-easter-etc 2 "Easter Tuesday") (holiday-float 6 1 2 "King's Birthday") (holiday-float 11 1 1 "Recreation Day") (holiday-fixed 12 26 "Boxing Day")) nil) (australia-holidays-for-vic t (#1# #2# #3# #4# #5# #6# (holiday-float 3 1 2 "Labour Day") (holiday-easter-etc -1 "Saturday Before Easter Sunday") (holiday-easter-etc 0 "Easter Sunday") (holiday-float 6 1 2 "King's Birthday") (holiday-float 11 2 1 "Melbourne Cup") (holiday-float 9 5 -1 "Friday before AFL Grand Final" 29) (holiday-fixed 12 26 "Boxing Day")) nil) (australia-holidays-for-wa t (#1# #2# #3# #4# #5# #6# (holiday-float 3 1 1 "Labour Day") (holiday-easter-etc 0 "Easter Sunday") (holiday-float 6 1 1 "Western Australia Day") (holiday-fixed 12 26 "Boxing Day")) nil)) ("[PACKAGE]") nil)"#
     ]];
 
     assert_australia_holidays_autoload_parity(elisp_form, expect);

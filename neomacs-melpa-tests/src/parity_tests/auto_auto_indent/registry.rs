@@ -70,7 +70,7 @@ fn auto_auto_indent_installed_payload_inventory_and_exact_archive_hashes_match()
              "\\`[^.]")
             #'string<)))"##;
     let expect = expect![[
-        r#"OK (("README-elpa" :generated t) ("auto-auto-indent-autoloads.el" :generated t) ("auto-auto-indent-pkg.el" :archive 303 "d7432b94b26217127b8e1ff04031da73914ddbb5d356ab080fce2dc68daa77e3") ("auto-auto-indent.el" :archive 14282 "504be02f5545a58d4a0cb5b2d7433aa0a63c8828779b99d6883e22378e30fcb1") ("auto-auto-indent.elc" :generated t))"#
+        r#"OK (("auto-auto-indent-autoloads.el" :generated t) ("auto-auto-indent-pkg.el" :archive 303 "d7432b94b26217127b8e1ff04031da73914ddbb5d356ab080fce2dc68daa77e3") ("auto-auto-indent.el" :archive 14282 "504be02f5545a58d4a0cb5b2d7433aa0a63c8828779b99d6883e22378e30fcb1") ("auto-auto-indent.elc" :generated t))"#
     ]];
 
     assert_auto_auto_indent_parity(elisp_form, expect);

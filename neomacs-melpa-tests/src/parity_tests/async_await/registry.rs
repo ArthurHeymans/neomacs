@@ -17,7 +17,7 @@ fn package_descriptor_records_exact_pin_dependencies_and_payload() {
                     (directory-files dir t "^[^.].*"))
             #'string<)))"##;
     let expect = expect![[
-        r#"OK ("20220827.437" ((emacs (25 1)) (promise (1 1)) (iter2 (0 9 10))) ("README-elpa" "async-await-autoloads.el" "async-await-pkg.el" "async-await.el" "async-await.elc"))"#
+        r#"OK ("20220827.437" ((emacs (25 1)) (promise (1 1)) (iter2 (0 9 10))) ("async-await-autoloads.el" "async-await-pkg.el" "async-await.el" "async-await.elc"))"#
     ]];
     assert_async_await_parity(elisp_form, expect);
 }
@@ -32,7 +32,18 @@ fn installed_source_has_exact_hash_features_and_dependency_versions() {
                  (expand-file-name
                   "async-await.el" dir)))
           (list
-           (secure-hash 'sha256 source)
+           ;; `secure-hash' on a filename hashes the *string*, not the
+           ;; file, so this pinned the installed path -- laundered through
+           ;; a digest, where no amount of grepping for the cache
+           ;; directory would find it.  It broke when the cache moved from
+           ;; package-cache/ to the revision-pinned source-install-cache/,
+           ;; and re-capturing would have re-pinned the new path just as
+           ;; invisibly.  Hash the contents, which is what this test's
+           ;; name claims and what survives a layout change.
+           (with-temp-buffer
+             (set-buffer-multibyte nil)
+             (insert-file-contents-literally source)
+             (secure-hash 'sha256 (current-buffer)))
            (featurep 'async-await)
            (featurep 'promise)
            (featurep 'iter2)
@@ -47,7 +58,7 @@ fn installed_source_has_exact_hash_features_and_dependency_versions() {
                   (package-desc-version installed)))))
             '(async-await promise iter2))))"##;
     let expect = expect![[
-        r#"OK ("d17e4c22707af9e49223f19098d1103577e064418234dae0760652e1a9de901f" t t t ((async-await "20220827.437") (promise "20210307.727") (iter2 "20250209.1516")))"#
+        r#"OK ("85797e62ef3e734a5d92c65cd0a4379dd4f07588a3abfc40221aa6fd0ae1d3d6" t t t ((async-await "20220827.437") (promise "20210307.727") (iter2 "20250209.1516")))"#
     ]];
     assert_async_await_parity(elisp_form, expect);
 }

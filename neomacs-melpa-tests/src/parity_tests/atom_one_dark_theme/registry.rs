@@ -66,7 +66,7 @@ fn atom_one_dark_theme_installed_payload_hashes_only_exact_archive_files() {
             (directory-files directory nil "\\`[^.]"))
            #'string<)))"##;
     let expect = expect![[
-        r#"OK (("README-elpa" :generated t) ("atom-one-dark-theme-autoloads.el" :generated t) ("atom-one-dark-theme-pkg.el" :archive 392 "9398e08bb830b7d4560d0ea7f935807b934daaa98cc07869ca488da1caebef0d") ("atom-one-dark-theme.el" :archive 46988 "a5c590aeb7dc5c2b8d36601a4c94a1145e46bd2291571af02807dd7a8552630c"))"#
+        r#"OK (("atom-one-dark-theme-autoloads.el" :generated t) ("atom-one-dark-theme-pkg.el" :archive 392 "9398e08bb830b7d4560d0ea7f935807b934daaa98cc07869ca488da1caebef0d") ("atom-one-dark-theme.el" :archive 46988 "a5c590aeb7dc5c2b8d36601a4c94a1145e46bd2291571af02807dd7a8552630c"))"#
     ]];
 
     assert_atom_one_dark_theme_parity(elisp_form, expect);

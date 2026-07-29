@@ -10,7 +10,20 @@ fn auth_source_kwallet_exact_package_descriptor_origin_and_dependency_contract_m
                                    'auth-source-kwallet
                                    package-alist)))
                                 (extras
-                                 (package-desc-extras description)))
+                                 (package-desc-extras description))
+                                ;; Mask the installed package's own
+                                ;; directory.  Spelling it out pinned the
+                                ;; harness's acquisition layout, so this
+                                ;; expectation broke when the cache moved
+                                ;; from package-cache/ to the
+                                ;; revision-pinned source-install-cache/ --
+                                ;; a harness change wearing the shape of a
+                                ;; package regression.
+                                (installed
+                                 (directory-file-name
+                                  (file-name-directory
+                                   (getenv
+                                    "NEOMACS_PACKAGE_SOURCE")))))
                            (list
                             (package-desc-name description)
                             (package-version-join
@@ -19,14 +32,18 @@ fn auth_source_kwallet_exact_package_descriptor_origin_and_dependency_contract_m
                             (package-desc-reqs description)
                             (package-desc-kind description)
                             (package-desc-archive description)
-                            (package-desc-dir description)
+                            (replace-regexp-in-string
+                             (regexp-quote installed)
+                             "[PACKAGE]"
+                             (package-desc-dir description)
+                             t t)
                             (alist-get :commit extras)
                             (alist-get :revdesc extras)
                             (alist-get :url extras)
                             (alist-get :authors extras)
                             (alist-get :maintainers extras)))"##;
     let expect = expect![[
-        r#"OK (auth-source-kwallet "20250419.1330" "KWallet integration for auth-source." ((emacs (24 4))) nil nil "[ORACLE-WORKSPACE]/tmp/melpa/package-cache/auth-source-kwallet/20250419.1330/home/.emacs.d/elpa/auth-source-kwallet-20250419.1330" "1e1bff2403966c3a0683ee65fb28cb8d8ff2c389" "1e1bff240396" "https://github.com/vaartis/auth-source-kwallet" (("Ekaterina Vaartis" . "vaartis@kotobank.ch")) (("Ekaterina Vaartis" . "vaartis@kotobank.ch")))"#
+        r#"OK (auth-source-kwallet "20250419.1330" "KWallet integration for auth-source." ((emacs (24 4))) nil nil "[PACKAGE]" "1e1bff2403966c3a0683ee65fb28cb8d8ff2c389" "1e1bff240396" "https://github.com/vaartis/auth-source-kwallet" (("Ekaterina Vaartis" . "vaartis@kotobank.ch")) (("Ekaterina Vaartis" . "vaartis@kotobank.ch")))"#
     ]];
 
     assert_auth_source_kwallet_parity(elisp_form, expect);
@@ -74,7 +91,7 @@ fn auth_source_kwallet_installed_payload_inventory_and_exact_archive_hashes_matc
                               "\\`[^.]")
                              #'string<)))"##;
     let expect = expect![[
-        r#"OK (("README-elpa" :generated t) ("auth-source-kwallet-autoloads.el" :generated t) ("auth-source-kwallet-pkg.el" :archive 427 "e3805f16efde58f38c2b12eb4a6b6ed24c4d1ca0c8e3b76199608ba194258101") ("auth-source-kwallet.el" :archive 3443 "b950902e0dad963d2e85bcffe0d55c6ee7b61e58b64b9047443308a4c2ef4241") ("auth-source-kwallet.elc" :generated t))"#
+        r#"OK (("auth-source-kwallet-autoloads.el" :generated t) ("auth-source-kwallet-pkg.el" :archive 427 "e3805f16efde58f38c2b12eb4a6b6ed24c4d1ca0c8e3b76199608ba194258101") ("auth-source-kwallet.el" :archive 3443 "b950902e0dad963d2e85bcffe0d55c6ee7b61e58b64b9047443308a4c2ef4241") ("auth-source-kwallet.elc" :generated t))"#
     ]];
 
     assert_auth_source_kwallet_parity(elisp_form, expect);

@@ -70,7 +70,7 @@ fn auto_highlight_symbol_installed_payload_inventory_and_exact_hashes_match() {
                               "\\`[^.]")
                              #'string<)))"##;
     let expect = expect![[
-        r#"OK (("README-elpa" :generated t) ("auto-highlight-symbol-autoloads.el" :generated t) ("auto-highlight-symbol-pkg.el" :archive 512 "ca26d132b79380307187c44f026a2fb5bbe519b0e7c8b97447cc9101c407b358") ("auto-highlight-symbol.el" :archive 58228 "52233bc912161cdc71d2d9977540dde163f125c3413a58903a1f8c929d9a049f") ("auto-highlight-symbol.elc" :generated t))"#
+        r#"OK (("auto-highlight-symbol-autoloads.el" :generated t) ("auto-highlight-symbol-pkg.el" :archive 512 "ca26d132b79380307187c44f026a2fb5bbe519b0e7c8b97447cc9101c407b358") ("auto-highlight-symbol.el" :archive 58228 "52233bc912161cdc71d2d9977540dde163f125c3413a58903a1f8c929d9a049f") ("auto-highlight-symbol.elc" :generated t))"#
     ]];
 
     assert_auto_highlight_symbol_parity(elisp_form, expect);

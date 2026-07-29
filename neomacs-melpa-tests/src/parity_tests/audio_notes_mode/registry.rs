@@ -10,7 +10,20 @@ fn audio_notes_mode_exact_package_descriptor_origin_and_dependency_contract_matc
                                    'audio-notes-mode
                                    package-alist)))
                                 (extras
-                                 (package-desc-extras descriptor)))
+                                 (package-desc-extras descriptor))
+                                ;; Mask the installed package's own
+                                ;; directory.  Spelling it out pinned the
+                                ;; harness's acquisition layout, so this
+                                ;; expectation broke when the cache moved
+                                ;; from package-cache/ to the
+                                ;; revision-pinned source-install-cache/ --
+                                ;; a harness change wearing the shape of a
+                                ;; package regression.
+                                (installed
+                                 (directory-file-name
+                                  (file-name-directory
+                                   (getenv
+                                    "NEOMACS_PACKAGE_SOURCE")))))
                            (list
                             (package-desc-name descriptor)
                             (package-version-join
@@ -19,7 +32,11 @@ fn audio_notes_mode_exact_package_descriptor_origin_and_dependency_contract_matc
                             (package-desc-reqs descriptor)
                             (package-desc-kind descriptor)
                             (package-desc-archive descriptor)
-                            (package-desc-dir descriptor)
+                            (replace-regexp-in-string
+                             (regexp-quote installed)
+                             "[PACKAGE]"
+                             (package-desc-dir descriptor)
+                             t t)
                             (alist-get :commit extras)
                             (alist-get :revdesc extras)
                             (alist-get :url extras)
@@ -27,7 +44,7 @@ fn audio_notes_mode_exact_package_descriptor_origin_and_dependency_contract_matc
                             (alist-get :authors extras)
                             (alist-get :maintainers extras)))"##;
     let expect = expect![[
-        r#"OK (audio-notes-mode "20170611.2159" "Play audio notes synced from somewhere else." nil nil nil "[ORACLE-WORKSPACE]/tmp/melpa/package-cache/audio-notes-mode/20170611.2159/home/.emacs.d/elpa/audio-notes-mode-20170611.2159" "fa38350829c7e97257efc746a010471d33748a68" "fa38350829c7" "https://github.com/Bruce-Connor/audio-notes-mode" ("hypermedia" "convenience") (("Artur Malabarba" . "bruce.connor.am@gmail.com")) (("Artur Malabarba" . "bruce.connor.am@gmail.com")))"#
+        r#"OK (audio-notes-mode "20170611.2159" "Play audio notes synced from somewhere else." nil nil nil "[PACKAGE]" "fa38350829c7e97257efc746a010471d33748a68" "fa38350829c7" "https://github.com/Bruce-Connor/audio-notes-mode" ("hypermedia" "convenience") (("Artur Malabarba" . "bruce.connor.am@gmail.com")) (("Artur Malabarba" . "bruce.connor.am@gmail.com")))"#
     ]];
 
     assert_audio_notes_mode_parity(elisp_form, expect);
@@ -77,7 +94,7 @@ fn audio_notes_mode_installed_payload_inventory_and_exact_archive_hashes_match()
                                "\\`[^.]"))
                              #'string<)))"##;
     let expect = expect![[
-        r#"OK (("README-elpa" :generated t) ("audio-notes-mode-autoloads.el" :generated t) ("audio-notes-mode-pkg.el" :archive 469 "2a1e422c77fd0c59101523248bd0cef98a0f14d424618d7f874363553180ab65") ("audio-notes-mode.el" :archive 20079 "83c5bf06158a0cce041afaeb552284a52d4a49156b4857fc3a942bfe3fbfb7ad") ("audio-notes-mode.elc" :generated t))"#
+        r#"OK (("audio-notes-mode-autoloads.el" :generated t) ("audio-notes-mode-pkg.el" :archive 469 "2a1e422c77fd0c59101523248bd0cef98a0f14d424618d7f874363553180ab65") ("audio-notes-mode.el" :archive 20079 "83c5bf06158a0cce041afaeb552284a52d4a49156b4857fc3a942bfe3fbfb7ad") ("audio-notes-mode.elc" :generated t))"#
     ]];
 
     assert_audio_notes_mode_parity(elisp_form, expect);
@@ -324,17 +341,30 @@ fn audio_notes_mode_generated_autoloads_register_exact_commands_paths_and_featur
                               (commandp symbol)))
                            '(anm/display-on-modeline
                              audio-notes-mode))
-                          (seq-filter
+                          ;; Mask the installed package's own directory;
+                          ;; see the note in the descriptor case above.
+                          (mapcar
                            (lambda (entry)
-                             (string-match-p
-                              "audio-notes-mode"
-                              entry))
-                           load-path)
+                             (replace-regexp-in-string
+                              (regexp-quote
+                               (directory-file-name
+                                (file-name-directory
+                                 (getenv
+                                  "NEOMACS_PACKAGE_SOURCE"))))
+                              "[PACKAGE]"
+                              entry
+                              t t))
+                           (seq-filter
+                            (lambda (entry)
+                              (string-match-p
+                               "audio-notes-mode"
+                               entry))
+                            load-path))
                           (get
                            'audio-notes-mode
                            'definition-prefixes))"##;
     let expect = expect![[
-        r#"OK (t nil ((anm/display-on-modeline t "audio-notes-mode" t) (audio-notes-mode t "audio-notes-mode" t)) ("[ORACLE-WORKSPACE]/tmp/melpa/package-cache/audio-notes-mode/20170611.2159/home/.emacs.d/elpa/audio-notes-mode-20170611.2159") nil)"#
+        r#"OK (t nil ((anm/display-on-modeline t "audio-notes-mode" t) (audio-notes-mode t "audio-notes-mode" t)) ("[PACKAGE]") nil)"#
     ]];
 
     assert_audio_notes_mode_autoload_parity(elisp_form, expect);

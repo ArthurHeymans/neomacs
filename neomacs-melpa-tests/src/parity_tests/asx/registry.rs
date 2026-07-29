@@ -57,7 +57,7 @@ fn asx_installed_payload_inventory_sizes_and_content_digests_match() {
             (directory-files directory nil "\\`[^.]"))
            #'string<)))"##;
     let expect = expect![[
-        r#"OK (("README-elpa" 366 "7db328fd4c63fbecc9560cfa88f052d6ccf2a69960889b1d405a4e94c78ff879") ("asx-autoloads.el" 790 "b7419b305ddd63857d1c39449539cd8b13e24d9b97ce376cae7f4594a46b3696") ("asx-pkg.el" 405 "301d7c695479a1d819cc0ebbe0d347d40b40d0c517772f6a56781b834f2c0986") ("asx.el" 14824 "220bc57d98d09d383624541baa458084799a6e544ea69cf58ec4f8bf626f24d9"))"#
+        r#"OK (("asx-autoloads.el" 790 "b7419b305ddd63857d1c39449539cd8b13e24d9b97ce376cae7f4594a46b3696") ("asx-pkg.el" 405 "301d7c695479a1d819cc0ebbe0d347d40b40d0c517772f6a56781b834f2c0986") ("asx.el" 14824 "220bc57d98d09d383624541baa458084799a6e544ea69cf58ec4f8bf626f24d9"))"#
     ]];
 
     assert_asx_parity(elisp_form, expect);
@@ -222,7 +222,21 @@ fn asx_generated_autoload_registers_only_the_primary_command_without_loading_sou
          (fboundp 'asx)
          (autoloadp
           (symbol-function 'asx))
-         (symbol-file 'asx 'defun)
+         ;; Mask the installed package's own directory.  Spelling it out
+         ;; pinned the harness's acquisition layout, so this expectation
+         ;; broke when the cache moved from package-cache/ to the
+         ;; revision-pinned source-install-cache/ -- a harness change
+         ;; wearing the shape of a package regression.  What the assertion
+         ;; is about is that the autoload points at the installed
+         ;; package's own source file.
+         (replace-regexp-in-string
+          (regexp-quote
+           (directory-file-name
+            (file-name-directory
+             (getenv "NEOMACS_PACKAGE_SOURCE"))))
+          "[PACKAGE]"
+          (symbol-file 'asx 'defun)
+          t t)
          (mapcar
           (lambda (symbol)
             (list
@@ -237,7 +251,7 @@ fn asx_generated_autoload_registers_only_the_primary_command_without_loading_sou
          (boundp 'asx-sites)
          (boundp 'asx--posts))"##;
     let expect = expect![[
-        r#"OK (nil t t "[ORACLE-WORKSPACE]/tmp/melpa/package-cache/asx/20191024.1100/home/.emacs.d/elpa/asx-20191024.1100/asx.el" ((asx-jump nil) (asx-next-post nil) (asx-previous-post nil) (asx-reload-post nil) (asx-first-post nil) (asx-n-post nil)) nil nil)"#
+        r#"OK (nil t t "[PACKAGE]/asx.el" ((asx-jump nil) (asx-next-post nil) (asx-previous-post nil) (asx-reload-post nil) (asx-first-post nil) (asx-n-post nil)) nil nil)"#
     ]];
 
     assert_asx_autoload_parity(elisp_form, expect);
