@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -230,14 +230,33 @@ pub fn locked_melpa_source(package: (&str, &str)) -> Result<LockedPackageSource<
         })
 }
 
+/// Map every pinned package name to the single version `melpa-sources.tsv`
+/// gives it.
+///
+/// The dependency manifest records edges by **name only**.  A package is pinned
+/// at exactly one version tree-wide, so repeating the version on each edge would
+/// be derivable data that can disagree with the source lock — and the version an
+/// edge would carry is never consulted for anything except finding the same row
+/// this map already holds.
+fn locked_pins_by_name() -> Result<BTreeMap<&'static str, PackagePin>, String> {
+    let mut pins = BTreeMap::new();
+    for source in locked_melpa_sources()? {
+        let pin = source.package();
+        if pins.insert(pin.0, pin).is_some() {
+            return Err(format!(
+                "locked package source manifest pins {} at more than one version, so \
+                 dependency edges naming it would be ambiguous",
+                pin.0
+            ));
+        }
+    }
+    Ok(pins)
+}
+
 fn locked_dependencies() -> Result<Vec<DependencyEdge>, String> {
-    let sources = locked_melpa_sources()?;
-    let pins = sources
-        .iter()
-        .map(|source| source.package())
-        .collect::<BTreeSet<_>>();
+    let pins = locked_pins_by_name()?;
     let mut lines = LOCKED_PACKAGE_DEPENDENCIES.lines();
-    if lines.next() != Some("package\tversion\tdependency\tdependency-version") {
+    if lines.next() != Some("package\tdependency") {
         return Err("locked package dependency manifest has an invalid header".to_string());
     }
 
@@ -246,22 +265,31 @@ fn locked_dependencies() -> Result<Vec<DependencyEdge>, String> {
     for (index, line) in lines.enumerate() {
         let line_number = index + 2;
         let fields = line.split('\t').collect::<Vec<_>>();
-        if fields.len() != 4 || fields.iter().any(|field| field.is_empty()) {
+        if fields.len() != 2 || fields.iter().any(|field| field.is_empty()) {
             return Err(format!(
                 "locked package dependency manifest line {line_number} is invalid"
             ));
         }
-        let package = (fields[0], fields[1]);
-        let dependency = (fields[2], fields[3]);
-        if package == dependency || !pins.contains(&package) || !pins.contains(&dependency) {
+        let resolve = |name: &str| -> Result<PackagePin, String> {
+            pins.get(name).copied().ok_or_else(|| {
+                format!(
+                    "locked package dependency manifest line {line_number} names {name}, \
+                     which has no revision-pinned source lock"
+                )
+            })
+        };
+        let package = resolve(fields[0])?;
+        let dependency = resolve(fields[1])?;
+        if package == dependency {
             return Err(format!(
-                "locked package dependency manifest line {line_number} references an invalid pin"
+                "locked package dependency manifest line {line_number} makes {} depend on itself",
+                package.0
             ));
         }
         if !edges.insert((package, dependency)) {
             return Err(format!(
-                "locked package dependency manifest repeats {} {} -> {} {}",
-                package.0, package.1, dependency.0, dependency.1
+                "locked package dependency manifest repeats {} -> {}",
+                package.0, dependency.0
             ));
         }
         dependencies.push((package, dependency));

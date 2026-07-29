@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""Derive `melpa-source-dependencies.tsv` from each pinned package's own
+`Package-Requires` header, and report where the committed manifest disagrees.
+
+The manifest records one edge per line as `package<TAB>dependency`.  Versions are
+deliberately absent: `melpa-sources.tsv` pins every package at exactly one
+version, so carrying it on each edge would be derivable data that can disagree
+with the source lock.
+
+An edge is included when the dependency is *pinned in the source lock*.  A
+requirement that is not pinned is either built into Emacs (`cl-lib`, `json`,
+`flymake`, `seq`) or is something the suite never installs, and in both cases
+package.el resolves it without our help.
+
+Usage:
+    scripts/melpa-derive-dependencies.py            # report differences
+    scripts/melpa-derive-dependencies.py --write    # rewrite the manifest
+
+Coverage is limited to packages whose main `.el` is present in the local caches
+below `tmp/melpa`, so a full regeneration needs the packages built first.  With
+partial coverage `--write` refuses to drop edges it could not confirm, since an
+absent cache entry is not evidence that an edge is wrong.
+"""
+
+from __future__ import annotations
+
+import argparse
+import collections
+import os
+import pathlib
+import re
+import sys
+
+WORKSPACE = pathlib.Path(__file__).resolve().parent.parent
+SOURCES = WORKSPACE / "neomacs-melpa-tests/melpa-sources.tsv"
+MANIFEST = WORKSPACE / "neomacs-melpa-tests/melpa-source-dependencies.tsv"
+CACHES = ("tmp/melpa/source-install-cache", "tmp/melpa/package-cache")
+
+HEADER = "package\tdependency"
+REQUIRES = re.compile(r";;\s*Package-Requires:\s*(.+)$", re.M)
+REQUIREMENT = re.compile(r"\(\s*([A-Za-z0-9@_.+-]+)\s")
+
+
+def pinned_versions() -> dict[str, str]:
+    versions: dict[str, str] = {}
+    with SOURCES.open(encoding="utf-8") as handle:
+        next(handle)
+        for line in handle:
+            fields = line.rstrip("\n").split("\t")
+            if fields[0] in versions:
+                sys.exit(f"{fields[0]} is pinned at more than one version")
+            versions[fields[0]] = fields[1]
+    return versions
+
+
+def cached_main_files(versions: dict[str, str]) -> dict[str, pathlib.Path]:
+    wanted = {f"{name}-{version}": name for name, version in versions.items()}
+    found: dict[str, pathlib.Path] = {}
+    for cache in CACHES:
+        for directory, _, files in os.walk(WORKSPACE / cache):
+            name = wanted.get(os.path.basename(directory))
+            if name and f"{name}.el" in files and name not in found:
+                found[name] = pathlib.Path(directory) / f"{name}.el"
+    return found
+
+
+def derived_edges(
+    versions: dict[str, str], sources: dict[str, pathlib.Path]
+) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+    """Return (edges to pinned packages, requirements that are not pinned)."""
+    edges: dict[str, set[str]] = collections.defaultdict(set)
+    unpinned: dict[str, set[str]] = collections.defaultdict(set)
+    for name, path in sorted(sources.items()):
+        header = REQUIRES.search(path.read_text(encoding="utf-8", errors="replace")[:8000])
+        if not header:
+            continue
+        for requirement in REQUIREMENT.findall(header.group(1)):
+            if requirement == "emacs" or requirement == name:
+                continue
+            if requirement in versions:
+                edges[name].add(requirement)
+            else:
+                unpinned[name].add(requirement)
+    return edges, unpinned
+
+
+def committed_edges() -> dict[str, set[str]]:
+    edges: dict[str, set[str]] = collections.defaultdict(set)
+    with MANIFEST.open(encoding="utf-8") as handle:
+        if next(handle).rstrip("\n") != HEADER:
+            sys.exit(f"{MANIFEST} does not start with `{HEADER}`")
+        for line in handle:
+            package, dependency = line.rstrip("\n").split("\t")
+            edges[package].add(dependency)
+    return edges
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--write", action="store_true", help="rewrite the manifest")
+    arguments = parser.parse_args()
+
+    versions = pinned_versions()
+    sources = cached_main_files(versions)
+    derived, unpinned = derived_edges(versions, sources)
+    committed = committed_edges()
+
+    missing = {
+        package: sorted(dependencies - committed.get(package, set()))
+        for package, dependencies in derived.items()
+        if dependencies - committed.get(package, set())
+    }
+    spurious = {
+        package: sorted(committed[package] - derived[package])
+        for package in derived
+        if committed.get(package, set()) - derived[package]
+    }
+
+    print(f"pinned packages           : {len(versions)}")
+    print(f"main .el readable in cache: {len(sources)}")
+    print(f"declaring Package-Requires: {len(derived) + len(unpinned)}")
+    print(f"packages with pinned edges: {len(derived)}")
+
+    if missing:
+        print(f"\nderived but not committed ({sum(map(len, missing.values()))}):")
+        for package, dependencies in sorted(missing.items()):
+            print(f"  {package} -> {', '.join(dependencies)}")
+    if spurious:
+        print(f"\ncommitted but not derived ({sum(map(len, spurious.values()))}):")
+        for package, dependencies in sorted(spurious.items()):
+            print(f"  {package} -> {', '.join(dependencies)}")
+    if not missing and not spurious:
+        print("\nthe committed manifest matches every edge that could be derived")
+
+    if arguments.write:
+        # Only add what was derived; never drop an edge whose package could not
+        # be read, because an absent cache entry is not evidence.
+        merged = {package: set(dependencies) for package, dependencies in committed.items()}
+        for package, dependencies in derived.items():
+            merged.setdefault(package, set()).update(dependencies)
+            if package in sources:
+                merged[package] = set(dependencies)
+        lines = [HEADER]
+        for package in sorted(merged):
+            for dependency in sorted(merged[package]):
+                lines.append(f"{package}\t{dependency}")
+        MANIFEST.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print(f"\nwrote {len(lines) - 1} edges to {MANIFEST.relative_to(WORKSPACE)}")
+
+    return 1 if (missing or spurious) and not arguments.write else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

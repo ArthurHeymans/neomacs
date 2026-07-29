@@ -1,268 +1,268 @@
-package	version	dependency	dependency-version
-0xc	20201025.2105	s	20220902.1511
-aa-edit-mode	20170119.320	navi2ch	20200130.36
-aangit	20231106.2115	s	20220902.1511
-abgaben	20171119.646	f	20241003.1131
-abgaben	20171119.646	pdf-tools	20260102.1101
-abgaben	20171119.646	s	20220902.1511
-abs-mode	20260415.813	erlang	20260724.1508
-abs-mode	20260415.813	maude-mode	20230504.937
-abs-mode	20260415.813	yasnippet	20250602.1342
-ac-alchemist	20150908.656	alchemist	20180312.1304
-ac-alchemist	20150908.656	auto-complete	20251231.1622
-ac-c-headers	20200816.1007	auto-complete	20251231.1622
-ac-capf	20151101.217	auto-complete	20251231.1622
-ac-clang	20180710.546	auto-complete	20251231.1622
-ac-clang	20180710.546	pos-tip	20240209.837
-ac-clang	20180710.546	yasnippet	20250602.1342
-ac-dcd	20250925.946	auto-complete	20251231.1622
-ac-dcd	20250925.946	flycheck-dmd-dub	20250304.1432
-ac-emmet	20131015.1558	auto-complete	20251231.1622
-ac-emmet	20131015.1558	emmet-mode	20240617.45
-ac-emoji	20150823.711	auto-complete	20251231.1622
-ac-etags	20161001.1507	auto-complete	20251231.1622
-ac-geiser	20200318.824	auto-complete	20251231.1622
-ac-geiser	20200318.824	geiser	20260718.8
-ac-haskell-process	20150423.1402	auto-complete	20251231.1622
-ac-haskell-process	20150423.1402	haskell-mode	20260206.1050
-ac-helm	20160319.233	auto-complete	20251231.1622
-ac-helm	20160319.233	helm	20260728.709
-ac-helm	20160319.233	popup	20251231.1622
-ac-html	20151005.731	auto-complete	20251231.1622
-ac-html	20151005.731	dash	20260221.1346
-ac-html	20151005.731	f	20241003.1131
-ac-html	20151005.731	s	20220902.1511
-ac-html-angular	20151225.719	web-completion-data	20160318.848
-ac-html-bootstrap	20160302.1701	web-completion-data	20160318.848
-ac-html-csswatcher	20151208.2113	web-completion-data	20160318.848
-ac-inf-ruby	20131115.1150	auto-complete	20251231.1622
-ac-inf-ruby	20131115.1150	inf-ruby	20251224.216
-ac-ispell	20151101.226	auto-complete	20251231.1622
-ac-js2	20190101.933	js2-mode	20260627.1342
-ac-js2	20190101.933	skewer-mode	20200304.1142
-ac-math	20141116.2127	auto-complete	20251231.1622
-ac-math	20141116.2127	math-symbol-lists	20220828.2047
-ac-mozc	20150227.1619	auto-complete	20251231.1622
-ac-mozc	20150227.1619	mozc	20260624.1355
-ac-octave	20180406.334	auto-complete	20251231.1622
-ac-php	20240328.1036	ac-php-core	20260210.846
-ac-php	20240328.1036	auto-complete	20251231.1622
-ac-php	20240328.1036	yasnippet	20250602.1342
-ac-php-core	20260210.846	dash	20260221.1346
-ac-php-core	20260210.846	f	20241003.1131
-ac-php-core	20260210.846	php-mode	20260719.209
-ac-php-core	20260210.846	popup	20251231.1622
-ac-php-core	20260210.846	s	20220902.1511
-ac-php-core	20260210.846	xcscope	20230626.2109
-ac-racer	20170114.809	auto-complete	20251231.1622
-ac-racer	20170114.809	racer	20210307.243
-ac-rtags	20191222.920	auto-complete	20251231.1622
-ac-rtags	20191222.920	rtags	20260727.1603
-ac-skk	20141230.119	auto-complete	20251231.1622
-ac-skk	20141230.119	ddskk	20260329.1317
-ac-skk	20141230.119	tinysegmenter	20141124.1013
-ac-slime	20171027.2100	auto-complete	20251231.1622
-ac-slime	20171027.2100	slime	20260719.420
-ac-sly	20170728.1027	auto-complete	20251231.1622
-ac-sly	20170728.1027	sly	20260402.2249
-academic-phrases	20180723.1021	dash	20260221.1346
-academic-phrases	20180723.1021	ht	20230703.558
-academic-phrases	20180723.1021	s	20220902.1511
-accent	20250210.906	popup	20251231.1622
-ace-flyspell	20170309.509	avy	20241101.1357
-ace-jump-buffer	20171031.1550	avy	20241101.1357
-ace-jump-buffer	20171031.1550	dash	20260221.1346
-ace-jump-helm-line	20160918.1836	avy	20241101.1357
-ace-jump-helm-line	20160918.1836	helm	20260728.709
-ace-jump-zap	20170717.1849	ace-jump-mode	20140616.815
-ace-jump-zap	20170717.1849	dash	20260221.1346
-ace-link	20241101.1344	avy	20241101.1357
-ace-mc	20190206.749	ace-jump-mode	20140616.815
-ace-mc	20190206.749	dash	20260221.1346
-ace-mc	20190206.749	multiple-cursors	20260419.931
-ace-pinyin	20210827.355	avy	20241101.1357
-ace-pinyin	20210827.355	pinyinlib	20200911.1723
-ace-popup-menu	20230606.1445	avy-menu	20230606.1519
-ace-window	20220911.358	avy	20241101.1357
-achievements	20240703.318	keyfreq	20231107.106
-ack-menu	20150504.2022	mag-menu	20150505.1850
-activity-watch-mode	20260311.835	request	20250219.2213
-adafruit-wisdom	20200217.306	request	20250219.2213
-add-node-modules-path	20230307.655	s	20220902.1511
-affe	20260519.1026	consult	20260716.1105
-ag	20201031.2202	dash	20260221.1346
-ag	20201031.2202	s	20220902.1511
-agda-editor-tactics	20211024.2357	dash	20260221.1346
-agda-editor-tactics	20211024.2357	s	20220902.1511
-agent-recall	20260710.1707	agent-shell	20260728.953
-agent-shell	20260728.953	acp	20260719.342
-agent-shell	20260728.953	shell-maker	20260727.1508
-aggressive-fill-paragraph	20240213.2320	dash	20260221.1346
-agitjo	20260523.2048	magit	20260724.2338
-agitjo	20260523.2048	markdown-mode	20260722.40
-ai-code	20260727.2322	magit	20260724.2338
-aider	20251201.133	magit	20260724.2338
-aider	20251201.133	markdown-mode	20260722.40
-aider	20251201.133	s	20220902.1511
-aidermacs	20260726.839	markdown-mode	20260722.40
-aidev-mode	20250318.2144	request	20250219.2213
-airline-themes	20250502.1915	powerline	20221110.1956
-airplay	20130212.1226	deferred	20170901.1330
-airplay	20130212.1226	request	20250219.2213
-airplay	20130212.1226	simple-httpd	20260623.1110
-alan-mode	20260523.1330	flycheck	20260728.931
-alan-mode	20260523.1330	s	20220902.1511
-alchemist	20180312.1304	company	20260721.100
-alchemist	20180312.1304	dash	20260221.1346
-alchemist	20180312.1304	elixir-mode	20230626.1738
-alchemist	20180312.1304	pkg-info	20150517.1143
-alchemist	20180312.1304	s	20220902.1511
-alectryon	20260525.2000	flycheck	20260728.931
-alert	20260316.2025	gntp	20141025.250
-alert	20260316.2025	log4e	20240123.1313
-alert-toast	20220312.229	alert	20260316.2025
-alert-toast	20220312.229	f	20241003.1131
-alert-toast	20220312.229	s	20220902.1511
-align-cljlet	20160112.2101	clojure-mode	20260709.952
-all-ext	20200315.1443	all	1.0
-all-the-icons-completion	20240128.2048	all-the-icons	20250527.927
-all-the-icons-dired	20231207.1324	all-the-icons	20250527.927
-all-the-icons-gnus	20180511.654	all-the-icons	20250527.927
-all-the-icons-gnus	20180511.654	dash	20260221.1346
-all-the-icons-ibuffer	20230503.1625	all-the-icons	20250527.927
-all-the-icons-ivy	20190508.1803	all-the-icons	20250527.927
-all-the-icons-ivy	20190508.1803	ivy	20260413.2102
-all-the-icons-ivy-rich	20230420.1234	all-the-icons	20250527.927
-all-the-icons-ivy-rich	20230420.1234	ivy-rich	20230425.1422
-all-the-icons-nerd-fonts	20260614.1246	all-the-icons	20250527.927
-all-the-icons-nerd-fonts	20260614.1246	nerd-icons	20260710.1627
-amd-mode	20180111.1402	f	20241003.1131
-amd-mode	20180111.1402	js2-mode	20260627.1342
-amd-mode	20180111.1402	js2-refactor	20250210.1811
-amd-mode	20180111.1402	makey	20131231.1430
-amd-mode	20180111.1402	projectile	20260728.945
-amd-mode	20180111.1402	s	20220902.1511
-amread-mode	20240903.1534	hydra	20250316.1254
-amread-mode	20240903.1534	pyim	20251230.809
-amx	20230413.1210	s	20220902.1511
-anaconda-mode	20250430.227	dash	20260221.1346
-anaconda-mode	20250430.227	f	20241003.1131
-anaconda-mode	20250430.227	pythonic	20230821.1733
-anaconda-mode	20250430.227	s	20220902.1511
-android-env	20220810.1449	s	20220902.1511
-angular-snippets	20140514.523	dash	20260221.1346
-angular-snippets	20140514.523	s	20220902.1511
-anju	20260701.2139	casual	20260718.1803
-anju	20260701.2139	markdown-mode	20260722.40
-anki-mode	20201223.719	dash	20260221.1346
-anki-mode	20201223.719	markdown-mode	20260722.40
-anki-mode	20201223.719	request	20250219.2213
-anki-mode	20201223.719	s	20220902.1511
-anki-vocabulary	20200103.325	anki-connect	20250414.1301
-anki-vocabulary	20200103.325	s	20220902.1511
-anki-vocabulary	20200103.325	youdao-dictionary	20231005.1920
-ansible	20260607.1852	f	20241003.1131
-ansible	20260607.1852	s	20220902.1511
-apib-mode	20200101.1017	markdown-mode	20260722.40
-aqi	20230530.1204	request	20250219.2213
-arch-packer	20170730.1321	async	20260318.1803
-arch-packer	20170730.1321	dash	20260221.1346
-arch-packer	20170730.1321	s	20220902.1511
-archive-phar	20221009.2129	datetime-format	20240105.1901
-archive-phar	20221009.2129	php-runtime	20241024.1622
-arduino-mode	20240527.1603	spinner	1.7.4
-ariadne	20131117.1711	bert	20131117.1014
-arxiv-citation	20230713.627	dash	20260221.1346
-arxiv-citation	20230713.627	s	20220902.1511
-arxiv-mode	20240111.2203	hydra	20250316.1254
-asm-blox	20240106.1930	yaml	20260605.834
-asn1-mode	20170729.226	s	20220902.1511
-assess	20240303.1454	m-buffer	20241215.2214
-astyle	20200328.616	reformatter	20241204.1051
-async-await	20220827.437	iter2	20250209.1516
-async-await	20220827.437	promise	20210307.727
-async-job-queue	20230427.2122	async	20260318.1803
-async-job-queue	20230427.2122	queue	0.2
-async-status	20230821.204	posframe	20260527.857
-async-status	20230821.204	svg-lib	0.3
-atcoder-tools	20200109.1236	f	20241003.1131
-atcoder-tools	20200109.1236	s	20220902.1511
-atomic-chrome	20230304.112	websocket	20260301.157
-attrap	20260304.1504	dash	20260221.1346
-attrap	20260304.1504	f	20241003.1131
-attrap	20260304.1504	s	20220902.1511
-audacious	20210917.51	helm	20260728.709
-aurel	20260429.458	bui	20260502.730
-auth-source-keytar	20251231.1726	keytar	20251231.1727
-auth-source-keytar	20251231.1726	s	20220902.1511
-auto-auto-indent	20131106.1903	es-lib	20141111.1830
-auto-complete	20251231.1622	popup	20251231.1622
-auto-complete-auctex	20140223.1758	auto-complete	20251231.1622
-auto-complete-auctex	20140223.1758	yasnippet	20250602.1342
-auto-complete-c-headers	20150912.323	auto-complete	20251231.1622
-auto-complete-chunk	20140225.946	auto-complete	20251231.1622
-auto-complete-clang	20140409.752	auto-complete	20251231.1622
-auto-complete-distel	20180827.1344	auto-complete	20251231.1622
-auto-complete-distel	20180827.1344	distel-completion-lib	20180827.1344
-auto-complete-exuberant-ctags	20140320.724	auto-complete	20251231.1622
-auto-complete-nxml	20140221.458	auto-complete	20251231.1622
-auto-complete-pcmp	20140303.255	auto-complete	20251231.1622
-auto-complete-pcmp	20140303.255	log4e	20240123.1313
-auto-complete-pcmp	20140303.255	yaxception	20240107.504
-auto-complete-rst	20140225.944	auto-complete	20251231.1622
-auto-complete-sage	20160514.751	auto-complete	20251231.1622
-auto-complete-sage	20160514.751	sage-shell-mode	20260523.1504
-auto-highlight-symbol	20260101.552	ht	20230703.558
-auto-package-update	20260601.1804	dash	20260221.1346
-avy-menu	20230606.1519	avy	20241101.1357
-casual	20260718.1803	csv-mode	1.27
-company	20260721.100	posframe	20260527.857
-ddskk	20260329.1317	ccc	20260322.1316
-ddskk	20260329.1317	cdb	20230318.2152
-evil	20260603.654	goto-chg	20240407.1110
-f	20241003.1131	dash	20260221.1346
-f	20241003.1131	s	20220902.1511
-flycheck-dmd-dub	20250304.1432	f	20241003.1131
-flycheck-dmd-dub	20250304.1432	flycheck	20260728.931
-helm	20260728.709	helm-core	20260720.1307
-helm	20260728.709	wfnames	20260706.903
-helm-core	20260720.1307	async	20260318.1803
-ht	20230703.558	dash	20260221.1346
-hydra	20250316.1254	lv	20200507.1518
-ivy-rich	20230425.1422	ivy	20260413.2102
-js2-refactor	20250210.1811	dash	20260221.1346
-js2-refactor	20250210.1811	js2-mode	20260627.1342
-js2-refactor	20250210.1811	multiple-cursors	20260419.931
-js2-refactor	20250210.1811	s	20220902.1511
-js2-refactor	20250210.1811	yasnippet	20250602.1342
-mag-menu	20150505.1850	splitter	20170809.2208
-magit	20260724.2338	cond-let	20260701.1237
-magit	20260724.2338	llama	20260601.1455
-magit	20260724.2338	magit-section	20260722.2131
-magit	20260724.2338	with-editor	20260701.1252
-magit-section	20260722.2131	cond-let	20260701.1237
-magit-section	20260722.2131	llama	20260601.1455
-pdf-tools	20260102.1101	tablist	20260623.1855
-pkg-info	20150517.1143	epl	20180205.2049
-pyim	20251230.809	async	20260318.1803
-pyim	20251230.809	xr	2.2
-pythonic	20230821.1733	f	20241003.1131
-pythonic	20230821.1733	s	20220902.1511
-racer	20210307.243	dash	20260221.1346
-racer	20210307.243	f	20241003.1131
-racer	20210307.243	pos-tip	20240209.837
-racer	20210307.243	rust-mode	20260725.1442
-racer	20210307.243	s	20220902.1511
-sage-shell-mode	20260523.1504	deferred	20170901.1330
-skewer-mode	20200304.1142	js2-mode	20260627.1342
-skewer-mode	20200304.1142	simple-httpd	20260623.1110
-slime	20260719.420	macrostep	20250202.2205
-transient	20260725.1105	cond-let	20260701.1237
-transient	20260725.1105	llama	20260601.1455
-with-editor	20260701.1252	cond-let	20260701.1237
-with-editor	20260701.1252	llama	20260601.1455
-yaxception	20240107.504	dash	20260221.1346
-youdao-dictionary	20231005.1920	chinese-word-at-point	20170811.941
-youdao-dictionary	20231005.1920	names	20221227.1825
-youdao-dictionary	20231005.1920	popup	20251231.1622
-youdao-dictionary	20231005.1920	pos-tip	20240209.837
+package	dependency
+0xc	s
+aa-edit-mode	navi2ch
+aangit	s
+abgaben	f
+abgaben	pdf-tools
+abgaben	s
+abs-mode	erlang
+abs-mode	maude-mode
+abs-mode	yasnippet
+ac-alchemist	alchemist
+ac-alchemist	auto-complete
+ac-c-headers	auto-complete
+ac-capf	auto-complete
+ac-clang	auto-complete
+ac-clang	pos-tip
+ac-clang	yasnippet
+ac-dcd	auto-complete
+ac-dcd	flycheck-dmd-dub
+ac-emmet	auto-complete
+ac-emmet	emmet-mode
+ac-emoji	auto-complete
+ac-etags	auto-complete
+ac-geiser	auto-complete
+ac-geiser	geiser
+ac-haskell-process	auto-complete
+ac-haskell-process	haskell-mode
+ac-helm	auto-complete
+ac-helm	helm
+ac-helm	popup
+ac-html	auto-complete
+ac-html	dash
+ac-html	f
+ac-html	s
+ac-html-angular	web-completion-data
+ac-html-bootstrap	web-completion-data
+ac-html-csswatcher	web-completion-data
+ac-inf-ruby	auto-complete
+ac-inf-ruby	inf-ruby
+ac-ispell	auto-complete
+ac-js2	js2-mode
+ac-js2	skewer-mode
+ac-math	auto-complete
+ac-math	math-symbol-lists
+ac-mozc	auto-complete
+ac-mozc	mozc
+ac-octave	auto-complete
+ac-php	ac-php-core
+ac-php	auto-complete
+ac-php	yasnippet
+ac-php-core	dash
+ac-php-core	f
+ac-php-core	php-mode
+ac-php-core	popup
+ac-php-core	s
+ac-php-core	xcscope
+ac-racer	auto-complete
+ac-racer	racer
+ac-rtags	auto-complete
+ac-rtags	rtags
+ac-skk	auto-complete
+ac-skk	ddskk
+ac-skk	tinysegmenter
+ac-slime	auto-complete
+ac-slime	slime
+ac-sly	auto-complete
+ac-sly	sly
+academic-phrases	dash
+academic-phrases	ht
+academic-phrases	s
+accent	popup
+ace-flyspell	avy
+ace-jump-buffer	avy
+ace-jump-buffer	dash
+ace-jump-helm-line	avy
+ace-jump-helm-line	helm
+ace-jump-zap	ace-jump-mode
+ace-jump-zap	dash
+ace-link	avy
+ace-mc	ace-jump-mode
+ace-mc	dash
+ace-mc	multiple-cursors
+ace-pinyin	avy
+ace-pinyin	pinyinlib
+ace-popup-menu	avy-menu
+ace-window	avy
+achievements	keyfreq
+ack-menu	mag-menu
+activity-watch-mode	request
+adafruit-wisdom	request
+add-node-modules-path	s
+affe	consult
+ag	dash
+ag	s
+agda-editor-tactics	dash
+agda-editor-tactics	s
+agent-recall	agent-shell
+agent-shell	acp
+agent-shell	shell-maker
+aggressive-fill-paragraph	dash
+agitjo	magit
+agitjo	markdown-mode
+ai-code	magit
+aider	magit
+aider	markdown-mode
+aider	s
+aidermacs	markdown-mode
+aidev-mode	request
+airline-themes	powerline
+airplay	deferred
+airplay	request
+airplay	simple-httpd
+alan-mode	flycheck
+alan-mode	s
+alchemist	company
+alchemist	dash
+alchemist	elixir-mode
+alchemist	pkg-info
+alchemist	s
+alectryon	flycheck
+alert	gntp
+alert	log4e
+alert-toast	alert
+alert-toast	f
+alert-toast	s
+align-cljlet	clojure-mode
+all-ext	all
+all-the-icons-completion	all-the-icons
+all-the-icons-dired	all-the-icons
+all-the-icons-gnus	all-the-icons
+all-the-icons-gnus	dash
+all-the-icons-ibuffer	all-the-icons
+all-the-icons-ivy	all-the-icons
+all-the-icons-ivy	ivy
+all-the-icons-ivy-rich	all-the-icons
+all-the-icons-ivy-rich	ivy-rich
+all-the-icons-nerd-fonts	all-the-icons
+all-the-icons-nerd-fonts	nerd-icons
+amd-mode	f
+amd-mode	js2-mode
+amd-mode	js2-refactor
+amd-mode	makey
+amd-mode	projectile
+amd-mode	s
+amread-mode	hydra
+amread-mode	pyim
+amx	s
+anaconda-mode	dash
+anaconda-mode	f
+anaconda-mode	pythonic
+anaconda-mode	s
+android-env	s
+angular-snippets	dash
+angular-snippets	s
+anju	casual
+anju	markdown-mode
+anki-mode	dash
+anki-mode	markdown-mode
+anki-mode	request
+anki-mode	s
+anki-vocabulary	anki-connect
+anki-vocabulary	s
+anki-vocabulary	youdao-dictionary
+ansible	f
+ansible	s
+apib-mode	markdown-mode
+aqi	request
+arch-packer	async
+arch-packer	dash
+arch-packer	s
+archive-phar	datetime-format
+archive-phar	php-runtime
+arduino-mode	spinner
+ariadne	bert
+arxiv-citation	dash
+arxiv-citation	s
+arxiv-mode	hydra
+asm-blox	yaml
+asn1-mode	s
+assess	m-buffer
+astyle	reformatter
+async-await	iter2
+async-await	promise
+async-job-queue	async
+async-job-queue	queue
+async-status	posframe
+async-status	svg-lib
+atcoder-tools	f
+atcoder-tools	s
+atomic-chrome	websocket
+attrap	dash
+attrap	f
+attrap	s
+audacious	helm
+aurel	bui
+auth-source-keytar	keytar
+auth-source-keytar	s
+auto-auto-indent	es-lib
+auto-complete	popup
+auto-complete-auctex	auto-complete
+auto-complete-auctex	yasnippet
+auto-complete-c-headers	auto-complete
+auto-complete-chunk	auto-complete
+auto-complete-clang	auto-complete
+auto-complete-distel	auto-complete
+auto-complete-distel	distel-completion-lib
+auto-complete-exuberant-ctags	auto-complete
+auto-complete-nxml	auto-complete
+auto-complete-pcmp	auto-complete
+auto-complete-pcmp	log4e
+auto-complete-pcmp	yaxception
+auto-complete-rst	auto-complete
+auto-complete-sage	auto-complete
+auto-complete-sage	sage-shell-mode
+auto-highlight-symbol	ht
+auto-package-update	dash
+avy-menu	avy
+casual	csv-mode
+company	posframe
+ddskk	ccc
+ddskk	cdb
+evil	goto-chg
+f	dash
+f	s
+flycheck-dmd-dub	f
+flycheck-dmd-dub	flycheck
+helm	helm-core
+helm	wfnames
+helm-core	async
+ht	dash
+hydra	lv
+ivy-rich	ivy
+js2-refactor	dash
+js2-refactor	js2-mode
+js2-refactor	multiple-cursors
+js2-refactor	s
+js2-refactor	yasnippet
+mag-menu	splitter
+magit	cond-let
+magit	llama
+magit	magit-section
+magit	with-editor
+magit-section	cond-let
+magit-section	llama
+pdf-tools	tablist
+pkg-info	epl
+pyim	async
+pyim	xr
+pythonic	f
+pythonic	s
+racer	dash
+racer	f
+racer	pos-tip
+racer	rust-mode
+racer	s
+sage-shell-mode	deferred
+skewer-mode	js2-mode
+skewer-mode	simple-httpd
+slime	macrostep
+transient	cond-let
+transient	llama
+with-editor	cond-let
+with-editor	llama
+yaxception	dash
+youdao-dictionary	chinese-word-at-point
+youdao-dictionary	names
+youdao-dictionary	popup
+youdao-dictionary	pos-tip
