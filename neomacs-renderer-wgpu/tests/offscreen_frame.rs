@@ -578,11 +578,20 @@ fn presented_pointer_integration_image_relief_flips_edge_polarity_without_moving
 // cursor-only produces the same pixels as a single full render. This proves
 // the retained-scene fast path is correct by construction for a clean cursor.
 fn make_tex(r: &WgpuRenderer, label: &str) -> (wgpu::Texture, wgpu::TextureView) {
+    make_tex_sized(r, label, W, H)
+}
+
+fn make_tex_sized(
+    r: &WgpuRenderer,
+    label: &str,
+    width: u32,
+    height: u32,
+) -> (wgpu::Texture, wgpu::TextureView) {
     let t = r.device().create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
         size: wgpu::Extent3d {
-            width: W,
-            height: H,
+            width,
+            height,
             depth_or_array_layers: 1,
         },
         mip_level_count: 1,
@@ -925,5 +934,32 @@ fn filled_box_composite_matches_full_render() {
     assert!(
         max_diff <= 2,
         "filled-box composite must match full render, max_diff={max_diff}"
+    );
+}
+
+#[test]
+fn filled_box_cell_redraw_ignores_stale_cell_below_resized_surface() {
+    let Some(mut h) = try_harness() else {
+        return;
+    };
+    let frame = filled_box_frame();
+    h.atlas
+        .set_current_frame_fonts(&frame.fonts, &frame.char_fonts, &frame.shaped_clusters);
+
+    // Model a rapid shrink: the committed frame still places the cursor cell
+    // at y=16..34, while the newly acquired surface is only eight pixels tall.
+    // The stale cell has no intersection with the render target and must be
+    // skipped rather than encoded as an out-of-bounds zero-height scissor.
+    let (_target, view) = make_tex_sized(&h.renderer, "resized-below-cursor", W, 8);
+    h.renderer.render_frame_cell_loaded(
+        &view,
+        &frame,
+        &mut h.atlas,
+        W,
+        8,
+        true,
+        None,
+        (0.0, 0.0),
+        (20, 16, 10, 18),
     );
 }

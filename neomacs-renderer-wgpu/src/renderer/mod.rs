@@ -34,6 +34,7 @@ mod pattern_effects;
 mod pointer_override;
 mod resources;
 mod row_reuse;
+mod scissor;
 mod stats;
 mod transitions;
 mod ui_overlays;

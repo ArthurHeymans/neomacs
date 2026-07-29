@@ -6,6 +6,7 @@ use super::GlyphRenderStats;
 use super::ModeLineFadeEntry;
 use super::WgpuRenderer;
 use super::frame_pass::{BoxSpan, FrameParams, FramePassCtx};
+use super::scissor::SurfaceScissor;
 use neomacs_display_protocol::PointerAppearanceSelection;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
@@ -1229,6 +1230,21 @@ impl WgpuRenderer {
         load_existing: bool,
         scissor: Option<(u32, u32, u32, u32)>,
     ) {
+        let scissor = match scissor {
+            Some(scissor) => {
+                let Some(scissor) =
+                    SurfaceScissor::intersect(scissor, surface_width, surface_height)
+                else {
+                    // A retained frame may briefly describe cells outside a
+                    // newly resized surface. An empty clip has no pixels to
+                    // update and must not become an invalid WGPU scissor.
+                    return;
+                };
+                Some(scissor)
+            }
+            None => None,
+        };
+
         self.arenas.begin_frame();
 
         let face_debug_call_id = if trace_face_debug_enabled() {
@@ -1373,12 +1389,10 @@ impl WgpuRenderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            if let Some((sx, sy, sw, sh)) = scissor {
+            if let Some(scissor) = scissor {
                 // Clip every draw in this pass to the cell; combined with
                 // LoadOp::Load, only the cursor cell is overwritten.
-                let max_w = surface_width.saturating_sub(sx);
-                let max_h = surface_height.saturating_sub(sy);
-                render_pass.set_scissor_rect(sx, sy, sw.min(max_w), sh.min(max_h));
+                scissor.apply(&mut render_pass);
             }
             let mut ctx = FramePassCtx {
                 pass: render_pass,
