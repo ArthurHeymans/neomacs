@@ -119,7 +119,9 @@ fn read_process_output_carries_split_decode_sequences_between_chunks() {
 fn process_send_string_reenters_wait_and_runs_filter_when_write_blocks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t 4 262144)""#]];
+    // GNU promises that process output can arrive between write bunches, but
+    // the number of filter calls depends on pipe and scheduler chunking.
+    let expect = expect_test::expect![[r#""OK (t 262144)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (let* ((python (or (executable-find "python3")
@@ -143,7 +145,6 @@ fn process_send_string_reenters_wait_and_runs_filter_when_write_blocks() {
                          (push (length string) events))))
         (process-send-string p (make-string 262144 ?x))
         (list (> (apply #'+ events) 0)
-              (length events)
               (apply #'+ events)))
     (when p
       (ignore-errors

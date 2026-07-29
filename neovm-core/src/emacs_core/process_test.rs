@@ -1787,13 +1787,12 @@ fn process_send_string_reenters_wait_and_runs_filter_when_write_blocks() {
                                     (push (length string) events))))
                    (process-send-string p (make-string 262144 ?x))
                    (list (> (apply #'+ events) 0)
-                         (length events)
                          (apply #'+ events)))
                (when p
                  (ignore-errors
                    (delete-process p)))))"#
     ));
-    assert_eq!(result, "OK (t 4 262144)");
+    assert_eq!(result, "OK (t 262144)");
 }
 
 #[test]
