@@ -752,6 +752,26 @@ and back when it is disabled. A theme that omits `:weight` on a stock-bold face
 silently un-bolds it — and a suite that reads only the attributes the theme
 *sets* is structurally unable to see that happen.
 
+**SILENT — "unset" has four spellings, and a filter that misses one produces a
+green, stable, fictional answer.** A face attribute that is not set reads back
+as the *symbol* `unspecified`, as the *strings* `"unspecified-bg"` /
+`"unspecified-fg"` (a background or foreground with no theme loaded), or as
+`nil` (a dropped `:inherit`). One agent got it wrong twice in a row on the same
+helper:
+
+- `(memq value '(unspecified "unspecified-bg" …))` is `eq`-based, so it filtered
+  the symbol and kept the strings. An unset background reads as
+  `"unspecified-bg"` bare and as `unspecified` under a theme, so **all 28 faces
+  appeared to lose their background — 17 losses, stable across runs, entirely
+  fictional.**
+- `memq` → `member` fixed that and then *hid* the real losses, because a dropped
+  `:inherit` is `nil`, not `unspecified`. **Answer: 0 losses.**
+
+The truth was 14 of 28. Both wrong answers were self-consistent and would have
+shipped. What caught it was that 17 identical `:background` losses looked too
+uniform — **check concrete values against a hand-written probe when a count is
+suspiciously round**, and never trust the count alone.
+
 **Caveat, and it is the difference between a true report and an alarming one:
 put `face-default-spec` in the report beside the before and after.** Two things
 that look identical in a before/after diff are not the same finding, and the
