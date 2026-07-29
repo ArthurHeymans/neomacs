@@ -1402,6 +1402,12 @@ impl WgpuGlyphAtlas {
 
     /// Clear the cache
     pub fn clear(&mut self) {
+        tracing::debug!(
+            target: "glyph_atlas_invalidate",
+            single = self.atlas_cache.len(),
+            composed = self.atlas_composed_cache.len(),
+            "atlas clear(): all cached glyphs dropped"
+        );
         self.atlas_cache.clear();
         self.atlas_composed_cache.clear();
         self.atlas_pages.clear();
@@ -1583,6 +1589,21 @@ impl WgpuGlyphAtlas {
         if (self.default_font_size - font_size).abs() > 0.1
             || (self.default_line_height - line_height).abs() > 0.1
         {
+            // A metrics change nukes EVERY cached glyph. That is correct when
+            // the user changes font size; it is a silent performance disaster
+            // when two render paths alternate slightly different metrics.
+            // Log the transition so a periodic full re-rasterization is
+            // attributable instead of invisible (a typing profile once showed
+            // every glyph re-rasterized 48x at steady state with no log line
+            // pointing here).
+            tracing::debug!(
+                target: "glyph_atlas_invalidate",
+                old_size = self.default_font_size,
+                new_size = font_size,
+                old_line_height = self.default_line_height,
+                new_line_height = line_height,
+                "atlas cleared: default metrics changed"
+            );
             self.default_font_size = font_size;
             self.default_line_height = line_height;
             // Clear cache when metrics change
@@ -1738,6 +1759,12 @@ impl WgpuGlyphAtlas {
                 material: GlyphMaterialKind::AlphaMask,
             })?;
 
+        tracing::debug!(
+            target: "glyph_atlas_invalidate",
+            ?evicted_id,
+            frame = self.frame_number,
+            "alpha atlas page evicted (working set exceeds page budget)"
+        );
         self.remove_alpha_page_entries(evicted_id);
         self.page_evictions_this_frame += 1;
         self.eviction_generation = self.eviction_generation.wrapping_add(1);
@@ -2061,6 +2088,18 @@ impl WgpuGlyphAtlas {
 
         let c =
             char::from_u32(key.charcode).ok_or(GlyphAtlasError::InvalidCharCode(key.charcode))?;
+        tracing::debug!(
+            target: "glyph_atlas_invalidate",
+            charcode = key.charcode,
+            ch = %c,
+            font_size_bits = key.font_size_bits,
+            font_identity = key.font_identity,
+            x_bin = ?key.x_bin,
+            y_bin = ?key.y_bin,
+            mode = ?cache_key.mode,
+            cache_len = self.atlas_cache.len(),
+            "single-glyph atlas MISS"
+        );
         let enable_subpixel = matches!(subpixel, SubpixelRequest::Enabled);
         // Keep the ordinary-whitespace fast rejection. U+0020 is exceptional
         // only when GNU's primary-ASCII policy leaves it missing: that case
@@ -2183,6 +2222,18 @@ impl WgpuGlyphAtlas {
         }
 
         let enable_subpixel = matches!(subpixel, SubpixelRequest::Enabled);
+        tracing::debug!(
+            target: "glyph_atlas_invalidate",
+            text,
+            face_id = ?key.face_id,
+            font_size_bits = key.font_size_bits,
+            font_identity = key.font_identity,
+            x_bin = ?key.x_bin,
+            y_bin = ?key.y_bin,
+            mode = ?cache_key.mode,
+            cache_len = self.atlas_composed_cache.len(),
+            "composed atlas MISS"
+        );
         // Prefer the layout-shaped exact glyphs; re-shape the cluster text
         // only when this (face, text) wasn't published (render-side
         // fallback, e.g. renderer-owned chrome text).

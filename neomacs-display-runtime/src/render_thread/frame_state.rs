@@ -3,7 +3,6 @@ use crate::core::face::Face;
 use crate::core::frame_glyphs::{DisplaySlotId, FrameGlyph, WindowCursor};
 use crate::core::types::FaceId;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::time::Instant;
 
 const FACE_DIFF_SAMPLE_LIMIT: usize = 10;
 
@@ -14,17 +13,21 @@ pub(super) fn next_faces_ingest_seq() -> u64 {
     SEQ.fetch_add(1, Ordering::Relaxed)
 }
 
+/// Diagnostic classification of a face-table update. Purely observational:
+/// no category clears the glyph atlas (entries are content-addressed — see
+/// the comment at the update site in `refresh_faces_from_frames`).
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(super) struct FaceChangeSummary {
     pub(super) added: usize,
     pub(super) modified: usize,
+    /// Subset of `modified` whose glyph-raster-relevant projection changed
+    /// (the fields `glyph_font_identity` hashes: family, file path, weight,
+    /// size, attributes, resolved font id). A high steady-state rate here
+    /// signals face-id slots flapping between different realizations
+    /// upstream — worth fixing for composed-cluster cache locality, not for
+    /// correctness.
+    pub(super) raster_modified: usize,
     pub(super) removed: usize,
-}
-
-impl FaceChangeSummary {
-    pub(super) fn invalidates_glyph_atlas(self) -> bool {
-        self.added != 0 || self.modified != 0
-    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -90,11 +93,17 @@ pub(super) fn summarize_face_changes(
     old: &HashMap<FaceId, Face>,
     new: &HashMap<FaceId, Face>,
 ) -> FaceChangeSummary {
+    use neomacs_renderer_wgpu::glyph_atlas::glyph_font_identity;
     let mut summary = FaceChangeSummary::default();
     for (face_id, face) in new {
         match old.get(face_id) {
             None => summary.added += 1,
-            Some(old_face) if old_face != face => summary.modified += 1,
+            Some(old_face) if old_face != face => {
+                summary.modified += 1;
+                if glyph_font_identity(Some(old_face)) != glyph_font_identity(Some(face)) {
+                    summary.raster_modified += 1;
+                }
+            }
             Some(_) => {}
         }
     }
@@ -374,87 +383,35 @@ impl RenderApp {
             }
         });
 
-        // Glyph atlas entries go stale when a face id appears OR an existing
-        // id changes attributes; the old id-set check missed the latter and
-        // left stale glyphs rendered until some new face happened to appear.
-        // A pure removal leaves no live glyphs behind and keeps the atlas.
+        // NO face-table change clears the glyph atlas. Atlas entries are
+        // content-addressed: single-glyph keys hash the raster-relevant face
+        // projection (glyph_font_identity: family, file path, weight, size,
+        // attributes, resolved font id) and exclude the face id; composed
+        // keys carry (face_id, font_identity) together. A recolor cannot
+        // touch a coverage mask (color is draw-time vertex data), an added
+        // face either shares an identity (correct by definition) or mints
+        // fresh keys, and even a face-id slot being reused for a different
+        // realization lands on a different key in both directions. GNU keys
+        // its font-backend rasters by font, not by realized face, for the
+        // same reason. The previous clear-on-any-change here re-rasterized
+        // the entire glyph set ~30x/second during typing: font-lock recolors
+        // ~36 anonymous realizations per keystroke, and mode-line/default
+        // realizations flap across shared face-id slots.
         let summary = summarize_face_changes(&self.faces, &faces);
 
-        if !summary.invalidates_glyph_atlas() {
-            if tracing::enabled!(tracing::Level::DEBUG) {
-                let details = build_face_diff_details(&self.faces, &faces, FACE_DIFF_SAMPLE_LIMIT);
-                let source_changes =
-                    changed_face_sources(&self.faces_signature, &signature, FACE_DIFF_SAMPLE_LIMIT);
-                let conflicts = self.collect_face_id_conflicts(FACE_DIFF_SAMPLE_LIMIT);
-                tracing::debug!(
-                    event = "face_table_update_without_invalidation",
-                    faces_old = self.faces.len(),
-                    faces_new = faces.len(),
-                    faces_removed = summary.removed,
-                    removed = ?details.removed,
-                    removed_omitted = details.removed_omitted,
-                    source_changes = ?source_changes.changes,
-                    source_changes_omitted = source_changes.omitted,
-                    face_id_conflicts = ?conflicts.conflicts,
-                    face_id_conflicts_omitted = conflicts.omitted,
-                    "face-table source update did not require glyph-atlas invalidation"
-                );
-            }
-            self.faces = faces;
-            self.faces_signature = signature;
-            return;
-        }
-
-        let debug_diagnostics = tracing::enabled!(tracing::Level::DEBUG).then(|| {
-            (
-                build_face_diff_details(&self.faces, &faces, FACE_DIFF_SAMPLE_LIMIT),
-                changed_face_sources(&self.faces_signature, &signature, FACE_DIFF_SAMPLE_LIMIT),
-                self.collect_face_id_conflicts(FACE_DIFF_SAMPLE_LIMIT),
-            )
-        });
-
-        let old_face_count = self.faces.len();
-        let old_source_count = self.faces_signature.len();
-        let new_source_count = signature.len();
-        self.faces = faces;
-        self.faces_signature = signature;
-        let clear_stats = self.frame_windows.clear_top_level_glyph_atlases();
-
-        let now = Instant::now();
-        let since_previous_ms = self.last_face_cache_invalidation.map(|previous| {
-            now.saturating_duration_since(previous)
-                .as_millis()
-                .min(u64::MAX as u128) as u64
-        });
-        let has_previous_invalidation = since_previous_ms.is_some();
-        let since_previous_ms = since_previous_ms.unwrap_or_default();
-        self.last_face_cache_invalidation = Some(now);
-        self.face_cache_invalidation_seq = self.face_cache_invalidation_seq.wrapping_add(1);
-
-        tracing::info!(
-            event = "glyph_atlas_invalidated",
-            invalidation_seq = self.face_cache_invalidation_seq,
-            faces_old = old_face_count,
-            faces_new = self.faces.len(),
-            faces_added = summary.added,
-            faces_modified = summary.modified,
-            faces_removed = summary.removed,
-            face_sources_old = old_source_count,
-            face_sources_new = new_source_count,
-            windows_visited = clear_stats.windows_visited,
-            atlases_cleared = clear_stats.atlases_cleared,
-            glyphs_evicted = clear_stats.glyphs_evicted,
-            alpha_pages_cleared = clear_stats.alpha_pages_cleared,
-            subpixel_pages_cleared = clear_stats.subpixel_pages_cleared,
-            color_pages_cleared = clear_stats.color_pages_cleared,
-            has_previous_invalidation,
-            since_previous_ms,
-            "glyph atlases invalidated after face-table update"
-        );
-
-        if let Some((details, source_changes, conflicts)) = debug_diagnostics {
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            let details = build_face_diff_details(&self.faces, &faces, FACE_DIFF_SAMPLE_LIMIT);
+            let source_changes =
+                changed_face_sources(&self.faces_signature, &signature, FACE_DIFF_SAMPLE_LIMIT);
+            let conflicts = self.collect_face_id_conflicts(FACE_DIFF_SAMPLE_LIMIT);
             tracing::debug!(
-                event = "face_table_diff",
+                event = "face_table_updated",
+                faces_old = self.faces.len(),
+                faces_new = faces.len(),
+                faces_added = summary.added,
+                faces_modified = summary.modified,
+                faces_raster_modified = summary.raster_modified,
+                faces_removed = summary.removed,
                 added = ?details.added,
                 added_omitted = details.added_omitted,
                 modified = ?details.modified,
@@ -465,9 +422,11 @@ impl RenderApp {
                 source_changes_omitted = source_changes.omitted,
                 face_id_conflicts = ?conflicts.conflicts,
                 face_id_conflicts_omitted = conflicts.omitted,
-                "face-table changes that invalidated glyph atlases"
+                "face-table source update (glyph atlases kept: entries are content-addressed)"
             );
         }
+        self.faces = faces;
+        self.faces_signature = signature;
     }
 
     fn apply_primary_fallback_visual_cursor_animations(&mut self) {

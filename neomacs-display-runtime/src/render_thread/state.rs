@@ -649,12 +649,6 @@ pub(super) struct RenderApp {
     /// `faces` map was aggregated from; unchanged fingerprint skips the
     /// per-render rebuild entirely.
     pub(super) faces_signature: Vec<(u64, u64)>,
-    /// Monotonic diagnostic sequence for glyph-atlas invalidations caused by
-    /// face additions or attribute changes.
-    pub(super) face_cache_invalidation_seq: u64,
-    /// Monotonic elapsed spacing between face-driven glyph-atlas invalidations.
-    pub(super) last_face_cache_invalidation: Option<Instant>,
-
     pub(super) modifiers: u32,
 
     pub(super) image_metadata: SharedImageMetadata,
@@ -773,8 +767,6 @@ impl RenderApp {
             device_lost: super::device_loss::DeviceLossDetector::new(),
             faces: HashMap::new(),
             faces_signature: Vec::new(),
-            face_cache_invalidation_seq: 0,
-            last_face_cache_invalidation: None,
             modifiers: 0,
             image_metadata,
             cursor_defaults: CursorState::default(),

@@ -57,16 +57,6 @@ pub(super) struct NativeTextInputPolicy {
     pub(super) initial_cursor_area: ImeCursorArea,
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub(super) struct GlyphAtlasClearStats {
-    pub(super) windows_visited: usize,
-    pub(super) atlases_cleared: usize,
-    pub(super) glyphs_evicted: usize,
-    pub(super) alpha_pages_cleared: usize,
-    pub(super) subpixel_pages_cleared: usize,
-    pub(super) color_pages_cleared: usize,
-}
-
 impl NativeTextInputPolicy {
     pub(super) fn for_gui_frame() -> Self {
         Self {
@@ -2414,23 +2404,6 @@ impl GuiFrameWindowManager {
             dirty |= window_state.render.force_cursor_blink_on();
         });
         dirty
-    }
-
-    pub(super) fn clear_top_level_glyph_atlases(&mut self) -> GlyphAtlasClearStats {
-        let mut stats = GlyphAtlasClearStats::default();
-        self.for_each_top_level_window_mut(|window_state| {
-            stats.windows_visited += 1;
-            if let Some(atlas) = window_state.render.compositor.glyph_atlas.as_mut() {
-                stats.atlases_cleared += 1;
-                stats.glyphs_evicted += atlas.len();
-                let (alpha, subpixel, color) = atlas.atlas_page_counts();
-                stats.alpha_pages_cleared += alpha;
-                stats.subpixel_pages_cleared += subpixel;
-                stats.color_pages_cleared += color;
-                atlas.clear();
-            }
-        });
-        stats
     }
 
     pub(super) fn apply_top_level_transition_policy(

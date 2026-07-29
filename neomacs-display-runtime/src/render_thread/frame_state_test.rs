@@ -82,14 +82,64 @@ fn face_change_summary_distinguishes_added_modified_and_removed_faces() {
         FaceChangeSummary {
             added: 1,
             modified: 1,
+            raster_modified: 1,
             removed: 1,
         }
     );
-    assert!(summary.invalidates_glyph_atlas());
 }
 
 #[test]
-fn removing_faces_alone_does_not_invalidate_the_glyph_atlas() {
+fn recoloring_faces_is_not_classified_as_raster_relevant() {
+    // Typing recolors anonymous font-lock realizations every keystroke.
+    // Coverage masks are color-independent (color is applied at draw time),
+    // so a foreground/background-only change must not count as
+    // raster-relevant in diagnostics.
+    let id = FaceId::new(1);
+    let old = HashMap::from([(id, named_face(id, "recolored"))]);
+    let mut recolored = named_face(id, "recolored");
+    recolored.foreground = Color::new(0.9, 0.1, 0.1, 1.0);
+    let new = HashMap::from([(id, recolored)]);
+
+    let summary = summarize_face_changes(&old, &new);
+
+    assert_eq!(summary.modified, 1);
+    assert_eq!(summary.raster_modified, 0);
+}
+
+#[test]
+fn adding_faces_is_classified_as_added_not_modified() {
+    // An added face cannot collide with existing content-addressed entries:
+    // its glyph keys either share a font identity (correct by definition)
+    // or allocate fresh entries.
+    let retained_id = FaceId::new(1);
+    let added_id = FaceId::new(2);
+    let old = HashMap::from([(retained_id, face(retained_id))]);
+    let new = HashMap::from([
+        (retained_id, face(retained_id)),
+        (added_id, named_face(added_id, "fringe")),
+    ]);
+
+    let summary = summarize_face_changes(&old, &new);
+
+    assert_eq!(summary.added, 1);
+    assert_eq!(summary.modified, 0);
+}
+
+#[test]
+fn changing_a_face_font_is_classified_as_raster_relevant() {
+    let id = FaceId::new(1);
+    let old = HashMap::from([(id, named_face(id, "refonted"))]);
+    let mut refonted = named_face(id, "refonted");
+    refonted.font_family = "Iosevka".to_owned();
+    let new = HashMap::from([(id, refonted)]);
+
+    let summary = summarize_face_changes(&old, &new);
+
+    assert_eq!(summary.raster_modified, 1);
+}
+
+#[test]
+fn removing_faces_alone_is_classified_as_removed() {
     let retained_id = FaceId::new(1);
     let removed_id = FaceId::new(2);
     let old = HashMap::from([
@@ -101,7 +151,7 @@ fn removing_faces_alone_does_not_invalidate_the_glyph_atlas() {
     let summary = summarize_face_changes(&old, &new);
 
     assert_eq!(summary.removed, 1);
-    assert!(!summary.invalidates_glyph_atlas());
+    assert_eq!(summary.modified, 0);
 }
 
 #[test]
@@ -276,21 +326,13 @@ fn refresh_faces_rebuilds_from_primary_fallback_frames() {
     assert!(app.faces.contains_key(&FaceId::new(7)));
     assert!(app.faces.contains_key(&FaceId::new(8)));
     assert!(!app.faces.contains_key(&FaceId::new(99)));
-    assert_eq!(app.face_cache_invalidation_seq, 1);
 
+    // An unchanged frame signature must skip the rebuild entirely.
     app.refresh_faces_from_frames();
-    assert_eq!(
-        app.face_cache_invalidation_seq, 1,
-        "an unchanged frame signature must not perform diagnostics or clear atlases"
-    );
+    assert!(app.faces.contains_key(&FaceId::new(7)));
 
     let conflicts = app.collect_face_id_conflicts(10);
     assert_eq!(conflicts.conflicts.len(), 1);
     assert_eq!(conflicts.conflicts[0].face_id, FaceId::new(7));
     assert_eq!(conflicts.conflicts[0].conflicting_frame_id, 0x2000);
-
-    let clear_stats = app.frame_windows.clear_top_level_glyph_atlases();
-    assert_eq!(clear_stats.windows_visited, 1);
-    assert_eq!(clear_stats.atlases_cleared, 1);
-    assert_eq!(clear_stats.glyphs_evicted, 0);
 }
