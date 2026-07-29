@@ -1301,6 +1301,17 @@ signal.
 ;;             (wrong-type-argument integer-or-marker-p "8"))
 ```
 
+**All four members of the family, not just `ceiling`** — a fix that patches one
+leaves three live. Run in both editors:
+
+```elisp
+(mapcar (lambda (f) (list f (condition-case e (funcall f 5 (point-marker)) (error e))))
+        '(ceiling floor truncate round))
+;; GNU     => ((ceiling (wrong-type-argument numberp #<marker at 1 in *scratch*>))
+;;             (floor    …) (truncate …) (round …))   ; all four signal
+;; Neomacs => ((ceiling 5) (floor 5) (truncate 5) (round 5))
+```
+
 The marker case is the one that matters: GNU signals, Neomacs silently divides
 by the marker's position, so `(ceiling 5 (point-marker))` returns 5 at
 point-min and a different answer everywhere else in the buffer.
@@ -1316,6 +1327,69 @@ Affects: `ascii-table` (1).
 passes `"8"` as codepoints-per-row, which reaches `(ceiling 128 "8")` inside
 `ascii-table--table`. That test predates this catalogue entry and was already
 red.
+
+
+## 42. A tree-sitter font-lock setting without its language slot fails to compile
+
+GNU 31 carries the language in a sixth slot of each `treesit-font-lock-settings`
+entry: `(QUERY ENABLE FEATURE OVERRIDE nil LANGUAGE)`. A setting rebuilt with
+only the first four elements still fontifies in GNU and signals in Neomacs.
+
+```elisp
+(require 'css-mode)
+(with-temp-buffer
+  (insert ".a { color: red; }")
+  (treesit-parser-create 'css)
+  (setq-local treesit-font-lock-settings
+              (list (seq-take (car css--treesit-settings) 4)))
+  (setq-local treesit-font-lock-feature-list '((comment)))
+  (treesit-font-lock-recompute-features)
+  (font-lock-ensure))
+;; GNU     => fontifies
+;; Neomacs => (wrong-type-argument treesit-query-p nil treesit-query-compile)
+```
+
+**It is the missing slot, and it is order-dependent.** Controls, all run in both
+editors:
+
+| | GNU | Neomacs |
+|---|---|---|
+| the setting unmodified (6 elements) | fontifies | same |
+| `copy-sequence` of it, still 6 elements | fontifies | same |
+| truncated to 4, on a cold buffer | fontifies | **signals** |
+| truncated to 4, *after* a 6-element setting has been used once | fontifies | fontifies |
+
+So the query object itself is fine — it reports `treesit-query-p` as `t`, and it
+even prints its own language (`#s(treesit-compiled-query 1 css …)`) — and
+nothing is wrong with the truncated list's identity. What fails is the first
+compile of a setting that has no language slot, and once some other setting has
+primed whatever Neomacs caches, the same truncated setting goes through.
+
+The blast radius is any package that borrows another mode's tree-sitter rules
+and rebuilds them positionally, which is the ordinary idiom for embedding one
+language's font-lock in another's mode. The rebuild is written against the
+four fields the author knows about and silently drops the rest.
+
+Affects: `astro-ts-mode` (19 of 38 — every test that activates the mode).
+`astro-ts-mode--prefix-font-lock-features` rebuilds each borrowed CSS and TSX
+setting as `(list (nth 0 setting) (nth 1 setting) (intern …) (nth 3 setting))`,
+so 28 of the mode's 33 settings arrive four elements long and
+`treesit-major-mode-setup` dies inside `define-derived-mode`. The five native
+Astro rules, built by `treesit-font-lock-rules`, are unaffected — setting only
+those and fontifying succeeds in Neomacs.
+
+Reductions that did **not** isolate it, recorded so nobody repeats them:
+`treesit-range-rules` with `:local t` agrees; all six of the mode's own
+`treesit-query-compile` inputs agree; string, sexp and vector query forms agree
+(both editors reject a bare vector); and the unmodified `css--treesit-settings`
+and `typescript-ts-mode--font-lock-settings` are identical in shape and length
+in both editors.
+
+Two smaller observations from the same reduction, neither worth its own entry.
+Neomacs's `wrong-type-argument` data from `treesit-query-compile` carries a
+third element naming the function where GNU's carries two. And Neomacs's
+compiled query prints as a record exposing its language and source pattern
+where GNU's prints as the opaque `#<treesit-compiled-query>`.
 
 ## Behaviour that is NOT a divergence
 

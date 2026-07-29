@@ -15,7 +15,7 @@ fn descriptor_records_exact_pin_dependency_and_installed_payload() {
                     (directory-files dir t "^[^.].*"))
             #'string<)))"##;
     let expect = expect![[
-        r#"OK ("20260417.101" ((emacs (30))) nil ("README-elpa" "astro-ts-mode-autoloads.el" "astro-ts-mode-pkg.el" "astro-ts-mode.el" "astro-ts-mode.elc"))"#
+        r#"OK ("20260417.101" ((emacs (30))) nil ("astro-ts-mode-autoloads.el" "astro-ts-mode-pkg.el" "astro-ts-mode.el" "astro-ts-mode.elc"))"#
     ]];
     assert_astro_ts_mode_parity(elisp_form, expect);
 }

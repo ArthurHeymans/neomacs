@@ -10,6 +10,7 @@ mod activation;
 mod editing;
 mod prefix;
 mod registry;
+mod workflows;
 
 const ASTRO_TS_MODE_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 

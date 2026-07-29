@@ -419,6 +419,33 @@ awkward, they are just not round — the frame is 80 columns and
 a column. Capture the width in the snapshot beside the result and the number
 explains itself.
 
+**`insert` is a stand-in for typing, and it is a bad one.** `insert` does not
+run `post-self-insert-hook`, so `electric-indent-mode`, `electric-pair-mode`
+and every mode's own post-insert behaviour are silently absent; a document
+built with `insert` is a document that arrived by paste, not by keyboard. The
+substitute is easy to miss because it is not written as a substitute — there is
+no `cl-letf` to notice, just an ordinary-looking `(insert "…")`. Drive the real
+path with `(let ((last-command-event ch)) (call-interactively (key-binding
+(vector ch))))`, and `(kbd "RET")`/`(kbd "TAB")` for the keys, which is what the
+command loop does and what the hooks hang off.
+
+It changes results, not just provenance. astro-ts-mode's corpus builds every
+document with `insert` and then calls `indent-region`, and all nine of its
+indentation expectations are the nested layout that produces. Typing the same
+component through `self-insert-command` with electric indent live gives a
+**completely flat** document, every line at column 0 — because an element's
+nesting is established by its closing tag, so at the moment `RET` reindents a
+line the enclosing elements are still unterminated. Both products are real and
+they are not the same product; a suite that only has the second one is pinning
+formatting the user never sees while typing.
+
+The general form: **ask whether the corpus reaches the subject the way a user
+does, or the way that was convenient to write.** `insert` for typing,
+`funcall` for a command, `key-binding` + `call-interactively` for a keystroke,
+and a bound constant for a measurement are all the same move — each is one step
+closer to the code and one step further from the behaviour, and each skips
+whatever the real path would have run on the way.
+
 ## Assertions
 
 **Read a theme's display clauses before deciding what the suite can assert.**
@@ -1374,3 +1401,28 @@ equal.
 
 **Cite an existing catalogue entry rather than re-witnessing it.** Every red test
 should be a distinct problem, or the failure count stops carrying information.
+
+**Check which editor disagrees before diagnosing anything.** A test that fails
+against **GNU** is not a divergence at all — it is a stale expectation, and the
+question is what changed underneath it, not what Neomacs got wrong. Run the
+suspect package against GNU first; it costs one run and it decides whether you
+are looking for a bug or for a commit.
+
+When it is a stale expectation, find the change that caused it before
+re-capturing, because "a file vanished from a payload" and "the build dropped a
+file" look identical from the test. The evidence that settles it is usually in
+the lock: `26124b65b` switched the suite from installing downloaded MELPA
+archive tarballs to building from pinned sources with a pinned `package-build`,
+and archive tarballs carry a generated `README-elpa` that a source build does
+not — so every expectation captured before that commit and naming `README-elpa`
+is stale. Both pins it introduced had never moved since, which is what rules out
+a later regression. Twelve packages carry that filename in a committed
+expectation.
+
+Two rules fall out of that. **Date the corpus against the infrastructure
+commit** — `git log -1 --format=%ad` on both, and an corpus that predates a
+build change is a suspect before it is a finding. And **check whether the
+failure is a family before repairing it in your own package**: the same
+expectation shape in eleven other packages is somebody's sweep, not eleven
+independent bugs, and re-capturing one of them quietly hides how big the
+repair really is.
