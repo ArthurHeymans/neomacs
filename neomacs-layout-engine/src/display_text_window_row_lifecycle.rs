@@ -49,13 +49,46 @@ use crate::display_cursor::{
     CursorCaptureState, VisualTextWindowCursorPublishContext, VisualTextWindowCursorPublishSummary,
 };
 
+/// Columns at the terminal right edge that body text must not consume.
+///
+/// Keeping the combinations as an enum makes the layout budget exhaustive:
+/// adding a marker or border cannot silently leave its width out of the text
+/// extent.  GNU applies the same policy by subtracting the continuation glyph
+/// width from `last_visible_x` before producing body glyphs (`init_iterator`,
+/// xdisp.c), and then separately reserving a non-rightmost TTY border.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TextWindowRightEdgeReservation {
+    None,
+    EdgeMarker,
+    TerminalBorder,
+    EdgeMarkerAndTerminalBorder,
+}
+
+impl TextWindowRightEdgeReservation {
+    const fn for_columns(reserve_edge_marker: bool, reserve_terminal_border: bool) -> Self {
+        match (reserve_edge_marker, reserve_terminal_border) {
+            (false, false) => Self::None,
+            (true, false) => Self::EdgeMarker,
+            (false, true) => Self::TerminalBorder,
+            (true, true) => Self::EdgeMarkerAndTerminalBorder,
+        }
+    }
+
+    const fn column_count(self) -> usize {
+        match self {
+            Self::None => 0,
+            Self::EdgeMarker | Self::TerminalBorder => 1,
+            Self::EdgeMarkerAndTerminalBorder => 2,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextWindowAppendSurfaceRequest<'a> {
     content_x: f32,
     text_width: f32,
     line_number_width: f32,
-    reserve_right_border_col: bool,
-    reserve_right_special_col: bool,
+    right_edge_reservation: TextWindowRightEdgeReservation,
     char_width: f32,
     tab_width: i32,
     tab_stop_list: &'a [i32],
@@ -77,8 +110,10 @@ impl<'a> TextWindowAppendSurfaceRequest<'a> {
             content_x,
             text_width,
             line_number_width,
-            reserve_right_border_col,
-            reserve_right_special_col,
+            right_edge_reservation: TextWindowRightEdgeReservation::for_columns(
+                reserve_right_special_col,
+                reserve_right_border_col,
+            ),
             char_width,
             tab_width,
             tab_stop_list,
@@ -86,17 +121,7 @@ impl<'a> TextWindowAppendSurfaceRequest<'a> {
     }
 
     fn reserved_width(self) -> f32 {
-        // GNU reserves only the vertical-border column for a non-rightmost TTY
-        // window (window.c `window_body_width`). The truncation/continuation
-        // glyph is NOT a separate reserved column: it overwrites the LAST body
-        // column (the edge-marker code below trims the row text to its target
-        // column). So the special/edge-marker column must not shrink the text
-        // area on top of the border -- only the border counts here.
-        if self.reserve_right_border_col {
-            self.char_width
-        } else {
-            0.0
-        }
+        self.char_width * self.right_edge_reservation.column_count() as f32
     }
 
     fn append_width(self) -> f32 {
@@ -961,12 +986,10 @@ mod tests {
                 .into_surface();
 
         assert_eq!(surface.content_x(), 20.0);
-        // Only the vertical-border column (one char_width) is reserved on the
-        // right; the truncation/continuation edge-marker overwrites the last body
-        // column rather than reserving its own (see `reserved_width`). So the
-        // append right edge sits one char_width (8px) past the old border+special
-        // reservation: 204 (full text right edge) - 8 (border) = 196.
-        assert_eq!(surface.right_edge(), 196.0);
+        // GNU xdisp reserves both the continuation glyph and a non-rightmost
+        // terminal window's border before it consumes body text.  The marker
+        // must not replace the final source character at its display column.
+        assert_eq!(surface.right_edge(), 188.0);
         assert_eq!(surface.full_text_right_edge(), 204.0);
     }
 }

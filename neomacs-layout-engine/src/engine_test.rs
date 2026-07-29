@@ -3742,7 +3742,23 @@ fn layout_frame_rust_lays_out_wrapped_long_line() {
     };
     let trace = layout_trace_with_buffer_setup(text, 120, 120, setup);
 
-    assert!(!trace.matrix_rows.is_empty());
+    let rendered_source_text: String = trace
+        .matrix_rows
+        .iter()
+        .filter(|row| !row.mode_line && row.role == GlyphRowRole::Text && row.displays_text)
+        .flat_map(|row| row.glyph_areas[1].iter())
+        .filter_map(|glyph| match glyph.kind {
+            GlyphKindTrace::Char('\\') => None,
+            GlyphKindTrace::Char(ch) => Some(ch),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(
+        rendered_source_text, text,
+        "the terminal continuation marker must use its reserved column without \
+         replacing the final source character on each wrapped row"
+    );
 }
 
 /// Stage 5: a long line with `truncate-lines=t` (wider than the window) sets
