@@ -81,12 +81,28 @@ fn airline_themes_autoloads_register_the_installed_directory_without_loading_run
                 (sort
                  (directory-files directory nil
                                   "\\`airline-.*-theme\\.el\\'")
-                 #'string-lessp)))
+                 #'string-lessp))
+               ;; Mask the installed package's own directory.  Spelling it
+               ;; out pinned the harness's acquisition layout, so this
+               ;; expectation broke when the cache moved from
+               ;; package-cache/ to the revision-pinned
+               ;; source-install-cache/ -- a harness change wearing the
+               ;; shape of a package regression.  What the assertions are
+               ;; about is that the installed directory is on
+               ;; `custom-theme-load-path', and first on it.
+               (mask
+                (lambda (value)
+                  (if (stringp value)
+                      (replace-regexp-in-string
+                       (regexp-quote directory)
+                       "[PACKAGE]/"
+                       value t t)
+                    value))))
          (list
           (featurep 'airline-themes)
           (custom-theme-p 'airline-doom-one)
-          (member directory custom-theme-load-path)
-          (car custom-theme-load-path)
+          (mapcar mask (member directory custom-theme-load-path))
+          (funcall mask (car custom-theme-load-path))
           (length theme-files)
           (car theme-files)
           (car (last theme-files))
@@ -96,7 +112,7 @@ fn airline_themes_autoloads_register_the_installed_directory_without_loading_run
           (file-readable-p
            (expand-file-name "airline-themes-pkg.el" directory))))"##;
     let expect = expect![[
-        r#"OK (nil nil ("[ORACLE-WORKSPACE]/tmp/melpa/package-cache/airline-themes/20250502.1915/home/.emacs.d/elpa/airline-themes-20250502.1915/" custom-theme-directory t) "[ORACLE-WORKSPACE]/tmp/melpa/package-cache/airline-themes/20250502.1915/home/.emacs.d/elpa/airline-themes-20250502.1915/" 245 "airline-alduin-theme.el" "airline-zenburn-theme.el" "airline-themes-autoloads.el" t t)"#
+        r#"OK (nil nil ("[PACKAGE]/" custom-theme-directory t) "[PACKAGE]/" 245 "airline-alduin-theme.el" "airline-zenburn-theme.el" "airline-themes-autoloads.el" t t)"#
     ]];
     assert_airline_themes_autoload_parity(elisp_form, expect);
 }
@@ -257,9 +273,30 @@ fn airline_themes_runtime_has_no_hidden_asset_dependency_and_locates_every_entry
                   "airline-doom-one-theme.el"
                   "airline-transparent-theme.el"
                   "airline-base16-gui-dark-theme.el"
-                  "airline-base16-shell-dark-theme.el")))
+                  "airline-base16-shell-dark-theme.el"))
+               ;; Mask the elpa root rather than this package's own
+               ;; directory, because `powerline' below is a *sibling*
+               ;; install and only the root is common to both.  Spelling
+               ;; the root out pinned the harness's acquisition layout, so
+               ;; this expectation broke when the cache moved from
+               ;; package-cache/ to the revision-pinned
+               ;; source-install-cache/.  The package directory names and
+               ;; their versions are the part that carries meaning and are
+               ;; kept.
+               (elpa
+                (directory-file-name
+                 (file-name-directory
+                  (directory-file-name directory))))
+               (mask
+                (lambda (value)
+                  (if (stringp value)
+                      (replace-regexp-in-string
+                       (regexp-quote elpa)
+                       "[ELPA]"
+                       value t t)
+                    value))))
          (list
-          library
+          (funcall mask library)
           (file-name-nondirectory library)
           (mapcar
            (lambda (file)
@@ -271,11 +308,11 @@ fn airline_themes_runtime_has_no_hidden_asset_dependency_and_locates_every_entry
            representative)
           (directory-files directory nil
                            "\\.\\(png\\|gif\\|jpg\\|svg\\)\\'")
-          (locate-library "powerline")
+          (funcall mask (locate-library "powerline"))
           (featurep 's)
           (featurep 'json)))"##;
     let expect = expect![[
-        r#"OK ("[ORACLE-WORKSPACE]/tmp/melpa/package-cache/airline-themes/20250502.1915/home/.emacs.d/elpa/airline-themes-20250502.1915/airline-themes.el" "airline-themes.el" (("airline-light-theme.el" t 2073) ("airline-dark-theme.el" t 2062) ("airline-doom-one-theme.el" t 2130) ("airline-transparent-theme.el" t 2052) ("airline-base16-gui-dark-theme.el" t 2948) ("airline-base16-shell-dark-theme.el" t 2357)) nil "[ORACLE-WORKSPACE]/tmp/melpa/package-cache/airline-themes/20250502.1915/home/.emacs.d/elpa/powerline-20221110.1956/powerline.el" nil t)"#
+        r#"OK ("[ELPA]/airline-themes-20250502.1915/airline-themes.el" "airline-themes.el" (("airline-light-theme.el" t 2073) ("airline-dark-theme.el" t 2062) ("airline-doom-one-theme.el" t 2130) ("airline-transparent-theme.el" t 2052) ("airline-base16-gui-dark-theme.el" t 2948) ("airline-base16-shell-dark-theme.el" t 2357)) nil "[ELPA]/powerline-20221110.1956/powerline.el" nil t)"#
     ]];
     assert_airline_themes_parity(elisp_form, expect);
 }

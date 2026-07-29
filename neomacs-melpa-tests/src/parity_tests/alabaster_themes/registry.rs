@@ -127,9 +127,24 @@ fn complete_function_signatures_interactive_contracts_and_docs_are_stable() {
 #[test]
 fn package_generated_autoloads_register_commands_mode_and_theme_directory() {
     let elisp_form = r##"
-(let ((source-directory
-       (file-name-directory
-        (getenv "NEOMACS_PACKAGE_SOURCE"))))
+(let* ((source-directory
+        (file-name-directory
+         (getenv "NEOMACS_PACKAGE_SOURCE")))
+       ;; Mask the installed package's own directory.  Spelling it out
+       ;; pinned the harness's acquisition layout, so this expectation
+       ;; broke when the cache moved from package-cache/ to the
+       ;; revision-pinned source-install-cache/ -- a harness change
+       ;; wearing the shape of a package regression.  What the assertion
+       ;; is about is that the installed directory is on
+       ;; `custom-theme-load-path'.
+       (mask
+        (lambda (value)
+          (if (stringp value)
+              (replace-regexp-in-string
+               (regexp-quote source-directory)
+               "[PACKAGE]/"
+               value t t)
+            value))))
   (list
    (mapcar
     (lambda (symbol)
@@ -143,7 +158,7 @@ fn package_generated_autoloads_register_commands_mode_and_theme_directory() {
     '(alabaster-themes-select
       alabaster-themes-list-colors
       alabaster-themes-preview-mode))
-   (member source-directory custom-theme-load-path)
+   (mapcar mask (member source-directory custom-theme-load-path))
    (mapcar
     (lambda (theme)
       (member theme (custom-available-themes)))
@@ -154,7 +169,7 @@ fn package_generated_autoloads_register_commands_mode_and_theme_directory() {
       alabaster-themes-dark-mono))))
 "##;
     let expect = expect![[
-        r#"OK (((alabaster-themes-select t "alabaster-themes" t nil) (alabaster-themes-list-colors t "alabaster-themes" t nil) (alabaster-themes-preview-mode t "alabaster-themes" nil nil)) ("[ORACLE-WORKSPACE]/tmp/melpa/package-cache/alabaster-themes/20260113.657/home/.emacs.d/elpa/alabaster-themes-20260113.657/" custom-theme-directory t) ((alabaster-themes-light adwaita deeper-blue dichromacy leuven-dark leuven light-blue manoj-dark misterioso modus-operandi-deuteranopia modus-operandi modus-operandi-tinted modus-operandi-tritanopia modus-vivendi-deuteranopia modus-vivendi modus-vivendi-tinted modus-vivendi-tritanopia newcomers-presets tango-dark tango tsdh-dark tsdh-light wheatgrass whiteboard wombat) (alabaster-themes-light-bg alabaster-themes-light-mono alabaster-themes-light adwaita deeper-blue dichromacy leuven-dark leuven light-blue manoj-dark misterioso modus-operandi-deuteranopia modus-operandi modus-operandi-tinted modus-operandi-tritanopia modus-vivendi-deuteranopia modus-vivendi modus-vivendi-tinted modus-vivendi-tritanopia newcomers-presets tango-dark tango tsdh-dark tsdh-light wheatgrass whiteboard wombat) (alabaster-themes-dark alabaster-themes-light-bg alabaster-themes-light-mono alabaster-themes-light adwaita deeper-blue dichromacy leuven-dark leuven light-blue manoj-dark misterioso modus-operandi-deuteranopia modus-operandi modus-operandi-tinted modus-operandi-tritanopia modus-vivendi-deuteranopia modus-vivendi modus-vivendi-tinted modus-vivendi-tritanopia newcomers-presets tango-dark tango tsdh-dark tsdh-light wheatgrass whiteboard wombat) (alabaster-themes-light-mono alabaster-themes-light adwaita deeper-blue dichromacy leuven-dark leuven light-blue manoj-dark misterioso modus-operandi-deuteranopia modus-operandi modus-operandi-tinted modus-operandi-tritanopia modus-vivendi-deuteranopia modus-vivendi modus-vivendi-tinted modus-vivendi-tritanopia newcomers-presets tango-dark tango tsdh-dark tsdh-light wheatgrass whiteboard wombat) (alabaster-themes-dark-mono alabaster-themes-dark alabaster-themes-light-bg alabaster-themes-light-mono alabaster-themes-light adwaita deeper-blue dichromacy leuven-dark leuven light-blue manoj-dark misterioso modus-operandi-deuteranopia modus-operandi modus-operandi-tinted modus-operandi-tritanopia modus-vivendi-deuteranopia modus-vivendi modus-vivendi-tinted modus-vivendi-tritanopia newcomers-presets tango-dark tango tsdh-dark tsdh-light wheatgrass whiteboard wombat)))"#
+        r#"OK (((alabaster-themes-select t "alabaster-themes" t nil) (alabaster-themes-list-colors t "alabaster-themes" t nil) (alabaster-themes-preview-mode t "alabaster-themes" nil nil)) ("[PACKAGE]/" custom-theme-directory t) ((alabaster-themes-light adwaita deeper-blue dichromacy leuven-dark leuven light-blue manoj-dark misterioso modus-operandi-deuteranopia modus-operandi modus-operandi-tinted modus-operandi-tritanopia modus-vivendi-deuteranopia modus-vivendi modus-vivendi-tinted modus-vivendi-tritanopia newcomers-presets tango-dark tango tsdh-dark tsdh-light wheatgrass whiteboard wombat) (alabaster-themes-light-bg alabaster-themes-light-mono alabaster-themes-light adwaita deeper-blue dichromacy leuven-dark leuven light-blue manoj-dark misterioso modus-operandi-deuteranopia modus-operandi modus-operandi-tinted modus-operandi-tritanopia modus-vivendi-deuteranopia modus-vivendi modus-vivendi-tinted modus-vivendi-tritanopia newcomers-presets tango-dark tango tsdh-dark tsdh-light wheatgrass whiteboard wombat) (alabaster-themes-dark alabaster-themes-light-bg alabaster-themes-light-mono alabaster-themes-light adwaita deeper-blue dichromacy leuven-dark leuven light-blue manoj-dark misterioso modus-operandi-deuteranopia modus-operandi modus-operandi-tinted modus-operandi-tritanopia modus-vivendi-deuteranopia modus-vivendi modus-vivendi-tinted modus-vivendi-tritanopia newcomers-presets tango-dark tango tsdh-dark tsdh-light wheatgrass whiteboard wombat) (alabaster-themes-light-mono alabaster-themes-light adwaita deeper-blue dichromacy leuven-dark leuven light-blue manoj-dark misterioso modus-operandi-deuteranopia modus-operandi modus-operandi-tinted modus-operandi-tritanopia modus-vivendi-deuteranopia modus-vivendi modus-vivendi-tinted modus-vivendi-tritanopia newcomers-presets tango-dark tango tsdh-dark tsdh-light wheatgrass whiteboard wombat) (alabaster-themes-dark-mono alabaster-themes-dark alabaster-themes-light-bg alabaster-themes-light-mono alabaster-themes-light adwaita deeper-blue dichromacy leuven-dark leuven light-blue manoj-dark misterioso modus-operandi-deuteranopia modus-operandi modus-operandi-tinted modus-operandi-tritanopia modus-vivendi-deuteranopia modus-vivendi modus-vivendi-tinted modus-vivendi-tritanopia newcomers-presets tango-dark tango tsdh-dark tsdh-light wheatgrass whiteboard wombat)))"#
     ]];
     assert_alabaster_themes_autoload_parity(elisp_form, expect);
 }

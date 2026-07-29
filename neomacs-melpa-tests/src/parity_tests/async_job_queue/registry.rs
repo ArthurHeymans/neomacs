@@ -214,17 +214,34 @@ fn customization_conditions_group_and_generated_autoload_state_are_exact() {
 #[test]
 fn generated_autoload_file_registers_prefix_without_eagerly_loading_runtime() {
     let elisp_form = r##"
-(list
- (featurep 'async-job-queue-autoloads)
- (featurep 'async-job-queue)
- (fboundp 'async-job-queue-make-job-queue)
- (fboundp 'async-job-queue-schedule-job)
- (assoc
-  (getenv "NEOMACS_PACKAGE_SOURCE")
-  load-history))
+(let* ((source (getenv "NEOMACS_PACKAGE_SOURCE"))
+       ;; Mask the installed package's own directory.  Spelling it out
+       ;; pinned the harness's acquisition layout, so this expectation
+       ;; broke when the cache moved from package-cache/ to the
+       ;; revision-pinned source-install-cache/ -- a harness change
+       ;; wearing the shape of a package regression.  What the assertion
+       ;; is about is that the autoload file, and only it, is on
+       ;; `load-history'.
+       (directory
+        (directory-file-name
+         (file-name-directory source))))
+  (list
+   (featurep 'async-job-queue-autoloads)
+   (featurep 'async-job-queue)
+   (fboundp 'async-job-queue-make-job-queue)
+   (fboundp 'async-job-queue-schedule-job)
+   (mapcar
+    (lambda (value)
+      (if (stringp value)
+          (replace-regexp-in-string
+           (regexp-quote directory)
+           "[PACKAGE]"
+           value t t)
+        value))
+    (assoc source load-history))))
 "##;
     let expect: Expect = expect![[
-        r#"OK (t nil nil nil ("[ORACLE-WORKSPACE]/tmp/melpa/package-cache/async-job-queue/20230427.2122/home/.emacs.d/elpa/async-job-queue-20230427.2122/async-job-queue-autoloads.el" (provide . async-job-queue-autoloads)))"#
+        r#"OK (t nil nil nil ("[PACKAGE]/async-job-queue-autoloads.el" (provide . async-job-queue-autoloads)))"#
     ]];
     assert_async_job_queue_autoload_parity(elisp_form, expect);
 }
