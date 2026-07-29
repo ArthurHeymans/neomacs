@@ -753,6 +753,20 @@ enum NamedCallTarget {
     Void,
 }
 
+/// Continuation after loading one hop of a named autoload.
+///
+/// GNU `funcall_general` never applies the value returned by
+/// `autoload-do-load` blindly.  It retries resolution through the original
+/// symbol, because the loaded file may have installed another autoload.  Keep
+/// that distinction in the type system so an autoload form cannot accidentally
+/// flow into ordinary function-value dispatch.
+#[derive(Clone, Copy, Debug)]
+enum NamedAutoloadCallStep {
+    RetrySymbol { autoload_form: Value },
+    DispatchFunction { function: Value },
+    Void,
+}
+
 #[derive(Clone, Debug)]
 struct NamedCallCacheEntry {
     function_epoch: u64,
@@ -9986,31 +10000,29 @@ impl Context {
                         {
                             f = resolved;
                         }
-                        // Handle autoload
-                        if super::autoload::is_autoload_value(&f) {
-                            let _ = super::autoload::builtin_autoload_do_load(
-                                self,
-                                vec![f, Value::from_sym_id(sym_id), Value::NIL],
-                            )?;
-                            match self.obarray.symbol_function_id(sym_id) {
-                                Some(reloaded) => {
-                                    if let Some(alias_id) = reloaded.as_symbol_id() {
-                                        self.obarray
-                                            .indirect_function_id(alias_id)
-                                            .unwrap_or(reloaded)
-                                    } else {
-                                        reloaded
-                                    }
+                        loop {
+                            if !super::autoload::is_autoload_value(&f) {
+                                break f;
+                            }
+
+                            match self.load_named_autoload_call_step(sym_id, f)? {
+                                NamedAutoloadCallStep::RetrySymbol { autoload_form } => {
+                                    // GNU `eval_sub` jumps back to named
+                                    // function resolution after each autoload
+                                    // hop.  The returned form is the current
+                                    // indirect function cell for that symbol.
+                                    f = autoload_form;
                                 }
-                                _ => {
+                                NamedAutoloadCallStep::DispatchFunction { function } => {
+                                    break function;
+                                }
+                                NamedAutoloadCallStep::Void => {
                                     return Err(signal(
                                         LispCondition::VoidFunction,
-                                        vec![Value::from_sym_id(sym_id)],
+                                        vec![original_fun],
                                     ));
                                 }
                             }
-                        } else {
-                            f
                         }
                     }
                     _ => {
@@ -14425,12 +14437,27 @@ impl Context {
             }
         }
 
-        let loaded = super::autoload::builtin_autoload_do_load(
-            self,
-            vec![autoload_form, Value::from_sym_id(sym_id)],
-        )?;
-        let function_is_callable = self.function_value_is_callable(&loaded);
-        match self.apply_untraced(loaded, args) {
+        let mut current_autoload = autoload_form;
+        let function = loop {
+            match self.load_named_autoload_call_step(sym_id, current_autoload)? {
+                NamedAutoloadCallStep::RetrySymbol { autoload_form } => {
+                    // GNU `funcall_general` sets `fun = original_fun` and
+                    // jumps to `retry`, preserving the symbol identity across
+                    // any number of chained autoload declarations.
+                    current_autoload = autoload_form;
+                }
+                NamedAutoloadCallStep::DispatchFunction { function } => break function,
+                NamedAutoloadCallStep::Void => {
+                    return Err(signal(
+                        LispCondition::VoidFunction,
+                        vec![Value::from_sym_id(sym_id)],
+                    ));
+                }
+            }
+        };
+
+        let function_is_callable = self.function_value_is_callable(&function);
+        match self.apply_untraced(function, args) {
             Err(Flow::Signal(sig))
                 if sig.symbol_name() == "invalid-function" && !function_is_callable =>
             {
@@ -14441,6 +14468,27 @@ impl Context {
             }
             other => other,
         }
+    }
+
+    fn load_named_autoload_call_step(
+        &mut self,
+        sym_id: SymId,
+        autoload_form: Value,
+    ) -> Result<NamedAutoloadCallStep, Flow> {
+        let loaded = super::autoload::builtin_autoload_do_load(
+            self,
+            vec![autoload_form, Value::from_sym_id(sym_id)],
+        )?;
+
+        Ok(if loaded.is_nil() {
+            NamedAutoloadCallStep::Void
+        } else if super::autoload::is_autoload_value(&loaded) {
+            NamedAutoloadCallStep::RetrySymbol {
+                autoload_form: loaded,
+            }
+        } else {
+            NamedAutoloadCallStep::DispatchFunction { function: loaded }
+        })
     }
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up

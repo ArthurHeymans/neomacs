@@ -531,6 +531,67 @@ fn autoload_do_load_passes_nomessage_to_load_source_file_function() {
 }
 
 #[test]
+fn named_call_follows_chained_autoloads() {
+    crate::test_utils::init_test_tracing();
+
+    let dir = tempfile::tempdir().expect("autoload chain tempdir");
+    fs::write(
+        dir.path().join("vm-autoload-chain-outer.el"),
+        "(autoload 'vm-autoload-chain-run \"vm-autoload-chain-target\" nil t)\n",
+    )
+    .expect("write outer autoload fixture");
+    fs::write(
+        dir.path().join("vm-autoload-chain-target.el"),
+        "(defalias 'vm-autoload-chain-run #'(lambda (value) (+ value 7)))\n",
+    )
+    .expect("write chained autoload target fixture");
+
+    let mut eval = Context::new();
+    eval.set_variable(
+        "load-path",
+        Value::list(vec![Value::string(dir.path().to_string_lossy())]),
+    );
+    let result = eval.eval_str(
+        r#"(progn
+             (autoload 'vm-autoload-chain-run "vm-autoload-chain-outer" nil t)
+             (funcall 'vm-autoload-chain-run 5))"#,
+    );
+
+    assert_eq!(format_eval_result(&result), "OK 12");
+}
+
+#[test]
+fn named_call_retries_to_void_after_autoload_removes_definition() {
+    crate::test_utils::init_test_tracing();
+
+    let dir = tempfile::tempdir().expect("autoload removal tempdir");
+    fs::write(
+        dir.path().join("vm-autoload-removes-definition.el"),
+        "(fmakunbound 'vm-autoload-removed)\n",
+    )
+    .expect("write autoload removal fixture");
+
+    let mut eval = Context::new();
+    eval.set_variable(
+        "load-path",
+        Value::list(vec![Value::string(dir.path().to_string_lossy())]),
+    );
+    let result = eval.eval_str(
+        r#"(progn
+             (autoload 'vm-autoload-removed
+                       "vm-autoload-removes-definition" nil t)
+             (condition-case error
+                 (funcall 'vm-autoload-removed)
+               (error error)))"#,
+    );
+
+    assert_eq!(
+        format_eval_result(&result),
+        "OK (void-function vm-autoload-removed)"
+    );
+}
+
+#[test]
 fn require_passes_nomessage_to_load_source_file_function() {
     crate::test_utils::init_test_tracing();
 

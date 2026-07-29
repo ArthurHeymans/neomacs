@@ -68,6 +68,24 @@ fn compat_load_semantics_matches_gnu_emacs() {
     )
     .expect("write generated metadata loaddefs fixture");
 
+    let chained_autoload_outer_path = fixture_dir.path().join("vm-chain-outer.el");
+    fs::write(
+        &chained_autoload_outer_path,
+        "(autoload 'vm-chain-run \"vm-chain-target\" nil t)\n",
+    )
+    .expect("write chained autoload outer fixture");
+
+    let chained_autoload_target_path = fixture_dir.path().join("vm-chain-target.el");
+    fs::write(
+        &chained_autoload_target_path,
+        "(defalias 'vm-chain-run #'(lambda (value) (+ value 7)))\n",
+    )
+    .expect("write chained autoload target fixture");
+
+    let removed_autoload_path = fixture_dir.path().join("vm-chain-removes-definition.el");
+    fs::write(&removed_autoload_path, "(fmakunbound 'vm-chain-removed)\n")
+        .expect("write autoload removal fixture");
+
     let recursive_path = fixture_dir.path().join("recursive-load.el");
     fs::write(
         &recursive_path,
@@ -179,6 +197,26 @@ fn compat_load_semantics_matches_gnu_emacs() {
     (list (and (member '(defun . vm-generated-fn) entry) t)
           (and (member '(defun . vm-generated-old) entry) t))))"#,
                 path = elisp_string(&generated_metadata_path)
+            ),
+        },
+        LoadCase {
+            name: "named_call_follows_chained_autoloads",
+            form: format!(
+                r#"(let ((load-path (cons {directory} load-path)))
+  (autoload 'vm-chain-run "vm-chain-outer" nil t)
+  (funcall 'vm-chain-run 5))"#,
+                directory = elisp_string(fixture_dir.path())
+            ),
+        },
+        LoadCase {
+            name: "named_call_retries_to_void_after_autoload_removes_definition",
+            form: format!(
+                r#"(let ((load-path (cons {directory} load-path)))
+  (autoload 'vm-chain-removed "vm-chain-removes-definition" nil t)
+  (condition-case error
+      (funcall 'vm-chain-removed)
+    (error error)))"#,
+                directory = elisp_string(fixture_dir.path())
             ),
         },
         LoadCase {

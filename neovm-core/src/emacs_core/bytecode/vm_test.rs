@@ -7854,6 +7854,38 @@ fn vm_compiled_named_autoload_call_uses_shared_runtime_and_load_bridge() {
 }
 
 #[test]
+fn vm_direct_named_call_follows_chained_autoloads() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(
+        dir.path().join("vm-bytecode-autoload-chain-outer.el"),
+        "(autoload 'vm-bytecode-autoload-chain \"vm-bytecode-autoload-chain-target\")\n",
+    )
+    .expect("write outer autoload fixture");
+    std::fs::write(
+        dir.path().join("vm-bytecode-autoload-chain-target.el"),
+        "(defalias 'vm-bytecode-autoload-chain #'(lambda (x) (+ x 7)))\n",
+    )
+    .expect("write chained autoload target fixture");
+
+    let mut eval = Context::new_vm_runtime_harness();
+    eval.obarray.set_symbol_value(
+        "load-path",
+        Value::list(vec![Value::string(dir.path().to_string_lossy())]),
+    );
+    let result = eval
+        .eval_str(
+            r#"(progn
+                 (autoload 'vm-bytecode-autoload-chain
+                           "vm-bytecode-autoload-chain-outer")
+                 (vm-bytecode-autoload-chain 5))"#,
+        )
+        .expect("direct named call should follow the autoload chain");
+
+    assert_eq!(result, Value::fixnum(12));
+}
+
+#[test]
 fn vm_indentation_builtins_use_buffer_local_current_buffer_state() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
