@@ -1004,20 +1004,9 @@ fn encoded_hash_slice_for_buffer_in_context(
         super::fileio::WriteCodingFallback::RawText
     };
     let coding_system = coding_override
+        .map(crate::encoding::RuntimeCodingSystem::from_symbol)
         .unwrap_or_else(|| super::fileio::resolve_write_coding_system(eval, buffer_id, fallback));
-    let encoded = crate::encoding::builtin_encode_coding_string_in_context(
-        eval,
-        vec![Value::heap_string(text), Value::symbol(coding_system)],
-    )?;
-    let encoded = encoded.as_lisp_string().ok_or_else(|| {
-        signal(
-            "error",
-            vec![Value::string(
-                "Coding system produced non-string hash input",
-            )],
-        )
-    })?;
-    Ok(encoded.as_bytes().to_vec())
+    Ok(crate::encoding::encode_external_text_in_context(eval, text, coding_system)?.bytes)
 }
 
 fn secure_hash_algorithm_name(val: &Value) -> Result<String, Flow> {

@@ -3972,6 +3972,30 @@ fn write_region_honors_dynamic_coding_system_for_write() {
 }
 
 #[test]
+fn write_region_uses_runtime_shift_jis_codec() {
+    crate::test_utils::init_test_tracing();
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("shift-jis.txt");
+    let path_lisp = path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+    let results = bootstrap_eval(&format!(
+        r#"(with-temp-buffer
+             (insert "日本\n")
+             (setq buffer-file-coding-system 'japanese-shift-jis-unix)
+             (write-region nil nil "{path_lisp}" nil 'silent))"#
+    ));
+
+    assert_eq!(results[0], "OK nil");
+    assert_eq!(
+        std::fs::read(&path).expect("read Shift-JIS output"),
+        [0x93, 0xfa, 0x96, 0x7b, b'\n']
+    );
+}
+
+#[test]
 fn insert_file_contents_honors_dynamic_big5_coding_system_for_read() {
     crate::test_utils::init_test_tracing();
 

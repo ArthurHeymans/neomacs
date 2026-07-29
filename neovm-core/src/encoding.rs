@@ -3428,6 +3428,62 @@ pub(crate) fn builtin_decode_coding_string_in_context(
     builtin_coding_string_in_context(ctx, args, CodingDirection::Decode)
 }
 
+/// An externally encoded byte stream together with the concrete coding system
+/// that produced it.
+pub(crate) struct EncodedTextBytes {
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) coding_system: crate::emacs_core::intern::SymId,
+}
+
+/// A coding-system symbol that must be interpreted by the current evaluator.
+///
+/// The inner symbol stays private so external byte consumers cannot
+/// accidentally turn a runtime coding protocol back into a name and feed it
+/// to the context-free family encoder.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct RuntimeCodingSystem(crate::emacs_core::intern::SymId);
+
+impl RuntimeCodingSystem {
+    pub(crate) fn from_symbol(symbol: crate::emacs_core::intern::SymId) -> Self {
+        Self(symbol)
+    }
+}
+
+/// Encode Lisp text through the complete runtime coding engine.
+///
+/// External byte consumers must use this seam instead of the context-free
+/// `encode_lisp_string` family switch: ISO-2022, EUC, Shift-JIS, charset
+/// codings, and conversion hooks depend on definitions stored in the current
+/// evaluator.  `RuntimeCodingSystem` preserves that requirement across the
+/// call boundary.  The result also carries GNU's concrete
+/// `last-coding-system-used` value, so callers can report aliases and EOL
+/// subsidiaries consistently.
+pub(crate) fn encode_external_text_in_context(
+    ctx: &mut crate::emacs_core::eval::Context,
+    text: crate::heap_types::LispString,
+    coding: RuntimeCodingSystem,
+) -> Result<EncodedTextBytes, crate::emacs_core::error::Flow> {
+    let encoded = builtin_coding_string_in_context(
+        ctx,
+        vec![Value::heap_string(text), Value::symbol(coding.0)],
+        CodingDirection::Encode,
+    )?;
+    let bytes = encoded
+        .as_lisp_string()
+        .expect("encode-coding-string must return a Lisp string")
+        .as_bytes()
+        .to_vec();
+    let coding_system = ctx
+        .visible_variable_value_or_nil("last-coding-system-used")
+        .as_symbol_id()
+        .filter(|&symbol| symbol != intern("nil"))
+        .expect("a successful context-aware encode records its concrete coding system");
+    Ok(EncodedTextBytes {
+        bytes,
+        coding_system,
+    })
+}
+
 /// A file decode result whose coding-system selection remains an interned
 /// protocol value until the file-I/O boundary needs its Lisp name.
 pub(crate) struct DecodedFileBytes {
