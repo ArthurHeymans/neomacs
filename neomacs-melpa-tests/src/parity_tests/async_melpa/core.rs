@@ -543,7 +543,9 @@ fn read_from_client_reassembles_fragmented_multiple_wire_messages() {
         (buffer-live-p buffer)
       (kill-buffer buffer))))
 "##;
-    let expect: Expect = expect![""];
+    let expect: Expect = expect![[
+        r#"OK (((:phase first :async-message t) (:phase second :payload "����" :async-message t)) 115 "\"KDpwaGFzZSBmaXJzdCA6YXN5bmMtbWVzc2FnZSB0KQ==\"\n\"KDpwaGFzZSBzZWNvbmQgOnBheWxvYWQgIs67IiA6YXN5bmMtbWVzc2FnZSB0KQ==\"\n")"#
+    ]];
     assert_async_melpa_parity(elisp_form, expect);
 }
 
@@ -613,7 +615,9 @@ fn callback_receives_messages_before_final_result_and_future_then_yields_nil() {
      (buffer-live-p
       (process-buffer future)))))
 "##;
-    let expect: Expect = expect![""];
+    let expect: Expect = expect![[
+        r#"OK (((:phase first :payload "����" :async-message t) (:phase second :payload (1 2 3) :async-message t) finished) nil t nil)"#
+    ]];
     assert_async_melpa_parity(elisp_form, expect);
 }
 
@@ -686,7 +690,7 @@ fn callback_reassembles_message_larger_than_process_chunk_with_unicode_edges() {
     (async-wait future)
     (nreverse events)))
 "##;
-    let expect: Expect = expect![""];
+    let expect: Expect = expect![[r#"OK ((message 65541 "����" "����") finished)"#]];
     assert_async_melpa_parity(elisp_form, expect);
 }
 

@@ -76,7 +76,9 @@ fn viewport_file_arguments_apply_positions_once_and_respect_double_dash() {
     '("--wait" "+12:4" "src/api.el" "README.md"
       "+7" "src/model.el" "--" "+literal.el" "-draft.txt"))))
 "##;
-    let expect = expect![""];
+    let expect = expect![[
+        r#"OK (("api.el" 12 4) ("README.md" nil nil) ("model.el" 7 nil) ("+literal.el" nil nil) ("-draft.txt" nil nil))"#
+    ]];
     assert_ai_code_parity(elisp_form, expect);
 }
 
