@@ -2,11 +2,29 @@
 //!
 //! User-visible symptom: `C-x k` should run `kill-buffer` interactively, which
 //! reads a buffer name (and therefore honors completion/read-buffer config).
-//! Neomacs currently treats the built-in `kill-buffer` as a no-argument
-//! interactive command, so invoking it through `call-interactively` kills the
-//! current buffer immediately.
+//! These tests guard the primitive's GNU-compatible interactive metadata and
+//! the read path reached through `call-interactively`.
 
 use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn div_builtin_command_metadata_matches_gnu_subr_interactive_specs() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let expect = expect_test::expect![[
+        r#""OK ((kill-buffer t (interactive \"bKill buffer: \")) (widen t (interactive \"\")) (abort-minibuffers t (interactive \"\")) (delete-frame t (interactive \"\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(
+        r##"
+(mapcar (lambda (command)
+          (list command
+                (commandp command t)
+                (interactive-form command)))
+        '(kill-buffer widen abort-minibuffers delete-frame))
+"##,
+        expect,
+    );
+}
 
 #[test]
 fn div_kill_buffer_c_x_k_is_bound_to_kill_buffer_not_kill_current_buffer() {
@@ -25,25 +43,19 @@ fn div_kill_buffer_c_x_k_is_bound_to_kill_buffer_not_kill_current_buffer() {
 }
 
 #[test]
-fn div_kill_buffer_interactive_form_is_missing_the_read_buffer_spec() {
+fn div_kill_buffer_interactive_form_preserves_the_read_buffer_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Root cause of the whole divergence, isolated to a single, fully
     // deterministic value (no stdin / EOF / prompt-text dependence):
     //
     //   GNU:    (interactive-form 'kill-buffer) => (interactive "bKill buffer: ")
-    //   Neomacs:(interactive-form 'kill-buffer) => nil
+    //   Neomacs:(interactive-form 'kill-buffer) => (interactive "bKill buffer: ")
     //
-    // Because Neomacs' built-in `kill-buffer` carries no interactive form,
-    // `call-interactively` (and therefore the `C-x k` command loop) supplies
-    // no buffer argument and kills the current buffer outright, instead of
-    // reading a buffer name with completion the way GNU's "b" spec does.
-    //
-    // The inline snapshot records the *current* Neomacs value so this test is
-    // green in the default snapshot mode and documents today's behavior; the
-    // divergence surfaces under `NEOVM_ORACLE_MODE=verify`/`live`, where the
-    // GNU oracle returns the `(interactive "bKill buffer: ")` spec instead.
-    let expect = expect_test::expect![[r#""OK (nil (interactive nil) t)""#]];
+    // The registered "b" spec makes `call-interactively` (and therefore the
+    // `C-x k` command loop) read a buffer name with completion.
+    let expect =
+        expect_test::expect![[r#""OK ((interactive \"bKill buffer: \") (interactive nil) t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (interactive-form 'kill-buffer)

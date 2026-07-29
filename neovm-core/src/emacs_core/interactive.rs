@@ -189,11 +189,7 @@ fn interactive_form_from_spec_value(spec: Value) -> Value {
 }
 
 fn interactive_form_from_string_spec(code: &str) -> Value {
-    interactive_form_from_spec_value(if code.is_empty() {
-        Value::NIL
-    } else {
-        Value::string(code)
-    })
+    interactive_form_from_spec_value(Value::string(code))
 }
 
 pub(crate) fn registry_interactive_form(
@@ -811,7 +807,6 @@ fn builtin_command_name(name: &str) -> bool {
             | "end-of-line"
             | "move-beginning-of-line"
             | "move-end-of-line"
-            | "abort-minibuffers"
             | "abort-recursive-edit"
             | "add-name-to-file"
             | "advice-remove"
@@ -828,7 +823,6 @@ fn builtin_command_name(name: &str) -> bool {
             | "defining-kbd-macro"
             | "delete-directory"
             | "delete-file"
-            | "delete-frame"
             | "delete-other-windows"
             | "delete-other-windows-internal"
             | "delete-process"
@@ -865,7 +859,6 @@ fn builtin_command_name(name: &str) -> bool {
             | "iconify-frame"
             | "isearch-backward"
             | "isearch-forward"
-            | "kill-buffer"
             | "kill-emacs"
             | "kill-local-variable"
             | "lower-frame"
@@ -923,7 +916,6 @@ fn builtin_command_name(name: &str) -> bool {
             | "undo"
             | "unix-sync"
             | "view-register"
-            | "widen"
             | "word-search-backward"
             | "word-search-forward"
             | "write-region"

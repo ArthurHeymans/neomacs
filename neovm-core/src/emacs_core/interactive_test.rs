@@ -3036,6 +3036,30 @@ fn registered_builtin_interactive_spec_is_the_command_identity_source() {
 }
 
 #[test]
+fn builtin_subr_commands_carry_their_gnu_interactive_specs() {
+    crate::test_utils::init_test_tracing();
+
+    for name in ["kill-buffer", "widen", "abort-minibuffers", "delete-frame"] {
+        assert!(
+            !builtin_command_name(name),
+            "{name} must not rely on the transitional command-name fallback"
+        );
+    }
+
+    let results = bootstrap_eval_all(
+        r#"(mapcar (lambda (command)
+                     (list command
+                           (commandp command t)
+                           (interactive-form command)))
+                   '(kill-buffer widen abort-minibuffers delete-frame))"#,
+    );
+    assert_eq!(
+        results[0],
+        "OK ((kill-buffer t (interactive \"bKill buffer: \")) (widen t (interactive \"\")) (abort-minibuffers t (interactive \"\")) (delete-frame t (interactive \"\")))"
+    );
+}
+
+#[test]
 fn call_interactively_builtin_kill_ring_save_uses_marked_region() {
     crate::test_utils::init_test_tracing();
     let results = bootstrap_eval_all(

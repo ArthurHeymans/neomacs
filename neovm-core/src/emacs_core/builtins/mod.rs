@@ -1336,7 +1336,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr("get-file-buffer", builtin_get_file_buffer, 1, Some(1));
-    ctx.defsubr("kill-buffer", builtin_kill_buffer, 0, Some(1));
+    ctx.defsubr_interactive(
+        "kill-buffer",
+        builtin_kill_buffer,
+        0,
+        Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("bKill buffer: "),
+    );
     ctx.defsubr("set-buffer", builtin_set_buffer, 1, Some(1));
     ctx.defsubr("current-buffer", builtin_current_buffer, 0, Some(0));
     ctx.defsubr("buffer-name", builtin_buffer_name, 0, Some(1));
@@ -1492,7 +1498,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr("buffer-enable-undo", builtin_buffer_enable_undo, 0, Some(1));
     ctx.defsubr("buffer-size", builtin_buffer_size, 0, Some(1));
     ctx.defsubr("narrow-to-region", builtin_narrow_to_region, 2, Some(2));
-    ctx.defsubr("widen", builtin_widen, 0, Some(0));
+    ctx.defsubr_interactive(
+        "widen",
+        builtin_widen,
+        0,
+        Some(0),
+        super::interactive::BuiltinInteractiveSpec::String(""),
+    );
     register_builtin(
         ctx,
         BuiltinRegistration::placeholder(
@@ -3174,11 +3186,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(1),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "delete-frame",
         super::window_cmds::builtin_delete_frame,
         0,
         Some(2),
+        super::interactive::BuiltinInteractiveSpec::String(""),
     );
     ctx.defsubr(
         "frame-char-height",
@@ -7393,11 +7406,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "abort-minibuffers",
         super::minibuffer::builtin_abort_minibuffers_ctx,
         0,
         Some(0),
+        super::interactive::BuiltinInteractiveSpec::String(""),
     );
     ctx.defsubr(
         "set-marker-insertion-type",
