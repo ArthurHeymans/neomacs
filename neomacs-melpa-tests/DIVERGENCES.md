@@ -1019,6 +1019,94 @@ commented-out entries, so `M-x alan-grammar-update-keyword` rewrites the
 keywords section in GNU and signals `args-out-of-range` in Neomacs.
 
 
+## 35. A `:family` set beside a colour on `default` is discarded by GNU only
+
+Specific to the **`default` face**, and to setting a font family *together with*
+a colour. Either alone agrees; any other face agrees. GNU resets the family to
+`"default"`, Neomacs reports the family the theme asked for.
+
+```elisp
+(progn
+  (deftheme probe)
+  (custom-theme-set-faces 'probe
+    '(default ((t (:family "Terminus" :foreground "#ffffff")))))
+  (enable-theme 'probe)
+  (face-attribute 'default :family nil 'default))
+;; GNU => "default"    Neomacs => "Terminus"
+```
+
+The three neighbouring cases all agree in both editors, which is what makes the
+characterisation narrow rather than "GNU will not report an uninstantiable
+font":
+
+| spec on the face | GNU | Neomacs |
+|---|---|---|
+| `default` with `:family` alone | `"Terminus"` | `"Terminus"` |
+| `default` with `:family` + `:foreground` | **`"default"`** | `"Terminus"` |
+| `default` with `:family` + `:background` | **`"default"`** | `"Terminus"` |
+| `font-lock-keyword-face` with `:family` + `:foreground` | `"Terminus"` | `"Terminus"` |
+
+`:foundry` follows `:family` exactly. `:height` is **not** affected — both
+editors report 130 in every row above — so this is not "GNU drops font
+attributes on a tty", and a suite that only checked `:height` would miss it.
+
+Consistent with GNU re-realizing the `default` face when a colour is set on it,
+recomputing the font from scratch on a frame that has none, while Neomacs keeps
+the requested family. Not confirmed against GNU's source.
+
+Blast radius: any package that sets a font family and reads it back —
+`default-text-scale`, font-size adjusters, theme validators, and any theme
+shipping a font preference, which is most themes that ship one at all. On a tty
+neither editor can use the font, so the visible effect is confined to what
+`face-attribute` reports; that is still the value such packages branch on.
+
+Affects: `ahungry-theme` (1) — its `default` spec carries `:foreground
+"#ffffff"` and `:family "Terminus" :foundry "xos4"` in one `((t ...))` clause,
+so the font workflow reads back `"Terminus"`/`"xos4"` here and
+`"default"`/`"default"` in GNU. The suite's colour-focused workflows read a
+deliberately narrowed attribute list so that only the font workflow witnesses
+this.
+
+## 36. Process output does not relocate markers at the process mark
+
+GNU's default process filter inserts output the way `insert-before-markers`
+does, so a marker sitting exactly at the process mark is carried to the end of
+the freshly inserted text. Neomacs inserts the same bytes and leaves such a
+marker behind, pointing at where the output began instead of where it ended.
+
+```elisp
+(let* ((buffer (generate-new-buffer " *probe*"))
+       (process (start-process "probe" buffer "sh" "-c" "printf world")))
+  (with-current-buffer buffer
+    (insert "hello")
+    (set-marker (process-mark process) (point-max))
+    (let ((mark (copy-marker (point-max))))
+      (while (accept-process-output process 0.2))
+      (list (buffer-string) (marker-position mark)
+            (marker-position (process-mark process))))))
+;; GNU     => ("helloworld\nProcess probe finished\n" 11 35)
+;; Neomacs => ("helloworld\nProcess probe finished\n"  6 35)
+```
+
+**The buffer text and the process mark itself agree** — only the third-party
+marker differs, which is what makes this quiet. And `insert-before-markers`
+called directly is correct in both editors (the marker moves to 11 either way),
+so the primitive is not implicated: the divergence is confined to the
+insertion the default filter performs.
+
+The markers this strands are the ones comint keeps at the process mark —
+`comint-last-input-end`, `comint-last-output-start`. A buffer whose
+`comint-last-input-end` points before the echoed output rather than after it
+reports the wrong "last input" region, so `comint-get-old-input`, input history
+and anything that shows or re-sends the previous command work from a region
+that includes output the user never typed.
+
+Affects: `alchemist` (1) — `alchemist-iex--send-command` deliberately uses
+`insert-before-markers` and then `move-marker comint-last-input-end (point)`
+before handing the line to `comint-send-string`; when IEx echoes it back, GNU
+carries that marker past the echo and Neomacs leaves it at 39 where GNU has 77.
+
+
 ## Behaviour that is NOT a divergence
 
 Recorded so nobody re-investigates them:
