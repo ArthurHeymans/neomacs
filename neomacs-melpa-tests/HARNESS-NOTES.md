@@ -743,6 +743,47 @@ first and let the snapshot confirm it, rather than writing from memory and
 letting the snapshot correct you** — the snapshot does catch it, but only after
 you have built a fixture around the wrong belief.
 
+**SILENT — key a stand-in on the repository *and* the argument vector, not the
+argv alone.** Two fixtures can legitimately answer the same command
+differently, and with one key the second recording silently overwrites the
+first. ahg records `status` and `summary` against two repositories — one plain,
+one with an MQ queue — and an argv-only key left both answering with the
+queue's output, so the plain-repository workflow asserted the wrong tree while
+passing. Distinct from the agtags stand-in note: there the collision is between
+*invocations*, here between *fixtures*, and nothing in the run says so.
+
+**SILENT — `RUST_LOG=debug` from the dev shell leaks into recordings.** The nix
+develop banner sets it, and any tool with a Rust core honours it: Mercurial 7.1
+wrote ANSI-coloured `DEBUG hg::dirstate…` tracing to stderr during a recording
+pass, which would have been baked into the fixtures as though the tool had
+emitted it. Unset it while recording, and assert every record's stderr is
+empty rather than trusting that it is.
+
+**For a tool where "no output" is a legitimate answer, silence is the dangerous
+default.** A stand-in that exits nonzero with `UNRECORDED` on an argv it has no
+recording for is only half the guard; the other half is that **every workflow
+asserts the miss log is empty**. Without it the marker nothing-was-invented
+never gets read. It matters most where the package ignores the tool's output
+entirely — alda-mode only builds an argv and starts a process, so a stand-in
+answering nothing is indistinguishable from success. It caught a real miss in
+the alda-mode suite that had already gone green.
+
+**SILENT — an argv fixture stored newline-separated cannot be read back.** The
+alda-mode recorder wrote one argument per line, and alda-mode passes a whole
+multi-line score to `--code`; read back, that one argument became six, the
+replay key was computed over nine arguments instead of four, and every playback
+missed. Store recorded arguments NUL-separated. The same ambiguity fragments a
+call *log*: fold newlines to a placeholder there, or one invocation appears as
+several.
+
+**SILENT — a wrong buffer name is a no-op in this harness, not an error.** A
+workflow that looks for `*hg log:*` when the package creates `*hg log (details):*`
+records "no such buffer" and **passes**, because both editors agree a missing
+buffer is missing. Two ahg workflows did exactly that while asserting nothing
+about the view they were named for. Have the helper report `no-buffer-matching
+PREFIX` rather than nil, and read the captured value — the test name is
+otherwise the only thing claiming a buffer was examined.
+
 **SILENT — a fixture that cannot fail for the reason the test is named after.**
 android-mode's `android-project-main-activities` uses `cl-member-if`, so it
 returns the tail from the first match rather than the matches. The workflow
@@ -1105,6 +1146,63 @@ its purpose. Commit synchronously with a short bounded retry you watch, and
 verify with `git show --stat --format=%s` after it lands. A job's own
 `COMMITTED`/`PUSHED` line is true and tells you nothing about *what* it
 committed.
+
+## Tests that never asserted anything
+
+**SILENT — an empty `expect!` literal ships as a permanently failing test, and
+nobody reads it as a bug.** The UPDATE_EXPECT cascade documented under
+Snapshots does not only lose *one* update: when a later test in the run cannot
+patch itself, its literal is left empty, and if the suite is committed in that
+state the test fails in both editors forever. It never reads as a divergence,
+because both editors disagree with `""` equally, and it never reads as a gap,
+because the test is right there in the file with a plausible name.
+
+Found seven of these across the tree in one sweep — three in `aidermacs`
+(one of which was a symbol inventory and was deleted instead), one in
+`ai-code`, three in `async-melpa`. Every one had been red since it was
+committed. The sweep is one line and worth running after any UPDATE_EXPECT
+session, including someone else's:
+
+```sh
+grep -rn 'expect!\[\[r#""#\]\]\|expect!\[""\]' neomacs-melpa-tests/src/parity_tests/
+```
+
+Two cautions on reading its output. **An empty literal in an *untracked* or
+modified file is normal** — that is an agent mid-record, and the empty literal
+is how the recording pass is supposed to start; check `git status` on the file
+before touching it. And **repairing one can surface a real divergence that the
+empty literal was masking**: filling in `aidermacs`' gave entry 37 and
+`ai-code`'s gave entry 38, both of which had been invisible for as long as the
+suites existed. So the sweep is not tidying — it is a way of finding bugs that
+were already caught and then dropped.
+
+**A package directory with clean porcelain is not evidence that nothing was
+done.** It is equally consistent with the package being finished and committed.
+`git log --oneline -- <pkg dir>` and the presence of the module in `mod.rs`
+distinguish the two; porcelain alone does not, and reading it as "untouched"
+loses a completed package's worth of work to a redo.
+
+## Mutating the package to test the tests
+
+**A mutation that does not mutate reads as a gap in the test.** Two ways this
+went wrong in one session, both making the matrix silently *under*-report:
+
+- `defvar` on an already-bound variable is a **no-op**. A mutation written as
+  `(defvar pkg-some-regexp "NEVER-MATCHES")` changes nothing, the workflow stays
+  green, and the honest-looking conclusion is "this workflow does not cover the
+  regexp". Use `setq`, and sanity-check a mutation by confirming at least one
+  workflow reddens.
+- A harness that extracts workflows by matching `fn NAME() {` immediately
+  followed by `let elisp_form` **skips every test carrying a doc comment**, which
+  in practice means it skips exactly the workflows whose behaviour was subtle
+  enough to need explaining. Two of `alchemist`'s six were silently outside its
+  matrix, and the run reported "4 workflows" without that being wrong enough to
+  notice.
+
+Both failures share a shape: the matrix reports a *smaller* claim than you think
+it does, and a smaller claim still looks like a passing result. Print the number
+of workflows the harness found and check it against the number in the file.
+
 
 ## Reducing a divergence
 
