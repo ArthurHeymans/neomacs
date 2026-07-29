@@ -1335,6 +1335,24 @@ GNU 31 carries the language in a sixth slot of each `treesit-font-lock-settings`
 entry: `(QUERY ENABLE FEATURE OVERRIDE nil LANGUAGE)`. A setting rebuilt with
 only the first four elements still fontifies in GNU and signals in Neomacs.
 
+> **Precondition — this is the one entry in this file that does not run from a
+> bare `emacs -Q --batch`.** It needs the **css tree-sitter grammar**, and
+> `(treesit-language-available-p 'css)` is `nil` in a stock session of *both*
+> editors. Without it the reduction dies at `(wrong-type-argument
+> treesit-parser-p)` before reaching any compile — identically in both, so it
+> reads as "does not reproduce" rather than as a missing grammar. Either
+> install one with `M-x treesit-install-language-grammar RET css`, or point at
+> the suite's pinned copy, which is what the harness itself does:
+>
+> ```elisp
+> (setq treesit-extra-load-path
+>       (list "tmp/melpa/tree-sitter-grammar-cache/css/\
+> dda5cfc5722c429eaba1c910ca32c2c0c5bb1a3f/home/.emacs.d/tree-sitter"))
+> ```
+>
+> Confirm `(treesit-language-available-p 'css)` is `t` before concluding
+> anything about the reduction below.
+
 ```elisp
 (require 'css-mode)
 (with-temp-buffer

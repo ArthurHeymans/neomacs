@@ -9,6 +9,7 @@ mod palette;
 mod practical;
 mod registry;
 mod remapping;
+mod workflows;
 
 const ATOM_ONE_DARK_THEME_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 const ATOM_ONE_DARK_THEME_TEST_PRELUDE: &str = r##"
