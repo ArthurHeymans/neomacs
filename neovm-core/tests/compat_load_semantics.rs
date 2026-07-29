@@ -86,6 +86,14 @@ fn compat_load_semantics_matches_gnu_emacs() {
     fs::write(&removed_autoload_path, "(fmakunbound 'vm-chain-removed)\n")
         .expect("write autoload removal fixture");
 
+    let late_interactive_autoload_path = fixture_dir.path().join("vm-ci-late-command.el");
+    fs::write(
+        &late_interactive_autoload_path,
+        "(defalias 'vm-ci-late-command
+           #'(lambda () (interactive) 'loaded-command))\n",
+    )
+    .expect("write call-interactively autoload fixture");
+
     let recursive_path = fixture_dir.path().join("recursive-load.el");
     fs::write(
         &recursive_path,
@@ -218,6 +226,57 @@ fn compat_load_semantics_matches_gnu_emacs() {
     (error error)))"#,
                 directory = elisp_string(fixture_dir.path())
             ),
+        },
+        LoadCase {
+            name: "call_interactively_propagates_noninteractive_autoload_failure",
+            form: r#"(progn
+  (autoload 'vm-ci-missing-plain "vm-ci-missing-plain-library" nil nil)
+  (condition-case error
+      (call-interactively 'vm-ci-missing-plain)
+    (error (car error))))"#
+                .to_owned(),
+        },
+        LoadCase {
+            name: "call_interactively_loads_before_testing_command_status",
+            form: format!(
+                r#"(let ((load-path (cons {directory} load-path)))
+  (autoload 'vm-ci-late-command "vm-ci-late-command" nil nil)
+  (call-interactively 'vm-ci-late-command))"#,
+                directory = elisp_string(fixture_dir.path())
+            ),
+        },
+        LoadCase {
+            name: "call_interactively_obtains_the_interactive_form_once",
+            form: r#"(let ((original (symbol-function 'interactive-form))
+       (calls 0))
+  (unwind-protect
+      (progn
+        (fset 'interactive-form
+              (lambda (command)
+                (setq calls (1+ calls))
+                (funcall original command)))
+        (fset 'vm-ci-single-form
+              (lambda (value) (interactive (list 9)) value))
+        (list (call-interactively 'vm-ci-single-form) calls))
+    (fset 'interactive-form original)
+    (fmakunbound 'vm-ci-single-form)))"#
+                .to_owned(),
+        },
+        LoadCase {
+            name: "call_interactively_accepts_symbol_interactive_form_property",
+            form: r#"(progn
+  (fset 'vm-ci-property-command (lambda (value) value))
+  (put 'vm-ci-property-command
+       'interactive-form
+       '(interactive (list 9)))
+  (unwind-protect
+      (call-interactively 'vm-ci-property-command)
+    (fmakunbound 'vm-ci-property-command)))"#
+                .to_owned(),
+        },
+        LoadCase {
+            name: "region_subr_interactive_form_matches_gnu",
+            form: "(interactive-form 'upcase-region)".to_owned(),
         },
         LoadCase {
             name: "load_with_code_conversion_preserves_utf_8_emacs_chars",

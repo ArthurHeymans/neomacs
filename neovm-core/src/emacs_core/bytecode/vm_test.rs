@@ -3116,6 +3116,93 @@ fn vm_call_interactively_uses_shared_runtime_planning() {
 }
 
 #[test]
+fn vm_call_interactively_resolves_noninteractive_autoload_before_commandp() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let fixture = dir.path().join("vm-ci-late-command.el");
+    std::fs::write(
+        &fixture,
+        "(defalias 'vm-ci-late-command
+           #'(lambda () (interactive) 'loaded-command))\n",
+    )
+    .expect("write call-interactively autoload fixture");
+
+    let mut eval = Context::new_vm_runtime_harness();
+    eval.obarray.set_symbol_value(
+        "load-path",
+        Value::list(vec![Value::string(dir.path().to_string_lossy())]),
+    );
+
+    let result = eval
+        .eval_str(
+            "(progn
+               (autoload 'vm-ci-late-command \"vm-ci-late-command\" nil nil)
+               (call-interactively 'vm-ci-late-command))",
+        )
+        .expect("call-interactively should resolve the non-interactive autoload");
+
+    assert_eq!(result, Value::symbol("loaded-command"));
+}
+
+#[test]
+fn vm_call_interactively_propagates_noninteractive_autoload_failure_before_commandp() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(
+            "(progn
+               (autoload 'vm-ci-missing-plain
+                         \"vm-ci-missing-plain-library\"
+                         nil nil)
+               (condition-case error
+                   (call-interactively 'vm-ci-missing-plain)
+                 (error (car error))))"
+        ),
+        "OK file-missing"
+    );
+}
+
+#[test]
+fn vm_call_interactively_uses_one_resolved_interactive_form() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(
+            "(let ((original (symbol-function 'interactive-form))
+                   (calls 0))
+               (unwind-protect
+                   (progn
+                     (fset 'interactive-form
+                           (lambda (command)
+                             (setq calls (1+ calls))
+                             (funcall original command)))
+                     (fset 'vm-ci-single-form
+                           (lambda (value) (interactive (list 9)) value))
+                     (list (call-interactively 'vm-ci-single-form) calls))
+                 (fset 'interactive-form original)
+                 (fmakunbound 'vm-ci-single-form)))"
+        ),
+        "OK (9 1)"
+    );
+}
+
+#[test]
+fn vm_call_interactively_accepts_symbol_interactive_form_property() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(
+            "(progn
+               (fset 'vm-ci-property-command (lambda (value) value))
+               (put 'vm-ci-property-command
+                    'interactive-form
+                    '(interactive (list 9)))
+               (unwind-protect
+                   (call-interactively 'vm-ci-property-command)
+                 (fmakunbound 'vm-ci-property-command)))"
+        ),
+        "OK 9"
+    );
+}
+
+#[test]
 fn vm_call_interactively_honors_function_cell_mutation_during_interactive_spec_eval() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

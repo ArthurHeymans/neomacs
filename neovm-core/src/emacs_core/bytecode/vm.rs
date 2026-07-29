@@ -5237,17 +5237,24 @@ impl<'a> Vm<'a> {
     }
 
     fn builtin_call_interactively_shared(&mut self, args: &[Value]) -> EvalResult {
-        let mut plan = crate::emacs_core::interactive::plan_call_interactively_in_state(
-            &self.ctx.obarray,
-            &self.ctx.interactive,
-            self.ctx.read_command_keys(),
-            args,
-        )?;
+        crate::emacs_core::interactive::validate_call_interactively_args(args)?;
+        let interactive_form =
+            self.call_function_with_roots(Value::symbol("interactive-form"), &[args[0]])?;
         self.with_vm_root_scope(|vm| {
             for value in args.iter().copied() {
                 vm.push_dynamic_vm_root(value);
             }
-            vm.push_dynamic_vm_root(plan.func);
+            vm.push_dynamic_vm_root(interactive_form);
+            let mut plan =
+                crate::emacs_core::interactive::plan_call_interactively_after_interactive_form_in_state(
+                    &vm.ctx.obarray,
+                    vm.ctx.read_command_keys(),
+                    args,
+                    interactive_form,
+                )?;
+            for value in plan.gc_roots() {
+                vm.push_dynamic_vm_root(value);
+            }
             let (_function, call_args) =
                 crate::emacs_core::interactive::resolve_call_interactively_target_and_args_with_vm_fallback(
                     vm.ctx,

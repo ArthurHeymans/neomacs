@@ -46,6 +46,21 @@ fn eval_one(src: &str) -> String {
     eval_all(src).into_iter().next().expect("at least one form")
 }
 
+fn plan_call_interactively_for_test(
+    eval: &mut Context,
+    args: &[Value],
+) -> Result<CallInteractivelyPlan, Flow> {
+    validate_call_interactively_args(args)?;
+    let interactive_form =
+        crate::emacs_core::builtins::symbols::builtin_interactive_form(eval, vec![args[0]])?;
+    plan_call_interactively_after_interactive_form_in_state(
+        &eval.obarray,
+        eval.read_command_keys(),
+        args,
+        interactive_form,
+    )
+}
+
 #[test]
 fn parse_interactive_code_entries_preserves_raw_unibyte_prompt_bytes() {
     let spec = crate::heap_types::LispString::from_unibyte(vec![b'a', 0xFF, b':', b' ']);
@@ -1295,21 +1310,15 @@ fn call_interactively_state_resolution_handles_default_and_noarg_cases() {
     ev.obarray
         .set_symbol_value("current-prefix-arg", Value::list(vec![Value::fixnum(4)]));
 
-    let mut builtin_plan = plan_call_interactively_in_state(
-        ev.obarray(),
-        &ev.interactive,
-        ev.read_command_keys(),
-        &[Value::symbol("forward-char")],
-    )
-    .expect("plan builtin default interactive command");
+    let mut builtin_plan =
+        plan_call_interactively_for_test(&mut ev, &[Value::symbol("forward-char")])
+            .expect("plan builtin default interactive command");
     let (_, builtin_args) = resolve_call_interactively_target_and_args_in_state(
         &mut ev.obarray,
         &mut Vec::new(),
         &mut ev.buffers,
         &ev.custom,
         ev.specpdl.as_slice(),
-        &ev.frames,
-        &ev.interactive,
         &mut builtin_plan,
     )
     .expect("resolve builtin default args")
@@ -1319,21 +1328,14 @@ fn call_interactively_state_resolution_handles_default_and_noarg_cases() {
     let lambda = ev
         .eval_str("(lambda () (interactive) 1)")
         .expect("eval lambda");
-    let mut lambda_plan = plan_call_interactively_in_state(
-        ev.obarray(),
-        &ev.interactive,
-        ev.read_command_keys(),
-        &[lambda],
-    )
-    .expect("plan interactive lambda");
+    let mut lambda_plan =
+        plan_call_interactively_for_test(&mut ev, &[lambda]).expect("plan interactive lambda");
     let (_, lambda_args) = resolve_call_interactively_target_and_args_in_state(
         &mut ev.obarray,
         &mut Vec::new(),
         &mut ev.buffers,
         &ev.custom,
         ev.specpdl.as_slice(),
-        &ev.frames,
-        &ev.interactive,
         &mut lambda_plan,
     )
     .expect("resolve lambda args")
@@ -1348,21 +1350,14 @@ fn call_interactively_state_resolution_defers_prompting_specs_to_eval() {
     let lambda = ev
         .eval_str("(lambda (x) (interactive \"sPrompt: \") x)")
         .expect("eval prompting lambda");
-    let mut plan = plan_call_interactively_in_state(
-        ev.obarray(),
-        &ev.interactive,
-        ev.read_command_keys(),
-        &[lambda],
-    )
-    .expect("plan prompting lambda");
+    let mut plan =
+        plan_call_interactively_for_test(&mut ev, &[lambda]).expect("plan prompting lambda");
     let resolved = resolve_call_interactively_target_and_args_in_state(
         &mut ev.obarray,
         &mut Vec::new(),
         &mut ev.buffers,
         &ev.custom,
         ev.specpdl.as_slice(),
-        &ev.frames,
-        &ev.interactive,
         &mut plan,
     )
     .expect("resolve prompting lambda");
@@ -1394,10 +1389,8 @@ fn call_interactively_state_resolution_handles_simple_string_codes_without_eval(
            (list raw num pt mk beg end evt up ignored))",
         )
         .expect("eval lambda");
-    let mut plan = plan_call_interactively_in_state(
-        ev.obarray(),
-        &ev.interactive,
-        ev.read_command_keys(),
+    let mut plan = plan_call_interactively_for_test(
+        &mut ev,
         &[lambda, Value::NIL, Value::vector(vec![event])],
     )
     .expect("plan simple string-code lambda");
@@ -1407,8 +1400,6 @@ fn call_interactively_state_resolution_handles_simple_string_codes_without_eval(
         &mut ev.buffers,
         &ev.custom,
         ev.specpdl.as_slice(),
-        &ev.frames,
-        &ev.interactive,
         &mut plan,
     )
     .expect("resolve simple string-code args")
@@ -1445,21 +1436,14 @@ fn call_interactively_state_resolution_applies_shift_selection_prefix_in_state()
     let lambda = ev
         .eval_str("(lambda (pt) (interactive \"^d\") pt)")
         .expect("eval lambda");
-    let mut plan = plan_call_interactively_in_state(
-        ev.obarray(),
-        &ev.interactive,
-        ev.read_command_keys(),
-        &[lambda],
-    )
-    .expect("plan shift-selection lambda");
+    let mut plan =
+        plan_call_interactively_for_test(&mut ev, &[lambda]).expect("plan shift-selection lambda");
     let (_, args) = resolve_call_interactively_target_and_args_in_state(
         &mut ev.obarray,
         &mut Vec::new(),
         &mut ev.buffers,
         &ev.custom,
         ev.specpdl.as_slice(),
-        &ev.frames,
-        &ev.interactive,
         &mut plan,
     )
     .expect("resolve shift-selection args")
@@ -1478,21 +1462,14 @@ fn call_interactively_state_resolution_handles_optional_coding_without_prefix() 
     let lambda = ev
         .eval_str("(lambda (coding) (interactive \"ZCoding: \") coding)")
         .expect("eval lambda");
-    let mut plan = plan_call_interactively_in_state(
-        ev.obarray(),
-        &ev.interactive,
-        ev.read_command_keys(),
-        &[lambda],
-    )
-    .expect("plan optional coding lambda");
+    let mut plan =
+        plan_call_interactively_for_test(&mut ev, &[lambda]).expect("plan optional coding lambda");
     let (_, args) = resolve_call_interactively_target_and_args_in_state(
         &mut ev.obarray,
         &mut Vec::new(),
         &mut ev.buffers,
         &ev.custom,
         ev.specpdl.as_slice(),
-        &ev.frames,
-        &ev.interactive,
         &mut plan,
     )
     .expect("resolve optional coding args")
@@ -4215,6 +4192,25 @@ fn call_interactively_non_command_signals_commandp_error() {
                 vec![Value::symbol("commandp"), Value::symbol("car")]
             );
         }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+}
+
+#[test]
+fn call_interactively_propagates_noninteractive_autoload_failure_before_commandp() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.eval_str(
+        "(autoload 'neovm-ci-missing-plain
+                   \"neovm-ci-missing-plain-library\"
+                   nil nil)",
+    )
+    .expect("install non-interactive autoload");
+
+    let result = builtin_call_interactively(&mut ev, vec![Value::symbol("neovm-ci-missing-plain")])
+        .expect_err("call-interactively should propagate the autoload failure");
+    match result {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "file-missing"),
         other => panic!("unexpected flow: {other:?}"),
     }
 }

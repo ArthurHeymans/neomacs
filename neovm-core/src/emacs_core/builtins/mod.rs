@@ -2568,23 +2568,32 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
     );
     ctx.defsubr("symbol-file", super::autoload::builtin_symbol_file, 0, None);
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "downcase-region",
         super::casefiddle::builtin_downcase_region,
         2,
         Some(3),
+        super::interactive::BuiltinInteractiveSpec::Form(
+            super::interactive::region_noncontiguous_interactive_spec,
+        ),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "upcase-region",
         super::casefiddle::builtin_upcase_region,
         2,
         Some(3),
+        super::interactive::BuiltinInteractiveSpec::Form(
+            super::interactive::region_noncontiguous_interactive_spec,
+        ),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "capitalize-region",
         super::casefiddle::builtin_capitalize_region,
         2,
         Some(3),
+        super::interactive::BuiltinInteractiveSpec::Form(
+            super::interactive::region_noncontiguous_interactive_spec,
+        ),
     );
     ctx.defsubr(
         "downcase-word",
@@ -7414,11 +7423,14 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "upcase-initials-region",
         super::casefiddle::builtin_upcase_initials_region,
         2,
         Some(3),
+        super::interactive::BuiltinInteractiveSpec::Form(
+            super::interactive::region_noncontiguous_interactive_spec,
+        ),
     );
     ctx.defsubr(
         "buffer-substring-no-properties",

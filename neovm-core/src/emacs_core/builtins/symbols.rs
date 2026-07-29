@@ -4829,7 +4829,21 @@ pub(crate) fn builtin_interactive_form(
             return Ok(prop);
         }
         match symbol_function_cell_in_obarray(&eval.obarray, symbol) {
-            Some(next) => fun = next,
+            Some(next) => {
+                // An autoload's boolean INTERACTIVE flag is only a cheap
+                // `commandp` hint.  GNU `interactive-form` always loads it to
+                // obtain the real spec, so do not let registry metadata turn
+                // that hint into a no-argument spec.
+                if !super::autoload::is_autoload_value(&next)
+                    && let Some(form) = crate::emacs_core::interactive::registry_interactive_form(
+                        &eval.interactive,
+                        symbol,
+                    )
+                {
+                    return Ok(form);
+                }
+                fun = next;
+            }
             None => return Ok(Value::NIL),
         }
     }
