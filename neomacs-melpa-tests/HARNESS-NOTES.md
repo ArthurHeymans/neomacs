@@ -1192,6 +1192,29 @@ it rather than asserted it. Harness at `tmp/afp-mutate.py`.
 Use it when you are unsure whether to replace a corpus, and when you want to know
 whether a new workflow adds coverage or restates it.
 
+**A half-masked path is worse than an unmasked one, because the next sweep's
+grep will not find it.** The repair that makes a test pass is not always the
+repair that unpins it. `airline_themes_runtime_has_no_hidden_asset_dependency_and_locates_every_entrypoint`
+asserts both `(locate-library "airline-themes")` and `(locate-library
+"powerline")` — a **sibling** install, `elpa/powerline-20221110.1956/` next to
+`elpa/airline-themes-20250502.1915/`. Masking the package's own directory turns
+the test green while leaving the dependency's install path fully spelled out:
+still layout-pinned, no longer greppable, and green enough that nobody looks
+again. Masking the **elpa root** as `[ELPA]` resolves both and keeps the part
+that carries meaning — each package's directory name and version.
+
+The rule is **mask at the layer the layout can move at, not at the string that
+happens to be failing.** Ask what the assertion is *for*, and mask the thing
+whose stability you are actually relying on. The same question caught the other
+member of this species: six digests computed by `(secure-hash 'sha256 source)`
+on a *filename*, which hashes the string and not the file, so they were path
+assertions laundered through a digest — invisible to a grep for the cache
+directory and to a name-based sweep alike, and a re-capture would have re-pinned
+the new path just as invisibly.
+
+Both were found by asking what the assertion is for rather than what makes it
+green, and in both cases the passing repair was the one that hid the problem.
+
 ## Before you replace a corpus
 
 **Read the existing corpus before deciding to replace it.** `workflows.rs` is a

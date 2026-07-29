@@ -7,6 +7,7 @@ mod arguments;
 mod commands;
 mod mode;
 mod registry;
+mod workflows;
 
 const ASTYLE_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 const ASTYLE_TEST_PRELUDE: &str = r##"
