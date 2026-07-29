@@ -171,6 +171,17 @@ fn compat_load_semantics_matches_gnu_emacs() {
             ),
         },
         LoadCase {
+            name: "autoload_definitions_are_recorded_in_load_history",
+            form: format!(
+                r#"(let ((load-history nil))
+  (load {path} nil nil t)
+  (let ((entry (car load-history)))
+    (list (and (member '(defun . vm-generated-fn) entry) t)
+          (and (member '(defun . vm-generated-old) entry) t))))"#,
+                path = elisp_string(&generated_metadata_path)
+            ),
+        },
+        LoadCase {
             name: "load_with_code_conversion_preserves_utf_8_emacs_chars",
             form: format!(
                 r#"(let ((sym 'neovm--utf8-emacs-probe))

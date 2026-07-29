@@ -115,9 +115,18 @@ pub(crate) enum EchoMessageClearResult {
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum LoadHistoryEntry {
     Variable(SymId),
-    Function(Value),
+    Function {
+        symbol: Value,
+        definition_kind: FunctionDefinitionKind,
+    },
     ProvidedFeature(Value),
     RequiredFeature(Value),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FunctionDefinitionKind {
+    Concrete,
+    Autoload,
 }
 
 #[derive(Clone, Copy, Debug, IntoStaticStr)]
@@ -129,10 +138,22 @@ enum TaggedLoadHistoryKind {
 }
 
 impl LoadHistoryEntry {
+    pub(crate) fn function(symbol: Value, definition: Value) -> Self {
+        let definition_kind = if super::autoload::is_autoload_value(&definition) {
+            FunctionDefinitionKind::Autoload
+        } else {
+            FunctionDefinitionKind::Concrete
+        };
+        Self::Function {
+            symbol,
+            definition_kind,
+        }
+    }
+
     fn into_lisp_value(self) -> Value {
         let (kind, subject) = match self {
             Self::Variable(symbol) => return value_from_symbol_id(symbol),
-            Self::Function(symbol) => (TaggedLoadHistoryKind::Defun, symbol),
+            Self::Function { symbol, .. } => (TaggedLoadHistoryKind::Defun, symbol),
             Self::ProvidedFeature(feature) => (TaggedLoadHistoryKind::Provide, feature),
             Self::RequiredFeature(feature) => (TaggedLoadHistoryKind::Require, feature),
         };
@@ -142,6 +163,16 @@ impl LoadHistoryEntry {
 
     fn should_deduplicate(self) -> bool {
         matches!(self, Self::RequiredFeature(_))
+    }
+
+    fn is_autoload_definition(self) -> bool {
+        matches!(
+            self,
+            Self::Function {
+                definition_kind: FunctionDefinitionKind::Autoload,
+                ..
+            }
+        )
     }
 }
 
@@ -12349,7 +12380,7 @@ impl Context {
     pub(crate) fn defalias_value(&mut self, sym: Value, def: Value) -> EvalResult {
         let plan = builtins::plan_defalias_in_obarray(self.obarray(), &[sym, def])?;
         let builtins::DefaliasPlan { action, result, .. } = plan;
-        self.record_load_history_entry(LoadHistoryEntry::Function(result));
+        self.record_load_history_entry(LoadHistoryEntry::function(result, def));
         self.record_defalias_function_history(result);
         match action {
             builtins::DefaliasAction::SetFunction { symbol, definition } => {
@@ -12494,6 +12525,15 @@ impl Context {
     }
 
     pub(crate) fn record_load_history_entry(&mut self, entry: LoadHistoryEntry) {
+        // GNU `defalias` omits autoload definitions while constructing a dump:
+        // those entries are bootstrap implementation detail and otherwise add
+        // substantial dead weight to the persisted load history.  Runtime
+        // package autoload files have dump-mode=nil and remain observable.
+        if entry.is_autoload_definition()
+            && self.visible_variable_value_or_nil("dump-mode").is_truthy()
+        {
+            return;
+        }
         let dedup = entry.should_deduplicate();
         let entry = entry.into_lisp_value();
         let current_load_list = self.visible_variable_value_or_nil("current-load-list");

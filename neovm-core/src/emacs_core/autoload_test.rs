@@ -827,6 +827,50 @@ fn autoload_registers_in_autoload_manager() {
 }
 
 #[test]
+fn autoload_uses_defalias_hook_and_indexes_the_resulting_function_cell() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let results = eval_all_with(
+        &mut ev,
+        r#"(setq vm-autoload-hook-log nil)
+           (put 'vm-hooked-autoload 'defalias-fset-function
+                (lambda (symbol definition)
+                  (setq vm-autoload-hook-log (list symbol definition))
+                  (fset symbol definition)))
+           (autoload 'vm-hooked-autoload "vm-hooked-file" nil t)
+           vm-autoload-hook-log"#,
+    );
+
+    assert_eq!(results[2], "OK vm-hooked-autoload");
+    assert_eq!(
+        results[3],
+        "OK (vm-hooked-autoload (autoload \"vm-hooked-file\" nil t nil))"
+    );
+    assert!(ev.autoloads.is_autoloaded("vm-hooked-autoload"));
+}
+
+#[test]
+fn autoload_load_history_distinguishes_runtime_from_dump_definitions() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((current-load-list (list "runtime-autoloads.el"))
+                 (dump-mode nil))
+             (autoload 'vm-runtime-autoload "vm-runtime-file")
+             current-load-list)
+           (let ((current-load-list (list "bootstrap-autoloads.el"))
+                 (dump-mode "pdump"))
+             (autoload 'vm-bootstrap-autoload "vm-bootstrap-file")
+             current-load-list)"#,
+    );
+
+    assert_eq!(
+        results[0],
+        "OK ((defun . vm-runtime-autoload) \"runtime-autoloads.el\")"
+    );
+    assert_eq!(results[1], "OK (\"bootstrap-autoloads.el\")");
+}
+
+#[test]
 fn autoload_sets_uninterned_symbol_function_cell_by_identity() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

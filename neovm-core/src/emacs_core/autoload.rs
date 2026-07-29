@@ -570,12 +570,20 @@ pub(crate) fn builtin_autoload_do_load_in_vm_runtime(
     }
 }
 
-pub(crate) fn register_autoload_in_state(
-    obarray: &mut Obarray,
-    autoloads: &mut AutoloadManager,
+enum AutoloadDefinitionPlan {
+    KeepExistingDefinition,
+    Define {
+        symbol: SymId,
+        symbol_value: Value,
+        definition: Value,
+    },
+}
+
+fn plan_autoload_definition(
+    obarray: &Obarray,
     args: &[Value],
     symbols_with_pos_enabled: bool,
-) -> EvalResult {
+) -> Result<AutoloadDefinitionPlan, Flow> {
     if args.len() < 2 || args.len() > 5 {
         return Err(signal(
             LispCondition::WrongNumberOfArguments,
@@ -602,36 +610,27 @@ pub(crate) fn register_autoload_in_state(
             )
         })?;
 
+    let file_val = args[1];
+    if !file_val.is_string() {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("stringp"), file_val],
+        ));
+    }
+
     // GNU Emacs eval.c:Fautoload — "If function is defined and not as an
     // autoload, don't override."  If the symbol already has a real (non-
     // autoload) function definition, return nil without touching it.
     if let Some(current) = obarray.symbol_function_id(name)
         && !is_autoload_value(&current)
     {
-        return Ok(Value::NIL);
+        return Ok(AutoloadDefinitionPlan::KeepExistingDefinition);
     }
 
-    let file_val = args[1];
-    let file = match file_val.as_lisp_string() {
-        Some(file) => file.clone(),
-        _ => {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("stringp"), file_val],
-            ));
-        }
-    };
-
     let docstring_val = args.get(2).cloned().unwrap_or(Value::NIL);
-    let docstring = docstring_val.as_lisp_string().cloned();
-
     let interactive_val = args.get(3).cloned().unwrap_or(Value::NIL);
-    let interactive = !interactive_val.is_nil();
-
     let type_val = args.get(4).cloned().unwrap_or(Value::NIL);
-    let autoload_type = AutoloadType::from_value(&type_val);
-
-    let autoload_form = Value::list(vec![
+    let definition = Value::list(vec![
         Value::symbol("autoload"),
         file_val,
         docstring_val,
@@ -639,18 +638,34 @@ pub(crate) fn register_autoload_in_state(
         type_val,
     ]);
 
-    obarray.set_symbol_function_id(name, autoload_form);
-    autoloads.register_symbol(
-        name,
-        AutoloadEntry {
-            file: file.clone(),
-            docstring,
-            interactive,
-            autoload_type,
-        },
-    );
+    Ok(AutoloadDefinitionPlan::Define {
+        symbol: name,
+        symbol_value: Value::from_sym_id(name),
+        definition,
+    })
+}
 
-    Ok(Value::from_sym_id(name))
+fn autoload_entry_from_function_cell(function: Value) -> Option<AutoloadEntry> {
+    if !is_autoload_value(&function) {
+        return None;
+    }
+    let fields = list_to_vec(&function)?;
+    let file = fields.get(1)?.as_lisp_string()?.clone();
+    let docstring = fields
+        .get(2)
+        .and_then(|value| value.as_lisp_string())
+        .cloned();
+    let interactive = fields.get(3).is_some_and(|value| value.is_truthy());
+    let autoload_type = fields
+        .get(4)
+        .map(AutoloadType::from_value)
+        .unwrap_or(AutoloadType::Function);
+    Some(AutoloadEntry {
+        file,
+        docstring,
+        interactive,
+        autoload_type,
+    })
 }
 
 /// `(autoload FUNCTION FILE &optional DOCSTRING INTERACTIVE TYPE)`
@@ -658,12 +673,41 @@ pub(crate) fn register_autoload_in_state(
 /// Callable builtin form used by `funcall`/`apply` and direct function calls.
 /// Arguments are already evaluated.
 pub(crate) fn builtin_autoload(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    register_autoload_in_state(
-        &mut eval.obarray,
-        &mut eval.autoloads,
-        &args,
-        eval.symbols_with_pos_enabled,
-    )
+    match plan_autoload_definition(&eval.obarray, &args, eval.symbols_with_pos_enabled)? {
+        AutoloadDefinitionPlan::KeepExistingDefinition => Ok(Value::NIL),
+        AutoloadDefinitionPlan::Define {
+            symbol,
+            symbol_value,
+            definition,
+        } => {
+            // GNU Fautoload delegates to Fdefalias.  Keep that semantic
+            // boundary intact so autoload definitions inherit load-history,
+            // function-history, advice hooks, and interactive-registry
+            // handling instead of maintaining a parallel definition path.
+            let roots = eval.save_specpdl_roots();
+            eval.push_specpdl_root(symbol_value);
+            eval.push_specpdl_root(definition);
+            let result =
+                super::builtins::misc_eval::builtin_defalias(eval, vec![symbol_value, definition]);
+
+            if result.is_ok() {
+                // AutoloadManager is an acceleration index, not a second
+                // source of truth.  Rebuild its entry from the function cell
+                // after the defalias hook has run, or remove a stale entry if
+                // the hook installed a different kind of definition.
+                let entry = eval
+                    .obarray
+                    .symbol_function_id(symbol)
+                    .and_then(autoload_entry_from_function_cell);
+                match entry {
+                    Some(entry) => eval.autoloads.register_symbol(symbol, entry),
+                    None => eval.autoloads.remove_symbol(symbol),
+                }
+            }
+            eval.restore_specpdl_roots(roots);
+            result
+        }
+    }
 }
 
 /// Context-aware `(symbol-file SYMBOL &optional TYPE)`.

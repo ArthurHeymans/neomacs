@@ -532,7 +532,13 @@ pub(crate) fn builtin_defalias(eval: &mut super::eval::Context, args: Vec<Value>
         docstring,
         result,
     } = plan;
-    eval.record_load_history_entry(crate::emacs_core::eval::LoadHistoryEntry::Function(result));
+    let definition = match &action {
+        DefaliasAction::SetFunction { definition, .. }
+        | DefaliasAction::CallHook { definition, .. } => *definition,
+    };
+    eval.record_load_history_entry(crate::emacs_core::eval::LoadHistoryEntry::function(
+        result, definition,
+    ));
     eval.record_defalias_function_history(result);
     match action {
         DefaliasAction::SetFunction { symbol, definition } => {
