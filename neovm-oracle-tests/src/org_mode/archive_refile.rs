@@ -396,9 +396,7 @@ fn org_archive_all_done_tag_then_move_old_combo() {
 fn org_archive_property_locations_hooks_files_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r##""OK ((\"archive-a.org\" \"* Project Archive\") (\"archive-b.org\" \"* Other Archive\") ((#(\"Task A\" 0 6 (fontified nil)) 2 (\"done\")) (#(\"Task B\" 0 6 (fontified nil)) 2 (\"closed\"))) (\"archive-a.org\" \"archive-b.org\") (\"archive-a.org\" \"archive-b.org\" \"source.org\") \"#+CATEGORY: Cases\n* Project :client:\n:PROPERTIES:\n:ARCHIVE: <root>/archive-a.org::* Project Archive\n:END:\n** TODO Active\n* Other :ops:\n:PROPERTIES:\n:ARCHIVE: <root>/archive-b.org::* Other Archive\n:END:\n\" \"\nArchived entries from file <root>/source.org\n\n\n* Project Archive\n\n** DONE Task A                                                  :client:done:\n:PROPERTIES:\n:ARCHIVE_FILE: <root>/source.org\n:ARCHIVE_CATEGORY: Cases\n:ARCHIVE_TODO: DONE\n:ARCHIVE_OLPATH: Project\n:ARCHIVE_ITAGS: client\n:ARCHIVE_LTAGS: done\n:END:\nBody A\n\" \"\nArchived entries from file <root>/source.org\n\n\n* Other Archive\n\n** DONE Task B                                                   :ops:closed:\n:PROPERTIES:\n:ARCHIVE_FILE: <root>/source.org\n:ARCHIVE_CATEGORY: Cases\n:ARCHIVE_TODO: DONE\n:ARCHIVE_OLPATH: Other\n:ARCHIVE_ITAGS: ops\n:ARCHIVE_LTAGS: closed\n:END:\nBody B\n\")""##
-    ]];
+    let expect = expect_test::expect![[r##""OK ((\"archive-a.org\" \"* Project Archive\") (\"archive-b.org\" \"* Other Archive\") ((\"Task A\" 2 (\"done\")) (\"Task B\" 2 (\"closed\"))) (\"archive-a.org\" \"archive-b.org\") (\"archive-a.org\" \"archive-b.org\" \"source.org\") \"#+CATEGORY: Cases\n* Project :client:\n:PROPERTIES:\n:ARCHIVE: <root>/archive-a.org::* Project Archive\n:END:\n** TODO Active\n* Other :ops:\n:PROPERTIES:\n:ARCHIVE: <root>/archive-b.org::* Other Archive\n:END:\n\" \"\nArchived entries from file <root>/source.org\n\n\n* Project Archive\n\n** DONE Task A                                                  :client:done:\n:PROPERTIES:\n:ARCHIVE_FILE: <root>/source.org\n:ARCHIVE_CATEGORY: Cases\n:ARCHIVE_TODO: DONE\n:ARCHIVE_OLPATH: Project\n:ARCHIVE_ITAGS: client\n:ARCHIVE_LTAGS: done\n:END:\nBody A\n\" \"\nArchived entries from file <root>/source.org\n\n\n* Other Archive\n\n** DONE Task B                                                   :ops:closed:\n:PROPERTIES:\n:ARCHIVE_FILE: <root>/source.org\n:ARCHIVE_CATEGORY: Cases\n:ARCHIVE_TODO: DONE\n:ARCHIVE_OLPATH: Other\n:ARCHIVE_ITAGS: ops\n:ARCHIVE_LTAGS: closed\n:END:\nBody B\n\")""##]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -490,9 +488,7 @@ fn org_archive_property_locations_hooks_files_combo() {
 fn org_refile_then_archive_logged_context_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r##""OK (((#(\"Alpha\" 0 5 (fontified nil)) 3 (\"work\"))) \"** DONE Beta :work:\nBeta body\n\" \"#+CATEGORY: Flow\n* Inbox :inbox:\n* Projects :project:\n** Target :client:\nTarget body\n*** TODO Alpha                                                         :work:\nAlpha body\n\" \"\nArchived entries from file <root>/tasks.org\n\n\n* Archive\n\n** DONE Beta                                                     :inbox:work:\n:PROPERTIES:\n:ARCHIVE_FILE: <root>/tasks.org\n:ARCHIVE_OLPATH: Inbox\n:ARCHIVE_CATEGORY: Flow\n:ARCHIVE_TODO: DONE\n:ARCHIVE_ITAGS: inbox\n:ARCHIVE_LTAGS: work\n:END:\nBeta body\n\" ((#(\"Inbox\" 0 5 (fontified nil)) 1 nil (\"inbox\") nil nil) (#(\"Projects\" 0 8 (fontified nil)) 1 nil (\"project\") nil nil) (#(\"Target\" 0 6 (fontified nil)) 2 nil (\"client\") nil nil) (#(\"Alpha\" 0 5 (fontified nil)) 3 #(\"TODO\" 0 4 (fontified nil)) (\"work\") nil nil)))""##
-    ]];
+    let expect = expect_test::expect![[r##""OK (((\"Alpha\" 3 (\"work\"))) \"** DONE Beta :work:\nBeta body\n\" \"#+CATEGORY: Flow\n* Inbox :inbox:\n* Projects :project:\n** Target :client:\nTarget body\n*** TODO Alpha                                                         :work:\nAlpha body\n\" \"\nArchived entries from file <root>/tasks.org\n\n\n* Archive\n\n** DONE Beta                                                     :inbox:work:\n:PROPERTIES:\n:ARCHIVE_FILE: <root>/tasks.org\n:ARCHIVE_OLPATH: Inbox\n:ARCHIVE_CATEGORY: Flow\n:ARCHIVE_TODO: DONE\n:ARCHIVE_ITAGS: inbox\n:ARCHIVE_LTAGS: work\n:END:\nBeta body\n\" ((\"Inbox\" 1 nil (\"inbox\") nil nil) (\"Projects\" 1 nil (\"project\") nil nil) (\"Target\" 2 nil (\"client\") nil nil) (\"Alpha\" 3 \"TODO\" (\"work\") nil nil)))""##]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -744,9 +740,7 @@ fn org_refile_targets_outline_path_markers_deep_state_combo() {
 fn org_refile_active_region_reverse_order_log_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK ((#(\"Loose note line\" 0 15 (fontified nil)) #(\"Task A\" 0 6 (fontified nil))) \"org-refile-last-stored\" \"* Inbox\n\n** TODO Task B :inbox:\nTask B body\n* Projects\n** Target\n*** Existing child\n** Loose note line\nContinued context\n*** TODO Task A                                                       :inbox:\nTask body\n\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK ((\"Loose note line\" \"Task A\") \"org-refile-last-stored\" \"* Inbox\n\n** TODO Task B :inbox:\nTask B body\n* Projects\n** Target\n*** Existing child\n** Loose note line\nContinued context\n*** TODO Task A                                                       :inbox:\nTask body\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)

@@ -398,9 +398,7 @@ fn org_agenda_priority_effort_source_mutation_combo() {
 fn org_agenda_bulk_mark_toggle_regexp_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK ((2 nil (#(\"Beta\" 0 4 (fontified nil)) #(\"Alpha\" 0 5 (fontified nil)))) (0 nil) 2 \"Global list of TODO items of type: ALL\nPress ‘N r’ (e.g. ‘0 r’) to search again: (0)[ALL] (1)DONE (2)TODO\nBulk:   TODO Alpha                                                       :work:\nBulk:   TODO Beta                                                        :home:\n\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK ((2 nil (\"Beta\" \"Alpha\")) (0 nil) 2 \"Global list of TODO items of type: ALL\nPress ‘N r’ (e.g. ‘0 r’) to search again: (0)[ALL] (1)DONE (2)TODO\nBulk:   TODO Alpha                                                       :work:\nBulk:   TODO Beta                                                        :home:\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -617,9 +615,7 @@ CLOCK: [2026-05-28 Thu 08:00]--[2026-05-28 Thu 08:45] =>  0:45
 fn org_agenda_entry_text_switch_context_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK (nil (nil nil nil nil) t (#(\"Alpha\" 0 5 (fontified nil)) \"* TODO Alpha :work:\") nil \"Global list of TODO items of type: ALL\nPress ‘N r’ (e.g. ‘0 r’) to search again: (0)[ALL] (1)DONE (2)TODO\nText:   TODO Alpha                                                       :work:\nText:   TODO Beta                                                        :home:\n\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (nil (nil nil nil nil) t (\"Alpha\" \"* TODO Alpha :work:\") nil \"Global list of TODO items of type: ALL\nPress ‘N r’ (e.g. ‘0 r’) to search again: (0)[ALL] (1)DONE (2)TODO\nText:   TODO Alpha                                                       :work:\nText:   TODO Beta                                                        :home:\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -830,9 +826,7 @@ DEADLINE: <2026-05-20 Wed +1w>
 fn org_agenda_date_shift_redo_marker_source_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r##""OK ((t t t nil t nil) ((\"Shift:        TODO Window                                           :work:ship:\" \"timestamp\" #(\"TODO\" 0 4 (fontified nil)) nil nil nil #(\"Window\" 0 6 (fontified nil)))) nil (t t t) \" 9:00...... Shift:        Scheduled: TODO Window                    :work:ship:\" \"13:00-14:00 Shift:        TODO Range                                :work:call:\" (t t t t) (t t t t nil) ((\"Shift:        TODO Window                                           :work:ship:\" \"timestamp\" #(\"TODO\" 0 4 (fontified nil)) nil nil nil #(\"Window\" 0 6 (fontified nil)))) \"#+CATEGORY: Shift\n* TODO Window :work:ship:\nSCHEDULED: <2026-05-29 Fri 09:00>\nDEADLINE: <2026-05-29 Fri>\n:PROPERTIES:\n:Effort: 1:00\n:END:\n* TODO Range :work:call:\n<2026-05-27 Wed 15:00-16:00>\n* WAIT Future :home:\nSCHEDULED: <2026-05-28 Thu 08:30>\n\")""##
-    ]];
+    let expect = expect_test::expect![[r##""OK ((t t t nil t nil) ((\"Shift:        TODO Window                                           :work:ship:\" \"timestamp\" \"TODO\" nil nil nil \"Window\")) nil (t t t) \" 9:00...... Shift:        Scheduled: TODO Window                    :work:ship:\" \"13:00-14:00 Shift:        TODO Range                                :work:call:\" (t t t t) (t t t t nil) ((\"Shift:        TODO Window                                           :work:ship:\" \"timestamp\" \"TODO\" nil nil nil \"Window\")) \"#+CATEGORY: Shift\n* TODO Window :work:ship:\nSCHEDULED: <2026-05-29 Fri 09:00>\nDEADLINE: <2026-05-29 Fri>\n:PROPERTIES:\n:Effort: 1:00\n:END:\n* TODO Range :work:call:\n<2026-05-27 Wed 15:00-16:00>\n* WAIT Future :home:\nSCHEDULED: <2026-05-28 Thu 08:30>\n\")""##]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
   (require 'org)
