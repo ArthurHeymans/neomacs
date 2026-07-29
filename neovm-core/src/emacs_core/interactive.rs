@@ -22,7 +22,8 @@ use super::keyboard::pure::{
     KEY_CHAR_SUPER, make_event_array_value,
 };
 use super::keymap::{
-    KeymapMarker, command_remapping_command_name as keymap_command_remapping_command_name,
+    DefaultBindingMode, KeymapMarker,
+    command_remapping_command_name as keymap_command_remapping_command_name,
     command_remapping_lookup_in_keymaps as keymap_command_remapping_lookup_in_keymaps,
     command_remapping_lookup_in_lisp_keymap as keymap_command_remapping_lookup_in_lisp_keymap,
     command_remapping_normalize_target as keymap_command_remapping_normalize_target,
@@ -3317,11 +3318,15 @@ pub(crate) fn builtin_key_binding_impl(
     }
 
     let emacs_events: Vec<Value> = events.iter().map(key_event_to_emacs_event).collect();
-    let accept_default = args.get(1).is_some_and(|v| v.is_truthy());
-    Ok(
-        resolve_active_key_binding(ctx, &emacs_events, accept_default, no_remap, args.get(3))?
-            .binding,
-    )
+    let default_binding_mode = DefaultBindingMode::from(args.get(1).is_some_and(|v| v.is_truthy()));
+    Ok(resolve_active_key_binding(
+        ctx,
+        &emacs_events,
+        default_binding_mode,
+        no_remap,
+        args.get(3),
+    )?
+    .binding)
 }
 
 /// `(local-key-binding KEY &optional ACCEPT-DEFAULTS)`

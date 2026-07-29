@@ -238,3 +238,56 @@ fn compat_keymap_semantics_matches_gnu_emacs() {
         );
     }
 }
+
+#[test]
+fn command_dispatch_accepts_default_keymap_bindings_like_gnu_emacs() {
+    if !oracle_enabled() {
+        eprintln!(
+            "skipping default keymap dispatch audit: set NEOVM_FORCE_ORACLE_PATH or place GNU Emacs mirror alongside the repo"
+        );
+        return;
+    }
+
+    let form = r#"(progn
+  (defvar neovm-default-binding-events nil)
+  (defun neovm-default-binding-local-fallback ()
+    (interactive)
+    (push 'local-fallback neovm-default-binding-events))
+  (defun neovm-default-binding-local-specific ()
+    (interactive)
+    (push 'local-specific neovm-default-binding-events))
+  (defun neovm-default-binding-override-fallback ()
+    (interactive)
+    (push 'override-fallback neovm-default-binding-events))
+  (let ((buffer (generate-new-buffer " *neovm-default-binding*"))
+        (local-map (make-sparse-keymap))
+        (override-map (make-sparse-keymap)))
+    (unwind-protect
+        (save-window-excursion
+          (set-window-buffer (selected-window) buffer)
+          (with-current-buffer buffer
+            (setq neovm-default-binding-events nil)
+            (define-key local-map [t] #'neovm-default-binding-local-fallback)
+            (define-key local-map (kbd "x") #'neovm-default-binding-local-specific)
+            (define-key override-map [t] #'neovm-default-binding-override-fallback)
+            (use-local-map local-map)
+            (execute-kbd-macro (kbd "!"))
+            (execute-kbd-macro (kbd "x"))
+            (let ((overriding-local-map override-map))
+              (execute-kbd-macro (kbd "x")))
+            (list
+             (nreverse neovm-default-binding-events)
+             (buffer-string)
+             (lookup-key local-map [t])
+             (key-binding (kbd "!"))
+             (let ((overriding-local-map override-map))
+               (key-binding (kbd "x") t)))))
+      (kill-buffer buffer))))"#;
+
+    let gnu = run_oracle_eval(form).expect("GNU Emacs evaluation");
+    let neovm = run_neovm_eval(form).expect("NeoVM evaluation");
+    assert_eq!(
+        neovm, gnu,
+        "command dispatch default keymap binding semantics differ from GNU Emacs"
+    );
+}

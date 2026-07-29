@@ -3504,7 +3504,8 @@ impl crate::emacs_core::eval::Context {
         options: ReadKeySequenceOptions,
     ) -> Result<(Vec<Value>, Value), crate::emacs_core::error::Flow> {
         use crate::emacs_core::keymap::{
-            resolve_active_key_binding, resolve_prefix_keymap_binding_in_obarray,
+            DefaultBindingMode, resolve_active_key_binding,
+            resolve_prefix_keymap_binding_in_obarray,
         };
 
         self.sync_keyboard_terminal_owner();
@@ -3683,7 +3684,7 @@ impl crate::emacs_core::eval::Context {
             let pre_function_key_resolution = match resolve_active_key_binding(
                 self,
                 &translated_events,
-                false,
+                DefaultBindingMode::Accept,
                 false,
                 lookup_position.as_ref(),
             ) {
@@ -3800,7 +3801,7 @@ impl crate::emacs_core::eval::Context {
                     match resolve_active_key_binding(
                         self,
                         &translated_events,
-                        false,
+                        DefaultBindingMode::Accept,
                         false,
                         lookup_position.as_ref(),
                     ) {
@@ -5310,7 +5311,7 @@ impl crate::emacs_core::eval::Context {
         events: &[Value],
         lookup_position: Option<&Value>,
     ) -> Result<Option<UndefinedMouseSequenceFallback>, crate::emacs_core::error::Flow> {
-        use crate::emacs_core::keymap::resolve_active_key_binding;
+        use crate::emacs_core::keymap::{DefaultBindingMode, resolve_active_key_binding};
 
         let Some(last_index) = events.len().checked_sub(1) else {
             return Ok(None);
@@ -5333,7 +5334,7 @@ impl crate::emacs_core::eval::Context {
                     let resolved = resolve_active_key_binding(
                         self,
                         &rewritten_events,
-                        false,
+                        DefaultBindingMode::Accept,
                         false,
                         lookup_position,
                     )?;

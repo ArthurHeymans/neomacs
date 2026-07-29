@@ -2440,6 +2440,34 @@ pub(crate) struct ActiveKeyBindingResolution {
     pub binding: Value,
 }
 
+/// Whether `(t . BINDING)` entries participate in active keymap lookup.
+///
+/// GNU's command reader always accepts these catch-all bindings, while Lisp
+/// inspection APIs such as `key-binding` expose an `ACCEPT-DEFAULT` argument.
+/// Keeping those two modes distinct in the type system prevents command
+/// dispatch from accidentally inheriting the inspection API's default.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DefaultBindingMode {
+    Ignore,
+    Accept,
+}
+
+impl DefaultBindingMode {
+    fn accepts_default(self) -> bool {
+        matches!(self, Self::Accept)
+    }
+}
+
+impl From<bool> for DefaultBindingMode {
+    fn from(accept_default: bool) -> Self {
+        if accept_default {
+            Self::Accept
+        } else {
+            Self::Ignore
+        }
+    }
+}
+
 pub(crate) fn is_plain_printable_emacs_event(event: &Value) -> bool {
     let Some(ch) = (match event.kind() {
         ValueKind::Fixnum(code) if (code & KEY_CHAR_MOD_MASK) == 0 => char::from_u32(code as u32),
@@ -2454,7 +2482,7 @@ pub(crate) fn is_plain_printable_emacs_event(event: &Value) -> bool {
 pub(crate) fn resolve_active_key_binding(
     ctx: &mut Context,
     events: &[Value],
-    accept_default: bool,
+    default_binding_mode: DefaultBindingMode,
     no_remap: bool,
     position: Option<&Value>,
 ) -> Result<ActiveKeyBindingResolution, Flow> {
@@ -2473,8 +2501,12 @@ pub(crate) fn resolve_active_key_binding(
     let root_scope = ctx.save_specpdl_roots();
     ctx.push_specpdl_root(holder);
     let result = (|| -> Result<ActiveKeyBindingResolution, Flow> {
-        let lookup =
-            lookup_key_in_keymaps_in_obarray_runtime(ctx, &active_maps, events, accept_default)?;
+        let lookup = lookup_key_in_keymaps_in_obarray_runtime(
+            ctx,
+            &active_maps,
+            events,
+            default_binding_mode.accepts_default(),
+        )?;
         let binding = if !lookup.is_nil() && !lookup.is_fixnum() {
             key_binding_apply_remap_in_active_maps(ctx, &active_maps, lookup, no_remap)?
         } else if events.len() == 1 && is_plain_printable_emacs_event(&events[0]) {
