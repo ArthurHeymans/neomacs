@@ -1409,6 +1409,70 @@ third element naming the function where GNU's carries two. And Neomacs's
 compiled query prints as a record exposing its language and source pattern
 where GNU's prints as the opaque `#<treesit-compiled-query>`.
 
+## 43. `autoload` does not record its definition in `load-history`
+
+`defalias` attaches a `(defun . SYMBOL)` entry to the loading file's
+`load-history` record; `autoload`, which GNU implements *as* a `defalias`, does
+not in Neomacs. The file's other entries are all present, so the omission is
+specific to the autoload.
+
+```elisp
+;; a file containing
+;;   (autoload 'lh-probe-command "lh-probe-lib" "Docstring." t)
+;;   (defvar lh-probe-var 1)
+;;   (defun lh-probe-real-fn () nil)
+;;   (provide 'lh-probe)
+(cdr (assoc (expand-file-name "lh-probe.el") load-history))
+;; GNU     => ((defun . lh-probe-command) lh-probe-var
+;;             (defun . lh-probe-real-fn) (provide . lh-probe))
+;; Neomacs => (lh-probe-var (defun . lh-probe-real-fn) (provide . lh-probe))
+```
+
+**It is the `autoload` function, not autoload-ness of the definition.** The
+control is the decisive one and was run in both editors -- handing `defalias` an
+autoload object directly is recorded by both, so nothing rejects autoloads as
+such:
+
+| defined by | GNU | Neomacs |
+|---|---|---|
+| `(defalias 'x (lambda () nil))` | `(defun . x)` | same |
+| `(defalias 'x (list 'autoload …))` | `(defun . x)` | same |
+| `(autoload 'x "lib" nil t)` | `(defun . x)` | **absent** |
+
+GNU records it in `defalias` at `src/data.c:970`, which attaches for every
+definition except while dumping:
+
+```c
+bool autoload = AUTOLOADP (definition);
+if (!will_dump_p () || !autoload)
+  LOADHIST_ATTACH (Fcons (Qdefun, symbol));
+```
+
+and `Fautoload` (`src/eval.c`) ends in `return Fdefalias (function, ...)`, so
+the autoload path reaches the same attach. Neomacs's `autoload` does not go
+through whatever its `defalias` uses to record the entry.
+
+**The consequence is that unloading leaves the commands behind.**
+`unload-feature` undoes definitions by walking these entries, so an autoloaded
+command survives the unload and stays in `M-x`, pointing at a file the user
+just unloaded:
+
+```elisp
+;; a file containing (autoload 'lh-feat-command "lh-feat-lib" nil t)
+(load "lh-feat.el") (unload-feature 'lh-feat t) (fboundp 'lh-feat-command)
+;; GNU     => nil
+;; Neomacs => t
+```
+
+`symbol-file` is *not* affected -- it returns nil for an autoloaded symbol in
+both editors, so `describe-function` is not where this shows up.
+
+Affects: `auto-dark` (1).
+`registry.rs auto_dark_generated_autoload_exposes_only_global_mode_before_activation`
+reads the autoload file's `load-history` record and gets
+`((provide . auto-dark-autoloads))` where GNU gives
+`((defun . auto-dark-mode) (provide . auto-dark-autoloads))`.
+
 ## Behaviour that is NOT a divergence
 
 Recorded so nobody re-investigates them:

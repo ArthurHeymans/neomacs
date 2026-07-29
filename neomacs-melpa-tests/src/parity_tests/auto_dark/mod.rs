@@ -8,6 +8,7 @@ mod lifecycle;
 mod listeners;
 mod registry;
 mod themes;
+mod workflows;
 
 const AUTO_DARK_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 const AUTO_DARK_TEST_PRELUDE: &str = r##"

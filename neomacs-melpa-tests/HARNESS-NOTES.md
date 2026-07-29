@@ -1000,6 +1000,40 @@ Measured properly, ample sets 550 faces, 34 already exist at bare startup, and
 **21 of the 34 lose at least one stock attribute** — that is the mechanism's real
 size.
 
+**A test can be wrong about its subject while being right about everything a
+reader checks.** This is not the fixture-points-at-the-wrong-thing failure; the
+fixture is correct, the path is real, and the assertion still cannot see the
+feature. atom-one-dark-theme's `..._registered_hook_applies_real_html_font_lock_workflow`
+enters a real `html-mode` buffer, runs the real `after-change-major-mode-hook`,
+fontifies for real, and pins the `face` text property of six tokens. Every
+signal a reviewer scans for is present and correct. **All six values are
+identical with the remapping disabled** — measured, not reasoned about — because
+`face-remapping-alist` is buffer-local and consumed by the display engine, and
+never touches the `face` property. Six of that test's seven assertions cannot
+distinguish the package's whole purpose working from it switched off; only the
+`face-remapping-alist` element riding along in the same returned list saves it.
+
+The general shape: **ask what the assertion would read if the feature were
+removed, and go and measure it** — do not reason about it, because the reasoning
+that picked the assertion in the first place is the reasoning that will clear
+it. Where the answer is "the same", the test is documenting the path, not the
+behaviour, and something else has to carry the finding. The cheap check is to
+disable the feature by its own configuration variable and re-run the same
+observation; if the snapshot does not move, the assertion is not about the
+feature.
+
+Two live examples of the same discipline catching a *wrong claim of mine* before
+it shipped, both in this file's own subject matter. In auto-complete the
+automatic trigger looked untested — every test sets `this-command` by hand and
+calls `ac-handle-post-command` — but driving it faithfully showed
+`call-interactively` sets neither `this-command` nor runs `post-command-hook` in
+batch, and even with both simulated and `sit-for` letting the idle timer run,
+`ac-start` yields no candidates. The corpus's simulation is what is *reachable*,
+not laziness. And in auto-dark a control written to prove the package's `2>&1`
+redirect was load-bearing proved the opposite: `shell-command-to-string` merges
+standard error itself, so a stderr-only reply is captured with or without it.
+Both claims were plausible, both were wrong, and both cost one probe to check.
+
 **If a measurement is not behaviour, do not pin it at all.** An amread-mode
 initial-delay assertion read 0 tenths in a probe and 17 under UPDATE_EXPECT on
 identical code, because the baseline is taken before the mode-enabling call
