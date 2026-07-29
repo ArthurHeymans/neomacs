@@ -8,6 +8,7 @@ mod lifecycle;
 mod palettes;
 mod registry;
 mod rendering;
+mod workflows;
 
 const ALABASTER_THEMES_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 const TRUE_COLOR_PRELUDE: &str = r##"

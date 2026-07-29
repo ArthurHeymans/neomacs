@@ -1185,6 +1185,60 @@ marker, or a leading option character. Affects: `ai-code` (1) —
 filename of its own and opens no file at any position.
 
 
+## 39. `easy-menu-add-item` drops a submenu that carries any property
+
+The whole entry goes — key, label, binding and property together — leaving a
+degenerate `(nil (menu-item nil))` where the submenu should be.
+
+```elisp
+(progn
+  (require 'easymenu)
+  (easy-menu-define sub nil "" '("Sub" :help "h" ["I" ignore]))
+  (easy-menu-define top nil "" '("Top"))
+  (easy-menu-add-item top nil sub)
+  (let (out) (map-keymap (lambda (k v) (push (list k v) out)) top) out))
+;; GNU     => ((Sub (menu-item "Sub" (keymap "Sub" (I menu-item "I" ignore)) :help "h")))
+;; Neomacs => ((nil (menu-item nil)))
+```
+
+**It is not `:visible`, and it is not the submenu-keymap path.** The controls
+are what make the entry precise, and each was run in both editors:
+
+| submenu carries | GNU | Neomacs |
+|---|---|---|
+| no property | `(Sub (menu-item "Sub" (keymap …)))` | same |
+| `:visible t` | `(Sub (menu-item "Sub" (keymap …)))` | same |
+| `:visible foo` | `… :visible foo` | **`(nil (menu-item nil))`** |
+| `:enable foo` | `… :enable foo` | **`(nil (menu-item nil))`** |
+| `:help "h"` | `… :help "h"` | **`(nil (menu-item nil))`** |
+
+`:visible t` is the decisive control: easymenu optimises a constant-true
+`:visible` away, leaving an empty property list, and then the two agree. So the
+trigger is the *presence of a surviving property*, not any particular one.
+
+**And the keymap layer is innocent.** Building the identical structure by hand
+agrees in both editors, so `menu-item` storage, submenu keymaps and property
+retention are all correct and the loss is inside easymenu's splicing:
+
+```elisp
+(let ((m (make-sparse-keymap "Top")) (sub (make-sparse-keymap "Sub")))
+  (define-key sub [i] (list 'menu-item "I" 'ignore))
+  (define-key m [Sub] (list 'menu-item "Sub" sub :help "h"))
+  (let (out) (map-keymap (lambda (k v) (push (list k v) out)) m) out))
+;; both => ((Sub (menu-item "Sub" (keymap (i menu-item "I" ignore) "Sub") :help "h")))
+```
+
+Blast radius is wider than the package that surfaced it: a propertied submenu
+spliced with `easy-menu-add-item` is an ordinary way to build a menu, and the
+failure is silent — the menu simply has a hole where the submenu should be,
+with no error and nothing in `*Messages*`.
+
+Affects: `anju` (6). `anju-context-menu.el:866` defines the Hide/Show submenu
+with `easy-menu-define … '("Hide/Show" :visible hs-minor-mode …)` and `:981`
+splices it with `easy-menu-add-item`; all six of that package's Neomacs-only
+failures are menus built that way — four in `context_menu.rs`, two in
+`initialization.rs`.
+
 ## Behaviour that is NOT a divergence
 
 Recorded so nobody re-investigates them:
