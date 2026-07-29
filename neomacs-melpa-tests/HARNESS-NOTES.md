@@ -84,6 +84,20 @@ printer's representation is not the value.
 normaliser breaks string identity, so probe output containing `#1=` sharing
 markers never matches. Applies whenever a value repeats.
 
+**Sometimes a probe cannot reproduce the condition at all, and then a clean
+probe is not weak evidence — it is no evidence.** `dir-locals-find-file` stops
+its upward walk at `abbreviated-home-dir`, computed from `$HOME` at process
+start. A probe driver that sets `HOME` to its own fixture directory therefore
+*cannot* see the repository's `.dir-locals.el` above the sandbox: the walk stops
+first, the file gets the mode's own `fill-column`, and the trap looks dead. Under
+the harness — sandbox below `tmp/melpa/`, `HOME` at `<root>/home` — the same file
+gets the repository's 72. One agent nearly wrote "does not apply here" into a
+commit on the strength of the clean probe.
+
+So a probe driver must mirror the harness's directory layout and `HOME`, not
+merely its package set. And when a probe says a known trap is absent, probe the
+*mechanism* rather than trusting the symptom.
+
 **And a probe driver is usually the *more forgiving* environment, which is the
 wrong way round for a prototype.** A probe that calls `package-initialize` loads
 every installed package, and one of them may `require` a library the harness's
@@ -885,6 +899,25 @@ absent.
 **`popup-tip` never returns under `--batch`** — it waits for an event to dismiss
 the tooltip, so any popup path that really has something to show is unreachable.
 Same family as "helm cannot be driven in batch".
+
+## Measuring a suite instead of judging it
+
+**Mutate the package and see which tests go red.** Reading a corpus tells you
+what it *looks* like it covers; mutating the package tells you what it actually
+catches. aggressive-fill-paragraph was checked with 7 mutated copies against 11
+tests, and the targeting came out precise: killing the comments-only dispatch
+reddened exactly one workflow, disabling the suppression predicate exactly two,
+and four deeper mutations reddened all seven.
+
+It also answered the read-before-replacing question with a measurement rather
+than an opinion. The three modules that agent **kept** caught six of the seven
+mutations and missed one — `ignore-fill-keys` — entirely, all four staying green.
+So the existing corpus was genuinely good *and* had one real hole, which is
+exactly the judgement that rule asks for and the only way anyone has demonstrated
+it rather than asserted it. Harness at `tmp/afp-mutate.py`.
+
+Use it when you are unsure whether to replace a corpus, and when you want to know
+whether a new workflow adds coverage or restates it.
 
 ## Before you replace a corpus
 
