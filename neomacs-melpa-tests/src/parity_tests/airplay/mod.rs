@@ -3,33 +3,58 @@ use std::time::Duration;
 use crate::{AIRPLAY_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-mod device;
-mod media;
-mod protocol;
-mod registry;
-mod server;
+mod workflows;
 
 const AIRPLAY_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 
-fn airplay_oracle(source_file: &str) -> CachedMelpaOracle {
-    let dependency_boundary = match source_file {
-        "airplay.el" => "(provide 'request-deferred)",
-        "airplay-video-server.el" => {
-            r##"(progn
-                   (require 'cl)
-                   (defvar httpd-status-codes nil)
-                   (defvar httpd-mime-types
-                     '(("txt" . "text/plain")))
-                   (defun httpd-get-mime (extension)
-                     (or (cdr (assoc extension httpd-mime-types))
-                         "application/octet-stream"))
-                   (provide 'simple-httpd))"##
-        }
-        _ => "",
-    };
-    CachedMelpaOracle::new(AIRPLAY_MELPA_PIN, source_file)
+/// airplay cannot be loaded in its own pinned closure.  `airplay.el' opens
+/// with `(require 'request-deferred)', and the pinned `request'
+/// 20250219.2213 no longer ships `request-deferred.el' -- the built package
+/// contains only `request.el', its `.elc', its autoloads and its pkg file.
+/// So `(require 'airplay)' fails, in both editors, byte for byte.
+///
+/// The source these workflows load is therefore `airplay-autoloads.el',
+/// which is what `package-initialize' really loads for a user and which
+/// loads perfectly well.  That is the honest entry point: the autoloads
+/// define every command, so the package appears installed and working until
+/// one of those commands is invoked.
+///
+/// No stand-in is used, and that is the point.  The corpus this replaces
+/// passed `(provide 'request-deferred)' as its prelude -- a bare `provide'
+/// with nothing behind it, which makes the `require' succeed while leaving
+/// `request-deferred' undefined.  Supplying the missing library for real
+/// would be worse still: it would assert behaviour no user can reach in the
+/// configuration MELPA actually ships.
+const AIRPLAY_TEST_PRELUDE: &str = r##"
+(defun airplay-test-plain (value)
+  (cond ((stringp value) (substring-no-properties value))
+        ((consp value)
+         (cons (airplay-test-plain (car value)) (airplay-test-plain (cdr value))))
+        (t value)))
+
+(defconst airplay-test-commands
+  '(airplay/image:view
+    airplay:stop
+    airplay/video:play
+    airplay/video:scrub
+    airplay/video:seek
+    airplay/video:info
+    airplay/video:pause
+    airplay/video:resume)
+  "Every function `airplay-autoloads.el' defines for the user.
+Only three of them carry an `interactive' form, which the workflow pins.")
+
+(defun airplay-test-load ()
+  "Try to load the package the way `require' would, and report the outcome."
+  (condition-case error
+      (progn (require 'airplay) :loaded)
+    (error (airplay-test-plain error))))
+"##;
+
+fn airplay_oracle() -> CachedMelpaOracle {
+    CachedMelpaOracle::new(AIRPLAY_MELPA_PIN, "airplay-autoloads.el")
         .expect("prepare pinned airplay source below ./tmp")
-        .with_prelude(dependency_boundary)
+        .with_prelude(AIRPLAY_TEST_PRELUDE)
         .with_timeout(AIRPLAY_TEST_TIMEOUT)
 }
 
@@ -41,22 +66,10 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_airplay_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_airplay_parity(elisp_form: &str, expected: Expect) {
     let name = current_test_name();
-    let report = airplay_oracle(source_file)
+    let report = airplay_oracle()
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("airplay parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_airplay_parity(elisp_form: &str, expected: Expect) {
-    assert_airplay_source_parity("airplay.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_airplay_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_airplay_source_parity("airplay-autoloads.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_airplay_server_parity(elisp_form: &str, expected: Expect) {
-    assert_airplay_source_parity("airplay-video-server.el", elisp_form, expected);
 }
