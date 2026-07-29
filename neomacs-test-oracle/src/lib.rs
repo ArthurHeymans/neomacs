@@ -120,15 +120,35 @@ pub fn wrap_elisp_outcome(setup: &str, probe: &str, marker: &str) -> String {
                (list :frame
                      (frame-parameter value 'name)))
               ((consp value)
+               ;; Walk the cdr chain iteratively.  This function's recursion
+               ;; depth must track how deeply a value nests, not how long a
+               ;; list is: recursing on the cdr cost one frame per cons, so a
+               ;; flat list of 316 elements exhausted `max-lisp-eval-depth'
+               ;; and the overflow surfaced from inside the oracle's own
+               ;; error handler, indistinguishable from the package under
+               ;; test signalling.  Each cons is still registered in SEEN
+               ;; before its car is normalized, so shared structure and
+               ;; cycles resolve exactly as before.
                (or (gethash value seen)
-                   (let ((copy (cons nil nil)))
+                   (let* ((copy (cons nil nil))
+                          (tail copy)
+                          (rest (cdr value)))
                      (puthash value copy seen)
                      (setcar
                       copy
                       (neomacs--test-oracle-normalize (car value) seen))
+                     (while (and (consp rest) (not (gethash rest seen)))
+                       (let ((next (cons nil nil)))
+                         (puthash rest next seen)
+                         (setcar
+                          next
+                          (neomacs--test-oracle-normalize (car rest) seen))
+                         (setcdr tail next)
+                         (setq tail next
+                               rest (cdr rest))))
                      (setcdr
-                      copy
-                      (neomacs--test-oracle-normalize (cdr value) seen))
+                      tail
+                      (neomacs--test-oracle-normalize rest seen))
                      copy)))
               ((vectorp value)
                (or (gethash value seen)
