@@ -122,6 +122,42 @@ fn compat_buffer_switch_semantics_matches_gnu_emacs() {
             (kill-buffer indirect))))
     (kill-buffer base)))"#,
         },
+        BufferSwitchCase {
+            name: "killing_selected_current_buffer_selects_its_window_replacement",
+            form: r#"(let ((victim
+       (get-buffer-create " *compat-kill-selected-current*")))
+  (unwind-protect
+      (save-window-excursion
+        (switch-to-buffer victim)
+        (kill-buffer victim)
+        (list
+         (buffer-name (current-buffer))
+         (buffer-name (window-buffer (selected-window)))
+         (eq (current-buffer) (window-buffer (selected-window)))))
+    (when (buffer-live-p victim)
+      (kill-buffer victim))))"#,
+        },
+        BufferSwitchCase {
+            name: "kill_buffer_propagates_window_replacement_errors",
+            form: r#"(progn
+  (require 'cl-lib)
+  (let ((victim
+         (get-buffer-create " *compat-kill-replacement-error*")))
+    (unwind-protect
+        (progn
+          (switch-to-buffer victim)
+          (list
+           (condition-case err
+               (cl-letf
+                   (((symbol-function 'replace-buffer-in-windows)
+                     (lambda (&rest _)
+                       (error "replacement failed"))))
+                 (kill-buffer victim))
+             (error (list (car err) (cadr err))))
+           (buffer-live-p victim)))
+      (when (buffer-live-p victim)
+        (kill-buffer victim)))))"#,
+        },
     ];
 
     for case in cases {

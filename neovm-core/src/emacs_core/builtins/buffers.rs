@@ -567,12 +567,11 @@ pub(crate) fn builtin_kill_buffer(eval: &mut super::eval::Context, args: Vec<Val
         // it live showing `*scratch*`.  Delegate to the Lisp function instead
         // of reimplementing it; the `*scratch*` swap below remains as the
         // safety fallback (GNU `replace_buffer_in_windows_safely`).
-        let _ = eval.funcall_general(
-            Value::symbol("replace-buffer-in-windows"),
-            vec![Value::make_buffer(id)],
-        );
-        if let Some(buffer_id) = saved_current {
-            eval.restore_current_buffer_if_live(buffer_id);
+        if eval.obarray().fboundp("replace-buffer-in-windows") {
+            eval.funcall_general(
+                Value::symbol("replace-buffer-in-windows"),
+                vec![Value::make_buffer(id)],
+            )?;
         }
         if eval.buffers.get(id).is_none() {
             return Ok(Value::T);

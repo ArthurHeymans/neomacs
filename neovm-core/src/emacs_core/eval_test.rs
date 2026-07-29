@@ -10019,6 +10019,50 @@ fn kill_buffer_query_abort_does_not_record_buffer_list_order_like_gnu() {
 }
 
 #[test]
+fn kill_selected_current_buffer_selects_its_window_replacement() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one(
+        r#"(let ((victim (get-buffer-create " *kill-selected-current*")))
+  (unwind-protect
+      (save-window-excursion
+        (switch-to-buffer victim)
+        (kill-buffer victim)
+        (list
+         (buffer-name (current-buffer))
+         (buffer-name (window-buffer (selected-window)))
+         (eq (current-buffer) (window-buffer (selected-window)))))
+    (when (buffer-live-p victim)
+      (kill-buffer victim))))"#,
+    );
+    assert_eq!(result, r#"OK ("*scratch*" "*scratch*" t)"#);
+}
+
+#[test]
+fn kill_buffer_propagates_window_replacement_errors() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one(
+        r#"(progn
+  (require 'cl-lib)
+  (let ((victim (get-buffer-create " *kill-replacement-error*")))
+    (unwind-protect
+        (progn
+          (switch-to-buffer victim)
+          (list
+           (condition-case err
+               (cl-letf
+                   (((symbol-function 'replace-buffer-in-windows)
+                     (lambda (&rest _)
+                       (error "replacement failed"))))
+                 (kill-buffer victim))
+             (error (list (car err) (cadr err))))
+           (buffer-live-p victim)))
+      (when (buffer-live-p victim)
+        (kill-buffer victim)))))"#,
+    );
+    assert_eq!(result, r#"OK ((error "replacement failed") t)"#);
+}
+
+#[test]
 fn killed_buffer_slots_and_local_defaults_match_gnu() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(
