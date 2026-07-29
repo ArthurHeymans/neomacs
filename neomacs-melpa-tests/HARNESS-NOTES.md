@@ -964,6 +964,33 @@ Do **not** run `cargo fmt --all` in a commit retry loop for a Markdown-only
 change: it rewrites peers' half-written `.rs` files. Wait for a fmt-clean tree
 instead.
 
+**`git commit --amend` silently drops the pathspec the original commit was
+scoped with, and the index is shared.** This is the sharpest edge in this
+section, and it does more than muddle a commit message — it can leave `main`
+**unbuildable**.
+
+`git commit -F msg -- <paths>` commits only those paths. Amending it with
+`git commit --amend --no-edit` commits **everything staged**, which in a shared
+worktree includes whatever a peer has staged in the seconds since. That is how
+`543726dde` — an amend intended to add one missing file to the agitjo suite —
+also carried a peer's staged deletions of `alan_mode/flycheck.rs` and
+`surface.rs`, while the committed `alan_mode/mod.rs` still declared both modules.
+A fresh checkout could not compile the crate, and the failure was nowhere near
+either package.
+
+So: **always re-state the pathspec when amending** — `git commit --amend
+--no-edit -- <the same paths>` — and afterwards check `git show --stat` names
+only what you meant. The same rule that applies to shared Markdown applies to the
+shared index, and amending is where it is easiest to forget.
+
+Related, and worth knowing before you reach for it: a repair commit for an
+unbuildable `main` is one of the few legitimate uses of `--no-verify`, when the
+pre-commit hook's workspace-wide `cargo fmt` check is failing on a peer's
+in-flight file that the repair does not touch. Verify the restored files are
+individually rustfmt-clean and byte-identical to their pre-sweep content first,
+and say so in the message. Leaving `main` broken while waiting on an unrelated
+file is worse.
+
 **Do not use a detached retry loop to commit at all.** This is the strongest
 rule in this section and it was learned twice. A backgrounded "wait for a clean
 tree, then commit" loop keeps running after you have moved on, and it commits
