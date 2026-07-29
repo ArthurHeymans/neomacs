@@ -43,13 +43,17 @@ fn airline_themes_discovers_real_nested_repository_branches_and_non_repositories
                   "src/deep/component/" root))
                 (head
                  (expand-file-name ".git/HEAD" root))
-                (outside
-                 (expand-file-name
-                  "outside/"
-                  (getenv "NEOMACS_TEST_SANDBOX_ROOT"))))
+                ;; `airline-curr-dir-git-branch-string' resolves through
+                ;; `locate-dominating-file', and the sandbox lives inside the
+                ;; neomacs worktree - so no directory under it is outside a
+                ;; repository.  A sandbox path here reports whatever branch
+                ;; this checkout happens to be on, which would make the
+                ;; expectation pass on `main' and fail on every feature
+                ;; branch.  The filesystem root is the only directory with no
+                ;; repository above it.
+                (outside "/"))
          (make-directory nested t)
          (make-directory (file-name-directory head) t)
-         (make-directory outside t)
          (with-temp-file head
            (insert "ref: refs/heads/integration/modeline\n"))
          (list
