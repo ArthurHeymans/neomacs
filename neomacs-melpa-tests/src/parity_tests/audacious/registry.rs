@@ -211,13 +211,13 @@ fn audacious_exact_runtime_dependency_pin_is_activated_without_loading_real_helm
               "20210917.51")
              (helm
               ,helm-descriptor
-              "20260727.857")))
+              "20260728.709")))
           (featurep 'helm)
           (fboundp 'helm)
           (fboundp
            'helm-build-sync-source)))"##;
     let expect = expect![[
-        r#"OK ((all (audacious "20210917.51") (helm "20260727.857")) ((audacious "20210917.51" t t "audacious-20210917.51") (helm "20260727.857" t t "helm-20260727.857")) t t nil)"#
+        r#"OK ((all (audacious "20210917.51") (helm "20260728.709")) ((audacious "20210917.51" t t "audacious-20210917.51") (helm "20260728.709" t t "helm-20260728.709")) t t nil)"#
     ]];
     assert_audacious_parity(elisp_form, expect);
 }
