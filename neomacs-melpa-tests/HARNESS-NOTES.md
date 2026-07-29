@@ -303,8 +303,8 @@ not for the process to exit.
 
 **SILENT — a stand-in that answers the same thing regardless of input is a
 double for the package's own logic.** If the real tool's answer depends on its
-input, the stand-in must depend on it too, or the suite pins the stand-in. Two
-independent encounters, one per direction:
+input, the stand-in must depend on it too, or the suite pins the stand-in. Three
+independent encounters:
 
 - *Wrong answers look like package behaviour.* anakondo's first stand-in replayed
   the `inventory.core` analysis for every buffer, so completing in
@@ -317,6 +317,30 @@ independent encounters, one per direction:
   asserted by three identical strings. Making it answer per-argv turned that into
   a real observation. Same family as the alignment-fixture rule — make each case
   wrong by a different amount.
+- *The defect is already in the snapshot, and nobody reads it.* This is the
+  worst of the three, because the suite looks fine and the evidence is sitting
+  in the committed expectation. agtags' old corpus pinned the trace line
+  `global <-u> <--single-update=>` — an empty path — and passed, because its
+  invented stand-in matched on `*' --single-update='*` and appended its "I was
+  updated" marker whatever the argument said. The empty argument is agtags'
+  save-time update **never working at all** (below), visible in the expectation
+  of a green test for as long as it had existed. An argv-keyed replay makes it
+  impossible to miss: the stand-in must **fail loudly on an argument vector it
+  has no recording for** — write `UNRECORDED` into the trace and exit nonzero —
+  because a stand-in that answers "nothing" to an unknown request is
+  indistinguishable from the tool finding nothing, which is a legitimate result
+  for most CLI tools and therefore reads as data.
+
+**SILENT — `awk -v key=…` expands escape sequences, so a lookup key containing a
+backslash silently misses.** POSIX awk processes `\.` in a `-v` assignment as
+`.`, so a replay key for `global --result=path -P \.c$` arrived as `.c$`,
+matched no row, and the stand-in printed nothing — which for a search tool is
+"no matches", not "lookup failed". It was caught only by replaying every
+recorded argument vector through the stand-in and diffing against the recording
+itself. Pass the key through the environment and read it with
+`ENVIRON["…"]`, which does no escape processing — and **diff the stand-in's
+whole output against the recording before building assertions on it**, the same
+discipline the ac-php entry prescribes for fixture files that land on disk.
 
 ## Assertions
 
@@ -536,6 +560,22 @@ one-match regexp look as though it offered two entries — so the symptom points
 at the *package*, not at the test, and reads as a divergence worth filing. Bind
 each capture in the `let*` immediately after its own call. Same family as the
 `copy-tree` note, but the mechanism is ordering rather than sharing.
+
+**SILENT — scope a `*Warnings*` capture to a mark; the harness has already
+written there before your workflow starts.** The oracle `load`s the package
+source, and most MELPA packages predate the `lexical-binding` cookie, so
+`*Warnings*` already holds `Warning (files): Missing ‘lexical-binding’ cookie in
+"…"` before the workflow's first form runs. A whole-buffer capture therefore
+records somebody else's sentence. It bites hardest in the case that can least
+afford it: add-node-modules-path's "with debugging off the package says nothing"
+workflow captured exactly that foreign warning, so it recorded a non-empty
+string where the whole claim was emptiness and **could not have failed for the
+reason it was named after**. It also baked the source-install-cache path, two
+content-addressed hash directories deep, into the expectation, where any change
+to the cache layout would have read as a divergence. Mark `*Warnings*` the way
+`*Messages*` is conventionally marked and capture only what was added since.
+The `*Messages*` half of this is already habit; the `*Warnings*` half is not,
+and it is the one that starts out non-empty.
 
 **SILENT — name the text, do not count the line.** ahk-mode's font-lock
 workflow located each construct by a hand-counted line number and **four of

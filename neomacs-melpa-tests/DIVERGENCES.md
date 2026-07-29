@@ -979,3 +979,19 @@ Recorded so nobody re-investigates them:
   `define-derived-mode` has already defined it, so that `defvar` is a no-op and
   the documented `d` binding resolves to `undefined` from the suppressed
   special-mode map. Upstream defect, identical in both editors.
+- `agtags`' save-time database update never runs. `agtags--auto-update` builds
+  its argument as `(concat "--single-update=" buffer-file-name)` *inside*
+  `with-temp-buffer`, where `buffer-file-name` is nil, so GNU GLOBAL is handed a
+  bare `--single-update=` with no path. Real GNU GLOBAL 6.6.14 answers that with
+  exit 1 and `gtags: path '<cwd>' is out of the project.`, indexing nothing — so
+  `agtags-mode`'s headline feature is inert, and an edited file's new
+  definitions never become findable however often it is saved. The guard
+  `(and agtags-mode buffer-file-name …)` reads the name in the right buffer,
+  which is why the hook still fires and still clears the tag history and the
+  completion cache. Upstream defect, identical in both editors.
+- `agtags-open-file` cannot open a file completed by base name. GNU GLOBAL's
+  `-c -P` completes on path *components*, so `global -c -P main` answers
+  `main.c` where `global -c -P inc` answers `include/parser.h`; agtags expands
+  whatever comes back against the project root, so picking `main.c` visits a
+  `<root>/main.c` that does not exist and the user gets an empty buffer.
+  Upstream, identical in both editors.
