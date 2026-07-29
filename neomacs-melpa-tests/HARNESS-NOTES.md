@@ -69,6 +69,29 @@ only, so two runs disagree on `...-YwrfNK` vs `...-IAgVWA` and it reads as a
 divergence. Any suite whose assertions pass through xref, project.el, or
 `file-relative-name` must normalise the workspace-relative spelling too.
 
+**SILENT — never let a snapshot embed a harness path, and never lean on the
+oracle's normaliser to hide one.** Two failures of the same shape:
+
+*A pinned harness path breaks later wearing the shape of a package regression.*
+An alchemist expectation spelled out `tmp/melpa/package-cache/…`. Acquisition
+later moved to the revision-pinned `tmp/melpa/source-install-cache/<upstream>/
+<recipe>/<tools>/`, and the case began failing **in both editors** — which reads
+as the package having broken, not the harness having moved. Mask it to
+`[PACKAGE]`, which is what the assertion meant: the command is
+`<elixir> <package>/alchemist-server/run.exs`.
+
+*Masking in your own helper is not optional just because the oracle also masks.*
+The same suite's invocation log masked the project path only in its **slashed**
+form, while a process's `cwd` is recorded without the trailing slash — so three
+snapshots passed only because the oracle's sandbox normaliser caught the
+unslashed form on the way out. They would have failed anywhere else, and they
+were not asserting what they appeared to. Mask **both** forms in the helper, and
+read the recorded snapshot to confirm it says `[PROJECT]` on its own rather than
+by the oracle's grace.
+
+Found by the mutation matrix, which has now caught its author twice rather than
+the package.
+
 **SILENT — scrub a string as a string, before anything formats or prints it.**
 A normaliser applied to the *printed* form of a value silently matches nothing,
 and **fails open rather than closed**: the volatile data stays in the
@@ -979,6 +1002,22 @@ right often enough to stop being checked.
 
 **Report it if you find a corpus that was replaced when it should have been
 extended.** The conversions already landed were made under that assumption.
+
+## Who edits the shared catalogues
+
+**Agents report; the lead files.** `DIVERGENCES.md` and `HARNESS-NOTES.md` are
+not to be edited by a package agent. Send the entry — reduction, both editors'
+output, blast radius — and it gets verified in both binaries and filed centrally.
+
+This is a structural rule, not a courtesy, and it replaces the "read the diff
+before committing a shared file" discipline below for these two files. That
+discipline was followed carefully and still failed three times in one session, in
+both directions: one agent's harness note landed inside another's package commit,
+and an alchemist divergence landed under an ahungry-theme subject. Every author
+was diligent; the shared index simply does not support concurrent append.
+
+What is left of the old rule still applies to any *other* file two agents might
+touch at once.
 
 ## Committing shared files
 
