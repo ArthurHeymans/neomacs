@@ -928,7 +928,7 @@ pub const ARDUINO_MODE_MELPA_PIN: (&str, &str) = ("arduino-mode", "20240527.1603
 
 /// The exact Flycheck package used to exercise arduino-mode's optional
 /// integration against its real dependency surface.
-pub const ARDUINO_MODE_FLYCHECK_MELPA_PIN: (&str, &str) = ("flycheck", "20260727.1207");
+pub const ARDUINO_MODE_FLYCHECK_MELPA_PIN: (&str, &str) = ("flycheck", "20260728.931");
 
 /// The exact arscript-mode package selected by the comprehensive mode,
 /// font-lock, indentation, and editing parity corpus. MELPA built this archive

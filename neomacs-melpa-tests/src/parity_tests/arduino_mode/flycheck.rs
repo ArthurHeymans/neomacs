@@ -27,7 +27,7 @@ fn optional_module_loads_real_pinned_flycheck_and_registers_complete_checker_def
                       'flycheck-arduino-setup)
                      flycheck-arduino-board))"##;
     let expect = expect![[
-        r#"OK (t t "20260727.1207" ("arduino" "--verify" source) (arduino-mode) 2 (warning error) "Setup Flycheck Arduino.\nAdd ‘arduino’ to ‘flycheck-checkers’." nil)"#
+        r#"OK (t t "20260728.931" ("arduino" "--verify" source) (arduino-mode) 2 (warning error) "Setup Flycheck Arduino.\nAdd ‘arduino’ to ‘flycheck-checkers’." nil)"#
     ]];
     assert_flycheck_arduino_parity(elisp_form, expect);
 }
