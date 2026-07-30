@@ -7,7 +7,7 @@ use crate::display_buffer_source_face_resolution::*;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_render_attempt::{
     BufferSourceRedisplayPublishRequest, BufferSourceRenderAttemptContext,
-    BufferSourceRenderAttemptOutcome, BufferSourceRetryPlan,
+    BufferSourceRenderAttemptOutcome, BufferSourceRetryPlan, WindowPositionPublication,
 };
 use crate::display_buffer_source_tail_render::{
     BufferSourceBodyInstallContext, BufferSourceRetryBounds, BufferSourceTailRequestContext,
@@ -50,6 +50,7 @@ pub(crate) struct BufferSourceOutputSetup {
     row_limit: DisplayRowLimit,
     body_install_context: BufferSourceBodyInstallContext,
     retry_bounds: BufferSourceRetryBounds,
+    position_publication: WindowPositionPublication,
 }
 
 #[cfg(test)]
@@ -308,7 +309,16 @@ impl BufferSourceOutputSetup {
                 (text_y - walk_setup.window_top).round() as i64,
                 (text_y + text_height - walk_setup.window_top).round() as i64,
             ),
+            position_publication: WindowPositionPublication::Redisplay,
         }
+    }
+
+    pub(crate) fn with_position_publication(
+        mut self,
+        publication: WindowPositionPublication,
+    ) -> Self {
+        self.position_publication = publication;
+        self
     }
 }
 
@@ -517,6 +527,7 @@ impl BufferSourceOutputSetup {
             self.begin_request.window_id(),
             source.accessible_end_lisp_char(),
             source.accessible_end_emacs_byte(),
+            self.position_publication,
         );
 
         // --- Phase 1 cursor-only fast path ---

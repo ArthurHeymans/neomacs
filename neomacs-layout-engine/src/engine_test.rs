@@ -16284,6 +16284,80 @@ fn synchronous_window_end_query_updates_only_the_target_without_preparing_a_pres
     );
 }
 
+#[test]
+fn synchronous_window_end_query_preserves_redisplay_only_window_state() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    eval.buffer_manager_mut()
+        .get_mut(buffer_id)
+        .expect("buffer")
+        .insert(&"line with enough text to wrap in a narrow window\n".repeat(80));
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "side-effect-free-window-end-query",
+        320,
+        240,
+        buffer_id,
+    );
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    eval.eval_form(Value::list(vec![
+        Value::symbol("set-window-start"),
+        Value::make_window(window_id.0),
+        Value::fixnum(240),
+    ]))
+    .expect("set explicit window start");
+
+    let before = match eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .find_window(window_id)
+        .expect("window")
+    {
+        neovm_core::window::Window::Leaf {
+            window_start,
+            point,
+            force_start,
+            ..
+        } => (*window_start, *point, *force_start),
+        other => panic!("expected leaf, got {other:?}"),
+    };
+    assert!(before.2, "set-window-start should arm force_start");
+
+    let mut engine = LayoutEngine::new();
+    engine
+        .query_window_end(&mut eval, frame_id, window_id)
+        .expect("exact query");
+
+    let after = match eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .find_window(window_id)
+        .expect("window")
+    {
+        neovm_core::window::Window::Leaf {
+            window_start,
+            point,
+            force_start,
+            ..
+        } => (*window_start, *point, *force_start),
+        other => panic!("expected leaf, got {other:?}"),
+    };
+    assert_eq!(
+        after, before,
+        "GNU Fwindow_end UPDATE walks from w->start but does not consume \
+         force_start, rewrite the start marker, or move point"
+    );
+}
+
 /// An active minibuffer holding a prompt line plus several candidate lines
 /// must grow to one display row per logical line, render every line, and never
 /// flatten content into one row.  Exercises the active-fido/vertico measure

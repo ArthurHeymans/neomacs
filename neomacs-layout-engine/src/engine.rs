@@ -21,6 +21,7 @@ use super::gui_chrome::{
 use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
+use crate::display_buffer_source_render_attempt::WindowPositionPublication;
 use crate::display_buffer_window_render::{
     BufferSourceRenderAttemptContext, BufferSourceRenderAttemptOutcome, BufferWindowRenderRequest,
 };
@@ -1053,10 +1054,19 @@ impl LayoutEngine {
                     &layout_box,
                     &face_resolver,
                     window_geometry.reserve_terminal_right_border_col,
-                    MAX_WINDOW_VISIBILITY_RETRIES,
+                    if query_window.is_some() {
+                        0
+                    } else {
+                        MAX_WINDOW_VISIBILITY_RETRIES
+                    },
                     plan.cursor_only,
                     plan.scroll,
                     plan.is_edit,
+                    if query_window.is_some() {
+                        WindowPositionPublication::SynchronousQueryEnd
+                    } else {
+                        WindowPositionPublication::Redisplay
+                    },
                     &face_attempt,
                 );
                 let accepted_layout_box = match window_layout {
@@ -1828,6 +1838,7 @@ impl LayoutEngine {
         cursor_only_replay: Option<CursorOnlyReplay>,
         scroll_replay: Option<ScrollReplay>,
         is_edit: bool,
+        position_publication: WindowPositionPublication,
         face_attempt: &FrameFaceAttempt,
     ) -> WindowLayoutOutcome {
         let window_id = neovm_core::window::WindowId(params.window_id as u64);
@@ -1888,6 +1899,7 @@ impl LayoutEngine {
             &buffer_name,
             reserve_right_border_col,
         )
+        .with_position_publication(position_publication)
         .render_into(
             BufferSourceRenderAttemptContext::from_frame_output_owner(
                 &mut self.frame_output,
@@ -1939,6 +1951,7 @@ impl LayoutEngine {
                     None,
                     None,
                     false,
+                    position_publication,
                     face_attempt,
                 );
             }
@@ -1981,6 +1994,7 @@ impl LayoutEngine {
                     None,
                     None,
                     false,
+                    position_publication,
                     face_attempt,
                 );
             }

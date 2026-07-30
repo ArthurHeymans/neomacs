@@ -35,12 +35,21 @@ pub(crate) struct BufferSourceRenderAttemptContext<'a, 'face> {
     window_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
+/// Which live window state may be published by a completed row walk.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum WindowPositionPublication {
+    #[default]
+    Redisplay,
+    SynchronousQueryEnd,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferSourceRedisplayPublishRequest {
     frame_id: FrameId,
     window_id: WindowId,
     accessible_end_lisp_char: usize,
     accessible_end_emacs_byte: usize,
+    publication: WindowPositionPublication,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -210,26 +219,45 @@ impl BufferSourceRedisplayPublishRequest {
         window_id: WindowId,
         accessible_end_lisp_char: usize,
         accessible_end_emacs_byte: usize,
+        publication: WindowPositionPublication,
     ) -> Self {
         Self {
             frame_id,
             window_id,
             accessible_end_lisp_char,
             accessible_end_emacs_byte,
+            publication,
         }
     }
 
     pub(crate) fn publish(self, evaluator: &mut Context, positions: TextWindowRedisplayPositions) {
-        evaluator.publish_redisplay_window_positions(
-            self.frame_id,
-            self.window_id,
-            positions.window_start,
-            LispCharPos1::from_one_based_usize(self.accessible_end_lisp_char),
-            EmacsBytePos::new(self.accessible_end_emacs_byte),
-            positions.window_end,
-            positions.window_end_byte,
-            positions.window_end_vpos,
-        );
+        let buffer_z_char = LispCharPos1::from_one_based_usize(self.accessible_end_lisp_char);
+        let buffer_z_byte = EmacsBytePos::new(self.accessible_end_emacs_byte);
+        match self.publication {
+            WindowPositionPublication::Redisplay => {
+                evaluator.publish_redisplay_window_positions(
+                    self.frame_id,
+                    self.window_id,
+                    positions.window_start,
+                    buffer_z_char,
+                    buffer_z_byte,
+                    positions.window_end,
+                    positions.window_end_byte,
+                    positions.window_end_vpos,
+                );
+            }
+            WindowPositionPublication::SynchronousQueryEnd => {
+                evaluator.publish_window_layout_query_end(
+                    self.frame_id,
+                    self.window_id,
+                    buffer_z_char,
+                    buffer_z_byte,
+                    positions.window_end,
+                    positions.window_end_byte,
+                    positions.window_end_vpos,
+                );
+            }
+        }
     }
 }
 

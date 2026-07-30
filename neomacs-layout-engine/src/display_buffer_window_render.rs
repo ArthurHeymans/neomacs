@@ -2,6 +2,7 @@
 #[cfg(test)]
 pub(crate) use crate::display_buffer_display_property_render::BufferDisplayPropertyTextReplacementOutcome;
 use crate::display_buffer_source_body_render::BufferSourceWalkSetupRequest;
+use crate::display_buffer_source_render_attempt::WindowPositionPublication;
 pub(crate) use crate::display_buffer_source_render_attempt::{
     BufferSourceRenderAttemptContext, BufferSourceRenderAttemptOutcome,
 };
@@ -35,6 +36,7 @@ where
     buffer: &'a B,
     buffer_name: &'a str,
     reserve_right_border_col: bool,
+    position_publication: WindowPositionPublication,
 }
 
 impl<'a, B> BufferWindowRenderRequest<'a, B>
@@ -62,7 +64,16 @@ where
             buffer,
             buffer_name,
             reserve_right_border_col,
+            position_publication: WindowPositionPublication::Redisplay,
         }
+    }
+
+    pub(crate) fn with_position_publication(
+        mut self,
+        publication: WindowPositionPublication,
+    ) -> Self {
+        self.position_publication = publication;
+        self
     }
 
     pub(crate) fn render_into(
@@ -83,6 +94,7 @@ where
             buffer,
             buffer_name,
             reserve_right_border_col,
+            position_publication,
         } = self;
         let mut state = context;
         let buf_access = RustBufferAccess::new(buffer);
@@ -230,7 +242,8 @@ where
             layout_box,
             geometry.max_rows,
             &walk_setup,
-        );
+        )
+        .with_position_publication(position_publication);
 
         output_setup.render_body_attempt(
             &mut walk_setup,
