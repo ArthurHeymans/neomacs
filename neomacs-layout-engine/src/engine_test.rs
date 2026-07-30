@@ -2518,17 +2518,19 @@ fn window_layout_trace(
     let display_snapshot = frame
         .redisplay_snapshot(selected_window)
         .expect("display snapshot");
-    let (window_start, window_point, window_end_pos, window_end_bytepos) =
+    let (window_start, window_point, window_end) =
         match frame.find_window(selected_window).expect("selected window") {
             neovm_core::window::Window::Leaf {
                 window_start,
                 point,
-                window_end_pos,
-                window_end_bytepos,
+                window_end,
                 ..
-            } => (*window_start, *point, *window_end_pos, *window_end_bytepos),
+            } => (*window_start, *point, *window_end),
             other => panic!("expected leaf window, got {other:?}"),
         };
+    let record = window_end
+        .record()
+        .expect("completed layout should publish a window-end record");
     BackendLayoutTrace {
         matrix_rows: window_entry
             .matrix
@@ -2543,8 +2545,8 @@ fn window_layout_trace(
         visible_span: display_snapshot.visible_buffer_span(),
         window_start,
         window_point,
-        window_end_pos,
-        window_end_bytepos,
+        window_end_pos: record.char_offset_from_z().get(),
+        window_end_bytepos: record.byte_offset_from_z().get(),
     }
 }
 

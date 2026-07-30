@@ -7,7 +7,7 @@
 //! - The **selected window** is the one receiving input.
 //! - The **minibuffer window** is a special single-line window at the bottom.
 
-use crate::buffer::{BufferId, BufferManager, EmacsBytePos, LispCharPos1};
+use crate::buffer::{BufferId, BufferManager, CharLen, EmacsByteLen, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::value::{HashTableTest, Value};
 use crate::gc_trace::GcTrace;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -432,15 +432,140 @@ pub struct WindowRedisplayState {
     pub buffer_id: BufferId,
     pub bounds: (u32, u32, u32, u32),
     pub window_start: LispCharPos1,
-    pub window_end_pos: usize,
-    pub window_end_bytepos: usize,
-    pub window_end_vpos: usize,
-    pub window_end_valid: bool,
+    pub window_end: WindowEndState,
     pub point: LispCharPos1,
     pub old_point: LispCharPos1,
     pub hscroll: usize,
     pub vscroll: i32,
     pub preserve_vscroll_p: bool,
+}
+
+/// Zero-based glyph-matrix row coordinate.
+///
+/// This deliberately does not accept or expose buffer positions, display
+/// columns, or pixel coordinates. Those domains have separate types.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
+pub struct MatrixRow0(usize);
+
+impl MatrixRow0 {
+    pub const ZERO: Self = Self(0);
+
+    pub const fn new(row: usize) -> Self {
+        Self(row)
+    }
+
+    pub const fn get(self) -> usize {
+        self.0
+    }
+}
+
+/// One atomically published GNU-compatible window-end record.
+///
+/// GNU stores both distances from buffer Z plus the matrix row that produced
+/// them. Keeping the tuple together prevents partial char/byte/row updates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct WindowEndRecord {
+    char_offset_from_z: CharLen,
+    byte_offset_from_z: EmacsByteLen,
+    matrix_row: MatrixRow0,
+}
+
+impl WindowEndRecord {
+    fn from_positions(
+        buffer_z_char: LispCharPos1,
+        buffer_z_byte: EmacsBytePos,
+        end_charpos: LispCharPos1,
+        end_bytepos: EmacsBytePos,
+        matrix_row: MatrixRow0,
+    ) -> Self {
+        let buffer_z_char = usize::try_from(buffer_z_char.as_i64().max(1))
+            .expect("Lisp character position fits usize");
+        let end_charpos = usize::try_from(end_charpos.as_i64().max(1))
+            .expect("Lisp character position fits usize");
+        Self {
+            char_offset_from_z: CharLen::new(
+                buffer_z_char.saturating_sub(end_charpos.min(buffer_z_char)),
+            ),
+            byte_offset_from_z: EmacsByteLen::new(
+                buffer_z_byte
+                    .get()
+                    .saturating_sub(end_bytepos.get().min(buffer_z_byte.get())),
+            ),
+            matrix_row,
+        }
+    }
+
+    pub const fn char_offset_from_z(self) -> CharLen {
+        self.char_offset_from_z
+    }
+
+    pub const fn byte_offset_from_z(self) -> EmacsByteLen {
+        self.byte_offset_from_z
+    }
+
+    pub const fn matrix_row(self) -> MatrixRow0 {
+        self.matrix_row
+    }
+
+    /// Recover GNU's Lisp-visible end position from the current buffer Z.
+    pub fn charpos_from_z(self, buffer_z: LispCharPos1) -> LispCharPos1 {
+        let buffer_z = buffer_z.to_one_based_usize();
+        LispCharPos1::from_one_based_usize(
+            buffer_z
+                .saturating_sub(self.char_offset_from_z.get())
+                .max(1),
+        )
+    }
+
+    /// Recover the byte companion of [`Self::charpos_from_z`].
+    pub const fn bytepos_from_z(self, buffer_z_byte: EmacsBytePos) -> EmacsBytePos {
+        buffer_z_byte.saturating_sub_len(self.byte_offset_from_z)
+    }
+}
+
+/// Presentation lifecycle of a leaf window's last complete end record.
+///
+/// `Stale` retains GNU's `UPDATE=nil` behavior while making it impossible to
+/// mark a partially populated record current.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum WindowEndState {
+    #[default]
+    Unrecorded,
+    Stale(WindowEndRecord),
+    Current(WindowEndRecord),
+}
+
+impl WindowEndState {
+    pub const fn record(self) -> Option<WindowEndRecord> {
+        match self {
+            Self::Unrecorded => None,
+            Self::Stale(record) | Self::Current(record) => Some(record),
+        }
+    }
+
+    pub const fn is_current(self) -> bool {
+        matches!(self, Self::Current(_))
+    }
+
+    /// Recover the last recorded end, treating an unrecorded offset as GNU's
+    /// zero-initialized distance from Z.
+    pub fn charpos_from_z(self, buffer_z: LispCharPos1) -> LispCharPos1 {
+        self.record()
+            .map_or(buffer_z, |record| record.charpos_from_z(buffer_z))
+    }
+
+    /// Recover the byte companion of [`Self::charpos_from_z`].
+    pub fn bytepos_from_z(self, buffer_z_byte: EmacsBytePos) -> EmacsBytePos {
+        self.record()
+            .map_or(buffer_z_byte, |record| record.bytepos_from_z(buffer_z_byte))
+    }
+
+    fn invalidate(&mut self) {
+        if let Self::Current(record) = *self {
+            *self = Self::Stale(record);
+        }
+    }
 }
 
 fn redisplay_f32_bits(value: f32) -> u32 {
@@ -480,20 +605,8 @@ pub enum Window {
         /// Marker id backing `window_start`.  `None` until the window is
         /// attached to a buffer via `create_window_markers`.
         start_marker_id: Option<u64>,
-        /// Offset of the last displayed character position from buffer `Z`.
-        ///
-        /// Mirrors GNU Emacs `w->window_end_pos`, so Lisp-visible
-        /// `window-end` can continue to track buffer growth/shrinkage even
-        /// between redisplays.
-        window_end_pos: usize,
-        /// Offset of the last displayed byte position from buffer `Z_BYTE`.
-        ///
-        /// This is the byte-position companion to `window_end_pos`.
-        window_end_bytepos: usize,
-        /// Visual row that produced `window_end_pos`.
-        window_end_vpos: usize,
-        /// Whether the last completed redisplay recorded window-end state.
-        window_end_valid: bool,
+        /// Last atomically published window-end record and its freshness.
+        window_end: WindowEndState,
         /// Cached cursor (point) position in this window.
         ///
         /// GNU Emacs stores this as a marker (`w->pointm`) so that buffer
@@ -642,10 +755,7 @@ impl Window {
             bounds,
             window_start: LispCharPos1::ONE,
             start_marker_id: None,
-            window_end_pos: 0,
-            window_end_bytepos: 0,
-            window_end_vpos: 0,
-            window_end_valid: false,
+            window_end: WindowEndState::Unrecorded,
             point: LispCharPos1::ONE,
             point_marker_id: None,
             old_point: LispCharPos1::ONE,
@@ -886,10 +996,7 @@ impl Window {
                 buffer_id,
                 bounds,
                 window_start,
-                window_end_pos,
-                window_end_bytepos,
-                window_end_vpos,
-                window_end_valid,
+                window_end,
                 point,
                 old_point,
                 hscroll,
@@ -906,10 +1013,7 @@ impl Window {
                     redisplay_f32_bits(bounds.height),
                 ),
                 window_start: *window_start,
-                window_end_pos: *window_end_pos,
-                window_end_bytepos: *window_end_bytepos,
-                window_end_vpos: *window_end_vpos,
-                window_end_valid: *window_end_valid,
+                window_end: *window_end,
                 point: *point,
                 old_point: *old_point,
                 hscroll: *hscroll,
@@ -1035,10 +1139,7 @@ impl Window {
             buffer_id,
             window_start,
             start_marker_id,
-            window_end_pos,
-            window_end_bytepos,
-            window_end_vpos,
-            window_end_valid,
+            window_end,
             point,
             point_marker_id,
             old_point_marker_id,
@@ -1050,10 +1151,7 @@ impl Window {
             *buffer_id = new_id;
             *window_start = LispCharPos1::ONE;
             *start_marker_id = None;
-            *window_end_pos = 0;
-            *window_end_bytepos = 0;
-            *window_end_vpos = 0;
-            *window_end_valid = false;
+            *window_end = WindowEndState::Unrecorded;
             *point = LispCharPos1::ONE;
             *point_marker_id = None;
             *old_point_marker_id = None;
@@ -1069,13 +1167,7 @@ impl Window {
     /// Stored Lisp-visible `window-end` for this leaf window.
     pub fn window_end_charpos(&self, buffer_z: LispCharPos1) -> Option<LispCharPos1> {
         match self {
-            Window::Leaf { window_end_pos, .. } => {
-                let buffer_z = usize::try_from(buffer_z.as_i64().max(1))
-                    .expect("Lisp character position fits usize");
-                Some(LispCharPos1::from_one_based_usize(
-                    buffer_z.saturating_sub(*window_end_pos),
-                ))
-            }
+            Window::Leaf { window_end, .. } => Some(window_end.charpos_from_z(buffer_z)),
             Window::Internal { .. } => None,
         }
     }
@@ -1083,22 +1175,31 @@ impl Window {
     /// Stored byte-position `window-end` for this leaf window.
     pub fn window_end_bytepos(&self, buffer_z_byte: EmacsBytePos) -> Option<EmacsBytePos> {
         match self {
-            Window::Leaf {
-                window_end_bytepos, ..
-            } => Some(EmacsBytePos::new(
-                buffer_z_byte.get().saturating_sub(*window_end_bytepos),
-            )),
+            Window::Leaf { window_end, .. } => Some(window_end.bytepos_from_z(buffer_z_byte)),
+            Window::Internal { .. } => None,
+        }
+    }
+
+    /// Typed presentation lifecycle for this leaf window.
+    pub fn window_end_state(&self) -> Option<WindowEndState> {
+        match self {
+            Window::Leaf { window_end, .. } => Some(*window_end),
             Window::Internal { .. } => None,
         }
     }
 
     /// Whether the stored window-end came from a completed redisplay.
     pub fn window_end_valid(&self) -> Option<bool> {
-        match self {
-            Window::Leaf {
-                window_end_valid, ..
-            } => Some(*window_end_valid),
-            Window::Internal { .. } => None,
+        self.window_end_state().map(WindowEndState::is_current)
+    }
+
+    /// Mark the last complete window-end record stale without discarding it.
+    ///
+    /// GNU keeps the offsets available for `window-end` with `UPDATE=nil`
+    /// after invalidation, while `UPDATE=t` must recompute.
+    pub fn invalidate_window_end(&mut self) {
+        if let Window::Leaf { window_end, .. } = self {
+            window_end.invalidate();
         }
     }
 
@@ -1111,24 +1212,14 @@ impl Window {
         end_bytepos: EmacsBytePos,
         vpos: usize,
     ) {
-        if let Window::Leaf {
-            window_end_pos,
-            window_end_bytepos,
-            window_end_vpos,
-            window_end_valid,
-            ..
-        } = self
-        {
-            let buffer_z_char = usize::try_from(buffer_z_char.as_i64().max(1))
-                .expect("Lisp character position fits usize");
-            let end_charpos = usize::try_from(end_charpos.as_i64().max(1))
-                .expect("Lisp character position fits usize");
-            *window_end_pos = buffer_z_char.saturating_sub(end_charpos.min(buffer_z_char));
-            *window_end_bytepos = buffer_z_byte
-                .get()
-                .saturating_sub(end_bytepos.get().min(buffer_z_byte.get()));
-            *window_end_vpos = vpos;
-            *window_end_valid = true;
+        if let Window::Leaf { window_end, .. } = self {
+            *window_end = WindowEndState::Current(WindowEndRecord::from_positions(
+                buffer_z_char,
+                buffer_z_byte,
+                end_charpos,
+                end_bytepos,
+                MatrixRow0::new(vpos),
+            ));
         }
     }
 
@@ -1237,11 +1328,11 @@ impl Window {
     pub fn invalidate_display_state(&mut self) {
         match self {
             Window::Leaf {
-                window_end_valid,
+                window_end,
                 display,
                 ..
             } => {
-                *window_end_valid = false;
+                window_end.invalidate();
                 display.clear_physical_cursor_state();
             }
             Window::Internal { children, .. } => {
@@ -3983,10 +4074,7 @@ fn split_window_in_tree(
                 history,
                 window_start,
                 start_marker_id,
-                window_end_pos,
-                window_end_bytepos,
-                window_end_vpos,
-                window_end_valid,
+                window_end,
                 point,
                 point_marker_id,
                 old_point,
@@ -4013,10 +4101,7 @@ fn split_window_in_tree(
                     LispCharPos1::ONE
                 };
                 *start_marker_id = None;
-                *window_end_pos = 0;
-                *window_end_bytepos = 0;
-                *window_end_vpos = 0;
-                *window_end_valid = false;
+                *window_end = WindowEndState::Unrecorded;
                 *point = if same_buffer {
                     inherited_point
                 } else {
@@ -4323,10 +4408,7 @@ fn split_window_in_tree(
                         parameters,
                         window_start,
                         start_marker_id,
-                        window_end_pos,
-                        window_end_bytepos,
-                        window_end_vpos,
-                        window_end_valid,
+                        window_end,
                         ..
                     } = &mut new_leaf
                     {
@@ -4336,10 +4418,7 @@ fn split_window_in_tree(
                         parameters.clear();
                         *window_start = LispCharPos1::ONE;
                         *start_marker_id = None;
-                        *window_end_pos = 0;
-                        *window_end_bytepos = 0;
-                        *window_end_vpos = 0;
-                        *window_end_valid = false;
+                        *window_end = WindowEndState::Unrecorded;
                     }
 
                     // Compute normal fractions for all children in parent.

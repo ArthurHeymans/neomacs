@@ -2997,6 +2997,7 @@ fn run_gui_evaluator_worker(
         publish_gui_frame(eval, &frame_tx, Some(&redisplay_waker));
     }));
     tty_layout::install_frame_snapshot_fn(&mut evaluator);
+    tty_layout::install_window_layout_query_fn(&mut evaluator);
     publish_gui_frame(&mut evaluator, &initial_frame_tx, Some(&render_waker));
 
     if let Some(buf) = evaluator.buffer_manager_mut().current_buffer_mut() {

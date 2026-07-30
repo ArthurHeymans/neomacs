@@ -1,4 +1,4 @@
-use crate::buffer::LispCharPos1;
+use crate::buffer::{EmacsBytePos, LispCharPos1};
 use crate::emacs_core::eval::{GuiFrameHostSize, ResolvedFrameFont};
 use crate::emacs_core::window_cmds::SplitWindowSide;
 use crate::emacs_core::{Context, DisplayHost, GuiFrameHostRequest, Value, format_eval_result};
@@ -6,6 +6,7 @@ use crate::face::{FontSlant, FontWeight, FontWidth};
 use crate::heap_types::LispString;
 use crate::test_utils::{runtime_startup_context, runtime_startup_eval_all};
 use crate::window::{FrameFullscreen, FrameParam};
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::fs;
 use std::path::PathBuf;
@@ -6695,7 +6696,7 @@ fn window_end_greater_than_start() {
 }
 
 #[test]
-fn window_end_prefers_last_redisplay_snapshot_when_available() {
+fn window_end_reads_the_atomic_record_when_a_snapshot_disagrees() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let buf = ev.buffers.create_buffer("*scratch*");
@@ -6712,22 +6713,28 @@ fn window_end_prefers_last_redisplay_snapshot_when_available() {
         .expect("scratch buffer")
         .point_max_char_pos()
         .get();
+    let buffer_z_byte = ev
+        .buffers
+        .get(buf)
+        .expect("scratch buffer")
+        .point_max_emacs_byte_pos();
 
     {
         let frame = ev.frames.get_mut(fid).expect("frame");
-        if let Some(crate::window::Window::Leaf {
-            window_start,
-            window_end_pos,
-            window_end_valid,
-            ..
-        }) = frame.find_window_mut(wid)
-        {
-            *window_start = LispCharPos1::ONE;
-            *window_end_pos = point_max;
-            *window_end_valid = false;
-        } else {
+        let Some(window) = frame.find_window_mut(wid) else {
+            panic!("selected window should exist");
+        };
+        let crate::window::Window::Leaf { window_start, .. } = window else {
             panic!("selected window should be a leaf");
-        }
+        };
+        *window_start = LispCharPos1::ONE;
+        window.set_window_end_from_positions(
+            LispCharPos1::from_one_based_usize(point_max.saturating_add(1)),
+            buffer_z_byte,
+            LispCharPos1::new(8),
+            EmacsBytePos::new(7),
+            0,
+        );
 
         frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
             window_id: wid,
@@ -6747,15 +6754,15 @@ fn window_end_prefers_last_redisplay_snapshot_when_available() {
     }
 
     let result = super::builtin_window_end(&mut ev, vec![]).expect("window-end");
-    // The snapshot's last row ends AT character 12, but GNU's `window-end` is
-    // `BUF_Z (b) - w->window_end_pos` — the position just after the last
-    // displayed character, so 13. (Measured against GNU 31: a window showing
-    // buffer lines 1-21 reports the start of line 22.)
-    assert_eq!(result, Value::fixnum(13));
+    assert_eq!(
+        result,
+        Value::fixnum(8),
+        "the atomically published GNU window-end tuple is the sole authority"
+    );
 }
 
 #[test]
-fn window_end_snapshot_at_eob_never_exceeds_point_max() {
+fn window_end_record_at_eob_never_exceeds_point_max() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let buf = ev.buffers.create_buffer("*scratch*");
@@ -6774,26 +6781,23 @@ fn window_end_snapshot_at_eob_never_exceeds_point_max() {
         .get()
         .saturating_add(1);
 
+    let buffer_z_byte = ev
+        .buffers
+        .get(buf)
+        .expect("scratch buffer")
+        .point_max_emacs_byte_pos();
     ev.frames
         .get_mut(fid)
         .expect("frame")
-        .commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
-            window_id: wid,
-            rows: vec![crate::window::DisplayRowSnapshot {
-                row: 0,
-                y: 0,
-                height: 16,
-                start_x: 0,
-                start_col: 0,
-                end_x: 0,
-                end_col: 0,
-                start_buffer_pos: Some(LispCharPos1::ONE),
-                // Redisplay publishes an insertion boundary at ZV so
-                // `posn-at-point' can resolve point-max at EOB.
-                end_buffer_pos: Some(LispCharPos1::from_one_based_usize(point_max)),
-            }],
-            ..crate::window::WindowDisplaySnapshot::default()
-        }]);
+        .find_window_mut(wid)
+        .expect("selected window")
+        .set_window_end_from_positions(
+            LispCharPos1::from_one_based_usize(point_max),
+            buffer_z_byte,
+            LispCharPos1::from_one_based_usize(point_max),
+            buffer_z_byte,
+            0,
+        );
 
     let result = super::builtin_window_end(&mut ev, vec![]).expect("window-end");
     assert_eq!(result, Value::fixnum(point_max as i64));
@@ -6821,16 +6825,8 @@ fn window_end_update_in_batch_returns_stored_end_without_estimate() {
 
     {
         let frame = ev.frames.get_mut(fid).expect("frame");
-        if let Some(crate::window::Window::Leaf {
-            window_start,
-            window_end_pos,
-            window_end_valid,
-            ..
-        }) = frame.find_window_mut(wid)
-        {
+        if let Some(crate::window::Window::Leaf { window_start, .. }) = frame.find_window_mut(wid) {
             *window_start = LispCharPos1::from_one_based_usize(50);
-            *window_end_pos = 0;
-            *window_end_valid = false;
         } else {
             panic!("selected window should be a leaf");
         }
@@ -6839,6 +6835,82 @@ fn window_end_update_in_batch_returns_stored_end_without_estimate() {
     let result =
         super::builtin_window_end(&mut ev, vec![Value::NIL, Value::T]).expect("window-end");
     assert_eq!(result, Value::fixnum(point_max as i64 + 1));
+}
+
+#[test]
+fn window_end_update_returns_the_record_published_by_the_synchronous_layout_query() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.set_variable("noninteractive", Value::NIL);
+    let buf = ev.buffers.create_buffer("*window-end-layout-query*");
+    ev.buffers.set_current(buf);
+    ev.buffers
+        .get_mut(buf)
+        .expect("window-end buffer")
+        .insert("//! Unicode — repro\nsecond line\nthird line\n");
+    let fid = ev.frames.create_frame("F1", 800, 600, buf);
+    let wid = ev.frames.get(fid).expect("frame").selected_window;
+    ev.frames.get_mut(fid).expect("frame").initial = false;
+    let buffer_z_char = LispCharPos1::from_one_based_usize(
+        ev.buffers
+            .get(buf)
+            .expect("window-end buffer")
+            .point_max_char_pos()
+            .get()
+            .saturating_add(1),
+    );
+    let buffer_z_byte = ev
+        .buffers
+        .get(buf)
+        .expect("window-end buffer")
+        .point_max_emacs_byte_pos();
+    ev.frames
+        .get_mut(fid)
+        .expect("frame")
+        .find_window_mut(wid)
+        .expect("selected window")
+        .set_window_end_from_positions(
+            buffer_z_char,
+            buffer_z_byte,
+            LispCharPos1::new(5),
+            EmacsBytePos::new(4),
+            0,
+        );
+
+    let calls = Rc::new(Cell::new(0));
+    let observed_calls = Rc::clone(&calls);
+    ev.window_layout_query_fn = Some(Box::new(move |eval, frame_id, window_id| {
+        assert_eq!(frame_id, fid);
+        assert_eq!(window_id, wid);
+        observed_calls.set(observed_calls.get() + 1);
+        eval.frames
+            .get_mut(frame_id)
+            .expect("frame")
+            .find_window_mut(window_id)
+            .expect("selected window")
+            .set_window_end_from_positions(
+                buffer_z_char,
+                buffer_z_byte,
+                LispCharPos1::new(17),
+                EmacsBytePos::new(16),
+                1,
+            );
+        eval.frames
+            .get(frame_id)
+            .and_then(|frame| frame.find_window(window_id))
+            .and_then(crate::window::Window::window_end_state)
+            .and_then(crate::window::WindowEndState::record)
+    }));
+
+    let result =
+        super::builtin_window_end(&mut ev, vec![Value::NIL, Value::T]).expect("window-end");
+
+    assert_eq!(
+        result,
+        Value::fixnum(17),
+        "the layout query must return the canonical record it published"
+    );
+    assert_eq!(calls.get(), 1);
 }
 
 #[test]

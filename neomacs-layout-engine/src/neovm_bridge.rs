@@ -23,7 +23,7 @@ use neovm_core::face::{
     FaceTable, FontWeight, UnderlineStyle as NeoUnderlineStyle,
 };
 use neovm_core::window::{
-    CursorTypeSymbol, Frame, FrameId, VerticalScrollBarType, Window,
+    CursorTypeSymbol, Frame, FrameId, VerticalScrollBarType, Window, WindowEndState,
     resolve_window_scroll_bar_geometry,
 };
 
@@ -1486,8 +1486,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         bounds,
         window_start,
         force_start,
-        window_end_pos,
-        window_end_valid,
+        window_end,
         point,
         hscroll,
         vscroll,
@@ -1501,8 +1500,7 @@ pub fn window_params_from_neovm_with_font_sizing(
             bounds,
             window_start,
             force_start,
-            window_end_pos,
-            window_end_valid,
+            window_end,
             point,
             hscroll,
             vscroll,
@@ -1515,8 +1513,7 @@ pub fn window_params_from_neovm_with_font_sizing(
             bounds,
             *window_start,
             *force_start,
-            *window_end_pos,
-            *window_end_valid,
+            *window_end,
             *point,
             *hscroll,
             *vscroll,
@@ -1716,16 +1713,15 @@ pub fn window_params_from_neovm_with_font_sizing(
         force_start,
         // GNU stores this as an offset from Z; recover the Lisp position and
         // normalize to the layout engine's 0-based space.
-        previous_visible_end: window_end_valid.then(|| {
-            lisp_char_pos_to_layout_i64(LispCharPos1::from_one_based_usize(
-                buffer
-                    .point_max_char_pos()
-                    .get()
-                    .saturating_add(1)
-                    .saturating_sub(window_end_pos)
-                    .max(1),
-            ))
-        }),
+        previous_visible_end: match window_end {
+            WindowEndState::Current(record) => {
+                let buffer_z = LispCharPos1::from_one_based_usize(
+                    buffer.point_max_char_pos().get().saturating_add(1),
+                );
+                Some(lisp_char_pos_to_layout_i64(record.charpos_from_z(buffer_z)))
+            }
+            WindowEndState::Unrecorded | WindowEndState::Stale(_) => None,
+        },
         // Mirror GNU `window.c:window_point` (around line 1782):
         //
         //   return (w == XWINDOW (selected_window)

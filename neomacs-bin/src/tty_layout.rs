@@ -217,6 +217,30 @@ pub fn install_frame_snapshot_fn(evaluator: &mut Context) {
     }));
 }
 
+/// Install the synchronous layout-query adapter used by display primitives
+/// such as `(window-end WINDOW t)`.
+///
+/// This runs the same layout engine as redisplay, discards the unsubmitted
+/// presentation, and returns the atomic record that layout published into the
+/// window. Both GUI and TTY install this adapter; batch mode intentionally
+/// does not.
+pub fn install_window_layout_query_fn(evaluator: &mut Context) {
+    evaluator.window_layout_query_fn = Some(Box::new(|eval, frame_id, window_id| {
+        let prepared = layout_frame_display_state(eval, frame_id)?;
+        let _ = prepared.discard(eval);
+        match eval
+            .frame_manager()
+            .get(frame_id)?
+            .find_window(window_id)?
+            .window_end_state()?
+        {
+            neovm_core::window::WindowEndState::Current(record) => Some(record),
+            neovm_core::window::WindowEndState::Unrecorded
+            | neovm_core::window::WindowEndState::Stale(_) => None,
+        }
+    }));
+}
+
 // ── TTY layout tree and redisplay ─────────────────────────────────────────
 
 pub fn run_tty_layout_tree(
@@ -342,4 +366,5 @@ pub fn install_tty_redisplay_callback_with_popup_redraw(
         }
     }));
     install_frame_snapshot_fn(evaluator);
+    install_window_layout_query_fn(evaluator);
 }

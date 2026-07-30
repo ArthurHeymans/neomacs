@@ -2016,101 +2016,77 @@ pub(crate) fn builtin_window_start(
         _ => Ok(Value::fixnum(0)),
     }
 }
-fn estimated_window_end_from_body_lines(
-    frames: &FrameManager,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WindowEndQueryPolicy {
+    LastPresented,
+    EnsureCurrent,
+}
+
+fn current_buffer_z(
     buffers: &BufferManager,
+    buffer_id: BufferId,
+    fallback: LispCharPos1,
+) -> LispCharPos1 {
+    buffers
+        .get(buffer_id)
+        .map(|buffer| {
+            LispCharPos1::from_one_based_usize(buffer.point_max_char_pos().get().saturating_add(1))
+        })
+        .unwrap_or(fallback)
+}
+
+/// Resolve GNU `window-end` semantics behind one typed query seam.
+///
+/// `EnsureCurrent` delegates to the frontend's synchronous layout adapter,
+/// which runs the same row producer as redisplay. A missing/reentrant adapter
+/// behaves like GNU's noninteractive/initial-frame case and returns the last
+/// recorded value; there is no second approximation algorithm.
+fn query_window_end(
+    eval: &mut super::eval::Context,
     fid: FrameId,
     wid: WindowId,
-    window_start: LispCharPos1,
-    bounds: &Rect,
-    buffer_id: crate::buffer::BufferId,
-) -> usize {
-    let Some(frame) = frames.get(fid) else {
-        return window_start.to_one_based_usize();
+    policy: WindowEndQueryPolicy,
+) -> EvalResult {
+    let noninteractive = eval.noninteractive();
+    let frame_initial = eval.frames.get(fid).is_some_and(|frame| frame.initial);
+    let (window_start, buffer_id, window_end) = match get_leaf(&eval.frames, fid, wid)? {
+        Window::Leaf {
+            window_start,
+            buffer_id,
+            window_end,
+            ..
+        } => (*window_start, *buffer_id, *window_end),
+        Window::Internal { .. } => return Ok(Value::NIL),
     };
-    let body_lines = if is_minibuffer_window(frames, fid, wid) {
-        (bounds.height / frame.char_height) as usize
-    } else {
-        ((bounds.height / frame.char_height) as usize).saturating_sub(1)
-    };
-
-    let Some(buf) = buffers.get(buffer_id) else {
-        return window_start.to_one_based_usize();
-    };
-    let buffer_end = buf.total_char_len().get().saturating_add(1);
-    let text = buf.full_text_string();
-    let start_char = window_start.to_char_pos().get();
-    let mut char_pos = start_char;
-    let mut lines_seen = 0usize;
-    for (i, ch) in text.char_indices().skip(start_char) {
-        if lines_seen >= body_lines {
-            let _ = i;
-            return (char_pos + 1).min(buffer_end);
-        }
-        char_pos = text[..=i].chars().count();
-        if ch == '\n' {
-            lines_seen += 1;
-        }
+    let buffer_z = current_buffer_z(&eval.buffers, buffer_id, window_start);
+    let stored_end = window_end.charpos_from_z(buffer_z);
+    if policy == WindowEndQueryPolicy::LastPresented || noninteractive || frame_initial {
+        return Ok(Value::fixnum(stored_end.as_i64()));
     }
-    buffer_end
+
+    if let Some(record) = eval.query_window_layout_end_record(fid, wid) {
+        let buffer_z = current_buffer_z(&eval.buffers, buffer_id, window_start);
+        return Ok(Value::fixnum(record.charpos_from_z(buffer_z).as_i64()));
+    }
+
+    Ok(Value::fixnum(stored_end.as_i64()))
 }
 
 /// `(window-end &optional WINDOW UPDATE)` -> integer position.
 pub(crate) fn builtin_window_end(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    let noninteractive = eval.noninteractive();
-    let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
     expect_max_args("window-end", &args, 2)?;
-    let (fid, wid) =
-        resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
-    let frame_initial = frames.get(fid).is_some_and(|frame| frame.initial);
-    let w = get_leaf(frames, fid, wid)?;
-    match w {
-        Window::Leaf {
-            window_start,
-            window_end_pos,
-            window_end_valid,
-            bounds,
-            buffer_id,
-            ..
-        } => {
-            let update_requested = args.get(1).is_some_and(|arg| !arg.is_nil());
-            let buffer_z = buffers
-                .get(*buffer_id)
-                .map(|b| {
-                    LispCharPos1::from_one_based_usize(
-                        b.point_max_char_pos().get().saturating_add(1),
-                    )
-                })
-                .unwrap_or(*window_start);
-            let stored_end = buffer_z
-                .to_one_based_usize()
-                .saturating_sub(*window_end_pos)
-                .max(1);
-            if let Some(visible_span) = frames
-                .get(fid)
-                .and_then(|frame| frame.redisplay_snapshot(wid))
-                .and_then(|snapshot| snapshot.visible_buffer_span())
-            {
-                return Ok(Value::fixnum(
-                    visible_span.lisp_window_end(buffer_z).as_i64(),
-                ));
-            }
-            if !update_requested || noninteractive || frame_initial || *window_end_valid {
-                return Ok(Value::fixnum(stored_end as i64));
-            }
-
-            Ok(Value::fixnum(estimated_window_end_from_body_lines(
-                frames,
-                buffers,
-                fid,
-                wid,
-                *window_start,
-                bounds,
-                *buffer_id,
-            ) as i64))
-        }
-        _ => Ok(Value::fixnum(0)),
-    }
+    let (fid, wid) = resolve_window_id_with_pred_in_state(
+        &mut eval.frames,
+        &mut eval.buffers,
+        args.first(),
+        "window-live-p",
+    )?;
+    let policy = if args.get(1).is_some_and(|arg| !arg.is_nil()) {
+        WindowEndQueryPolicy::EnsureCurrent
+    } else {
+        WindowEndQueryPolicy::LastPresented
+    };
+    query_window_end(eval, fid, wid, policy)
 }
 /// `(window-point &optional WINDOW)` -> integer position.
 pub(crate) fn builtin_window_point(
@@ -2195,16 +2171,11 @@ pub(crate) fn builtin_set_window_start(
     Ok(result)
 }
 fn set_window_force_start(window: &mut Window, force: bool) {
-    if let Window::Leaf {
-        force_start,
-        window_end_valid,
-        ..
-    } = window
-    {
+    if let Window::Leaf { force_start, .. } = window {
         *force_start = force;
-        if force {
-            *window_end_valid = false;
-        }
+    }
+    if force {
+        window.invalidate_window_end();
     }
 }
 
@@ -5884,9 +5855,9 @@ fn scroll_by_screen_lines(eval: &mut super::eval::Context, lines: i64) -> EvalRe
                 buffer_id,
                 point,
                 window_start,
-                window_end_valid,
+                window_end,
                 ..
-            } => (*buffer_id, *point, *window_start, *window_end_valid),
+            } => (*buffer_id, *point, *window_start, window_end.is_current()),
             _ => return Ok(Value::NIL),
         };
     let Some(buf) = eval.buffers.get(buffer_id) else {
@@ -6006,15 +5977,14 @@ fn scroll_by_screen_lines(eval: &mut super::eval::Context, lines: i64) -> EvalRe
             window,
             start_lisp,
         );
+        window.invalidate_window_end();
         if let Window::Leaf {
-            window_end_valid,
             vscroll,
             preserve_vscroll_p,
             force_start,
             ..
         } = window
         {
-            *window_end_valid = false;
             *vscroll = 0;
             *preserve_vscroll_p = false;
             // GNU window_scroll sets w->force_start: the next redisplay must
@@ -6121,14 +6091,13 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
                 .and_then(|frame| frame.find_window_mut(wid))
         {
             crate::window::window_markers::set_window_start_with_marker(buffers, window, clamped);
+            window.invalidate_window_end();
             if let Window::Leaf {
-                window_end_valid,
                 vscroll,
                 preserve_vscroll_p,
                 ..
             } = window
             {
-                *window_end_valid = false;
                 *vscroll = 0;
                 *preserve_vscroll_p = false;
             }

@@ -287,10 +287,7 @@ struct RedisplayWindowSignature {
     buffer_id: u64,
     bounds: (u32, u32, u32, u32),
     window_start: LispCharPos1,
-    window_end_pos: usize,
-    window_end_bytepos: usize,
-    window_end_vpos: usize,
-    window_end_valid: bool,
+    window_end: crate::window::WindowEndState,
     point: LispCharPos1,
     old_point: LispCharPos1,
     hscroll: usize,
@@ -2218,6 +2215,23 @@ pub struct Context {
             ) -> Result<String, String>,
         >,
     >,
+    /// Frontend-installed synchronous window layout query.
+    ///
+    /// `window-end` with UPDATE non-nil must use the same row producer as
+    /// redisplay. The layout engine lives above neovm-core in the dependency
+    /// graph, so the frontend installs this typed seam. Taking the callback
+    /// while invoking it makes nested layout queries fall back to recorded
+    /// state instead of recursively entering layout.
+    #[allow(clippy::type_complexity)]
+    pub window_layout_query_fn: Option<
+        Box<
+            dyn FnMut(
+                &mut Self,
+                crate::window::FrameId,
+                crate::window::WindowId,
+            ) -> Option<crate::window::WindowEndRecord>,
+        >,
+    >,
     /// Smooth scroll (Phase 1): accumulated trackpad pixel-scroll delta
     /// `(target_frame_id, delta_y)` pending application by the next layout pass,
     /// which drains it and calls `Engine::pixel_scroll_window`.
@@ -3096,6 +3110,7 @@ impl Context {
         ev.eval_task_rx = None;
         ev.redisplay_fn = None;
         ev.frame_snapshot_fn = None;
+        ev.window_layout_query_fn = None;
         ev.display_host = None;
         ev.coding_systems = CodingSystemManager::new();
         ev.face_table = FaceTable::new();
@@ -5547,6 +5562,7 @@ impl Context {
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
             frame_snapshot_fn: None,
+            window_layout_query_fn: None,
             pending_pixel_scroll: None,
             display_host: None,
             visual_config: neomacs_display_protocol::VisualConfig::default(),
@@ -5738,6 +5754,7 @@ impl Context {
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
             frame_snapshot_fn: None,
+            window_layout_query_fn: None,
             pending_pixel_scroll: None,
             display_host: None,
             visual_config: neomacs_display_protocol::VisualConfig::default(),
@@ -7471,6 +7488,40 @@ impl Context {
         self.redisplay_with_force(false);
     }
 
+    /// Refresh one window through the frontend's real layout engine and return
+    /// the same atomic window-end record that layout published into the window.
+    pub(crate) fn query_window_layout_end_record(
+        &mut self,
+        frame_id: crate::window::FrameId,
+        window_id: crate::window::WindowId,
+    ) -> Option<crate::window::WindowEndRecord> {
+        self.sync_pending_resize_events();
+        if let Some(buffer_id) = self
+            .frames
+            .get(frame_id)
+            .and_then(|frame| frame.find_window(window_id))
+            .and_then(crate::window::Window::buffer_id)
+        {
+            crate::window::window_markers::sync_all_frames_for_buffer(
+                &mut self.frames,
+                &self.buffers,
+                buffer_id,
+            );
+        }
+        super::window_cmds::remember_selected_window_point_in_state(
+            &mut self.frames,
+            &self.buffers,
+            frame_id,
+        );
+        let mut query = self.window_layout_query_fn.take()?;
+        let saved_restrictions = self.buffers.reset_outermost_restrictions();
+        let record = query(self, frame_id, window_id);
+        self.buffers
+            .restore_outermost_restrictions(saved_restrictions);
+        self.window_layout_query_fn = Some(query);
+        record
+    }
+
     pub(crate) fn redisplay_for_input_wait(&mut self) {
         self.redisplay_with_force(false);
     }
@@ -7721,10 +7772,7 @@ impl Context {
                     buffer_id: state.buffer_id.0,
                     bounds: state.bounds,
                     window_start: state.window_start,
-                    window_end_pos: state.window_end_pos,
-                    window_end_bytepos: state.window_end_bytepos,
-                    window_end_vpos: state.window_end_vpos,
-                    window_end_valid: state.window_end_valid,
+                    window_end: state.window_end,
                     point: state.point,
                     old_point: state.old_point,
                     hscroll: state.hscroll,

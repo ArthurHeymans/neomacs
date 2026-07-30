@@ -1,4 +1,41 @@
 use super::*;
+use crate::buffer::{CharLen, EmacsByteLen};
+
+#[test]
+fn window_end_state_preserves_one_atomic_record_across_invalidation() {
+    let mut window = Window::new_leaf(WindowId(11), BufferId(1), Rect::new(0.0, 0.0, 800.0, 600.0));
+
+    assert_eq!(window.window_end_state(), Some(WindowEndState::Unrecorded));
+
+    window.set_window_end_from_positions(
+        LispCharPos1::new(200),
+        EmacsBytePos::new(240),
+        LispCharPos1::new(150),
+        EmacsBytePos::new(175),
+        3,
+    );
+
+    let Some(WindowEndState::Current(record)) = window.window_end_state() else {
+        panic!("completed redisplay should publish one current window-end record");
+    };
+    assert_eq!(record.char_offset_from_z(), CharLen::new(50));
+    assert_eq!(record.byte_offset_from_z(), EmacsByteLen::new(65));
+    assert_eq!(record.matrix_row(), MatrixRow0::new(3));
+
+    window.invalidate_display_state();
+
+    let Some(WindowEndState::Stale(record)) = window.window_end_state() else {
+        panic!("invalidation should preserve the last presented record as stale");
+    };
+    assert_eq!(record.char_offset_from_z(), CharLen::new(50));
+    assert_eq!(record.byte_offset_from_z(), EmacsByteLen::new(65));
+    assert_eq!(record.matrix_row(), MatrixRow0::new(3));
+    assert_eq!(
+        window.window_end_charpos(LispCharPos1::new(200)),
+        Some(LispCharPos1::new(150)),
+        "UPDATE=nil semantics retain the last recorded offset"
+    );
+}
 
 #[test]
 fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {

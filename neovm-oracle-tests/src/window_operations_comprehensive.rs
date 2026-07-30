@@ -143,6 +143,28 @@ fn oracle_prop_window_end_never_exceeds_point_max() {
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
+#[test]
+fn oracle_prop_window_end_uses_character_positions_for_multibyte_text() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(save-window-excursion
+  (with-temp-buffer
+    (insert "//! Unicode — repro\nsecond line\n")
+    (set-window-buffer (selected-window) (current-buffer))
+    (goto-char (point-min))
+    (redisplay t)
+    (let ((end (window-end nil t)))
+      (list (integerp end)
+            (= end (point-max))
+            (= (length (buffer-substring (point-min) end))
+               (1- end))
+            (= (char-after 13) #x2014)))))
+"#;
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
 // ---------------------------------------------------------------------------
 // window-list returns proper list of live windows
 // ---------------------------------------------------------------------------

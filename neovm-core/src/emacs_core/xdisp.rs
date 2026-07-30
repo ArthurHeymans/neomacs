@@ -1411,7 +1411,6 @@ fn build_mode_line_percent_context(
         if let crate::window::Window::Leaf {
             id,
             window_start,
-            window_end_pos,
             point,
             ..
         } = window
@@ -1420,11 +1419,13 @@ fn build_mode_line_percent_context(
             // 0-indexed to match buffer begv/zv.
             ctx.window_start = window_start.to_char_pos().get();
             if let Some(buf) = context_buffer {
-                ctx.window_end = buf
-                    .point_max_char_pos()
-                    .get()
-                    .saturating_add(1)
-                    .saturating_sub(*window_end_pos);
+                let buffer_z = LispCharPos1::from_one_based_usize(
+                    buf.point_max_char_pos().get().saturating_add(1),
+                );
+                ctx.window_end = window
+                    .window_end_charpos(buffer_z)
+                    .unwrap_or(buffer_z)
+                    .to_one_based_usize();
                 // GNU displays a window's mode line with the buffer point set to
                 // that window's `w->pointm`, so `%l`/`%c` reflect THIS window.
                 // The selected window's point is the live buffer point; a
