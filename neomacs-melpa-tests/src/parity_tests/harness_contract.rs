@@ -303,6 +303,14 @@ fn non_git_upstream_is_acquired_from_an_exact_emacsmirror_git_revision() {
 }
 
 #[test]
+fn source_build_can_exclude_upstream_test_code_from_the_runtime_package() {
+    let source = locked_melpa_source(("alectryon", "20260525.2000"))
+        .expect("resolve the Alectryon runtime source");
+
+    assert_eq!(source.build(), SourceBuild::Files("etc/elisp/alectryon.el"));
+}
+
+#[test]
 fn exact_source_install_plan_orders_dependencies_before_the_main_package() {
     let plan = locked_melpa_install_plan(("arxiv-citation", "20230713.627"))
         .expect("resolve the source-locked arxiv-citation dependency closure");

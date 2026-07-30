@@ -19,7 +19,7 @@ fn alectryon_code_mode_activation_installs_real_buffer_local_editing_and_save_st
    (local-variable-p 'font-lock-syntactic-face-function)
    (not (null alectryon--prog-font-lock-keywords))))"##;
     let expect = expect![
-        "OK (coq-mode t t nil coq-mode coq-mode nil t t (alectryon--save) (alectryon--flyspell-hook t) (modification-hooks wrap-prefix display) nil nil t t)"
+        "OK (coq-mode t t nil coq-mode coq-mode nil t t (alectryon--save) (alectryon--flyspell-hook t) (modification-hooks wrap-prefix display) 1 1 t t)"
     ];
     assert_alectryon_parity(elisp_form, expect);
 }
@@ -65,7 +65,7 @@ fn alectryon_disabling_in_original_code_mode_cleans_hooks_maps_and_font_lock_sta
           (lookup-key (current-local-map) (kbd "C-c C-="))
           (local-variable-p 'font-lock-syntactic-face-function))))"##;
     let expect = expect![
-        "OK ((t t nil (alectryon--save) (alectryon--flyspell-hook t)) coq-mode nil nil nil nil nil nil nil nil)"
+        "OK ((t t nil (alectryon--save) (alectryon--flyspell-hook t)) coq-mode nil nil nil nil nil nil 1 nil)"
     ];
     assert_alectryon_parity(elisp_form, expect);
 }
