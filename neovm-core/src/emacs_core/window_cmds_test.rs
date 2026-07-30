@@ -6755,6 +6755,51 @@ fn window_end_prefers_last_redisplay_snapshot_when_available() {
 }
 
 #[test]
+fn window_end_snapshot_at_eob_never_exceeds_point_max() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let buf = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(buf);
+    ev.buffers
+        .get_mut(buf)
+        .expect("scratch buffer")
+        .insert("hello");
+    let fid = ev.frames.create_frame("F1", 800, 600, buf);
+    let wid = ev.frames.get(fid).expect("frame").selected_window;
+    let point_max = ev
+        .buffers
+        .get(buf)
+        .expect("scratch buffer")
+        .point_max_char_pos()
+        .get()
+        .saturating_add(1);
+
+    ev.frames
+        .get_mut(fid)
+        .expect("frame")
+        .commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
+            window_id: wid,
+            rows: vec![crate::window::DisplayRowSnapshot {
+                row: 0,
+                y: 0,
+                height: 16,
+                start_x: 0,
+                start_col: 0,
+                end_x: 0,
+                end_col: 0,
+                start_buffer_pos: Some(LispCharPos1::ONE),
+                // Redisplay publishes an insertion boundary at ZV so
+                // `posn-at-point' can resolve point-max at EOB.
+                end_buffer_pos: Some(LispCharPos1::from_one_based_usize(point_max)),
+            }],
+            ..crate::window::WindowDisplaySnapshot::default()
+        }]);
+
+    let result = super::builtin_window_end(&mut ev, vec![]).expect("window-end");
+    assert_eq!(result, Value::fixnum(point_max as i64));
+}
+
+#[test]
 fn window_end_update_in_batch_returns_stored_end_without_estimate() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

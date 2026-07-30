@@ -451,6 +451,7 @@ impl DisplayOutputBuilder {
             0.0,
             style,
             color,
+            Color::BLACK,
         ));
     }
 

@@ -879,6 +879,33 @@ fn test_gui_frame_cursor_color_falls_back_when_matching_background_like_gnu() {
 }
 
 #[test]
+fn test_gui_frame_cursor_color_falls_back_to_foreground_when_mouse_also_matches_background() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator
+        .buffer_manager_mut()
+        .create_buffer("*cursor-color*");
+    let frame_id = evaluator
+        .frame_manager_mut()
+        .create_frame("test", 800, 600, buf_id);
+    {
+        let frame = evaluator.frame_manager_mut().get_mut(frame_id).unwrap();
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.set_known_parameter(FrameParam::ForegroundColor, Value::string("white"));
+        frame.set_known_parameter(FrameParam::BackgroundColor, Value::string("black"));
+        frame.set_known_parameter(FrameParam::CursorColor, Value::string("black"));
+        frame.set_known_parameter(FrameParam::MouseColor, Value::string("black"));
+    }
+    let frame = evaluator.frame_manager().get(frame_id).unwrap();
+
+    let cursor_color = frame_cursor_color_pixel(frame, evaluator.face_table());
+
+    assert_eq!(
+        cursor_color, 0xffffff,
+        "a filled cursor needs a paint color distinct from the child frame background"
+    );
+}
+
+#[test]
 fn test_gui_frame_cursor_color_keeps_contrasting_parameter_like_gnu() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator

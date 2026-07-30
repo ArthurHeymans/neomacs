@@ -980,6 +980,7 @@ impl<'a> VisualTextWindowCursorPublishContext<'a> {
                     height: resolved_cursor.height,
                     style: resolved_cursor.style,
                     color: resolved_cursor.color,
+                    cursor_fg: resolved_cursor.cursor_fg,
                     effects: spec.effects.clone(),
                 },
             );

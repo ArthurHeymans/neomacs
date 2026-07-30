@@ -929,6 +929,9 @@ pub struct CursorItem {
     pub height: f32,
     pub style: CursorStyle,
     pub color: Color,
+    /// Foreground used to redraw a glyph covered by a filled box cursor.
+    #[serde(default)]
+    pub cursor_fg: Color,
     /// Pixels above the baseline. Needed so `cursor_draw_rect` places the cursor
     /// top at `glyph_baseline - ascent`; a non-selected window's cursor is drawn
     /// one row too low when this is dropped to 0.
@@ -1446,6 +1449,7 @@ impl FrameDisplayState {
                     height: cursor.height,
                     style: cursor.style,
                     color: cursor.color,
+                    cursor_fg: cursor.cursor_fg,
                     ascent: cursor.ascent,
                 }),
         );
@@ -1578,10 +1582,10 @@ impl FrameDisplayState {
         self.for_each_glyph(|g| buf.glyphs.push(g));
 
         // --- Materialize cursors ---
-        // These are non-selected (decorative) cursors; CursorItem has no
-        // cursor_fg/ascent. The selected window's active cursor is pushed by
-        // set_phys_cursor below. These write to `buf.window_cursors`, not
-        // `buf.glyphs`, so the glyph order produced above is preserved.
+        // These are non-selected (decorative) cursors. The selected window's
+        // active cursor is pushed by set_phys_cursor below. These write to
+        // `buf.window_cursors`, not `buf.glyphs`, so the glyph order produced
+        // above is preserved.
         for cursor in &self.cursors {
             buf.window_cursors.push(WindowCursor {
                 window_id: cursor.window_id,
@@ -1592,7 +1596,7 @@ impl FrameDisplayState {
                 height: cursor.height,
                 style: cursor.style,
                 color: cursor.color,
-                cursor_fg: Color::BLACK,
+                cursor_fg: cursor.cursor_fg,
                 // Carry the real ascent so `cursor_draw_rect` places the cursor
                 // top at `baseline - ascent`; a hardcoded 0 dropped a
                 // non-selected window's cursor one text row too low.

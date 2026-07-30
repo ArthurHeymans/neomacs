@@ -15819,6 +15819,55 @@ fn visible_gui_minibuffer_reports_positive_posn_at_point_height() {
     );
 }
 
+#[test]
+fn visible_gui_minibuffer_window_end_is_bounded_by_point_max_at_eob() {
+    let mut eval = Context::new();
+    let root_buffer = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("root buffer")
+        .id();
+    let minibuffer = eval.buffer_manager_mut().create_buffer(" *Minibuf-1*");
+    eval.buffer_manager_mut()
+        .get_mut(minibuffer)
+        .expect("minibuffer")
+        .insert("M-x if");
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("minibuffer-window-end", 640, 200, root_buffer);
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    let minibuffer_window = eval
+        .activate_minibuffer_window_for_buffer(
+            minibuffer,
+            LispString::from_utf8("M-x "),
+            Some(LispString::from_utf8("if")),
+        )
+        .expect("activate minibuffer")
+        .expect("minibuffer window");
+    eval.eval_form(Value::list(vec![
+        Value::symbol("select-window"),
+        Value::make_window(minibuffer_window.0),
+    ]))
+    .expect("select active minibuffer window");
+
+    let mut engine = LayoutEngine::new();
+    engine.enable_cosmic_metrics();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+
+    let result = eval
+        .eval_str("(<= (window-end nil t) (point-max))")
+        .expect("query displayed window end");
+    assert_eq!(
+        result,
+        Value::T,
+        "GNU window-end is a buffer position and cannot advance past Z"
+    );
+}
+
 /// An active minibuffer holding a prompt line plus several candidate lines
 /// must grow to one display row per logical line, render every line, and never
 /// flatten content into one row.  Exercises the active-fido/vertico measure

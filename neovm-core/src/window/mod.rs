@@ -1251,6 +1251,43 @@ impl Window {
             }
         }
     }
+
+    /// Drop only horizontal scroll derived from the previous geometry.
+    ///
+    /// GNU distinguishes auto-hscroll state from an explicit
+    /// `set-window-hscroll` with `suspend_auto_hscroll`. Geometry changes
+    /// invalidate the former, while the latter remains user-owned.
+    fn invalidate_automatic_hscroll_for_geometry_change(&mut self) {
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        enum HorizontalScrollOwnership {
+            Automatic,
+            Explicit,
+        }
+
+        match self {
+            Window::Leaf {
+                hscroll,
+                min_hscroll,
+                suspend_auto_hscroll,
+                ..
+            } => {
+                let ownership = if *suspend_auto_hscroll {
+                    HorizontalScrollOwnership::Explicit
+                } else {
+                    HorizontalScrollOwnership::Automatic
+                };
+                match ownership {
+                    HorizontalScrollOwnership::Automatic => *hscroll = *min_hscroll,
+                    HorizontalScrollOwnership::Explicit => {}
+                }
+            }
+            Window::Internal { children, .. } => {
+                for child in children {
+                    child.invalidate_automatic_hscroll_for_geometry_change();
+                }
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1448,6 +1485,21 @@ impl WindowVisibleBufferSpan {
 
     pub const fn end(self) -> LispCharPos1 {
         self.end
+    }
+
+    /// Convert the inclusive redisplay span into GNU's Lisp-visible
+    /// `window-end` position.
+    ///
+    /// Published row ends normally identify the last displayed character, so
+    /// `window-end` is the following insertion position. Redisplay also
+    /// publishes Z itself for a visible EOB insertion slot; that boundary is
+    /// already a Lisp position and must not be advanced past `point-max`.
+    pub fn lisp_window_end(self, buffer_z: LispCharPos1) -> LispCharPos1 {
+        if self.end >= buffer_z {
+            buffer_z
+        } else {
+            LispCharPos1::new(self.end.as_i64().saturating_add(1))
+        }
     }
 }
 
@@ -2869,10 +2921,18 @@ impl Frame {
 
     /// Resize the frame and window tree to new pixel dimensions.
     pub fn resize_pixelwise(&mut self, width: u32, height: u32) {
+        let horizontal_geometry_changed = self.width != width;
         self.clear_pending_gui_resize();
         self.width = width;
         self.height = height;
         self.sync_window_area_bounds();
+        if horizontal_geometry_changed {
+            self.root_window
+                .invalidate_automatic_hscroll_for_geometry_change();
+            if let Some(minibuffer) = self.minibuffer_leaf.as_mut() {
+                minibuffer.invalidate_automatic_hscroll_for_geometry_change();
+            }
+        }
 
         let char_width = self.char_width.max(1.0).round();
         let char_height = self.char_height.max(1.0).round();

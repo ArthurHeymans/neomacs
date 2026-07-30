@@ -833,6 +833,7 @@ fn publish_text_window_decorative_cursor_installs_cursor_item_and_effects_only()
             height: 16.0,
             style: CursorStyle::Bar(2.0),
             color: Color::WHITE,
+            cursor_fg: Color::BLACK,
             effects: Some(effects.clone()),
         },
     );
@@ -843,6 +844,7 @@ fn publish_text_window_decorative_cursor_installs_cursor_item_and_effects_only()
     assert_eq!(state.cursors[0].window_id.get(), 77);
     assert_eq!(state.cursors[0].slot_id.row, 3);
     assert_eq!(state.cursors[0].slot_id.col, 5);
+    assert_eq!(state.cursors[0].cursor_fg, Color::BLACK);
     assert_eq!(
         state
             .cursor_effects_by_window

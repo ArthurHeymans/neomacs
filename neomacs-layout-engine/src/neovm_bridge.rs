@@ -1075,6 +1075,19 @@ fn frame_background_color_pixel(frame: &Frame, face_table: &FaceTable) -> u32 {
         .unwrap_or(0x00ffffff)
 }
 
+fn frame_foreground_color_pixel(frame: &Frame, face_table: &FaceTable) -> u32 {
+    frame
+        .parameter("foreground-color")
+        .and_then(|value| parse_color_pixel(&value))
+        .or_else(|| {
+            face_table
+                .resolve("default")
+                .foreground
+                .map(|color| color_to_pixel(&color))
+        })
+        .unwrap_or(0x000000)
+}
+
 fn frame_mouse_color_pixel(frame: &Frame) -> u32 {
     frame
         .parameter("mouse-color")
@@ -1094,13 +1107,25 @@ fn frame_cursor_color_pixel(frame: &Frame, face_table: &FaceTable) -> u32 {
     // empty-line or end-of-line filled box remains visible.  TTY frames keep
     // the terminal cursor color sentinel path, so only apply this to GUI
     // frames.
-    if frame.effective_window_system().is_some()
-        && pixel == frame_background_color_pixel(frame, face_table)
-    {
-        frame_mouse_color_pixel(frame)
-    } else {
-        pixel
+    if frame.effective_window_system().is_none() {
+        return pixel;
     }
+
+    let background = frame_background_color_pixel(frame, face_table);
+    if pixel != background {
+        return pixel;
+    }
+
+    let mouse = frame_mouse_color_pixel(frame);
+    if mouse != background {
+        return mouse;
+    }
+
+    // GNU first falls back to the mouse pixel. A dark child frame can make
+    // cursor, mouse, and background all identical, however. Keep the stronger
+    // renderer invariant that a filled cursor background remains visible on
+    // an empty EOL/EOB slot, where there is no glyph foreground to rescue it.
+    frame_foreground_color_pixel(frame, face_table)
 }
 
 fn cursor_effect_name_from_symbol(value: Value) -> Option<String> {

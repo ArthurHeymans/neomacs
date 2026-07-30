@@ -2074,22 +2074,26 @@ pub(crate) fn builtin_window_end(eval: &mut super::eval::Context, args: Vec<Valu
             ..
         } => {
             let update_requested = args.get(1).is_some_and(|arg| !arg.is_nil());
-            let stored_end = buffers
+            let buffer_z = buffers
                 .get(*buffer_id)
-                .map(|b| b.point_max_char_pos().get().saturating_add(1))
-                .unwrap_or(window_start.to_one_based_usize())
+                .map(|b| {
+                    LispCharPos1::from_one_based_usize(
+                        b.point_max_char_pos().get().saturating_add(1),
+                    )
+                })
+                .unwrap_or(*window_start);
+            let stored_end = buffer_z
+                .to_one_based_usize()
                 .saturating_sub(*window_end_pos)
                 .max(1);
-            if let Some(last_visible) = frames
+            if let Some(visible_span) = frames
                 .get(fid)
                 .and_then(|frame| frame.redisplay_snapshot(wid))
-                .and_then(|snapshot| snapshot.visible_buffer_span().map(|span| span.end()))
+                .and_then(|snapshot| snapshot.visible_buffer_span())
             {
-                // `visible_buffer_span` ends at the LAST displayed character
-                // (that is what `point_for_buffer_pos` range-tests against),
-                // but GNU's `window-end` is `BUF_Z (b) - w->window_end_pos` —
-                // the position just AFTER it, matching `stored_end` above.
-                return Ok(Value::fixnum(last_visible.as_i64().saturating_add(1)));
+                return Ok(Value::fixnum(
+                    visible_span.lisp_window_end(buffer_z).as_i64(),
+                ));
             }
             if !update_requested || noninteractive || frame_initial || *window_end_valid {
                 return Ok(Value::fixnum(stored_end as i64));

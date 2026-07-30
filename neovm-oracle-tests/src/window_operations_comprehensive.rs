@@ -123,6 +123,26 @@ fn oracle_prop_window_start_end_relationship() {
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
+#[test]
+fn oracle_prop_window_end_never_exceeds_point_max() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(save-window-excursion
+  (with-temp-buffer
+    (insert "one line without a trailing newline")
+    (set-window-buffer (selected-window) (current-buffer))
+    (goto-char (point-max))
+    (redisplay t)
+    (let ((end (window-end nil t)))
+      (list (integerp end)
+            (<= (point-min) end)
+            (<= end (point-max))))))
+"#;
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
 // ---------------------------------------------------------------------------
 // window-list returns proper list of live windows
 // ---------------------------------------------------------------------------

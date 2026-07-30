@@ -1025,6 +1025,7 @@ fn materialize_includes_cursors() {
         height: 16.0,
         style: CursorStyle::FilledBox,
         color: Color::GREEN,
+        cursor_fg: Color::WHITE,
         ascent: 12.0,
     });
     let buf = state.materialize();
@@ -1036,10 +1037,37 @@ fn materialize_includes_cursors() {
     assert_eq!(cursor.x, 40.0);
     assert_eq!(cursor.style, CursorStyle::FilledBox);
     assert_eq!(cursor.color, Color::GREEN);
+    assert_eq!(cursor.cursor_fg, Color::WHITE);
     // The CursorItem's ascent must flow into the WindowCursor. A hardcoded 0
     // here dropped a non-selected window's cursor one text row too low
     // (`cursor_draw_rect` places the top at `glyph_baseline - ascent`).
     assert_eq!(cursor.ascent, 12.0);
+}
+
+#[test]
+fn decorative_cursor_paint_round_trips_without_losing_inverse_foreground() {
+    let window_id = DisplayWindowId::new(7);
+    let slot_id = DisplaySlotId::from_pixels(window_id, Px(40.0), Px(0.0), Px(8.0), Px(16.0));
+    let mut input = FrameGlyphBuffer::new();
+    input.window_cursors.push(WindowCursor {
+        window_id,
+        slot_id,
+        x: 40.0,
+        y: 0.0,
+        width: 8.0,
+        height: 16.0,
+        style: CursorStyle::FilledBox,
+        color: Color::BLUE,
+        cursor_fg: Color::WHITE,
+        ascent: 12.0,
+        active: false,
+    });
+
+    let state = FrameDisplayState::from_frame_glyph_buffer(&input);
+    let output = state.materialize();
+
+    assert_eq!(output.window_cursors.len(), 1);
+    assert_eq!(output.window_cursors[0].cursor_fg, Color::WHITE);
 }
 
 #[test]
@@ -2212,6 +2240,7 @@ fn materialize_mixed_grid_and_nongrid_items() {
         height: 16.0,
         style: CursorStyle::FilledBox,
         color: Color::WHITE,
+        cursor_fg: Color::BLACK,
         ascent: 12.0,
     });
 

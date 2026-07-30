@@ -1896,6 +1896,79 @@ fn frame_resize_pixelwise_updates_window_tree_and_invalidates_display_state() {
 }
 
 #[test]
+fn frame_resize_discards_geometry_dependent_auto_hscroll() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let fid = mgr.create_frame("posframe", 9, 19, BufferId(1));
+    let frame = mgr.get_mut(fid).expect("frame");
+    let window = frame
+        .find_window_mut(frame.selected_window)
+        .expect("selected window");
+    let Window::Leaf {
+        hscroll,
+        min_hscroll,
+        suspend_auto_hscroll,
+        ..
+    } = window
+    else {
+        panic!("selected window should be a leaf");
+    };
+    // A current-line auto-hscroll pass ran while the child frame was only one
+    // column wide.  The offset is derived from that geometry, not user intent.
+    *hscroll = 15;
+    *min_hscroll = 0;
+    *suspend_auto_hscroll = false;
+
+    frame.resize_pixelwise(1_955, 376);
+
+    assert_eq!(
+        frame
+            .find_window(frame.selected_window)
+            .expect("selected window")
+            .hscroll(),
+        0,
+        "a resized child frame must not present an auto-hscroll offset computed for its bootstrap size"
+    );
+}
+
+#[test]
+fn frame_resize_preserves_manual_hscroll() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let fid = mgr.create_frame("manual-hscroll", 800, 600, BufferId(1));
+    let frame = mgr.get_mut(fid).expect("frame");
+    let window = frame
+        .find_window_mut(frame.selected_window)
+        .expect("selected window");
+    let Window::Leaf {
+        hscroll,
+        min_hscroll,
+        suspend_auto_hscroll,
+        ..
+    } = window
+    else {
+        panic!("selected window should be a leaf");
+    };
+    // Mirrors `(set-window-hscroll WINDOW 12)`: GNU marks this state as
+    // suspended so redisplay does not reinterpret an explicit user offset.
+    *hscroll = 12;
+    // Keep the automatic lower bound distinct: resetting every window to
+    // min_hscroll would erase the explicit offset and must fail this test.
+    *min_hscroll = 0;
+    *suspend_auto_hscroll = true;
+
+    frame.resize_pixelwise(1_200, 700);
+
+    assert_eq!(
+        frame
+            .find_window(frame.selected_window)
+            .expect("selected window")
+            .hscroll(),
+        12
+    );
+}
+
+#[test]
 fn frame_resize_pixelwise_preserves_fixed_width_side_window() {
     crate::test_utils::init_test_tracing();
     let mut mgr = FrameManager::new();

@@ -641,6 +641,7 @@ pub(crate) struct TextWindowDecorativeCursor {
     pub(crate) height: f32,
     pub(crate) style: CursorStyle,
     pub(crate) color: Color,
+    pub(crate) cursor_fg: Color,
     pub(crate) effects: Option<EffectsConfig>,
 }
 
@@ -811,6 +812,7 @@ pub(crate) fn publish_text_window_decorative_cursor(
             ascent: 0.0,
             style: cursor.style,
             color: cursor.color,
+            cursor_fg: cursor.cursor_fg,
         },
     );
 }
@@ -829,6 +831,7 @@ fn install_text_window_cursor_artifact(
         cursor.ascent,
         cursor.style,
         cursor.color,
+        cursor.cursor_fg,
     ));
 }
 
@@ -868,6 +871,7 @@ struct TextWindowCursorArtifact {
     ascent: f32,
     style: CursorStyle,
     color: Color,
+    cursor_fg: Color,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -891,6 +895,7 @@ impl TextWindowCursorPublication {
             ascent: cursor.ascent,
             style: cursor.style,
             color: cursor.color,
+            cursor_fg: cursor.cursor_fg,
         });
         let mut phys_cursor = cursor.phys_cursor();
         let row_col = if cursor.selected && !cursor.glyph_row_resolved {
