@@ -36,16 +36,17 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
         {
             self.render_row_prelude(row_prelude_context, params, active_face_state, buffer);
 
-            if self
-                .render_invisible_text_for_context(
-                    loop_context,
-                    source_walk,
-                    text,
-                    active_face_state,
-                    buffer,
-                )
-                .should_continue_buffer_walk()
-            {
+            let invisible_text_outcome = self.render_invisible_text_for_context(
+                loop_context,
+                source_walk,
+                text,
+                active_face_state,
+                buffer,
+            );
+            if invisible_text_outcome.should_break() {
+                break;
+            }
+            if invisible_text_outcome.should_continue_buffer_walk() {
                 continue;
             }
 

@@ -126,7 +126,7 @@ impl<'a> BufferSourceCharRenderRequest<'a> {
         // is load-bearing: an overlay string can contain a newline and advance
         // the live row.  Keep every row-dependent source-char value below this
         // boundary so a prepared append can never retain pre-overlay geometry.
-        {
+        let overlay_continuation = {
             let overlay_charpos = progress.charpos();
             let (x, col) = progress.row_progress_mut().coordinates_mut();
             self.overlay_context.render_at_text_row(
@@ -143,7 +143,10 @@ impl<'a> BufferSourceCharRenderRequest<'a> {
                 face_ids,
                 line_numbers,
                 face_scan,
-            );
+            )
+        };
+        if overlay_continuation.should_break() {
+            return BufferSourceItemRenderOutcome::Stop;
         }
 
         let append_position = progress.row_position();

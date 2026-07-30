@@ -709,6 +709,7 @@ pub(crate) enum BufferSourceSelectiveDisplayTailRenderOutcome {
 pub(crate) enum BufferSourceInvisibleTextRenderOutcome {
     Visible,
     ContinueBufferWalk,
+    Stop,
 }
 
 impl BufferSourceSelectiveDisplayTailRenderOutcome {
@@ -722,6 +723,10 @@ impl BufferSourceSelectiveDisplayTailRenderOutcome {
 }
 
 impl BufferSourceInvisibleTextRenderOutcome {
+    pub(crate) fn should_break(self) -> bool {
+        matches!(self, Self::Stop)
+    }
+
     pub(crate) fn should_continue_buffer_walk(self) -> bool {
         matches!(self, Self::ContinueBufferWalk)
     }
@@ -1139,7 +1144,7 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
 
         let overlay_charpos = progress.charpos();
         let (x, col) = progress.row_progress_mut().coordinates_mut();
-        context.overlay_context.render_at_text_row(
+        let overlay_continuation = context.overlay_context.render_at_text_row(
             buffer,
             overlay_charpos,
             source_render.reborrow(),
@@ -1154,6 +1159,9 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
             line_numbers,
             face_scan,
         );
+        if overlay_continuation.should_break() {
+            return BufferSourceInvisibleTextRenderOutcome::Stop;
+        }
         BufferSourceInvisibleTextRenderOutcome::ContinueBufferWalk
     }
 }
@@ -1576,7 +1584,7 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             context.char_h,
             context.extra_line_spacing,
         );
-        {
+        let overlay_continuation = {
             let overlay_charpos = progress.charpos();
             let (x, col) = progress.row_progress_mut().coordinates_mut();
             context.overlay_context.render_at_text_row(
@@ -1593,7 +1601,10 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
                 face_ids,
                 line_numbers,
                 face_scan,
-            );
+            )
+        };
+        if overlay_continuation.should_break() {
+            return DisplayRowTransitionContinuation::Exhausted;
         }
         let row_position = progress.row_position();
         line_break_action.capture_cursor_if_point(

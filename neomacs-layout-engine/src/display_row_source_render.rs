@@ -44,9 +44,8 @@ use crate::glyph_row_writer::push_stretch_to_area;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::types::WindowParams;
 use crate::window_output::{
-    DisplayTextRowGeometryTransition, DisplayTextRowMetrics, DisplayTextRowTransition,
-    TextWindowOutputTarget, WindowOutputEmitter, finish_and_end_text_window_row,
-    install_text_window_row_decoration_request, transition_text_window_row,
+    DisplayTextRowGeometryTransition, DisplayTextRowTransition, TextWindowOutputTarget,
+    WindowOutputEmitter, install_text_window_row_decoration_request,
     transition_text_window_row_with_limit,
 };
 use neomacs_display_protocol::glyph_matrix::{
@@ -590,14 +589,6 @@ impl<'a> TextRowOutputRenderState<'a> {
         f: impl FnOnce(TextWindowOutputTarget<'_>, &mut WindowOutputEmitter, &mut Context) -> R,
     ) -> R {
         f(self.output, self.output_emitter, self.evaluator)
-    }
-
-    pub(crate) fn finish_and_end_text_row(self, metrics: DisplayTextRowMetrics) {
-        finish_and_end_text_window_row(self.output, self.output_emitter, metrics);
-    }
-
-    pub(crate) fn transition_text_row(self, transition: DisplayTextRowGeometryTransition) {
-        transition_text_window_row(self.output, self.output_emitter, self.evaluator, transition);
     }
 
     pub(crate) fn transition_text_row_with_limit(

@@ -5152,7 +5152,10 @@ fn overlay_string_row_break_context_finishes_current_row() {
             &mut face_ids,
         );
 
-        assert!(OverlayStringRowBreakRenderContext::new(5, row_context).finish_row(&mut state));
+        assert_eq!(
+            OverlayStringRowBreakRenderContext::new(5, row_context).finish_row(&mut state),
+            DisplayRowTransitionContinuation::Continue
+        );
     }
 
     assert_eq!(x, 0.0);

@@ -14888,6 +14888,72 @@ fn overlay_newline_continuation_reserves_a_blank_line_number_margin() {
 }
 
 #[test]
+fn overlay_newline_at_visible_row_limit_does_not_overflow_an_ended_row() {
+    // A Magit blame heading is an overlay before-string ending in a newline.
+    // When that newline consumes the final visible display row, redisplay must
+    // stop before attempting to append or wrap the underlying buffer text:
+    // there is no longer a live output row to finish.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert(&format!("{}\n", "x".repeat(200)));
+        buf.set_buffer_local("display-line-numbers", Value::T);
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: 1,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let _ = buf.overlays_mut().overlay_put(
+            overlay,
+            Value::symbol("before-string"),
+            Value::string("blame header\n"),
+        );
+        buf.goto_emacs_byte_pos(EmacsBytePos::ZERO);
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-overlay-newline-row-limit", 96, 32, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("window matrix entry");
+    let rows = enabled_window_row_texts(entry);
+    assert!(
+        rows.iter().any(|row| row.contains("blame")),
+        "the final visible row must contain the overlay heading, rows={rows:?}"
+    );
+    assert!(
+        rows.iter().all(|row| !row.contains('x')),
+        "the underlying buffer text must not render after the overlay newline exhausted rows, \
+         rows={rows:?}"
+    );
+}
+
+#[test]
 fn layout_frame_rust_suppresses_left_fringe_display_spec_before_string() {
     // magit attaches an overlay before-string `#("fringe" 0 6 (display
     // (left-fringe magit-fringe-bitmapv fringe)))` to every collapsible section
