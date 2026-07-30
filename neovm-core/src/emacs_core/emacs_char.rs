@@ -1304,18 +1304,44 @@ pub fn blankp(cat: i64) -> bool {
 /// `emacs_abort` in GNU. We assert in debug builds and fall back to a 1-byte
 /// advance in release builds so a malformed buffer does not crash production.
 pub fn chars_in_multibyte(bytes: &[u8]) -> usize {
+    let count = count_lead_bytes(bytes);
+    #[cfg(debug_assertions)]
+    assert_eq!(
+        count,
+        chars_in_multibyte_by_decode(bytes),
+        "lead-byte count diverged from per-char decode (malformed content?)"
+    );
+    count
+}
+
+/// Number of non-continuation bytes in `bytes`.
+///
+/// Every character in the internal encoding is exactly one lead byte
+/// (anything outside 0x80..=0xBF) followed by its continuation bytes — for
+/// ASCII, the C0/C1 raw-byte encoding, and 2..5-byte sequences alike (see
+/// `multibyte_length`). Counting leads therefore counts characters, and this
+/// bytewise form auto-vectorizes to a few bytes per cycle where the previous
+/// per-char `multibyte_length` loop paid a validation ladder per character —
+/// position-conversion scans were 10 percent of an elisp editing profile.
+/// GNU walks `BYTES_BY_CHAR_HEAD` per char (character.h); on well-formed
+/// content this computes the same count without the walk.
+#[inline]
+fn count_lead_bytes(bytes: &[u8]) -> usize {
+    bytes.iter().filter(|&&b| (b & 0xC0) != 0x80).count()
+}
+
+/// The pre-vectorization per-char counting loop, kept as the debug oracle
+/// for `chars_in_multibyte`: the two agree on every well-formed buffer, and
+/// disagreement means the buffer invariant (well-formed internal encoding
+/// everywhere) was broken upstream.
+#[cfg(debug_assertions)]
+fn chars_in_multibyte_by_decode(bytes: &[u8]) -> usize {
     let mut count = 0usize;
     let mut pos = 0usize;
     while pos < bytes.len() {
         let len = match multibyte_length(&bytes[pos..], true) {
             Some(n) if n > 0 => n,
-            _ => {
-                debug_assert!(
-                    false,
-                    "chars_in_multibyte: invalid multibyte sequence at offset {pos}"
-                );
-                1
-            }
+            _ => 1,
         };
         pos += len;
         count += 1;
@@ -1334,9 +1360,6 @@ fn record_position_conversion_scan_step() {
     POSITION_CONVERSION_SCAN_STEPS.with(|steps| steps.set(steps.get() + 1));
 }
 
-#[cfg(not(test))]
-fn record_position_conversion_scan_step() {}
-
 #[cfg(test)]
 pub(crate) fn reset_position_conversion_scan_steps_for_test() {
     POSITION_CONVERSION_SCAN_STEPS.with(|steps| steps.set(0));
@@ -1352,15 +1375,42 @@ pub(crate) fn position_conversion_scan_steps_for_test() -> usize {
 /// Returns the byte position of the `char_idx`-th character (0-based).
 /// If `char_idx` is beyond the end of the string, returns `bytes.len()`.
 pub fn char_to_byte_pos(bytes: &[u8], char_idx: usize) -> usize {
-    let mut pos = 0usize;
-    let mut ci = 0usize;
-    while ci < char_idx && pos < bytes.len() {
-        record_position_conversion_scan_step();
-        let (_, len) = string_char(&bytes[pos..]);
-        pos += len;
-        ci += 1;
+    // Byte offset of the char_idx-th lead byte (see count_lead_bytes for
+    // the invariant): count leads a block at a time (vectorized), then walk
+    // the block containing the target. Past-the-end char_idx clamps to
+    // bytes.len(), matching the previous scan loop.
+    if char_idx == 0 {
+        return 0;
     }
-    pos
+    #[cfg(test)]
+    record_position_conversion_scan_step();
+    let mut remaining = char_idx;
+    let mut base = 0usize;
+    const BLOCK: usize = 64;
+    while base + BLOCK <= bytes.len() {
+        let leads = count_lead_bytes(&bytes[base..base + BLOCK]);
+        if leads >= remaining {
+            break;
+        }
+        remaining -= leads;
+        base += BLOCK;
+    }
+    for (i, &b) in bytes[base..].iter().enumerate() {
+        if (b & 0xC0) != 0x80 {
+            remaining -= 1;
+            if remaining == 0 {
+                // The target char STARTS at this lead; its end is the next
+                // lead (or the end of the slice).
+                let start = base + i;
+                return start
+                    + bytes[start + 1..]
+                        .iter()
+                        .position(|&b| (b & 0xC0) != 0x80)
+                        .map_or(bytes.len() - start, |n| n + 1);
+            }
+        }
+    }
+    bytes.len()
 }
 
 /// Convert a byte offset to a character index.
@@ -1368,15 +1418,14 @@ pub fn char_to_byte_pos(bytes: &[u8], char_idx: usize) -> usize {
 /// `byte_pos` should fall on a character boundary. Returns the number of
 /// characters before that byte position.
 pub fn byte_to_char_pos(bytes: &[u8], byte_pos: usize) -> usize {
-    let mut pos = 0usize;
-    let mut ci = 0usize;
-    while pos < byte_pos && pos < bytes.len() {
+    // Characters before byte_pos = lead bytes before it (a char started
+    // before byte_pos iff its lead byte is before byte_pos), identical to
+    // the previous per-char scan even for a byte_pos inside a character.
+    #[cfg(test)]
+    if byte_pos > 0 {
         record_position_conversion_scan_step();
-        let (_, len) = string_char(&bytes[pos..]);
-        pos += len;
-        ci += 1;
     }
-    ci
+    count_lead_bytes(&bytes[..byte_pos.min(bytes.len())])
 }
 
 /// If the byte sequence is valid UTF-8 (i.e. contains no raw-byte overlong
