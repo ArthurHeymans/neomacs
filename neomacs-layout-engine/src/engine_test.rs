@@ -16232,6 +16232,13 @@ fn synchronous_window_end_query_updates_only_the_target_without_preparing_a_pres
         .expect("initial layout")
         .presentation_id;
     let prepared_id = neovm_core::window::geometry::PresentationId::new(prior_presentation.get());
+    let accepted_output_before_query = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.find_window(target))
+        .and_then(neovm_core::window::Window::redisplay_output)
+        .cloned()
+        .expect("initial redisplay should publish atomic window output");
     assert!(
         eval.frame_manager_mut()
             .get_mut(frame_id)
@@ -16281,6 +16288,15 @@ fn synchronous_window_end_query_updates_only_the_target_without_preparing_a_pres
             .presentation_id,
         prior_presentation,
         "the query must not replace the last renderer-facing frame output"
+    );
+    assert_eq!(
+        frame
+            .find_window(target)
+            .expect("target")
+            .redisplay_output(),
+        Some(&accepted_output_before_query),
+        "the query may refresh GNU's live end record but must not replace the \
+         last accepted redisplay generation"
     );
 }
 

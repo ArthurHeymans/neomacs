@@ -704,6 +704,7 @@ impl BufferSourceOutputSetup {
             );
             return BufferSourceRenderAttemptOutcome::Finished {
                 redisplay_positions,
+                window_end_record: publish_request.window_end_record(redisplay_positions),
                 cursor_only: true,
                 scroll_reused_rows: None,
             };
@@ -876,6 +877,7 @@ impl BufferSourceOutputSetup {
             );
             return BufferSourceRenderAttemptOutcome::Finished {
                 redisplay_positions,
+                window_end_record: publish_request.window_end_record(redisplay_positions),
                 cursor_only: false,
                 scroll_reused_rows: Some(reused_count),
             };
@@ -1056,6 +1058,7 @@ impl BufferSourceOutputSetup {
         );
         BufferSourceRenderAttemptOutcome::Finished {
             redisplay_positions,
+            window_end_record: publish_request.window_end_record(redisplay_positions),
             cursor_only: false,
             scroll_reused_rows: None,
         }

@@ -68,6 +68,7 @@ pub(crate) enum BufferSourceRenderAttemptOutcome {
     },
     Finished {
         redisplay_positions: TextWindowRedisplayPositions,
+        window_end_record: neovm_core::window::WindowEndRecord,
         /// Whether this window took the Phase 1 cursor-only fast path (body rows
         /// reused verbatim) rather than a full body walk.
         cursor_only: bool,
@@ -258,6 +259,19 @@ impl BufferSourceRedisplayPublishRequest {
                 );
             }
         }
+    }
+
+    pub(crate) fn window_end_record(
+        self,
+        positions: TextWindowRedisplayPositions,
+    ) -> neovm_core::window::WindowEndRecord {
+        neovm_core::window::WindowEndRecord::from_positions(
+            LispCharPos1::from_one_based_usize(self.accessible_end_lisp_char),
+            EmacsBytePos::new(self.accessible_end_emacs_byte),
+            positions.window_end,
+            positions.window_end_byte,
+            neovm_core::window::MatrixRow0::new(positions.window_end_vpos),
+        )
     }
 }
 

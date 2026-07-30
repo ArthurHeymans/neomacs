@@ -1604,6 +1604,7 @@ impl WindowOutputEmitter {
             points: self.points,
             rows: self.rows,
             buffer_modiff,
+            window_end_record: None,
         };
         if self.publish_live
             && let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id)

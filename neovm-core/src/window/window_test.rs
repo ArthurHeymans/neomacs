@@ -38,6 +38,97 @@ fn window_end_state_preserves_one_atomic_record_across_invalidation() {
 }
 
 #[test]
+fn prepared_presentation_publishes_one_atomic_window_redisplay_output() {
+    use super::geometry::PresentationId;
+
+    let mut frames = FrameManager::new();
+    let frame_id = frames.create_frame("atomic-window-output", 800, 600, BufferId(1));
+    let frame = frames.get_mut(frame_id).expect("frame");
+    let window_id = frame.selected_window;
+    let first_end = WindowEndRecord::from_positions(
+        LispCharPos1::new(300),
+        EmacsBytePos::new(360),
+        LispCharPos1::new(120),
+        EmacsBytePos::new(150),
+        MatrixRow0::new(8),
+    );
+    let first_cursor = WindowCursorPos {
+        x: 24,
+        y: 32,
+        row: 2,
+        col: 3,
+    };
+    let first_snapshot = WindowDisplaySnapshot {
+        window_id,
+        window_end_record: Some(first_end),
+        logical_cursor: Some(first_cursor),
+        rows: vec![DisplayRowSnapshot {
+            row: 0,
+            start_buffer_pos: Some(LispCharPos1::new(10)),
+            end_buffer_pos: Some(LispCharPos1::new(119)),
+            ..DisplayRowSnapshot::default()
+        }],
+        ..WindowDisplaySnapshot::default()
+    };
+
+    frame
+        .prepare_display_presentation(PresentationId::new(41), vec![first_snapshot])
+        .expect("prepare first output");
+    let first = frame
+        .find_window(window_id)
+        .expect("window")
+        .redisplay_output()
+        .expect("atomic output");
+    assert_eq!(first.generation(), PresentationId::new(41));
+    assert_eq!(first.window_end(), first_end);
+    assert_eq!(
+        first.visible_span(),
+        Some(WindowVisibleBufferSpan::new(
+            LispCharPos1::new(10),
+            LispCharPos1::new(119)
+        ))
+    );
+    assert_eq!(first.logical_cursor(), Some(first_cursor));
+
+    let second_end = WindowEndRecord::from_positions(
+        LispCharPos1::new(300),
+        EmacsBytePos::new(360),
+        LispCharPos1::new(180),
+        EmacsBytePos::new(220),
+        MatrixRow0::new(11),
+    );
+    let second_snapshot = WindowDisplaySnapshot {
+        window_id,
+        window_end_record: Some(second_end),
+        rows: vec![DisplayRowSnapshot {
+            row: 0,
+            start_buffer_pos: Some(LispCharPos1::new(70)),
+            end_buffer_pos: Some(LispCharPos1::new(179)),
+            ..DisplayRowSnapshot::default()
+        }],
+        ..WindowDisplaySnapshot::default()
+    };
+    frame
+        .prepare_display_presentation(PresentationId::new(42), vec![second_snapshot])
+        .expect("prepare second output");
+    let second = frame
+        .find_window(window_id)
+        .expect("window")
+        .redisplay_output()
+        .expect("replacement output");
+    assert_eq!(second.generation(), PresentationId::new(42));
+    assert_eq!(second.window_end(), second_end);
+    assert_eq!(
+        second.visible_span(),
+        Some(WindowVisibleBufferSpan::new(
+            LispCharPos1::new(70),
+            LispCharPos1::new(179)
+        ))
+    );
+    assert_eq!(second.logical_cursor(), None);
+}
+
+#[test]
 fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
     use super::geometry::{Column, Line, PresentationGeometry, PresentationId};
     use neomacs_display_protocol::types::Rect as TransportRect;

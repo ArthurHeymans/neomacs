@@ -2000,9 +2000,18 @@ impl LayoutEngine {
             }
             BufferSourceRenderAttemptOutcome::Finished {
                 redisplay_positions,
+                window_end_record,
                 cursor_only,
                 scroll_reused_rows,
             } => {
+                if let Some(snapshot) = self
+                    .window_snapshots
+                    .iter_mut()
+                    .rev()
+                    .find(|snapshot| snapshot.window_id == window_id)
+                {
+                    snapshot.window_end_record = Some(window_end_record);
+                }
                 if cursor_only {
                     self.cursor_only_window_ids
                         .insert(DisplayWindowId::new(params.window_id));

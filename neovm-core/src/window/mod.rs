@@ -183,6 +183,8 @@ pub struct WindowDisplayState {
     pub output_cursor: Option<WindowCursorPos>,
     /// Last physical cursor type emitted by redisplay.
     pub phys_cursor_type: WindowCursorKind,
+    /// Last accepted redisplay's related query/output facts, committed together.
+    redisplay_output: Option<WindowRedisplayOutput>,
     /// Whether the window currently owns a live physical cursor.
     pub phys_cursor_on_p: bool,
     /// Whether the cursor is hidden without invalidating the geometry.
@@ -213,6 +215,7 @@ impl Default for WindowDisplayState {
             phys_cursor: None,
             output_cursor: None,
             phys_cursor_type: WindowCursorKind::NoCursor,
+            redisplay_output: None,
             phys_cursor_on_p: false,
             cursor_off_p: false,
             last_cursor_off_p: false,
@@ -231,6 +234,10 @@ impl Default for WindowDisplayState {
 }
 
 impl WindowDisplayState {
+    pub const fn redisplay_output(&self) -> Option<&WindowRedisplayOutput> {
+        self.redisplay_output.as_ref()
+    }
+
     pub fn clear_cursor_state(&mut self) {
         self.cursor = None;
         self.clear_output_cursor_state();
@@ -472,7 +479,7 @@ pub struct WindowEndRecord {
 }
 
 impl WindowEndRecord {
-    fn from_positions(
+    pub fn from_positions(
         buffer_z_char: LispCharPos1,
         buffer_z_byte: EmacsBytePos,
         end_charpos: LispCharPos1,
@@ -521,6 +528,56 @@ impl WindowEndRecord {
     /// Recover the byte companion of [`Self::charpos_from_z`].
     pub const fn bytepos_from_z(self, buffer_z_byte: EmacsBytePos) -> EmacsBytePos {
         buffer_z_byte.saturating_sub_len(self.byte_offset_from_z)
+    }
+}
+
+/// One accepted window redisplay's mutually consistent output facts.
+///
+/// These values all come from the same immutable snapshot and presentation
+/// generation. Consumers never have to combine a new end record with an old
+/// visible span or cursor.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WindowRedisplayOutput {
+    generation: geometry::PresentationId,
+    window_end: WindowEndRecord,
+    visible_span: Option<WindowVisibleBufferSpan>,
+    logical_cursor: Option<WindowCursorPos>,
+    phys_cursor: Option<WindowCursorSnapshot>,
+}
+
+impl WindowRedisplayOutput {
+    fn from_snapshot(
+        generation: geometry::PresentationId,
+        snapshot: &WindowDisplaySnapshot,
+        window_end: WindowEndRecord,
+    ) -> Self {
+        Self {
+            generation,
+            window_end,
+            visible_span: snapshot.visible_buffer_span(),
+            logical_cursor: snapshot.logical_cursor_pos(),
+            phys_cursor: snapshot.phys_cursor.clone(),
+        }
+    }
+
+    pub const fn generation(&self) -> geometry::PresentationId {
+        self.generation
+    }
+
+    pub const fn window_end(&self) -> WindowEndRecord {
+        self.window_end
+    }
+
+    pub const fn visible_span(&self) -> Option<WindowVisibleBufferSpan> {
+        self.visible_span
+    }
+
+    pub const fn logical_cursor(&self) -> Option<WindowCursorPos> {
+        self.logical_cursor
+    }
+
+    pub fn phys_cursor(&self) -> Option<&WindowCursorSnapshot> {
+        self.phys_cursor.as_ref()
     }
 }
 
@@ -1067,6 +1124,26 @@ impl Window {
         }
     }
 
+    pub fn redisplay_output(&self) -> Option<&WindowRedisplayOutput> {
+        self.display()?.redisplay_output()
+    }
+
+    /// Accept every query-visible fact produced by one redisplay generation.
+    ///
+    /// Synchronous layout queries deliberately do not use this path: they may
+    /// refresh `window-end`, but cannot masquerade as a presented redisplay.
+    fn accept_redisplay_output(&mut self, output: WindowRedisplayOutput) {
+        if let Self::Leaf {
+            window_end,
+            display,
+            ..
+        } = self
+        {
+            *window_end = WindowEndState::Current(output.window_end());
+            display.redisplay_output = Some(output);
+        }
+    }
+
     /// Return a mutable reference to this leaf window's display state.
     pub fn display_mut(&mut self) -> Option<&mut WindowDisplayState> {
         match self {
@@ -1418,7 +1495,7 @@ pub struct PresentedBodyRowSnapshot {
 }
 
 /// Per-row metrics from the last redisplay of a window.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DisplayRowSnapshot {
     /// Visual row number in the window (0-based).
     pub row: i64,
@@ -1557,6 +1634,8 @@ pub struct WindowDisplaySnapshot {
     /// recomputes from current buffer state. `None` disables the staleness
     /// gate (used by test fixtures that install a synthetic snapshot).
     pub buffer_modiff: Option<i64>,
+    /// Exact end record produced by the same row walk as this snapshot.
+    pub window_end_record: Option<WindowEndRecord>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1793,6 +1872,7 @@ impl Default for WindowDisplaySnapshot {
             points: Vec::new(),
             rows: Vec::new(),
             buffer_modiff: None,
+            window_end_record: None,
         }
     }
 }
@@ -2796,7 +2876,11 @@ impl Frame {
         &mut self,
         snapshots: Vec<WindowDisplaySnapshot>,
     ) {
-        self.commit_completed_window_output(&snapshots);
+        let generation = self
+            .presentation_state
+            .last_identity
+            .unwrap_or_else(|| geometry::PresentationId::new(1));
+        self.commit_completed_window_output(generation, &snapshots);
         self.replace_redisplay_cache_for_test(snapshots);
     }
 
@@ -2854,7 +2938,7 @@ impl Frame {
                 presentation,
             ));
         }
-        self.commit_completed_window_output(&prepared.snapshots);
+        self.commit_completed_window_output(presentation, &prepared.snapshots);
         self.redisplay_cache = prepared
             .snapshots
             .iter()
@@ -2979,10 +3063,22 @@ impl Frame {
     /// output state. Speculative layout never calls this; all window cursors
     /// and output progress become visible together at the presentation prepare
     /// boundary.
-    fn commit_completed_window_output(&mut self, snapshots: &[WindowDisplaySnapshot]) {
+    fn commit_completed_window_output(
+        &mut self,
+        generation: geometry::PresentationId,
+        snapshots: &[WindowDisplaySnapshot],
+    ) {
         self.begin_display_output_pass();
         for snapshot in snapshots {
             self.replay_window_output_snapshot(snapshot);
+            let Some(window_end) = snapshot.window_end_record else {
+                continue;
+            };
+            if let Some(window) = self.find_window_mut(snapshot.window_id) {
+                window.accept_redisplay_output(WindowRedisplayOutput::from_snapshot(
+                    generation, snapshot, window_end,
+                ));
+            }
         }
     }
 
