@@ -10,6 +10,7 @@ use crate::display_source::{
     classify_text_source_char, display_item_kind_for_text_source_char,
 };
 use crate::neovm_bridge::LayoutBufferView;
+use crate::neovm_bridge::LayoutVar;
 use crate::unicode::decode_utf8;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::Value;
@@ -47,7 +48,7 @@ pub(crate) enum BufferTextCursorItem {
 /// resolved once per source run: the layout runs on an immutable buffer
 /// snapshot, so the alist cannot change mid-walk. Empty in the common case.
 fn compute_display_property_aliases<B: LayoutBufferView + ?Sized>(buffer: &B) -> Vec<Value> {
-    let Some(alist) = buffer.layout_buffer_local_value("char-property-alias-alist") else {
+    let Some(alist) = buffer.layout_buffer_local_value(LayoutVar::CharPropertyAliasAlist) else {
         return Vec::new();
     };
     let display = Value::symbol("display");

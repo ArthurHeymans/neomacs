@@ -3906,6 +3906,25 @@ impl Buffer {
         }
     }
 
+    /// [`Self::buffer_local_value`] for a pre-interned symbol — the form hot
+    /// callers (layout reads every redisplay) use to skip the per-call string
+    /// hash + obarray probe.
+    pub fn buffer_local_value_id(&self, sym_id: SymId) -> Option<Value> {
+        if let Some(info) = lookup_buffer_slot_by_sym_id(sym_id) {
+            return Some(self.slots[info.offset.index()]);
+        }
+        {
+            static UNDO_LIST: OnceLock<SymId> = OnceLock::new();
+            if sym_id == *UNDO_LIST.get_or_init(|| intern("buffer-undo-list")) {
+                return Some(self.get_undo_list());
+            }
+        }
+        match self.get_buffer_local_binding_by_sym_id(sym_id) {
+            Some(RuntimeBindingValue::Bound(value)) => Some(value),
+            Some(RuntimeBindingValue::Void) | None => None,
+        }
+    }
+
     pub fn ordered_buffer_local_bindings(&self) -> Vec<(SymId, RuntimeBindingValue)> {
         // Returns entries in REVERSED GNU order so the caller can
         // `.rev()' to get GNU's prepend-based final order.

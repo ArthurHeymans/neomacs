@@ -2,6 +2,7 @@ use crate::display_buffer_source_row_prelude::BufferSourceRowPreludeRequestConte
 use crate::display_row_lisp_string::DisplayRowPrefixValues;
 use crate::display_row_walk_state::LineNumberRenderState;
 use crate::display_row_width::DisplayRowCharWidthPolicy;
+use crate::neovm_bridge::LayoutVar;
 use crate::neovm_bridge::{
     LayoutBufferView, RustBufferAccess, buffer_display_line_numbers_mode, buffer_local_bool,
     buffer_local_int, buffer_local_value,
@@ -294,18 +295,22 @@ impl BufferWindowLocalDisplayPolicy {
     pub(crate) fn from_buffer(buffer: &impl LayoutBufferView) -> Self {
         Self {
             line_number_mode: buffer_display_line_numbers_mode(buffer).engine_code(),
-            line_number_offset: buffer_local_int(buffer, "display-line-numbers-offset", 0),
-            line_number_major_tick: buffer_local_int(buffer, "display-line-numbers-major-tick", 0)
-                as i32,
+            line_number_offset: buffer_local_int(buffer, LayoutVar::DisplayLineNumbersOffset, 0),
+            line_number_major_tick: buffer_local_int(
+                buffer,
+                LayoutVar::DisplayLineNumbersMajorTick,
+                0,
+            ) as i32,
             line_number_current_absolute: buffer_local_bool(
                 buffer,
-                "display-line-numbers-current-absolute",
+                LayoutVar::DisplayLineNumbersCurrentAbsolute,
             ),
-            line_number_widen: buffer_local_bool(buffer, "display-line-numbers-widen"),
-            line_number_min_width: buffer_local_int(buffer, "display-line-numbers-width", 0) as i32,
+            line_number_widen: buffer_local_bool(buffer, LayoutVar::DisplayLineNumbersWiden),
+            line_number_min_width: buffer_local_int(buffer, LayoutVar::DisplayLineNumbersWidth, 0)
+                as i32,
             prefix_values: DisplayRowPrefixValues::default_values(
-                buffer_local_value(buffer, "line-prefix"),
-                buffer_local_value(buffer, "wrap-prefix"),
+                buffer_local_value(buffer, LayoutVar::LinePrefix),
+                buffer_local_value(buffer, LayoutVar::WrapPrefix),
             ),
         }
     }

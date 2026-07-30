@@ -37,6 +37,7 @@ use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_source::DisplayItemSource;
 use crate::font_metrics::FontMetricsService;
 use crate::frame_face_arena::FrameFaceAttempt;
+use crate::neovm_bridge::LayoutVar;
 use crate::presented_pointer_map::{PointerAppearanceRangeId, PresentedPointerMapBuildError};
 use crate::types::WindowParams;
 use crate::window_layout::{WindowChromeMetrics, WindowLayoutBox};
@@ -1991,7 +1992,7 @@ pub(crate) fn max_mini_window_lines_for_buffer<B: LayoutBufferView>(
     buffer: &B,
     frame_rows: f32,
 ) -> f32 {
-    let raw = buffer_local_value(buffer, "max-mini-window-height")
+    let raw = buffer_local_value(buffer, LayoutVar::MaxMiniWindowHeight)
         .or_else(|| {
             evaluator
                 .obarray()

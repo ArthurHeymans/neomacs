@@ -365,7 +365,6 @@ impl FrameFaceAttempt {
         #[cfg(debug_assertions)]
         {
             let identity = face_realization_identity(&face);
-            let hash = face_identity_hash(&identity);
             for map in [&state.fresh_realized, &*state.realized] {
                 for (bound_identity, bound_id) in
                     map.values().flatten().filter(|(_, id)| *id == face_id)

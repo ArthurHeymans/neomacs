@@ -7,7 +7,7 @@ use std::cmp::Ordering;
 
 use neovm_core::buffer::{
     Buffer, BufferTextSnapshot, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1,
-    buffer::{BUFFER_SLOT_COUNT, lookup_buffer_slot},
+    buffer::{BUFFER_SLOT_COUNT, BufferSlotInfo, lookup_buffer_slot_by_sym_id},
     overlay::OverlayList,
 };
 use neovm_core::emacs_core::effect_profile::{
@@ -94,7 +94,7 @@ impl DisplayLineNumbersMode {
 }
 
 pub(crate) trait LayoutBufferView {
-    fn layout_buffer_local_value(&self, name: &str) -> Option<Value>;
+    fn layout_buffer_local_value(&self, var: LayoutVar) -> Option<Value>;
     fn layout_point_min_emacs_byte_pos(&self) -> EmacsBytePos;
     fn layout_point_max_emacs_byte_pos(&self) -> EmacsBytePos;
     fn layout_point_max_char_pos(&self) -> CharPos0;
@@ -149,35 +149,37 @@ pub(crate) struct LayoutBufferSnapshot {
     local_var_alist: Value,
     slots: [Value; BUFFER_SLOT_COUNT],
     overlays: OverlayList,
-    default_values: Vec<(neovm_core::emacs_core::intern::SymId, Value)>,
+    /// Every [`LayoutVar`] resolved once at snapshot construction, indexed by
+    /// variant. GNU redisplay reads display variables as one memory load
+    /// (BVAR fields, or V-globals the buffer-local machinery keeps swapped
+    /// in: xdisp.c:3424, xfaces.c:5188); resolving per QUERY instead walked
+    /// the buffer's local-var alist every time and measured 3.15% of GUI
+    /// typing even with pre-interned symbols.
+    vars: [Option<Value>; <LayoutVar as strum::EnumCount>::COUNT],
 }
 
 impl LayoutBufferSnapshot {
     pub fn from_buffer(buffer: &Buffer) -> Self {
+        let local_var_alist = buffer.local_var_alist_value();
+        let slots = buffer.slot_values_snapshot();
         Self {
             name: buffer.name_runtime_string_owned(),
             text_snapshot: buffer.text_snapshot(),
             accessible_start_emacs_byte: buffer.point_min_emacs_byte_pos(),
             accessible_end_emacs_byte: buffer.point_max_emacs_byte_pos(),
             accessible_end_char: buffer.point_max_char_pos(),
-            local_var_alist: buffer.local_var_alist_value(),
-            slots: buffer.slot_values_snapshot(),
+            vars: resolve_layout_vars(local_var_alist, &slots, None),
+            local_var_alist,
+            slots,
             overlays: buffer.overlays().clone(),
-            default_values: Vec::new(),
         }
     }
 
     pub fn from_buffer_with_obarray(buffer: &Buffer, obarray: &Obarray) -> Self {
         let mut snapshot = Self::from_buffer(buffer);
-        snapshot.default_values = layout_default_values(obarray);
+        snapshot.vars =
+            resolve_layout_vars(snapshot.local_var_alist, &snapshot.slots, Some(obarray));
         snapshot
-    }
-
-    fn default_value(&self, name: &str) -> Option<Value> {
-        let id = intern::intern(name);
-        self.default_values
-            .iter()
-            .find_map(|(sym_id, value)| (*sym_id == id).then_some(*value))
     }
 
     pub(crate) fn name(&self) -> &str {
@@ -185,80 +187,205 @@ impl LayoutBufferSnapshot {
     }
 }
 
-const LAYOUT_DEFAULT_VALUE_SYMBOLS: &[&str] = &[
-    // `char-property-alias-alist` lets a text property (e.g. `display`) be
-    // recorded under an aliased key (GNU `lookup_char_property`). It is a plain
-    // global (indent-bars mutates the default, not a buffer-local), so the
-    // snapshot must capture the default value for the source walk to resolve
-    // aliased `display` properties. See `compute_display_property_aliases`.
-    "char-property-alias-alist",
-    "display-fill-column-indicator",
-    "display-fill-column-indicator-character",
-    "display-fill-column-indicator-column",
-    "display-line-numbers",
-    "display-line-numbers-current-absolute",
-    "display-line-numbers-major-tick",
-    "display-line-numbers-minor-tick",
-    "display-line-numbers-offset",
-    "display-line-numbers-widen",
-    "display-line-numbers-width",
-    "face-remapping-alist",
-    "line-prefix",
-    "neomacs-cursor-effect",
-    "neomacs-visual-cursors",
-    "show-trailing-whitespace",
-    "standard-display-table",
-    "tab-stop-list",
-    "wrap-prefix",
-];
+/// Resolve every [`LayoutVar`] with the same precedence the per-query path
+/// used: buffer slot, else the FIRST local-var-alist entry when bound, else
+/// (for the curated captures_default subset, and only when an obarray is
+/// available) the variable's default value. An alist entry that exists but
+/// is unbound shadows nothing — it falls through to the default, exactly
+/// like the old `assq`-then-default sequence.
+fn resolve_layout_vars(
+    local_var_alist: Value,
+    slots: &[Value; BUFFER_SLOT_COUNT],
+    obarray: Option<&Obarray>,
+) -> [Option<Value>; <LayoutVar as strum::EnumCount>::COUNT] {
+    use strum::EnumCount;
+    use strum::VariantArray;
+    const N: usize = <LayoutVar as EnumCount>::COUNT;
+    let mut vars: [Option<Value>; N] = [None; N];
+    let mut seen_in_alist = [false; N];
 
-/// The `LAYOUT_DEFAULT_VALUE_SYMBOLS` names as interned ids, computed once.
-///
-/// `layout_default_values` runs per buffer snapshot per redisplay, and
-/// interning all 19 names each time (a hash + obarray probe per name) showed
-/// up in a typing profile under the redisplay callback. The names are a
-/// compile-time constant, so their ids are too. Caching `SymId`s in a
-/// process-global `OnceLock` is the established pattern here -- eval.rs's
-/// `cached_symbol_id!` does exactly this for `quote`/`let`/etc. across every
-/// Context the test suite creates.
-fn layout_default_value_sym_ids() -> &'static [neovm_core::emacs_core::intern::SymId] {
-    use std::sync::OnceLock;
-    static IDS: OnceLock<Vec<neovm_core::emacs_core::intern::SymId>> = OnceLock::new();
-    IDS.get_or_init(|| {
-        LAYOUT_DEFAULT_VALUE_SYMBOLS
-            .iter()
-            .map(|name| intern::intern(name))
-            .collect()
-    })
-}
+    for var in LayoutVar::VARIANTS {
+        if let Some(info) = var.info().slot {
+            vars[*var as usize] = Some(slots[info.offset.index()]);
+        }
+    }
 
-fn layout_default_values(obarray: &Obarray) -> Vec<(neovm_core::emacs_core::intern::SymId, Value)> {
-    layout_default_value_sym_ids()
-        .iter()
-        .filter_map(|&id| {
-            obarray
-                .default_value_id(id)
-                .copied()
-                .map(|value| (id, value))
-        })
-        .collect()
-}
-
-fn find_layout_local_var_alist_entry(alist: Value, key: Value) -> Option<Value> {
-    let mut cursor = alist;
+    // One walk over the alist for all variables (first entry per symbol
+    // wins, matching assq).
+    let mut cursor = local_var_alist;
     while cursor.is_cons() {
         let entry = cursor.cons_car();
         cursor = cursor.cons_cdr();
-        if entry.is_cons() && eq_value(&entry.cons_car(), &key) {
-            return Some(entry.cons_cdr());
+        if !entry.is_cons() {
+            continue;
+        }
+        let Some(var) = entry
+            .cons_car()
+            .as_symbol_id()
+            .and_then(layout_var_by_sym_id)
+        else {
+            continue;
+        };
+        let index = var as usize;
+        if vars[index].is_some() || seen_in_alist[index] {
+            continue;
+        }
+        seen_in_alist[index] = true;
+        let value = entry.cons_cdr();
+        if !value.is_unbound() {
+            vars[index] = Some(value);
         }
     }
-    None
+
+    if let Some(obarray) = obarray {
+        for var in LayoutVar::VARIANTS {
+            let index = *var as usize;
+            if vars[index].is_none() && var.info().captures_default {
+                vars[index] = obarray.default_value_id(var.sym_id()).copied();
+            }
+        }
+    }
+
+    vars
+}
+
+/// Reverse map sym_id -> LayoutVar for the single alist walk above.
+fn layout_var_by_sym_id(sym_id: neovm_core::emacs_core::intern::SymId) -> Option<LayoutVar> {
+    use std::sync::OnceLock;
+    use strum::VariantArray;
+    static MAP: OnceLock<rustc_hash::FxHashMap<neovm_core::emacs_core::intern::SymId, LayoutVar>> =
+        OnceLock::new();
+    MAP.get_or_init(|| {
+        LayoutVar::VARIANTS
+            .iter()
+            .map(|var| (var.sym_id(), *var))
+            .collect()
+    })
+    .get(&sym_id)
+    .copied()
+}
+
+/// Every buffer variable the layout engine reads. A CLOSED set: layout, like
+/// GNU redisplay, consults a fixed vocabulary of display variables, and it
+/// reads them through pre-interned symbols (GNU reads through `Q`-symbols) —
+/// a per-query string intern measured 4.2% of GUI typing. The kebab-case
+/// strum rendering of each variant IS the Lisp variable name.
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, strum::IntoStaticStr, strum::EnumCount, strum::VariantArray,
+)]
+#[strum(serialize_all = "kebab-case")]
+pub(crate) enum LayoutVar {
+    BufferDisplayTable,
+    BufferInvisibilitySpec,
+    CharPropertyAliasAlist,
+    CursorInNonSelectedWindows,
+    CursorType,
+    DisplayFillColumnIndicator,
+    DisplayFillColumnIndicatorCharacter,
+    DisplayFillColumnIndicatorColumn,
+    DisplayLineNumbers,
+    DisplayLineNumbersCurrentAbsolute,
+    DisplayLineNumbersMajorTick,
+    DisplayLineNumbersMinorTick,
+    DisplayLineNumbersOffset,
+    DisplayLineNumbersWiden,
+    DisplayLineNumbersWidth,
+    FaceRemappingAlist,
+    FillColumn,
+    FringeIndicatorAlist,
+    HeaderLineFormat,
+    HeaderLineIndentWidth,
+    IndicateEmptyLines,
+    LinePrefix,
+    LineSpacing,
+    MaxMiniWindowHeight,
+    ModeLineFormat,
+    NeomacsCursorEffect,
+    NeomacsVisualCursors,
+    NobreakCharDisplay,
+    ResizeMiniWindows,
+    ScrollConservatively,
+    ScrollMargin,
+    ScrollStep,
+    SelectiveDisplay,
+    ShowTrailingWhitespace,
+    StandardDisplayTable,
+    TabLineFormat,
+    TabStopList,
+    TabWidth,
+    ToolBarMap,
+    TruncateLines,
+    TruncatePartialWidthWindows,
+    WordWrap,
+    WrapPrefix,
+}
+
+struct LayoutVarInfo {
+    sym_id: neovm_core::emacs_core::intern::SymId,
+    slot: Option<&'static BufferSlotInfo>,
+    /// Whether [`LayoutBufferSnapshot`] captures this variable's DEFAULT
+    /// value. Deliberately the historical curated subset: the snapshot falls
+    /// back to the default only for these (e.g. `char-property-alias-alist`
+    /// is a plain global that indent-bars mutates), while the rest — and the
+    /// live-Buffer impl for ALL variables — return None without a local
+    /// binding or slot. Widening this set changes display semantics; do it
+    /// as its own change, not as a side effect of plumbing.
+    captures_default: bool,
+}
+
+impl LayoutVar {
+    pub(crate) fn name(self) -> &'static str {
+        self.into()
+    }
+
+    fn info(self) -> &'static LayoutVarInfo {
+        use std::sync::OnceLock;
+        use strum::VariantArray;
+        static INFOS: OnceLock<Vec<LayoutVarInfo>> = OnceLock::new();
+        &INFOS.get_or_init(|| {
+            LayoutVar::VARIANTS
+                .iter()
+                .map(|var| {
+                    let sym_id = intern::intern(var.name());
+                    LayoutVarInfo {
+                        sym_id,
+                        slot: lookup_buffer_slot_by_sym_id(sym_id),
+                        captures_default: matches!(
+                            var,
+                            LayoutVar::CharPropertyAliasAlist
+                                | LayoutVar::DisplayFillColumnIndicator
+                                | LayoutVar::DisplayFillColumnIndicatorCharacter
+                                | LayoutVar::DisplayFillColumnIndicatorColumn
+                                | LayoutVar::DisplayLineNumbers
+                                | LayoutVar::DisplayLineNumbersCurrentAbsolute
+                                | LayoutVar::DisplayLineNumbersMajorTick
+                                | LayoutVar::DisplayLineNumbersMinorTick
+                                | LayoutVar::DisplayLineNumbersOffset
+                                | LayoutVar::DisplayLineNumbersWiden
+                                | LayoutVar::DisplayLineNumbersWidth
+                                | LayoutVar::FaceRemappingAlist
+                                | LayoutVar::LinePrefix
+                                | LayoutVar::NeomacsCursorEffect
+                                | LayoutVar::NeomacsVisualCursors
+                                | LayoutVar::ShowTrailingWhitespace
+                                | LayoutVar::StandardDisplayTable
+                                | LayoutVar::TabStopList
+                                | LayoutVar::WrapPrefix
+                        ),
+                    }
+                })
+                .collect()
+        })[self as usize]
+    }
+
+    pub(crate) fn sym_id(self) -> neovm_core::emacs_core::intern::SymId {
+        self.info().sym_id
+    }
 }
 
 impl LayoutBufferView for Buffer {
-    fn layout_buffer_local_value(&self, name: &str) -> Option<Value> {
-        self.buffer_local_value(name)
+    fn layout_buffer_local_value(&self, var: LayoutVar) -> Option<Value> {
+        self.buffer_local_value_id(var.sym_id())
     }
 
     fn layout_point_min_emacs_byte_pos(&self) -> EmacsBytePos {
@@ -343,14 +470,8 @@ impl LayoutBufferView for Buffer {
 }
 
 impl LayoutBufferView for LayoutBufferSnapshot {
-    fn layout_buffer_local_value(&self, name: &str) -> Option<Value> {
-        if let Some(info) = lookup_buffer_slot(name) {
-            return Some(self.slots[info.offset.index()]);
-        }
-        let key = Value::from_sym_id(intern::intern(name));
-        find_layout_local_var_alist_entry(self.local_var_alist, key)
-            .and_then(|v| (!v.is_unbound()).then_some(v))
-            .or_else(|| self.default_value(name))
+    fn layout_buffer_local_value(&self, var: LayoutVar) -> Option<Value> {
+        self.vars[var as usize]
     }
 
     fn layout_point_min_emacs_byte_pos(&self) -> EmacsBytePos {
@@ -443,20 +564,20 @@ impl LayoutBufferView for LayoutBufferSnapshot {
 
 pub(crate) fn buffer_local_value<B: LayoutBufferView + ?Sized>(
     buffer: &B,
-    name: &str,
+    var: LayoutVar,
 ) -> Option<Value> {
     // GNU `buffer_local_value` (`buffer.c:1359-1413`) returns a buffer's
     // local binding when present and otherwise falls through to the default
     // value.  Layout uses this helper for display variables such as
     // `display-line-numbers-current-absolute`; using the local-only predicate
     // here silently loses global/default display state.
-    buffer.layout_buffer_local_value(name)
+    buffer.layout_buffer_local_value(var)
 }
 
-fn effective_buffer_value(buffer: &Buffer, obarray: &Obarray, name: &str) -> Option<Value> {
+fn effective_buffer_value(buffer: &Buffer, obarray: &Obarray, var: LayoutVar) -> Option<Value> {
     buffer
-        .buffer_local_value(name)
-        .or_else(|| obarray.symbol_value(name).copied())
+        .buffer_local_value_id(var.sym_id())
+        .or_else(|| obarray.symbol_value_id(var.sym_id()).copied())
 }
 
 fn frame_parameter_int(frame: &Frame, name: &str, default: i64) -> i64 {
@@ -542,31 +663,35 @@ pub fn frame_params_from_neovm(
 }
 
 /// Helper: extract an integer buffer-local variable.
-pub(crate) fn buffer_local_int<B: LayoutBufferView>(buffer: &B, name: &str, default: i64) -> i64 {
-    match buffer_local_value(buffer, name) {
+pub(crate) fn buffer_local_int<B: LayoutBufferView>(
+    buffer: &B,
+    var: LayoutVar,
+    default: i64,
+) -> i64 {
+    match buffer_local_value(buffer, var) {
         Some(v) if v.is_fixnum() => v.as_fixnum().unwrap(),
         _ => default,
     }
 }
 
-fn effective_buffer_int(buffer: &Buffer, obarray: &Obarray, name: &str, default: i64) -> i64 {
-    match effective_buffer_value(buffer, obarray, name) {
+fn effective_buffer_int(buffer: &Buffer, obarray: &Obarray, var: LayoutVar, default: i64) -> i64 {
+    match effective_buffer_value(buffer, obarray, var) {
         Some(v) if v.is_fixnum() => v.as_fixnum().unwrap(),
         _ => default,
     }
 }
 
 /// Helper: extract a boolean buffer-local variable (nil = false, anything else = true).
-pub(crate) fn buffer_local_bool<B: LayoutBufferView>(buffer: &B, name: &str) -> bool {
-    match buffer_local_value(buffer, name) {
+pub(crate) fn buffer_local_bool<B: LayoutBufferView>(buffer: &B, var: LayoutVar) -> bool {
+    match buffer_local_value(buffer, var) {
         Some(v) if v.is_nil() => false,
         None => false,
         Some(_) => true,
     }
 }
 
-fn effective_buffer_bool(buffer: &Buffer, obarray: &Obarray, name: &str) -> bool {
-    match effective_buffer_value(buffer, obarray, name) {
+fn effective_buffer_bool(buffer: &Buffer, obarray: &Obarray, var: LayoutVar) -> bool {
+    match effective_buffer_value(buffer, obarray, var) {
         Some(v) if v.is_nil() => false,
         None => false,
         Some(_) => true,
@@ -601,7 +726,11 @@ fn window_wants_mode_line(
         && !is_minibuffer
         && !value_is_symbol(window_mode_line_format, "none")
         && (value_non_nil(window_mode_line_format)
-            || value_non_nil(effective_buffer_value(buffer, obarray, "mode-line-format")))
+            || value_non_nil(effective_buffer_value(
+                buffer,
+                obarray,
+                LayoutVar::ModeLineFormat,
+            )))
         && window.bounds().height > frame.char_height
 }
 
@@ -622,7 +751,7 @@ fn window_wants_header_line(
             || value_non_nil(effective_buffer_value(
                 buffer,
                 obarray,
-                "header-line-format",
+                LayoutVar::HeaderLineFormat,
             )))
         && window.bounds().height > required_rows * frame.char_height
 }
@@ -644,7 +773,11 @@ fn window_wants_tab_line(
         && !is_minibuffer
         && !value_is_symbol(window_tab_line_format, "none")
         && (value_non_nil(window_tab_line_format)
-            || value_non_nil(effective_buffer_value(buffer, obarray, "tab-line-format")))
+            || value_non_nil(effective_buffer_value(
+                buffer,
+                obarray,
+                LayoutVar::TabLineFormat,
+            )))
         && window.bounds().height > required_rows * frame.char_height
 }
 
@@ -659,7 +792,7 @@ fn effective_nobreak_char_display(buffer: &Buffer, obarray: &Obarray) -> i32 {
     // while displaying buffer text (xdisp.c:8522, with the window's buffer current),
     // so a buffer-local binding takes effect. Read buffer-local-then-global, not the
     // raw global.
-    match effective_buffer_value(buffer, obarray, "nobreak-char-display") {
+    match effective_buffer_value(buffer, obarray, LayoutVar::NobreakCharDisplay) {
         Some(value) if value.is_nil() => 0,
         Some(value) if value.as_int() == Some(2) => 2,
         Some(_) => 1,
@@ -690,7 +823,7 @@ fn effective_wrap_mode(
     obarray: &Obarray,
     hscroll: usize,
 ) -> LineWrapMode {
-    if effective_buffer_bool(buffer, obarray, "truncate-lines") {
+    if effective_buffer_bool(buffer, obarray, LayoutVar::TruncateLines) {
         return LineWrapMode::Truncate;
     }
 
@@ -707,12 +840,13 @@ fn effective_wrap_mode(
         return LineWrapMode::Wrap;
     }
 
-    let truncate = match effective_buffer_value(buffer, obarray, "truncate-partial-width-windows") {
-        Some(value) if value.is_nil() => false,
-        Some(value) if value.is_fixnum() => total_cols < value.as_fixnum().unwrap(),
-        Some(_) => true,
-        None => false,
-    };
+    let truncate =
+        match effective_buffer_value(buffer, obarray, LayoutVar::TruncatePartialWidthWindows) {
+            Some(value) if value.is_nil() => false,
+            Some(value) if value.is_fixnum() => total_cols < value.as_fixnum().unwrap(),
+            Some(_) => true,
+            None => false,
+        };
 
     if truncate {
         LineWrapMode::Truncate
@@ -755,10 +889,13 @@ fn chrome_face_pixel_height(face: &ResolvedFace, fallback_char_height: f32) -> f
     (line_height + box_pixels).max(1.0)
 }
 
-pub(crate) fn buffer_local_list_values<B: LayoutBufferView>(buffer: &B, name: &str) -> Vec<Value> {
+pub(crate) fn buffer_local_list_values<B: LayoutBufferView>(
+    buffer: &B,
+    var: LayoutVar,
+) -> Vec<Value> {
     // `list_to_vec' takes `&Value'; feed the borrowed form since
     // `buffer_local_value' returns the `Copy' `Value' by value.
-    buffer_local_value(buffer, name)
+    buffer_local_value(buffer, var)
         .and_then(|v| list_to_vec(&v))
         .unwrap_or_default()
 }
@@ -838,7 +975,7 @@ pub(crate) fn resolve_fringe_indicator_bitmap_index<B: LayoutBufferView>(
     };
 
     // 1. Buffer-local `fringe-indicator-alist`.
-    let local = buffer.layout_buffer_local_value("fringe-indicator-alist");
+    let local = buffer.layout_buffer_local_value(LayoutVar::FringeIndicatorAlist);
     // 2. Global/default value (GNU `BVAR(&buffer_defaults, fringe_indicator_alist)`).
     // `fringe-indicator-alist` is a forwarded per-buffer slot, so its default
     // lives in `buffer_defaults` — the obarray value cell is always nil.
@@ -872,7 +1009,10 @@ pub(crate) fn resolve_fringe_indicator_bitmap_index<B: LayoutBufferView>(
 pub(crate) fn buffer_display_line_numbers_mode<B: LayoutBufferView>(
     buffer: &B,
 ) -> DisplayLineNumbersMode {
-    DisplayLineNumbersMode::from_lisp_value(buffer_local_value(buffer, "display-line-numbers"))
+    DisplayLineNumbersMode::from_lisp_value(buffer_local_value(
+        buffer,
+        LayoutVar::DisplayLineNumbers,
+    ))
 }
 
 fn buffer_fill_column_indicator(buffer: &Buffer, obarray: &Obarray) -> Option<(i32, char)> {
@@ -883,24 +1023,30 @@ fn buffer_fill_column_indicator(buffer: &Buffer, obarray: &Obarray) -> Option<(i
     // `display-fill-column-indicator-column` in particular defaults to `t` (use
     // fill-column) and is rarely set locally, so a buffer-local-only read returns
     // None and disables the indicator even when the mode is on.
-    if !effective_buffer_bool(buffer, obarray, "display-fill-column-indicator") {
+    if !effective_buffer_bool(buffer, obarray, LayoutVar::DisplayFillColumnIndicator) {
         return None;
     }
 
-    let character_value =
-        effective_buffer_value(buffer, obarray, "display-fill-column-indicator-character")?;
+    let character_value = effective_buffer_value(
+        buffer,
+        obarray,
+        LayoutVar::DisplayFillColumnIndicatorCharacter,
+    )?;
     if !character_value.is_char() {
         return None;
     }
     let character = character_value.as_char()?;
 
-    let column_value =
-        match effective_buffer_value(buffer, obarray, "display-fill-column-indicator-column") {
-            Some(value) if value.bits() == Value::T.bits() => {
-                effective_buffer_value(buffer, obarray, "fill-column")
-            }
-            value => value,
-        }?;
+    let column_value = match effective_buffer_value(
+        buffer,
+        obarray,
+        LayoutVar::DisplayFillColumnIndicatorColumn,
+    ) {
+        Some(value) if value.bits() == Value::T.bits() => {
+            effective_buffer_value(buffer, obarray, LayoutVar::FillColumn)
+        }
+        value => value,
+    }?;
     let column = column_value.as_fixnum()?;
     if column < 0 || column > i32::MAX as i64 {
         return None;
@@ -934,9 +1080,9 @@ fn glyph_code_char(glyph: Value) -> Option<char> {
 /// `standard-display-table` (GNU `disp_char_vector`'s `dp` argument selection).
 /// Per-window display tables are not yet wired into the layout buffer view.
 fn active_buffer_display_table<B: LayoutBufferView + ?Sized>(buffer: &B) -> Option<Value> {
-    buffer_local_value(buffer, "buffer-display-table")
+    buffer_local_value(buffer, LayoutVar::BufferDisplayTable)
         .filter(|v| !v.is_nil())
-        .or_else(|| buffer_local_value(buffer, "standard-display-table"))
+        .or_else(|| buffer_local_value(buffer, LayoutVar::StandardDisplayTable))
         .filter(|v| !v.is_nil())
 }
 
@@ -995,7 +1141,7 @@ pub(crate) fn buffer_display_table_glyphs<B: LayoutBufferView + ?Sized>(
 }
 
 pub(crate) fn buffer_selective_display<B: LayoutBufferView>(buffer: &B) -> i32 {
-    match buffer_local_value(buffer, "selective-display") {
+    match buffer_local_value(buffer, LayoutVar::SelectiveDisplay) {
         Some(v) if v.is_fixnum() => v.as_fixnum().unwrap() as i32,
         Some(v) if v.bits() == Value::T.bits() => i32::MAX,
         _ => 0,
@@ -1222,7 +1368,7 @@ fn parse_visual_cursor_spec(
 }
 
 fn parse_visual_cursors(buffer: &Buffer, default_color: u32) -> Vec<VisualCursorSpec> {
-    let Some(value) = buffer_local_value(buffer, "neomacs-visual-cursors") else {
+    let Some(value) = buffer_local_value(buffer, LayoutVar::NeomacsVisualCursors) else {
         return Vec::new();
     };
     let Some(items) = list_to_vec(&value) else {
@@ -1244,7 +1390,7 @@ fn effective_cursor_spec(
 ) -> Option<CursorSpec> {
     let base = if window_cursor_type.bits() != Value::T.bits() {
         parse_cursor_spec(&window_cursor_type)
-    } else if let Some(buffer_cursor_type) = buffer_local_value(buffer, "cursor-type") {
+    } else if let Some(buffer_cursor_type) = buffer_local_value(buffer, LayoutVar::CursorType) {
         if buffer_cursor_type.bits() == Value::T.bits() {
             Some(frame_cursor_spec(frame))
         } else {
@@ -1262,7 +1408,7 @@ fn effective_cursor_spec(
         return None;
     }
 
-    let alt_cursor = buffer_local_value(buffer, "cursor-in-non-selected-windows");
+    let alt_cursor = buffer_local_value(buffer, LayoutVar::CursorInNonSelectedWindows);
     if let Some(value) = alt_cursor
         && value.bits() != Value::T.bits()
     {
@@ -1452,17 +1598,18 @@ pub fn window_params_from_neovm_with_font_sizing(
 
     // Read buffer-local variables.
     let wrap_mode = effective_wrap_mode(window, buffer, frame, obarray, hscroll);
-    let word_wrap = effective_buffer_bool(buffer, obarray, "word-wrap");
-    let tab_width = effective_buffer_int(buffer, obarray, "tab-width", 8) as i32;
+    let word_wrap = effective_buffer_bool(buffer, obarray, LayoutVar::WordWrap);
+    let tab_width = effective_buffer_int(buffer, obarray, LayoutVar::TabWidth, 8) as i32;
     // GNU `try_scrolling` reads `scroll-conservatively` / `scroll-margin`
     // (buffer-local with a global fallback) to choose between minimal scrolling
     // and recentering point when point jumps off-screen (src/xdisp.c).
-    let scroll_conservatively = effective_buffer_int(buffer, obarray, "scroll-conservatively", 0);
-    let scroll_step = effective_buffer_int(buffer, obarray, "scroll-step", 0);
+    let scroll_conservatively =
+        effective_buffer_int(buffer, obarray, LayoutVar::ScrollConservatively, 0);
+    let scroll_step = effective_buffer_int(buffer, obarray, LayoutVar::ScrollStep, 0);
     let scroll_minibuffer_conservatively = obarray
         .symbol_value("scroll-minibuffer-conservatively")
         .is_none_or(|value| !value.is_nil());
-    let scroll_margin = effective_buffer_int(buffer, obarray, "scroll-margin", 0);
+    let scroll_margin = effective_buffer_int(buffer, obarray, LayoutVar::ScrollMargin, 0);
 
     // GNU window.c gates chrome reservation through window_wants_*:
     // a mode/header/tab line is shown only for leaf non-minibuffer
@@ -1514,7 +1661,8 @@ pub fn window_params_from_neovm_with_font_sizing(
     });
     let cursor_color = frame_cursor_color_pixel(frame, face_table);
     let cursor_effects = parse_cursor_effect_profile(window_cursor_effect).or_else(|| {
-        buffer_local_value(buffer, "neomacs-cursor-effect").and_then(parse_cursor_effect_profile)
+        buffer_local_value(buffer, LayoutVar::NeomacsCursorEffect)
+            .and_then(parse_cursor_effect_profile)
     });
     let visual_cursors = parse_visual_cursors(buffer, cursor_color);
     let x_stretch_cursor = global_bool(obarray, "x-stretch-cursor");
@@ -1614,7 +1762,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         scroll_step,
         scroll_minibuffer_conservatively,
         scroll_margin,
-        tab_stop_list: buffer_local_list_values(buffer, "tab-stop-list")
+        tab_stop_list: buffer_local_list_values(buffer, LayoutVar::TabStopList)
             .iter()
             .filter_map(|v| v.as_int().map(|n| n as i32))
             .collect(),
@@ -1654,7 +1802,11 @@ pub fn window_params_from_neovm_with_font_sizing(
         // them in every buffer that has no local override. Read the EFFECTIVE
         // value (buffer-local, else global/default) — `buffer_local_bool` sees
         // only an explicit local binding and so silently ignored `setq-default`.
-        indicate_empty_lines: if effective_buffer_bool(buffer, obarray, "indicate-empty-lines") {
+        indicate_empty_lines: if effective_buffer_bool(
+            buffer,
+            obarray,
+            LayoutVar::IndicateEmptyLines,
+        ) {
             1
         } else {
             0
@@ -1662,7 +1814,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         show_trailing_whitespace: effective_buffer_bool(
             buffer,
             obarray,
-            "show-trailing-whitespace",
+            LayoutVar::ShowTrailingWhitespace,
         ),
         trailing_ws_bg: face_bg_pixel(face_table, "trailing-whitespace", 0),
         fill_column_indicator: fill_column_indicator
@@ -1672,7 +1824,7 @@ pub fn window_params_from_neovm_with_font_sizing(
             .map(|(_, character)| character)
             .unwrap_or('|'),
         fill_column_indicator_fg: face_fg_pixel(face_table, "fill-column-indicator", 0),
-        extra_line_spacing: match buffer_local_value(buffer, "line-spacing") {
+        extra_line_spacing: match buffer_local_value(buffer, LayoutVar::LineSpacing) {
             Some(v) if v.is_fixnum() => v.as_fixnum().unwrap() as f32,
             Some(v) if v.is_float() => v.xfloat() as f32,
             _ => 0.0,
@@ -2234,7 +2386,7 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
         let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
         let spec = self
             .buffer
-            .layout_buffer_local_value("buffer-invisibility-spec")
+            .layout_buffer_local_value(LayoutVar::BufferInvisibilitySpec)
             .unwrap_or(Value::T);
         // GNU `handle_invisible_prop` resolves `invisible` through
         // `get_char_property_and_overlay (pos, Qinvisible, it->window)`: the
@@ -3261,7 +3413,7 @@ impl FaceResolver {
         buffer: &B,
         face_name: &str,
     ) -> Option<Value> {
-        let mut cursor = buffer.layout_buffer_local_value("face-remapping-alist")?;
+        let mut cursor = buffer.layout_buffer_local_value(LayoutVar::FaceRemappingAlist)?;
         loop {
             if !cursor.is_cons() {
                 return None;

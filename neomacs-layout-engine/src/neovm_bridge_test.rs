@@ -472,7 +472,7 @@ fn layout_snapshot_buffer_local_value_falls_back_to_default_values() {
     );
     assert!(buffer_local_bool(
         &snapshot,
-        "display-line-numbers-current-absolute"
+        LayoutVar::DisplayLineNumbersCurrentAbsolute
     ));
 }
 
