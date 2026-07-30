@@ -91,6 +91,38 @@ fn test_directory_files_and_attributes_basic() {
 }
 
 #[test]
+fn directory_files_and_attributes_decodes_names_before_matching_and_returning_them() {
+    crate::test_utils::init_test_tracing();
+    let dir = std::env::temp_dir().join(format!("neovm_dfa_unicode_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("Übung – Lösung.zip"), "").unwrap();
+
+    let mut eval = Context::new();
+    eval.obarray.set_symbol_value(
+        "default-file-name-coding-system",
+        Value::symbol("utf-8-unix"),
+    );
+    let result = builtin_directory_files_and_attributes(
+        &mut eval,
+        vec![
+            Value::string(dir.to_string_lossy().to_string()),
+            Value::NIL,
+            Value::string("Übung"),
+        ],
+    )
+    .unwrap();
+
+    let items = list_to_vec(&result).unwrap();
+    assert_eq!(items.len(), 1);
+    let name = items[0].cons_car().as_lisp_string().unwrap();
+    assert!(name.is_multibyte());
+    assert_eq!(name.as_utf8_str(), Some("Übung – Lösung.zip"));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn test_directory_files_and_attributes_order_and_count() {
     crate::test_utils::init_test_tracing();
     let (dir, dir_str) = make_test_dir("dfa_count");
@@ -310,6 +342,57 @@ fn test_file_name_completion_basic() {
     )
     .unwrap();
     assert_eq!(result.as_utf8_str(), Some("fooba"));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn file_name_completion_decodes_the_common_prefix_before_returning_it() {
+    crate::test_utils::init_test_tracing();
+    let (dir, dir_str) = make_test_dir("fnc_unicode");
+    create_file(&dir, "Übung – Lösung.pdf", "");
+    create_file(&dir, "Übung – Lösung.tex", "");
+
+    let mut eval = Context::new();
+    eval.obarray.set_symbol_value(
+        "default-file-name-coding-system",
+        Value::symbol("utf-8-unix"),
+    );
+    let result = builtin_file_name_completion(
+        &mut eval,
+        vec![Value::string("Übung"), Value::string(&dir_str)],
+    )
+    .unwrap();
+
+    let completion = result.as_lisp_string().unwrap();
+    assert!(completion.is_multibyte());
+    assert_eq!(completion.as_utf8_str(), Some("Übung – Lösung."));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn file_name_all_completions_decodes_names_before_returning_them() {
+    crate::test_utils::init_test_tracing();
+    let (dir, dir_str) = make_test_dir("fnac_unicode");
+    create_file(&dir, "Übung – Lösung.zip", "");
+
+    let mut eval = Context::new();
+    eval.obarray.set_symbol_value(
+        "default-file-name-coding-system",
+        Value::symbol("utf-8-unix"),
+    );
+    let result = builtin_file_name_all_completions(
+        &mut eval,
+        vec![Value::string("Übung"), Value::string(&dir_str)],
+    )
+    .unwrap();
+
+    let items = list_to_vec(&result).unwrap();
+    assert_eq!(items.len(), 1);
+    let completion = items[0].as_lisp_string().unwrap();
+    assert!(completion.is_multibyte());
+    assert_eq!(completion.as_utf8_str(), Some("Übung – Lösung.zip"));
 
     let _ = fs::remove_dir_all(&dir);
 }

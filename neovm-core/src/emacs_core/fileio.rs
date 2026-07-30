@@ -1430,8 +1430,8 @@ fn read_directory_names_lisp(
             action: "Reading directory entry",
             err: e,
         })?;
-        // GNU decodes each readdir name (DECODE_FILE); keep the raw file-name
-        // bytes faithfully instead of lossily mapping them to U+FFFD.
+        // Keep the host entry bytes intact here.  Public directory primitives
+        // apply GNU's DECODE_FILE step before matching or returning names.
         names.push(path_to_lisp_file_name(Path::new(&entry.file_name())));
     }
     Ok(names)
@@ -1446,12 +1446,26 @@ enum DirectoryFilesError {
     InvalidRegexp(String),
 }
 
+#[cfg(test)]
 fn directory_files(
     dir: &crate::heap_types::LispString,
     full: bool,
     match_regex: Option<&crate::heap_types::LispString>,
     nosort: bool,
     count: Option<usize>,
+) -> Result<Vec<crate::heap_types::LispString>, DirectoryFilesError> {
+    directory_files_with_decoder(dir, full, match_regex, nosort, count, |bytes| {
+        crate::heap_types::LispString::from_unibyte(bytes.to_vec())
+    })
+}
+
+fn directory_files_with_decoder(
+    dir: &crate::heap_types::LispString,
+    full: bool,
+    match_regex: Option<&crate::heap_types::LispString>,
+    nosort: bool,
+    count: Option<usize>,
+    decode_name: impl Fn(&[u8]) -> crate::heap_types::LispString,
 ) -> Result<Vec<crate::heap_types::LispString>, DirectoryFilesError> {
     if count == Some(0) {
         return Ok(Vec::new());
@@ -1466,7 +1480,8 @@ fn directory_files(
     let mut remaining = count.unwrap_or(usize::MAX);
     let dir_with_slash = lisp_file_name_as_directory(dir);
 
-    for name in names {
+    for raw_name in names {
+        let name = decode_name(raw_name.as_bytes());
         if let Some(pattern) = match_regex {
             let matched =
                 super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix(
@@ -2372,7 +2387,7 @@ fn create_private_temp_dir(path: &Path) -> std::io::Result<()> {
 /// back to a multibyte string using `file-name-coding-system`, then
 /// `default-file-name-coding-system`, then (when both are nil) identity.
 /// Returns the decoded multibyte `LispString`.
-fn decode_file_name_lisp(
+pub(crate) fn decode_file_name_lisp(
     eval: &super::eval::Context,
     bytes: &[u8],
 ) -> crate::heap_types::LispString {
@@ -4862,7 +4877,10 @@ pub(crate) fn builtin_directory_files(eval: &mut Context, args: Vec<Value>) -> E
         None
     };
 
-    let files = directory_files(&dir, full, match_pattern.as_ref(), nosort, count)
+    let files =
+        directory_files_with_decoder(&dir, full, match_pattern.as_ref(), nosort, count, |bytes| {
+            decode_file_name_lisp(eval, bytes)
+        })
         .map_err(|e| signal_directory_files_error(e, &dir))?;
     Ok(Value::list(
         files.into_iter().map(Value::heap_string).collect(),

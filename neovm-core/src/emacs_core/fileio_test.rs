@@ -2467,6 +2467,38 @@ fn test_builtin_directory_files_args() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn directory_files_decodes_names_before_matching_and_returning_them() {
+    crate::test_utils::init_test_tracing();
+    let dir = std::env::temp_dir().join(format!("neovm_dirfiles_unicode_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("Übung – Lösung.zip"), "").unwrap();
+
+    let mut eval = Context::new();
+    eval.obarray.set_symbol_value(
+        "default-file-name-coding-system",
+        Value::symbol("utf-8-unix"),
+    );
+    let result = builtin_directory_files(
+        &mut eval,
+        vec![
+            Value::string(dir.to_string_lossy().to_string()),
+            Value::NIL,
+            Value::string("Übung"),
+        ],
+    )
+    .unwrap();
+
+    let items = list_to_vec(&result).unwrap();
+    assert_eq!(items.len(), 1);
+    let name = items[0].as_lisp_string().unwrap();
+    assert!(name.is_multibyte());
+    assert_eq!(name.as_utf8_str(), Some("Übung – Lösung.zip"));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
 // GNU `directory_files_internal` (src/dired.c) applies COUNT to the *raw*
 // readdir stream — it breaks after COUNT entries (`if (ind == last) break;`)
 // and only THEN sorts.  So `(directory-files DIR nil nil nil COUNT)` is the
