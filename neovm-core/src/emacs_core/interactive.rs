@@ -839,8 +839,6 @@ fn builtin_command_name(name: &str) -> bool {
             | "emacs-version"
             | "end-kbd-macro"
             | "erase-buffer"
-            | "eval-buffer"
-            | "eval-region"
             | "encode-coding-region"
             | "exit-minibuffer"
             | "exit-recursive-edit"

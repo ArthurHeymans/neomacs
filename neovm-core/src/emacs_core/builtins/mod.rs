@@ -3972,8 +3972,20 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(2),
     );
-    ctx.defsubr("eval-buffer", super::lread::builtin_eval_buffer, 0, Some(5));
-    ctx.defsubr("eval-region", super::lread::builtin_eval_region, 2, Some(4));
+    ctx.defsubr_interactive(
+        "eval-buffer",
+        super::lread::builtin_eval_buffer,
+        0,
+        Some(5),
+        super::interactive::BuiltinInteractiveSpec::String(""),
+    );
+    ctx.defsubr_interactive(
+        "eval-region",
+        super::lread::builtin_eval_region,
+        2,
+        Some(4),
+        super::interactive::BuiltinInteractiveSpec::String("r"),
+    );
     ctx.defsubr(
         "read-char-exclusive",
         super::lread::builtin_read_char_exclusive,

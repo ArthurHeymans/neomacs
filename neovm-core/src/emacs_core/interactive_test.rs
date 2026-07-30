@@ -3015,6 +3015,47 @@ fn call_interactively_builtin_delete_region_uses_its_registered_region_spec() {
 }
 
 #[test]
+fn call_interactively_eval_buffer_uses_its_registered_gnu_no_arg_spec() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        r#"(progn
+             (setq neovm--eval-buffer-interactive-result nil)
+             (unwind-protect
+                 (with-temp-buffer
+                   (insert ";;; -*- lexical-binding: t; -*-\n"
+                           "(setq neovm--eval-buffer-interactive-result 42)")
+                   (list (commandp 'eval-buffer t)
+                         (interactive-form 'eval-buffer)
+                         (progn
+                           (call-interactively 'eval-buffer)
+                           neovm--eval-buffer-interactive-result)))
+               (makunbound 'neovm--eval-buffer-interactive-result)))"#,
+    );
+    assert_eq!(results[0], "OK (t (interactive \"\") 42)");
+}
+
+#[test]
+fn call_interactively_eval_region_uses_its_registered_gnu_region_spec() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        r#"(progn
+             (setq neovm--eval-region-interactive-result nil)
+             (unwind-protect
+                 (with-temp-buffer
+                   (insert "(setq neovm--eval-region-interactive-result 73)")
+                   (goto-char (point-min))
+                   (set-mark (point-max))
+                   (list (commandp 'eval-region t)
+                         (interactive-form 'eval-region)
+                         (progn
+                           (call-interactively 'eval-region)
+                           neovm--eval-region-interactive-result)))
+               (makunbound 'neovm--eval-region-interactive-result)))"#,
+    );
+    assert_eq!(results[0], "OK (t (interactive \"r\") 73)");
+}
+
+#[test]
 fn registered_builtin_interactive_spec_is_the_command_identity_source() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -3039,7 +3080,14 @@ fn registered_builtin_interactive_spec_is_the_command_identity_source() {
 fn builtin_subr_commands_carry_their_gnu_interactive_specs() {
     crate::test_utils::init_test_tracing();
 
-    for name in ["kill-buffer", "widen", "abort-minibuffers", "delete-frame"] {
+    for name in [
+        "kill-buffer",
+        "widen",
+        "abort-minibuffers",
+        "delete-frame",
+        "eval-buffer",
+        "eval-region",
+    ] {
         assert!(
             !builtin_command_name(name),
             "{name} must not rely on the transitional command-name fallback"
