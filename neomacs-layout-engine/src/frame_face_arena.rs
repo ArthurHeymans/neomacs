@@ -84,7 +84,11 @@ fn resolved_face_route_hash(face: &crate::neovm_bridge::ResolvedFace) -> u64 {
 
 type RealizedIdentityMap = HashMap<u64, Vec<(Face, FaceId)>>;
 
-fn realized_identity_lookup(map: &RealizedIdentityMap, hash: u64, identity: &Face) -> Option<FaceId> {
+fn realized_identity_lookup(
+    map: &RealizedIdentityMap,
+    hash: u64,
+    identity: &Face,
+) -> Option<FaceId> {
     map.get(&hash)?
         .iter()
         .find_map(|(face, id)| (face == identity).then_some(*id))
