@@ -4413,7 +4413,11 @@ fn publish_gui_frame(
 
     let mut sent_any = false;
     for node in tree.frames_bottom_to_top {
-        let prepared = tty_layout::layout_frame_display_state(evaluator, node.frame_id);
+        let prepared = tty_layout::layout_frame_display_state(
+            evaluator,
+            node.frame_id,
+            tty_layout::FrameLayoutPurpose::Redisplay,
+        );
         let Some(prepared) = prepared else {
             continue;
         };

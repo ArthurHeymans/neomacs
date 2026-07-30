@@ -102,15 +102,41 @@ pub(crate) fn current_layout_frame_id(evaluator: &Context) -> Option<FrameId> {
         .map(|frame| frame.id)
 }
 
+/// Layout purposes that are allowed to produce renderer-facing frame state.
+///
+/// Synchronous logical queries use a separate function, so Rust makes it
+/// impossible to ask `layout_frame_display_state` for a query and accidentally
+/// receive an older cached presentation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrameLayoutPurpose {
+    Redisplay,
+    Snapshot,
+}
+
+impl FrameLayoutPurpose {
+    const fn engine_purpose(self) -> neomacs_layout_engine::engine::LayoutPurpose {
+        match self {
+            Self::Redisplay => neomacs_layout_engine::engine::LayoutPurpose::Redisplay,
+            Self::Snapshot => neomacs_layout_engine::engine::LayoutPurpose::Snapshot,
+        }
+    }
+
+    const fn consumes_pending_input(self) -> bool {
+        matches!(self, Self::Redisplay)
+    }
+}
+
 pub fn layout_frame_display_state(
     evaluator: &mut Context,
     frame_id: FrameId,
+    purpose: FrameLayoutPurpose,
 ) -> Option<PreparedFrameDisplay> {
     LAYOUT_ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
         // Smooth scroll (Phase 1, T4): drain a pending trackpad pixel-scroll for
         // this frame and apply it (sub-line vscroll) before re-laying.
-        if let Some(delta) = evaluator.take_pending_pixel_scroll_for_frame(frame_id)
+        if purpose.consumes_pending_input()
+            && let Some(delta) = evaluator.take_pending_pixel_scroll_for_frame(frame_id)
             && let Some(window_id) = evaluator
                 .frame_manager()
                 .get(frame_id)
@@ -121,7 +147,7 @@ pub fn layout_frame_display_state(
             let delta_px = (-delta).round() as i32;
             let _ = engine.pixel_scroll_window(evaluator, window_id, delta_px);
         }
-        engine.layout_frame_rust(evaluator, frame_id);
+        let _ = engine.layout_frame_rust_for_purpose(evaluator, frame_id, purpose.engine_purpose());
         let state = engine.last_frame_display_state.take()?;
         Some(PreparedFrameDisplay {
             ticket: PreparedPresentationTicket {
@@ -162,7 +188,9 @@ pub fn collect_snapshot_states(
         if !keep {
             continue;
         }
-        let Some(prepared) = layout_frame_display_state(evaluator, node.frame_id) else {
+        let Some(prepared) =
+            layout_frame_display_state(evaluator, node.frame_id, FrameLayoutPurpose::Snapshot)
+        else {
             continue;
         };
         states.push(prepared.discard(evaluator));
@@ -172,7 +200,8 @@ pub fn collect_snapshot_states(
     // frame): lay it out directly with its canonical root placement.
     if states.is_empty()
         && let SnapshotTarget::Frame(id) = target
-        && let Some(prepared) = layout_frame_display_state(evaluator, FrameId(*id))
+        && let Some(prepared) =
+            layout_frame_display_state(evaluator, FrameId(*id), FrameLayoutPurpose::Snapshot)
     {
         states.push(prepared.discard(evaluator));
     }
@@ -220,24 +249,16 @@ pub fn install_frame_snapshot_fn(evaluator: &mut Context) {
 /// Install the synchronous layout-query adapter used by display primitives
 /// such as `(window-end WINDOW t)`.
 ///
-/// This runs the same layout engine as redisplay, discards the unsubmitted
-/// presentation, and returns the atomic record that layout published into the
-/// window. Both GUI and TTY install this adapter; batch mode intentionally
-/// does not.
+/// This targets one window through the canonical row producer without entering
+/// the renderer presentation lifecycle. Both GUI and TTY install this adapter;
+/// batch mode intentionally does not.
 pub fn install_window_layout_query_fn(evaluator: &mut Context) {
     evaluator.window_layout_query_fn = Some(Box::new(|eval, frame_id, window_id| {
-        let prepared = layout_frame_display_state(eval, frame_id)?;
-        let _ = prepared.discard(eval);
-        match eval
-            .frame_manager()
-            .get(frame_id)?
-            .find_window(window_id)?
-            .window_end_state()?
-        {
-            neovm_core::window::WindowEndState::Current(record) => Some(record),
-            neovm_core::window::WindowEndState::Unrecorded
-            | neovm_core::window::WindowEndState::Stale(_) => None,
-        }
+        LAYOUT_ENGINE.with(|engine| {
+            engine
+                .borrow_mut()
+                .query_window_end(eval, frame_id, window_id)
+        })
     }));
 }
 
@@ -255,7 +276,7 @@ pub fn run_tty_layout_tree(
         .frame_manager()
         .frames_in_reverse_z_order(root_id, true);
 
-    let root_state = layout_frame_display_state(evaluator, root_id)?
+    let root_state = layout_frame_display_state(evaluator, root_id, FrameLayoutPurpose::Redisplay)?
         .activate(evaluator)
         .ok()?;
 
@@ -264,7 +285,9 @@ pub fn run_tty_layout_tree(
         if frame_id == root_id {
             continue;
         }
-        let Some(prepared) = layout_frame_display_state(evaluator, frame_id) else {
+        let Some(prepared) =
+            layout_frame_display_state(evaluator, frame_id, FrameLayoutPurpose::Redisplay)
+        else {
             continue;
         };
         let Ok(state) = prepared.activate(evaluator) else {

@@ -76,6 +76,46 @@ fn shared_primary_window_size(width: u32, height: u32) -> Arc<Mutex<PrimaryWindo
     Arc::new(Mutex::new(PrimaryWindowSize { width, height }))
 }
 
+#[test]
+fn layout_purpose_is_the_only_owner_of_pending_scroll_consumption() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    eval.buffer_manager_mut()
+        .get_mut(buffer_id)
+        .expect("buffer")
+        .insert(&"scrollable line\n".repeat(40));
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-purpose-scroll", 800, 320, buffer_id);
+    eval.accumulate_pending_pixel_scroll(frame_id, 3.5);
+
+    let snapshot = super::tty_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::tty_layout::FrameLayoutPurpose::Snapshot,
+    )
+    .expect("snapshot layout");
+    let _ = snapshot.discard(&mut eval);
+    assert_eq!(
+        eval.pending_pixel_scroll_for_frame(frame_id),
+        Some(3.5),
+        "snapshot and logical-query layout must preserve user input for redisplay"
+    );
+
+    let redisplay = super::tty_layout::layout_frame_display_state(
+        &mut eval,
+        frame_id,
+        super::tty_layout::FrameLayoutPurpose::Redisplay,
+    )
+    .expect("redisplay layout");
+    let _ = redisplay.discard(&mut eval);
+    assert_eq!(eval.pending_pixel_scroll_for_frame(frame_id), None);
+}
+
 fn test_image_catalog(
     cmd_tx: &crossbeam_channel::Sender<RenderCommand>,
     image_metadata: SharedImageMetadata,

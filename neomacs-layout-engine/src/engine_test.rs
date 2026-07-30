@@ -16192,6 +16192,98 @@ fn visible_gui_minibuffer_window_end_is_bounded_by_point_max_at_eob() {
     );
 }
 
+#[test]
+fn synchronous_window_end_query_updates_only_the_target_without_preparing_a_presentation() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    eval.buffer_manager_mut()
+        .get_mut(buffer_id)
+        .expect("buffer")
+        .insert(&"one two three four five six seven eight\n".repeat(20));
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("targeted-window-end-query", 800, 320, buffer_id);
+    let target = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let sibling = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            target,
+            neovm_core::window::SplitDirection::Horizontal,
+            buffer_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split");
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let prior_presentation = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("initial layout")
+        .presentation_id;
+    let prepared_id = neovm_core::window::geometry::PresentationId::new(prior_presentation.get());
+    assert!(
+        eval.frame_manager_mut()
+            .get_mut(frame_id)
+            .expect("frame")
+            .discard_display_presentation(prepared_id)
+    );
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame
+            .find_window_mut(target)
+            .expect("target")
+            .invalidate_window_end();
+        frame
+            .find_window_mut(sibling)
+            .expect("sibling")
+            .invalidate_window_end();
+    }
+
+    let record = engine
+        .query_window_end(&mut eval, frame_id, target)
+        .expect("targeted query should produce an exact end record");
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    assert_eq!(
+        frame
+            .find_window(target)
+            .expect("target")
+            .window_end_state(),
+        Some(neovm_core::window::WindowEndState::Current(record))
+    );
+    assert!(matches!(
+        frame
+            .find_window(sibling)
+            .expect("sibling")
+            .window_end_state(),
+        Some(neovm_core::window::WindowEndState::Stale(_))
+    ));
+    assert!(
+        !frame.has_prepared_display_presentations(),
+        "a logical layout query must not enter the renderer presentation lifecycle"
+    );
+    assert_eq!(
+        engine
+            .last_frame_display_state
+            .as_ref()
+            .expect("last real redisplay remains available")
+            .presentation_id,
+        prior_presentation,
+        "the query must not replace the last renderer-facing frame output"
+    );
+}
+
 /// An active minibuffer holding a prompt line plus several candidate lines
 /// must grow to one display row per logical line, render every line, and never
 /// flatten content into one row.  Exercises the active-fido/vertico measure

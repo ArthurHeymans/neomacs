@@ -98,6 +98,31 @@ const MAX_WINDOW_VISIBILITY_RETRIES: usize = 128;
 /// never publish mismatched geometry or spin forever.
 const MAX_FRAME_LAYOUT_RETRIES: usize = 12;
 
+/// Why layout is running.
+///
+/// This is deliberately a closed set: callers cannot accidentally combine a
+/// logical query with renderer publication or input consumption.  A
+/// synchronous query still uses the canonical window row producer, but targets
+/// one window and retires its speculative output before the presentation
+/// boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LayoutPurpose {
+    Redisplay,
+    Snapshot,
+    SynchronousQuery {
+        window_id: neovm_core::window::WindowId,
+    },
+}
+
+impl LayoutPurpose {
+    const fn query_window(self) -> Option<neovm_core::window::WindowId> {
+        match self {
+            Self::Redisplay | Self::Snapshot => None,
+            Self::SynchronousQuery { window_id } => Some(window_id),
+        }
+    }
+}
+
 #[cfg(test)]
 #[inline]
 fn cursor_point_columns(text: &[u8], byte_idx: usize, col: i32, params: &WindowParams) -> usize {
@@ -617,9 +642,26 @@ impl LayoutEngine {
         evaluator: &mut neovm_core::emacs_core::Context,
         frame_id: neovm_core::window::FrameId,
     ) {
+        let _ = self.layout_frame_rust_for_purpose(evaluator, frame_id, LayoutPurpose::Redisplay);
+    }
+
+    /// Lay out a frame for an explicit consumer.
+    ///
+    /// Renderer-facing purposes produce `last_frame_display_state` and prepare
+    /// a presentation. A synchronous query lays out only its target window and
+    /// returns the exact end record without replacing renderer-facing state.
+    pub fn layout_frame_rust_for_purpose(
+        &mut self,
+        evaluator: &mut neovm_core::emacs_core::Context,
+        frame_id: neovm_core::window::FrameId,
+        purpose: LayoutPurpose,
+    ) -> Option<neovm_core::window::WindowEndRecord> {
+        let query_window = purpose.query_window();
         // Incremental-layout instrumentation (Phase 0a): start each frame from
         // a clean slate; populated as the accepted frame is committed below.
-        self.layout_stats = LayoutStats::default();
+        if query_window.is_none() {
+            self.layout_stats = LayoutStats::default();
+        }
         // The font service can exist on the engine even while laying out a
         // terminal frame in tests. Match GNU's redisplay split: window-system
         // frames use realized font pixels, terminal frames stay on cell
@@ -635,7 +677,7 @@ impl LayoutEngine {
         let (bootstrap_bg, bootstrap_font_size, window_system) = {
             let Some(frame) = evaluator.frame_manager().get(frame_id) else {
                 tracing::error!("layout_frame_rust: frame {:?} not found", frame_id);
-                return;
+                return None;
             };
             let bootstrap = super::neovm_bridge::frame_params_from_neovm(
                 frame,
@@ -730,7 +772,7 @@ impl LayoutEngine {
                     None => {
                         tracing::error!("layout_frame_rust: frame {:?} not found", frame_id);
                         evaluator.retire_interaction_presentation(presentation_id);
-                        return;
+                        return None;
                     }
                 };
 
@@ -750,6 +792,19 @@ impl LayoutEngine {
                 .iter()
                 .map(|params| resolve_window_display_source_params(evaluator, params))
                 .collect();
+            let main_area_bottom = window_params_list
+                .iter()
+                .filter(|params| !params.is_minibuffer())
+                .map(|params| params.bounds.y + params.bounds.height)
+                .fold(0.0_f32, f32::max);
+            if let Some(target) = query_window {
+                window_params_list.retain(|params| params.window_id == target.0 as i64);
+                if window_params_list.is_empty() {
+                    evaluator.retire_interaction_presentation(presentation_id);
+                    self.reset_frame_attempt_state();
+                    return None;
+                }
+            }
 
             // --- Fontification pass ---
             // Run fontification for each window's visible region BEFORE the
@@ -820,15 +875,10 @@ impl LayoutEngine {
             // that a replaying window later imports.
             let tab_bar_height = frame_params.tab_bar_height;
             let tab_bar_gc_roots = ScratchGcRootScope::new();
-            let built_tab_bar = (tab_bar_height > 0.0)
+            let built_tab_bar = (query_window.is_none() && tab_bar_height > 0.0)
                 .then(|| build_tab_bar_display(evaluator, frame_id.0, &tab_bar_gc_roots))
                 .flatten();
 
-            let main_area_bottom = window_params_list
-                .iter()
-                .filter(|params| !params.is_minibuffer())
-                .map(|params| params.bounds.y + params.bounds.height)
-                .fold(0.0_f32, f32::max);
             let window_layout_inputs: Vec<(WindowFrameGeometry, WindowLayoutBox)> =
                 window_params_list
                     .iter()
@@ -872,6 +922,13 @@ impl LayoutEngine {
                 .iter()
                 .zip(&window_layout_inputs)
                 .map(|(params, (_, layout_box))| {
+                    if query_window.is_some() {
+                        return IncrementalWindowPlan {
+                            cursor_only: None,
+                            scroll: None,
+                            is_edit: false,
+                        };
+                    }
                     let cursor_only = self.build_cursor_only_replay(params, *layout_box, evaluator);
                     let mut is_edit = false;
                     let scroll = if cursor_only.is_none() {
@@ -935,7 +992,7 @@ impl LayoutEngine {
                     presentation_id,
                     request,
                 ) {
-                    return;
+                    return None;
                 }
                 if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
                     frame.tab_bar_height = actual_tab_bar_height.max(1.0) as u32;
@@ -1021,7 +1078,7 @@ impl LayoutEngine {
                             presentation_id,
                             request,
                         ) {
-                            return;
+                            return None;
                         }
                         window_chrome_metrics
                             .insert(DisplayWindowId::new(params.window_id), measured);
@@ -1060,6 +1117,22 @@ impl LayoutEngine {
                         &face_attempt,
                     );
                 }
+            }
+
+            if let Some(target) = query_window {
+                let record = evaluator
+                    .frame_manager()
+                    .get(frame_id)
+                    .and_then(|frame| frame.find_window(target))
+                    .and_then(|window| window.window_end_state())
+                    .and_then(|state| match state {
+                        neovm_core::window::WindowEndState::Current(record) => Some(record),
+                        neovm_core::window::WindowEndState::Unrecorded
+                        | neovm_core::window::WindowEndState::Stale(_) => None,
+                    });
+                evaluator.retire_interaction_presentation(presentation_id);
+                self.reset_frame_attempt_state();
+                return record;
             }
 
             // --- Minibuffer auto-resize check (GNU xdisp.c:13161-13301) ---
@@ -1143,7 +1216,7 @@ impl LayoutEngine {
                             presentation_id,
                             request,
                         ) {
-                            return;
+                            return None;
                         }
                         if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
                             frame.grow_mini_window_with_max_lines(delta, max_mini_lines);
@@ -1177,7 +1250,7 @@ impl LayoutEngine {
                             presentation_id,
                             request,
                         ) {
-                            return;
+                            return None;
                         }
                         if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
                             frame.shrink_mini_window();
@@ -1317,7 +1390,7 @@ impl LayoutEngine {
             Err(error) => {
                 tracing::error!(?error, "rejecting invalid frame chrome snapshot");
                 evaluator.retire_interaction_presentation(presentation_id);
-                return;
+                return None;
             }
         };
         let sealed_face_arena = match accepted_face_attempt.seal(frame_display_state.faces.clone())
@@ -1326,7 +1399,7 @@ impl LayoutEngine {
             Err(error) => {
                 tracing::error!(?error, "rejecting incoherent frame face namespace");
                 evaluator.retire_interaction_presentation(presentation_id);
-                return;
+                return None;
             }
         };
 
@@ -1511,7 +1584,7 @@ impl LayoutEngine {
             Err(error) => {
                 tracing::error!(?error, "rejecting incoherent resolved frame");
                 evaluator.retire_interaction_presentation(presentation_id);
-                return;
+                return None;
             }
         };
         let presentation_inputs =
@@ -1525,7 +1598,7 @@ impl LayoutEngine {
             Err(error) => {
                 tracing::error!(?error, "rejecting invalid frame presentation");
                 evaluator.retire_interaction_presentation(presentation_id);
-                return;
+                return None;
             }
         };
         debug_assert_eq!(sealed.presentation(), sealed.state().presentation_id);
@@ -1558,6 +1631,21 @@ impl LayoutEngine {
                 )
                 .expect("layout presentation identity is fresh");
         }
+        None
+    }
+
+    /// Recompute GNU-compatible `window-end` for one live window.
+    pub fn query_window_end(
+        &mut self,
+        evaluator: &mut neovm_core::emacs_core::Context,
+        frame_id: neovm_core::window::FrameId,
+        window_id: neovm_core::window::WindowId,
+    ) -> Option<neovm_core::window::WindowEndRecord> {
+        self.layout_frame_rust_for_purpose(
+            evaluator,
+            frame_id,
+            LayoutPurpose::SynchronousQuery { window_id },
+        )
     }
 
     /// Simplified window layout using neovm-core data.

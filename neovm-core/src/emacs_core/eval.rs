@@ -2232,10 +2232,8 @@ pub struct Context {
             ) -> Option<crate::window::WindowEndRecord>,
         >,
     >,
-    /// Smooth scroll (Phase 1): accumulated trackpad pixel-scroll delta
-    /// `(target_frame_id, delta_y)` pending application by the next layout pass,
-    /// which drains it and calls `Engine::pixel_scroll_window`.
-    pub(crate) pending_pixel_scroll: Option<(u64, f32)>,
+    /// Smooth scroll accumulated for the next input-consuming redisplay.
+    pub(crate) pending_pixel_scroll: Option<crate::keyboard::PendingPixelScroll>,
     /// Host-display bridge for GUI frame realization.
     pub display_host: Option<Box<dyn DisplayHost>>,
     /// Desired visual configuration.  Lisp updates this snapshot atomically;

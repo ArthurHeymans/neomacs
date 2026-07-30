@@ -94,6 +94,41 @@ impl crate::gc_trace::GcTrace for PresentedInteractions {
     }
 }
 
+/// Coalesced high-resolution scroll input waiting for redisplay.
+///
+/// Keeping the frame identity and delta in one value prevents a caller from
+/// draining a delta for the wrong frame. A different target replaces the
+/// pending gesture; repeated input for one frame preserves sub-pixel precision.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PendingPixelScroll {
+    frame: crate::window::FrameId,
+    delta_y: f32,
+}
+
+impl PendingPixelScroll {
+    fn accumulate(current: Option<Self>, frame: crate::window::FrameId, delta_y: f32) -> Self {
+        let accumulated = current.map_or(0.0, |pending| {
+            if pending.frame == frame {
+                pending.delta_y
+            } else {
+                0.0
+            }
+        });
+        Self {
+            frame,
+            delta_y: accumulated + delta_y,
+        }
+    }
+
+    pub const fn for_frame(self, frame: crate::window::FrameId) -> Option<f32> {
+        if self.frame.0 == frame.0 {
+            Some(self.delta_y)
+        } else {
+            None
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Key events
 // ---------------------------------------------------------------------------
@@ -4318,7 +4353,10 @@ impl crate::emacs_core::eval::Context {
                 // for this frame; the layout pass drains it and calls
                 // Engine::pixel_scroll_window before re-laying. Consume the event
                 // (no command); the command loop redisplays when input drains.
-                self.accumulate_pixel_scroll(target_frame_id, delta_y);
+                self.accumulate_pending_pixel_scroll(
+                    crate::window::FrameId(target_frame_id),
+                    delta_y,
+                );
                 Ok(None)
             }
             InputEvent::LayoutInvalidated => {
@@ -6297,11 +6335,22 @@ impl crate::emacs_core::eval::Context {
     /// `target_frame_id`. Deltas for the same frame sum (sub-pixel precision); a
     /// delta for a different frame replaces the pending one. Drained + applied by
     /// the layout pass via `Engine::pixel_scroll_window`.
-    pub(crate) fn accumulate_pixel_scroll(&mut self, target_frame_id: u64, delta_y: f32) {
-        let acc = self
-            .pending_pixel_scroll
-            .map_or(0.0, |(f, d)| if f == target_frame_id { d } else { 0.0 });
-        self.pending_pixel_scroll = Some((target_frame_id, acc + delta_y));
+    pub fn accumulate_pending_pixel_scroll(
+        &mut self,
+        target_frame: crate::window::FrameId,
+        delta_y: f32,
+    ) {
+        self.pending_pixel_scroll = Some(PendingPixelScroll::accumulate(
+            self.pending_pixel_scroll,
+            target_frame,
+            delta_y,
+        ));
+    }
+
+    /// Observe pending scroll without taking ownership from the next redisplay.
+    pub fn pending_pixel_scroll_for_frame(&self, frame: crate::window::FrameId) -> Option<f32> {
+        self.pending_pixel_scroll
+            .and_then(|pending| pending.for_frame(frame))
     }
 
     /// Smooth scroll (Phase 1): take the pending trackpad pixel-scroll delta if it
@@ -6312,9 +6361,9 @@ impl crate::emacs_core::eval::Context {
         frame: crate::window::FrameId,
     ) -> Option<f32> {
         match self.pending_pixel_scroll {
-            Some((tf, delta)) if tf == frame.0 => {
+            Some(pending) if pending.frame == frame => {
                 self.pending_pixel_scroll = None;
-                Some(delta)
+                Some(pending.delta_y)
             }
             _ => None,
         }
@@ -6326,19 +6375,22 @@ mod pixel_scroll_accumulate_tests {
     #[test]
     fn accumulate_pixel_scroll_sums_same_frame_and_replaces_other() {
         let mut eval = crate::emacs_core::eval::Context::new();
-        eval.accumulate_pixel_scroll(7, 3.5);
-        eval.accumulate_pixel_scroll(7, 2.0);
+        let frame_7 = crate::window::FrameId(7);
+        let frame_9 = crate::window::FrameId(9);
+        eval.accumulate_pending_pixel_scroll(frame_7, 3.5);
+        eval.accumulate_pending_pixel_scroll(frame_7, 2.0);
         assert_eq!(
-            eval.pending_pixel_scroll,
-            Some((7, 5.5)),
+            eval.pending_pixel_scroll_for_frame(frame_7),
+            Some(5.5),
             "same-frame deltas sum (sub-pixel accumulation)"
         );
-        eval.accumulate_pixel_scroll(9, -1.0);
+        eval.accumulate_pending_pixel_scroll(frame_9, -1.0);
         assert_eq!(
-            eval.pending_pixel_scroll,
-            Some((9, -1.0)),
+            eval.pending_pixel_scroll_for_frame(frame_9),
+            Some(-1.0),
             "a different frame replaces the pending delta"
         );
+        assert_eq!(eval.pending_pixel_scroll_for_frame(frame_7), None);
     }
 }
 
