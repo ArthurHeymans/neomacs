@@ -335,7 +335,7 @@ fn org_planning_agenda_repeat_logbook_cookie_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((#(\"TODO\" 0 4 (org-todo-head \"TODO\")) \"<2026-06-17 Wed 08:30 .+2d>\" \"<2026-06-06 Sat +1w -2d>\" \"[2026-05-27 Wed 13:45]\" \"Ada\" \"+1w\") (#(\"DONE\" 0 4 (org-todo-head \"TODO\")) #(\"Checklist [2/2]\" 0 15 (org-todo-head \"TODO\")) nil) ((t nil nil t) \"3 days-agenda (W22):\nWednesday  27 May 2026\n  Plan:       11:00-12:15 TODO Repeat                                   :work::\n\") nil \"3 days-agenda (W22):\nWednesday  27 May 2026\n  Plan:       11:00-12:15 TODO Repeat                                   :work::\n\")""#
+        r#""OK ((#(\"TODO\" 0 4 (org-todo-head \"TODO\" fontified nil)) \"<2026-06-17 Wed 08:30 .+2d>\" \"<2026-06-06 Sat +1w -2d>\" \"[2026-05-27 Wed 13:45]\" \"Ada\" \"+1w\") (#(\"DONE\" 0 4 (org-todo-head \"TODO\" fontified nil)) #(\"Checklist [2/2]\" 0 15 (fontified nil org-todo-head \"TODO\")) nil) ((t nil nil t) \"3 days-agenda (W22):\nWednesday  27 May 2026\n  Plan:       11:00-12:15 TODO Repeat                                   :work::\n\") nil \"3 days-agenda (W22):\nWednesday  27 May 2026\n  Plan:       11:00-12:15 TODO Repeat                                   :work::\n\")""#
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
