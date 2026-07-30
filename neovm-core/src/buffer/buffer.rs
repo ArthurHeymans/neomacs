@@ -2688,6 +2688,13 @@ impl Buffer {
             .char_code_at_emacs_byte_pos(self.clamped_emacs_byte_pos(pos))
     }
 
+    /// See `BufferText::contiguous_window_at`: the gap half (or storage
+    /// chunk) containing logical byte `pos`, for borrow-free sequential
+    /// scans. Valid only until the next text mutation.
+    pub fn contiguous_window_at(&self, pos: usize) -> Option<(usize, *const u8, usize)> {
+        self.text.contiguous_window_at(pos)
+    }
+
     pub fn text_props_get_property_at_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,

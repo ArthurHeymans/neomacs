@@ -617,6 +617,13 @@ impl BufferText {
             .char_code_at_emacs_byte_pos(pos)
     }
 
+    /// See `PhysicalTextBackend::contiguous_window_at`. The returned pointer
+    /// outlives the internal borrow taken here and is valid only until the
+    /// next text mutation; callers must confine it to a pure-read scan.
+    pub(crate) fn contiguous_window_at(&self, pos: usize) -> Option<(usize, *const u8, usize)> {
+        self.storage.borrow().backend.contiguous_window_at(pos)
+    }
+
     pub(crate) fn text_emacs_byte_range(&self, range: EmacsByteRange) -> String {
         self.storage.borrow().backend.text_emacs_byte_range(range)
     }

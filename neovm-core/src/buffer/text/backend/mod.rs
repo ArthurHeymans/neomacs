@@ -188,6 +188,13 @@ impl TextBackend {
         dispatch_backend_ref!(self, storage => PhysicalTextBackend::char_code_at_emacs_byte_pos(storage, pos))
     }
 
+    pub(in crate::buffer) fn contiguous_window_at(
+        &self,
+        pos: usize,
+    ) -> Option<(usize, *const u8, usize)> {
+        dispatch_backend_ref!(self, storage => PhysicalTextBackend::contiguous_window_at(storage, pos))
+    }
+
     pub(in crate::buffer) fn emacs_byte_pos_to_char_pos(&self, byte_pos: EmacsBytePos) -> CharPos0 {
         dispatch_backend_ref!(self, storage => PhysicalTextBackend::emacs_byte_pos_to_char_pos(storage, byte_pos))
     }

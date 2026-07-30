@@ -299,6 +299,27 @@ impl GapBuffer {
         self.char_code_at(pos.get())
     }
 
+    /// The contiguous physical window containing logical byte `pos`: the
+    /// gap half `pos` falls in, as `(logical_start, base_ptr, len)` where
+    /// logical byte `logical_start + i` lives at `base_ptr.add(i)`.
+    ///
+    /// The pointer is valid until the next text mutation (anything that
+    /// moves the gap or reallocates `buf`). Callers hold it only across
+    /// pure-read scans — the same lifetime discipline GNU's scanners apply
+    /// to `BYTE_POS_ADDR` pointers.
+    pub(crate) fn contiguous_window_at(&self, pos: usize) -> Option<(usize, *const u8, usize)> {
+        if pos >= self.len() {
+            return None;
+        }
+        if pos < self.gap_start {
+            Some((0, self.buf.as_ptr(), self.gap_start))
+        } else {
+            // SAFETY: gap_end <= buf.len() by construction.
+            let base = unsafe { self.buf.as_ptr().add(self.gap_end) };
+            Some((self.gap_start, base, self.len() - self.gap_start))
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Range extraction
     // -----------------------------------------------------------------------

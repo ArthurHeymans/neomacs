@@ -849,6 +849,18 @@ struct BufferChars<'a> {
     /// char->byte conversion per char.  Random access falls back to the
     /// (cached) conversion, so this only ever helps.
     cursor: Cell<Option<(usize, EmacsBytePos, EmacsByteLen)>>,
+    /// Borrow-free storage window: `(logical_start, base_ptr, len)` for the
+    /// contiguous physical segment (gap half) last read from. Every
+    /// `char_at` used to re-enter the text storage -- a RefCell borrow, a
+    /// backend dispatch, and a gap-half recomputation PER CHARACTER; GNU's
+    /// scanners read through a raw `BYTE_POS_ADDR` pointer instead
+    /// (syntax.c FETCH_CHAR_AS_MULTIBYTE).
+    ///
+    /// SOUNDNESS: the pointer is valid until the next text mutation. A
+    /// `BufferChars` lives inside one syntax scan that holds `&Buffer`
+    /// throughout and runs no Lisp; its property/table arms only READ. The
+    /// window therefore never outlives the text layout it points into.
+    window: Cell<Option<(usize, *const u8, usize)>>,
 }
 
 impl<'a> BufferChars<'a> {
@@ -858,7 +870,45 @@ impl<'a> BufferChars<'a> {
             base_char,
             multibyte: buf.get_multibyte(),
             cursor: Cell::new(None),
+            window: Cell::new(None),
         }
+    }
+
+    /// Decode the char code at `byte_pos` through the cached storage
+    /// window, refreshing the window when the position leaves it.
+    #[inline]
+    fn code_at_byte(&self, byte_pos: EmacsBytePos) -> u32 {
+        let pos = byte_pos.get();
+        let window = match self.window.get() {
+            Some(w @ (start, _, len)) if pos >= start && pos < start + len => w,
+            _ => match self.buf.contiguous_window_at(pos) {
+                Some(w) => {
+                    self.window.set(Some(w));
+                    w
+                }
+                // Chunked backend (or out of range): per-call accessor.
+                None => return self.buf.char_code_at_emacs_byte_pos(byte_pos).unwrap_or(0),
+            },
+        };
+        let (start, base, len) = window;
+        // SAFETY: pos is inside [start, start+len) per the check above, and
+        // the window invariant (struct doc) guarantees base..base+len is the
+        // live physical segment for those logical bytes.
+        let slice =
+            unsafe { std::slice::from_raw_parts(base.add(pos - start), len - (pos - start)) };
+        let code = if !self.multibyte {
+            slice[0] as u32
+        } else if slice[0] < 0x80 {
+            slice[0] as u32
+        } else {
+            crate::emacs_core::emacs_char::string_char(slice).0
+        };
+        debug_assert_eq!(
+            Some(code),
+            self.buf.char_code_at_emacs_byte_pos(byte_pos),
+            "window decode diverged from the storage accessor at byte {pos}"
+        );
+        code
     }
 
     #[inline]
@@ -872,7 +922,7 @@ impl<'a> BufferChars<'a> {
             Some((c_idx, c_byte, c_width)) if idx == c_idx + 1 => c_byte.add_len(c_width),
             _ => buffer_char_to_emacs_byte_pos(self.buf, self.base_char.add_len(CharLen::new(idx))),
         };
-        let code = self.buf.char_code_at_emacs_byte_pos(byte_pos).unwrap_or(0);
+        let code = self.code_at_byte(byte_pos);
         // A unibyte buffer stores one byte per char; a multibyte buffer stores
         // the char's internal multibyte length (raw bytes included -- see
         // `emacs_char::char_bytes`).

@@ -266,6 +266,15 @@ impl PieceTreeTextBackend {
         Some(crate::emacs_core::emacs_char::string_char(&tmp[..written]).0)
     }
 
+    /// No cheap contiguous window: storage is chunked. Callers fall back to
+    /// the per-byte accessors.
+    pub(in crate::buffer) fn contiguous_window_at(
+        &self,
+        _pos: usize,
+    ) -> Option<(usize, *const u8, usize)> {
+        None
+    }
+
     pub(in crate::buffer) fn emacs_byte_pos_to_char_pos(&self, byte_pos: EmacsBytePos) -> CharPos0 {
         let byte_pos = byte_pos.get();
         assert!(

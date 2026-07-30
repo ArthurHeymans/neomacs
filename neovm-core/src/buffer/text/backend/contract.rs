@@ -60,6 +60,10 @@ macro_rules! impl_physical_text_backend {
                 <$backend>::char_code_at_emacs_byte_pos(self, pos)
             }
 
+            fn contiguous_window_at(&self, pos: usize) -> Option<(usize, *const u8, usize)> {
+                <$backend>::contiguous_window_at(self, pos)
+            }
+
             fn emacs_byte_pos_to_char_pos(&self, byte_pos: EmacsBytePos) -> CharPos0 {
                 <$backend>::emacs_byte_pos_to_char_pos(self, byte_pos)
             }
@@ -148,6 +152,13 @@ pub(super) trait PhysicalTextBackend: fmt::Display {
     fn emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8>;
     fn char_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<char>;
     fn char_code_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<u32>;
+
+    /// The contiguous physical window containing logical byte `pos`, as
+    /// `(logical_start, base_ptr, len)`. Backends without cheap contiguous
+    /// windows return `None`; callers must fall back to the per-byte
+    /// accessors. The pointer is valid only until the next text mutation —
+    /// see `GapBuffer::contiguous_window_at`.
+    fn contiguous_window_at(&self, pos: usize) -> Option<(usize, *const u8, usize)>;
     fn emacs_byte_pos_to_char_pos(&self, byte_pos: EmacsBytePos) -> CharPos0;
     fn char_pos_to_emacs_byte_pos(&self, char_pos: CharPos0) -> EmacsBytePos;
     fn text_emacs_byte_range(&self, range: EmacsByteRange) -> String;
