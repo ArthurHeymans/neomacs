@@ -3532,9 +3532,9 @@ fn assert_fastmap_equivalence(
     ];
     for &(start, range) in &spans {
         let normal = regex_emacs::re_search(cp, text, start, range, syn, start);
-        regex_emacs::FORCE_DISABLE_FASTMAP.with(|f| f.set(true));
-        let forced = regex_emacs::re_search(cp, text, start, range, syn, start);
-        regex_emacs::FORCE_DISABLE_FASTMAP.with(|f| f.set(false));
+        let forced = regex_emacs::with_fastmap_disabled(|| {
+            regex_emacs::re_search(cp, text, start, range, syn, start)
+        });
         match (&normal, &forced) {
             (None, None) => {}
             (Some((p1, r1)), Some((p2, r2))) => {

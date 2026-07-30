@@ -114,6 +114,9 @@ jit = [
 # vanishes). Distinct from the STATIC per-compiled-function op-mix behind
 # NEOVM_JIT_PROFILE. Run a profiling build with `--features vm-profile`.
 vm-profile = []
+# Typed differential-fuzzing seam used by the independent cargo-fuzz package.
+# Kept out of production and ordinary dependency builds.
+fuzzing = []
 
 [dev-dependencies]
 criterion = { version = "0.8", default-features = false, features = ["plotters", "cargo_bench_support"] }

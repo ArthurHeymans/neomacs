@@ -103,3 +103,38 @@ fn facade_reexports_name_the_engine_front_door() {
         .expect("eval succeeds");
     assert!(matches!(v.kind(), crate::ValueKind::Fixnum(3)));
 }
+
+#[test]
+fn regex_fuzz_support_checks_each_differential_through_one_interface() {
+    use crate::fuzz_support::{RegexCase, RegexCheck, RegexDifferential, check_regex_differential};
+    use strum::IntoEnumIterator;
+
+    let case = RegexCase::new(
+        "prefix\\(alpha\\|beta\\)suffix",
+        b"noise prefixbetasuffix tail",
+        false,
+        0,
+        0,
+    );
+
+    for differential in RegexDifferential::iter() {
+        assert!(
+            matches!(
+                check_regex_differential(case, differential),
+                Ok(RegexCheck::Equivalent { comparisons }) if comparisons > 0
+            ),
+            "{differential} should compare at least one operation",
+        );
+    }
+}
+
+#[test]
+fn regex_fuzz_support_checks_search_optimizations_without_a_prefilter() {
+    use crate::fuzz_support::{RegexCase, RegexCheck, RegexDifferential, check_regex_differential};
+
+    let case = RegexCase::new("a", b"zzza", false, 0, 0);
+    assert!(matches!(
+        check_regex_differential(case, RegexDifferential::SearchOptimizations),
+        Ok(RegexCheck::Equivalent { comparisons: 1 })
+    ));
+}

@@ -718,8 +718,9 @@ pub(crate) fn take_matcher_overflow() -> bool {
 // caller re-runs the match on the linear, byte-exact Pike VM.  This keeps
 // the common-case speed while eliminating catastrophic blow-up.
 //
-// Two test-only switches let the differential fuzzer pin ONE engine so it
-// can compare them directly (bypassing the budget heuristic).
+// A test/fuzz-only typed override lets differential checks pin one engine and
+// compare it with another (bypassing the budget heuristic). One enum makes
+// contradictory "force both engines" states unrepresentable.
 thread_local! {
     /// Set by the budgeted backtracker when it gives up so the caller
     /// re-runs the match on the Pike VM.
@@ -746,54 +747,77 @@ fn take_pike_fallback() -> bool {
     PIKE_FALLBACK.with(|f| f.replace(false))
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "fuzzing"))]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum RegexEngineOverride {
+    #[default]
+    Production,
+    Backtracker,
+    PikeVm,
+}
+
+#[cfg(any(test, feature = "fuzzing"))]
 thread_local! {
-    /// Pin the backtracker (no budget, no Pike) — the fuzzer's oracle side.
-    static FORCE_BACKTRACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    /// Pin the Pike VM for eligible patterns — the fuzzer's engine side.
-    static FORCE_PIKE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static REGEX_ENGINE_OVERRIDE: std::cell::Cell<RegexEngineOverride> =
+        const { std::cell::Cell::new(RegexEngineOverride::Production) };
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "fuzzing"))]
 #[inline]
 fn force_backtrack() -> bool {
-    FORCE_BACKTRACK.with(|f| f.get())
+    REGEX_ENGINE_OVERRIDE.with(|slot| slot.get() == RegexEngineOverride::Backtracker)
 }
 
-#[cfg(not(test))]
+#[cfg(not(any(test, feature = "fuzzing")))]
 #[inline]
 fn force_backtrack() -> bool {
     false
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "fuzzing"))]
 #[inline]
 fn force_pike() -> bool {
-    FORCE_PIKE.with(|f| f.get())
+    REGEX_ENGINE_OVERRIDE.with(|slot| slot.get() == RegexEngineOverride::PikeVm)
 }
 
-#[cfg(not(test))]
+#[cfg(not(any(test, feature = "fuzzing")))]
 #[inline]
 fn force_pike() -> bool {
     false
 }
 
-/// Run `f` with the pure backtracker forced (no budget/Pike).  Test only.
+#[cfg(any(test, feature = "fuzzing"))]
+struct RegexEngineOverrideGuard(RegexEngineOverride);
+
+#[cfg(any(test, feature = "fuzzing"))]
+impl Drop for RegexEngineOverrideGuard {
+    fn drop(&mut self) {
+        REGEX_ENGINE_OVERRIDE.with(|slot| slot.set(self.0));
+    }
+}
+
+/// Run `f` with one regex routing policy, restoring the previous policy even
+/// when `f` unwinds.
+#[cfg(any(test, feature = "fuzzing"))]
+pub(crate) fn with_regex_engine_override<R>(
+    engine: RegexEngineOverride,
+    f: impl FnOnce() -> R,
+) -> R {
+    let previous = REGEX_ENGINE_OVERRIDE.with(|slot| slot.replace(engine));
+    let _guard = RegexEngineOverrideGuard(previous);
+    f()
+}
+
+/// Run `f` with the pure backtracker forced (no budget/Pike). Test only.
 #[cfg(test)]
 pub(crate) fn with_backtracker_forced<R>(f: impl FnOnce() -> R) -> R {
-    FORCE_BACKTRACK.with(|flag| flag.set(true));
-    let r = f();
-    FORCE_BACKTRACK.with(|flag| flag.set(false));
-    r
+    with_regex_engine_override(RegexEngineOverride::Backtracker, f)
 }
 
-/// Run `f` with the Pike VM forced for eligible patterns.  Test only.
+/// Run `f` with the Pike VM forced for eligible patterns. Test only.
 #[cfg(test)]
 pub(crate) fn with_pike_forced<R>(f: impl FnOnce() -> R) -> R {
-    FORCE_PIKE.with(|flag| flag.set(true));
-    let r = f();
-    FORCE_PIKE.with(|flag| flag.set(false));
-    r
+    with_regex_engine_override(RegexEngineOverride::PikeVm, f)
 }
 
 // SyntaxClass is imported from crate::emacs_core::syntax.
@@ -6585,34 +6609,49 @@ fn collect_prefix_literals(
     }
 }
 
-// Test-only escape hatch: force `re_search` down the no-fastmap path so
-// equivalence tests can assert that fastmap skipping never changes match
-// results (position + registers) for any pattern/haystack pair.
-#[cfg(test)]
-thread_local! {
-    pub(crate) static FORCE_DISABLE_FASTMAP: std::cell::Cell<bool> =
-        const { std::cell::Cell::new(false) };
+// Test/fuzz-only escape hatch: force `re_search` down the no-fastmap path so
+// equivalence checks can prove search optimizations never change match results.
+#[cfg(any(test, feature = "fuzzing"))]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum SearchOptimizationOverride {
+    #[default]
+    Production,
+    Disabled,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "fuzzing"))]
+thread_local! {
+    static SEARCH_OPTIMIZATION_OVERRIDE: std::cell::Cell<SearchOptimizationOverride> =
+        const { std::cell::Cell::new(SearchOptimizationOverride::Production) };
+}
+
+#[cfg(any(test, feature = "fuzzing"))]
 fn fastmap_force_disabled() -> bool {
-    FORCE_DISABLE_FASTMAP.with(|flag| flag.get())
+    SEARCH_OPTIMIZATION_OVERRIDE.with(|slot| slot.get() == SearchOptimizationOverride::Disabled)
 }
 
 /// Run `f` with the fastmap AND prefilter search-skips disabled, so
 /// `re_search` scans every position through the pure backtracker/Pike matcher.
 /// This is the ORACLE for the prefilter differential fuzzer: comparing it
 /// against the normal (prefilter-enabled) search proves the prefilter never
-/// changes match results.  Test only.
-#[cfg(test)]
+/// changes match results. The previous policy is restored even if `f` unwinds.
+#[cfg(any(test, feature = "fuzzing"))]
 pub(crate) fn with_fastmap_disabled<R>(f: impl FnOnce() -> R) -> R {
-    FORCE_DISABLE_FASTMAP.with(|flag| flag.set(true));
-    let r = f();
-    FORCE_DISABLE_FASTMAP.with(|flag| flag.set(false));
-    r
+    struct Guard(SearchOptimizationOverride);
+
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            SEARCH_OPTIMIZATION_OVERRIDE.with(|slot| slot.set(self.0));
+        }
+    }
+
+    let previous = SEARCH_OPTIMIZATION_OVERRIDE
+        .with(|slot| slot.replace(SearchOptimizationOverride::Disabled));
+    let _guard = Guard(previous);
+    f()
 }
 
-#[cfg(not(test))]
+#[cfg(not(any(test, feature = "fuzzing")))]
 #[inline(always)]
 fn fastmap_force_disabled() -> bool {
     false

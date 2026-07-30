@@ -1,4 +1,5 @@
 use super::*;
+use crate::fuzz_support::{RegexCase, RegexCheck, RegexDifferential, check_regex_differential};
 
 #[test]
 fn test_simple_literal() {
@@ -919,76 +920,11 @@ impl FuzzRng {
     }
 }
 
-/// Normalised match result: `(match_start, group_starts, group_ends)` or
-/// `None`.  Comparing these across engines is the byte-exactness assertion.
-type FuzzResult = Option<(usize, Vec<i64>, Vec<i64>)>;
-
-fn norm(r: Option<(usize, MatchRegisters)>) -> FuzzResult {
-    r.map(|(pos, regs)| (pos, regs.start.clone(), regs.end.clone()))
-}
-
-/// Run the two engines for an anchored match and a forward/backward search;
-/// return `(label, backtracker_result, pike_result)` for the first that
-/// diverges, or `None` if all agree.
-fn diff_engines(
-    cp: &CompiledPattern,
-    text: &[u8],
-    start: usize,
-    point: usize,
-) -> Option<(&'static str, FuzzResult, FuzzResult)> {
-    let syn = DefaultSyntaxLookup;
-    let len = text.len();
-
-    // Compare the two engines directly by pinning each one (bypassing the
-    // production step-budget heuristic): the pure backtracker (oracle) vs the
-    // pure Pike VM.  If the backtracker aborts on the fail-stack limit
-    // (catastrophic backtracking) it returns a spurious `None`, so skip.
-    macro_rules! compare {
-        ($label:expr, $call:expr) => {{
-            let _ = take_matcher_overflow();
-            let bt = norm(with_backtracker_forced(|| $call));
-            if take_matcher_overflow() {
-                return None; // backtracker overflowed — skip this comparison
-            }
-            let pk = norm(with_pike_forced(|| $call));
-            if bt != pk {
-                return Some(($label, bt, pk));
-            }
-        }};
-    }
-
-    // Anchored (`re_match` / looking-at) at `start`.
-    compare!("re_match", re_match(cp, text, start, len, &syn, point));
-    // Forward search from `start`.
-    let range = (len - start) as isize;
-    compare!(
-        "re_search_fwd",
-        re_search(cp, text, start, range, &syn, point)
-    );
-    // Backward search from `start` back to 0.
-    let brange = -(start as isize);
-    compare!(
-        "re_search_bwd",
-        re_search(cp, text, start, brange, &syn, point)
-    );
-
-    None
-}
-
 /// True if this (pattern, case_fold, text, start, point) diverges — used by
 /// the shrinker.
 fn fuzz_diverges(pat: &str, case_fold: bool, text: &[u8], start: usize, point: usize) -> bool {
-    match regex_compile(pat, false, case_fold) {
-        Ok(cp) => {
-            if !cp.pike_eligible {
-                return false;
-            }
-            let start = start.min(text.len());
-            let point = point.min(text.len());
-            diff_engines(&cp, text, start, point).is_some()
-        }
-        Err(_) => false,
-    }
+    let case = RegexCase::new(pat, text, case_fold, start, point);
+    check_regex_differential(case, RegexDifferential::PikeVm).is_err()
 }
 
 // ---- random pattern generation (eligible subset only) --------------------
@@ -1298,20 +1234,19 @@ fn run_fuzz(cases: usize, base_seed: u64, text_max: usize) {
         let start = rng.below(text.len() + 1);
         let point = rng.below(text.len() + 1);
 
-        if let Some((label, bt, pk)) = diff_engines(&cp, &text, start, point) {
+        let case = RegexCase::new(&pat, &text, case_fold, start, point);
+        if let Err(divergence) = check_regex_differential(case, RegexDifferential::PikeVm) {
             // Print the RAW case first so it survives even if shrinking is slow.
             eprintln!(
-                "PIKE/BACKTRACKER DIVERGENCE ({label}) at seed {seed}: pattern={pat:?} \
-                 case_fold={case_fold} text={text:?} start={start} point={point} bt={bt:?} pike={pk:?}"
+                "PIKE/BACKTRACKER DIVERGENCE at seed {seed}: {divergence}; pattern={pat:?} \
+                 case_fold={case_fold} text={text:?} start={start} point={point}"
             );
             let (spat, stext, sstart, spoint) = shrink(&pat, case_fold, &text, start, point);
             panic!(
-                "PIKE/BACKTRACKER DIVERGENCE ({label}) at seed {seed}:\n\
+                "PIKE/BACKTRACKER DIVERGENCE at seed {seed}: {divergence}\n\
                  pattern   = {pat:?}  (case_fold={case_fold})\n\
                  text      = {text:?}\n\
                  start={start} point={point}\n\
-                 backtrack = {bt:?}\n\
-                 pike      = {pk:?}\n\
                  --- shrunk ---\n\
                  pattern   = {spat:?}\n\
                  text      = {stext:?}\n\
@@ -1342,15 +1277,38 @@ fn pike_fuzz_smoke() {
     run_fuzz(4_000, 0x1234_5678, 16);
 }
 
-/// The full 100k+ differential fuzz — the primary correctness gate.  Ignored
-/// by default (slow); run explicitly with `--ignored`.
 #[test]
-#[ignore = "long-running differential fuzz; run explicitly"]
-fn pike_fuzz_differential() {
-    crate::test_utils::init_test_tracing();
-    // Two independent seed streams for broader coverage (>>100k cases).
-    run_fuzz(200_000, 0xF00D_BEEF, 28);
-    run_fuzz(120_000, 0x0BAD_C0DE, 20);
+fn differential_overrides_restore_nested_and_unwound_state() {
+    assert!(!force_backtrack());
+    assert!(!force_pike());
+    assert!(!fastmap_force_disabled());
+
+    with_regex_engine_override(RegexEngineOverride::Backtracker, || {
+        assert!(force_backtrack());
+        assert!(!force_pike());
+
+        let panic = std::panic::catch_unwind(|| {
+            with_regex_engine_override(RegexEngineOverride::PikeVm, || {
+                assert!(!force_backtrack());
+                assert!(force_pike());
+                panic!("exercise override unwinding");
+            });
+        });
+        assert!(panic.is_err());
+        assert!(force_backtrack());
+        assert!(!force_pike());
+    });
+
+    let panic = std::panic::catch_unwind(|| {
+        with_fastmap_disabled(|| {
+            assert!(fastmap_force_disabled());
+            panic!("exercise optimization-override unwinding");
+        });
+    });
+    assert!(panic.is_err());
+    assert!(!force_backtrack());
+    assert!(!force_pike());
+    assert!(!fastmap_force_disabled());
 }
 
 // ---- targeted unit tests: Pike vs backtracker byte-exactness -------------
@@ -1360,9 +1318,13 @@ fn assert_engines_agree(pat: &str, case_fold: bool, text: &[u8]) {
     let cp = regex_compile(pat, false, case_fold).expect("compile");
     assert!(cp.pike_eligible, "pattern {pat:?} should be pike-eligible");
     for start in 0..=text.len() {
-        if let Some((label, bt, pk)) = diff_engines(&cp, text, start, start) {
-            panic!("{label} divergence for {pat:?} @ {start}: bt={bt:?} pike={pk:?}");
-        }
+        let case = RegexCase::new(pat, text, case_fold, start, start);
+        let check = check_regex_differential(case, RegexDifferential::PikeVm).unwrap_or_else(
+            |divergence| {
+                panic!("{divergence} for {pat:?} @ start={start}");
+            },
+        );
+        assert_eq!(check, RegexCheck::Equivalent { comparisons: 3 });
     }
 }
 
@@ -1485,9 +1447,13 @@ fn pike_nullable_noncapturing_loops() {
         // Keep texts SHORT (<=3 chars): these nullable-loop patterns blow up
         // exponentially in the forced-backtracker oracle on longer input.
         for text in [&b""[..], b"a", b"b", b"ab", b"ba", b"xy", b"c", b"axy"] {
-            if let Some((label, bt, pk)) = diff_engines(&cp, text, 0, 0) {
-                panic!("{label} divergence for {p:?} on {text:?}: bt={bt:?} pike={pk:?}");
-            }
+            let case = RegexCase::new(p, text, false, 0, 0);
+            let check = check_regex_differential(case, RegexDifferential::PikeVm).unwrap_or_else(
+                |divergence| {
+                    panic!("{divergence} for {p:?} on {text:?}");
+                },
+            );
+            assert_eq!(check, RegexCheck::Equivalent { comparisons: 3 });
         }
     }
 }
@@ -1669,54 +1635,6 @@ fn pf_gen_text(rng: &mut FuzzRng, keywords: &[String], max_len: usize) -> Vec<u8
     v
 }
 
-/// Compare oracle (skip disabled) vs candidate (prefilter enabled) for a
-/// forward search and an anchored match.  Returns the diverging label +
-/// results, or `None` if all agree (or a matcher overflow makes the case
-/// non-comparable).
-fn pf_diff(
-    cp: &CompiledPattern,
-    text: &[u8],
-    start: usize,
-) -> Option<(&'static str, FuzzResult, FuzzResult)> {
-    let syn = DefaultSyntaxLookup;
-    let len = text.len();
-
-    // Forward search.
-    let range = (len - start) as isize;
-    let _ = take_matcher_overflow();
-    let oracle = norm(with_fastmap_disabled(|| {
-        re_search(cp, text, start, range, &syn, start)
-    }));
-    if take_matcher_overflow() {
-        return None;
-    }
-    let cand = norm(re_search(cp, text, start, range, &syn, start));
-    if take_matcher_overflow() {
-        return None;
-    }
-    if oracle != cand {
-        return Some(("fwd", oracle, cand));
-    }
-
-    // Anchored match (re_match never uses the prefilter — a regression guard).
-    let _ = take_matcher_overflow();
-    let oracle = norm(with_fastmap_disabled(|| {
-        re_match(cp, text, start, len, &syn, start)
-    }));
-    if take_matcher_overflow() {
-        return None;
-    }
-    let cand = norm(re_match(cp, text, start, len, &syn, start));
-    if take_matcher_overflow() {
-        return None;
-    }
-    if oracle != cand {
-        return Some(("anchored", oracle, cand));
-    }
-
-    None
-}
-
 /// Result counters from one fuzz stream.
 #[derive(Default, Clone, Copy)]
 struct PfFuzzCounts {
@@ -1767,18 +1685,16 @@ fn run_prefilter_fuzz(
             c.with_prefilter += 1;
         }
 
-        let panic_diff = |text: &[u8], start: usize| {
-            if let Some((label, oracle, cand)) = pf_diff(&cp, text, start) {
-                panic!(
-                    "PREFILTER DIVERGENCE ({label}) at seed {seed}:\n\
-                     pattern      = {pat:?}\n\
-                     has_prefilter= {has_pf}\n\
-                     text         = {text:?}\n\
-                     start        = {start}\n\
-                     oracle(skip-off) = {oracle:?}\n\
-                     candidate(prefilter) = {cand:?}"
-                );
-            }
+        let check_case = |text: &[u8], start: usize| {
+            let case = RegexCase::new(&pat, text, false, start, start);
+            let check = check_regex_differential(case, RegexDifferential::SearchOptimizations)
+                .unwrap_or_else(|divergence| {
+                    panic!(
+                        "{divergence} at seed {seed}: pattern={pat:?} \
+                         has_prefilter={has_pf} text={text:?} start={start}"
+                    );
+                });
+            assert_eq!(check, RegexCheck::Equivalent { comparisons: 1 });
         };
 
         if has_pf {
@@ -1791,7 +1707,7 @@ fn run_prefilter_fuzz(
             for text in &texts {
                 for &start in &[0usize, text.len() / 2, text.len()] {
                     let start = start.min(text.len());
-                    panic_diff(text, start);
+                    check_case(text, start);
                     c.pf_forward_cmp += 1;
                 }
             }
@@ -1799,7 +1715,7 @@ fn run_prefilter_fuzz(
             // No prefilter → can't diverge on the prefilter path; a light
             // sampled forward comparison still guards the fastmap path cheaply.
             let text = gen_text(&mut rng, text_max);
-            panic_diff(&text, 0);
+            check_case(&text, 0);
         }
     }
     c
@@ -1825,50 +1741,21 @@ fn prefilter_fuzz_smoke() {
     );
 }
 
-/// The full prefilter differential fuzz — the primary soundness gate.  Ignored
-/// by default (slow); run with `--ignored`.  Targeted literal/alternation
-/// shapes only (the patterns that actually build a prefilter), so every
-/// prefilter case is compared exhaustively.  Asserts ≥320k FORWARD comparisons
-/// actually ran through the prefilter path (an unsound literal skip → a missed
-/// match → immediate panic).
-#[test]
-#[ignore = "long-running prefilter differential fuzz; run explicitly"]
-fn prefilter_fuzz_differential() {
-    crate::test_utils::init_test_tracing();
-    // Two independent seed streams, targeted-only (general_1_in = 0), varied
-    // buffer sizes.  Prefilter patterns are literal-ish (mostly Pike-linear),
-    // so this stays well within the per-test timeout.
-    let a = run_prefilter_fuzz(200_000, 0xF00D_D001, 40, 0);
-    let b = run_prefilter_fuzz(160_000, 0x0BAD_F11E, 28, 0);
-    let compiled = a.compiled + b.compiled;
-    let with_pf = a.with_prefilter + b.with_prefilter;
-    let pf_fwd = a.pf_forward_cmp + b.pf_forward_cmp;
-    eprintln!(
-        "prefilter fuzz: compiled={compiled} with_prefilter={with_pf} \
-         prefilter_forward_comparisons={pf_fwd}"
-    );
-    assert!(
-        pf_fwd >= 320_000,
-        "prefilter fuzz must run >=320k prefilter forward comparisons \
-         (got {pf_fwd}; with_prefilter={with_pf} compiled={compiled})"
-    );
-}
-
 // ---- prefilter: targeted extraction-shape unit tests ---------------------
 
 /// Search with the prefilter enabled must equal search with it disabled, for a
 /// concrete (pattern, text) pair, at every start position.
 fn assert_prefilter_equiv(pat: &str, case_fold: bool, text: &[u8]) {
-    let cp = regex_compile(pat, false, case_fold).expect("compile");
-    let syn = DefaultSyntaxLookup;
+    regex_compile(pat, false, case_fold).expect("compile");
     for start in 0..=text.len() {
-        let range = (text.len() - start) as isize;
-        let oracle = norm(with_fastmap_disabled(|| {
-            re_search(&cp, text, start, range, &syn, start)
-        }));
-        let cand = norm(re_search(&cp, text, start, range, &syn, start));
+        let case = RegexCase::new(pat, text, case_fold, start, start);
+        let check = check_regex_differential(case, RegexDifferential::SearchOptimizations)
+            .unwrap_or_else(|divergence| {
+                panic!("{divergence} for {pat:?} @ start={start}");
+            });
         assert_eq!(
-            oracle, cand,
+            check,
+            RegexCheck::Equivalent { comparisons: 1 },
             "prefilter diverged for {pat:?} @ start={start}"
         );
     }
