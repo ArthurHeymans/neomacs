@@ -457,6 +457,8 @@ impl BufferSourceOutputSetup {
             params.image_scale_environment,
         );
         let row_fallback_metrics = default_face.row_metrics_for_body_width(geometry.char_width);
+        let row_prelude_context =
+            local_display_policy.row_prelude_context(line_number_cols, row_fallback_metrics);
         let overlay_text_row = BufferOverlayStringTextRowRenderContext::new(
             has_overlays,
             output_window_id,
@@ -467,7 +469,8 @@ impl BufferSourceOutputSetup {
             geometry.row_origin_y(),
             self.body_install_context.display_text_row_base(),
             geometry.max_rows,
-        );
+        )
+        .with_continuation_row_prelude(row_prelude_context.continuation_row_prelude());
         let loop_context = BufferSourceLoopRequestContext::new(
             buffer_id,
             source.text_start_byte(),
@@ -487,8 +490,6 @@ impl BufferSourceOutputSetup {
             // whose bg equals the frame bg is a visual no-op and is skipped.
             Color::from_pixel(default_face.face().bg),
         );
-        let row_prelude_context =
-            local_display_policy.row_prelude_context(line_number_cols, row_fallback_metrics);
         let fallback_metrics = default_face.metrics();
         let tail_context = BufferSourceTailRequestContext::new(
             params,

@@ -8,7 +8,9 @@ use crate::display_row_geometry::{
 };
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row_source_render::TextRowSourceRenderState;
-use crate::display_row_walk_state::HitRowRangeTracker;
+use crate::display_row_walk_state::{
+    FaceScanCheckpoint, HitRowRangeTracker, LineNumberRenderState,
+};
 use crate::display_source_progress::DisplaySourceRowProgressState;
 use crate::display_text_window_row_lifecycle::{
     TextWindowBodyInstallRenderContext, TextWindowBodyInstallRequest, TextWindowFinishRequest,
@@ -292,6 +294,8 @@ pub(crate) fn render_buffer_source_tail_and_decide_retry<
     hit_row_range: &'emit mut HitRowRangeTracker,
     row_y_positions: &'rows mut DisplayRowYPositions,
     face_ids: &'emit mut FrameFaceAttempt,
+    line_numbers: &'emit mut LineNumberRenderState,
+    face_scan: &'emit mut FaceScanCheckpoint,
     overlay_context: BufferOverlayStringTextRowRenderContext<'surface>,
     tail_context: &BufferSourceTailRequestContext<'_>,
     text: &'request [u8],
@@ -316,6 +320,8 @@ where
             hit_row_range,
             row_y_positions,
             face_ids,
+            line_numbers,
+            face_scan,
         )
         .point_is_visible_eob();
 

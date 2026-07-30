@@ -7494,6 +7494,8 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
     let mut cursor_info = CursorCaptureState::new();
     let mut hit_row_range = HitRowRangeTracker::new(0);
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(7);
+    let mut line_numbers = LineNumberRenderState::new(false, 1, 1);
+    let mut face_scan = FaceScanCheckpoint::initial();
     let mut font_metrics = None;
 
     let outcome =
@@ -7514,6 +7516,8 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
                 &mut hit_row_range,
                 &mut context.row_y_positions,
                 &mut face_ids,
+                &mut line_numbers,
+                &mut face_scan,
             );
 
     assert!(outcome.point_is_visible_eob());

@@ -141,6 +141,8 @@ impl<'a> BufferSourceCharRenderRequest<'a> {
                 hit_row_range,
                 row_y_positions,
                 face_ids,
+                line_numbers,
+                face_scan,
             );
         }
 

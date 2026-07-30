@@ -10,7 +10,23 @@ use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
 use crate::display_row_lisp_string::{BufferLinePrefixRenderRequest, DisplayRowPrefixValues};
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
+use crate::display_row_source_render::TextRowSourceRenderState;
+use crate::display_row_walk_state::{FaceScanCheckpoint, LineNumberRenderState};
+use crate::frame_face_arena::FrameFaceAttempt;
 use crate::types::WindowParams;
+
+/// The buffer-owned decoration emitted when a display-only source starts a
+/// continuation row without advancing the logical buffer line.
+///
+/// GNU's display iterator runs `maybe_produce_line_number` for every glyph
+/// row, including rows created by an overlay-string newline.  Keeping that
+/// policy in a row-prelude request means overlay rendering does not need to
+/// understand line-number modes, faces, widths, or margin glyph construction.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BufferSourceContinuationRowPreludeRequest {
+    line_number_margin: BufferLineNumberMarginRenderRequest,
+    char_width: f32,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferSourceRowPreludeRequestContext {
@@ -21,6 +37,27 @@ pub(crate) struct BufferSourceRowPreludeRequestContext {
     line_number_cols: i32,
     prefix_values: DisplayRowPrefixValues,
     fallback_metrics: DisplayRowFallbackMetrics,
+}
+
+impl BufferSourceContinuationRowPreludeRequest {
+    pub(crate) fn render_with_source_state(
+        self,
+        line_numbers: &mut LineNumberRenderState,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceAttempt,
+        row_geometry: &DisplayRowGeometryState,
+        face_scan: &mut FaceScanCheckpoint,
+    ) {
+        line_numbers.mark_continuation_row();
+        self.line_number_margin.render_pending_with_source_state(
+            line_numbers,
+            source_render,
+            face_ids,
+            row_geometry,
+            face_scan,
+            self.char_width,
+        );
+    }
 }
 
 impl BufferSourceRowPreludeRequestContext {
@@ -78,6 +115,13 @@ impl BufferSourceRowPreludeRequestContext {
 
     pub(crate) fn char_width(self) -> f32 {
         self.fallback_metrics.char_width()
+    }
+
+    pub(crate) fn continuation_row_prelude(self) -> BufferSourceContinuationRowPreludeRequest {
+        BufferSourceContinuationRowPreludeRequest {
+            line_number_margin: self.line_number_margin_request(),
+            char_width: self.char_width(),
+        }
     }
 
     #[cfg(test)]

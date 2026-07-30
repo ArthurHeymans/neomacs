@@ -29,8 +29,9 @@ use crate::display_row_transition::{
     DisplayRowTransitionContinuation, DisplayRowTransitionRenderState,
 };
 use crate::display_row_walk_state::{
-    BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState, InvisibleTextScanCheckpoint,
-    LineNumberRenderState, TrailingWhitespaceRenderState, sync_position_after_row_transition,
+    BoxFaceRowState, FaceScanCheckpoint, HitRowRangeTracker, HorizontalScrollSkipState,
+    InvisibleTextScanCheckpoint, LineNumberRenderState, TrailingWhitespaceRenderState,
+    sync_position_after_row_transition,
 };
 use crate::display_source::DisplaySourceStepChar;
 use crate::display_source::DisplaySourceTextPosition;
@@ -387,6 +388,8 @@ impl<'a> BufferSourceEndOfBufferTailRenderContext<'a> {
         hit_row_range: &mut HitRowRangeTracker,
         row_y_positions: &mut DisplayRowYPositions,
         face_ids: &mut FrameFaceAttempt,
+        line_numbers: &mut LineNumberRenderState,
+        face_scan: &mut FaceScanCheckpoint,
     ) -> BufferSourceEndOfBufferTailRenderOutcome {
         let mut row_progress = row_progress;
         let mut source_render = source_render;
@@ -433,6 +436,8 @@ impl<'a> BufferSourceEndOfBufferTailRenderContext<'a> {
                 hit_row_range,
                 row_y_positions,
                 face_ids,
+                line_numbers,
+                face_scan,
             );
         }
 
@@ -1087,6 +1092,7 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
             row_y_positions,
             face_ids,
             line_numbers,
+            face_scan,
             ..
         } = state;
         let mut source_render = source_render;
@@ -1145,6 +1151,8 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
             hit_row_range,
             row_y_positions,
             face_ids,
+            line_numbers,
+            face_scan,
         );
         BufferSourceInvisibleTextRenderOutcome::ContinueBufferWalk
     }
@@ -1556,6 +1564,7 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             hit_row_range,
             row_y_positions,
             face_ids,
+            face_scan,
             ..
         } = state;
         let mut source_render = source_render;
@@ -1582,6 +1591,8 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
                 hit_row_range,
                 row_y_positions,
                 face_ids,
+                line_numbers,
+                face_scan,
             );
         }
         let row_position = progress.row_position();

@@ -14792,6 +14792,102 @@ fn layout_frame_rust_renders_magit_blame_heading_before_string_with_trailing_new
 }
 
 #[test]
+fn overlay_newline_continuation_reserves_a_blank_line_number_margin() {
+    // GNU `maybe_produce_line_number` emits the number on the display row that
+    // contains an overlay before-string, then a width-matched blank prefix on
+    // the continuation display row below it.  The continuation is still part
+    // of the same logical buffer line, so it must reserve the line-number lane
+    // without repeating the number.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("code\nnext\n");
+        buf.set_buffer_local("display-line-numbers", Value::T);
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: 1,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let _ = buf.overlays_mut().overlay_put(
+            overlay,
+            Value::symbol("before-string"),
+            Value::string("blame header\n"),
+        );
+        buf.goto_emacs_byte_pos(EmacsBytePos::ZERO);
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-overlay-newline-line-number-margin",
+        640,
+        180,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("window matrix entry");
+    let text_rows = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .collect::<Vec<_>>();
+    let row_containing = |needle: &str| {
+        text_rows
+            .iter()
+            .copied()
+            .find(|row| glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).contains(needle))
+            .unwrap_or_else(|| panic!("missing row containing {needle:?}, rows={text_rows:?}"))
+    };
+    let code_row = row_containing("code");
+    let next_row = row_containing("next");
+    let code_margin = &code_row.glyphs[GlyphArea::LeftMargin.index()];
+    let next_margin = &next_row.glyphs[GlyphArea::LeftMargin.index()];
+    let margin_width = |glyphs: &[Glyph]| glyphs.iter().map(|glyph| glyph.pixel_width).sum::<f32>();
+
+    assert!(
+        !code_margin.is_empty(),
+        "the continuation below an overlay newline must reserve a blank line-number margin; \
+         code row={code_row:?}"
+    );
+    assert!(
+        code_margin
+            .iter()
+            .all(|glyph| !matches!(glyph.glyph_type, GlyphType::Char { .. })),
+        "the continuation must not repeat its logical line number; margin={code_margin:?}"
+    );
+    assert!(
+        (margin_width(code_margin) - margin_width(next_margin)).abs() < 0.01,
+        "the blank continuation margin must match the normal line-number margin width; \
+         continuation={code_margin:?}, normal={next_margin:?}"
+    );
+}
+
+#[test]
 fn layout_frame_rust_suppresses_left_fringe_display_spec_before_string() {
     // magit attaches an overlay before-string `#("fringe" 0 6 (display
     // (left-fringe magit-fringe-bitmapv fringe)))` to every collapsible section

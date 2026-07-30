@@ -2,6 +2,7 @@
 //! `it->overlay_strings` consumption (xdisp.c). Overlay strings render from the
 //! single GNU-ordered before/after list exposed by the buffer bridge.
 
+use crate::display_buffer_source_row_prelude::BufferSourceContinuationRowPreludeRequest;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth,
     CapturedCursorVisualState, CursorCaptureState,
@@ -23,7 +24,9 @@ use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_render_state::DisplayRowRenderStop;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_transition::DisplayRowLineBreakTransitionRequest;
-use crate::display_row_walk_state::HitRowRangeTracker;
+use crate::display_row_walk_state::{
+    FaceScanCheckpoint, HitRowRangeTracker, LineNumberRenderState,
+};
 use crate::display_source::LispStringSourceOrigin;
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::hit_test::HitRow;
@@ -121,6 +124,7 @@ pub(crate) struct OverlayStringRenderRowContext<'a> {
     text_y: f32,
     pub(crate) row_base: usize,
     pub(crate) max_rows: usize,
+    continuation_row_prelude: Option<BufferSourceContinuationRowPreludeRequest>,
 }
 
 impl<'a> OverlayStringRenderRowContext<'a> {
@@ -137,7 +141,16 @@ impl<'a> OverlayStringRenderRowContext<'a> {
             text_y,
             row_base,
             max_rows,
+            continuation_row_prelude: None,
         }
+    }
+
+    fn with_continuation_row_prelude(
+        mut self,
+        request: Option<BufferSourceContinuationRowPreludeRequest>,
+    ) -> Self {
+        self.continuation_row_prelude = request;
+        self
     }
 
     pub(crate) fn content_x(self) -> f32 {
@@ -182,6 +195,12 @@ pub(crate) struct OverlayStringRenderState<'a> {
     pub(crate) hit_row_range: &'a mut HitRowRangeTracker,
     pub(crate) row_y_positions: &'a mut DisplayRowYPositions,
     pub(crate) face_ids: &'a mut FrameFaceAttempt,
+    continuation_row_prelude_state: Option<BufferSourceContinuationRowPreludeState<'a>>,
+}
+
+struct BufferSourceContinuationRowPreludeState<'a> {
+    line_numbers: &'a mut LineNumberRenderState,
+    face_scan: &'a mut FaceScanCheckpoint,
 }
 
 impl<'a> OverlayStringRenderState<'a> {
@@ -207,7 +226,37 @@ impl<'a> OverlayStringRenderState<'a> {
             hit_row_range,
             row_y_positions,
             face_ids,
+            continuation_row_prelude_state: None,
         }
+    }
+
+    fn with_buffer_source_continuation_row_prelude(
+        mut self,
+        line_numbers: &'a mut LineNumberRenderState,
+        face_scan: &'a mut FaceScanCheckpoint,
+    ) -> Self {
+        self.continuation_row_prelude_state = Some(BufferSourceContinuationRowPreludeState {
+            line_numbers,
+            face_scan,
+        });
+        self
+    }
+
+    fn render_continuation_row_prelude(
+        &mut self,
+        request: BufferSourceContinuationRowPreludeRequest,
+    ) {
+        let state = self
+            .continuation_row_prelude_state
+            .as_mut()
+            .expect("buffer continuation-row prelude requires its render state");
+        request.render_with_source_state(
+            state.line_numbers,
+            &mut self.source_render,
+            self.face_ids,
+            self.geometry,
+            state.face_scan,
+        );
     }
 }
 
@@ -220,6 +269,7 @@ pub(crate) struct BufferOverlayStringTextRowRenderContext<'a> {
     text_y: f32,
     row_base: usize,
     max_rows: usize,
+    continuation_row_prelude: Option<BufferSourceContinuationRowPreludeRequest>,
 }
 
 impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
@@ -241,7 +291,16 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             text_y,
             row_base,
             max_rows,
+            continuation_row_prelude: None,
         }
+    }
+
+    pub(crate) fn with_continuation_row_prelude(
+        mut self,
+        request: BufferSourceContinuationRowPreludeRequest,
+    ) -> Self {
+        self.continuation_row_prelude = Some(request);
+        self
     }
 
     fn row_context(self) -> OverlayStringRenderRowContext<'a> {
@@ -252,6 +311,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             self.row_base,
             self.max_rows,
         )
+        .with_continuation_row_prelude(self.continuation_row_prelude)
     }
 
     pub(crate) fn first_overlay_string_charpos_in_range<B: LayoutBufferView>(
@@ -330,6 +390,8 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         hit_row_range: &mut HitRowRangeTracker,
         row_y_positions: &mut DisplayRowYPositions,
         face_ids: &mut FrameFaceAttempt,
+        line_numbers: &mut LineNumberRenderState,
+        face_scan: &mut FaceScanCheckpoint,
     ) {
         let mut overlay_state = OverlayStringRenderState::from_source_render(
             source_render,
@@ -341,7 +403,8 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             hit_row_range,
             row_y_positions,
             face_ids,
-        );
+        )
+        .with_buffer_source_continuation_row_prelude(line_numbers, face_scan);
         self.render_at(buffer, anchor_charpos, &mut overlay_state);
     }
 
@@ -403,6 +466,9 @@ impl<'a> OverlayStringRowBreakRenderContext<'a> {
             .source_render
             .output_render()
             .transition_text_row(geometry_transition);
+        if let Some(prelude) = self.row_context.continuation_row_prelude {
+            state.render_continuation_row_prelude(prelude);
+        }
         true
     }
 }
