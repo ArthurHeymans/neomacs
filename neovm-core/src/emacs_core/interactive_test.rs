@@ -781,20 +781,13 @@ fn commandp_handles_keyboard_macros_and_bytecode_interactive_slots() {
 }
 
 #[test]
-fn commandp_true_for_builtin_editing_commands() {
+fn commandp_true_for_registered_rust_editing_commands() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     for name in [
         "backward-char",
         "delete-char",
         "insert-char",
-        "yank",
-        "yank-pop",
-        "transpose-chars",
-        "transpose-lines",
-        "transpose-paragraphs",
-        "transpose-sentences",
-        "transpose-sexps",
         "upcase-word",
         "downcase-word",
         "capitalize-word",
@@ -802,27 +795,18 @@ fn commandp_true_for_builtin_editing_commands() {
         "downcase-region",
         "capitalize-region",
         "upcase-initials-region",
-        "kill-word",
-        "backward-kill-word",
-        "kill-region",
-        "kill-ring-save",
-        "kill-whole-line",
-        "copy-region-as-kill",
-        "open-line",
-        "delete-horizontal-space",
-        "just-one-space",
-        "delete-indentation",
-        "transpose-words",
         "scroll-up",
         "scroll-down",
         "scroll-left",
         "scroll-right",
-        "scroll-up-command",
-        "scroll-down-command",
         "recenter",
-        "move-beginning-of-line",
-        "move-end-of-line",
     ] {
+        assert!(
+            ev.obarray
+                .symbol_function(name)
+                .is_some_and(|function| function.is_subr()),
+            "{name} must be a registered Rust subr"
+        );
         let result = builtin_commandp_interactive(&mut ev, vec![Value::symbol(name)])
             .expect("commandp call");
         assert!(result.is_truthy(), "expected commandp true for {name}");
@@ -1154,7 +1138,7 @@ fn remove_hook_is_available_after_bootstrap() {
 }
 
 #[test]
-fn commandp_true_for_additional_builtin_commands() {
+fn commandp_true_for_additional_registered_rust_commands() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     for name in [
@@ -1162,17 +1146,12 @@ fn commandp_true_for_additional_builtin_commands() {
         "base64-encode-region",
         "base64url-encode-region",
         "decode-coding-region",
-        "display-buffer",
         "encode-coding-region",
         "eval-buffer",
-        "forward-sexp",
-        "gui-set-selection",
         "goto-char",
-        "isearch-forward",
         "iconify-frame",
         "kill-emacs",
         "lower-frame",
-        "make-directory",
         "make-frame-invisible",
         "make-frame-visible",
         "make-indirect-buffer",
@@ -1182,7 +1161,6 @@ fn commandp_true_for_additional_builtin_commands() {
         "redirect-debugging-output",
         "rename-buffer",
         "select-frame",
-        "set-buffer-process-coding-system",
         "transpose-regions",
         "kill-process",
         "signal-process",
@@ -1192,6 +1170,12 @@ fn commandp_true_for_additional_builtin_commands() {
         "write-region",
         "x-menu-bar-open-internal",
     ] {
+        assert!(
+            ev.obarray
+                .symbol_function(name)
+                .is_some_and(|function| function.is_subr()),
+            "{name} must be a registered Rust subr"
+        );
         let result = builtin_commandp_interactive(&mut ev, vec![Value::symbol(name)])
             .expect("commandp call");
         assert!(result.is_truthy(), "expected commandp true for {name}");
@@ -1204,11 +1188,40 @@ fn commandp_true_for_loaded_lisp_commands_after_bootstrap() {
     let mut ev = create_bootstrap_evaluator_cached().expect("bootstrap");
     apply_runtime_startup_state(&mut ev).expect("runtime startup state");
     for name in [
+        "backward-kill-word",
+        "copy-region-as-kill",
+        "delete-horizontal-space",
+        "delete-indentation",
+        "display-buffer",
+        "forward-sexp",
+        "gui-set-selection",
+        "isearch-forward",
+        "just-one-space",
+        "kill-line",
+        "kill-region",
+        "kill-ring-save",
+        "kill-whole-line",
+        "kill-word",
+        "make-directory",
+        "move-beginning-of-line",
+        "move-end-of-line",
         "newline-and-indent",
+        "open-line",
         "recenter-top-bottom",
         "replace-buffer-contents",
+        "scroll-down-command",
+        "scroll-up-command",
+        "set-buffer-process-coding-system",
         "tab-to-tab-stop",
         "transient-mark-mode",
+        "transpose-chars",
+        "transpose-lines",
+        "transpose-paragraphs",
+        "transpose-sentences",
+        "transpose-sexps",
+        "transpose-words",
+        "yank",
+        "yank-pop",
     ] {
         let function = ev
             .obarray
@@ -3056,6 +3069,26 @@ fn call_interactively_eval_region_uses_its_registered_gnu_region_spec() {
 }
 
 #[test]
+fn every_builtin_subr_command_exposes_the_interactive_form_that_defines_it() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        r#"(let (missing)
+             (mapatoms
+              (lambda (symbol)
+                (when (and (fboundp symbol)
+                           (subrp (symbol-function symbol))
+                           (commandp symbol t)
+                           (null (interactive-form symbol)))
+                  (push symbol missing))))
+             (sort missing
+                   (lambda (left right)
+                     (string-lessp (symbol-name left)
+                                   (symbol-name right)))))"#,
+    );
+    assert_eq!(results[0], "OK nil");
+}
+
+#[test]
 fn registered_builtin_interactive_spec_is_the_command_identity_source() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -3065,6 +3098,11 @@ fn registered_builtin_interactive_spec_is_the_command_identity_source() {
         0,
         Some(0),
         BuiltinInteractiveSpec::NoArgs,
+    );
+    let command = crate::emacs_core::intern::intern("neovm--typed-interactive-registration-test");
+    assert!(
+        ev.interactive.get_spec(command).is_none(),
+        "immutable Rust subr metadata must not leak into the mutable Lisp registry"
     );
 
     let results = eval_all_with(
@@ -3077,22 +3115,69 @@ fn registered_builtin_interactive_spec_is_the_command_identity_source() {
 }
 
 #[test]
+fn registered_builtin_alias_resolves_command_identity_without_registry_copy() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.defsubr_interactive(
+        "neovm--typed-interactive-target",
+        |_ctx, _args| Ok(Value::NIL),
+        0,
+        Some(0),
+        BuiltinInteractiveSpec::String("P"),
+    );
+
+    let results = eval_all_with(
+        &mut ev,
+        r#"(progn
+             (defalias 'neovm--typed-interactive-alias
+                       (symbol-function 'neovm--typed-interactive-target))
+             (list
+              (commandp 'neovm--typed-interactive-alias)
+              (interactive-form 'neovm--typed-interactive-alias)))"#,
+    );
+    let alias = crate::emacs_core::intern::intern("neovm--typed-interactive-alias");
+    assert!(
+        ev.interactive.get_spec(alias).is_none(),
+        "subr aliases must resolve immutable metadata through the function object"
+    );
+    assert_eq!(results[0], "OK (t (interactive \"P\"))");
+}
+
+#[test]
+fn replacing_registered_builtin_with_noninteractive_lambda_removes_command_identity() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    let results = eval_all_with(
+        &mut ev,
+        r#"(progn
+             (fset 'eval-buffer (lambda () nil))
+             (list
+              (commandp 'eval-buffer t)
+              (interactive-form 'eval-buffer)))"#,
+    );
+    assert_eq!(results[0], "OK (nil nil)");
+}
+
+#[test]
+fn captured_noninteractive_subr_does_not_inherit_replacement_symbol_command_identity() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    let results = eval_all_with(
+        &mut ev,
+        r#"(let ((old (symbol-function 'car)))
+             (fset 'car '(autoload "never" nil t))
+             (list
+              (commandp old t)
+              (interactive-form old)))"#,
+    );
+    assert_eq!(results[0], "OK (nil nil)");
+}
+
+#[test]
 fn builtin_subr_commands_carry_their_gnu_interactive_specs() {
     crate::test_utils::init_test_tracing();
-
-    for name in [
-        "kill-buffer",
-        "widen",
-        "abort-minibuffers",
-        "delete-frame",
-        "eval-buffer",
-        "eval-region",
-    ] {
-        assert!(
-            !builtin_command_name(name),
-            "{name} must not rely on the transitional command-name fallback"
-        );
-    }
 
     let results = bootstrap_eval_all(
         r#"(mapcar (lambda (command)

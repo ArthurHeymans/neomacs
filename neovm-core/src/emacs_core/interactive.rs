@@ -16,7 +16,7 @@ use std::collections::HashMap;
 
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
-use super::intern::{intern, resolve_sym, resolve_sym_lisp_string};
+use super::intern::{intern, resolve_sym};
 use super::keyboard::pure::{
     KEY_CHAR_ALT, KEY_CHAR_CTRL, KEY_CHAR_HYPER, KEY_CHAR_META, KEY_CHAR_MOD_MASK, KEY_CHAR_SHIFT,
     KEY_CHAR_SUPER, make_event_array_value,
@@ -92,22 +92,17 @@ pub(crate) enum BuiltinInteractiveSpec {
 }
 
 impl BuiltinInteractiveSpec {
-    fn into_interactive_form(self) -> Value {
+    fn into_spec_value(self) -> Value {
         match self {
-            Self::NoArgs => interactive_form_from_spec_value(Value::NIL),
-            Self::String(code) => interactive_form_from_string_spec(code),
-            Self::Form(build) => interactive_form_from_spec_value(build()),
+            Self::NoArgs => Value::NIL,
+            Self::String(code) => Value::string(code),
+            Self::Form(build) => build(),
         }
     }
-}
 
-pub(crate) fn region_noncontiguous_interactive_spec() -> Value {
-    Value::list(vec![
-        Value::symbol("list"),
-        Value::list(vec![Value::symbol("region-beginning")]),
-        Value::list(vec![Value::symbol("region-end")]),
-        Value::list(vec![Value::symbol("region-noncontiguous-p")]),
-    ])
+    fn into_interactive_form(self) -> Value {
+        interactive_form_from_spec_value(self.into_spec_value())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -189,10 +184,6 @@ fn interactive_form_from_spec_value(spec: Value) -> Value {
     Value::list(vec![Value::symbol("interactive"), spec])
 }
 
-fn interactive_form_from_string_spec(code: &str) -> Value {
-    interactive_form_from_spec_value(Value::string(code))
-}
-
 pub(crate) fn registry_interactive_form(
     registry: &InteractiveRegistry,
     symbol: SymId,
@@ -202,31 +193,12 @@ pub(crate) fn registry_interactive_form(
         .map(|spec| interactive_form_from_spec_value(spec.spec))
 }
 
-fn interactive_spec_from_interactive_form(form: Value) -> Option<InteractiveSpec> {
-    let items = value_list_to_vec(&form)?;
-    if items.first().copied() != Some(Value::symbol("interactive")) {
-        return None;
-    }
-    Some(InteractiveSpec::from_value(
-        items.get(1).copied().unwrap_or(Value::NIL),
-    ))
+fn registered_builtin_interactive_spec(symbol: SymId) -> Option<BuiltinInteractiveSpec> {
+    super::eval::lookup_global_subr_entry(symbol).and_then(|entry| entry.interactive_spec)
 }
 
-fn direct_subr_interactive_spec(
-    interactive: &InteractiveRegistry,
-    symbol: SymId,
-) -> Option<InteractiveSpec> {
-    interactive.get_spec(symbol).cloned().or_else(|| {
-        // Look the subr up by name, but a symbol name need not be valid UTF-8
-        // (`(intern (unibyte-string #xff))` is a legal Emacs symbol). Built-in
-        // subrs are all ASCII, so a non-UTF-8-named symbol is simply not one —
-        // use the non-panicking name accessor rather than `resolve_sym`, which
-        // panics on non-UTF-8 (a real M-x `commandp`-over-the-obarray crash,
-        // issue #153).
-        symbol_utf8_name(symbol)
-            .and_then(builtin_subr_interactive_form)
-            .and_then(interactive_spec_from_interactive_form)
-    })
+pub(crate) fn registered_builtin_interactive_form(symbol: SymId) -> Option<Value> {
+    registered_builtin_interactive_spec(symbol).map(BuiltinInteractiveSpec::into_interactive_form)
 }
 
 pub(crate) fn sync_interactive_registry_for_symbol_definition(
@@ -234,110 +206,21 @@ pub(crate) fn sync_interactive_registry_for_symbol_definition(
     symbol: SymId,
     definition: Value,
 ) {
+    // The mutable registry owns Lisp definitions whose command identity is not
+    // part of their function object (notably interactive autoloads). Rust
+    // subrs keep their immutable command contract in `SubrEntry`; copying it
+    // here would create a second source of truth and unnecessarily serialize
+    // heap-backed interactive forms into pdump images.
     let replacement = if value_is_interactive_autoload(&definition) {
         Some(InteractiveSpec::no_args())
     } else {
-        match definition.kind() {
-            ValueKind::Subr(id) => direct_subr_interactive_spec(interactive, id),
-            ValueKind::Veclike(VecLikeType::Subr) => {
-                let id = definition.as_subr_id().unwrap();
-                direct_subr_interactive_spec(interactive, id)
-            }
-            _ => None,
-        }
+        None
     };
 
     if let Some(spec) = replacement {
         interactive.register_interactive(symbol, spec);
     } else {
         interactive.unregister_interactive(symbol);
-    }
-}
-
-pub(crate) fn builtin_subr_interactive_form(name: &str) -> Option<Value> {
-    if let Some(spec) =
-        super::eval::lookup_global_subr_entry(intern(name)).and_then(|entry| entry.interactive_spec)
-    {
-        return Some(spec.into_interactive_form());
-    }
-
-    match name {
-        "forward-char"
-        | "backward-char"
-        | "beginning-of-line"
-        | "end-of-line"
-        | "move-beginning-of-line"
-        | "move-end-of-line"
-        | "forward-word"
-        | "backward-word" => Some(interactive_form_from_string_spec("^p")),
-        "forward-sexp" | "backward-sexp" => Some(interactive_form_from_string_spec("^p\nd")),
-        "delete-char" => Some(interactive_form_from_string_spec("p\nP")),
-        "kill-word" | "backward-kill-word" | "upcase-word" | "downcase-word"
-        | "capitalize-word" => Some(interactive_form_from_string_spec("p")),
-        "transpose-lines"
-        | "transpose-words"
-        | "transpose-sentences"
-        | "transpose-paragraphs"
-        | "open-line"
-        | "just-one-space" => Some(interactive_form_from_string_spec("*p")),
-        "transpose-sexps" => Some(interactive_form_from_string_spec("*p\nd")),
-        "delete-horizontal-space" => Some(interactive_form_from_string_spec("*P")),
-        "scroll-up-command" | "scroll-down-command" => {
-            Some(interactive_form_from_string_spec("^P"))
-        }
-        // GNU `scroll-left`/`scroll-right` use the spec "^P\np": the first arg
-        // is the raw prefix (columns) and the second is the numeric prefix,
-        // which is always non-nil interactively, so an interactive scroll
-        // becomes the auto-hscroll lower bound (SET-MINIMUM).
-        "scroll-left" | "scroll-right" => Some(interactive_form_from_string_spec("^P\np")),
-        "set-mark-command" => Some(interactive_form_from_string_spec("P")),
-        "narrow-to-region" => Some(interactive_form_from_string_spec("r")),
-        "move-to-column" => Some(interactive_form_from_string_spec("NMove to column: ")),
-        "goto-char" => Some(interactive_form_from_spec_value(Value::list(vec![
-            Value::symbol("goto-char--read-natnum-interactive"),
-            Value::string("Go to char: "),
-        ]))),
-        "rename-buffer" => Some(interactive_form_from_spec_value(Value::list(vec![
-            Value::symbol("list"),
-            Value::list(vec![
-                Value::symbol("read-string"),
-                Value::string("Rename buffer (to new name): "),
-                Value::NIL,
-                Value::list(vec![
-                    Value::symbol("quote"),
-                    Value::symbol("buffer-name-history"),
-                ]),
-                Value::list(vec![
-                    Value::symbol("buffer-name"),
-                    Value::list(vec![Value::symbol("current-buffer")]),
-                ]),
-            ]),
-            Value::symbol("current-prefix-arg"),
-        ]))),
-        "rename-file" => Some(interactive_form_from_string_spec(
-            "fRename file: \nGRename %s to file: \np",
-        )),
-        "insert-char" => Some(interactive_form_from_spec_value(Value::list(vec![
-            Value::symbol("list"),
-            Value::list(vec![
-                Value::symbol("read-char-by-name"),
-                Value::string("Insert character (Unicode name or hex): "),
-            ]),
-            Value::list(vec![
-                Value::symbol("prefix-numeric-value"),
-                Value::symbol("current-prefix-arg"),
-            ]),
-            Value::T,
-        ]))),
-        "self-insert-command" => Some(interactive_form_from_spec_value(Value::list(vec![
-            Value::symbol("list"),
-            Value::list(vec![
-                Value::symbol("prefix-numeric-value"),
-                Value::symbol("current-prefix-arg"),
-            ]),
-            Value::symbol("last-command-event"),
-        ]))),
-        _ => None,
     }
 }
 
@@ -762,166 +645,6 @@ pub(crate) fn builtin_command_remapping_impl(
     Ok(command_remapping_lookup_in_keymaps(&active_maps, command_name).unwrap_or(Value::NIL))
 }
 
-fn builtin_command_name(name: &str) -> bool {
-    matches!(
-        name,
-        "ignore"
-            | "self-insert-command"
-            | "newline"
-            | "forward-char"
-            | "backward-char"
-            | "delete-char"
-            | "insert-char"
-            | "kill-line"
-            | "kill-word"
-            | "backward-kill-word"
-            | "kill-region"
-            | "kill-ring-save"
-            | "kill-whole-line"
-            | "copy-region-as-kill"
-            | "yank"
-            | "yank-pop"
-            | "transpose-chars"
-            | "transpose-lines"
-            | "transpose-paragraphs"
-            | "transpose-sentences"
-            | "transpose-sexps"
-            | "transpose-words"
-            | "open-line"
-            | "delete-horizontal-space"
-            | "just-one-space"
-            | "delete-indentation"
-            | "upcase-word"
-            | "downcase-word"
-            | "capitalize-word"
-            | "upcase-region"
-            | "downcase-region"
-            | "capitalize-region"
-            | "upcase-initials-region"
-            | "switch-to-buffer"
-            | "select-frame"
-            | "scroll-up-command"
-            | "scroll-down-command"
-            | "other-window"
-            | "keyboard-quit"
-            | "beginning-of-line"
-            | "end-of-line"
-            | "move-beginning-of-line"
-            | "move-end-of-line"
-            | "abort-recursive-edit"
-            | "add-name-to-file"
-            | "advice-remove"
-            | "backward-sexp"
-            | "backward-word"
-            | "base64-decode-region"
-            | "base64-encode-region"
-            | "base64url-encode-region"
-            | "buffer-disable-undo"
-            | "buffer-enable-undo"
-            | "call-last-kbd-macro"
-            | "copy-file"
-            | "copy-to-register"
-            | "defining-kbd-macro"
-            | "delete-directory"
-            | "delete-file"
-            | "delete-other-windows"
-            | "delete-other-windows-internal"
-            | "delete-process"
-            | "kill-process"
-            | "signal-process"
-            | "delete-region"
-            | "delete-window"
-            | "decode-coding-region"
-            | "do-auto-save"
-            | "handle-save-session"
-            | "handle-switch-frame"
-            | "display-buffer"
-            | "emacs-version"
-            | "end-kbd-macro"
-            | "erase-buffer"
-            | "encode-coding-region"
-            | "exit-minibuffer"
-            | "exit-recursive-edit"
-            | "expand-abbrev"
-            | "fit-window-to-buffer"
-            | "forward-line"
-            | "forward-sexp"
-            | "forward-word"
-            | "garbage-collect"
-            | "getenv"
-            | "gui-set-selection"
-            | "goto-char"
-            | "increment-register"
-            | "indent-rigidly"
-            | "indent-to"
-            | "insert-register"
-            | "iconify-frame"
-            | "isearch-backward"
-            | "isearch-forward"
-            | "kill-emacs"
-            | "kill-local-variable"
-            | "lower-frame"
-            | "lossage-size"
-            | "malloc-info"
-            | "malloc-trim"
-            | "make-directory"
-            | "make-frame"
-            | "make-frame-invisible"
-            | "make-frame-visible"
-            | "make-indirect-buffer"
-            | "make-local-variable"
-            | "make-symbolic-link"
-            | "make-variable-buffer-local"
-            | "modify-syntax-entry"
-            | "move-to-column"
-            | "move-to-window-line"
-            | "narrow-to-region"
-            | "number-to-register"
-            | "open-dribble-file"
-            | "open-termscript"
-            | "point-to-register"
-            | "pop-to-buffer"
-            | "posix-search-backward"
-            | "posix-search-forward"
-            | "raise-frame"
-            | "recenter"
-            | "redirect-debugging-output"
-            | "re-search-backward"
-            | "re-search-forward"
-            | "recursive-edit"
-            | "rename-buffer"
-            | "rename-file"
-            | "replace-rectangle"
-            | "redraw-display"
-            | "run-at-time"
-            | "run-with-idle-timer"
-            | "run-with-timer"
-            | "scroll-down"
-            | "scroll-left"
-            | "scroll-right"
-            | "search-backward"
-            | "search-forward"
-            | "scroll-up"
-            | "set-file-modes"
-            | "set-frame-height"
-            | "set-frame-width"
-            | "set-buffer-process-coding-system"
-            | "set-keyboard-coding-system"
-            | "set-terminal-coding-system"
-            | "start-kbd-macro"
-            | "suspend-emacs"
-            | "top-level"
-            | "transpose-regions"
-            | "undo"
-            | "unix-sync"
-            | "view-register"
-            | "word-search-backward"
-            | "word-search-forward"
-            | "write-region"
-            | "x-menu-bar-open-internal"
-    )
-}
-
 fn value_body_metadata_end(body: &[Value]) -> usize {
     let mut body_index = 0;
     if body.first().is_some_and(|value| value.is_string()) {
@@ -1029,14 +752,8 @@ fn resolve_function_designator_symbol_in_state(
     crate::emacs_core::builtins::symbols::resolve_indirect_symbol_by_id_in_obarray(obarray, symbol)
 }
 
-fn symbol_utf8_name(symbol: SymId) -> Option<&'static str> {
-    resolve_sym_lisp_string(symbol).as_utf8_str()
-}
-
-fn builtin_command_symbol(symbol: SymId) -> bool {
-    super::eval::lookup_global_subr_entry(symbol)
-        .is_some_and(|entry| entry.interactive_spec.is_some())
-        || symbol_utf8_name(symbol).is_some_and(builtin_command_name)
+fn registered_builtin_command(subr_id: SymId) -> bool {
+    registered_builtin_interactive_spec(subr_id).is_some()
 }
 
 fn command_object_p_in_state(
@@ -1046,7 +763,7 @@ fn command_object_p_in_state(
     for_call_interactively: bool,
 ) -> bool {
     if let Some(symbol) = resolved_symbol
-        && (interactive.is_interactive(symbol) || builtin_command_symbol(symbol))
+        && interactive.is_interactive(symbol)
     {
         return true;
     }
@@ -1095,10 +812,10 @@ fn command_object_p_in_state(
             .get_bytecode_data()
             .is_some_and(|bc| bc.observable_closure_slot_count() > 5),
         ValueKind::Cons => quoted_lambda_has_interactive_form(value),
-        ValueKind::Subr(id) => interactive.is_interactive(id) || builtin_command_symbol(id),
+        ValueKind::Subr(id) => registered_builtin_command(id),
         ValueKind::Veclike(VecLikeType::Subr) => {
             let id = value.as_subr_id().unwrap();
-            interactive.is_interactive(id) || builtin_command_symbol(id)
+            registered_builtin_command(id)
         }
         ValueKind::String | ValueKind::Veclike(VecLikeType::Vector) => !for_call_interactively,
         _ => false,
@@ -1125,7 +842,7 @@ fn command_designator_p_in_state(
                 for_call_interactively,
             );
         }
-        return interactive.is_interactive(symbol) || builtin_command_symbol(symbol);
+        return interactive.is_interactive(symbol);
     }
     command_object_p_in_state(
         interactive,
@@ -2718,9 +2435,6 @@ fn resolve_command_target_in_state(
             resolve_function_designator_symbol_in_state(obarray, symbol)
         {
             return Some((Some(resolved_symbol), value));
-        }
-        if symbol_utf8_name(symbol).is_some_and(builtin_command_name) {
-            return Some((Some(symbol), Value::subr_from_sym_id(symbol)));
         }
         return None;
     }

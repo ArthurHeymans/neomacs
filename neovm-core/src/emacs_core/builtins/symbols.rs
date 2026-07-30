@@ -4707,7 +4707,6 @@ pub(crate) enum InteractiveFormPlan {
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn plan_interactive_form_in_state(
     obarray: &Obarray,
-    interactive: &crate::emacs_core::interactive::InteractiveRegistry,
     cmd: Value,
 ) -> Result<InteractiveFormPlan, Flow> {
     let mut function = cmd;
@@ -4741,20 +4740,14 @@ pub(crate) fn plan_interactive_form_in_state(
     }
 
     match function.kind() {
-        ValueKind::Subr(id) => {
-            let name = resolve_sym(id);
-            Ok(InteractiveFormPlan::Return(
-                crate::emacs_core::interactive::registry_interactive_form(interactive, id)
-                    .or_else(|| crate::emacs_core::interactive::builtin_subr_interactive_form(name))
-                    .unwrap_or(Value::NIL),
-            ))
-        }
+        ValueKind::Subr(id) => Ok(InteractiveFormPlan::Return(
+            crate::emacs_core::interactive::registered_builtin_interactive_form(id)
+                .unwrap_or(Value::NIL),
+        )),
         ValueKind::Veclike(VecLikeType::Subr) => {
             let id = function.as_subr_id().unwrap();
-            let name = resolve_sym(id);
             Ok(InteractiveFormPlan::Return(
-                crate::emacs_core::interactive::registry_interactive_form(interactive, id)
-                    .or_else(|| crate::emacs_core::interactive::builtin_subr_interactive_form(name))
+                crate::emacs_core::interactive::registered_builtin_interactive_form(id)
                     .unwrap_or(Value::NIL),
             ))
         }
@@ -4852,20 +4845,14 @@ pub(crate) fn builtin_interactive_form(
     match fun.kind() {
         // GNU (data.c:1151-1161): SUBRP
         ValueKind::Subr(id) => {
-            let name = resolve_sym(id);
-            let result =
-                crate::emacs_core::interactive::registry_interactive_form(&eval.interactive, id)
-                    .or_else(|| crate::emacs_core::interactive::builtin_subr_interactive_form(name))
-                    .unwrap_or(Value::NIL);
+            let result = crate::emacs_core::interactive::registered_builtin_interactive_form(id)
+                .unwrap_or(Value::NIL);
             Ok(result)
         }
         ValueKind::Veclike(VecLikeType::Subr) => {
             let id = fun.as_subr_id().unwrap();
-            let name = resolve_sym(id);
-            let result =
-                crate::emacs_core::interactive::registry_interactive_form(&eval.interactive, id)
-                    .or_else(|| crate::emacs_core::interactive::builtin_subr_interactive_form(name))
-                    .unwrap_or(Value::NIL);
+            let result = crate::emacs_core::interactive::registered_builtin_interactive_form(id)
+                .unwrap_or(Value::NIL);
             Ok(result)
         }
 

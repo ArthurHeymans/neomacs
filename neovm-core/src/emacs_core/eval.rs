@@ -16081,6 +16081,22 @@ impl Context {
         );
     }
 
+    pub(crate) fn defsubr_1_interactive(
+        &mut self,
+        name: &str,
+        func: fn(&mut Context, Value) -> EvalResult,
+        min_args: u16,
+        interactive_spec: super::interactive::BuiltinInteractiveSpec,
+    ) {
+        self.defsubr_with_entry_and_interactive(
+            name,
+            crate::tagged::header::SubrFn::A1(func),
+            min_args,
+            Some(1),
+            Some(interactive_spec),
+        );
+    }
+
     pub fn defsubr_2(
         &mut self,
         name: &str,

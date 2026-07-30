@@ -885,6 +885,7 @@ struct BuiltinRegistration {
     func: BuiltinFn,
     min_args: u16,
     max_args: Option<u16>,
+    interactive_spec: Option<super::interactive::BuiltinInteractiveSpec>,
     no_eval_policy: BuiltinNoEvalPolicy,
     command_default: BuiltinCommandDefault,
 }
@@ -901,6 +902,7 @@ impl BuiltinRegistration {
             func,
             min_args,
             max_args,
+            interactive_spec: None,
             no_eval_policy: BuiltinNoEvalPolicy::RequiresEvalState,
             command_default: BuiltinCommandDefault::Enabled,
         }
@@ -918,6 +920,7 @@ impl BuiltinRegistration {
             func,
             min_args,
             max_args,
+            interactive_spec: None,
             no_eval_policy: BuiltinNoEvalPolicy::Placeholder(placeholder),
             command_default: BuiltinCommandDefault::Enabled,
         }
@@ -934,10 +937,225 @@ impl BuiltinRegistration {
             func,
             min_args,
             max_args,
+            interactive_spec: None,
             no_eval_policy: BuiltinNoEvalPolicy::Native,
             command_default: BuiltinCommandDefault::Disabled,
         }
     }
+
+    const fn interactive(
+        mut self,
+        interactive_spec: super::interactive::BuiltinInteractiveSpec,
+    ) -> Self {
+        self.interactive_spec = Some(interactive_spec);
+        self
+    }
+}
+
+fn region_noncontiguous_interactive_spec() -> Value {
+    Value::list(vec![
+        Value::symbol("list"),
+        Value::list(vec![Value::symbol("region-beginning")]),
+        Value::list(vec![Value::symbol("region-end")]),
+        Value::list(vec![Value::symbol("region-noncontiguous-p")]),
+    ])
+}
+
+fn goto_char_interactive_spec() -> Value {
+    Value::list(vec![
+        Value::symbol("goto-char--read-natnum-interactive"),
+        Value::string("Go to char: "),
+    ])
+}
+
+fn insert_char_interactive_spec() -> Value {
+    Value::list(vec![
+        Value::symbol("list"),
+        Value::list(vec![
+            Value::symbol("read-char-by-name"),
+            Value::string("Insert character (Unicode name or hex): "),
+        ]),
+        Value::list(vec![
+            Value::symbol("prefix-numeric-value"),
+            Value::symbol("current-prefix-arg"),
+        ]),
+        Value::T,
+    ])
+}
+
+fn rename_buffer_interactive_spec() -> Value {
+    Value::list(vec![
+        Value::symbol("list"),
+        Value::list(vec![
+            Value::symbol("read-string"),
+            Value::string("Rename buffer (to new name): "),
+            Value::NIL,
+            Value::list(vec![
+                Value::symbol("quote"),
+                Value::symbol("buffer-name-history"),
+            ]),
+            Value::list(vec![
+                Value::symbol("buffer-name"),
+                Value::list(vec![Value::symbol("current-buffer")]),
+            ]),
+        ]),
+        Value::symbol("current-prefix-arg"),
+    ])
+}
+
+fn self_insert_command_interactive_spec() -> Value {
+    Value::list(vec![
+        Value::symbol("list"),
+        Value::list(vec![
+            Value::symbol("prefix-numeric-value"),
+            Value::symbol("current-prefix-arg"),
+        ]),
+        Value::symbol("last-command-event"),
+    ])
+}
+
+fn delete_process_interactive_spec() -> Value {
+    Value::list(vec![
+        Value::symbol("list"),
+        Value::list(vec![Value::symbol("quote"), Value::symbol("message")]),
+    ])
+}
+
+fn kill_process_interactive_spec() -> Value {
+    Value::list(vec![
+        Value::symbol("list"),
+        Value::list(vec![
+            Value::symbol("read-process-name"),
+            Value::string("Kill process"),
+        ]),
+    ])
+}
+
+fn signal_process_interactive_spec() -> Value {
+    Value::list(vec![
+        Value::symbol("list"),
+        Value::list(vec![
+            Value::symbol("read-string"),
+            Value::string("Process (name or number): "),
+        ]),
+        Value::list(vec![Value::symbol("read-signal-name")]),
+    ])
+}
+
+fn set_file_modes_interactive_spec() -> Value {
+    Value::list(vec![
+        Value::symbol("let"),
+        Value::list(vec![Value::list(vec![
+            Value::symbol("file"),
+            Value::list(vec![
+                Value::symbol("read-file-name"),
+                Value::string("File: "),
+            ]),
+        ])]),
+        Value::list(vec![
+            Value::symbol("list"),
+            Value::symbol("file"),
+            Value::list(vec![
+                Value::symbol("read-file-modes"),
+                Value::NIL,
+                Value::symbol("file"),
+            ]),
+        ]),
+    ])
+}
+
+fn set_frame_property_interactive_spec(prompt: &'static str, getter: &'static str) -> Value {
+    Value::list(vec![
+        Value::symbol("set-frame-property--interactive"),
+        Value::string(prompt),
+        Value::list(vec![Value::symbol(getter)]),
+    ])
+}
+
+fn set_frame_height_interactive_spec() -> Value {
+    set_frame_property_interactive_spec("Frame height: ", "frame-height")
+}
+
+fn set_frame_width_interactive_spec() -> Value {
+    set_frame_property_interactive_spec("Frame width: ", "frame-width")
+}
+
+fn lossage_size_interactive_spec() -> Value {
+    Value::list(vec![
+        Value::symbol("list"),
+        Value::list(vec![
+            Value::symbol("read-number"),
+            Value::string("Set maximum keystrokes to: "),
+            Value::list(vec![Value::symbol("lossage-size")]),
+        ]),
+    ])
+}
+
+fn transpose_regions_interactive_spec() -> Value {
+    Value::list(vec![
+        Value::symbol("if"),
+        Value::list(vec![
+            Value::symbol("<"),
+            Value::list(vec![Value::symbol("length"), Value::symbol("mark-ring")]),
+            Value::fixnum(2),
+        ]),
+        Value::list(vec![
+            Value::symbol("error"),
+            Value::string("Other region must be marked before transposing two regions"),
+        ]),
+        Value::list(vec![
+            Value::symbol("let*"),
+            Value::list(vec![
+                Value::list(vec![
+                    Value::symbol("num"),
+                    Value::list(vec![
+                        Value::symbol("if"),
+                        Value::symbol("current-prefix-arg"),
+                        Value::list(vec![
+                            Value::symbol("prefix-numeric-value"),
+                            Value::symbol("current-prefix-arg"),
+                        ]),
+                        Value::fixnum(0),
+                    ]),
+                ]),
+                Value::list(vec![
+                    Value::symbol("ring-length"),
+                    Value::list(vec![Value::symbol("length"), Value::symbol("mark-ring")]),
+                ]),
+                Value::list(vec![
+                    Value::symbol("eltnum"),
+                    Value::list(vec![
+                        Value::symbol("mod"),
+                        Value::symbol("num"),
+                        Value::symbol("ring-length"),
+                    ]),
+                ]),
+                Value::list(vec![
+                    Value::symbol("eltnum2"),
+                    Value::list(vec![
+                        Value::symbol("mod"),
+                        Value::list(vec![Value::symbol("1+"), Value::symbol("num")]),
+                        Value::symbol("ring-length"),
+                    ]),
+                ]),
+            ]),
+            Value::list(vec![
+                Value::symbol("list"),
+                Value::list(vec![Value::symbol("point")]),
+                Value::list(vec![Value::symbol("mark")]),
+                Value::list(vec![
+                    Value::symbol("elt"),
+                    Value::symbol("mark-ring"),
+                    Value::symbol("eltnum"),
+                ]),
+                Value::list(vec![
+                    Value::symbol("elt"),
+                    Value::symbol("mark-ring"),
+                    Value::symbol("eltnum2"),
+                ]),
+            ]),
+        ]),
+    ])
 }
 
 /// Diagnostics-only (feature `vm-profile`): clear the VM profiler histograms
@@ -981,12 +1199,22 @@ fn register_builtin(ctx: &mut super::eval::Context, builtin: BuiltinRegistration
     if builtin.no_eval_policy != BuiltinNoEvalPolicy::Native {
         record_builtin_no_eval_policy(builtin.name, builtin.no_eval_policy);
     }
-    ctx.defsubr(
-        builtin.name,
-        builtin.func,
-        builtin.min_args,
-        builtin.max_args,
-    );
+    if let Some(interactive_spec) = builtin.interactive_spec {
+        ctx.defsubr_interactive(
+            builtin.name,
+            builtin.func,
+            builtin.min_args,
+            builtin.max_args,
+            interactive_spec,
+        );
+    } else {
+        ctx.defsubr(
+            builtin.name,
+            builtin.func,
+            builtin.min_args,
+            builtin.max_args,
+        );
+    }
     match builtin.command_default {
         BuiltinCommandDefault::Enabled => {}
         BuiltinCommandDefault::Disabled => ctx
@@ -1139,7 +1367,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         None,
     );
     ctx.defsubr("featurep", builtin_featurep, 1, Some(2));
-    ctx.defsubr("garbage-collect", builtin_garbage_collect, 0, Some(0));
+    ctx.defsubr_interactive(
+        "garbage-collect",
+        builtin_garbage_collect,
+        0,
+        Some(0),
+        super::interactive::BuiltinInteractiveSpec::String(""),
+    );
     ctx.defsubr_2("eval", builtin_eval_2, 1);
     ctx.defsubr("get-buffer-create", builtin_get_buffer_create, 1, Some(2));
     ctx.defsubr("get-buffer", builtin_get_buffer, 1, Some(1));
@@ -1319,7 +1553,10 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             builtin_make_indirect_buffer,
             2,
             Some(4),
-        ),
+        )
+        .interactive(super::interactive::BuiltinInteractiveSpec::String(
+            "bMake indirect buffer (to buffer): \nBName of indirect buffer: ",
+        )),
     );
     ctx.defsubr("find-buffer", builtin_find_buffer, 2, Some(2));
     ctx.defsubr("buffer-live-p", builtin_buffer_live_p, 1, Some(1));
@@ -1349,7 +1586,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr("buffer-file-name", builtin_buffer_file_name, 0, Some(1));
     ctx.defsubr("buffer-base-buffer", builtin_buffer_base_buffer, 0, Some(1));
     ctx.defsubr("buffer-last-name", builtin_buffer_last_name, 0, Some(1));
-    ctx.defsubr("rename-buffer", builtin_rename_buffer, 1, Some(2));
+    ctx.defsubr_interactive(
+        "rename-buffer",
+        builtin_rename_buffer,
+        1,
+        Some(2),
+        super::interactive::BuiltinInteractiveSpec::Form(rename_buffer_interactive_spec),
+    );
     ctx.defsubr("buffer-string", builtin_buffer_string, 0, Some(0));
     ctx.defsubr(
         "buffer-line-statistics",
@@ -1363,23 +1606,26 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(4),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "base64-encode-region",
         super::fns::builtin_base64_encode_region,
         2,
         Some(3),
+        super::interactive::BuiltinInteractiveSpec::String("r"),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "base64-decode-region",
         super::fns::builtin_base64_decode_region,
         0,
         None,
+        super::interactive::BuiltinInteractiveSpec::String("r"),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "base64url-encode-region",
         super::fns::builtin_base64url_encode_region,
         2,
         Some(3),
+        super::interactive::BuiltinInteractiveSpec::String("r"),
     );
     ctx.defsubr("md5", super::fns::builtin_md5, 1, Some(5));
     ctx.defsubr("secure-hash", super::fns::builtin_secure_hash, 2, Some(5));
@@ -1394,7 +1640,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr_0("point", builtin_point_0);
     ctx.defsubr_0("point-min", builtin_point_min_0);
     ctx.defsubr_0("point-max", builtin_point_max_0);
-    ctx.defsubr_1("goto-char", builtin_goto_char_1, 1);
+    ctx.defsubr_1_interactive(
+        "goto-char",
+        builtin_goto_char_1,
+        1,
+        super::interactive::BuiltinInteractiveSpec::Form(goto_char_interactive_spec),
+    );
     ctx.defsubr("field-beginning", builtin_field_beginning, 0, Some(3));
     ctx.defsubr("field-end", builtin_field_end, 0, Some(3));
     ctx.defsubr("field-string", builtin_field_string, 0, Some(1));
@@ -1433,7 +1684,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             Some(3),
         ),
     );
-    ctx.defsubr("insert-char", builtin_insert_char, 1, Some(3));
+    ctx.defsubr_interactive(
+        "insert-char",
+        builtin_insert_char,
+        1,
+        Some(3),
+        super::interactive::BuiltinInteractiveSpec::Form(insert_char_interactive_spec),
+    );
     ctx.defsubr("insert-byte", builtin_insert_byte, 2, Some(3));
     ctx.defsubr(
         "replace-region-contents",
@@ -1493,11 +1750,24 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             super::editfns::builtin_erase_buffer,
             0,
             Some(0),
-        ),
+        )
+        .interactive(super::interactive::BuiltinInteractiveSpec::String("*")),
     );
-    ctx.defsubr("buffer-enable-undo", builtin_buffer_enable_undo, 0, Some(1));
+    ctx.defsubr_interactive(
+        "buffer-enable-undo",
+        builtin_buffer_enable_undo,
+        0,
+        Some(1),
+        super::interactive::BuiltinInteractiveSpec::String(""),
+    );
     ctx.defsubr("buffer-size", builtin_buffer_size, 0, Some(1));
-    ctx.defsubr("narrow-to-region", builtin_narrow_to_region, 2, Some(2));
+    ctx.defsubr_interactive(
+        "narrow-to-region",
+        builtin_narrow_to_region,
+        2,
+        Some(2),
+        super::interactive::BuiltinInteractiveSpec::String("r"),
+    );
     ctx.defsubr_interactive(
         "widen",
         builtin_widen,
@@ -1577,10 +1847,34 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
-    ctx.defsubr("search-forward", builtin_search_forward, 1, Some(4));
-    ctx.defsubr("search-backward", builtin_search_backward, 1, Some(4));
-    ctx.defsubr("re-search-forward", builtin_re_search_forward, 1, Some(4));
-    ctx.defsubr("re-search-backward", builtin_re_search_backward, 1, Some(4));
+    ctx.defsubr_interactive(
+        "search-forward",
+        builtin_search_forward,
+        1,
+        Some(4),
+        super::interactive::BuiltinInteractiveSpec::String("MSearch: "),
+    );
+    ctx.defsubr_interactive(
+        "search-backward",
+        builtin_search_backward,
+        1,
+        Some(4),
+        super::interactive::BuiltinInteractiveSpec::String("MSearch backward: "),
+    );
+    ctx.defsubr_interactive(
+        "re-search-forward",
+        builtin_re_search_forward,
+        1,
+        Some(4),
+        super::interactive::BuiltinInteractiveSpec::String("sRE search: "),
+    );
+    ctx.defsubr_interactive(
+        "re-search-backward",
+        builtin_re_search_backward,
+        1,
+        Some(4),
+        super::interactive::BuiltinInteractiveSpec::String("sRE search backward: "),
+    );
     ctx.defsubr("looking-at", builtin_looking_at, 1, Some(2));
     ctx.defsubr("posix-looking-at", builtin_posix_looking_at, 1, Some(2));
     ctx.defsubr_slice("string-match", builtin_string_match_slice, 2, Some(4));
@@ -1681,11 +1975,14 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(5),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "write-region",
         super::fileio::builtin_write_region,
         3,
         Some(7),
+        super::interactive::BuiltinInteractiveSpec::String(
+            "r\nFWrite region to file: \ni\ni\ni\np",
+        ),
     );
     ctx.defsubr(
         "file-name-completion",
@@ -1859,11 +2156,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(2),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "delete-process",
         super::process::builtin_delete_process,
         0,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::Form(delete_process_interactive_spec),
     );
     ctx.defsubr(
         "interrupt-process",
@@ -1871,11 +2169,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(2),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "kill-process",
         super::process::builtin_kill_process,
         0,
         Some(2),
+        super::interactive::BuiltinInteractiveSpec::Form(kill_process_interactive_spec),
     );
     ctx.defsubr(
         "quit-process",
@@ -1883,11 +2182,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(2),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "signal-process",
         super::process::builtin_signal_process,
         2,
         Some(3),
+        super::interactive::BuiltinInteractiveSpec::Form(signal_process_interactive_spec),
     );
     ctx.defsubr(
         "stop-process",
@@ -2131,11 +2431,14 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             Some(1),
         ),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "modify-syntax-entry",
         super::syntax::builtin_modify_syntax_entry,
         2,
         Some(3),
+        super::interactive::BuiltinInteractiveSpec::String(
+            "cSet syntax for character: \nsSet syntax for %s to: ",
+        ),
     );
     ctx.defsubr(
         "syntax-table",
@@ -2173,11 +2476,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(0),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "forward-word",
         super::syntax::builtin_forward_word,
         0,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("^p"),
     );
     ctx.defsubr("scan-lists", super::syntax::builtin_scan_lists, 3, Some(3));
     ctx.defsubr("scan-sexps", super::syntax::builtin_scan_sexps, 2, Some(2));
@@ -2199,23 +2503,26 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(2),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "start-kbd-macro",
         super::kmacro::builtin_start_kbd_macro,
         1,
         Some(2),
+        super::interactive::BuiltinInteractiveSpec::String("P"),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "end-kbd-macro",
         super::kmacro::builtin_end_kbd_macro,
         0,
         Some(2),
+        super::interactive::BuiltinInteractiveSpec::String("p"),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "call-last-kbd-macro",
         super::kmacro::builtin_call_last_kbd_macro,
         0,
         Some(2),
+        super::interactive::BuiltinInteractiveSpec::String("p"),
     );
     ctx.defsubr(
         "execute-kbd-macro",
@@ -2229,11 +2536,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "defining-kbd-macro",
         super::kmacro::builtin_defining_kbd_macro,
         1,
         Some(2),
+        super::interactive::BuiltinInteractiveSpec::String("P"),
     );
     ctx.defsubr(
         "defining-kbd-macro-p",
@@ -2465,35 +2773,40 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(2),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "forward-line",
         super::navigation::builtin_forward_line,
         0,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("^p"),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "beginning-of-line",
         super::navigation::builtin_beginning_of_line,
         0,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("^p"),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "end-of-line",
         super::navigation::builtin_end_of_line,
         0,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("^p"),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "forward-char",
         super::navigation::builtin_forward_char,
         0,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("^p"),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "backward-char",
         super::navigation::builtin_backward_char,
         0,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("^p"),
     );
     ctx.defsubr(
         "skip-chars-forward",
@@ -2531,11 +2844,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "make-local-variable",
         super::custom::builtin_make_local_variable,
         1,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("vMake Local Variable: "),
     );
     ctx.defsubr(
         "local-variable-p",
@@ -2549,11 +2863,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "kill-local-variable",
         super::custom::builtin_kill_local_variable,
         0,
         None,
+        super::interactive::BuiltinInteractiveSpec::String("vKill Local Variable: "),
     );
     ctx.defsubr(
         "default-value",
@@ -2585,47 +2900,50 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         super::casefiddle::builtin_downcase_region,
         2,
         Some(3),
-        super::interactive::BuiltinInteractiveSpec::Form(
-            super::interactive::region_noncontiguous_interactive_spec,
-        ),
+        super::interactive::BuiltinInteractiveSpec::Form(region_noncontiguous_interactive_spec),
     );
     ctx.defsubr_interactive(
         "upcase-region",
         super::casefiddle::builtin_upcase_region,
         2,
         Some(3),
-        super::interactive::BuiltinInteractiveSpec::Form(
-            super::interactive::region_noncontiguous_interactive_spec,
-        ),
+        super::interactive::BuiltinInteractiveSpec::Form(region_noncontiguous_interactive_spec),
     );
     ctx.defsubr_interactive(
         "capitalize-region",
         super::casefiddle::builtin_capitalize_region,
         2,
         Some(3),
-        super::interactive::BuiltinInteractiveSpec::Form(
-            super::interactive::region_noncontiguous_interactive_spec,
-        ),
+        super::interactive::BuiltinInteractiveSpec::Form(region_noncontiguous_interactive_spec),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "downcase-word",
         super::casefiddle::builtin_downcase_word,
         1,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("p"),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "upcase-word",
         super::casefiddle::builtin_upcase_word,
         1,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("p"),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "capitalize-word",
         super::casefiddle::builtin_capitalize_word,
         1,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("p"),
     );
-    ctx.defsubr("indent-to", super::indent::builtin_indent_to, 1, Some(2));
+    ctx.defsubr_interactive(
+        "indent-to",
+        super::indent::builtin_indent_to,
+        1,
+        Some(2),
+        super::interactive::BuiltinInteractiveSpec::String("NIndent to column: "),
+    );
     ctx.defsubr(
         "selected-window",
         super::window_cmds::builtin_selected_window,
@@ -3025,29 +3343,33 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(2),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "scroll-up",
         super::window_cmds::builtin_scroll_up,
         0,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("^P"),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "scroll-down",
         super::window_cmds::builtin_scroll_down,
         0,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("^P"),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "scroll-left",
         super::window_cmds::builtin_scroll_left,
         0,
         Some(2),
+        super::interactive::BuiltinInteractiveSpec::String("^P\np"),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "scroll-right",
         super::window_cmds::builtin_scroll_right,
         0,
         Some(2),
+        super::interactive::BuiltinInteractiveSpec::String("^P\np"),
     );
     ctx.defsubr(
         "window-resize-apply",
@@ -3055,7 +3377,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(2),
     );
-    ctx.defsubr("recenter", super::window_cmds::builtin_recenter, 0, Some(2));
+    ctx.defsubr_interactive(
+        "recenter",
+        super::window_cmds::builtin_recenter,
+        0,
+        Some(2),
+        super::interactive::BuiltinInteractiveSpec::String("P\np"),
+    );
     register_builtin(
         ctx,
         BuiltinRegistration::requires_eval_state(
@@ -3138,11 +3466,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             BuiltinNoEvalPlaceholder::Nil,
         ),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "select-frame",
         super::window_cmds::builtin_select_frame,
         1,
         Some(2),
+        super::interactive::BuiltinInteractiveSpec::String("e"),
     );
     ctx.defsubr(
         "last-nonminibuffer-frame",
@@ -3168,11 +3497,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "make-frame-visible",
         super::window_cmds::builtin_make_frame_visible,
         0,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String(""),
     );
     ctx.defsubr(
         "make-frame",
@@ -3180,11 +3510,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "iconify-frame",
         super::window_cmds::builtin_iconify_frame,
         0,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String(""),
     );
     ctx.defsubr_interactive(
         "delete-frame",
@@ -3265,17 +3596,19 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(1),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "set-frame-height",
         super::window_cmds::builtin_set_frame_height,
         2,
         Some(4),
+        super::interactive::BuiltinInteractiveSpec::Form(set_frame_height_interactive_spec),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "set-frame-width",
         super::window_cmds::builtin_set_frame_width,
         2,
         Some(4),
+        super::interactive::BuiltinInteractiveSpec::Form(set_frame_width_interactive_spec),
     );
     ctx.defsubr(
         "set-frame-size",
@@ -3435,11 +3768,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(3),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "self-insert-command",
         super::interactive::builtin_self_insert_command,
         1,
         Some(2),
+        super::interactive::BuiltinInteractiveSpec::Form(self_insert_command_interactive_spec),
     );
     ctx.defsubr(
         "key-binding",
@@ -3682,19 +4016,22 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     register_builtin(
         ctx,
-        BuiltinRegistration::requires_eval_state("kill-emacs", builtin_kill_emacs, 0, Some(2)),
+        BuiltinRegistration::requires_eval_state("kill-emacs", builtin_kill_emacs, 0, Some(2))
+            .interactive(super::interactive::BuiltinInteractiveSpec::String("P")),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "exit-recursive-edit",
         super::minibuffer::builtin_exit_recursive_edit,
         0,
         Some(0),
+        super::interactive::BuiltinInteractiveSpec::String(""),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "abort-recursive-edit",
         super::minibuffer::builtin_abort_recursive_edit,
         0,
         Some(0),
+        super::interactive::BuiltinInteractiveSpec::String(""),
     );
     ctx.defsubr(
         "make-thread",
@@ -3966,11 +4303,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(0),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "move-to-column",
         super::indent::builtin_move_to_column,
         1,
         Some(2),
+        super::interactive::BuiltinInteractiveSpec::String("NMove to column: "),
     );
     ctx.defsubr_interactive(
         "eval-buffer",
@@ -3998,11 +4336,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "delete-char",
         super::editfns::builtin_delete_char,
         1,
         Some(2),
+        super::interactive::BuiltinInteractiveSpec::String("p\nP"),
     );
     ctx.defsubr_0("following-char", super::editfns::builtin_following_char_0);
     ctx.defsubr(
@@ -4046,7 +4385,10 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             super::fileio::builtin_rename_file,
             2,
             Some(3),
-        ),
+        )
+        .interactive(super::interactive::BuiltinInteractiveSpec::String(
+            "fRename file: \nGRename %s to file: \np",
+        )),
     );
     register_builtin(
         ctx,
@@ -4055,19 +4397,28 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             super::fileio::builtin_copy_file,
             2,
             Some(6),
-        ),
+        )
+        .interactive(super::interactive::BuiltinInteractiveSpec::String(
+            "fCopy file: \nGCopy %s to file: \np\nP",
+        )),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "add-name-to-file",
         super::fileio::builtin_add_name_to_file,
         2,
         Some(3),
+        super::interactive::BuiltinInteractiveSpec::String(
+            "fAdd name to file: \nGName to add to %s: \np",
+        ),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "make-symbolic-link",
         super::fileio::builtin_make_symbolic_link,
         2,
         Some(3),
+        super::interactive::BuiltinInteractiveSpec::String(
+            "FMake symbolic link to file: \nGMake symbolic link to file %s: \np",
+        ),
     );
     ctx.defsubr(
         "directory-files",
@@ -4143,11 +4494,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr("file-modes", super::fileio::builtin_file_modes, 1, Some(2));
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "set-file-modes",
         super::fileio::builtin_set_file_modes,
         2,
         Some(3),
+        super::interactive::BuiltinInteractiveSpec::Form(set_file_modes_interactive_spec),
     );
     ctx.defsubr(
         "set-file-times",
@@ -4317,11 +4669,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             Some(1),
         ),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "recursive-edit",
         super::minibuffer::builtin_recursive_edit,
         0,
         Some(0),
+        super::interactive::BuiltinInteractiveSpec::String(""),
     );
     register_builtin(
         ctx,
@@ -4332,17 +4685,19 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             Some(3),
         ),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "posix-search-forward",
         super::builtins::search::builtin_posix_search_forward,
         1,
         Some(4),
+        super::interactive::BuiltinInteractiveSpec::String("sPosix search: "),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "posix-search-backward",
         super::builtins::search::builtin_posix_search_backward,
         1,
         Some(4),
+        super::interactive::BuiltinInteractiveSpec::String("sPosix search backward: "),
     );
     ctx.defsubr("read-event", super::lread::builtin_read_event, 0, Some(3));
     ctx.defsubr("run-hooks", defsubr_run_hooks, 0, None);
@@ -4843,11 +5198,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         3,
         Some(3),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "do-auto-save",
         super::fileio::builtin_do_auto_save,
         0,
         Some(2),
+        super::interactive::BuiltinInteractiveSpec::String(""),
     );
     ctx.defsubr(
         "make-auto-save-file-name",
@@ -5194,17 +5550,19 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "handle-save-session",
         |_ctx, args| builtin_handle_save_session(args),
         1,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("e"),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "handle-switch-frame",
         |_ctx, args| builtin_handle_switch_frame(args),
         1,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("^e"),
     );
     ctx.defsubr(
         "help--describe-vector",
@@ -5368,11 +5726,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "decode-coding-region",
         crate::encoding::builtin_decode_coding_region,
         3,
         Some(4),
+        super::interactive::BuiltinInteractiveSpec::String("r\nzCoding system: "),
     );
     ctx.defsubr(
         "dump-emacs-portable",
@@ -5404,11 +5763,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(0),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "encode-coding-region",
         crate::encoding::builtin_encode_coding_region,
         3,
         Some(4),
+        super::interactive::BuiltinInteractiveSpec::String("r\nzCoding system: "),
     );
     register_builtin(
         ctx,
@@ -5437,11 +5797,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "lower-frame",
         |_ctx, args| builtin_lower_frame(args),
         0,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String(""),
     );
     ctx.defsubr(
         "lread--substitute-object-in-subtree",
@@ -5449,17 +5810,19 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         3,
         Some(3),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "malloc-info",
         |_ctx, args| builtin_malloc_info(args),
         0,
         Some(0),
+        super::interactive::BuiltinInteractiveSpec::String(""),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "malloc-trim",
         |_ctx, args| builtin_malloc_trim(args),
         0,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String(""),
     );
     ctx.defsubr(
         "make-byte-code",
@@ -5533,7 +5896,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             super::window_cmds::builtin_make_frame_invisible,
             0,
             Some(2),
-        ),
+        )
+        .interactive(super::interactive::BuiltinInteractiveSpec::String("")),
     );
     ctx.defsubr(
         "menu-bar-menu-at-x-y",
@@ -5579,7 +5943,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr("object-intervals", builtin_object_intervals, 1, Some(1));
-    ctx.defsubr("open-dribble-file", builtin_open_dribble_file, 1, Some(1));
+    ctx.defsubr_interactive(
+        "open-dribble-file",
+        builtin_open_dribble_file,
+        1,
+        Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("FOpen dribble file: "),
+    );
     ctx.defsubr(
         "open-font",
         |_ctx, args| builtin_open_font(args),
@@ -5676,7 +6046,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             0,
             Some(1),
             BuiltinNoEvalPlaceholder::Nil,
-        ),
+        )
+        .interactive(super::interactive::BuiltinInteractiveSpec::String("")),
     );
     ctx.defsubr(
         "read-positioning-symbols",
@@ -5723,11 +6094,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "redirect-debugging-output",
         builtin_redirect_debugging_output,
         1,
         Some(2),
+        super::interactive::BuiltinInteractiveSpec::String("FDebug output file: \nP"),
     );
     ctx.defsubr(
         "redirect-frame-focus",
@@ -5864,7 +6236,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             0,
             Some(1),
             BuiltinNoEvalPlaceholder::Nil,
-        ),
+        )
+        .interactive(super::interactive::BuiltinInteractiveSpec::String("")),
     );
     register_builtin(
         ctx,
@@ -5904,7 +6277,10 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             builtin_transpose_regions,
             4,
             Some(5),
-        ),
+        )
+        .interactive(super::interactive::BuiltinInteractiveSpec::Form(
+            transpose_regions_interactive_spec,
+        )),
     );
     ctx.defsubr(
         "tty--output-buffer-size",
@@ -5984,11 +6360,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(3),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "unix-sync",
         |_ctx, args| builtin_unix_sync(args),
         0,
         Some(0),
+        super::interactive::BuiltinInteractiveSpec::String(""),
     );
     ctx.defsubr("value<", builtin_value_lt, 2, Some(2));
     ctx.defsubr(
@@ -6003,11 +6380,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(1),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "x-menu-bar-open-internal",
         |_ctx, args| builtin_x_menu_bar_open_internal(args),
         0,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("i"),
     );
     register_builtin(
         ctx,
@@ -6074,11 +6452,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     }
     ctx.defsubr("lock-buffer", super::filelock::builtin_lock_buffer, 0, None);
     ctx.defsubr("lock-file", super::filelock::builtin_lock_file, 1, Some(1));
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "lossage-size",
         |_ctx, args| builtin_lossage_size(args),
         0,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::Form(lossage_size_interactive_spec),
     );
     ctx.defsubr(
         "unlock-buffer",
@@ -6947,11 +7326,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "top-level",
         |_ctx, args| super::minibuffer::builtin_top_level(args),
         0,
         Some(0),
+        super::interactive::BuiltinInteractiveSpec::String(""),
     );
     ctx.defsubr(
         "documentation-stringp",
@@ -7142,11 +7522,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(1),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "make-variable-buffer-local",
         super::custom::builtin_make_variable_buffer_local,
         1,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("vMake Variable Buffer Local: "),
     );
     ctx.defsubr(
         "active-minibuffer-window",
@@ -7224,11 +7605,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "delete-other-windows-internal",
         super::window_cmds::builtin_delete_other_windows_internal,
         0,
         Some(2),
+        super::interactive::BuiltinInteractiveSpec::String(""),
     );
     ctx.defsubr(
         "window-combination-limit",
@@ -7454,9 +7836,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         super::casefiddle::builtin_upcase_initials_region,
         2,
         Some(3),
-        super::interactive::BuiltinInteractiveSpec::Form(
-            super::interactive::region_noncontiguous_interactive_spec,
-        ),
+        super::interactive::BuiltinInteractiveSpec::Form(region_noncontiguous_interactive_spec),
     );
     ctx.defsubr(
         "buffer-substring-no-properties",
@@ -8662,17 +9042,19 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
 
     // -- Dispnew --
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "redraw-display",
         |_ctx, args| super::dispnew::pure::builtin_redraw_display(args),
         0,
         Some(0),
+        super::interactive::BuiltinInteractiveSpec::String(""),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "open-termscript",
         |_ctx, args| super::dispnew::pure::builtin_open_termscript(args),
         1,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("FOpen termscript file: "),
     );
     ctx.defsubr(
         "ding",
@@ -9023,11 +9405,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         3,
         Some(4),
     );
-    ctx.defsubr(
+    ctx.defsubr_interactive(
         "move-to-window-line",
         super::xdisp::builtin_move_to_window_line,
         1,
         Some(1),
+        super::interactive::BuiltinInteractiveSpec::String("P"),
     );
     ctx.defsubr(
         "line-number-display-width",
