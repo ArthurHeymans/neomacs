@@ -7761,10 +7761,13 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
         ),
     ));
 
-    assert_eq!(positions.window_start, LispCharPos1::new(4));
-    assert_eq!(positions.window_end, LispCharPos1::new(8));
-    assert_eq!(positions.window_end_byte, EmacsBytePos::new(104));
-    assert_eq!(positions.window_end_vpos, 0);
+    assert_eq!(positions.window_start(), LispCharPos1::new(4));
+    assert_eq!(positions.window_end_lisp(), LispCharPos1::new(8));
+    assert_eq!(
+        positions.window_end_position().anchor().emacs_byte_pos(),
+        EmacsBytePos::new(104)
+    );
+    assert_eq!(positions.window_end_position().matrix_row().get(), 0);
 
     builder.end_window();
     let state = builder.finish(5, 1, 8.0, 16.0);

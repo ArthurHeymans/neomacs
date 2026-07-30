@@ -525,8 +525,7 @@ impl BufferSourceOutputSetup {
         let publish_request = BufferSourceRedisplayPublishRequest::new(
             self.begin_request.frame_id(),
             self.begin_request.window_id(),
-            source.accessible_end_lisp_char(),
-            source.accessible_end_emacs_byte(),
+            source.accessible_end_position(),
             self.position_publication,
         );
 
@@ -626,11 +625,16 @@ impl BufferSourceOutputSetup {
             // full rebuild instead of defaulting to the buffer top.
             {
                 let end_char0 = redisplay_positions
-                    .window_end
+                    .window_end_lisp()
                     .to_one_based_usize()
                     .saturating_sub(1) as i64;
-                redisplay_positions.window_end_byte = neovm_core::buffer::EmacsBytePos::new(
-                    buf_access.charpos_to_bytepos(end_char0) as usize,
+                redisplay_positions.replace_window_end_anchor(
+                    neovm_core::buffer::TextPositionAnchor::new(
+                        neovm_core::buffer::CharPos0::new(end_char0 as usize),
+                        neovm_core::buffer::EmacsBytePos::new(
+                            buf_access.charpos_to_bytepos(end_char0) as usize,
+                        ),
+                    ),
                 );
             }
             record_text_window_display_range(
@@ -800,11 +804,16 @@ impl BufferSourceOutputSetup {
                 // reused-below row. Re-derive it from the (correct) window_end
                 // char so the published byte companion matches a full rebuild.
                 let end_char0 = redisplay_positions
-                    .window_end
+                    .window_end_lisp()
                     .to_one_based_usize()
                     .saturating_sub(1) as i64;
-                redisplay_positions.window_end_byte = neovm_core::buffer::EmacsBytePos::new(
-                    buf_access.charpos_to_bytepos(end_char0) as usize,
+                redisplay_positions.replace_window_end_anchor(
+                    neovm_core::buffer::TextPositionAnchor::new(
+                        neovm_core::buffer::CharPos0::new(end_char0 as usize),
+                        neovm_core::buffer::EmacsBytePos::new(
+                            buf_access.charpos_to_bytepos(end_char0) as usize,
+                        ),
+                    ),
                 );
             }
 

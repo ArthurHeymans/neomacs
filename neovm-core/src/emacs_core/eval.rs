@@ -9403,17 +9403,12 @@ impl Context {
         }
     }
 
-    #[allow(clippy::too_many_arguments)] // publishes GNU's complete window-position tuple atomically
     pub fn publish_redisplay_window_positions(
         &mut self,
         frame_id: crate::window::FrameId,
         window_id: crate::window::WindowId,
         window_start_lisp: LispCharPos1,
-        buffer_z_char: LispCharPos1,
-        buffer_z_byte: EmacsBytePos,
-        window_end_lisp: LispCharPos1,
-        window_end_byte: EmacsBytePos,
-        window_end_vpos: usize,
+        window_end: crate::window::WindowEndRecord,
     ) {
         let frames = &mut self.frames;
         let buffers = &mut self.buffers;
@@ -9427,13 +9422,7 @@ impl Context {
                 window,
                 window_start_lisp,
             );
-            window.set_window_end_from_positions(
-                buffer_z_char,
-                buffer_z_byte,
-                window_end_lisp,
-                window_end_byte,
-                window_end_vpos,
-            );
+            window.set_window_end_record(window_end);
             // GNU clears `w->force_start` once redisplay has consumed it
             // (redisplay_window force_start branch) — one-shot semantics.
             if let crate::window::Window::Leaf { force_start, .. } = window {
@@ -9456,16 +9445,11 @@ impl Context {
     /// GNU `Fwindow_end` with UPDATE non-nil walks from `w->start`, but it is
     /// not redisplay: it must not rewrite the start marker, consume
     /// `force_start`, or move point.
-    #[allow(clippy::too_many_arguments)]
     pub fn publish_window_layout_query_end(
         &mut self,
         frame_id: crate::window::FrameId,
         window_id: crate::window::WindowId,
-        buffer_z_char: LispCharPos1,
-        buffer_z_byte: EmacsBytePos,
-        window_end_lisp: LispCharPos1,
-        window_end_byte: EmacsBytePos,
-        window_end_vpos: usize,
+        window_end: crate::window::WindowEndRecord,
     ) {
         let Some(window) = self
             .frames
@@ -9474,13 +9458,7 @@ impl Context {
         else {
             return;
         };
-        window.set_window_end_from_positions(
-            buffer_z_char,
-            buffer_z_byte,
-            window_end_lisp,
-            window_end_byte,
-            window_end_vpos,
-        );
+        window.set_window_end_record(window_end);
     }
 
     pub fn create_window_markers_for_root(

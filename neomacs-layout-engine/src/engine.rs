@@ -2093,8 +2093,8 @@ impl LayoutEngine {
 
         tracing::debug!(
             "  layout_window_rust: window_start={} window_end={}",
-            redisplay_positions.window_start.as_i64(),
-            redisplay_positions.window_end.as_i64()
+            redisplay_positions.window_start().as_i64(),
+            redisplay_positions.window_end_lisp().as_i64()
         );
 
         let assumed = WindowChromeMetrics::from_params(params);

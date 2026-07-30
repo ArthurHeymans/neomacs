@@ -706,10 +706,13 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
 
     let positions = TextWindowRedisplayPositions::from_output_rows(&emitter, 3, 100, 4);
 
-    assert_eq!(positions.window_start, LispCharPos1::new(4));
-    assert_eq!(positions.window_end, LispCharPos1::new(8));
-    assert_eq!(positions.window_end_byte, EmacsBytePos::new(104));
-    assert_eq!(positions.window_end_vpos, 1);
+    assert_eq!(positions.window_start(), LispCharPos1::new(4));
+    assert_eq!(positions.window_end_lisp(), LispCharPos1::new(8));
+    assert_eq!(
+        positions.window_end_position().anchor().emacs_byte_pos(),
+        EmacsBytePos::new(104)
+    );
+    assert_eq!(positions.window_end_position().matrix_row().get(), 1);
     assert_eq!(
         positions.display_range(41),
         TextWindowDisplayRange {
@@ -1244,10 +1247,13 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
         None,
     );
 
-    assert_eq!(positions.window_start, LispCharPos1::new(4));
-    assert_eq!(positions.window_end, LispCharPos1::new(8));
-    assert_eq!(positions.window_end_byte, EmacsBytePos::new(104));
-    assert_eq!(positions.window_end_vpos, 0);
+    assert_eq!(positions.window_start(), LispCharPos1::new(4));
+    assert_eq!(positions.window_end_lisp(), LispCharPos1::new(8));
+    assert_eq!(
+        positions.window_end_position().anchor().emacs_byte_pos(),
+        EmacsBytePos::new(104)
+    );
+    assert_eq!(positions.window_end_position().matrix_row().get(), 0);
     let info = builder.window_infos().last().expect("window info");
     assert_eq!(info.window_start, 4);
     assert_eq!(info.window_end, 8);

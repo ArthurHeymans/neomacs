@@ -48,11 +48,11 @@ use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, PhysCursor};
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
-use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
+use neovm_core::buffer::{CharPos0, EmacsBytePos, LispCharPos1, TextPositionAnchor};
 use neovm_core::emacs_core::Context;
 use neovm_core::window::geometry::CellOrigin;
 use neovm_core::window::{
-    DisplayPointSnapshot, DisplayRowSnapshot, PresentedWindowRegions, WindowCursorKind,
+    DisplayPointSnapshot, DisplayRowSnapshot, MatrixRow0, PresentedWindowRegions, WindowCursorKind,
     WindowCursorPos, WindowCursorSnapshot, WindowDisplaySnapshot,
 };
 
@@ -599,10 +599,18 @@ pub(crate) struct TextWindowBodyOutputInstall<'a> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct TextWindowRedisplayPositions {
-    pub(crate) window_start: LispCharPos1,
-    pub(crate) window_end: LispCharPos1,
-    pub(crate) window_end_byte: EmacsBytePos,
-    pub(crate) window_end_vpos: usize,
+    window_start: LispCharPos1,
+    window_end: TextWindowEndPosition,
+}
+
+/// The char/byte/matrix-row identity of one row walk's terminal position.
+///
+/// Fast paths may replace this value only as a whole, preventing a corrected
+/// character coordinate from retaining the byte companion of another walk.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct TextWindowEndPosition {
+    anchor: TextPositionAnchor,
+    matrix_row: MatrixRow0,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -737,14 +745,14 @@ impl TextWindowRedisplayPositions {
         byte_idx: usize,
     ) -> Self {
         let window_start = layout_i64_char_pos_to_lisp_char_pos(window_start);
-        let window_end = output_emitter
+        let window_end_char = output_emitter
             .rows()
             .iter()
             .rev()
             .find_map(|row| row.end_buffer_pos)
             .map(|pos| layout_i64_char_pos_to_lisp_char_pos(pos.as_i64()))
             .unwrap_or_else(|| LispCharPos1::from_one_based_usize(1));
-        let window_end_vpos = output_emitter
+        let window_end_row = output_emitter
             .rows()
             .last()
             .map(|row| row.row.max(0) as usize)
@@ -752,18 +760,48 @@ impl TextWindowRedisplayPositions {
 
         Self {
             window_start,
-            window_end,
-            window_end_byte: EmacsBytePos::new(text_start_byte.saturating_add(byte_idx)),
-            window_end_vpos,
+            window_end: TextWindowEndPosition {
+                anchor: TextPositionAnchor::new(
+                    CharPos0::from_lisp(window_end_char),
+                    EmacsBytePos::new(text_start_byte.saturating_add(byte_idx)),
+                ),
+                matrix_row: MatrixRow0::new(window_end_row),
+            },
         }
+    }
+
+    pub(crate) const fn window_start(self) -> LispCharPos1 {
+        self.window_start
+    }
+
+    pub(crate) fn window_end_lisp(self) -> LispCharPos1 {
+        self.window_end.anchor.char_pos().to_lisp()
+    }
+
+    pub(crate) const fn window_end_position(self) -> TextWindowEndPosition {
+        self.window_end
+    }
+
+    pub(crate) fn replace_window_end_anchor(&mut self, anchor: TextPositionAnchor) {
+        self.window_end.anchor = anchor;
     }
 
     pub(crate) fn display_range(self, window_id: u64) -> TextWindowDisplayRange {
         TextWindowDisplayRange {
             window_id,
             window_start: self.window_start,
-            window_end: self.window_end,
+            window_end: self.window_end_lisp(),
         }
+    }
+}
+
+impl TextWindowEndPosition {
+    pub(crate) const fn anchor(self) -> TextPositionAnchor {
+        self.anchor
+    }
+
+    pub(crate) const fn matrix_row(self) -> MatrixRow0 {
+        self.matrix_row
     }
 }
 

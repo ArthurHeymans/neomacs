@@ -16301,6 +16301,107 @@ fn synchronous_window_end_query_updates_only_the_target_without_preparing_a_pres
 }
 
 #[test]
+fn synchronous_window_end_query_on_child_frame_does_not_touch_parent_frame() {
+    let mut eval = Context::new();
+    let parent_buffer = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("parent buffer")
+        .id();
+    eval.buffer_manager_mut()
+        .get_mut(parent_buffer)
+        .expect("parent buffer")
+        .insert(&"parent frame line\n".repeat(80));
+    let child_buffer = eval
+        .buffer_manager_mut()
+        .create_buffer(" *window-end-child*");
+    eval.buffer_manager_mut()
+        .get_mut(child_buffer)
+        .expect("child buffer")
+        .insert(&"child frame line with 好🙂β\n".repeat(80));
+
+    let parent_frame =
+        eval.frame_manager_mut()
+            .create_frame("window-end-parent", 800, 320, parent_buffer);
+    let child_frame =
+        eval.frame_manager_mut()
+            .create_frame("window-end-child", 360, 180, child_buffer);
+    let parent_window = eval
+        .frame_manager()
+        .get(parent_frame)
+        .expect("parent frame")
+        .selected_window;
+    let child_window = eval
+        .frame_manager()
+        .get(child_frame)
+        .expect("child frame")
+        .selected_window;
+    eval.frame_manager_mut()
+        .get_mut(child_frame)
+        .expect("child frame")
+        .parent_frame = Value::make_frame(parent_frame.0);
+
+    let parent_record = {
+        let buffer = eval
+            .buffer_manager()
+            .get(parent_buffer)
+            .expect("parent buffer");
+        neovm_core::window::WindowEndRecord::from_positions(
+            neovm_core::buffer::LispCharPos1::from_one_based_usize(
+                buffer.point_max_char_pos().get() + 1,
+            ),
+            buffer.point_max_emacs_byte_pos(),
+            neovm_core::buffer::LispCharPos1::new(40),
+            buffer.lisp_pos_to_emacs_byte_pos(neovm_core::buffer::LispCharPos1::new(40)),
+            neovm_core::window::MatrixRow0::new(3),
+        )
+    };
+    {
+        let parent = eval
+            .frame_manager_mut()
+            .get_mut(parent_frame)
+            .expect("parent frame")
+            .find_window_mut(parent_window)
+            .expect("parent window");
+        parent.set_window_end_record(parent_record);
+        parent.invalidate_window_end();
+    }
+
+    let mut engine = LayoutEngine::new_without_font_metrics();
+    let child_record = engine
+        .query_window_end(&mut eval, child_frame, child_window)
+        .expect("child query");
+
+    let parent = eval
+        .frame_manager()
+        .get(parent_frame)
+        .expect("parent frame");
+    assert_eq!(
+        parent
+            .find_window(parent_window)
+            .expect("parent window")
+            .window_end_state(),
+        Some(neovm_core::window::WindowEndState::Stale(parent_record)),
+        "a child-frame query must not lay out or publish into its parent"
+    );
+    assert!(!parent.has_prepared_display_presentations());
+
+    let child = eval.frame_manager().get(child_frame).expect("child frame");
+    assert_eq!(
+        child
+            .find_window(child_window)
+            .expect("child window")
+            .window_end_state(),
+        Some(neovm_core::window::WindowEndState::Current(child_record))
+    );
+    assert!(!child.has_prepared_display_presentations());
+    assert!(
+        engine.last_frame_display_state.is_none(),
+        "a child-frame query must remain outside renderer publication"
+    );
+}
+
+#[test]
 fn synchronous_window_end_query_preserves_redisplay_only_window_state() {
     let mut eval = Context::new();
     let buffer_id = eval

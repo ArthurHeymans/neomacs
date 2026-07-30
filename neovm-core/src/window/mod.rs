@@ -7,7 +7,10 @@
 //! - The **selected window** is the one receiving input.
 //! - The **minibuffer window** is a special single-line window at the bottom.
 
-use crate::buffer::{BufferId, BufferManager, CharLen, EmacsByteLen, EmacsBytePos, LispCharPos1};
+use crate::buffer::{
+    BufferId, BufferManager, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, LispCharPos1,
+    TextPositionAnchor,
+};
 use crate::emacs_core::value::{HashTableTest, Value};
 use crate::gc_trace::GcTrace;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -479,6 +482,22 @@ pub struct WindowEndRecord {
 }
 
 impl WindowEndRecord {
+    pub fn from_anchors(
+        buffer_z: TextPositionAnchor,
+        end: TextPositionAnchor,
+        matrix_row: MatrixRow0,
+    ) -> Self {
+        Self {
+            char_offset_from_z: buffer_z
+                .char_pos()
+                .saturating_offset_from(end.char_pos().min(buffer_z.char_pos())),
+            byte_offset_from_z: buffer_z
+                .emacs_byte_pos()
+                .saturating_offset_from(end.emacs_byte_pos().min(buffer_z.emacs_byte_pos())),
+            matrix_row,
+        }
+    }
+
     pub fn from_positions(
         buffer_z_char: LispCharPos1,
         buffer_z_byte: EmacsBytePos,
@@ -486,21 +505,11 @@ impl WindowEndRecord {
         end_bytepos: EmacsBytePos,
         matrix_row: MatrixRow0,
     ) -> Self {
-        let buffer_z_char = usize::try_from(buffer_z_char.as_i64().max(1))
-            .expect("Lisp character position fits usize");
-        let end_charpos = usize::try_from(end_charpos.as_i64().max(1))
-            .expect("Lisp character position fits usize");
-        Self {
-            char_offset_from_z: CharLen::new(
-                buffer_z_char.saturating_sub(end_charpos.min(buffer_z_char)),
-            ),
-            byte_offset_from_z: EmacsByteLen::new(
-                buffer_z_byte
-                    .get()
-                    .saturating_sub(end_bytepos.get().min(buffer_z_byte.get())),
-            ),
+        Self::from_anchors(
+            TextPositionAnchor::new(CharPos0::from_lisp(buffer_z_char), buffer_z_byte),
+            TextPositionAnchor::new(CharPos0::from_lisp(end_charpos), end_bytepos),
             matrix_row,
-        }
+        )
     }
 
     pub const fn char_offset_from_z(self) -> CharLen {
@@ -1289,14 +1298,19 @@ impl Window {
         end_bytepos: EmacsBytePos,
         vpos: usize,
     ) {
+        self.set_window_end_record(WindowEndRecord::from_positions(
+            buffer_z_char,
+            buffer_z_byte,
+            end_charpos,
+            end_bytepos,
+            MatrixRow0::new(vpos),
+        ));
+    }
+
+    /// Publish a complete char/byte/row record without reopening its tuple.
+    pub fn set_window_end_record(&mut self, record: WindowEndRecord) {
         if let Window::Leaf { window_end, .. } = self {
-            *window_end = WindowEndState::Current(WindowEndRecord::from_positions(
-                buffer_z_char,
-                buffer_z_byte,
-                end_charpos,
-                end_bytepos,
-                MatrixRow0::new(vpos),
-            ));
+            *window_end = WindowEndState::Current(record);
         }
     }
 

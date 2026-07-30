@@ -18,7 +18,7 @@ use crate::window_output::{
     WindowOutputEmitter, capture_text_window_retry_checkpoint,
     restore_text_window_retry_checkpoint,
 };
-use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
+use neovm_core::buffer::TextPositionAnchor;
 use neovm_core::emacs_core::Context;
 use neovm_core::window::{FrameId, WindowDisplaySnapshot, WindowId};
 
@@ -67,8 +67,7 @@ impl WindowPositionPublication {
 pub(crate) struct BufferSourceRedisplayPublishRequest {
     frame_id: FrameId,
     window_id: WindowId,
-    accessible_end_lisp_char: usize,
-    accessible_end_emacs_byte: usize,
+    buffer_z: TextPositionAnchor,
     publication: WindowPositionPublication,
 }
 
@@ -238,45 +237,34 @@ impl BufferSourceRedisplayPublishRequest {
     pub(crate) fn new(
         frame_id: FrameId,
         window_id: WindowId,
-        accessible_end_lisp_char: usize,
-        accessible_end_emacs_byte: usize,
+        buffer_z: TextPositionAnchor,
         publication: WindowPositionPublication,
     ) -> Self {
         Self {
             frame_id,
             window_id,
-            accessible_end_lisp_char,
-            accessible_end_emacs_byte,
+            buffer_z,
             publication,
         }
     }
 
     pub(crate) fn publish(self, evaluator: &mut Context, positions: TextWindowRedisplayPositions) {
-        let buffer_z_char = LispCharPos1::from_one_based_usize(self.accessible_end_lisp_char);
-        let buffer_z_byte = EmacsBytePos::new(self.accessible_end_emacs_byte);
+        let window_end = self.window_end_record(positions);
         match self.publication {
             WindowPositionPublication::Redisplay
             | WindowPositionPublication::RedisplayMinibufferMeasurement => {
                 evaluator.publish_redisplay_window_positions(
                     self.frame_id,
                     self.window_id,
-                    positions.window_start,
-                    buffer_z_char,
-                    buffer_z_byte,
-                    positions.window_end,
-                    positions.window_end_byte,
-                    positions.window_end_vpos,
+                    positions.window_start(),
+                    window_end,
                 );
             }
             WindowPositionPublication::SynchronousQueryEnd => {
                 evaluator.publish_window_layout_query_end(
                     self.frame_id,
                     self.window_id,
-                    buffer_z_char,
-                    buffer_z_byte,
-                    positions.window_end,
-                    positions.window_end_byte,
-                    positions.window_end_vpos,
+                    window_end,
                 );
             }
         }
@@ -286,12 +274,11 @@ impl BufferSourceRedisplayPublishRequest {
         self,
         positions: TextWindowRedisplayPositions,
     ) -> neovm_core::window::WindowEndRecord {
-        neovm_core::window::WindowEndRecord::from_positions(
-            LispCharPos1::from_one_based_usize(self.accessible_end_lisp_char),
-            EmacsBytePos::new(self.accessible_end_emacs_byte),
-            positions.window_end,
-            positions.window_end_byte,
-            neovm_core::window::MatrixRow0::new(positions.window_end_vpos),
+        let window_end = positions.window_end_position();
+        neovm_core::window::WindowEndRecord::from_anchors(
+            self.buffer_z,
+            window_end.anchor(),
+            window_end.matrix_row(),
         )
     }
 }

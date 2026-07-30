@@ -6,6 +6,7 @@ use crate::scroll_policy::{
     line_start_below, top_margin,
 };
 use crate::types::{WindowKind, WindowParams};
+use neovm_core::buffer::{CharPos0, EmacsBytePos, TextPositionAnchor};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferWindowSource {
@@ -14,9 +15,7 @@ pub(crate) struct BufferWindowSource {
     bytes_read: usize,
     point_charpos: i64,
     accessible_start: i64,
-    accessible_end: i64,
-    accessible_end_lisp_char: usize,
-    accessible_end_emacs_byte: usize,
+    accessible_end: TextPositionAnchor,
 }
 
 impl BufferWindowSource {
@@ -41,15 +40,11 @@ impl BufferWindowSource {
     }
 
     pub(crate) const fn accessible_end(self) -> i64 {
+        self.accessible_end.char_pos().get() as i64
+    }
+
+    pub(crate) const fn accessible_end_position(self) -> TextPositionAnchor {
         self.accessible_end
-    }
-
-    pub(crate) const fn accessible_end_lisp_char(self) -> usize {
-        self.accessible_end_lisp_char
-    }
-
-    pub(crate) const fn accessible_end_emacs_byte(self) -> usize {
-        self.accessible_end_emacs_byte
     }
 }
 
@@ -205,9 +200,10 @@ impl BufferWindowSourceRequest {
             bytes_read,
             point_charpos: self.point_charpos,
             accessible_start: self.accessible_start,
-            accessible_end: self.accessible_end,
-            accessible_end_lisp_char: self.accessible_end.max(0) as usize + 1,
-            accessible_end_emacs_byte: access.zv().max(0) as usize,
+            accessible_end: TextPositionAnchor::new(
+                CharPos0::new(self.accessible_end.max(0) as usize),
+                EmacsBytePos::new(access.zv().max(0) as usize),
+            ),
         }
     }
 
