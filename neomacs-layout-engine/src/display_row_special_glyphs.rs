@@ -486,7 +486,10 @@ pub(crate) fn install_text_window_terminal_right_border(
     // counter (`face_cache->used`, xfaces.c `lookup_face`). Allocate the
     // border's id from the frame-scoped allocator rather than a separate
     // `FaceResolver` counter that could collide with it.
-    let border_face_id = render_services.face_ids().reserve_dynamic_face();
+    let border_face_id = crate::display_row_face_state::stable_face_id_for_resolved(
+        render_services.face_ids(),
+        &border_face,
+    );
     install_output_resolved_face(output_builder, border_face_id, &border_face, None);
     install_text_window_right_border_rows(
         output_builder,

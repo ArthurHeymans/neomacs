@@ -74,7 +74,8 @@ pub(crate) fn draw_overlay_arrows<B: LayoutBufferView>(
         OverlayArrowStyle::TextString { .. } => "default",
     };
     let resolved = face_resolver.resolve_named_face(face_name);
-    let arrow_face_id = face_ids.reserve_dynamic_face();
+    let arrow_face_id =
+        crate::display_row_face_state::stable_face_id_for_resolved(face_ids, &resolved);
     output.install_resolved_face(arrow_face_id, &resolved, None);
 
     // GNU's `overlay_arrow_seen` is per redisplay pass: an arrow is drawn on a

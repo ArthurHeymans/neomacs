@@ -159,7 +159,8 @@ impl EmptyLineFringeFillRequest {
         // Resolve the `fringe` face once and register it so the renderer can
         // resolve fg/bg for the bitmap quads.
         let resolved = face_resolver.resolve_named_face("fringe");
-        let face_id = face_ids.reserve_dynamic_face();
+        let face_id =
+            crate::display_row_face_state::stable_face_id_for_resolved(face_ids, &resolved);
         output.install_resolved_face(face_id, &resolved, None);
 
         let info = FringeBitmapInfo {

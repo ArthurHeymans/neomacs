@@ -2610,7 +2610,7 @@ fn stipple_file_search_paths(name: &str) -> Vec<std::path::PathBuf> {
 ///
 /// This is the neovm-core equivalent of `FaceDataFFI`.  All attributes are
 /// fully realized (no `Option`s) so the layout engine can use them directly.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ResolvedFace {
     /// Foreground color (sRGB pixel: 0x00RRGGBB).
     pub fg: u32,

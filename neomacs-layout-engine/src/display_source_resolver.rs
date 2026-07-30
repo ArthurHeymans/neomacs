@@ -282,7 +282,7 @@ pub(crate) fn resolve_display_string_base_face<B: LayoutBufferView>(
         };
         (face_id, pending_face)
     } else {
-        let face_id = face_ids.reserve_dynamic_face();
+        let face_id = crate::display_row_face_state::stable_face_id_for_resolved(face_ids, &face);
         let pending_face = Some(PendingDisplaySourceFace::new(face_id, face.clone()));
         (face_id, pending_face)
     };
@@ -577,7 +577,8 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
             return face;
         }
 
-        let face_id = self.face_ids.reserve_dynamic_face();
+        let face_id =
+            crate::display_row_face_state::stable_face_id_for_resolved(self.face_ids, &resolved);
         self.state.height_face_cache.insert(key, face_id);
         self.state.remember_face(face_id, &resolved);
         self.pending_faces
@@ -638,7 +639,7 @@ fn resolve_source_face_ref(
         return RenderFaceRef::FaceId(base_face_id);
     }
 
-    let face_id = face_ids.reserve_dynamic_face();
+    let face_id = crate::display_row_face_state::stable_face_id_for_resolved(face_ids, &resolved);
     state.cache_face(base_face_id, face_value, face_id, &resolved);
     pending_faces.push(PendingDisplaySourceFace::new(face_id, resolved));
     RenderFaceRef::FaceId(face_id)

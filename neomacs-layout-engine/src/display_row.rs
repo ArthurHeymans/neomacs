@@ -436,7 +436,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         let base_face_id = if base_face.face_id != 0 {
             base_face.display_face_id()
         } else {
-            face_ids.reserve_dynamic_face()
+            crate::display_row_face_state::stable_face_id_for_resolved(face_ids, base_face)
         };
         let render_bounds = DisplayRowRenderBounds::whole_row(geometry.width());
         Self {

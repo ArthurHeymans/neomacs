@@ -2024,9 +2024,13 @@ impl LayoutEngine {
             else {
                 continue;
             };
-            let face_id = face_ids.reserve_dynamic_face();
-            resolved.face_id = face_id.get();
             resolved.lisp_name = value.as_symbol_name().map(str::to_owned);
+            let face_id =
+                crate::display_row_face_state::stable_face_id_for_resolved(
+                    &mut face_ids,
+                    &resolved,
+                );
+            resolved.face_id = face_id.get();
             let realized = DisplayRowFaceRealizer::new(&mut self.font_metrics).realize_face(
                 face_id,
                 &resolved,

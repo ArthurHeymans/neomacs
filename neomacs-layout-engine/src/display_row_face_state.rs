@@ -286,6 +286,31 @@ pub(crate) fn resolved_display_row_face(
     render_face
 }
 
+/// Content-addressed dynamic face id for a resolved face.
+///
+/// The realization identity is computed by the SAME pipeline that later
+/// builds the published face (`resolved_display_row_face(..).render_face()`
+/// canonicalized by `face_realization_identity`), so the id key can never
+/// drift from the published content — publish() debug-asserts exactly that.
+/// Metrics are enrichment: the identity projection strips every
+/// metrics-derived field, so keying with `None` here matches the
+/// metrics-filled face published after font realization.
+pub(crate) fn stable_face_id_for_resolved(
+    face_ids: &mut crate::frame_face_arena::FrameFaceAttempt,
+    face: &ResolvedFace,
+) -> FaceId {
+    face_ids.face_id_for_resolved(face, || {
+        // The placeholder id must not collide with a basic face id:
+        // render_face's lisp_name fallback names the face after its basic
+        // id, and a basic name injected here would differ from the published
+        // face (which carries the real dynamic id and therefore no
+        // basic-name fallback).
+        crate::frame_face_arena::face_realization_identity(
+            &resolved_display_row_face(FaceId::new(u32::MAX), face, None).render_face(),
+        )
+    })
+}
+
 pub(crate) struct DisplayRowFaceRealizer<'a> {
     font_metrics: &'a mut Option<FontMetricsService>,
 }

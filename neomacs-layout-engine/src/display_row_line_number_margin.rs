@@ -73,7 +73,10 @@ impl BufferLineNumberMarginRenderRequest {
 
         let line_number_face =
             source_render.resolve_named_face(line_number_request.face().face_name());
-        let line_number_face_id = face_ids.reserve_dynamic_face();
+        let line_number_face_id = crate::display_row_face_state::stable_face_id_for_resolved(
+            face_ids,
+            &line_number_face,
+        );
         source_render.insert_resolved_face(line_number_face_id, &line_number_face);
 
         let text = line_number_request.text();

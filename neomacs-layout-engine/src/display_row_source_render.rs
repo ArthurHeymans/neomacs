@@ -1090,7 +1090,7 @@ impl<'a> TextRowSourceRenderState<'a> {
             return;
         }
         let face = self.resolve_named_face("trailing-whitespace");
-        let face_id = face_ids.reserve_dynamic_face();
+        let face_id = crate::display_row_face_state::stable_face_id_for_resolved(face_ids, &face);
         self.insert_resolved_face(face_id, &face);
         self.output_render
             .highlight_current_row_trailing_whitespace(face_id);
@@ -1162,7 +1162,9 @@ impl<'a> TextRowSourceRenderState<'a> {
                 let mut char_face = self.resolve_named_face("fill-column-indicator");
                 char_face.bg = protocol_color_to_pixel(extend_bg);
                 char_face.use_default_background = false;
-                let indicator_face_id = face_ids.reserve_dynamic_face();
+                let indicator_face_id = crate::display_row_face_state::stable_face_id_for_resolved(
+                    face_ids, &char_face,
+                );
                 self.insert_resolved_face(indicator_face_id, &char_face);
                 let tail_px = (right_edge - (indicator_px + char_width)).max(0.0);
                 let tail_cols = (tail_px / char_width).round().clamp(0.0, u16::MAX as f32) as u16;
@@ -1184,7 +1186,8 @@ impl<'a> TextRowSourceRenderState<'a> {
                 // Plain row: the gap is transparent (fill-column-indicator has no
                 // background) and there is no tail past the indicator.
                 let fci = self.resolve_named_face("fill-column-indicator");
-                let face_id = face_ids.reserve_dynamic_face();
+                let face_id =
+                    crate::display_row_face_state::stable_face_id_for_resolved(face_ids, &fci);
                 self.insert_resolved_face(face_id, &fci);
                 FillColumnIndicatorFill {
                     gap_px,
@@ -1313,7 +1316,8 @@ impl<'a> TextRowSourceRenderState<'a> {
     ) -> FaceId {
         if let Some(name) = override_name {
             let resolved = self.face_resolver.resolve_named_face(name);
-            let face_id = face_ids.reserve_dynamic_face();
+            let face_id =
+                crate::display_row_face_state::stable_face_id_for_resolved(face_ids, &resolved);
             self.insert_resolved_face(face_id, &resolved);
             return face_id;
         }
@@ -1322,7 +1326,8 @@ impl<'a> TextRowSourceRenderState<'a> {
                 .face_resolver
                 .resolve_face_value_over(self.face_resolver.default_face(), &face_value)
         {
-            let face_id = face_ids.reserve_dynamic_face();
+            let face_id =
+                crate::display_row_face_state::stable_face_id_for_resolved(face_ids, &resolved);
             self.insert_resolved_face(face_id, &resolved);
             return face_id;
         }

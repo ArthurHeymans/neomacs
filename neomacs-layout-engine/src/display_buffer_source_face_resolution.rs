@@ -7,7 +7,9 @@ use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
-use crate::display_row_face_state::{DisplayRowActiveFaceState, DisplayRowMeasurementPolicy};
+use crate::display_row_face_state::{
+    DisplayRowActiveFaceState, DisplayRowMeasurementPolicy, stable_face_id_for_resolved,
+};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowScopedValue};
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_source_render::TextRowSourceRenderState;
@@ -116,7 +118,7 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
             &origin,
             state.face_scan.next_check_mut(),
         );
-        let face_id = state.face_ids.reserve_dynamic_face();
+        let face_id = stable_face_id_for_resolved(state.face_ids, &resolved);
         let resolved_box_type = resolved.box_type;
         *state.active_face_state = state.source_render.resolve_and_install_measured_face(
             self.measurement_policy,
@@ -360,7 +362,7 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
             return active_face_state.clone();
         };
 
-        let face_id = face_ids.reserve_dynamic_face();
+        let face_id = stable_face_id_for_resolved(face_ids, &resolved);
         item.face = RenderFaceRef::FaceId(face_id);
         let resolved_active_face = source_render.resolve_and_install_measured_face(
             self.measurement_policy,
@@ -396,7 +398,7 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
         if merged.fg == base.fg && merged.use_default_foreground == base.use_default_foreground {
             return None;
         }
-        let face_id = face_ids.reserve_dynamic_face();
+        let face_id = stable_face_id_for_resolved(face_ids, &merged);
         item.face = RenderFaceRef::FaceId(face_id);
         let resolved_active_face = source_render.resolve_and_install_measured_face(
             self.measurement_policy,

@@ -358,7 +358,7 @@ impl BufferSourceDefaultFacePlan {
         if same_resolved_face(&self.face, face_resolver.default_face()) {
             BasicFaceId::Default.into()
         } else {
-            face_ids.reserve_dynamic_face()
+            crate::display_row_face_state::stable_face_id_for_resolved(face_ids, &self.face)
         }
     }
 
@@ -922,7 +922,10 @@ impl BufferSourceOutputSetup {
 
         let (mut output, evaluator) = output.into_parts();
         if !default_face.face().use_default_background && geometry.text_height > 0.0 {
-            let face_id = face_ids.reserve_dynamic_face();
+            let face_id = crate::display_row_face_state::stable_face_id_for_resolved(
+                &mut face_ids,
+                default_face.face(),
+            );
             output.install_resolved_face(face_id, default_face.face(), None);
             output.builder().add_output_face_fill(FaceFillItem {
                 window_id: DisplayWindowId::new(params.window_id),
@@ -1007,7 +1010,10 @@ impl BufferSourceOutputSetup {
             geometry.display_text_row_base,
             {
                 let resolved = render_services.face_resolver().resolve_named_face("fringe");
-                let face_id = render_services.face_ids().reserve_dynamic_face();
+                let face_id = crate::display_row_face_state::stable_face_id_for_resolved(
+                    render_services.face_ids(),
+                    &resolved,
+                );
                 output.install_resolved_face(face_id, &resolved, None);
                 face_id
             },
