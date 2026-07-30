@@ -1333,9 +1333,9 @@ fn compile_search_pattern_with_posix(
                             && syntax_key_matches(*cached_syntax_key, syntax_key)
                     },
                 )?;
-                let entry = cache.remove(index);
-                cache.insert(0, entry.clone());
-                Some(entry.5)
+                // Same MRU relink as the Lisp-pattern cache above.
+                cache[..=index].rotate_right(1);
+                Some(cache[0].5.clone())
             })
         },
     ) {
@@ -1428,14 +1428,15 @@ fn compile_lisp_pattern_with_posix_translation(
     translation: Option<CaseTranslation>,
     syntax: &dyn SyntaxLookup,
 ) -> Result<Rc<CompiledPattern>, String> {
-    let effective_translation = if case_fold {
-        translation.or_else(|| Some(CaseTranslation::standard()))
+    // The standard translation's cache key is a constant (its table is
+    // None), so the cache probe never needs the table built; materializing
+    // it copied a 1KB byte map per call, cache hits included. Build it on
+    // the miss path only.
+    let translation_key = if case_fold {
+        Some(translation.as_ref().map_or(0, CaseTranslation::cache_key))
     } else {
         None
     };
-    let translation_key = effective_translation
-        .as_ref()
-        .map(CaseTranslation::cache_key);
     let syntax_key = syntax.cache_key();
 
     if let Some(cached) = crate::emacs_core::perf_trace::time_op(
@@ -1463,15 +1464,23 @@ fn compile_lisp_pattern_with_posix_translation(
                             && syntax_key_matches(*cached_syntax_key, syntax_key)
                     },
                 )?;
-                let entry = cache.remove(index);
-                cache.insert(0, entry.clone());
-                Some(entry.7)
+                // Exact MRU like GNU's list relink (search.c:245-249): one
+                // prefix rotation, no element clone. remove+insert(clone)
+                // memmoved the whole cache twice and reallocated the entry
+                // (pattern bytes included) on EVERY hit.
+                cache[..=index].rotate_right(1);
+                Some(cache[0].7.clone())
             })
         },
     ) {
         return Ok(cached);
     }
 
+    let effective_translation = if case_fold {
+        translation.or_else(|| Some(CaseTranslation::standard()))
+    } else {
+        None
+    };
     let mut compiled = crate::emacs_core::perf_trace::time_op(
         crate::emacs_core::perf_trace::HotpathOp::RegexCompileMiss,
         || {
