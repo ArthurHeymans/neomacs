@@ -106,7 +106,6 @@ fn fts_p_lower_ampm() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: format-time-string %N (nanoseconds) is emitted literally as \"%N\" instead of the 9-digit fractional seconds."]
 fn divergence_fts_pct_n_nanoseconds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -118,7 +117,6 @@ fn divergence_fts_pct_n_nanoseconds() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: format-time-string %r (locale 12-hour clock) is emitted literally as \"%r\" instead of e.g. \"02:32:48 PM\"."]
 fn divergence_fts_pct_r_12hour() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -130,7 +128,6 @@ fn divergence_fts_pct_r_12hour() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: format-time-string %:z / %::z (colon UTC offset) are emitted literally instead of \"+00:00\" / \"+00:00:00\"."]
 fn divergence_fts_colon_z_offset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -142,7 +139,6 @@ fn divergence_fts_colon_z_offset() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: format-time-string %# swaps case (Mon => mON) where GNU upcases name fields (%#a/%#A/%#B => MON/MONDAY/APRIL)."]
 fn divergence_fts_hash_flag_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -154,7 +150,6 @@ fn divergence_fts_hash_flag_case() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: format-time-string strips the E/O modifier even for combos glibc rejects (%Ed => \"22\"); GNU emits the literal \"%Ed\"."]
 fn divergence_fts_invalid_e_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -166,7 +161,6 @@ fn divergence_fts_invalid_e_combo() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: format-time-string ignores numeric field width (%6Y => \"2024\" not \"002024\", %03H => \"14\" not \"014\"); GNU honors the width and zero/space padding."]
 fn divergence_fts_width_ignored() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

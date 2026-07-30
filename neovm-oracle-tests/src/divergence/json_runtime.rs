@@ -100,7 +100,6 @@ fn json_serialize_nested() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: json-serialize returns a multibyte string in neomacs but a unibyte UTF-8 string in GNU (multibyte-string-p t vs nil; length differs from string-bytes for non-ASCII output)."]
 fn divergence_json_serialize_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

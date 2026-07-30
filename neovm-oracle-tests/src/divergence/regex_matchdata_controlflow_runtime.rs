@@ -80,7 +80,6 @@ fn md_regex_repetition_bounds() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: replace-region-contents rejects a function REPLACE-FN (signals wrong-type-argument expecting string/buffer/vector); GNU calls the function to obtain the replacement buffer/string."]
 fn divergence_replace_region_contents_fn() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

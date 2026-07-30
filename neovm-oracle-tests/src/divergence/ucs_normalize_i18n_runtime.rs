@@ -117,7 +117,6 @@ fn i18_ucs_normalize_idempotent() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: ucs-normalize-NFD-string does not perform canonical decomposition - precomposed chars stay composed (é stays 1 char instead of e + U+0301). NFC composition works, but NFD does not."]
 fn divergence_ucs_normalize_nfd_canonical() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -132,7 +131,6 @@ fn divergence_ucs_normalize_nfd_canonical() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: ucs-normalize-NFKD/NFKC compatibility decomposition is incomplete - superscript ² is not decomposed to \"2\" (though Ⅻ=>XII and ㎏=>kg do work)."]
 fn divergence_ucs_normalize_nfkd_compat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

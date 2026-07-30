@@ -34,7 +34,6 @@ fn bd_bidi_mark_ltr() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: current-bidi-paragraph-direction returns left-to-right for RTL (Hebrew/Arabic) text where GNU detects right-to-left."]
 fn divergence_bidi_paragraph_direction_rtl() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -75,7 +74,6 @@ fn bd_compose_region_auto() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: string-glyph-split splits a base char + combining mark into separate glyphs (e + U+0301 => 2) instead of one grapheme cluster (GNU => 1)."]
 fn divergence_string_glyph_split_grapheme() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

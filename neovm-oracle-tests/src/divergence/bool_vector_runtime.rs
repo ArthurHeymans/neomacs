@@ -34,7 +34,6 @@ fn bool_vector_with_dest() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: bool-vector-union/intersection/not with a nil destination allocate a fresh bool-vector in GNU, but neomacs signals (wrong-type-argument bool-vector-p nil)."]
 fn divergence_bool_vector_set_ops_nil_dest() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

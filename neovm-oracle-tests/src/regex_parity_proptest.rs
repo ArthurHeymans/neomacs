@@ -346,10 +346,10 @@ fn regex_parity_proptest_smoke() {
     assert!(n >= 150, "smoke sweep compared too few cases: {n}");
 }
 
-/// Full ≥50k-case differential sweep.  Ignored by default (spawns GNU many
-/// times); run explicitly with `--run-ignored` and `NEOVM_FORCE_ORACLE_PATH`.
+/// Full ≥50k-case sweep. In snapshot mode this is a structural self-check. All
+/// non-snapshot modes compare every batch with GNU Emacs found on `PATH` or
+/// selected via `NEOVM_FORCE_ORACLE_PATH`.
 #[test]
-#[ignore = "long-running GNU differential; run explicitly with an oracle Emacs"]
 fn regex_parity_proptest_full() {
     if !oracle_prop_enabled() {
         return;

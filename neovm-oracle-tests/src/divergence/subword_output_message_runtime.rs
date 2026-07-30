@@ -129,7 +129,6 @@ fn sw_subword_forward() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: in --batch mode (current-message) returns nil in GNU (the echo area is not maintained in batch) but neomacs returns the text of the last `message`."]
 fn divergence_current_message_batch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

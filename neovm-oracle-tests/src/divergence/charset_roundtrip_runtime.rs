@@ -84,7 +84,6 @@ fn shift_jis() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: decode-coding-string with iso-8859-15 does not attach the `charset` text property; GNU tags decoded chars with (charset iso-8859-15)."]
 fn divergence_decode_iso8859_15_charset_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

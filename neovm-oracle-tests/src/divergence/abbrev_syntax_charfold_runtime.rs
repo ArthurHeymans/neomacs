@@ -135,7 +135,6 @@ fn ab2_syntax_propertize() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: char-fold-to-regexp folds some accented chars but not all - searching \"naive\" does not match \"naïve\" (ï not folded to i), though \"cafe\"=>café (é) works. Incomplete char-fold table."]
 fn divergence_char_fold_accent_incomplete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

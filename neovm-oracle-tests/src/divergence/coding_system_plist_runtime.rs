@@ -63,7 +63,6 @@ fn csplist_variants() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: (coding-system-plist 'no-conversion) omits the :eol-type unix entry (and uses a truncated :docstring) that GNU includes."]
 fn divergence_coding_plist_no_conversion_eol_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

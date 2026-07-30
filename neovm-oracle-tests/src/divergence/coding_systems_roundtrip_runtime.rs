@@ -124,7 +124,6 @@ fn utf7_utf8_auto() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: (coding-system-priority-list t) returns the single highest-priority coding-system symbol in GNU (e.g. utf-8), but neomacs returns a one-element list."]
 fn divergence_coding_priority_list_highestp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

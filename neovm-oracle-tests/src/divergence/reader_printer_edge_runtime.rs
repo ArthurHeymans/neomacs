@@ -182,7 +182,6 @@ fn print_vector_nested() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: a backslash-space inside a string literal is a reader continuation in GNU (both chars dropped: a-bslash-space-b reads as 'ab', length 2) but neomacs keeps the space ('a b', length 3)."]
 fn divergence_read_string_backslash_space() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

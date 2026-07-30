@@ -25,7 +25,6 @@ fn div_f4_mode_line_format_defaults() {
 }
 
 #[test]
-#[ignore = "intentional Neomacs product-branding divergence from GNU (frame title says NEO Emacs, not GNU Emacs)"]
 fn div_f4_frame_title_format_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[

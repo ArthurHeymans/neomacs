@@ -149,7 +149,6 @@ fn cn_seq_split_partition() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: cl-floor/cl-ceiling/cl-truncate require a divisor; a single-arg call signals wrong-type-argument (nil divisor), whereas GNU defaults the divisor to 1 ((cl-floor 7.5) => (7 0.5), (cl-floor 7) => (7 0)). cl-round handles the single-arg case."]
 fn divergence_cl_floor_single_arg() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

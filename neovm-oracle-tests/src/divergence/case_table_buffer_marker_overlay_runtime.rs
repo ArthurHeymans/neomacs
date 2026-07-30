@@ -23,7 +23,6 @@ fn ct_case_fold_table() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: set-case-syntax-pair on a custom case table is ignored by upcase/downcase, which use the standard mapping regardless (a custom { <-> } pairing has no effect; GNU honors it)."]
 fn divergence_case_table_custom_pair() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

@@ -149,7 +149,6 @@ fn coding_multibyte_string_ops() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: detect-coding-string returns 'undecided for clearly UTF-8 multibyte byte sequences where GNU detects 'utf-8."]
 fn divergence_detect_coding_string_utf8() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

@@ -5,8 +5,8 @@
 //! window-sides-vertical, window-sides-slots, window-sides-reversed,
 //! and edge/error cases.
 //!
-//! Known-divergent geometry tests are marked `#[ignore]` with a reason.
-//! They fail because GNU's *batch* frame geometry is internally
+//! Known-divergent geometry tests remain in the default oracle suite.
+//! They differ because GNU's *batch* frame geometry is internally
 //! inconsistent for the menu-bar top margin (`FRAME_TOP_MARGIN`), and
 //! matching it would mean reproducing those artifacts rather than a clean
 //! shape:
@@ -24,9 +24,10 @@
 //! text area; verified against GNU Emacs 31.0.90, frame.h
 //! `FRAME_TOP_MARGIN`).  The structural and kill-buffer side-window
 //! behaviour does match GNU; see the window-tree sibling model in
-//! `neovm-core/src/window/mod.rs`.  Re-enabling these tests requires
-//! implementing GNU's `adjust_frame_size` margin-realization (per-window
-//! `top_line` decoupled from layout + vertical-root overflow).
+//! `neovm-core/src/window/mod.rs`. Resolving the surfaced geometry failures as
+//! GNU parity requires implementing GNU's `adjust_frame_size`
+//! margin-realization (per-window `top_line` decoupled from layout +
+//! vertical-root overflow).
 
 use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
@@ -118,7 +119,6 @@ fn oracle_side_window_display_buffer_right() {
 }
 
 #[test]
-#[ignore = "GNU batch FRAME_TOP_MARGIN geometry artifact (see module docs): vertical-root layouts overflow the frame / internal-root top_line is decoupled from leaf layout; neomacs reports consistent non-overflowing edges. Needs adjust_frame_size margin-realization."]
 fn oracle_side_window_display_buffer_top() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -139,7 +139,6 @@ fn oracle_side_window_display_buffer_top() {
 }
 
 #[test]
-#[ignore = "GNU batch FRAME_TOP_MARGIN geometry artifact (see module docs): vertical-root layouts overflow the frame / internal-root top_line is decoupled from leaf layout; neomacs reports consistent non-overflowing edges. Needs adjust_frame_size margin-realization."]
 fn oracle_side_window_display_buffer_bottom() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -330,7 +329,6 @@ fn oracle_side_window_toggle_after_create_deletes_side_windows() {
 // ---------------------------------------------------------------------------
 
 #[test]
-#[ignore = "GNU batch FRAME_TOP_MARGIN geometry artifact (see module docs): vertical-root layouts overflow the frame / internal-root top_line is decoupled from leaf layout; neomacs reports consistent non-overflowing edges. Needs adjust_frame_size margin-realization."]
 fn oracle_side_window_sides_vertical_left_occupies_full_height() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -352,7 +350,6 @@ fn oracle_side_window_sides_vertical_left_occupies_full_height() {
 }
 
 #[test]
-#[ignore = "GNU batch FRAME_TOP_MARGIN geometry artifact (see module docs): vertical-root layouts overflow the frame / internal-root top_line is decoupled from leaf layout; neomacs reports consistent non-overflowing edges. Needs adjust_frame_size margin-realization."]
 fn oracle_side_window_sides_vertical_right_occupies_full_height() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -437,7 +434,6 @@ fn oracle_side_window_explicit_width_left() {
 }
 
 #[test]
-#[ignore = "GNU batch FRAME_TOP_MARGIN geometry artifact (see module docs): vertical-root layouts overflow the frame / internal-root top_line is decoupled from leaf layout; neomacs reports consistent non-overflowing edges. Needs adjust_frame_size margin-realization."]
 fn oracle_side_window_explicit_height_top() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -1081,7 +1077,6 @@ fn oracle_side_window_deep_mode_line_height_effect_on_offset() {
 }
 
 #[test]
-#[ignore = "GNU batch FRAME_TOP_MARGIN geometry artifact (see module docs): vertical-root layouts overflow the frame / internal-root top_line is decoupled from leaf layout; neomacs reports consistent non-overflowing edges. Needs adjust_frame_size margin-realization."]
 fn oracle_side_window_deep_all_four_sides_edges_compare() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -1281,7 +1276,6 @@ fn oracle_side_window_deep_config_change_hook_toggle_side_windows() {
 // ===========================================================================
 
 #[test]
-#[ignore = "GNU batch FRAME_TOP_MARGIN geometry artifact (see module docs): vertical-root layouts overflow the frame / internal-root top_line is decoupled from leaf layout; neomacs reports consistent non-overflowing edges. Needs adjust_frame_size margin-realization."]
 fn oracle_side_window_deep_sides_vertical_vs_horizontal_dimensions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -1305,7 +1299,6 @@ fn oracle_side_window_deep_sides_vertical_vs_horizontal_dimensions() {
 }
 
 #[test]
-#[ignore = "GNU batch FRAME_TOP_MARGIN geometry artifact (see module docs): vertical-root layouts overflow the frame / internal-root top_line is decoupled from leaf layout; neomacs reports consistent non-overflowing edges. Needs adjust_frame_size margin-realization."]
 fn oracle_side_window_deep_sides_vertical_nil_left_not_full_height() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -1591,7 +1584,6 @@ fn oracle_side_window_deep_window_atom_root_side_window() {
 }
 
 #[test]
-#[ignore = "Flawed oracle: compares a frame pointer address embedded in an error string, which differs between the GNU and neomacs processes."]
 fn oracle_side_window_deep_delete_main_window_with_side_windows() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -1697,7 +1689,6 @@ fn oracle_side_window_deep_split_window_below_side_window() {
 }
 
 #[test]
-#[ignore = "GNU batch FRAME_TOP_MARGIN geometry artifact (see module docs): vertical-root layouts overflow the frame / internal-root top_line is decoupled from leaf layout; neomacs reports consistent non-overflowing edges. Needs adjust_frame_size margin-realization."]
 fn oracle_side_window_deep_window_body_vs_total_dimensions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -2176,7 +2167,6 @@ fn oracle_side_window_deep_window_combination_limit_side() {
 // ===========================================================================
 
 #[test]
-#[ignore = "GNU batch FRAME_TOP_MARGIN geometry artifact (see module docs): vertical-root layouts overflow the frame / internal-root top_line is decoupled from leaf layout; neomacs reports consistent non-overflowing edges. Needs adjust_frame_size margin-realization."]
 fn oracle_side_window_deep_pixel_level_positioning() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -2197,7 +2187,6 @@ fn oracle_side_window_deep_pixel_level_positioning() {
 }
 
 #[test]
-#[ignore = "GNU batch FRAME_TOP_MARGIN geometry artifact (see module docs): vertical-root layouts overflow the frame / internal-root top_line is decoupled from leaf layout; neomacs reports consistent non-overflowing edges. Needs adjust_frame_size margin-realization."]
 fn oracle_side_window_deep_all_four_sides_pixel_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -2338,7 +2327,6 @@ fn oracle_side_window_deep_window_parameters_all_after_create() {
 }
 
 #[test]
-#[ignore = "GNU batch FRAME_TOP_MARGIN geometry artifact (see module docs): vertical-root layouts overflow the frame / internal-root top_line is decoupled from leaf layout; neomacs reports consistent non-overflowing edges. Needs adjust_frame_size margin-realization."]
 fn oracle_side_window_deep_window_inside_edges_comparison() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

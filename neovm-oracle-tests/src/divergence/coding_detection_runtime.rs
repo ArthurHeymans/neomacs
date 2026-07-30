@@ -43,7 +43,6 @@ fn detect_ascii() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: detect-coding-region returns 'undecided for UTF-8 multibyte content where GNU detects 'utf-8 (same root cause as detect-coding-string)."]
 fn divergence_detect_coding_region_utf8() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -58,7 +57,6 @@ fn divergence_detect_coding_region_utf8() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: detect-coding-string returns 'undecided for Latin-1 high-byte content where GNU detects 'iso-latin-1."]
 fn divergence_detect_coding_latin1() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

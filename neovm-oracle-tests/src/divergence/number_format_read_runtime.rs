@@ -210,7 +210,6 @@ fn read_symbols_odd() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: the reader parses trailing-dot integer syntax (1. 42. -7.) as a float in neomacs but GNU reads it as an integer (1. => 1; integerp t vs nil, type-of integer vs float)."]
 fn divergence_read_trailing_dot_integer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

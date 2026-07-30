@@ -76,7 +76,6 @@ fn fts_named_zone() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: format-time-string %:::z (minimal-digits colon UTC offset) and %::z are emitted literally instead of e.g. \"+01\" / \"+01:01:01\"; completes the colon-offset specifier gap."]
 fn divergence_fts_minimal_colon_zone() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

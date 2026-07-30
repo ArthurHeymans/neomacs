@@ -85,7 +85,6 @@ fn terminal_keyboard_coding() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: unencodable-char-position always returns nil (claims every char is encodable); GNU returns the position of the first char a coding system cannot encode (e.g. 4 for a non-ASCII char under us-ascii/iso-8859-1)."]
 fn divergence_unencodable_char_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -101,7 +100,6 @@ fn divergence_unencodable_char_position() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: find-coding-systems-string returns only the utf-8/raw family; GNU returns the full set of capable coding systems, so CJK/iso-2022 systems (iso-2022-jp, chinese-gbk, ...) are missing."]
 fn divergence_find_coding_systems_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -115,7 +113,6 @@ fn divergence_find_coding_systems_string() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: check-coding-systems-region reports no unencodable positions even when a coding system cannot encode the text (us-ascii vs cafe-with-accent); GNU returns (us-ascii POS). Related to unencodable-char-position."]
 fn divergence_check_coding_systems_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -130,7 +127,6 @@ fn divergence_check_coding_systems_region() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: a coding-system alias from define-coding-system-alias is recognized (coding-system-p/-base) but encode/decode through the alias name does not round-trip in neomacs, while GNU's alias works."]
 fn divergence_define_coding_system_alias_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

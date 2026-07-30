@@ -66,6 +66,15 @@ filter = 'package(neovm-oracle-tests) and (test(ucs_normalize) or test(oracle_pr
 threads-required = "num-test-threads"
 slow-timeout = { period = "120s", terminate-after = 1 }
 
+# The full regex sweep evaluates roughly 54k generated cases in 180 release
+# Neomacs subprocesses. It is now part of the default suite, so isolate it from
+# CPU contention and give it enough time to finish while retaining a bounded
+# watchdog.
+[[profile.default.overrides]]
+filter = 'package(neovm-oracle-tests) and test(regex_parity_proptest_full)'
+threads-required = "num-test-threads"
+slow-timeout = { period = "120s", terminate-after = 1 }
+
 # A couple of subprocess probes are timing sensitive rather than divergent:
 # `process_attributes_running_child` reads `process-running-child-p' while a
 # 0.2s child is alive, and `quit_process_sentinel_message' waits (a bounded

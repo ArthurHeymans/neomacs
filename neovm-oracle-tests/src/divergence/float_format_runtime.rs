@@ -142,7 +142,6 @@ fn ff_number_to_string_float() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: format accepts %E and %G (uppercase float conversions) and produces output, whereas GNU signals (error \"Invalid format operation %E\" / %G). neomacs is more permissive than GNU's format here."]
 fn divergence_format_uppercase_e_g() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
