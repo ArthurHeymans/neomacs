@@ -3,6 +3,7 @@ use std::time::Duration;
 use crate::{CachedMelpaOracle, MAGIT_MELPA_PIN};
 use expect_test::Expect;
 
+mod blame;
 mod clone;
 mod formatting;
 mod git;

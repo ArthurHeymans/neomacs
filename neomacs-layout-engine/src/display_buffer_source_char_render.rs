@@ -107,8 +107,6 @@ impl<'a> BufferSourceCharRenderRequest<'a> {
             overlay_context,
         } = state;
         let mut source_render = source_render;
-        let append_position = progress.row_position();
-        let append_geometry = *row_geometry;
 
         if source_item.is_multi_char_text_run()
             && let Some((first, pending)) = source_item
@@ -122,6 +120,32 @@ impl<'a> BufferSourceCharRenderRequest<'a> {
         let (source_step_char, source_end_charpos, source_end_byte_idx, source_item) =
             source_item.into_render_parts();
         let ch = source_step_char.ch();
+
+        // GNU's display iterator consumes an overlay before-string before it
+        // prepares the buffer character at the same position.  That ordering
+        // is load-bearing: an overlay string can contain a newline and advance
+        // the live row.  Keep every row-dependent source-char value below this
+        // boundary so a prepared append can never retain pre-overlay geometry.
+        {
+            let overlay_charpos = progress.charpos();
+            let (x, col) = progress.row_progress_mut().coordinates_mut();
+            self.overlay_context.render_at_text_row(
+                buffer,
+                overlay_charpos,
+                source_render.reborrow(),
+                x,
+                col,
+                row_geometry,
+                cursor_info,
+                hit_rows,
+                hit_row_range,
+                row_y_positions,
+                face_ids,
+            );
+        }
+
+        let append_position = progress.row_position();
+        let append_geometry = *row_geometry;
         source_step_char.record_word_wrap_candidate(word_wrap, &source_render);
 
         let buffer_source_char = source_step_char.source_char(self.params.nobreak_char_display);
@@ -263,24 +287,6 @@ impl<'a> BufferSourceCharRenderRequest<'a> {
         }
         if overflow_outcome.should_continue_buffer_walk() {
             return BufferSourceItemRenderOutcome::ContinueBufferWalk;
-        }
-
-        {
-            let overlay_charpos = progress.charpos();
-            let (x, col) = progress.row_progress_mut().coordinates_mut();
-            self.overlay_context.render_at_text_row(
-                buffer,
-                overlay_charpos,
-                source_render.reborrow(),
-                x,
-                col,
-                row_geometry,
-                cursor_info,
-                hit_rows,
-                hit_row_range,
-                row_y_positions,
-                face_ids,
-            );
         }
 
         let row_position = progress.row_position();

@@ -7816,3 +7816,26 @@ fn internal_default_process_filter_inserts_while_another_buffer_is_read_only() {
             .get_read_only()
     );
 }
+
+#[test]
+fn internal_default_process_filter_uses_a_reaped_process_buffer() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let* ((target (get-buffer-create " *reaped-filter-target*"))
+                  (other (get-buffer-create " *reaped-filter-other*"))
+                  (process
+                   (make-pipe-process
+                    :name "reaped-filter"
+                    :buffer target)))
+             (delete-process process)
+             (with-current-buffer other
+               (setq buffer-read-only t)
+               (internal-default-process-filter process "chunk")
+               (list
+                (with-current-buffer target
+                  (and (string-suffix-p "chunk" (buffer-string)) t))
+                (eq (current-buffer) target))))"#,
+    );
+
+    assert_eq!(result, "OK (t t)");
+}

@@ -14699,6 +14699,97 @@ fn layout_frame_rust_renders_row_start_before_string_at_point_min() {
 }
 
 #[test]
+fn layout_frame_rust_renders_magit_blame_heading_before_string_with_trailing_newline() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let before_string = eval
+        .eval_str(
+            r#"(concat
+                 (propertize "A U Thor             "
+                             'font-lock-face
+                             '(magit-blame-name magit-blame-heading default))
+                 (propertize "2026-07-30 03:48 "
+                             'font-lock-face
+                             '(magit-blame-date magit-blame-heading default))
+                 (propertize "GUI blame verification commit"
+                             'font-lock-face
+                             '(magit-blame-summary magit-blame-heading default))
+                 (propertize "\n"
+                             'font-lock-face
+                             '(magit-blame-heading default)))"#,
+        )
+        .expect("construct Magit blame heading");
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert(
+            "first line from GUI verification\n\
+             second line remains visible\n\
+             third line for blame metadata\n",
+        );
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: buf.point_max_emacs_byte_pos().get(),
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let _ =
+            buf.overlays_mut()
+                .overlay_put(overlay, Value::symbol("before-string"), before_string);
+        buf.goto_emacs_byte_pos(EmacsBytePos::ZERO);
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-magit-blame-heading", 1312, 1254, buf_id);
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("window matrix entry");
+    let rows = enabled_window_row_texts(entry);
+
+    let heading_row = rows
+        .iter()
+        .position(|row| row.contains("A U Thor"))
+        .unwrap_or_else(|| panic!("Magit blame heading should render, rows={rows:?}"));
+    let source_row = rows
+        .iter()
+        .position(|row| row.contains("first line from GUI verification"))
+        .unwrap_or_else(|| {
+            panic!("buffer text should resume after the blame heading row, rows={rows:?}")
+        });
+    assert!(
+        heading_row < source_row,
+        "a trailing newline in the blame heading must advance the buffer text row, rows={rows:?}"
+    );
+}
+
+#[test]
 fn layout_frame_rust_suppresses_left_fringe_display_spec_before_string() {
     // magit attaches an overlay before-string `#("fringe" 0 6 (display
     // (left-fringe magit-fringe-bitmapv fringe)))` to every collapsible section

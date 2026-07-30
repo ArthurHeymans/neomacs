@@ -8374,6 +8374,135 @@ fn adjusted_process_output_point(
     }
 }
 
+/// The two GNU-owned writes performed by the default process callbacks.
+///
+/// The variants deliberately encode the observable current-buffer contract:
+/// calling `internal-default-process-filter` directly leaves the process
+/// buffer current, while the default sentinel restores its caller's buffer.
+/// Keeping that distinction in an enum makes adding a third, accidentally
+/// ambiguous write policy a compile-time decision instead of another boolean.
+enum DefaultProcessBufferInsertion<'a> {
+    Output(&'a LispString),
+    StatusMessage(&'a str),
+}
+
+impl DefaultProcessBufferInsertion<'_> {
+    fn restores_callers_current_buffer(&self) -> bool {
+        matches!(self, Self::StatusMessage(_))
+    }
+
+    fn fallback_byte_len(&self) -> usize {
+        match self {
+            Self::Output(text) => text.sbytes(),
+            Self::StatusMessage(text) => text.len(),
+        }
+    }
+}
+
+/// Insert one default process callback payload at the process marker.
+///
+/// This is the NeoVM counterpart of GNU's process-buffer insertion state
+/// machine in `read_process_output_before_insert` /
+/// `read_process_output_after_insert` and
+/// `internal-default-process-sentinel` (`src/process.c`).  The module owns the
+/// target-buffer switch, read-only override, point adjustment, marker advance,
+/// and callback-specific current-buffer restoration as one deep operation.
+fn insert_default_process_buffer_payload(
+    eval: &mut super::eval::Context,
+    id: ProcessId,
+    insertion: DefaultProcessBufferInsertion<'_>,
+) -> EvalResult {
+    let (buffer, mark) = match eval.processes.get_any(id) {
+        Some(process) => (process.buffer, process.mark),
+        None => return Ok(Value::NIL),
+    };
+    let Some(buffer_id) = buffer.as_buffer_id() else {
+        return Ok(Value::NIL);
+    };
+    if eval.buffers.get(buffer_id).is_none() {
+        return Ok(Value::NIL);
+    }
+
+    let saved_current = insertion
+        .restores_callers_current_buffer()
+        .then(|| eval.buffers.current_buffer_id())
+        .flatten();
+    eval.set_current_buffer_unrecorded(buffer_id)?;
+
+    let insert_pos = process_mark_insert_emacs_byte_pos(&eval.buffers, buffer_id, mark);
+    let saved_point = eval
+        .buffers
+        .get(buffer_id)
+        .map(|buffer| buffer.point_emacs_byte_pos());
+    let saved_read_only = eval
+        .buffers
+        .get(buffer_id)
+        .map(|buffer| buffer.get_read_only());
+
+    if let Some(buffer) = eval.buffers.get_mut(buffer_id) {
+        buffer.set_read_only_value(false);
+    }
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(buffer_id, insert_pos);
+
+    let fallback_byte_len = insertion.fallback_byte_len();
+    match insertion {
+        DefaultProcessBufferInsertion::Output(text) => {
+            let change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
+                &eval.buffers,
+                buffer_id,
+                insert_pos,
+                super::editfns::lisp_string_text_extent(text),
+            )?;
+            super::editfns::signal_before_text_change(eval, change)?;
+            eval.buffers.insert_lisp_string_into_buffer(buffer_id, text);
+            super::editfns::signal_after_text_change(eval, change)?;
+        }
+        DefaultProcessBufferInsertion::StatusMessage(text) => {
+            let _ = eval
+                .buffers
+                .insert_into_buffer_before_markers(buffer_id, text);
+        }
+    }
+
+    let new_mark = eval
+        .buffers
+        .get(buffer_id)
+        .map(|buffer| buffer.point_emacs_byte_pos())
+        .unwrap_or(insert_pos.add_len(EmacsByteLen::new(fallback_byte_len)));
+
+    if let (Some(buffer), Some(read_only)) = (eval.buffers.get_mut(buffer_id), saved_read_only) {
+        buffer.set_read_only_value(read_only);
+    }
+
+    let inserted_len = EmacsByteLen::new(new_mark.get().saturating_sub(insert_pos.get()));
+    if let Some(old_point) = saved_point {
+        let adjusted_point = adjusted_process_output_point(old_point, insert_pos, inserted_len);
+        let _ = eval
+            .buffers
+            .goto_buffer_emacs_byte_pos(buffer_id, adjusted_point);
+    }
+
+    if let Some(process) = eval.processes.get_any_mut(id) {
+        let new_mark_pos = eval
+            .buffers
+            .get(buffer_id)
+            .map(|buffer| Value::fixnum(buffer.emacs_byte_pos_to_lisp_char_pos(new_mark).as_i64()))
+            .unwrap_or(Value::NIL);
+        super::marker::builtin_set_marker_in_buffers(
+            &mut eval.buffers,
+            vec![process.mark, new_mark_pos, process.buffer],
+        )?;
+    }
+
+    if let Some(saved_buffer_id) = saved_current {
+        eval.restore_current_buffer_if_live(saved_buffer_id);
+    }
+
+    Ok(Value::NIL)
+}
+
 /// (internal-default-process-filter PROCESS STRING) -> nil
 ///
 /// When no custom filter is set, insert output into the process's associated
@@ -8393,18 +8522,6 @@ pub(crate) fn builtin_internal_default_process_filter(
         return Ok(Value::NIL);
     }
 
-    // Look up the process buffer and mark.
-    let (buf_id, mark) = match eval.processes.get(id) {
-        Some(proc) => (proc.buffer.as_buffer_id(), proc.mark),
-        None => return Ok(Value::NIL),
-    };
-    let Some(buf_id) = buf_id else {
-        return Ok(Value::NIL);
-    };
-    if eval.buffers.get(buf_id).is_none() {
-        return Ok(Value::NIL);
-    }
-
     // GNU `read_process_output_before_insert` (src/process.c) makes the PROCESS
     // buffer current before touching anything: `Fset_buffer (p->buffer)`. Every
     // check the insertion then runs -- above all the read-only barf in
@@ -8419,73 +8536,7 @@ pub(crate) fn builtin_internal_default_process_filter(
     // GNU does not restore the current buffer here either; its caller
     // (`read_process_output`) unwinds it, which
     // `run_async_process_callback_preserving_state` mirrors.
-    eval.buffers.set_current(buf_id);
-
-    // Get mark position or end of buffer (ZV in GNU terms).
-    let insert_pos = process_mark_insert_emacs_byte_pos(&eval.buffers, buf_id, mark);
-
-    // Save current point, move point to insert position, insert, then restore.
-    let saved_pt = eval.buffers.get(buf_id).map(|b| b.point_emacs_byte_pos());
-    let old_read_only = eval.buffers.get(buf_id).map(|b| b.get_read_only());
-
-    // Temporarily clear read-only so process output can be inserted.
-    if let Some(buf) = eval.buffers.get_mut(buf_id) {
-        buf.set_read_only_value(false);
-    }
-    let _ = eval.buffers.goto_buffer_emacs_byte_pos(buf_id, insert_pos);
-
-    // Insert text at point (which is now at the mark position). GNU inserts
-    // process output through `insert_from_string_1` -> `prepare_to_modify_buffer`,
-    // which fires before/after-change-functions. Mirror that so change trackers
-    // (e.g. `track-changes.el`) stay consistent -- otherwise the buffer size
-    // drifts from the tracker's accounting and Emacs pops a spurious *Warnings*
-    // buffer ("Missing/incorrect calls to 'before/after-change-functions'").
-    let insert_change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
-        &eval.buffers,
-        buf_id,
-        insert_pos,
-        super::editfns::lisp_string_text_extent(&text),
-    )?;
-    super::editfns::signal_before_text_change(eval, insert_change)?;
-    eval.buffers.insert_lisp_string_into_buffer(buf_id, &text);
-    super::editfns::signal_after_text_change(eval, insert_change)?;
-
-    // The new mark is at point after insertion (insert advances point).
-    // If the buffer vanished out from under us the fallback uses text.len()
-    // as an approximation; the live buffer path reads the exact Emacs byte
-    // position after insertion.
-    let new_mark = eval
-        .buffers
-        .get(buf_id)
-        .map(|b| b.point_emacs_byte_pos())
-        .unwrap_or(insert_pos.add_len(EmacsByteLen::new(text.sbytes())));
-
-    // Restore read-only flag.
-    if let (Some(buf), Some(ro)) = (eval.buffers.get_mut(buf_id), old_read_only) {
-        buf.set_read_only_value(ro);
-    }
-
-    // Restore original point, adjusted for the insertion.
-    let text_byte_len = EmacsByteLen::new(new_mark.get().saturating_sub(insert_pos.get()));
-    if let Some(old_pt) = saved_pt {
-        let adjusted_pt = adjusted_process_output_point(old_pt, insert_pos, text_byte_len);
-        let _ = eval.buffers.goto_buffer_emacs_byte_pos(buf_id, adjusted_pt);
-    }
-
-    // Advance the stored process marker.
-    if let Some(proc) = eval.processes.get_mut(id) {
-        let new_mark_pos = eval
-            .buffers
-            .get(buf_id)
-            .map(|b| Value::fixnum(b.emacs_byte_pos_to_lisp_char_pos(new_mark).as_i64()))
-            .unwrap_or(Value::NIL);
-        let _ = super::marker::builtin_set_marker_in_buffers(
-            &mut eval.buffers,
-            vec![proc.mark, new_mark_pos, proc.buffer],
-        )?;
-    }
-
-    Ok(Value::NIL)
+    insert_default_process_buffer_payload(eval, id, DefaultProcessBufferInsertion::Output(&text))
 }
 
 /// (internal-default-process-sentinel PROCESS STRING) -> nil
@@ -8497,12 +8548,10 @@ pub(crate) fn builtin_internal_default_process_sentinel(
     let id = resolve_process_object_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
     let msg = expect_string_strict(&args[1])?;
 
-    let (buffer, mark, name, status_symbol) = match eval.processes.get_any(id) {
-        Some(proc) => (
-            proc.buffer,
-            proc.mark,
-            process_name_runtime(proc.name),
-            ProcessStatusSymbol::from_status_value(proc.status),
+    let (name, status_symbol) = match eval.processes.get_any(id) {
+        Some(process) => (
+            process_name_runtime(process.name),
+            ProcessStatusSymbol::from_status_value(process.status),
         ),
         None => return Err(signal_wrong_type_processp(args[0])),
     };
@@ -8511,62 +8560,12 @@ pub(crate) fn builtin_internal_default_process_sentinel(
         return Ok(Value::NIL);
     }
 
-    let Some(buf_id) = buffer.as_buffer_id() else {
-        return Ok(Value::NIL);
-    };
-    if eval.buffers.get(buf_id).is_none() {
-        return Ok(Value::NIL);
-    }
-
-    let saved_current = eval.buffers.current_buffer_id();
-    let insert_pos = process_mark_insert_emacs_byte_pos(&eval.buffers, buf_id, mark);
-    let saved_pt = eval.buffers.get(buf_id).map(|b| b.point_emacs_byte_pos());
-    let old_read_only = eval.buffers.get(buf_id).map(|b| b.get_read_only());
-
-    eval.set_current_buffer_unrecorded(buf_id)?;
-    if let Some(buf) = eval.buffers.get_mut(buf_id) {
-        buf.set_read_only_value(false);
-    }
-    let _ = eval.buffers.goto_buffer_emacs_byte_pos(buf_id, insert_pos);
-
     let text = format!("\nProcess {name} {msg}");
-    let _ = eval
-        .buffers
-        .insert_into_buffer_before_markers(buf_id, &text);
-
-    let new_mark = eval
-        .buffers
-        .get(buf_id)
-        .map(|b| b.point_emacs_byte_pos())
-        .unwrap_or(insert_pos.add_len(EmacsByteLen::new(text.len())));
-
-    if let (Some(buf), Some(ro)) = (eval.buffers.get_mut(buf_id), old_read_only) {
-        buf.set_read_only_value(ro);
-    }
-
-    let text_byte_len = EmacsByteLen::new(new_mark.get().saturating_sub(insert_pos.get()));
-    if let Some(old_pt) = saved_pt {
-        let adjusted_pt = adjusted_process_output_point(old_pt, insert_pos, text_byte_len);
-        let _ = eval.buffers.goto_buffer_emacs_byte_pos(buf_id, adjusted_pt);
-    }
-
-    if let Some(proc) = eval.processes.get_any_mut(id) {
-        let new_mark_pos = eval
-            .buffers
-            .get(buf_id)
-            .map(|b| Value::fixnum(b.emacs_byte_pos_to_lisp_char_pos(new_mark).as_i64()))
-            .unwrap_or(Value::NIL);
-        super::marker::builtin_set_marker_in_buffers(
-            &mut eval.buffers,
-            vec![proc.mark, new_mark_pos, proc.buffer],
-        )?;
-    }
-
-    if let Some(saved_id) = saved_current {
-        eval.restore_current_buffer_if_live(saved_id);
-    }
-
-    Ok(Value::NIL)
+    insert_default_process_buffer_payload(
+        eval,
+        id,
+        DefaultProcessBufferInsertion::StatusMessage(&text),
+    )
 }
 
 /// (gnutls-boot PROCESS TYPE PROPLIST) -> t or error
