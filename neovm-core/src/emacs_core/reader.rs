@@ -1573,6 +1573,8 @@ pub(crate) fn finish_read_number_in_vm_runtime(
 // 8. completing-read
 // ---------------------------------------------------------------------------
 
+const COMPLETING_READ_MAX_ARGS: usize = 8;
+
 /// `(completing-read PROMPT COLLECTION &optional PREDICATE REQUIRE-MATCH
 ///                    INITIAL-INPUT HIST DEF INHERIT-INPUT-METHOD)`
 ///
@@ -1586,7 +1588,7 @@ pub(crate) fn builtin_completing_read(
 ) -> EvalResult {
     validate_completing_read_arity(&args)?;
     if let Some(function) = completing_read_function_value(eval) {
-        return eval.apply(function, args);
+        return eval.apply(function, completing_read_function_args(args));
     }
 
     if let Some(result) = builtin_completing_read_in_runtime(eval, &args)? {
@@ -1653,8 +1655,17 @@ pub(crate) fn builtin_completing_read_in_runtime(
 
 pub(crate) fn validate_completing_read_arity(args: &[Value]) -> Result<(), Flow> {
     expect_min_args("completing-read", args, 2)?;
-    expect_max_args("completing-read", args, 8)?;
+    expect_max_args("completing-read", args, COMPLETING_READ_MAX_ARGS)?;
     Ok(())
+}
+
+fn completing_read_function_args(mut args: Vec<Value>) -> Vec<Value> {
+    // GNU's fixed-arity Fcompleting_read receives nil for omitted optional
+    // arguments, then calls completing-read-function with all eight values.
+    // Keep that adapter interface stable even though Neomacs builtins receive
+    // only the arguments supplied by the Lisp caller.
+    args.resize(COMPLETING_READ_MAX_ARGS, Value::NIL);
+    args
 }
 
 pub(crate) fn completing_read_function_value(eval: &super::eval::Context) -> Option<Value> {
