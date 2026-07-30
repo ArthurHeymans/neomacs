@@ -116,8 +116,12 @@ pub struct WindowParams {
     pub force_start: bool,
     /// Buffer position just AFTER the last character the previous redisplay
     /// actually displayed, in layout 0-based char coordinates — GNU's
-    /// `BUF_Z (b) - w->window_end_pos`. EXCLUSIVE: point is off the bottom
-    /// exactly when `point >= previous_visible_end`.
+    /// `BUF_Z (b) - w->window_end_pos`.  Positions strictly before this
+    /// exclusive end were visible.  Equality normally denotes the first
+    /// position below the span, except at accessible EOB: the EOB cursor sits
+    /// on that insertion boundary and can still be visible on the final row.
+    /// Callers must defer that boundary case to current-layout cursor-row
+    /// measurement.
     ///
     /// `None` when GNU's `window_end_valid` is clear, i.e. the buffer or the
     /// window changed since that layout and the position describes nothing.

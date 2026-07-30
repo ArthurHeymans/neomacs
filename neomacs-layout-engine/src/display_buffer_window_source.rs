@@ -56,9 +56,7 @@ impl BufferWindowSource {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferWindowSourceRequest {
     requested_window_start: i64,
-    /// Position just AFTER the last character the previous layout displayed
-    /// (EXCLUSIVE), or `None` when no previous layout describes this window.
-    previous_visible_end: Option<i64>,
+    previous_viewport: Option<PreviousViewportEvidence>,
     point_charpos: i64,
     accessible_start: i64,
     accessible_end: i64,
@@ -67,6 +65,31 @@ pub(crate) struct BufferWindowSourceRequest {
     kind: WindowKind,
     scroll_policy: ScrollPolicy,
     scroll_margin: i64,
+}
+
+/// Display evidence retained from the previous accepted layout.
+///
+/// This is deliberately evidence, not a viewport decision: an exclusive
+/// visible end can prove positions before it visible and positions after it
+/// hidden, but equality at accessible EOB is ambiguous.  The EOB cursor lives
+/// at the insertion boundary after the last character, so only the current
+/// rendered cursor row can decide whether it is still visible.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PreviousViewportEvidence {
+    visible_end_exclusive: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PreviousViewportPointRelation {
+    /// No accepted previous layout describes this viewport.
+    Unknown,
+    /// Point is strictly inside the previous visible buffer span.
+    Visible,
+    /// Point equals both the previous exclusive end and accessible EOB.
+    /// Defer to the current layout's exact cursor-row measurement.
+    NeedsMeasuredLayout,
+    /// Point is at or below the first position outside the previous span.
+    Below { visible_end_exclusive: i64 },
 }
 
 impl BufferWindowSourceRequest {
@@ -100,7 +123,11 @@ impl BufferWindowSourceRequest {
     ) -> Self {
         Self {
             requested_window_start,
-            previous_visible_end,
+            previous_viewport: previous_visible_end.map(|visible_end_exclusive| {
+                PreviousViewportEvidence {
+                    visible_end_exclusive,
+                }
+            }),
             point_charpos,
             accessible_start,
             accessible_end,
@@ -109,6 +136,22 @@ impl BufferWindowSourceRequest {
             kind,
             scroll_policy,
             scroll_margin,
+        }
+    }
+
+    fn previous_viewport_point_relation(self) -> PreviousViewportPointRelation {
+        let Some(previous) = self.previous_viewport else {
+            return PreviousViewportPointRelation::Unknown;
+        };
+        let end = previous.visible_end_exclusive;
+        if self.point_charpos < end {
+            PreviousViewportPointRelation::Visible
+        } else if self.point_charpos == end && self.point_charpos == self.accessible_end {
+            PreviousViewportPointRelation::NeedsMeasuredLayout
+        } else {
+            PreviousViewportPointRelation::Below {
+                visible_end_exclusive: end,
+            }
         }
     }
 
@@ -282,12 +325,15 @@ impl BufferWindowSourceRequest {
         }
 
         let bottom_row = last_usable_row(self.max_rows, self.scroll_margin);
-        let (point_row, bounded) = match self.previous_visible_end {
+        let (point_row, bounded) = match self.previous_viewport_point_relation() {
             // Point was on screen last time. Any scroll it still needs is one
             // the bottom scroll-margin asks for, and only real display rows can
             // measure that — leave it to the visibility retry.
-            Some(end) if self.point_charpos < end => return None,
-            Some(end) => {
+            PreviousViewportPointRelation::Visible
+            | PreviousViewportPointRelation::NeedsMeasuredLayout => return None,
+            PreviousViewportPointRelation::Below {
+                visible_end_exclusive: end,
+            } => {
                 let (extra_lines, bounded) = count_lines_bounded(
                     end,
                     self.point_charpos,
@@ -296,7 +342,7 @@ impl BufferWindowSourceRequest {
                 );
                 (self.max_rows as i64 + extra_lines, bounded)
             }
-            None => count_lines_bounded(
+            PreviousViewportPointRelation::Unknown => count_lines_bounded(
                 window_start,
                 self.point_charpos,
                 bottom_row + self.scroll_policy.search_limit_lines(),

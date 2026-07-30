@@ -12739,6 +12739,75 @@ fn layout_frame_rust_keeps_visible_eob_cursor_on_short_trailing_newline_buffer()
 }
 
 #[test]
+fn layout_frame_rust_keeps_visible_eob_cursor_across_redisplay_with_scroll_step() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let text = "M-x describe";
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert(text);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(text.len()));
+        buf.set_buffer_local("scroll-step", Value::fixnum(1));
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-visible-eob-scroll-step", 640, 480, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    {
+        let frame = eval.frame_manager().get(frame_id).expect("frame");
+        let window = frame.find_window(selected_window).expect("selected window");
+        match window {
+            neovm_core::window::Window::Leaf { window_start, .. } => {
+                assert_eq!(
+                    *window_start,
+                    LispCharPos1::ONE,
+                    "first redisplay should keep the visible EOB cursor at the buffer top"
+                );
+            }
+            other => panic!("expected leaf window, got {other:?}"),
+        }
+    }
+
+    // The second pass has a valid previous `window-end`.  Its value is
+    // exclusive and therefore equals point at EOB, but GNU still keeps the EOB
+    // cursor on the already-rendered row instead of invoking `scroll-step`.
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .redisplay_snapshot(selected_window)
+        .expect("display snapshot");
+    let window = frame.find_window(selected_window).expect("selected window");
+    assert!(
+        snapshot.point_for_buffer_pos(LispCharPos1::ONE).is_some(),
+        "repeated redisplay should keep the prompt/input row visible, points={:?}, rows={:?}",
+        snapshot.points,
+        snapshot.rows
+    );
+    match window {
+        neovm_core::window::Window::Leaf { window_start, .. } => {
+            assert_eq!(
+                *window_start,
+                LispCharPos1::ONE,
+                "visible EOB must not be mistaken for an off-screen cursor by scroll-step"
+            );
+        }
+        other => panic!("expected leaf window, got {other:?}"),
+    }
+}
+
+#[test]
 fn layout_frame_rust_keeps_default_scratch_message_at_top_when_eob_is_visible() {
     let mut eval = Context::new();
     let buf_id = eval
