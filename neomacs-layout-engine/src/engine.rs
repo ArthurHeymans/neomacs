@@ -124,6 +124,42 @@ impl LayoutPurpose {
     }
 }
 
+fn resize_mini_windows_mode_for_buffer(
+    evaluator: &neovm_core::emacs_core::Context,
+    buffer_id: neovm_core::buffer::BufferId,
+) -> ResizeMiniWindowsMode {
+    let value = evaluator
+        .buffer_manager()
+        .get(buffer_id)
+        .and_then(|buffer| buffer.buffer_local_value("resize-mini-windows"))
+        .or_else(|| {
+            evaluator
+                .obarray()
+                .symbol_value("resize-mini-windows")
+                .copied()
+        });
+    ResizeMiniWindowsMode::from_lisp_value(value.as_ref())
+}
+
+fn uses_adhoc_minibuffer_resize_scroll(
+    evaluator: &neovm_core::emacs_core::Context,
+    buffer_id: neovm_core::buffer::BufferId,
+) -> bool {
+    evaluator
+        .buffer_manager()
+        .get(buffer_id)
+        .and_then(|buffer| {
+            buffer.buffer_local_value("redisplay-adhoc-scroll-in-resize-mini-windows")
+        })
+        .or_else(|| {
+            evaluator
+                .obarray()
+                .symbol_value("redisplay-adhoc-scroll-in-resize-mini-windows")
+                .copied()
+        })
+        .is_none_or(|value| !value.is_nil())
+}
+
 #[cfg(test)]
 #[inline]
 fn cursor_point_columns(text: &[u8], byte_idx: usize, col: i32, params: &WindowParams) -> usize {
@@ -753,6 +789,7 @@ impl LayoutEngine {
             .get(&frame_id)
             .cloned()
             .unwrap_or_default();
+        let mut minibuffer_measurement_needs_begv = query_window.is_none();
 
         let (
             frame_params,
@@ -793,6 +830,24 @@ impl LayoutEngine {
                 .iter()
                 .map(|params| resolve_window_display_source_params(evaluator, params))
                 .collect();
+            if minibuffer_measurement_needs_begv
+                && let Some(mini_params) = window_params_list
+                    .iter_mut()
+                    .find(|params| params.is_minibuffer())
+            {
+                let buffer_id = neovm_core::buffer::BufferId(mini_params.buffer_id);
+                if resize_mini_windows_mode_for_buffer(evaluator, buffer_id).should_grow()
+                    && uses_adhoc_minibuffer_resize_scroll(evaluator, buffer_id)
+                {
+                    // GNU resize_mini_window starts its measurement at BEGV.
+                    // If all content fits, this remains the accepted start; if
+                    // it overflows, the visibility convergence below chooses
+                    // the tail start once and subsequent frame retries keep it.
+                    mini_params.window_start = mini_params.buffer_begv;
+                    mini_params.previous_visible_end = None;
+                    mini_params.force_start = false;
+                }
+            }
             let main_area_bottom = window_params_list
                 .iter()
                 .filter(|params| !params.is_minibuffer())
@@ -1045,6 +1100,21 @@ impl LayoutEngine {
                 self.frame_output
                     .render_window_info(WindowFrameInfoRenderRequest::new(params, metadata));
 
+                let position_publication = if query_window.is_some() {
+                    WindowPositionPublication::SynchronousQueryEnd
+                } else if params.is_minibuffer() {
+                    let buffer_id = neovm_core::buffer::BufferId(params.buffer_id);
+                    if resize_mini_windows_mode_for_buffer(evaluator, buffer_id).should_grow()
+                        && uses_adhoc_minibuffer_resize_scroll(evaluator, buffer_id)
+                    {
+                        WindowPositionPublication::RedisplayMinibufferMeasurement
+                    } else {
+                        WindowPositionPublication::Redisplay
+                    }
+                } else {
+                    WindowPositionPublication::Redisplay
+                };
+
                 // Simplified layout for this window (no face resolution, no overlays)
                 let window_layout = self.layout_window_rust(
                     evaluator,
@@ -1062,11 +1132,7 @@ impl LayoutEngine {
                     plan.cursor_only,
                     plan.scroll,
                     plan.is_edit,
-                    if query_window.is_some() {
-                        WindowPositionPublication::SynchronousQueryEnd
-                    } else {
-                        WindowPositionPublication::Redisplay
-                    },
+                    position_publication,
                     &face_attempt,
                 );
                 let accepted_layout_box = match window_layout {
@@ -1095,6 +1161,9 @@ impl LayoutEngine {
                         continue 'frame_layout;
                     }
                 };
+                if params.is_minibuffer() {
+                    minibuffer_measurement_needs_begv = false;
+                }
 
                 if let Some(snapshot) = self
                     .window_snapshots
@@ -1170,17 +1239,10 @@ impl LayoutEngine {
                 // (xdisp.c:13296,13318), so a buffer-local binding in the
                 // mini-window's buffer takes effect. Read buffer-local-
                 // then-global from that buffer, not the raw global.
-                let resize_policy = evaluator
-                    .buffer_manager()
-                    .get(neovm_core::buffer::BufferId(mini_params.buffer_id))
-                    .and_then(|buffer| buffer.buffer_local_value("resize-mini-windows"))
-                    .or_else(|| {
-                        evaluator
-                            .obarray()
-                            .symbol_value("resize-mini-windows")
-                            .copied()
-                    });
-                let resize_mode = ResizeMiniWindowsMode::from_lisp_value(resize_policy.as_ref());
+                let resize_mode = resize_mini_windows_mode_for_buffer(
+                    evaluator,
+                    neovm_core::buffer::BufferId(mini_params.buffer_id),
+                );
 
                 // GNU `resize_mini_window` measures the mini-window's
                 // CONTENT height via `move_it_to (ZV)` (xdisp.c:13340) and

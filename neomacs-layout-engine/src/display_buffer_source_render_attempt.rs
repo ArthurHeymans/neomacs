@@ -40,7 +40,27 @@ pub(crate) struct BufferSourceRenderAttemptContext<'a, 'face> {
 pub(crate) enum WindowPositionPublication {
     #[default]
     Redisplay,
+    /// Redisplay's preliminary GNU `resize_mini_window` measurement.
+    ///
+    /// The row walk is lifted to `max-mini-window-height`. If it reaches ZV,
+    /// point visibility relative to the old physical one-line allocation must
+    /// not scroll the start chosen by the resize measurement.
+    RedisplayMinibufferMeasurement,
     SynchronousQueryEnd,
+}
+
+impl WindowPositionPublication {
+    /// A logical `window-end` query walks from the live start marker exactly.
+    ///
+    /// Redisplay may resolve a different source start to keep point visible;
+    /// GNU `Fwindow_end` does not run that viewport policy.
+    pub(crate) const fn uses_exact_window_start(self) -> bool {
+        matches!(self, Self::SynchronousQueryEnd)
+    }
+
+    pub(crate) const fn keeps_complete_minibuffer_measurement_start(self) -> bool {
+        matches!(self, Self::RedisplayMinibufferMeasurement)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -235,7 +255,8 @@ impl BufferSourceRedisplayPublishRequest {
         let buffer_z_char = LispCharPos1::from_one_based_usize(self.accessible_end_lisp_char);
         let buffer_z_byte = EmacsBytePos::new(self.accessible_end_emacs_byte);
         match self.publication {
-            WindowPositionPublication::Redisplay => {
+            WindowPositionPublication::Redisplay
+            | WindowPositionPublication::RedisplayMinibufferMeasurement => {
                 evaluator.publish_redisplay_window_positions(
                     self.frame_id,
                     self.window_id,

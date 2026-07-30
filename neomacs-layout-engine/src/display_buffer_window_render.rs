@@ -182,7 +182,7 @@ where
 
         let source_request =
             BufferWindowSourceRequest::from_window_params(source_params, geometry.max_rows);
-        let text_source = if scroll.is_some() {
+        let text_source = if scroll.is_some() || position_publication.uses_exact_window_start() {
             source_request.read_exact_into(&buf_access, text_buf)
         } else {
             source_request.read_into(&buf_access, text_buf)

@@ -4066,6 +4066,8 @@ impl Context {
         obarray.set_symbol_value("image-cache-eviction-delay", Value::fixnum(300));
         // Display engine C variables (xdisp.c)
         obarray.set_symbol_value("global-mode-string", Value::NIL);
+        obarray.set_symbol_value("redisplay-adhoc-scroll-in-resize-mini-windows", Value::T);
+        obarray.make_special("redisplay-adhoc-scroll-in-resize-mini-windows");
         // Fringe C variable (fringe.c `syms_of_fringe`: `Vfringe_bitmaps = Qnil`).
         // GNU binds this to nil; `lisp/fringe.el` then guards its standard-bitmap
         // seeding and `fringe-indicator-alist`/`fringe-cursor-alist` defaults on

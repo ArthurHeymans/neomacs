@@ -16348,7 +16348,7 @@ fn synchronous_window_end_query_preserves_redisplay_only_window_state() {
     assert!(before.2, "set-window-start should arm force_start");
 
     let mut engine = LayoutEngine::new();
-    engine
+    let end_with_point_before_start = engine
         .query_window_end(&mut eval, frame_id, window_id)
         .expect("exact query");
 
@@ -16371,6 +16371,25 @@ fn synchronous_window_end_query_preserves_redisplay_only_window_state() {
         after, before,
         "GNU Fwindow_end UPDATE walks from w->start but does not consume \
          force_start, rewrite the start marker, or move point"
+    );
+
+    let start = neovm_core::buffer::LispCharPos1::new(240);
+    let start_byte = eval
+        .buffer_manager()
+        .get(buffer_id)
+        .expect("buffer")
+        .lisp_pos_to_emacs_byte_pos(start);
+    eval.buffer_manager_mut()
+        .goto_buffer_emacs_byte_pos(buffer_id, start_byte)
+        .expect("move selected buffer point to window start");
+    eval.set_window_point_for_redisplay(frame_id, window_id, start);
+    let end_with_point_at_start = engine
+        .query_window_end(&mut eval, frame_id, window_id)
+        .expect("control query");
+    assert_eq!(
+        end_with_point_before_start, end_with_point_at_start,
+        "GNU Fwindow_end UPDATE walks from w->start, so its answer is \
+         independent of point visibility"
     );
 }
 
@@ -16410,6 +16429,72 @@ fn active_minibuffer_grows_for_multiline_content_tty() {
 #[test]
 fn active_minibuffer_grows_for_multiline_content_gui() {
     assert_active_minibuffer_grows_for_multiline_content(true);
+}
+
+#[test]
+fn active_minibuffer_that_grows_to_fit_resets_start_to_point_min() {
+    let mut eval = Context::new();
+    eval.obarray_mut()
+        .set_symbol_value("resize-mini-windows", Value::symbol("grow-only"));
+    eval.obarray_mut()
+        .set_symbol_value("max-mini-window-height", Value::make_float(0.25));
+
+    let root_buffer = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("root buffer")
+        .id();
+    let minibuffer = eval.buffer_manager_mut().create_buffer(" *Minibuf-1*");
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("minibuffer-start-after-grow", 160, 50, root_buffer);
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        frame.shrink_mini_window();
+    }
+    let minibuffer_window = eval
+        .activate_minibuffer_window_for_buffer(minibuffer, LispString::from_utf8("Oracle: "), None)
+        .expect("activate minibuffer")
+        .expect("minibuffer window");
+    eval.eval_form(Value::list(vec![
+        Value::symbol("select-window"),
+        Value::make_window(minibuffer_window.0),
+    ]))
+    .expect("select active minibuffer");
+
+    let mut engine = LayoutEngine::new_without_font_metrics();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(minibuffer)
+            .expect("minibuffer");
+        for _ in 0..8 {
+            buffer.insert("candidate-好β-abcdefghij\n");
+        }
+        let eob = buffer.point_max_emacs_byte_pos();
+        buffer.goto_emacs_byte_pos(eob);
+    }
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let start = match eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .find_window(minibuffer_window)
+        .expect("active minibuffer")
+    {
+        neovm_core::window::Window::Leaf { window_start, .. } => *window_start,
+        other => panic!("expected leaf, got {other:?}"),
+    };
+    assert_eq!(
+        start,
+        neovm_core::buffer::LispCharPos1::ONE,
+        "GNU resize_mini_window sets w->start to BEGV whenever all content \
+         fits below max-mini-window-height"
+    );
 }
 
 #[test]

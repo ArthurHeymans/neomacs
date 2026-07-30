@@ -913,7 +913,17 @@ impl BufferSourceOutputSetup {
         );
         retry_plan.log_visibility_adjustments();
 
-        if let Some(window_start) = retry_plan.should_retry(remaining_visibility_retries) {
+        let source_exhausted = walk_setup.charpos >= source.accessible_end();
+        let retry_budget = if self
+            .position_publication
+            .keeps_complete_minibuffer_measurement_start()
+            && source_exhausted
+        {
+            0
+        } else {
+            remaining_visibility_retries
+        };
+        if let Some(window_start) = retry_plan.should_retry(retry_budget) {
             // GNU `w->force_start` (redisplay_window force_start branch): an
             // explicitly scrolled/set start is kept, and POINT moves into the
             // window instead of the start moving back to point.
