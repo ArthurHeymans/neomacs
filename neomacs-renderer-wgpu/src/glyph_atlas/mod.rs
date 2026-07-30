@@ -11,7 +11,7 @@ pub use types::{
 };
 
 use neomacs_display_protocol::types::FaceId;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::{HashMap, HashSet, hash_map::DefaultHasher};
 use std::hash::{Hash, Hasher};
 
@@ -332,6 +332,14 @@ pub struct WgpuGlyphAtlas {
     // per-glyph hash was ~a fifth of the SipHash cost in a Doom scroll profile.
     atlas_cache: FxHashMap<CachedGlyphKey, CachedAtlasGlyph>,
     atlas_composed_cache: FxHashMap<CachedComposedGlyphKey, CachedAtlasGlyph>,
+    // Keys proven to be ordinary whitespace (no atlas entry by design).
+    // Without this memo every space glyph re-ran the missing-primary-ascii
+    // probe — two table lookups plus font_system.get_font plus a swash
+    // charmap query — on every draw (~thousands per frame). The verdict is
+    // stable per key: for ASCII it depends only on the face's
+    // default_resolved_font_id, which glyph_font_identity hashes into the
+    // key. Cleared with the other caches (resolved-id reuse, metrics, DPI).
+    whitespace_skip: FxHashSet<CachedGlyphKey>,
     atlas_pages: GlyphAtlasPages,
     atlas_config: GlyphAtlasConfig,
     font_system: FontSystem,
@@ -438,6 +446,7 @@ impl WgpuGlyphAtlas {
         Self {
             atlas_cache: FxHashMap::default(),
             atlas_composed_cache: FxHashMap::default(),
+            whitespace_skip: FxHashSet::default(),
             atlas_pages: GlyphAtlasPages::new(atlas_config),
             atlas_config,
             font_system: FontSystem::new(),
@@ -1410,6 +1419,7 @@ impl WgpuGlyphAtlas {
         );
         self.atlas_cache.clear();
         self.atlas_composed_cache.clear();
+        self.whitespace_skip.clear();
         self.atlas_pages.clear();
         self.cached_char_width = None;
         self.cached_font_ascent = None;
@@ -1540,6 +1550,7 @@ impl WgpuGlyphAtlas {
             self.scale_factor = scale_factor;
             self.atlas_cache.clear();
             self.atlas_composed_cache.clear();
+            self.whitespace_skip.clear();
             self.atlas_pages.clear();
             tracing::info!(
                 "Glyph atlas: scale factor -> {}, cache cleared",
@@ -2088,6 +2099,36 @@ impl WgpuGlyphAtlas {
 
         let c =
             char::from_u32(key.charcode).ok_or(GlyphAtlasError::InvalidCharCode(key.charcode))?;
+        let enable_subpixel = matches!(subpixel, SubpixelRequest::Enabled);
+        // Keep the ordinary-whitespace fast rejection. U+0020 is exceptional
+        // only when GNU's primary-ASCII policy leaves it missing: that case
+        // draws the missing-glyph box directly. Normal spaces never shape or
+        // allocate an atlas entry — so the verdict is memoized per key, or
+        // every space in every frame re-runs the font probe.
+        let whitespace_result = if c.is_whitespace() {
+            if self.whitespace_skip.contains(&cache_key) {
+                return Err(GlyphAtlasError::Whitespace);
+            }
+            match self.try_fast_single_char_glyph(c, face) {
+                Some(SingleCharGlyph::MissingPrimaryAscii { advance_width }) => {
+                    let face = face.ok_or(GlyphAtlasError::RasterizeFailed)?;
+                    Some(self.rasterize_missing_primary_ascii(advance_width, face))
+                }
+                _ => {
+                    // Memoize ASCII only: its resolved font is
+                    // face.default_resolved_font_id, which the key's
+                    // font_identity hashes. Non-ASCII whitespace resolves
+                    // through the per-frame face-id-keyed char-font table,
+                    // which the key does not capture.
+                    if c.is_ascii() {
+                        self.whitespace_skip.insert(cache_key);
+                    }
+                    return Err(GlyphAtlasError::Whitespace);
+                }
+            }
+        } else {
+            None
+        };
         tracing::debug!(
             target: "glyph_atlas_invalidate",
             charcode = key.charcode,
@@ -2100,22 +2141,6 @@ impl WgpuGlyphAtlas {
             cache_len = self.atlas_cache.len(),
             "single-glyph atlas MISS"
         );
-        let enable_subpixel = matches!(subpixel, SubpixelRequest::Enabled);
-        // Keep the ordinary-whitespace fast rejection. U+0020 is exceptional
-        // only when GNU's primary-ASCII policy leaves it missing: that case
-        // draws the missing-glyph box directly. Normal spaces never shape or
-        // allocate an atlas entry.
-        let whitespace_result = if c.is_whitespace() {
-            match self.try_fast_single_char_glyph(c, face) {
-                Some(SingleCharGlyph::MissingPrimaryAscii { advance_width }) => {
-                    let face = face.ok_or(GlyphAtlasError::RasterizeFailed)?;
-                    Some(self.rasterize_missing_primary_ascii(advance_width, face))
-                }
-                _ => return Err(GlyphAtlasError::Whitespace),
-            }
-        } else {
-            None
-        };
         let result = match whitespace_result {
             Some(result) => result,
             None => self

@@ -1155,6 +1155,14 @@ impl RenderApp {
             mini.faces = frame.faces.clone();
             mini.background = frame.background;
             mini.background_alpha = frame.background_alpha;
+            // Carry the parent's default glyph metrics: a metric-less frame
+            // makes render_frame_glyphs fall back to invented defaults, and a
+            // default-metric change clears the whole glyph atlas — so a bare
+            // mini-frame silently evicted every cached glyph on each
+            // filled-box cursor composite (defeating this path's "the glyph
+            // is warm in the atlas" premise) and again on the next real frame.
+            mini.font_pixel_size = frame.font_pixel_size;
+            mini.char_height = frame.char_height;
             for glyph in &frame.glyphs {
                 if glyph.slot_id() == Some(cursor.slot_id) {
                     mini.glyphs.push(glyph.clone());

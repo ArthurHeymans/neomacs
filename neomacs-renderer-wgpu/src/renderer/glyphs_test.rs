@@ -227,16 +227,30 @@ fn frame_default_glyph_metrics_use_frame_font_and_line_height() {
     frame.font_pixel_size = 27.0;
     frame.char_height = 33.0;
 
-    assert_eq!(frame_default_glyph_metrics(&frame), (27.0, 33.0));
+    assert_eq!(frame_default_glyph_metrics(&frame), Some((27.0, 33.0)));
 }
 
 #[test]
-fn frame_default_glyph_metrics_fall_back_to_sane_values() {
+fn frame_default_glyph_metrics_none_without_font_size() {
+    // A frame without a resolved font size must not produce invented
+    // metrics: set_metrics clears the whole glyph atlas on a default-metric
+    // change, so a fabricated fallback from a synthetic frame (e.g. a
+    // filled-box cursor mini-frame) would evict every cached glyph twice.
     let mut frame = FrameGlyphBuffer::new();
     frame.font_pixel_size = f32::NAN;
     frame.char_height = 0.0;
 
-    let (font_size, line_height) = frame_default_glyph_metrics(&frame);
+    assert_eq!(frame_default_glyph_metrics(&frame), None);
+}
+
+#[test]
+fn frame_default_glyph_metrics_derive_line_height_from_font_size() {
+    let mut frame = FrameGlyphBuffer::new();
+    frame.font_pixel_size = 14.0;
+    frame.char_height = 0.0;
+
+    let (font_size, line_height) =
+        frame_default_glyph_metrics(&frame).expect("real font size yields metrics");
     assert_eq!(font_size, 14.0);
     assert!((line_height - 16.8).abs() < 0.001);
 }

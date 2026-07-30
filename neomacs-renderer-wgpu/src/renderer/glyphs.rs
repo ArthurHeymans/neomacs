@@ -447,20 +447,24 @@ fn sample_gradient_color(gradient: &Gradient, bounds: &Rect, x: f32, y: f32) -> 
     }
 }
 
-fn frame_default_glyph_metrics(frame_glyphs: &FrameGlyphBuffer) -> (f32, f32) {
-    let font_size =
-        if frame_glyphs.font_pixel_size.is_finite() && frame_glyphs.font_pixel_size > 0.0 {
-            frame_glyphs.font_pixel_size
-        } else {
-            14.0
-        };
+/// Default glyph metrics carried by a frame, or None when the frame has no
+/// resolved font metrics. Callers must NOT substitute invented defaults: a
+/// default-metric change clears the whole glyph atlas, so letting a
+/// metric-less frame (e.g. a synthetic overlay frame) overwrite a real
+/// default with a guess evicts every cached glyph twice — once for the
+/// guess, once when the next real frame restores the truth.
+fn frame_default_glyph_metrics(frame_glyphs: &FrameGlyphBuffer) -> Option<(f32, f32)> {
+    if !(frame_glyphs.font_pixel_size.is_finite() && frame_glyphs.font_pixel_size > 0.0) {
+        return None;
+    }
+    let font_size = frame_glyphs.font_pixel_size;
     let line_height = if frame_glyphs.char_height.is_finite() && frame_glyphs.char_height > 0.0 {
         frame_glyphs.char_height
     } else {
         font_size * 1.2
     };
 
-    (font_size, line_height.max(font_size))
+    Some((font_size, line_height.max(font_size)))
 }
 
 pub(super) fn subpixel_foreground_color(bg: Color, fg: Color, blend: f32) -> [f32; 4] {
@@ -1266,8 +1270,11 @@ impl WgpuRenderer {
 
         log_face_debug_summary(face_debug_call_id, frame_glyphs, faces);
 
-        let (default_font_size, default_line_height) = frame_default_glyph_metrics(frame_glyphs);
-        glyph_atlas.set_metrics(default_font_size, default_line_height);
+        if let Some((default_font_size, default_line_height)) =
+            frame_default_glyph_metrics(frame_glyphs)
+        {
+            glyph_atlas.set_metrics(default_font_size, default_line_height);
+        }
 
         self.refresh_frame_animation_state(frame_glyphs);
         if trace_face_debug_enabled() {
