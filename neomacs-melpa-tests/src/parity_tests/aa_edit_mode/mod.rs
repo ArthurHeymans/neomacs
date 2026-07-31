@@ -1,9 +1,12 @@
 use std::time::Duration;
 
-use crate::{AA_EDIT_MODE_MELPA_PIN, CachedMelpaOracle, OracleBatchCase};
+use crate::{AA_EDIT_MODE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in `workflows` use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod workflows;
 
@@ -82,13 +85,8 @@ pub(crate) fn assert_aa_edit_mode_parity(form: &str, expected: Expect) {
     expected.assert_eq(&report.gnu_emacs.to_string());
 }
 
-/// Multi-probe batch for `assert_aa_edit_mode_parity` cases (2a).
-pub(crate) fn assert_aa_edit_mode_batch(cases: &[(&str, &str, bool, Expect)]) {
+/// Multi-probe batch from structured [`ParityBatchCase`] constructors.
+pub(crate) fn assert_aa_edit_mode_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
-        aa_edit_mode_oracle(),
-        &name,
-        "aa_edit_mode_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(aa_edit_mode_oracle(), &name, "aa-edit-mode", cases);
 }

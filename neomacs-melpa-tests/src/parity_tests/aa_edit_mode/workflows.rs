@@ -1,17 +1,17 @@
+//! aa-edit-mode parity: one dual-editor process, many named case constructors.
+//!
+//! Each `fn …_case()` owns its Elisp probe and `expect!` snapshot. The single
+//! `#[test]` only lists those constructors so the process model stays one
+//! Neomacs + one GNU Emacs process for the whole package surface.
+
 use expect_test::expect;
 
-use super::assert_aa_edit_mode_batch;
+use super::{ParityBatchCase, assert_aa_edit_mode_batch};
 
-/// All aa-edit-mode workflows in one dual-editor process pair (multi-probe batch).
-///
-/// Setup (`package-initialize` + load + prelude) runs once per editor; each case
-/// writes distinct sandbox paths so file-system side effects do not collide.
-#[test]
-fn aa_edit_mode_public_surface_batch() {
-    assert_aa_edit_mode_batch(&[
-        (
-            "opens_shift_jis_mlt_as_art_buffer",
-            r##"(let* ((path
+fn opens_shift_jis_mlt_as_art_buffer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "opens_shift_jis_mlt_as_art_buffer",
+        r##"(let* ((path
         (aa-edit-test-write-mlt "aa gallery/opening scene.mlt" "[SPLIT]\n"))
        (digest (aa-edit-test-file-sha256 path))
        (buffer (find-file-noselect path)))
@@ -41,14 +41,17 @@ fn aa_edit_mode_public_surface_batch() {
            (get-text-property (match-beginning 0) 'charset))
          (equal digest (aa-edit-test-file-sha256 path))))
     (kill-buffer buffer)))"##,
-            true,
-            expect![[
-                r#"OK ("opening scene.mlt" aa-edit-mode "（´д｀）" text-mode japanese-shift-jis-unix t t "^\\[SPLIT]" t navi2ch-mona16-face t 62 "　　　（´д｀）\n　＿ノ　　ヽ、＿\n[SPLIT]\nやる夫「ＡＡだお」\n　　∧＿∧\n　（　´∀｀）\n[SPLIT]\nおわり\n" 1 nil japanese-jisx0208 japanese-jisx0208 japanese-jisx0208 t)"#
-            ]],
-        ),
-        (
-            "page_commands_walk_split_panels",
-            r##"(let ((buffer
+        true,
+        expect![[
+            r#"OK ("opening scene.mlt" aa-edit-mode "（´д｀）" text-mode japanese-shift-jis-unix t t "^\\[SPLIT]" t navi2ch-mona16-face t 62 "　　　（´д｀）\n　＿ノ　　ヽ、＿\n[SPLIT]\nやる夫「ＡＡだお」\n　　∧＿∧\n　（　´∀｀）\n[SPLIT]\nおわり\n" 1 nil japanese-jisx0208 japanese-jisx0208 japanese-jisx0208 t)"#
+        ]],
+    )
+}
+
+fn page_commands_walk_split_panels() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "page_commands_walk_split_panels",
+        r##"(let ((buffer
        (find-file-noselect
         (aa-edit-test-write-mlt "aa gallery/panels.mlt" "[SPLIT]\n"))))
   (unwind-protect
@@ -84,14 +87,17 @@ fn aa_edit_mode_public_surface_batch() {
                 (point-max)
                 (buffer-modified-p))))
     (kill-buffer buffer)))"##,
-            true,
-            expect![[
-                r#"OK ((1 26 58 63 58 1) ((1 19 "　　　（´д｀）\n　＿ノ　　ヽ、＿\n") (27 51 "やる夫「ＡＡだお」\n　　∧＿∧\n　（　´∀｀）\n") (59 63 "おわり\n")) 62 1 63 nil)"#
-            ]],
-        ),
-        (
-            "saves_appended_panel_as_shift_jis",
-            r##"(let* ((path (aa-edit-test-write-mlt "saving/story.mlt" "[SPLIT]\n"))
+        true,
+        expect![[
+            r#"OK ((1 26 58 63 58 1) ((1 19 "　　　（´д｀）\n　＿ノ　　ヽ、＿\n") (27 51 "やる夫「ＡＡだお」\n　　∧＿∧\n　（　´∀｀）\n") (59 63 "おわり\n")) 62 1 63 nil)"#
+        ]],
+    )
+}
+
+fn saves_appended_panel_as_shift_jis() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "saves_appended_panel_as_shift_jis",
+        r##"(let* ((path (aa-edit-test-write-mlt "saving/story.mlt" "[SPLIT]\n"))
        (original (aa-edit-test-file-sha256 path))
        (buffer (find-file-noselect path)))
   (unwind-protect
@@ -118,14 +124,17 @@ fn aa_edit_mode_public_surface_batch() {
              (list buffer-file-coding-system
                    (buffer-substring-no-properties (point-min) (point-max)))))))
     (kill-buffer buffer)))"##,
-            true,
-            expect![[
-                r#"OK (t nil japanese-shift-jis-unix 81 nil t 131 (("story.mlt" . 131) ("story.mlt~" . 102)) (japanese-shift-jis-unix "　　　（´д｀）\n　＿ノ　　ヽ、＿\n[SPLIT]\nやる夫「ＡＡだお」\n　　∧＿∧\n　（　´∀｀）\n[SPLIT]\nおわり\n[SPLIT]\nおまけ（´・ω・｀）\n"))"#
-            ]],
-        ),
-        (
-            "customized_delimiter_page_navigation",
-            r##"(let* ((text
+        true,
+        expect![[
+            r#"OK (t nil japanese-shift-jis-unix 81 nil t 131 (("story.mlt" . 131) ("story.mlt~" . 102)) (japanese-shift-jis-unix "　　　（´д｀）\n　＿ノ　　ヽ、＿\n[SPLIT]\nやる夫「ＡＡだお」\n　　∧＿∧\n　（　´∀｀）\n[SPLIT]\nおわり\n[SPLIT]\nおまけ（´・ω・｀）\n"))"#
+        ]],
+    )
+}
+
+fn customized_delimiter_page_navigation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "customized_delimiter_page_navigation",
+        r##"(let* ((text
         (concat "　（＾ω＾）\n"
                 "=====\n"
                 "本文に[SPLIT]と書いても区切らない\n"
@@ -161,14 +170,17 @@ fn aa_edit_mode_public_surface_batch() {
                (buffer-substring-no-properties (point-min) (point-max))))
            (buffer-size))))
     (kill-buffer buffer)))"##,
-            true,
-            expect![[
-                r#"OK ("^=====$" "^=====$" "^\\[SPLIT]" t (1 13 40) "　（＾ω＾）\n" "おしまい\n" 45)"#
-            ]],
-        ),
-        (
-            "claims_mlt_files_and_leaves_other_suffixes",
-            r##"(list
+        true,
+        expect![[
+            r#"OK ("^=====$" "^=====$" "^\\[SPLIT]" t (1 13 40) "　（＾ω＾）\n" "おしまい\n" 45)"#
+        ]],
+    )
+}
+
+fn claims_mlt_files_and_leaves_other_suffixes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "claims_mlt_files_and_leaves_other_suffixes",
+        r##"(list
  (assoc "\\.mlt\\'" auto-mode-alist)
  auto-mode-case-fold
  (mapcar
@@ -188,14 +200,17 @@ fn aa_edit_mode_public_surface_batch() {
     "routing/SCENE.MLT"
     "routing/scene.mlt.txt"
     "routing/mlt")))"##,
-            true,
-            expect![[
-                r#"OK (("\\.mlt\\'" . aa-edit-mode) t (("scene.mlt" aa-edit-mode "（´д｀）" t t) ("SCENE.MLT" aa-edit-mode "（´д｀）" t t) ("scene.mlt.txt" text-mode "Text" nil nil) ("mlt" fundamental-mode "Fundamental" nil nil)))"#
-            ]],
-        ),
-        (
-            "follows_navi2ch_mona_face_configuration",
-            r##"(let ((path (aa-edit-test-write-file "faces/scene.mlt" "　（´д｀）\n")))
+        true,
+        expect![[
+            r#"OK (("\\.mlt\\'" . aa-edit-mode) t (("scene.mlt" aa-edit-mode "（´д｀）" t t) ("SCENE.MLT" aa-edit-mode "（´д｀）" t t) ("scene.mlt.txt" text-mode "Text" nil nil) ("mlt" fundamental-mode "Fundamental" nil nil)))"#
+        ]],
+    )
+}
+
+fn follows_navi2ch_mona_face_configuration() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "follows_navi2ch_mona_face_configuration",
+        r##"(let ((path (aa-edit-test-write-file "faces/scene.mlt" "　（´д｀）\n")))
   (cl-flet ((open-face (setting)
               (let ((navi2ch-mona-face-variable setting))
                 (let ((buffer (find-file-noselect path)))
@@ -213,10 +228,22 @@ fn aa_edit_mode_public_surface_batch() {
      (open-face 'my-own-aa-face)
      (open-face '(:family "IPAMonaPGothic" :height 120))
      (default-value 'navi2ch-mona-face-variable))))"##,
-            true,
-            expect![[
-                r#"OK (t (t) (t navi2ch-mona16-face t aa-edit-mode) (t my-own-aa-face t aa-edit-mode) (t (:family "IPAMonaPGothic" :height 120) t aa-edit-mode) t)"#
-            ]],
-        ),
+        true,
+        expect![[
+            r#"OK (t (t) (t navi2ch-mona16-face t aa-edit-mode) (t my-own-aa-face t aa-edit-mode) (t (:family "IPAMonaPGothic" :height 120) t aa-edit-mode) t)"#
+        ]],
+    )
+}
+
+/// One nextest case → one Neomacs process + one GNU Emacs process; six probes inside.
+#[test]
+fn aa_edit_mode_public_surface_batch() {
+    assert_aa_edit_mode_batch(&[
+        opens_shift_jis_mlt_as_art_buffer(),
+        page_commands_walk_split_panels(),
+        saves_appended_panel_as_shift_jis(),
+        customized_delimiter_page_navigation(),
+        claims_mlt_files_and_leaves_other_suffixes(),
+        follows_navi2ch_mona_face_configuration(),
     ]);
 }
