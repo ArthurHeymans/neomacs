@@ -9153,6 +9153,41 @@ fn unread_command_events_is_bound_to_nil_at_startup() {
 }
 
 #[test]
+fn completion_in_region_mode_map_has_gnu_navigation_bindings_after_startup() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one(
+        r#"(mapcar
+             (lambda (key)
+               (lookup-key completion-in-region-mode-map (kbd key)))
+             '("M-?" "TAB" "M-<up>" "M-<down>" "M-RET"))"#,
+    );
+
+    assert_eq!(
+        result,
+        "OK (completion-help-at-point completion-at-point minibuffer-previous-completion minibuffer-next-completion minibuffer-choose-completion)"
+    );
+}
+
+#[test]
+fn completion_list_mode_map_has_gnu_navigation_bindings_after_startup() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one(
+        r#"(list
+             (eq (keymap-parent completion-list-mode-map) special-mode-map)
+             (mapcar
+              (lambda (key)
+                (lookup-key completion-list-mode-map (kbd key)))
+              '("RET" "<up>" "<down>" "TAB" "<backtab>"
+                "M-<up>" "M-<down>" "M-RET" "z" "n" "p" "M-g M-c")))"#,
+    );
+
+    assert_eq!(
+        result,
+        "OK (t (choose-completion previous-line-completion next-line-completion next-completion previous-completion minibuffer-previous-completion minibuffer-next-completion minibuffer-choose-completion kill-current-buffer next-completion previous-completion switch-to-minibuffer))"
+    );
+}
+
+#[test]
 fn emacs_copyright_is_bound_at_startup() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(

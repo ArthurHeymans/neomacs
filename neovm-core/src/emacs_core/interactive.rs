@@ -28,9 +28,10 @@ use super::keymap::{
     command_remapping_lookup_in_lisp_keymap as keymap_command_remapping_lookup_in_lisp_keymap,
     command_remapping_normalize_target as keymap_command_remapping_normalize_target,
     current_active_maps_for_position, current_active_maps_for_position_read_only, get_keyelt,
-    get_keymap_in_obarray, is_list_keymap, key_event_to_emacs_event, list_keymap_for_each_binding,
-    lookup_keymap_with_partial, minor_mode_key_binding_in_context, resolve_active_key_binding,
-    where_is_keymaps_in_context,
+    get_keymap_in_obarray, is_list_keymap, key_binding_apply_remap_in_active_maps,
+    key_event_to_emacs_event, list_keymap_for_each_binding,
+    lookup_key_in_keymaps_in_obarray_runtime, lookup_keymap_with_partial,
+    minor_mode_key_binding_in_context, resolve_active_key_binding, where_is_keymaps_in_context,
 };
 use super::symbol::Obarray;
 use super::value::*;
@@ -3201,6 +3202,24 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
             // global bindings outrank earlier active maps.
             seqs.append(&mut remapped_sequences);
             remapped_sequences = seqs;
+            continue;
+        }
+
+        // GNU `Fwhere_is_internal` verifies every reverse-lookup candidate
+        // through `shadow_lookup`, which calls `lookup-key` with autoloading
+        // enabled.  Besides rejecting bindings shadowed by a higher-precedence
+        // map, this evaluates `menu-item :filter` properties.  A conditional
+        // binding whose filter returns nil must therefore not be advertised by
+        // `substitute-command-keys`.
+        let visible_binding =
+            lookup_key_in_keymaps_in_obarray_runtime(eval, &keymaps, &sequence, false)?;
+        let visible_binding =
+            if remapped && !visible_binding.is_nil() && !visible_binding.is_fixnum() {
+                key_binding_apply_remap_in_active_maps(eval, &keymaps, visible_binding, false)?
+            } else {
+                visible_binding
+            };
+        if !binding_matches_definition(&visible_binding, &definition) {
             continue;
         }
 

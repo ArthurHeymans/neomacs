@@ -4201,8 +4201,6 @@ impl Context {
     fn seed_reader_keyboard_variables(
         obarray: &mut Obarray,
         standard_syntax_table: Value,
-        completion_in_region_mode_map: Value,
-        completion_list_mode_map: Value,
         minibuffer_local_map: Value,
     ) {
         obarray.set_symbol_value("inhibit-debugger", Value::NIL);
@@ -4351,11 +4349,6 @@ impl Context {
             "completion-setup-hook",
             Value::list(vec![Value::symbol("completion-setup-function")]),
         );
-        obarray.set_symbol_value(
-            "completion-in-region-mode-map",
-            completion_in_region_mode_map,
-        );
-        obarray.set_symbol_value("completion-list-mode-map", completion_list_mode_map);
         obarray.set_symbol_value("completion-list-mode-hook", Value::NIL);
         obarray.set_symbol_value(
             "completion-ignored-extensions",
@@ -5361,8 +5354,6 @@ impl Context {
             })
             .unwrap_or_else(|| "./".to_string());
         // Create all keymaps as Emacs-compatible cons-list values
-        let completion_in_region_mode_map = make_sparse_list_keymap();
-        let completion_list_mode_map = make_sparse_list_keymap();
         let minibuffer_local_map = make_sparse_list_keymap();
         // Keep only the base minibuffer map here. GNU Lisp defines
         // `read-expression-map` / `read--expression-map` itself in simple.el via
@@ -5435,8 +5426,6 @@ impl Context {
         Self::seed_reader_keyboard_variables(
             &mut obarray,
             standard_syntax_table,
-            completion_in_region_mode_map,
-            completion_list_mode_map,
             minibuffer_local_map,
         );
         // ---- C-level bootstrap variables required by loadup.el files ----

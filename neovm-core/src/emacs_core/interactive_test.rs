@@ -4871,6 +4871,19 @@ fn where_is_internal_accepts_list_of_keymaps() {
 }
 
 #[test]
+fn where_is_internal_skips_menu_item_disabled_by_filter() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m "\r"
+               '(menu-item "" ignore :filter (lambda (_command) nil)))
+             (define-key m "\M-\r" 'ignore)
+             (key-description (where-is-internal 'ignore (list m) t)))"#,
+    );
+    assert_eq!(result, r#"OK "M-RET""#);
+}
+
+#[test]
 fn where_is_internal_keymap_type_errors() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(
