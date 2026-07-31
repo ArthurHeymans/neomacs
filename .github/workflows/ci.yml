@@ -49,7 +49,9 @@ jobs:
           components: rustfmt
 
       - name: cargo fmt
-        run: cargo fmt --all --check
+        run: |
+          cargo fmt --all --check
+          cargo fmt --manifest-path neovm-core/fuzz/Cargo.toml --check
 
   cargo-deny:
     name: cargo deny
@@ -491,3 +493,53 @@ jobs:
 
       - name: Install unmodified Doom with Neomacs
         run: ./scripts/test-doom-install.sh
+
+  regex-fuzz:
+    name: regex differential fuzzing (linux x86_64)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+      TMPDIR: ${{ github.workspace }}/tmp
+    steps:
+      - *checkout
+      - *prepare_workspace_tmp
+      - *install_linux_deps
+
+      - name: Install nightly Rust
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --version 0.13.2 --locked
+
+      - name: Restore evolving fuzz corpora
+        uses: actions/cache@v4
+        with:
+          path: neovm-core/fuzz/corpus
+          key: regex-fuzz-corpus-${{ github.run_id }}
+          restore-keys: |
+            regex-fuzz-corpus-
+
+      - name: Fuzz Pike VM against the backtracker
+        run: |
+          cargo +nightly fuzz run regex_pike_vm \
+            --fuzz-dir neovm-core/fuzz -- \
+            -max_total_time=300 -max_len=512 -timeout=10
+
+      - name: Fuzz search optimizations against exhaustive scanning
+        run: |
+          cargo +nightly fuzz run regex_search_optimizations \
+            --fuzz-dir neovm-core/fuzz -- \
+            -max_total_time=300 -max_len=512 -timeout=10
+
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regex-fuzz-crashes-${{ github.run_id }}
+          path: neovm-core/fuzz/artifacts
+          if-no-files-found: ignore
+          retention-days: 30

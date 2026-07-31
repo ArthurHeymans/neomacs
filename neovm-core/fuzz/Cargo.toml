@@ -1,0 +1,32 @@
+[package]
+name = "neovm-core-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = { version = "0.4", features = ["arbitrary-derive"] }
+neovm-core = { path = "..", default-features = false, features = ["fuzzing"] }
+
+[[bin]]
+name = "regex_pike_vm"
+path = "fuzz_targets/regex_pike_vm.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "regex_search_optimizations"
+path = "fuzz_targets/regex_search_optimizations.rs"
+test = false
+doc = false
+bench = false
+
+# Keep libFuzzer/nightly-only dependencies outside the production workspace
+# dependency graph and Cargo.lock.
+[workspace]
+members = ["."]
