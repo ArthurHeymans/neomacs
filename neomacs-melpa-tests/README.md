@@ -25,7 +25,8 @@ phase-specific failures.
   to GNU Emacs and Neomacs. No third-party package payload is tracked by Git.
 - Multi-probe batches (`CachedPackageOracle::run_batch`) run many named Elisp
   probes in one GNU Emacs process and one Neomacs process (setup once per
-  editor; cases keep separate expect-test snapshots). Package `a` is the pilot.
+  editor; cases keep separate expect-test snapshots). Pilots: packages `a` and
+  `aa-edit-mode`.
 - `src/parity_tests/dash/` uses 103 ordinary Rust `#[test]` functions.
   Each case isolates one API family and covers normal, empty, boundary,
   mutation, evaluation-count, or signal behavior. Together they exercise the
