@@ -27,7 +27,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::emacs_core::{emacs_char, syntax::SyntaxClass};
+use crate::emacs_core::{emacs_char, syntax::SyntaxClass, value::Value};
 use regex_automata::util::prefilter::Prefilter as RaPrefilter;
 use regex_automata::{MatchKind, Span};
 use smallvec::SmallVec;
@@ -3307,6 +3307,98 @@ pub(crate) enum SyntaxCacheKey {
     Table { id: usize, epoch: u64 },
 }
 
+/// GNU's category-aware policy for boundaries between two word constituents.
+///
+/// `regex-emacs.c` delegates this decision to `WORD_BOUNDARY_P`, which reads
+/// `char-script-table`, `word-combining-categories`, and
+/// `word-separating-categories`.  Keep those Lisp values at the matcher
+/// boundary instead of reducing them to Unicode ranges so dynamic bindings and
+/// user mutations retain their GNU-visible effect.
+#[derive(Clone, Copy)]
+pub(crate) struct WordBoundaryLookup {
+    char_script_table: Option<Value>,
+    word_combining_categories: Value,
+    word_separating_categories: Value,
+}
+
+impl Default for WordBoundaryLookup {
+    fn default() -> Self {
+        Self {
+            char_script_table: None,
+            word_combining_categories: Value::NIL,
+            word_separating_categories: Value::NIL,
+        }
+    }
+}
+
+impl WordBoundaryLookup {
+    pub(crate) fn new(
+        char_script_table: Option<Value>,
+        word_combining_categories: Value,
+        word_separating_categories: Value,
+    ) -> Self {
+        Self {
+            char_script_table,
+            word_combining_categories,
+            word_separating_categories,
+        }
+    }
+
+    fn script_at(&self, c: char) -> Value {
+        self.char_script_table
+            .and_then(|table| crate::emacs_core::chartable::ct_lookup(&table, c as i64).ok())
+            .unwrap_or(Value::NIL)
+    }
+
+    fn category_pair_matches(pair: Value, c1: char, c2: char, syntax: &dyn SyntaxLookup) -> bool {
+        if !pair.is_cons() {
+            return false;
+        }
+
+        let first = pair.cons_car();
+        let second = pair.cons_cdr();
+        let first_matches = first.is_nil()
+            || first.as_fixnum().is_some_and(|category| {
+                let Ok(category @ 0x20..=0x7e) = u8::try_from(category) else {
+                    return false;
+                };
+                syntax.char_has_category(c1, category) && !syntax.char_has_category(c2, category)
+            });
+        let second_matches = second.is_nil()
+            || second.as_fixnum().is_some_and(|category| {
+                let Ok(category @ 0x20..=0x7e) = u8::try_from(category) else {
+                    return false;
+                };
+                !syntax.char_has_category(c1, category) && syntax.char_has_category(c2, category)
+            });
+        first_matches && second_matches
+    }
+
+    fn boundary_between(&self, c1: char, c2: char, syntax: &dyn SyntaxLookup) -> bool {
+        // GNU `WORD_BOUNDARY_P` never separates two ASCII/Latin-1 word
+        // constituents, even if their script-table entries differ.
+        if (c1 as u32) <= 0xff && (c2 as u32) <= 0xff {
+            return false;
+        }
+
+        let same_script = self.script_at(c1) == self.script_at(c2);
+        let mut categories = if same_script {
+            self.word_separating_categories
+        } else {
+            self.word_combining_categories
+        };
+        let default_result = !same_script;
+
+        while categories.is_cons() {
+            if Self::category_pair_matches(categories.cons_car(), c1, c2, syntax) {
+                return !default_result;
+            }
+            categories = categories.cons_cdr();
+        }
+        default_result
+    }
+}
+
 pub(crate) trait SyntaxLookup {
     /// Return the syntax class of character `c` in the current syntax table.
     fn char_syntax(&self, c: char) -> SyntaxClass;
@@ -3324,6 +3416,12 @@ pub(crate) trait SyntaxLookup {
     /// Return true if character `c` belongs to category `cat`.
     fn char_has_category(&self, c: char, cat: u8) -> bool;
 
+    /// Return true when two adjacent word constituents have a GNU word
+    /// boundary between them because of their scripts/categories.
+    fn word_boundary_between(&self, _c1: char, _c2: char) -> bool {
+        false
+    }
+
     /// Cache identity of this lookup (see [`SyntaxCacheKey`]).  Used by
     /// the front-end pattern caches to key `used_syntax` entries by
     /// syntax table, mirroring GNU `compile_pattern`.
@@ -3340,6 +3438,7 @@ pub(crate) struct DefaultSyntaxLookup;
 pub(crate) struct BufferSyntaxLookup {
     pub syntax_table: crate::emacs_core::syntax::SyntaxTable,
     pub category_table: Option<crate::emacs_core::value::Value>,
+    pub word_boundary: WordBoundaryLookup,
 }
 
 impl SyntaxLookup for DefaultSyntaxLookup {
@@ -3370,6 +3469,10 @@ impl SyntaxLookup for BufferSyntaxLookup {
                 crate::emacs_core::category::char_has_category_in_table(table, c, cat).ok()
             })
             .unwrap_or_else(|| default_char_has_category(c, cat))
+    }
+
+    fn word_boundary_between(&self, c1: char, c2: char) -> bool {
+        self.word_boundary.boundary_between(c1, c2, self)
     }
 
     fn cache_key(&self) -> SyntaxCacheKey {
@@ -3926,17 +4029,19 @@ fn match_categoryspec_at(
     if has != negate { Some(len) } else { None }
 }
 
-/// Is the char at `pos` a word constituent?  (`false` past the ends.)
+/// Character and syntax class at `pos`.  Keeping the character lets GNU word
+/// boundaries distinguish adjacent word constituents from different scripts.
 #[inline]
-fn re_char_is_word(
+fn re_char_and_syntax(
     text: &[u8],
     pos: usize,
     target_multibyte: bool,
     syntax: &dyn SyntaxLookup,
-) -> bool {
-    re_text_char(text, pos, target_multibyte)
-        .map(|(c, _)| syntax.char_syntax_at(regex_syntax_char(c), pos) == SyntaxClass::Word)
-        .unwrap_or(false)
+) -> Option<(char, SyntaxClass)> {
+    re_text_char(text, pos, target_multibyte).map(|(c, _)| {
+        let c = regex_syntax_char(c);
+        (c, syntax.char_syntax_at(c, pos))
+    })
 }
 
 /// Is the char at `pos` a word OR symbol constituent?  (`false` past the ends.)
@@ -3975,11 +4080,18 @@ fn assert_word_boundary(
     if d == 0 || d == text.len() {
         return true;
     }
-    let prev_word = re_prev_char_start(text, d, target_multibyte)
-        .map(|p| re_char_is_word(text, p, target_multibyte, syntax))
-        .unwrap_or(false);
-    let curr_word = re_char_is_word(text, d, target_multibyte, syntax);
-    prev_word != curr_word
+    let previous = re_prev_char_start(text, d, target_multibyte)
+        .and_then(|p| re_char_and_syntax(text, p, target_multibyte, syntax));
+    let current = re_char_and_syntax(text, d, target_multibyte, syntax);
+    match (previous, current) {
+        (Some((c1, SyntaxClass::Word)), Some((c2, SyntaxClass::Word))) => {
+            syntax.word_boundary_between(c1, c2)
+        }
+        (Some((_, previous)), Some((_, current))) => {
+            (previous == SyntaxClass::Word) != (current == SyntaxClass::Word)
+        }
+        _ => false,
+    }
 }
 
 /// `\<` word beginning.
@@ -3990,11 +4102,20 @@ fn assert_word_beg(
     target_multibyte: bool,
     syntax: &dyn SyntaxLookup,
 ) -> bool {
-    let prev_word = re_prev_char_start(text, d, target_multibyte)
-        .map(|p| re_char_is_word(text, p, target_multibyte, syntax))
-        .unwrap_or(false);
-    let curr_word = re_char_is_word(text, d, target_multibyte, syntax);
-    !prev_word && curr_word
+    let Some((c2, SyntaxClass::Word)) = re_char_and_syntax(text, d, target_multibyte, syntax)
+    else {
+        return false;
+    };
+    let Some(previous) = re_prev_char_start(text, d, target_multibyte)
+        .and_then(|p| re_char_and_syntax(text, p, target_multibyte, syntax))
+    else {
+        return true;
+    };
+    match previous {
+        (_, class) if class != SyntaxClass::Word => true,
+        (c1, SyntaxClass::Word) => syntax.word_boundary_between(c1, c2),
+        _ => false,
+    }
 }
 
 /// `\>` word end.
@@ -4005,11 +4126,22 @@ fn assert_word_end(
     target_multibyte: bool,
     syntax: &dyn SyntaxLookup,
 ) -> bool {
-    let prev_word = re_prev_char_start(text, d, target_multibyte)
-        .map(|p| re_char_is_word(text, p, target_multibyte, syntax))
-        .unwrap_or(false);
-    let curr_word = re_char_is_word(text, d, target_multibyte, syntax);
-    prev_word && !curr_word
+    let Some(previous) = re_prev_char_start(text, d, target_multibyte)
+        .and_then(|p| re_char_and_syntax(text, p, target_multibyte, syntax))
+    else {
+        return false;
+    };
+    let (c1, SyntaxClass::Word) = previous else {
+        return false;
+    };
+    let Some(current) = re_char_and_syntax(text, d, target_multibyte, syntax) else {
+        return true;
+    };
+    match current {
+        (_, class) if class != SyntaxClass::Word => true,
+        (c2, SyntaxClass::Word) => syntax.word_boundary_between(c1, c2),
+        _ => false,
+    }
 }
 
 /// `\_<` symbol beginning.

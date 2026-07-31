@@ -3554,11 +3554,13 @@ impl Context {
                 let category_table = Some(
                     crate::emacs_core::category::active_category_table_for_buffer(current_buffer)?,
                 );
+                let word_boundary = builtins::search::current_word_boundary_lookup(self);
                 if builtins::search::builtin_string_match_p_with_case_fold(
                     false,
                     None,
                     syntax_table.as_ref(),
                     category_table,
+                    word_boundary,
                     &[entry, message],
                 )?
                 .as_fixnum()

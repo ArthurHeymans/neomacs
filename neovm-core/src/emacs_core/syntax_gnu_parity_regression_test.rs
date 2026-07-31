@@ -188,6 +188,62 @@ fn regexp_syntax_class_search_ignores_properties_when_lookup_is_disabled() {
 }
 
 #[test]
+fn regexp_word_boundaries_separate_word_constituents_from_different_scripts() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (list (string-match "\\<my" "変数名myVariable")
+              (string-match "名\\>" "変数名myVariable")
+              (string-match "\\bmy" "変数名myVariable")
+              (string-match "\\Bmy" "変数名myVariable")
+              (string-match "\\<字" "漢字")
+              (string-match "\\<my" "abcmy"))
+        "#,
+    );
+    assert_eq!(result, "OK (3 2 3 nil nil nil)");
+}
+
+#[test]
+fn buffer_regexp_word_boundaries_separate_word_constituents_from_different_scripts() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (with-temp-buffer
+          (insert "変数名myVariable")
+          (goto-char (point-min))
+          (list (re-search-forward "\\<my" nil t)
+                (progn
+                  (goto-char (point-min))
+                  (re-search-forward "名\\>" nil t))
+                (progn
+                  (goto-char 4)
+                  (looking-at "\\bmy"))))
+        "#,
+    );
+    assert_eq!(result, "OK (6 4 t)");
+}
+
+#[test]
+fn regexp_word_boundaries_honor_script_and_category_overrides() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (list
+         (string-match "\\<カ" "あカ")
+         (let ((word-separating-categories nil))
+           (string-match "\\<カ" "あカ"))
+         (let ((word-combining-categories
+                (cons (cons ?C ?a) word-combining-categories)))
+           (string-match "\\<my" "名my"))
+         (let ((char-script-table (copy-sequence char-script-table)))
+           (set-char-table-range char-script-table ?m 'han)
+           (string-match "\\<my" "名my")))
+        "#,
+    );
+    assert_eq!(result, "OK (1 nil nil nil)");
+}
+
+#[test]
 fn syntax_independent_regexp_does_not_trigger_propertization() {
     crate::test_utils::init_test_tracing();
     let result = crate::test_utils::runtime_startup_eval_one(
