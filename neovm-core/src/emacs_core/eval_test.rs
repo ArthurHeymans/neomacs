@@ -843,6 +843,58 @@ fn recursive_edit_without_input_receiver_still_runs_noninteractive_top_level() {
 }
 
 #[test]
+fn outer_command_loop_leaves_exit_unmatched_inside_keyboard_macro() {
+    crate::test_utils::init_test_tracing();
+
+    let mut ev = Context::new();
+    ev.set_variable("noninteractive", Value::T);
+    let top_level = crate::emacs_core::value_reader::read_all(
+        r#"(progn
+             (setq neo-caught-exit nil
+                   neo-continued-after-macro nil)
+             (fset 'command-execute
+                   (lambda (command &optional _record _keys _special)
+                     (funcall command)))
+             (fset 'neo-throw-exit
+                   (lambda ()
+                     (interactive)
+                     (setq neo-caught-exit
+                           (condition-case err
+                               (throw 'exit nil)
+                             (error (list (car err) (cdr err)))))))
+             (let ((global (make-sparse-keymap)))
+               (use-global-map global)
+               (define-key global "a" 'neo-throw-exit)
+               (execute-kbd-macro "a")
+               (setq neo-continued-after-macro t))
+             nil)"#,
+        &test_ob(),
+    )
+    .expect("parse top-level form")
+    .into_iter()
+    .next()
+    .expect("top-level form");
+    ev.set_variable("top-level", top_level);
+
+    let result = ev.recursive_edit();
+
+    assert!(result.is_ok(), "batch recursive edit should exit cleanly");
+    assert_eq!(
+        ev.eval_symbol("neo-caught-exit")
+            .expect("command should record the caught no-catch signal"),
+        Value::list(vec![
+            Value::symbol("no-catch"),
+            Value::list(vec![Value::symbol("exit"), Value::NIL]),
+        ])
+    );
+    assert_eq!(
+        ev.eval_symbol("neo-continued-after-macro")
+            .expect("top-level should continue after the macro"),
+        Value::T
+    );
+}
+
+#[test]
 fn clear_top_level_eval_state_discards_stale_named_call_cache_entries() {
     crate::test_utils::init_test_tracing();
 

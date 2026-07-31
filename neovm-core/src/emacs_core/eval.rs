@@ -6353,16 +6353,23 @@ impl Context {
             self.command_loop.recursive_depth += 1;
         }
 
-        // Register catch tag for 'exit (mirrors keyboard.c catch handler).
-        let exit_tag = Value::symbol("exit");
-        self.push_condition_frame(ConditionFrame::Catch {
-            tag: exit_tag,
-            resume: ResumeTarget::CommandLoopExit,
-        });
+        // GNU `command_loop` installs its `exit` catch only for a recursive
+        // command loop or an active minibuffer (`command_loop_level > 0 ||
+        // minibuf_level > 0`).  The outermost loop must leave `exit`
+        // unmatched, so `(throw 'exit ...)` there signals `no-catch`.
+        let catches_exit = self.recursive_command_loop_depth() > 0 || self.minibuffers.depth() > 0;
+        if catches_exit {
+            self.push_condition_frame(ConditionFrame::Catch {
+                tag: Value::symbol("exit"),
+                resume: ResumeTarget::CommandLoopExit,
+            });
+        }
 
         let result = self.command_loop_inner();
 
-        self.pop_condition_frame();
+        if catches_exit {
+            self.pop_condition_frame();
+        }
         if increment_depth {
             self.command_loop.recursive_depth -= 1;
         }
@@ -6373,7 +6380,9 @@ impl Context {
         match result {
             Ok(val) => Ok(val),
             // exit-recursive-edit: throw 'exit nil → normal return
-            Err(Flow::Throw { ref tag, ref value }) if tag.is_symbol_named("exit") => {
+            Err(Flow::Throw { ref tag, ref value })
+                if catches_exit && tag.is_symbol_named("exit") =>
+            {
                 if value.is_truthy() {
                     // abort-recursive-edit: throw 'exit t → signal quit
                     Err(super::error::signal(LispCondition::Quit, vec![]))
