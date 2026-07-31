@@ -46,7 +46,13 @@ fn parse_defsubr_targets(path: &Path) -> BTreeMap<String, String> {
 
     for line in source.lines() {
         if !capturing {
-            if let Some(idx) = line.find("ctx.defsubr(") {
+            // defsubr and defsubr_interactive share the (name, target, ...)
+            // shape; the interactive form is how command-identity-bearing
+            // window primitives (recenter, scroll-up, ...) register.
+            if let Some(idx) = line
+                .find("ctx.defsubr(")
+                .or_else(|| line.find("ctx.defsubr_interactive("))
+            {
                 capturing = true;
                 block.clear();
                 block.push_str(&line[idx..]);
@@ -95,7 +101,8 @@ fn parse_defsubr_targets(path: &Path) -> BTreeMap<String, String> {
 }
 
 fn extract_defsubr_name_and_target(block: &str) -> Option<(String, String)> {
-    let re = NativeRegex::new(r#"ctx\.defsubr\(\s*"([^"]+)""#).expect("defsubr regex");
+    let re =
+        NativeRegex::new(r#"ctx\.defsubr(?:_interactive)?\(\s*"([^"]+)""#).expect("defsubr regex");
     let caps = re.captures(block)?;
     let name = caps.get(1)?.as_str().to_string();
     let full = caps.get(0)?;
