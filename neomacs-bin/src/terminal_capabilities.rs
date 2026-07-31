@@ -104,39 +104,127 @@ pub(crate) fn tty_attribute_capabilities_for_term(term: &str) -> Option<TtyAttri
     Some(resolve_tty_attribute_capabilities(database.as_mut()))
 }
 
-/// Resolve the update-planner capabilities ([`TermCaps`]) the same way GNU
-/// gates its terminal update: `term.c:4908` sets `scroll_region_ok` from the
-/// presence of `cs` (set_scroll_region) with absolute cursor motion, and
-/// `TF_bce` from the `ut` flag. Synchronized output (DECSET 2026) has no
-/// terminfo name; it is spec-safe to emit everywhere (an unknown DEC private
-/// mode is ignored), so it stays enabled unconditionally.
+/// Canonicalize a termcap/terminfo capability string for byte comparison:
+/// strip padding/delay markers (`$<..>`) and parameter-position markers
+/// (`%p1`..`%p9`), so terminfo `\E[%i%p1%d;%p2%dr` and its termcap
+/// translation `\E[%i%d;%dr` canonicalize to the same bytes.
+fn canonical_cap(entry: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(entry.len());
+    let mut i = 0;
+    while i < entry.len() {
+        if entry[i] == b'$' && entry.get(i + 1) == Some(&b'<') {
+            match entry[i + 2..].iter().position(|byte| *byte == b'>') {
+                Some(close) => {
+                    i += close + 3;
+                    continue;
+                }
+                None => break,
+            }
+        }
+        if entry[i] == b'%'
+            && entry.get(i + 1) == Some(&b'p')
+            && entry.get(i + 2).is_some_and(u8::is_ascii_digit)
+        {
+            i += 3;
+            continue;
+        }
+        out.push(entry[i]);
+        i += 1;
+    }
+    out
+}
+
+/// Does the entry's `cap` string canonicalize to exactly `expected`?
+fn cap_is(database: &mut dyn TerminalCapabilityDatabase, cap: &str, expected: &[u8]) -> bool {
+    database
+        .get_string(cap)
+        .is_some_and(|value| canonical_cap(&value) == expected)
+}
+
+/// Resolve the update-planner capabilities ([`TermCaps`]).
+///
+/// GNU (`term.c:4908`) gates on the PRESENCE of capabilities because it
+/// emits the entry's own strings through tparam. neomacs' encoder emits
+/// hardcoded ANSI bytes, so presence is not enough: each capability is
+/// claimed only when the entry's string IS the byte form the encoder
+/// produces (in either its terminfo or termcap spelling). A terminal whose
+/// `ic` exists but is not `ESC[@` (tvi955) must refuse ICH, and a terminal
+/// whose `cs` attests DECSTBM but that lacks `indn`/`rin` (vt220, the Linux
+/// console) must scroll with IND/RI, never CSI S/T. Synchronized output
+/// (DECSET 2026) has no terminfo name and is spec-safe to over-claim, so it
+/// stays enabled unconditionally.
 pub(crate) fn resolve_term_caps(
     database: &mut dyn TerminalCapabilityDatabase,
 ) -> neomacs_display_protocol::tty_rif::TermCaps {
-    let has_string = |database: &mut dyn TerminalCapabilityDatabase, cap: &str| {
-        database
-            .get_string(cap)
-            .is_some_and(|value| !value.is_empty())
+    use neomacs_display_protocol::tty_rif::RegionScrollMethod;
+
+    let decstbm = cap_is(database, "cs", b"\x1b[%i%d;%dr");
+    let cursor_address = cap_is(database, "cm", b"\x1b[%i%d;%dH");
+    let su_sd = cap_is(database, "SF", b"\x1b[%dS") && cap_is(database, "SR", b"\x1b[%dT");
+    // GNU defaults TS_fwd_scroll to plain cursor-down (LF) when `sf` is
+    // absent (term.c:4820), and requires `sr` for the reverse direction
+    // (term.c:4912). IND and RI are what the encoder emits; LF at the
+    // bottom margin indexes identically on every DECSTBM terminal.
+    let fwd_index = match database.get_string("sf") {
+        None => true,
+        Some(sf) => matches!(canonical_cap(&sf).as_slice(), b"\n" | b"\x1bD"),
     };
+    let rev_index = cap_is(database, "sr", b"\x1bM");
+    let scroll_region = if decstbm && cursor_address {
+        if su_sd {
+            Some(RegionScrollMethod::SuSd)
+        } else if fwd_index && rev_index {
+            Some(RegionScrollMethod::Index)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     neomacs_display_protocol::tty_rif::TermCaps {
-        scroll_region: has_string(database, "cs") && has_string(database, "cm"),
+        scroll_region,
         back_color_erase: database.get_flag("ut"),
-        // GNU term.c gates char insert/delete on ic/dc (multi-char IC/DC are
-        // optional refinements there; ANSI ICH/DCH is what we emit).
-        insert_delete_char: (has_string(database, "ic") || has_string(database, "IC"))
-            && (has_string(database, "dc") || has_string(database, "DC")),
+        insert_delete_char: cap_is(database, "IC", b"\x1b[%d@")
+            && cap_is(database, "DC", b"\x1b[%dP"),
+        erase_to_eol: cap_is(database, "ce", b"\x1b[K"),
         synchronized_output: true,
     }
 }
 
 /// [`resolve_term_caps`] for the terminal named by `TERM`; `None` when the
-/// terminfo entry cannot be read (the caller then assumes a modern terminal,
-/// mirroring the attribute-capability fallback above).
+/// terminfo entry cannot be read (the caller then falls back to
+/// [`TermCaps::unknown_terminal`]'s conservative floor — over-claiming
+/// scroll or shift bytes on an unknown terminal corrupts its screen
+/// permanently, while refusing merely costs bytes).
+///
+/// [`TermCaps::unknown_terminal`]: neomacs_display_protocol::tty_rif::TermCaps::unknown_terminal
 pub(crate) fn term_caps_for_term(
     term: &str,
 ) -> Option<neomacs_display_protocol::tty_rif::TermCaps> {
     let mut database = open_terminal_capability_database(term)?;
     Some(resolve_term_caps(database.as_mut()))
+}
+
+/// GNU's "powerful enough" check (term.c:4881): a terminal whose entry can
+/// be read but that cannot position the cursor cannot run a full-screen
+/// editor. neomacs additionally requires the ANSI form, because every byte
+/// the renderer emits hardcodes `CSI r;cH`. `Ok` when TERM is unset or the
+/// entry is unreadable (the conservative-caps fallback handles those).
+pub(crate) fn check_terminal_powerful_enough(term: &str) -> Result<(), String> {
+    let Some(mut database) = open_terminal_capability_database(term) else {
+        return Ok(());
+    };
+    if cap_is(database.as_mut(), "cm", b"\x1b[%i%d;%dH") {
+        return Ok(());
+    }
+    Err(format!(
+        "Terminal type \"{term}\" is not powerful enough to run Emacs.\n\
+It lacks the ability to position the cursor (ANSI cursor addressing).\n\
+If that is not the actual type of terminal you have,\n\
+use the Bourne shell command 'TERM=...; export TERM' (C-shell:\n\
+'setenv TERM ...') to specify the correct type."
+    ))
 }
 
 #[cfg(not(windows))]

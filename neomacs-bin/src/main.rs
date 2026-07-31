@@ -3424,6 +3424,13 @@ pub fn run(mode: RuntimeMode) {
     } else {
         // Single-thread TTY path: terminal init here, rendering via TtyRif
         // on the evaluator thread, input reader on a background thread.
+        // GNU init_tty parity: a terminal that cannot position the cursor
+        // cannot run a full-screen editor — refuse while stdout is still
+        // cooked, before any raw-mode or alternate-screen byte.
+        if let Err(diagnostic) = tty_init::tty_check_terminal_powerful_enough() {
+            eprintln!("{diagnostic}");
+            std::process::exit(1);
+        }
         tty_init::tty_init_terminal();
         let input_reader = tty_frontend::TtyInputReader::spawn(render_comms);
         tracing::info!("TTY frontend spawned (TtyRif single-thread redisplay)");

@@ -2201,9 +2201,10 @@ fn scroll_plan_is_one_scroll_op_plus_exposed_row_runs() {
 fn caps_without_scroll_region_never_plan_scroll_ops() {
     let mut rif = TtyRif::new(20, 10);
     rif.set_caps(TermCaps {
-        scroll_region: false,
+        scroll_region: None,
         back_color_erase: false,
         insert_delete_char: false,
+        erase_to_eol: false,
         synchronized_output: false,
     });
     for r in 0..10 {
@@ -2481,5 +2482,54 @@ fn typing_echo_bytes_are_a_fraction_of_tail_rewrite() {
     assert!(
         !text.contains("compute_the_answer"),
         "tail must ride the shift, not a rewrite: {text:?}"
+    );
+}
+
+#[test]
+fn index_method_scrolls_with_ind_ri_and_never_su_sd() {
+    // vt220 / Linux-console shape: DECSTBM attested, CSI S/T not. The
+    // capability carries the method, so the same plan encodes as cursor to
+    // the region edge plus IND/RI.
+    let caps = TermCaps {
+        scroll_region: Some(RegionScrollMethod::Index),
+        ..TermCaps::default()
+    };
+    let mut rif = TtyRif::new_with_caps(20, 10, caps);
+    // Production rasterization clears the desired grid every frame; this
+    // incremental harness must overwrite full rows for the same effect.
+    let full_row = |n: usize| format!("{:<20}", format!("line-number-{n:02}"));
+    for r in 0..10 {
+        set_row(&mut rif, r, &full_row(r));
+    }
+    let _ = render_output(&mut rif);
+
+    // Scroll up by one.
+    for r in 0..10 {
+        set_row(&mut rif, r, &full_row(r + 1));
+    }
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    assert!(
+        !text.contains("\x1b[1S") && !text.contains("\x1b[1T"),
+        "index method must never emit SU/SD: {text:?}"
+    );
+    assert!(
+        text.contains("\x1b[1;10r") && text.contains("\x1bD"),
+        "scroll must be DECSTBM + IND at the region bottom: {text:?}"
+    );
+    assert!(
+        !text.contains("line-number-05"),
+        "shifted row content was retransmitted: {text:?}"
+    );
+
+    // And the reverse direction uses RI at the region top.
+    for r in 0..10 {
+        set_row(&mut rif, r, &full_row(r));
+    }
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    assert!(
+        text.contains("\x1bM") && !text.contains("\x1b[1T"),
+        "reverse scroll must be RI, not SD: {text:?}"
     );
 }

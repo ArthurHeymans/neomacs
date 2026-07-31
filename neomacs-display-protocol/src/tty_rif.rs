@@ -217,28 +217,75 @@ fn terminal_cursor_cell(x: f32, y: f32, char_width: f32, char_height: f32) -> (u
 /// without DECSTBM would render SU as full-screen scroll), hence the split.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TermCaps {
-    /// DECSTBM scroll regions + SU/SD region scrolls.
-    pub scroll_region: bool,
+    /// How region scrolls may be encoded, or `None` to refuse them. The
+    /// method is chosen here, at capability time, and carried inside the
+    /// planned op, so the encoder never consults a capability it might
+    /// disagree with (the SU/SD-on-vt220 trap: `cs` attests DECSTBM but
+    /// says nothing about CSI S/T).
+    pub scroll_region: Option<RegionScrollMethod>,
     /// Back-color-erase (terminfo `bce`): erase operations fill with the
     /// current SGR background rather than the terminal default, which is
     /// what makes erase-to-EOL usable under a non-default background.
     pub back_color_erase: bool,
-    /// Parameterized insert/delete character (ICH/DCH, terminfo `IC`/`DC`):
-    /// in-line horizontal shifts for the typing-echo case.
+    /// Parameterized insert/delete character (ANSI ICH/DCH): in-line
+    /// horizontal shifts for the typing-echo case. True only when the
+    /// terminfo entry's own insert/delete strings ARE the ANSI forms the
+    /// encoder emits, not merely present (tvi955 has `ic`, but it is not
+    /// `ESC[@`).
     pub insert_delete_char: bool,
+    /// Erase to end of line with ANSI `ESC[K` (terminfo `el`).
+    pub erase_to_eol: bool,
     /// DECSET 2026 synchronized-output bracketing.
     pub synchronized_output: bool,
 }
 
 impl Default for TermCaps {
+    /// The capabilities of every modern terminal emulator; used directly by
+    /// tests and by callers that already know the terminal. Real TTY startup
+    /// resolves from terminfo instead, and unreadable terminfo falls back to
+    /// [`TermCaps::unknown_terminal`], not to this.
     fn default() -> Self {
         Self {
-            scroll_region: true,
+            scroll_region: Some(RegionScrollMethod::SuSd),
             back_color_erase: true,
             insert_delete_char: true,
+            erase_to_eol: true,
             synchronized_output: true,
         }
     }
+}
+
+impl TermCaps {
+    /// The safe floor for a terminal we know nothing about (unset TERM,
+    /// unreadable terminfo): refuse every optimization whose bytes an
+    /// arbitrary terminal may not implement, keep only synchronized output,
+    /// which is spec-safe to over-claim (an unknown DEC private mode is
+    /// ignored). Costs nothing but bytes: every refusal falls back to the
+    /// ordinary write path.
+    pub fn unknown_terminal() -> Self {
+        Self {
+            scroll_region: None,
+            back_color_erase: false,
+            insert_delete_char: false,
+            erase_to_eol: false,
+            synchronized_output: true,
+        }
+    }
+}
+
+/// How a region scroll is put on the wire. Chosen at capability-resolution
+/// time from what the terminfo entry actually attests, and carried in the
+/// planned op — the encoder is total over this enum.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RegionScrollMethod {
+    /// DECSTBM + cursor to the region edge + n single-line index/reverse
+    /// index controls (IND `ESC D` / RI `ESC M`) — GNU term.c's
+    /// `tty_ins_del_lines` fallback, the form every vt100-class entry
+    /// attests via `cs` + `sr`.
+    Index,
+    /// DECSTBM + parameterized SU/SD (`CSI n S` / `CSI n T`), attested by
+    /// terminfo `indn`/`rin`. One control regardless of distance.
+    SuSd,
 }
 
 /// Vertical scroll direction and magnitude. Zero is unrepresentable: a
@@ -261,12 +308,13 @@ enum ScrollDir {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TermOp {
     /// Scroll grid rows `top..=bottom`: encoded as one balanced
-    /// DECSTBM + SU/SD + reset sequence, so an unbalanced region cannot be
-    /// expressed.
+    /// DECSTBM + scroll + reset sequence, so an unbalanced region cannot be
+    /// expressed. The wire form is the capability-resolved `method`.
     ScrollRows {
         top: u16,
         bottom: u16,
         dir: ScrollDir,
+        method: RegionScrollMethod,
     },
     /// Move the cursor and rewrite desired cells `start..end` of `row`.
     WriteRun { row: u16, start: u16, end: u16 },
@@ -816,7 +864,7 @@ impl TtyRif {
         // row - the issue-206 case where one scroll step redrew the whole
         // frame. See detect_scroll for the design.
         let seed = self.scroll_seed.take();
-        if self.caps.scroll_region
+        if let Some(method) = self.caps.scroll_region
             && !self.force_full_render
             && let Some(scroll) = detect_scroll(&self.current, &self.desired, seed)
         {
@@ -833,6 +881,7 @@ impl TtyRif {
                     top: scroll.top as u16,
                     bottom: scroll.bottom as u16,
                     dir,
+                    method,
                 });
                 // Mirror the terminal-side move in the screen model, and
                 // poison the exposed rows so the row diff repaints them (the
@@ -996,6 +1045,7 @@ impl TtyRif {
                 if let Some(bg) = tail_bg
                     && split < width
                     && split + MIN_ERASE_CELLS <= last_changed + 1
+                    && self.caps.erase_to_eol
                     && (bg.is_none() || self.caps.back_color_erase)
                 {
                     erase_from = Some(split);
@@ -1070,23 +1120,44 @@ impl TtyRif {
         let mut last_attrs: Option<CellAttrs> = None;
         for op in ops {
             match *op {
-                TermOp::ScrollRows { top, bottom, dir } => {
+                TermOp::ScrollRows {
+                    top,
+                    bottom,
+                    dir,
+                    method,
+                } => {
                     self.frame_stats.scroll_ops += 1;
                     // Balanced by construction: region set, scroll, reset in
                     // one atomic encoding.
                     self.output
                         .extend_from_slice(format!("\x1b[{};{}r", top + 1, bottom + 1).as_bytes());
-                    // SGR reset first: SU/SD fill exposed lines with the
+                    // SGR reset first: the exposed lines fill with the
                     // current background (BCE); make that the default.
                     self.output.extend_from_slice(b"\x1b[0m");
                     last_attrs = Some(CellAttrs::default());
-                    match dir {
-                        ScrollDir::Up(n) => self
+                    match (method, dir) {
+                        (RegionScrollMethod::SuSd, ScrollDir::Up(n)) => self
                             .output
                             .extend_from_slice(format!("\x1b[{n}S").as_bytes()),
-                        ScrollDir::Down(n) => self
+                        (RegionScrollMethod::SuSd, ScrollDir::Down(n)) => self
                             .output
                             .extend_from_slice(format!("\x1b[{n}T").as_bytes()),
+                        // GNU tty_ins_del_lines fallback: cursor to the
+                        // region edge, then n single-line index controls.
+                        // IND/RI are core VT100, attested by the
+                        // DECSTBM-shaped cs that put us here.
+                        (RegionScrollMethod::Index, ScrollDir::Up(n)) => {
+                            write_cursor_goto(&mut self.output, bottom + 1, 1);
+                            for _ in 0..n.get() {
+                                self.output.extend_from_slice(b"\x1bD");
+                            }
+                        }
+                        (RegionScrollMethod::Index, ScrollDir::Down(n)) => {
+                            write_cursor_goto(&mut self.output, top + 1, 1);
+                            for _ in 0..n.get() {
+                                self.output.extend_from_slice(b"\x1bM");
+                            }
+                        }
                     }
                     self.output.extend_from_slice(b"\x1b[r");
                 }

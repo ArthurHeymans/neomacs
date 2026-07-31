@@ -45,12 +45,19 @@ pub fn detect_tty_type() -> Option<String> {
 }
 
 /// Detect the update-planner capabilities for the connected terminal.
-/// An unreadable terminfo entry assumes a modern terminal (TermCaps'
-/// defaults), mirroring the attribute-capability fallback above.
+///
+/// Unlike the attribute fallback above (where over-claiming merely styles
+/// text a dumb terminal ignores), over-claiming a planner capability emits
+/// scroll/shift bytes an unknown terminal may not implement while the
+/// screen model assumes it did — permanent corruption. An unset TERM or
+/// unreadable terminfo therefore falls to the conservative floor.
 pub fn detect_term_caps() -> neomacs_display_protocol::tty_rif::TermCaps {
     detect_tty_type()
         .and_then(|term| super::terminal_capabilities::term_caps_for_term(&term))
-        .unwrap_or_default()
+        .unwrap_or_else(|| {
+            tracing::debug!("no terminfo entry for TERM; refusing planner optimizations");
+            neomacs_display_protocol::tty_rif::TermCaps::unknown_terminal()
+        })
 }
 
 pub(crate) fn default_controlling_tty_name() -> &'static str {
@@ -138,6 +145,17 @@ pub fn query_terminal_size_cells() -> Option<(u32, u32)> {
 }
 
 // ── TTY terminal lifecycle (raw mode, alt screen) ────────────────────────
+
+/// GNU's init_tty refusal (term.c:4881): before touching terminal modes,
+/// verify the terminal can position the cursor. Returns the diagnostic to
+/// print (and exit with) when it cannot; checked here, while stdout is
+/// still cooked and no alternate-screen byte has been written.
+pub fn tty_check_terminal_powerful_enough() -> Result<(), String> {
+    match detect_tty_type() {
+        Some(term) => super::terminal_capabilities::check_terminal_powerful_enough(&term),
+        None => Ok(()),
+    }
+}
 
 /// Set up the terminal for the TtyRif direct-rendering path:
 /// raw mode, alternate screen buffer, hidden cursor.
