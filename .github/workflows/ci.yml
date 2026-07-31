@@ -339,7 +339,7 @@ jobs:
           retention-days: 1
 
   neovm-oracle-tests:
-    name: neovm-oracle-tests shard ${{ matrix.partition }}/20 (linux x86_64)
+    name: oracle-tests shard ${{ matrix.partition }}/20 (linux x86_64)
     if: github.event_name != 'schedule'
     needs: [neomacs-test-runtime, neomacs-workspace-test-archive]
     runs-on: ubuntu-24.04
