@@ -401,6 +401,12 @@ pub struct TtyFrameStats {
     pub erase_ops: u32,
     pub cells_written: u32,
     pub bytes: u32,
+    /// Layout's semantic scroll hint was verified against real cell
+    /// content and used (skipping delta voting).
+    pub scroll_seed_accepted: u32,
+    /// The hint was present but failed cell verification (stale or
+    /// conflicting); the voting fallback ran instead.
+    pub scroll_seed_rejected: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -886,6 +892,7 @@ impl TtyRif {
     /// real render's planning stage.
     #[cfg(test)]
     pub(crate) fn plan_for_test(&mut self) -> Vec<TermOp> {
+        self.frame_stats = TtyFrameStats::default();
         self.plan_frame()
     }
 
@@ -900,6 +907,13 @@ impl TtyRif {
     fn plan_frame(&mut self) -> Vec<TermOp> {
         let mut ops = Vec::new();
 
+        // A zero-area grid (TIOCGWINSZ reporting 0, mid-resize race) has no
+        // cells; every op references at least one, so the empty plan is the
+        // only correct plan — and the indexing below assumes area > 0.
+        if self.desired.width == 0 || self.desired.height == 0 {
+            return ops;
+        }
+
         // Vertical scroll: when a run of rows merely shifted, move them with
         // the terminal (one region scroll) instead of retransmitting every
         // row - the issue-206 case where one scroll step redrew the whole
@@ -907,7 +921,21 @@ impl TtyRif {
         let seed = self.scroll_seed.take();
         if let Some(method) = self.caps.scroll_region
             && !self.force_full_render
-            && let Some(scroll) = detect_scroll(&self.current, &self.desired, seed)
+            && let Some(scroll) = {
+                let scroll = detect_scroll(&self.current, &self.desired, seed);
+                // Seed disposition is observable: a stale or conflicting
+                // layout hint must show up as rejected, not silently ride
+                // the voting fallback.
+                if let Some(delta) = seed.filter(|delta| *delta != 0) {
+                    match &scroll {
+                        Some(found) if found.delta == delta => {
+                            self.frame_stats.scroll_seed_accepted += 1;
+                        }
+                        _ => self.frame_stats.scroll_seed_rejected += 1,
+                    }
+                }
+                scroll
+            }
         {
             let n = scroll.delta.unsigned_abs();
             let dir = std::num::NonZeroU16::new(n as u16).map(|n| {

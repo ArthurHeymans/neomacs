@@ -2380,6 +2380,34 @@ fn lying_scroll_seed_falls_back_to_correct_inference() {
         }
         other => panic!("scroll expected despite lying seed: {other:?}"),
     }
+    let stats = rif.frame_stats();
+    assert_eq!(stats.scroll_seed_rejected, 1, "the lie must be counted");
+    assert_eq!(stats.scroll_seed_accepted, 0);
+}
+
+#[test]
+fn truthful_scroll_seed_is_accepted_and_counted() {
+    let mut rif = TtyRif::new(20, 12);
+    for r in 0..12 {
+        set_row(&mut rif, r, &format!("seeded-line-{r:02}"));
+    }
+    let _ = render_output(&mut rif);
+    for r in 0..11 {
+        set_row(&mut rif, r, &format!("seeded-line-{:02}", r + 1));
+    }
+    set_row(&mut rif, 11, "seeded-line-12");
+    rif.set_scroll_seed_for_test(Some(1));
+    let ops = rif.plan_for_test();
+    assert!(
+        matches!(
+            ops.first(),
+            Some(TermOp::ScrollRows { dir: ScrollDir::Up(n), .. }) if n.get() == 1
+        ),
+        "seeded scroll expected: {ops:?}"
+    );
+    let stats = rif.frame_stats();
+    assert_eq!(stats.scroll_seed_accepted, 1);
+    assert_eq!(stats.scroll_seed_rejected, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -2625,5 +2653,87 @@ fn wide_base_in_the_final_column_rasterizes_as_a_space() {
     assert!(
         rif.desired.cells[..10].iter().all(|cell| !cell.padding),
         "no padding cell may survive at the row edge"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Planner hardening + coverage gaps from the adversarial review
+// ---------------------------------------------------------------------------
+
+#[test]
+fn zero_area_grids_plan_nothing_and_do_not_panic() {
+    for (w, h) in [(0, 10), (10, 0), (0, 0)] {
+        let mut rif = TtyRif::new(w, h);
+        let ops = rif.plan_for_test();
+        assert!(ops.is_empty(), "{w}x{h} must plan the empty frame");
+        let _ = render_output(&mut rif);
+    }
+}
+
+#[test]
+fn scrolling_backward_emits_region_scroll_down() {
+    // Down-direction sibling of scrolled_rows_emit_region_scroll: content
+    // moves down (viewport scrolled up), encoded as SD inside the region.
+    let mut rif = TtyRif::new(20, 10);
+    let full_row = |n: i32| format!("{:<20}", format!("line-number-{n:02}"));
+    for r in 0..10i32 {
+        set_row(&mut rif, r as usize, &full_row(r + 1));
+    }
+    let _ = render_output(&mut rif);
+    for r in 0..10i32 {
+        set_row(&mut rif, r as usize, &full_row(r));
+    }
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    assert!(
+        text.contains("\x1b[1T"),
+        "one-line backward shift must emit SD: {text:?}"
+    );
+    assert!(
+        !text.contains("line-number-05"),
+        "shifted rows must not be retransmitted: {text:?}"
+    );
+    assert!(
+        text.contains("line-number-00"),
+        "the exposed top row must be drawn: {text:?}"
+    );
+
+    // Model fidelity: an identical next frame is a no-op.
+    for r in 0..10i32 {
+        set_row(&mut rif, r as usize, &full_row(r));
+    }
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    assert!(
+        !text.contains("line-number"),
+        "model must match the terminal after SD: {text:?}"
+    );
+}
+
+#[test]
+fn colored_tail_with_bce_erases_and_establishes_the_fill_color() {
+    // The accepting BCE path: erase must set the tail's background BEFORE
+    // ESC[K with no reset between, or the fill color is wrong.
+    let mut rif = TtyRif::new(20, 4);
+    set_row(&mut rif, 1, "abcdefghijklmnopqrst");
+    let _ = render_output(&mut rif);
+    let colored_blank = CellAttrs {
+        bg: Some((40, 44, 52)),
+        ..CellAttrs::default()
+    };
+    for col in 0..20 {
+        rif.desired.set(1, col, ' ', colored_blank, false);
+    }
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    let erase_at = text.find("\x1b[K").expect("BCE tail must erase");
+    let bg_at = text
+        .find("48;2;40;44;52m")
+        .expect("fill background must be established");
+    assert!(bg_at < erase_at, "bg must precede the erase: {text:?}");
+    let between = &text[bg_at..erase_at];
+    assert!(
+        !between.contains("\x1b[0m"),
+        "no SGR reset may sit between bg and erase: {text:?}"
     );
 }
