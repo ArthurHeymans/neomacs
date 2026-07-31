@@ -77,6 +77,65 @@ fn forward_sexp_syntax_propertize_reads_buffer_local_lookup_flag() {
 }
 
 #[test]
+fn forward_comment_prepares_and_reads_syntax_table_properties() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (with-temp-buffer
+          (setq-local syntax-propertize-function
+                      (syntax-propertize-rules
+                       ("\\(A\\)" (1 "<"))
+                       ("\\(Z\\)" (1 ">"))))
+          (setq-local parse-sexp-lookup-properties t)
+          (insert "A body Z after")
+          (goto-char (point-min))
+          (list (forward-comment 1)
+                (point)
+                syntax-propertize--done
+                (get-text-property 1 'syntax-table)
+                (get-text-property 8 'syntax-table)))
+        "#,
+    );
+    assert_eq!(result, "OK (t 9 15 (11) (12))");
+}
+
+#[test]
+fn backward_comment_prepares_and_reads_syntax_table_properties() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (with-temp-buffer
+          (setq-local syntax-propertize-function
+                      (syntax-propertize-rules
+                       ("\\(A\\)" (1 "<"))
+                       ("\\(Z\\)" (1 ">"))))
+          (setq-local parse-sexp-lookup-properties t)
+          (insert "before A body Z")
+          (goto-char (point-max))
+          (list (forward-comment -1)
+                (point)
+                syntax-propertize--done
+                (get-text-property 8 'syntax-table)
+                (get-text-property 15 'syntax-table)))
+        "#,
+    );
+    assert_eq!(result, "OK (t 8 16 (11) (12))");
+}
+
+#[test]
+fn forward_comment_delegates_before_validating_count() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (let ((forward-comment-function
+               (lambda (count) (list :delegated count))))
+          (forward-comment 'not-an-integer))
+        "#,
+    );
+    assert_eq!(result, "OK (:delegated not-an-integer)");
+}
+
+#[test]
 fn regexp_syntax_class_search_prepares_syntax_properties_before_matching() {
     crate::test_utils::init_test_tracing();
     let result = crate::test_utils::runtime_startup_eval_one(
@@ -331,6 +390,48 @@ fn skip_syntax_forward_whitespace() {
         vec![Value::string(" ")],
     ));
     assert_eq!(n, 3);
+}
+
+#[test]
+fn skip_syntax_forward_prepares_and_reads_syntax_table_properties() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (with-temp-buffer
+          (setq-local syntax-propertize-function
+                      (syntax-propertize-rules
+                       ("\\(X+\\)" (1 " "))))
+          (setq-local parse-sexp-lookup-properties t)
+          (insert "XXXa")
+          (goto-char (point-min))
+          (list (skip-syntax-forward " ")
+                (point)
+                syntax-propertize--done
+                (get-text-property 1 'syntax-table)))
+        "#,
+    );
+    assert_eq!(result, "OK (3 4 5 (0))");
+}
+
+#[test]
+fn skip_syntax_backward_prepares_and_reads_syntax_table_properties() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (with-temp-buffer
+          (setq-local syntax-propertize-function
+                      (syntax-propertize-rules
+                       ("\\(X+\\)" (1 " "))))
+          (setq-local parse-sexp-lookup-properties t)
+          (insert "aXXX")
+          (goto-char (point-max))
+          (list (skip-syntax-backward " ")
+                (point)
+                syntax-propertize--done
+                (get-text-property 2 'syntax-table)))
+        "#,
+    );
+    assert_eq!(result, "OK (-3 2 5 (0))");
 }
 
 // --- modify-syntax-entry changes motion --------------------------------

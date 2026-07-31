@@ -3438,15 +3438,36 @@ pub(crate) fn builtin_forward_comment(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    let delegated = eval
+        .eval_symbol("forward-comment-function")
+        .unwrap_or(Value::NIL);
+    if !delegated.is_nil() {
+        return eval.apply(delegated, args);
+    }
+
+    let count = expect_forward_comment_count(&args)?;
     let honor_properties = parse_sexp_lookup_properties_enabled(eval);
-    builtin_forward_comment_in_buffers(&mut eval.buffers, args, honor_properties)
+    if honor_properties {
+        let target = eval
+            .buffers
+            .current_buffer()
+            .map(|buf| {
+                if count > 0 {
+                    buf.accessible_char_region().end().get().saturating_add(1)
+                } else {
+                    buf.point_char_pos().get()
+                }
+            })
+            .unwrap_or(0);
+        if target > 0 {
+            maybe_syntax_propertize_for_scan(eval, target)?;
+        }
+    }
+
+    forward_comment_in_buffers(&mut eval.buffers, count, honor_properties)
 }
 
-pub(crate) fn builtin_forward_comment_in_buffers(
-    buffers: &mut BufferManager,
-    args: Vec<Value>,
-    honor_properties: bool,
-) -> EvalResult {
+fn expect_forward_comment_count(args: &[Value]) -> Result<i64, Flow> {
     if args.len() != 1 {
         return Err(signal(
             LispCondition::WrongNumberOfArguments,
@@ -3466,7 +3487,14 @@ pub(crate) fn builtin_forward_comment_in_buffers(
             ));
         }
     };
+    Ok(count)
+}
 
+fn forward_comment_in_buffers(
+    buffers: &mut BufferManager,
+    count: i64,
+    honor_properties: bool,
+) -> EvalResult {
     let current_id = buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
@@ -5480,37 +5508,29 @@ pub(crate) fn builtin_skip_syntax_forward(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    let (syntax_chars, limit) = expect_skip_syntax_args("skip-syntax-forward", &args)?;
     let honor_properties = parse_sexp_lookup_properties_enabled(eval);
-    builtin_skip_syntax_forward_in_buffers(&mut eval.buffers, args, honor_properties)
-}
-
-pub(crate) fn builtin_skip_syntax_forward_in_buffers(
-    buffers: &mut BufferManager,
-    args: Vec<Value>,
-    honor_properties: bool,
-) -> EvalResult {
-    if args.is_empty() {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol("skip-syntax-forward"), Value::fixnum(0)],
-        ));
-    }
-    let syntax_chars = syntax_runtime_string(&args[0])?;
-    let limit = if args.len() > 1 && !args[1].is_nil() {
-        match args[1].kind() {
-            ValueKind::Fixnum(n) => Some(n),
-            _other => {
-                return Err(signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("integerp"), args[1]],
-                ));
-            }
+    if honor_properties {
+        let target = eval
+            .buffers
+            .current_buffer()
+            .map(|buf| {
+                limit.map_or_else(
+                    || buf.accessible_char_region().end().get().saturating_add(1),
+                    |raw| {
+                        let byte = lisp_pos_to_byte(buf, LispCharPos1::new(raw));
+                        buffer_byte_to_char_pos(buf, byte).saturating_add(1)
+                    },
+                )
+            })
+            .unwrap_or(0);
+        if target > 0 {
+            maybe_syntax_propertize_for_scan(eval, target)?;
         }
-    } else {
-        None
-    };
+    }
 
-    let buf = buffers
+    let buf = eval
+        .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let table = SyntaxTable::for_buffer(buf);
@@ -5518,19 +5538,22 @@ pub(crate) fn builtin_skip_syntax_forward_in_buffers(
     let new_pos =
         skip_syntax_forward_with_options(buf, &table, &syntax_chars, limit, honor_properties);
 
-    let old_pt = buffers
+    let old_pt = eval
+        .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
         .point_emacs_byte_pos();
     let new_pos = EmacsBytePos::new(new_pos);
 
-    let current_id = buffers
+    let current_id = eval
+        .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = buffers.goto_buffer_emacs_byte_pos(current_id, new_pos);
+    let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, new_pos);
 
     // Return number of characters skipped (Emacs convention).
-    let buf = buffers
+    let buf = eval
+        .buffers
         .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let chars_moved = if new_pos >= old_pt {
@@ -5547,37 +5570,21 @@ pub(crate) fn builtin_skip_syntax_backward(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    let (syntax_chars, limit) = expect_skip_syntax_args("skip-syntax-backward", &args)?;
     let honor_properties = parse_sexp_lookup_properties_enabled(eval);
-    builtin_skip_syntax_backward_in_buffers(&mut eval.buffers, args, honor_properties)
-}
-
-pub(crate) fn builtin_skip_syntax_backward_in_buffers(
-    buffers: &mut BufferManager,
-    args: Vec<Value>,
-    honor_properties: bool,
-) -> EvalResult {
-    if args.is_empty() {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol("skip-syntax-backward"), Value::fixnum(0)],
-        ));
-    }
-    let syntax_chars = syntax_runtime_string(&args[0])?;
-    let limit = if args.len() > 1 && !args[1].is_nil() {
-        match args[1].kind() {
-            ValueKind::Fixnum(n) => Some(n),
-            _other => {
-                return Err(signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("integerp"), args[1]],
-                ));
-            }
+    if honor_properties {
+        let target = eval
+            .buffers
+            .current_buffer()
+            .map(|buf| buf.point_char_pos().get())
+            .unwrap_or(0);
+        if target > 0 {
+            maybe_syntax_propertize_for_scan(eval, target)?;
         }
-    } else {
-        None
-    };
+    }
 
-    let buf = buffers
+    let buf = eval
+        .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let table = SyntaxTable::for_buffer(buf);
@@ -5585,19 +5592,22 @@ pub(crate) fn builtin_skip_syntax_backward_in_buffers(
     let new_pos =
         skip_syntax_backward_with_options(buf, &table, &syntax_chars, limit, honor_properties);
 
-    let old_pt = buffers
+    let old_pt = eval
+        .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
         .point_emacs_byte_pos();
     let new_pos = EmacsBytePos::new(new_pos);
 
-    let current_id = buffers
+    let current_id = eval
+        .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = buffers.goto_buffer_emacs_byte_pos(current_id, new_pos);
+    let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, new_pos);
 
     // Return negative number of characters skipped.
-    let buf = buffers
+    let buf = eval
+        .buffers
         .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let chars_moved = if old_pt >= new_pos {
@@ -5606,6 +5616,30 @@ pub(crate) fn builtin_skip_syntax_backward_in_buffers(
         buffer_byte_char_delta(buf, old_pt.get(), new_pos.get())
     };
     Ok(Value::fixnum(chars_moved))
+}
+
+fn expect_skip_syntax_args(caller: &str, args: &[Value]) -> Result<(String, Option<i64>), Flow> {
+    if !(1..=2).contains(&args.len()) {
+        return Err(signal(
+            LispCondition::WrongNumberOfArguments,
+            vec![Value::symbol(caller), Value::fixnum(args.len() as i64)],
+        ));
+    }
+    let syntax_chars = syntax_runtime_string(&args[0])?;
+    let limit = match args.get(1) {
+        None => None,
+        Some(value) if value.is_nil() => None,
+        Some(value) => match value.kind() {
+            ValueKind::Fixnum(n) => Some(n),
+            _ => {
+                return Err(signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("integerp"), *value],
+                ));
+            }
+        },
+    };
+    Ok((syntax_chars, limit))
 }
 
 // ===========================================================================
