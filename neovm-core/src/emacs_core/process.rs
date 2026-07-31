@@ -3655,6 +3655,10 @@ impl ProcessManager {
         kind: ProcessKind,
         executable: Option<LispString>,
     ) -> ProcessId {
+        // GNU `make_process` owns process-name allocation for every process
+        // kind.  Probe the live process registry and append the smallest free
+        // `<N>` suffix before the new record becomes visible.
+        let name = self.allocate_process_name(name);
         let id = self.next_id;
         self.next_id += 1;
         let (tty_name, tty_stdin, tty_stdout, tty_stderr) = match kind {
@@ -3737,6 +3741,36 @@ impl ProcessManager {
         register_process_print_name(id, &process_name_runtime(proc.name));
         self.processes.insert(id, proc);
         id
+    }
+
+    fn allocate_process_name(&self, requested: LispString) -> LispString {
+        if !self.process_name_is_in_use(&requested) {
+            return requested;
+        }
+
+        for suffix in 1_u64.. {
+            let suffix = LispString::from_unibyte(format!("<{suffix}>").into_bytes());
+            let candidate = requested.concat(&suffix);
+            if !self.process_name_is_in_use(&candidate) {
+                return candidate;
+            }
+        }
+
+        unreachable!("the process-name suffix space cannot be exhausted")
+    }
+
+    fn process_name_is_in_use(&self, candidate: &LispString) -> bool {
+        self.processes.values().any(|process| {
+            process.name.as_lisp_string().is_some_and(|existing| {
+                // `Fget_process` searches `Vprocess_alist` with `assoc`, whose
+                // string equality compares character count, byte count, and
+                // contents while ignoring text properties and the
+                // unibyte/multibyte flag itself.
+                existing.schars() == candidate.schars()
+                    && existing.sbytes() == candidate.sbytes()
+                    && existing.as_bytes() == candidate.as_bytes()
+            })
+        })
     }
 
     pub fn sync_process_mark(&mut self, buffers: &mut BufferManager, id: ProcessId) -> EvalResult {

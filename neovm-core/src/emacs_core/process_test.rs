@@ -857,6 +857,52 @@ fn process_manager_find_by_name() {
 }
 
 #[test]
+fn process_creation_allocates_the_smallest_available_gnu_name() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let (processes)
+             (unwind-protect
+                 (let* ((first
+                         (make-process :name "name-allocation"
+                                       :command nil
+                                       :noquery t))
+                        (second
+                         (make-process :name "name-allocation"
+                                       :command nil
+                                       :noquery t))
+                        (third
+                         (make-pipe-process :name "name-allocation"
+                                            :buffer nil
+                                            :noquery t)))
+                   (setq processes (list first second third))
+                   (let ((initial (mapcar #'process-name processes)))
+                     (delete-process second)
+                     (let ((reuse-suffix
+                            (make-pipe-process :name "name-allocation"
+                                               :buffer nil
+                                               :noquery t)))
+                       (push reuse-suffix processes)
+                       (delete-process first)
+                       (let ((reuse-base
+                              (make-process :name "name-allocation"
+                                            :command nil
+                                            :noquery t)))
+                         (push reuse-base processes)
+                         (list initial
+                               (process-name reuse-suffix)
+                               (process-name reuse-base))))))
+               (mapc (lambda (process)
+                       (ignore-errors (delete-process process)))
+                     processes)))"#,
+    );
+
+    assert_eq!(
+        result,
+        r#"OK (("name-allocation" "name-allocation<1>" "name-allocation<2>") "name-allocation<1>" "name-allocation")"#
+    );
+}
+
+#[test]
 fn builtin_process_name_uses_lisp_value_storage() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();
