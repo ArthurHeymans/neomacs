@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_asm_blox_parity;
+use super::assert_asm_blox_batch;
 
 #[test]
-fn asm_blox_sources_peek_and_pop_zero_negative_and_exhausted_values_in_order() {
-    let elisp_form = r##"(let ((source
+fn sources_sinks_public_surface_batch() {
+    assert_asm_blox_batch(&[
+        (
+            "asm_blox_sources_peek_and_pop_zero_negative_and_exhausted_values_in_order",
+            r##"(let ((source
                 (asm-blox--cell-source-create
                  :row -1
                  :col 2
@@ -26,17 +29,15 @@ fn asm_blox_sources_peek_and_pop_zero_negative_and_exhausted_values_in_order() {
             (error
              (list
               (car error)
-              (cdr error))))))"##;
-    let expect = expect![[
+              (cdr error))))))"##,
+            true,
+            expect![[
         r#"OK ((-1 2 #1=(0 -7 42) "I" 0) 0 0 -7 -7 42 nil nil (-1 2 #1# "I" 4) (error ("Cell-source-pop type error")))"#
-    ]];
-
-    assert_asm_blox_parity(elisp_form, expect);
-}
-
-#[test]
-fn asm_blox_boundary_sources_feed_real_get_instructions_and_advance_only_when_consumed() {
-    let elisp_form = r##"(let* ((source-top
+    ]],
+        ),
+        (
+            "asm_blox_boundary_sources_feed_real_get_instructions_and_advance_only_when_consumed",
+            r##"(let* ((source-top
                  (asm-blox--cell-source-create
                   :row -1 :col 0
                   :data '(10 20)
@@ -68,17 +69,15 @@ fn asm_blox_boundary_sources_feed_real_get_instructions_and_advance_only_when_co
              (asm-blox-test-source-summary source-top)
              (asm-blox-test-source-summary source-right))
             trace))
-         (nreverse trace))"##;
-    let expect = expect![[
+         (nreverse trace))"##,
+            true,
+            expect![[
         r#"OK (((:row 0 :col 0 :pc 1 :stack #1=(10) :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (:row 2 :col 3 :pc 0 :stack #2=(30) :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (-1 0 #3=(10 20) "T" 1) (2 4 #4=(30) "R" 1)) ((:row 0 :col 0 :pc 2 :stack (20 . #1#) :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (:row 2 :col 3 :pc 0 :stack #2# :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (-1 0 #3# "T" 2) (2 4 #4# "R" 1)) ((:row 0 :col 0 :pc 0 :stack #5=(30) :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (:row 2 :col 3 :pc 0 :stack #2# :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (-1 0 #3# "T" 2) (2 4 #4# "R" 1)) ((:row 0 :col 0 :pc 0 :stack #5# :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (:row 2 :col 3 :pc 0 :stack #2# :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (-1 0 #3# "T" 2) (2 4 #4# "R" 1)))"#
-    ]];
-
-    assert_asm_blox_parity(elisp_form, expect);
-}
-
-#[test]
-fn asm_blox_sinks_consume_every_board_edge_and_record_first_practical_mismatch() {
-    let elisp_form = r##"(let* ((asm-blox--gameboard
+    ]],
+        ),
+        (
+            "asm_blox_sinks_consume_every_board_edge_and_record_first_practical_mismatch",
+            r##"(let* ((asm-blox--gameboard
                  (asm-blox-test-create-gameboard nil))
                 (sinks
                  (list
@@ -120,17 +119,15 @@ fn asm_blox_sinks_consume_every_board_edge_and_record_first_practical_mismatch()
               (asm-blox--cell-at-row-col 0 0)
               (asm-blox--cell-at-row-col 2 1)
               (asm-blox--cell-at-row-col 1 0)
-              (asm-blox--cell-at-row-col 2 3))))))"##;
-    let expect = expect![[
+              (asm-blox--cell-at-row-col 2 3))))))"##,
+            true,
+            expect![[
         r#"OK ((nil nil nil nil) ((-1 0 (11) "T" 1 nil nil nil nil) (3 1 (22) "B" 1 nil nil nil nil) (1 -1 (33) "L" 1 nil nil nil nil) (2 4 (99) "R" 1 44 nil nil nil)) error ((:row 0 :col 0 :pc 0 :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (:row 2 :col 1 :pc 0 :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (:row 1 :col 0 :pc 0 :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (:row 2 :col 3 :pc 0 :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil)))"#
-    ]];
-
-    assert_asm_blox_parity(elisp_form, expect);
-}
-
-#[test]
-fn asm_blox_editor_sink_supports_insert_newline_backspace_delete_and_bounded_cursor_workflows() {
-    let elisp_form = r##"(let ((sink
+    ]],
+        ),
+        (
+            "asm_blox_editor_sink_supports_insert_newline_backspace_delete_and_bounded_cursor_workflows",
+            r##"(let ((sink
                 (asm-blox--cell-sink-create
                  :row 1 :col 4
                  :expected-data nil
@@ -162,17 +159,15 @@ fn asm_blox_editor_sink_supports_insert_newline_backspace_delete_and_bounded_cur
                (asm-blox--cell-sink-editor-text sink)
                (asm-blox--cell-sink-editor-point sink))
               trace))
-           (nreverse trace)))"##;
-    let expect = expect![[
+           (nreverse trace)))"##,
+            true,
+            expect![[
         r#"OK (((insert 33) "alpha !beta" 8) ((insert 10) "alpha !\nbeta" 9) ((move 100) "alpha !\nbeta" 13) ((insert 63) "alpha !\nbeta?" 14) ((insert 8) "alpha !\nbeta" 13) ((move -20) "alpha !\nbeta" 1) ((insert 8) "alpha !\nbeta" 1) ((move 4) "alpha !\nbeta" 4) ((insert -2) "alpa !\nbeta" 4))"#
-    ]];
-
-    assert_asm_blox_parity(elisp_form, expect);
-}
-
-#[test]
-fn asm_blox_reset_restores_sources_numeric_sinks_and_editor_sinks_to_initial_state() {
-    let elisp_form = r##"(let* ((source
+    ]],
+        ),
+        (
+            "asm_blox_reset_restores_sources_numeric_sinks_and_editor_sinks_to_initial_state",
+            r##"(let* ((source
                  (asm-blox--cell-source-create
                   :row -1 :col 0
                   :data '(1 2) :idx 2 :name "I"))
@@ -210,17 +205,15 @@ fn asm_blox_reset_restores_sources_numeric_sinks_and_editor_sinks_to_initial_sta
           (asm-blox-test-source-summary source)
           (mapcar
            #'asm-blox-test-sink-summary
-           (list numeric editor-default editor-empty))))"##;
-    let expect = expect![[
+           (list numeric editor-default editor-empty))))"##,
+            true,
+            expect![[
         r#"OK ((-1 0 (1 2) "I" 0) ((3 0 (3) "N" 0 nil nil nil nil) (3 1 nil "D" 0 nil "seed" 1 "target") (3 2 nil "E" 0 nil "" 1 "target")))"#
-    ]];
-
-    assert_asm_blox_parity(elisp_form, expect);
-}
-
-#[test]
-fn asm_blox_winning_conditions_require_complete_clean_data_and_trimmed_editor_line_parity() {
-    let elisp_form = r##"(let* ((data-sink
+    ]],
+        ),
+        (
+            "asm_blox_winning_conditions_require_complete_clean_data_and_trimmed_editor_line_parity",
+            r##"(let* ((data-sink
                  (asm-blox--cell-sink-create
                   :row 3 :col 0
                   :expected-data '(1 2)
@@ -266,15 +259,13 @@ fn asm_blox_winning_conditions_require_complete_clean_data_and_trimmed_editor_li
                 won
                 (list
                  asm-blox--gameboard-state
-                 wins))))))"##;
-    let expect = expect!["OK ((nil nil) (win #1=(:win-file)) (nil #1#))"];
-
-    assert_asm_blox_parity(elisp_form, expect);
-}
-
-#[test]
-fn asm_blox_display_register_helpers_map_sources_sinks_and_internal_ports_to_correct_edges() {
-    let elisp_form = r##"(let* ((source-top
+                 wins))))))"##,
+            true,
+            expect!["OK ((nil nil) (win #1=(:win-file)) (nil #1#))"],
+        ),
+        (
+            "asm_blox_display_register_helpers_map_sources_sinks_and_internal_ports_to_correct_edges",
+            r##"(let* ((source-top
                  (asm-blox--cell-source-create
                   :row -1 :col 1
                   :data '(17) :name "T"))
@@ -337,10 +328,11 @@ fn asm_blox_display_register_helpers_map_sources_sinks_and_internal_ports_to_cor
               (apply
                #'asm-blox--get-sink-name-at-position
                coords)))
-           '((-1 1) (2 -1) (3 2) (0 4) (1 1)))))"##;
-    let expect = expect![[
+           '((-1 1) (2 -1) (3 2) (0 4) (1 1)))))"##,
+            true,
+            expect![[
         r#"OK ((((2 0 RIGHT) 23) ((0 4 LEFT) nil) ((1 2 RIGHT) 31) ((1 2 LEFT) nil)) (((0 1 DOWN) 17) ((3 2 UP) nil) ((1 2 DOWN) 37) ((1 2 UP) nil)) (((-1 1) "T" nil) ((2 -1) "L" nil) ((3 2) nil "B") ((0 4) nil "R") ((1 1) nil nil)))"#
-    ]];
-
-    assert_asm_blox_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

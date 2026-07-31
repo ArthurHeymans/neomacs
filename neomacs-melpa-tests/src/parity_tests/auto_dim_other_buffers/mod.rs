@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AUTO_DIM_OTHER_BUFFERS_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod focus;
 mod lifecycle;
 mod registry;
@@ -120,5 +122,31 @@ pub(crate) fn assert_auto_dim_other_buffers_autoload_parity(elisp_form: &str, ex
         "auto-dim-other-buffers-autoloads.el",
         elisp_form,
         expected,
+    );
+}
+
+
+
+
+
+/// Multi-probe batch for `assert_auto_dim_other_buffers_autoload_parity` cases (2a).
+pub(crate) fn assert_auto_dim_other_buffers_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_dim_other_buffers_oracle("auto-dim-other-buffers-autoloads.el"),
+        &name,
+        "auto_dim_other_buffers_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_auto_dim_other_buffers_parity` cases (2a).
+pub(crate) fn assert_auto_dim_other_buffers_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_dim_other_buffers_oracle("auto-dim-other-buffers.el"),
+        &name,
+        "auto_dim_other_buffers_parity",
+        cases,
     );
 }

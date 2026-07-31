@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_astute_parity;
+use super::assert_astute_batch;
 
 #[test]
-fn astute_mode_enable_installs_buffer_local_keywords_lighter_and_font_lock_state() {
-    let elisp_form = r##"(with-temp-buffer
+fn mode_public_surface_batch() {
+    assert_astute_batch(&[
+        (
+            "astute_mode_enable_installs_buffer_local_keywords_lighter_and_font_lock_state",
+            r##"(with-temp-buffer
          (insert
           "\"quoted\" -- text")
          (text-mode)
@@ -31,17 +34,15 @@ fn astute_mode_enable_installs_buffer_local_keywords_lighter_and_font_lock_state
               astute--keywords
               font-lock-keywords)
              t)
-            (astute-test-display-map))))"##;
-    let expect = expect![[
+            (astute-test-display-map))))"##,
+            true,
+            expect![[
         r#"OK ((nil nil nil) t t t 8 (astute-mode astute-lighter) t ((0 34 "“") (7 34 "”") (9 45 "–") (10 45 "–")))"#
-    ]];
-
-    assert_astute_parity(elisp_form, expect);
-}
-
-#[test]
-fn astute_mode_disable_removes_typographic_displays_but_preserves_unrelated_display_properties() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "astute_mode_disable_removes_typographic_displays_but_preserves_unrelated_display_properties",
+            r##"(with-temp-buffer
          (insert
           "x \"quoted\" -- tail")
          (text-mode)
@@ -72,17 +73,15 @@ fn astute_mode_disable_removes_typographic_displays_but_preserves_unrelated_disp
             (buffer-substring-no-properties
              (point-min)
              (point-max))
-            (buffer-modified-p))))"##;
-    let expect = expect![[
+            (buffer-modified-p))))"##,
+            true,
+            expect![[
         r#"OK (((2 34 "“") (9 34 "”") (11 45 "–") (12 45 "–") (17 108 "★")) nil nil nil ((17 108 "★")) external "x \"quoted\" -- tail" nil)"#
-    ]];
-
-    assert_astute_parity(elisp_form, expect);
-}
-
-#[test]
-fn astute_mode_disable_exposes_exact_cleanup_behavior_for_display_at_buffer_start() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "astute_mode_disable_exposes_exact_cleanup_behavior_for_display_at_buffer_start",
+            r##"(with-temp-buffer
          (insert
           "\"start\" and \"middle\" -- done")
          (text-mode)
@@ -100,17 +99,15 @@ fn astute_mode_disable_exposes_exact_cleanup_behavior_for_display_at_buffer_star
             (get-text-property
              (1-
               (point-max))
-             'display))))"##;
-    let expect = expect![[
+             'display))))"##,
+            true,
+            expect![[
         r#"OK (((0 34 "“") (6 34 "”") (12 34 "“") (19 34 "”") (21 45 "–") (22 45 "–")) ((0 34 "“")) "“" nil)"#
-    ]];
-
-    assert_astute_parity(elisp_form, expect);
-}
-
-#[test]
-fn astute_mode_disable_widens_for_cleanup_then_restores_the_original_narrowing() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "astute_mode_disable_widens_for_cleanup_then_restores_the_original_narrowing",
+            r##"(with-temp-buffer
          (insert
           "\"outside\" -- left\n\"inside\" --- center\n'outside' -- right")
          (text-mode)
@@ -138,17 +135,15 @@ fn astute_mode_disable_widens_for_cleanup_then_restores_the_original_narrowing()
                 (astute-test-display-map))
               (buffer-substring-no-properties
                (point-min)
-               (point-max))))))"##;
-    let expect = expect![[
+               (point-max))))))"##,
+            true,
+            expect![[
         r#"OK (((0 34 "“") (8 34 "”") (10 45 "–") (11 45 "–") (18 34 "“") (25 34 "”") (27 45 "—") (28 45 "—") (29 45 "—") (38 39 "‘") (46 39 "’") (48 45 "–") (49 45 "–")) (20 39) (20 39) ((0 34 "“")) "inside\" --- center\n")"#
-    ]];
-
-    assert_astute_parity(elisp_form, expect);
-}
-
-#[test]
-fn astute_mode_reenable_rebuilds_keywords_after_live_transform_configuration_change() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "astute_mode_reenable_rebuilds_keywords_after_live_transform_configuration_change",
+            r##"(with-temp-buffer
          (insert
           "'single' \"double\" a--b a---b")
          (text-mode)
@@ -179,17 +174,15 @@ fn astute_mode_reenable_rebuilds_keywords_after_live_transform_configuration_cha
             (memq
              first-keywords
              font-lock-keywords)
-            (astute-test-display-map))))"##;
-    let expect = expect![[
+            (astute-test-display-map))))"##,
+            true,
+            expect![[
         r#"OK (8 ((0 39 "‘") (7 39 "’") (9 34 "“") (16 34 "”") (19 45 "–") (20 45 "–") (24 45 "—") (25 45 "—") (26 45 "—")) 1 nil nil ((0 39 "‘") (7 39 "’") (9 34 "“") (16 34 "”") (19 45 "–") (20 45 "–") (24 45 "—") (25 45 "—") (26 45 "—")))"#
-    ]];
-
-    assert_astute_parity(elisp_form, expect);
-}
-
-#[test]
-fn astute_mode_configuration_and_keyword_state_are_isolated_between_live_buffers() {
-    let elisp_form = r##"(let ((left
+    ]],
+        ),
+        (
+            "astute_mode_configuration_and_keyword_state_are_isolated_between_live_buffers",
+            r##"(let ((left
                 (generate-new-buffer
                  " *astute-left*"))
                (right
@@ -230,17 +223,15 @@ fn astute_mode_configuration_and_keyword_state_are_isolated_between_live_buffers
                 astute-transform-list
                 astute--keywords))
            (kill-buffer left)
-           (kill-buffer right)))"##;
-    let expect = expect![[
+           (kill-buffer right)))"##,
+            true,
+            expect![[
         r#"OK (((single-quote) 4 ((0 39 "‘") (5 39 "’"))) ((double-quote en-dash) 3 ((8 34 "“") (14 34 "”") (17 45 "–") (18 45 "–"))) (single-quote double-quote en-dash em-dash) nil)"#
-    ]];
-
-    assert_astute_parity(elisp_form, expect);
-}
-
-#[test]
-fn astute_mode_command_toggles_interactively_and_reuses_the_declared_lighter() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "astute_mode_command_toggles_interactively_and_reuses_the_declared_lighter",
+            r##"(with-temp-buffer
          (text-mode)
          (let ((command
                 (commandp 'astute-mode))
@@ -266,17 +257,15 @@ fn astute_mode_command_toggles_interactively_and_reuses_the_declared_lighter() {
               astute-lighter
               after-first
               astute-mode
-              astute--keywords))))"##;
-    let expect = expect![[
+              astute--keywords))))"##,
+            true,
+            expect![[
         r#"OK (t (interactive (list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) (astute-mode astute-lighter) " “As”" (t 8) nil nil)"#
-    ]];
-
-    assert_astute_parity(elisp_form, expect);
-}
-
-#[test]
-fn astute_custom_lighter_value_is_observed_through_minor_mode_alist_without_redefinition() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "astute_custom_lighter_value_is_observed_through_minor_mode_alist_without_redefinition",
+            r##"(with-temp-buffer
          (text-mode)
          (let ((astute-lighter
                 " [Typography]"))
@@ -291,16 +280,13 @@ fn astute_custom_lighter_value_is_observed_through_minor_mode_alist_without_rede
               (assq
                'astute-mode
                minor-mode-alist)))
-            astute-mode)))"##;
-    let expect =
-        expect![[r#"OK (" [Typography]" (astute-mode astute-lighter) " [Typography]" t)"#]];
-
-    assert_astute_parity(elisp_form, expect);
-}
-
-#[test]
-fn astute_mode_disable_before_fontification_is_safe_and_clears_registered_keywords() {
-    let elisp_form = r##"(with-temp-buffer
+            astute-mode)))"##,
+            true,
+            expect![[r#"OK (" [Typography]" (astute-mode astute-lighter) " [Typography]" t)"#]],
+        ),
+        (
+            "astute_mode_disable_before_fontification_is_safe_and_clears_registered_keywords",
+            r##"(with-temp-buffer
          (insert
           "\"not yet fontified\" -- text")
          (text-mode)
@@ -318,15 +304,13 @@ fn astute_mode_disable_before_fontification_is_safe_and_clears_registered_keywor
             (astute-test-display-map)
             (buffer-substring-no-properties
              (point-min)
-             (point-max)))))"##;
-    let expect = expect![[r#"OK (8 nil nil nil nil "\"not yet fontified\" -- text")"#]];
-
-    assert_astute_parity(elisp_form, expect);
-}
-
-#[test]
-fn astute_mode_hook_observes_completed_enable_and_disable_state_transitions() {
-    let elisp_form = r##"(with-temp-buffer
+             (point-max)))))"##,
+            true,
+            expect![[r#"OK (8 nil nil nil nil "\"not yet fontified\" -- text")"#]],
+        ),
+        (
+            "astute_mode_hook_observes_completed_enable_and_disable_state_transitions",
+            r##"(with-temp-buffer
          (text-mode)
          (let (events)
            (add-hook
@@ -348,8 +332,9 @@ fn astute_mode_hook_observes_completed_enable_and_disable_state_transitions() {
             astute-mode
             astute--keywords
             (local-variable-p
-             'astute-mode-hook))))"##;
-    let expect = expect!["OK (((t 8) (nil nil)) nil nil t)"];
-
-    assert_astute_parity(elisp_form, expect);
+             'astute-mode-hook))))"##,
+            true,
+            expect!["OK (((t 8) (nil nil)) nil nil t)"],
+        ),
+    ]);
 }

@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{APHELEIA_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const APHELEIA_TEST_TIMEOUT: Duration = Duration::from_secs(180);
@@ -94,4 +96,15 @@ fn assert_apheleia_source_parity(source_file: &str, elisp_form: &str, expected: 
 
 pub(crate) fn assert_apheleia_parity(elisp_form: &str, expected: Expect) {
     assert_apheleia_source_parity("apheleia.el", elisp_form, expected);
+}
+
+/// Multi-probe batch for `assert_apheleia_parity` cases (2a).
+pub(crate) fn assert_apheleia_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        apheleia_oracle("apheleia.el"),
+        &name,
+        "apheleia_parity",
+        cases,
+    );
 }

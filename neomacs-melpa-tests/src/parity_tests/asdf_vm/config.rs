@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_asdf_vm_parity;
+use super::assert_asdf_vm_batch;
 
 #[test]
-fn asdf_vm_config_scalar_decoders_and_encoders_cover_boolean_integer_string_and_key_shapes() {
-    let elisp_form = r##"(list
+fn config_public_surface_batch() {
+    assert_asdf_vm_batch(&[
+        (
+            "asdf_vm_config_scalar_decoders_and_encoders_cover_boolean_integer_string_and_key_shapes",
+            r##"(list
                (mapcar
                 #'asdf-vm-config--file-decode-key
                 '(" legacy_version_file "
@@ -31,16 +34,15 @@ fn asdf_vm_config_scalar_decoders_and_encoders_cover_boolean_integer_string_and_
                   資料-field))
                (mapcar
                 #'asdf-vm-config--file-encode-value
-                '(t nil 0 42 "auto" "資料 λ")))"##;
-    let expect = expect![[
+                '(t nil 0 42 "auto" "資料 λ")))"##,
+            true,
+            expect![[
         r#"OK ((:legacy-version-file :use-release-candidates :資料-field) (t nil 0 42 "-1" "auto" "資料 λ") ((:concurrency 8) (:legacy-version-file t) (:custom-value "資料 λ")) ("legacy_version_file" "use_release_candidates" "資料_field") ("yes" "no" "0" "42" "auto" "資料 λ"))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_config_decode_maps_real_asdfrc_text_into_typed_object_slots() {
-    let elisp_form = r##"(let* ((text
+    ]],
+        ),
+        (
+            "asdf_vm_config_decode_maps_real_asdfrc_text_into_typed_object_slots",
+            r##"(let* ((text
                      (concat
                       "legacy_version_file = yes\n"
                       "use_release_candidates = no\n"
@@ -64,16 +66,15 @@ fn asdf_vm_config_decode_maps_real_asdfrc_text_into_typed_object_slots() {
                    always-keep-download
                    plugin-repository-last-check-duration
                    disable-plugin-short-name-repository
-                   concurrency))))"##;
-    let expect = expect![[
+                   concurrency))))"##,
+            true,
+            expect![[
         r#"OK (asdf-vm-config--file ((legacy-version-file t) (use-release-candidates nil) (always-keep-download t) (plugin-repository-last-check-duration 125) (disable-plugin-short-name-repository nil) (concurrency "auto")))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_config_decode_exposes_inline_comment_whitespace_unknown_and_malformed_line_behavior() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "asdf_vm_config_decode_exposes_inline_comment_whitespace_unknown_and_malformed_line_behavior",
+            r##"(mapcar
                (lambda (text)
                  (condition-case error-data
                      (let ((object
@@ -103,16 +104,15 @@ fn asdf_vm_config_decode_exposes_inline_comment_whitespace_unknown_and_malformed
                  "; full comment\nlegacy_version_file = yes\n"
                  "legacy_version_file = yes\n\nconcurrency = 4\n"
                  "unknown_field = value\n"
-                 "whitespace only follows\n   \n"))"##;
-    let expect = expect![[
+                 "whitespace only follows\n   \n"))"##,
+            true,
+            expect![[
         r##"OK ((:error invalid-slot-type (asdf-vm-config--file legacy-version-file boolean "yes ; retained comment")) (:ok (t "auto")) (:error invalid-slot-type (asdf-vm-config--file concurrency string 4)) (:error invalid-slot-name :unknown-field) (:error wrong-type-argument (number-or-marker-p nil)))"##
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_config_encode_emits_every_supported_field_in_class_order() {
-    let elisp_form = r##"(let ((object
+    ]],
+        ),
+        (
+            "asdf_vm_config_encode_emits_every_supported_field_in_class_order",
+            r##"(let ((object
                     (make-instance
                      'asdf-vm-config--file
                      :legacy-version-file t
@@ -123,16 +123,15 @@ fn asdf_vm_config_encode_emits_every_supported_field_in_class_order() {
                      :concurrency "6")))
                (list
                 asdf-vm-config--valid-file-fields
-                (asdf-vm-ui--encode object)))"##;
-    let expect = expect![[
+                (asdf-vm-ui--encode object)))"##,
+            true,
+            expect![[
         r#"OK ((always-keep-download concurrency disable-plugin-short-name-repository legacy-version-file plugin-repository-last-check-duration use-release-candidates) "legacy_version_file = yes\nuse_release_candidates = no\nalways_keep_download = yes\nplugin_repository_last_check_duration = 17\ndisable_plugin_short_name_repository = yes\nconcurrency = 6")"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_ui_reads_mutates_and_writes_real_config_file_round_trip() {
-    let elisp_form = r##"(let* ((input
+    ]],
+        ),
+        (
+            "asdf_vm_ui_reads_mutates_and_writes_real_config_file_round_trip",
+            r##"(let* ((input
                      (asdf-vm-test-path
                       "config/input.asdfrc"))
                     (output
@@ -161,16 +160,15 @@ fn asdf_vm_ui_reads_mutates_and_writes_real_config_file_round_trip() {
                    object output)
                   (file-exists-p output)
                   (asdf-vm-test-read-file
-                   output))))"##;
-    let expect = expect![[
+                   output))))"##,
+            true,
+            expect![[
         r#"OK ("[ORACLE-SANDBOX]/config/input.asdfrc" nil t "legacy_version_file = yes\nuse_release_candidates = no\nalways_keep_download = yes\nplugin_repository_last_check_duration = 60\ndisable_plugin_short_name_repository = no\nconcurrency = 12\n")"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_config_edit_reads_existing_or_constructs_missing_backing_object() {
-    let elisp_form = r##"(let* ((existing
+    ]],
+        ),
+        (
+            "asdf_vm_config_edit_reads_existing_or_constructs_missing_backing_object",
+            r##"(let* ((existing
                      (asdf-vm-test-path
                       "config-edit/existing"))
                     (missing
@@ -199,16 +197,15 @@ fn asdf_vm_config_edit_reads_existing_or_constructs_missing_backing_object() {
                    existing)
                   (asdf-vm-config-edit
                    missing)
-                  (nreverse calls))))"##;
-    let expect = expect![[
+                  (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK (:customized :customized ((asdf-vm-config--file "[ORACLE-SANDBOX]/config-edit/existing" "auto") (asdf-vm-config--file "[ORACLE-SANDBOX]/config-edit/missing" "auto")))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_config_state_injection_and_rollback_restore_present_and_absent_environment_values() {
-    let elisp_form = r##"(let ((asdf-vm-config-file
+    ]],
+        ),
+        (
+            "asdf_vm_config_state_injection_and_rollback_restore_present_and_absent_environment_values",
+            r##"(let ((asdf-vm-config-file
                     "/new/config")
                    (asdf-vm-tool-versions-filename
                     ".versions-new")
@@ -249,9 +246,11 @@ fn asdf_vm_config_state_injection_and_rollback_restore_present_and_absent_enviro
                        "ASDF_TOOL_VERSIONS_FILENAME"
                        "ASDF_DIR"
                        "ASDF_DATA_DIR"
-                       "ASDF_CONCURRENCY"))))))"##;
-    let expect = expect![[
+                       "ASDF_CONCURRENCY"))))))"##,
+            true,
+            expect![[
         r#"OK (((asdf-vm-config-file "ASDF_CONFIG_FILE" "/old/config") (asdf-vm-tool-versions-filename "ASDF_TOOL_VERSIONS_FILENAME" nil) (asdf-vm-dir "ASDF_DIR" "/old/core") (asdf-vm-data-dir "ASDF_DATA_DIR" nil) (asdf-vm-concurrency "ASDF_CONCURRENCY" "auto")) ("/new/config" ".versions-new" "/new/core" "/new/data" "9") ("/old/config" nil "/old/core" nil "auto"))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,15 +1,19 @@
 use expect_test::expect;
 
-use super::assert_ac_ispell_parity;
+use super::assert_ac_ispell_batch;
 
 /// The package's headline workflow: writing prose, the user types a word stem
 /// and gets English completions from the word list.  The documented setup is
 /// `ac-ispell-setup' (which declares the sources from the current custom
 /// values) followed by `ac-ispell-ac-setup' in the buffer, here bound to the
 /// auto-complete trigger key so the completion is started by real typing.
+
 #[test]
-fn ac_ispell_completes_a_typed_prose_word_from_the_real_word_list() {
-    let elisp_form = r##"(progn
+fn workflows_public_surface_batch() {
+    assert_ac_ispell_batch(&[
+        (
+            "ac_ispell_completes_a_typed_prose_word_from_the_real_word_list",
+            r##"(progn
  (ac-ispell-test-setup)
  (ac-ispell-setup)
  (ac-ispell-test-with-live-buffer #'text-mode "Please send me the rec"
@@ -29,22 +33,15 @@ fn ac_ispell_completes_a_typed_prose_word_from_the_real_word_list() {
               :moved moved
               :after (ac-ispell-test-buffer-state)
               :lookups (ac-ispell-test-lookups)
-              :speller (ac-ispell-test-speller-log)))))))"##;
-
-    let expect = expect![[
+              :speller (ac-ispell-test-speller-log)))))))"##,
+            true,
+            expect![[
         r#"OK (:installed (:sources #1=(ac-source-ispell ac-source-ispell-fuzzy) :auto-complete t :ispell ((candidates . ac-ispell--candidates) (requires . 3) (symbol . "s")) :fuzzy ((candidates . ac-ispell--fuzzy-candidates) (match lambda (prefix candidates) candidates) (requires . 3) (limit . 2) (symbol . "s") (candidate-face . ac-ispell-fuzzy-candidate-face))) :offered ((:prefix "recip" :prefix-start 19 :common "recip" :menu-live t :selected "recipe") (("recipe" "s" nil) ("recipient" "s" nil) ("reciprocal" "s" nil))) :moved (:prefix "recip" :prefix-start 19 :common "recip" :menu-live t :selected "recipient") :after (:text "Please send me the recipient" :point 28 :mode text-mode :auto-complete t :sources #1#) :lookups ("grep|-Ei|^recip.*$|[ORACLE-SANDBOX]/words.txt") :speller ("run|-a|-m|-B" "!" "-" "%" "^recip"))"#
-    ]];
-
-    assert_ac_ispell_parity(elisp_form, expect);
-}
-
-/// Prose is written in sentences, so the case of the typed stem decides the
-/// case of the completions: one leading capital capitalizes them, two upcase
-/// them.  Both spellings are looked up in their downcased form, so the second
-/// completion is served from the package's cache without a second search.
-#[test]
-fn ac_ispell_matches_the_case_of_the_typed_stem_and_reuses_one_lookup() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "ac_ispell_matches_the_case_of_the_typed_stem_and_reuses_one_lookup",
+            r##"(progn
  (ac-ispell-test-setup)
  (ac-ispell-setup)
  (ac-ispell-test-with-live-buffer #'text-mode "Recip"
@@ -63,22 +60,15 @@ fn ac_ispell_matches_the_case_of_the_typed_stem_and_reuses_one_lookup() {
               :after-capitalized after-capitalized
               :upcased upcased
               :after (ac-ispell-test-buffer-state)
-              :lookups (ac-ispell-test-lookups)))))))"##;
-
-    let expect = expect![[
+              :lookups (ac-ispell-test-lookups)))))))"##,
+            true,
+            expect![[
         r#"OK (:capitalized ((:prefix "Recip" :prefix-start 0 :common "Recip" :menu-live t :selected "Recipe") (("Recipe" "s" nil) ("Recipient" "s" nil) ("Reciprocal" "s" nil))) :after-capitalized (:text "Recipe" :point 6 :mode text-mode :auto-complete t :sources #1=(ac-source-ispell ac-source-ispell-fuzzy)) :upcased ((:prefix "RECIP" :prefix-start 7 :common "RECIP" :menu-live t :selected "RECIPE") (("RECIPE" "s" nil) ("RECIPIENT" "s" nil) ("RECIPROCAL" "s" nil))) :after (:text "Recipe\nRECIPIENT" :point 16 :mode text-mode :auto-complete t :sources #1#) :lookups ("grep|-Ei|^recip.*$|[ORACLE-SANDBOX]/words.txt"))"#
-    ]];
-
-    assert_ac_ispell_parity(elisp_form, expect);
-}
-
-/// Typing continues after the first menu appears, and the package answers the
-/// longer stem from the candidates it already fetched: a stem that extends a
-/// cached one runs no new search, while a different stem does.  With a single
-/// candidate left auto-complete's dwim expansion inserts it immediately.
-#[test]
-fn ac_ispell_answers_a_longer_stem_from_its_cache_and_researches_a_new_one() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "ac_ispell_answers_a_longer_stem_from_its_cache_and_researches_a_new_one",
+            r##"(progn
  (ac-ispell-test-setup)
  (ac-ispell-setup)
  (ac-ispell-test-with-live-buffer #'text-mode "The recip"
@@ -95,23 +85,15 @@ fn ac_ispell_answers_a_longer_stem_from_its_cache_and_researches_a_new_one() {
       (list :first first
             :extended extended
             :other-stem (list (ac-ispell-test-session) (ac-ispell-test-menu))
-            :lookups (ac-ispell-test-lookups))))))"##;
-
-    let expect = expect![[
+            :lookups (ac-ispell-test-lookups))))))"##,
+            true,
+            expect![[
         r#"OK (:first ((:prefix "recip" :prefix-start 4 :common "recip" :menu-live t :selected "recipe") (("recipe" "s" nil) ("recipient" "s" nil) ("reciprocal" "s" nil))) :extended (:text "The recipient" :point 13 :mode text-mode :auto-complete t :sources (ac-source-ispell ac-source-ispell-fuzzy)) :other-stem ((:prefix "rece" :prefix-start 18 :common "rece" :menu-live t :selected "recess") (("recess" "s" nil) ("receive" "s" nil) ("receiver" "s" nil) ("reception" "s" nil))) :lookups ("grep|-Ei|^recip.*$|[ORACLE-SANDBOX]/words.txt" "grep|-Ei|^rece.*$|[ORACLE-SANDBOX]/words.txt"))"#
-    ]];
-
-    assert_ac_ispell_parity(elisp_form, expect);
-}
-
-/// `ac-ispell-requires' is the whole point of the package's configuration: it
-/// keeps a two-letter stem from starting a word-list search at all.  The
-/// documented configuration is `custom-set-variables' plus a fresh
-/// `ac-ispell-setup', which must rebuild both sources -- and a zero
-/// `ac-ispell-fuzzy-limit' must keep the fuzzy source out of `ac-sources'.
-#[test]
-fn ac_ispell_requires_gates_short_stems_and_a_customized_value_takes_effect() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "ac_ispell_requires_gates_short_stems_and_a_customized_value_takes_effect",
+            r##"(progn
  (ac-ispell-test-setup)
  (ac-ispell-setup)
  (let ((default-run
@@ -144,23 +126,15 @@ fn ac_ispell_requires_gates_short_stems_and_a_customized_value_takes_effect() {
                                (ac-ispell-test-menu)))))))
      (list :default default-run
            :customized custom-run
-           :lookups (ac-ispell-test-lookups)))))"##;
-
-    let expect = expect![[
+           :lookups (ac-ispell-test-lookups)))))"##,
+            true,
+            expect![[
         r#"OK (:default (:requires 3 :fuzzy-limit 2 :sources (ac-source-ispell ac-source-ispell-fuzzy) :short (nil (:prefix nil :prefix-start nil :common nil :menu-live nil :selected nil) nil nothing-recorded) :long ((:prefix "rec" :prefix-start 3 :common "rec" :menu-live t :selected "recall") (("recall" "s" nil) ("recess" "s" nil) ("recipe" "s" nil) ("recite" "s" nil) ("reckon" "s" nil) ("receive" "s" nil) ("receiver" "s" nil) ("reception" "s" nil) ("recipient" "s" nil) ("recommend" "s" nil) ("reciprocal" "s" nil)))) :customized (:ispell ((candidates . ac-ispell--candidates) (requires . 5) (symbol . "s")) :fuzzy ((candidates . ac-ispell--fuzzy-candidates) (match lambda (prefix candidates) candidates) (requires . 5) (limit . 0) (symbol . "s") (candidate-face . ac-ispell-fuzzy-candidate-face)) :sources (ac-source-ispell) :short (nil nil) :long ((:prefix "recip" :prefix-start 3 :common "recip" :menu-live t :selected "recipe") (("recipe" "s" nil) ("recipient" "s" nil) ("reciprocal" "s" nil)))) :lookups ("grep|-Ei|^rec.*$|[ORACLE-SANDBOX]/words.txt"))"#
-    ]];
-
-    assert_ac_ispell_parity(elisp_form, expect);
-}
-
-/// A misspelling is exactly where the word list has nothing to offer, so the
-/// fuzzy source asks the real speller for near misses over the `ispell -a'
-/// pipe.  `ac-ispell-fuzzy-limit' truncates the speller's three suggestions to
-/// two, they are marked with the package's own candidate face, and completing
-/// one repairs the misspelled word in place.
-#[test]
-fn ac_ispell_fuzzy_source_offers_limited_speller_near_misses_for_a_misspelling() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "ac_ispell_fuzzy_source_offers_limited_speller_near_misses_for_a_misspelling",
+            r##"(progn
  (ac-ispell-test-setup)
  (ac-ispell-setup)
  (ac-ispell-test-with-live-buffer #'text-mode "Dear recipiant"
@@ -172,23 +146,15 @@ fn ac_ispell_fuzzy_source_offers_limited_speller_near_misses_for_a_misspelling()
           :offered offered
           :after (ac-ispell-test-buffer-state)
           :lookups (ac-ispell-test-lookups)
-          :speller (ac-ispell-test-speller-log)))))"##;
-
-    let expect = expect![[
+          :speller (ac-ispell-test-speller-log)))))"##,
+            true,
+            expect![[
         r#"OK (:limit 2 :offered ((:prefix "recipiant" :prefix-start 5 :common nil :menu-live t :selected "recipient") (("recipient" "s" ac-ispell-fuzzy-candidate-face) ("recipients" "s" ac-ispell-fuzzy-candidate-face))) :after (:text "Dear recipient" :point 14 :mode text-mode :auto-complete t :sources (ac-source-ispell ac-source-ispell-fuzzy)) :lookups ("grep|-Ei|^recipiant.*$|[ORACLE-SANDBOX]/words.txt") :speller ("run|-a|-m|-B" "!" "-" "%" "^recipiant"))"#
-    ]];
-
-    assert_ac_ispell_parity(elisp_form, expect);
-}
-
-/// Two ways to get nothing.  A stem containing a digit is not a word, so the
-/// package skips the word-list search entirely -- while the fuzzy source still
-/// asks the speller, which is the only reason anything reaches the subprocess.
-/// A stem that is simply unknown searches the word list, gets no match, and the
-/// speller reports the word as correct, so it has no near misses either.
-#[test]
-fn ac_ispell_offers_nothing_for_a_non_word_stem_or_an_unknown_word() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "ac_ispell_offers_nothing_for_a_non_word_stem_or_an_unknown_word",
+            r##"(progn
  (ac-ispell-test-setup)
  (ac-ispell-setup)
  (ac-ispell-test-with-live-buffer #'text-mode "encoding utf8"
@@ -205,23 +171,15 @@ fn ac_ispell_offers_nothing_for_a_non_word_stem_or_an_unknown_word() {
                               (ac-ispell-test-menu)
                               (ac-ispell-test-buffer-state))
           :lookups (ac-ispell-test-lookups)
-          :speller (ac-ispell-test-speller-log)))))"##;
-
-    let expect = expect![[
+          :speller (ac-ispell-test-speller-log)))))"##,
+            true,
+            expect![[
         r#"OK (:non-word (t nil (:text "encoding utf8" :point 13 :mode text-mode :auto-complete t :sources #1=(ac-source-ispell ac-source-ispell-fuzzy)) nothing-recorded ("run|-a|-m|-B" "!" "-" "%" "^utf8")) :unknown-word (t nil (:text "encoding utf8 and unmatchable" :point 29 :mode text-mode :auto-complete t :sources #1#)) :lookups ("grep|-Ei|^unmatchable.*$|[ORACLE-SANDBOX]/words.txt") :speller ("run|-a|-m|-B" "!" "-" "%" "^utf8" "!" "-" "%" "^unmatchable"))"#
-    ]];
-
-    assert_ac_ispell_parity(elisp_form, expect);
-}
-
-/// The realistic broken installation: `ispell-complete-word-dict' names a word
-/// list that is not there.  The error escapes the public `auto-complete'
-/// command, the speller is never reached because the word-list source runs
-/// first, and the buffer keeps the newline auto-complete's prefix overlay
-/// inserted at end of buffer before the failure.
-#[test]
-fn ac_ispell_reports_a_missing_word_list_out_of_the_public_command() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "ac_ispell_reports_a_missing_word_list_out_of_the_public_command",
+            r##"(progn
  (ac-ispell-test-setup "dictionaries/words.txt")
  (ac-ispell-setup)
  (ac-ispell-test-with-live-buffer #'text-mode "The recip"
@@ -231,11 +189,11 @@ fn ac_ispell_reports_a_missing_word_list_out_of_the_public_command() {
         :after (ac-ispell-test-buffer-state)
         :dictionary ispell-complete-word-dict
         :lookups (ac-ispell-test-lookups)
-        :speller (ac-ispell-test-speller-log))))"##;
-
-    let expect = expect![[
+        :speller (ac-ispell-test-speller-log))))"##,
+            true,
+            expect![[
         r#"OK (:outcome (error "ispell-lookup-words: Unreadable or missing plain word-list [ORACLE-SANDBOX]/dictionaries/words.txt") :menu nil :after (:text "The recip\n" :point 9 :mode text-mode :auto-complete t :sources (ac-source-ispell ac-source-ispell-fuzzy)) :dictionary "[ORACLE-SANDBOX]/dictionaries/words.txt" :lookups nothing-recorded :speller nothing-recorded)"#
-    ]];
-
-    assert_ac_ispell_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

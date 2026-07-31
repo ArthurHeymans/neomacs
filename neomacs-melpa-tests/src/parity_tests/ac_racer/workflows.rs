@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_ac_racer_parity;
+use super::assert_ac_racer_batch;
 
 /// The workflow the package exists for: open a Rust file in a cargo project,
 /// run `M-x ac-racer-setup', and complete a method against racer.  The
@@ -11,9 +11,13 @@ use super::assert_ac_racer_parity;
 /// directory and the exact bytes written to `ac-racer--tempfile'.  With two
 /// candidates auto-complete first expands their common part inline, then the
 /// user picks the second one and completes it.
+
 #[test]
-fn sets_up_the_source_and_completes_a_string_method_through_racer() {
-    let elisp_form = r##"
+fn workflows_public_surface_batch() {
+    assert_ac_racer_batch(&[
+        (
+            "sets_up_the_source_and_completes_a_string_method_through_racer",
+            r##"
         (progn
           (ac-racer-test-project)
           (ac-racer-test-reply
@@ -74,26 +78,15 @@ fn sets_up_the_source_and_completes_a_string_method_through_racer() {
            :tempfile (list (file-exists-p ac-racer--tempfile)
                            (ac-racer-test-file-text ac-racer--tempfile))
            :recorded (ac-racer-test-recorded)))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:setup (:mode-before nil :sources-before #1=(ac-source-words-in-same-mode-buffers) :returned (ac-source-racer . #1#) :mode-after t :major-mode rust-mode) :offered (:line "    label.insert" :point 155 :ac-point 149 :ac-prefix "insert" :candidates (("insert" "Function" "pub fn insert(&mut self, idx: usize, ch: char)") ("insert_str" "Function" "pub fn insert_str(&mut self, idx: usize, string: &str)")) :first-properties (document "pub fn insert(&mut self, idx: usize, ch: char)" summary "Function") :menu-live t :menu ("insert" "insert_str") :selected "insert") :completed (:line "    label.insert_str" :point 159 :menu-live nil :last-completion ("insert_str" "Function" "pub fn insert_str(&mut self, idx: usize, string: &str)" 149) :buffer "use std::collections::HashMap;\n\nfn main() {\n    let mut scores: HashMap<String, i32> = HashMap::new();\n    let mut label = String::new();\n    label.insert_str\n    scores.insert(label, 1);\n    for (name, score) in &scores {\n        println!(\"{}: {}\", name, score);\n    }\n}\n") :tempfile (t "use std::collections::HashMap;\n\nfn main() {\n    let mut scores: HashMap<String, i32> = HashMap::new();\n    let mut label = String::new();\n    label.ins\n    scores.insert(label, 1);\n    for (name, score) in &scores {\n        println!(\"{}: {}\", name, score);\n    }\n}\n") :recorded (("01-request" . "argv: complete 6 13 [ORACLE-SANDBOX]/rust/src/main.rs [ORACLE-TMPDIR]/ac-racer-complete\nRUST_SRC_PATH: [ORACLE-SANDBOX]/rust/rust-src\nstdin: \ncwd: [ORACLE-SANDBOX]/rust/src\ntempfile([ORACLE-TMPDIR]/ac-racer-complete):\nuse std::collections::HashMap;\n\nfn main() {\n    let mut scores: HashMap<String, i32> = HashMap::new();\n    let mut label = String::new();\n    label.ins\n    scores.insert(label, 1);\n    for (name, score) in &scores {\n        println!(\"{}: {}\", name, score);\n    }\n}\n")))"#
-    ]];
-
-    assert_ac_racer_parity(elisp_form, expect);
-}
-
-/// The same completion on a line full of non-ASCII source.  `ac-racer--prefix'
-/// walks back over word and symbol syntax, so the German identifier before the
-/// `::' bounds the prefix, and the package reports the point to racer as
-/// `current-column' — a *character* column, which the recorded argument vector
-/// pins next to the byte column racer actually indexes by.  Racer answers with
-/// a single non-ASCII candidate, so auto-complete's DWIM path inserts it
-/// outright instead of showing a menu, and the temporary file has to carry the
-/// whole UTF-8 buffer through to the binary.
-#[test]
-fn completes_a_non_ascii_identifier_and_reports_a_character_column() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "completes_a_non_ascii_identifier_and_reports_a_character_column",
+            r##"
         (progn
           (ac-racer-test-project)
           (ac-racer-test-reply
@@ -135,23 +128,15 @@ fn completes_a_non_ascii_identifier_and_reports_a_character_column() {
                               :last-completion (ac-racer-test-last-completion)))
            :tempfile (ac-racer-test-file-text ac-racer--tempfile)
            :recorded (ac-racer-test-recorded)))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:before (:line "    let betrag = währung::erz" :point 202 :column 29 :byte-column 30) :completed (:line "    let betrag = währung::erzeuge" :point 206 :column 33 :menu-live nil :last-completion ("erzeuge" "Function" "pub fn erzeuge(höhe: i64) -> Betrag" 199)) :tempfile "mod währung {\n    pub struct Betrag { pub höhe: i64 }\n\n    pub fn erzeuge(höhe: i64) -> Betrag {\n        Betrag { höhe }\n    }\n}\n\nfn main() {\n    // Grüße an die Welt – 図形\n    let betrag = währung::erz\n    println!(\"{}\", betrag.höhe);\n}\n" :recorded (("01-request" . "argv: complete 11 29 [ORACLE-SANDBOX]/rust/src/main.rs [ORACLE-TMPDIR]/ac-racer-complete\nRUST_SRC_PATH: [ORACLE-SANDBOX]/rust/rust-src\nstdin: \ncwd: [ORACLE-SANDBOX]/rust/src\ntempfile([ORACLE-TMPDIR]/ac-racer-complete):\nmod währung {\n    pub struct Betrag { pub höhe: i64 }\n\n    pub fn erzeuge(höhe: i64) -> Betrag {\n        Betrag { höhe }\n    }\n}\n\nfn main() {\n    // Grüße an die Welt – 図形\n    let betrag = währung::erz\n    println!(\"{}\", betrag.höhe);\n}\n")))"#
-    ]];
-
-    assert_ac_racer_parity(elisp_form, expect);
-}
-
-/// Two things racer does routinely: answer successfully with no completions
-/// at all, and fail outright.  `ac-racer--candidates' only parses output when
-/// racer exited zero, so a failure must not turn stderr into candidates, and
-/// neither case may leave the buffer edited or a menu behind.  Both requests
-/// are still recorded, which is what proves the package asked at all.
-#[test]
-fn offers_nothing_when_racer_finds_no_matches_or_exits_non_zero() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "offers_nothing_when_racer_finds_no_matches_or_exits_non_zero",
+            r##"
         (progn
           (ac-racer-test-project)
           (ac-racer-test-reply "PREFIX 10,13,zzz\nEND\n" 1)
@@ -197,23 +182,15 @@ fn offers_nothing_when_racer_finds_no_matches_or_exits_non_zero() {
                    :modified (buffer-modified-p)
                    :invocations (ac-racer-test-invocations)))
            :recorded (ac-racer-test-recorded)))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:no-matches (:line "    label.zzz" :point 57 :candidates nil :menu-live nil :modified nil :invocations 1) :racer-failed (:line "    label.ins" :point 63 :candidates nil :menu-live nil :modified nil :invocations 2) :recorded (("01-request" . "argv: complete 3 13 [ORACLE-SANDBOX]/rust/src/main.rs [ORACLE-TMPDIR]/ac-racer-complete\nRUST_SRC_PATH: [ORACLE-SANDBOX]/rust/rust-src\nstdin: \ncwd: [ORACLE-SANDBOX]/rust/src\ntempfile([ORACLE-TMPDIR]/ac-racer-complete):\nfn main() {\n    let label = String::new();\n    label.zzz\n}\n") ("02-request" . "argv: complete 3 13 [ORACLE-SANDBOX]/rust/src/lib.rs [ORACLE-TMPDIR]/ac-racer-complete\nRUST_SRC_PATH: [ORACLE-SANDBOX]/rust/rust-src\nstdin: \ncwd: [ORACLE-SANDBOX]/rust/src\ntempfile([ORACLE-TMPDIR]/ac-racer-complete):\npub fn helper() {\n    let label = String::new();\n    label.ins\n}\n")))"#
-    ]];
-
-    assert_ac_racer_parity(elisp_form, expect);
-}
-
-/// The everyday broken setup: `racer' is not installed, so `racer-cmd' names a
-/// file that is not there.  ac-racer runs the binary unconditionally, so the
-/// user gets the raw `file-missing' signal rather than an empty completion.
-/// The buffer must survive it untouched, and the completion has to work again
-/// as soon as the binary is back.
-#[test]
-fn signals_file_missing_when_the_racer_binary_is_not_installed() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "signals_file_missing_when_the_racer_binary_is_not_installed",
+            r##"
         (progn
           (ac-racer-test-project)
           (ac-racer-test-reply
@@ -254,25 +231,15 @@ fn signals_file_missing_when_the_racer_binary_is_not_installed() {
                    :last-completion (ac-racer-test-last-completion)
                    :invocations (ac-racer-test-invocations)))
            :recorded (ac-racer-test-recorded)))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:uninstalled (:racer-cmd "racer" :exists nil :error (file-missing ("Searching for program" "No such file or directory" "[ORACLE-SANDBOX]/rust/bin/racer")) :line "    label.ins" :point 61 :candidates nil :modified nil :invocations 0) :reinstalled (:line "    label.insert" :point 64 :last-completion ("insert" "Function" "pub fn insert(&mut self, idx: usize, ch: char)" 58) :invocations 1) :recorded (("01-request" . "argv: complete 3 13 [ORACLE-SANDBOX]/rust/src/main.rs [ORACLE-TMPDIR]/ac-racer-complete\nRUST_SRC_PATH: [ORACLE-SANDBOX]/rust/rust-src\nstdin: \ncwd: [ORACLE-SANDBOX]/rust/src\ntempfile([ORACLE-TMPDIR]/ac-racer-complete):\nfn main() {\n    let mut label = String::new();\n    label.ins\n}\n")))"#
-    ]];
-
-    assert_ac_racer_parity(elisp_form, expect);
-}
-
-/// `ac-racer-setup' is what a user puts on `rust-mode-hook', so it has to be
-/// safe to run repeatedly and it must stay in the buffer that ran it.  A
-/// second Rust file with `auto-complete-mode' turned on by hand keeps the
-/// stock sources, completes only from auto-complete's word index, and never
-/// runs racer — one invocation is recorded for the whole workflow, for the
-/// buffer that was actually set up — while the global default `ac-sources'
-/// is left alone.
-#[test]
-fn setup_adds_the_source_once_and_only_to_the_buffer_that_ran_it() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "setup_adds_the_source_once_and_only_to_the_buffer_that_ran_it",
+            r##"
         (progn
           (ac-racer-test-project)
           (ac-racer-test-reply
@@ -339,11 +306,11 @@ fn setup_adds_the_source_once_and_only_to_the_buffer_that_ran_it() {
                      :modified (buffer-modified-p)
                      :invocations (ac-racer-test-invocations)))
              :recorded (ac-racer-test-recorded))))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:configured (:first #1=(ac-source-racer . #2=(ac-source-words-in-same-mode-buffers)) :second #1# :mode t :buffer-local t) :untouched (:major-mode rust-mode :mode t :sources #2# :buffer-local nil) :global-default #2# :completes-in-configured (:line "    label.insert" :last-completion ("insert" "Function" "pub fn insert(&mut self, idx: usize, ch: char)" 58) :invocations 1) :silent-in-untouched (:line "    label.ins" :point 67 :sources #2# :candidates ("ins" "insert") :modified nil :invocations 1) :recorded (("01-request" . "argv: complete 3 13 [ORACLE-SANDBOX]/rust/src/main.rs [ORACLE-TMPDIR]/ac-racer-complete\nRUST_SRC_PATH: [ORACLE-SANDBOX]/rust/rust-src\nstdin: \ncwd: [ORACLE-SANDBOX]/rust/src\ntempfile([ORACLE-TMPDIR]/ac-racer-complete):\nfn main() {\n    let mut label = String::new();\n    label.ins\n}\n")))"#
-    ]];
-
-    assert_ac_racer_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

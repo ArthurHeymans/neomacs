@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_audio_notes_mode_parity;
+use super::assert_audio_notes_mode_batch;
 
 #[test]
-fn audio_notes_mode_mplayer_prefix_parser_handles_numeric_raw_and_error_inputs() {
-    let elisp_form = r##"(let ((anm/default-seek-step 5))
+fn process_public_surface_batch() {
+    assert_audio_notes_mode_batch(&[
+        (
+            "audio_notes_mode_mplayer_prefix_parser_handles_numeric_raw_and_error_inputs",
+            r##"(let ((anm/default-seek-step 5))
                            (mapcar
                             (lambda (input)
                               (list
@@ -26,17 +29,15 @@ fn audio_notes_mode_mplayer_prefix_parser_handles_numeric_raw_and_error_inputs()
                               ()
                               (0)
                               symbol
-                              "5")))"##;
-    let expect = expect![[
+                              "5")))"##,
+            true,
+            expect![[
         r#"OK ((nil (:ok 5)) (0 (:ok 0)) (3 (:ok 3)) (-7 (:ok -7)) (2.5 (:ok 2.5)) ((1) (:ok 5.0)) ((4) (:ok 10.0)) ((16) (:ok 15.0)) ((-16) (:ok 15.0)) ((64) (:ok 20.0)) (nil (:ok 5)) ((0) (:ok -1.0e+INF)) (symbol (:ok nil)) ("5" (:ok nil)))"#
-    ]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_mplayer_prefix_parser_scales_with_custom_default_step() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "audio_notes_mode_mplayer_prefix_parser_scales_with_custom_default_step",
+            r##"(mapcar
                           (lambda (step)
                             (let ((anm/default-seek-step step))
                               (list
@@ -46,17 +47,15 @@ fn audio_notes_mode_mplayer_prefix_parser_scales_with_custom_default_step() {
                                (anm/-mplayer-parse-seconds '(1))
                                (anm/-mplayer-parse-seconds '(4))
                                (anm/-mplayer-parse-seconds '(16)))))
-                          '(1 3 10 -2 0))"##;
-    let expect = expect![
+                          '(1 3 10 -2 0))"##,
+            true,
+            expect![
         "OK ((1 1 7 1.0 2.0 3.0) (3 3 7 3.0 6.0 9.0) (10 10 7 10.0 20.0 30.0) (-2 -2 7 -2.0 -4.0 -6.0) (0 0 7 0.0 0.0 0.0))"
-    ];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_mplayer_and_process_alive_predicate_matrix_matches() {
-    let elisp_form = r##"(let (status-calls)
+    ],
+        ),
+        (
+            "audio_notes_mode_mplayer_and_process_alive_predicate_matrix_matches",
+            r##"(let (status-calls)
                            (cl-letf
                                (((symbol-function
                                   'process-status)
@@ -96,17 +95,15 @@ fn audio_notes_mode_mplayer_and_process_alive_predicate_matrix_matches() {
                                  running
                                  stopped
                                  exited))
-                              (nreverse status-calls))))"##;
-    let expect = expect![[
+                              (nreverse status-calls))))"##,
+            true,
+            expect![[
         r#"OK (((internal (:ok nil)) (nil (:ok nil)) (nil (:ok nil)) (("mplayer") (:ok t)) (("mplayer" "-quiet" file) (:ok t)) (("vlc" file) (:ok nil)) ((mplayer file) (:ok t)) (("MPLAYER" file) (:ok nil)) (("mplayer" . file) (:ok t))) ((nil nil) (running t) (stopped nil) (exited nil)) (running stopped exited))"#
-    ]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_mplayer_send_routes_commands_and_exact_failure_messages() {
-    let elisp_form = r##"(let (events
+    ]],
+        ),
+        (
+            "audio_notes_mode_mplayer_send_routes_commands_and_exact_failure_messages",
+            r##"(let (events
                                using-mplayer
                                alive)
                            (cl-letf
@@ -163,17 +160,15 @@ fn audio_notes_mode_mplayer_send_routes_commands_and_exact_failure_messages() {
                                       sent
                                       dead
                                       other
-                                      (nreverse events))))))))"##;
-    let expect = expect![[
+                                      (nreverse events))))))))"##,
+            true,
+            expect![[
         r#"OK (:sent "There's nothing playing!" "Not using mplayer!" ((:is-mplayer t) (:is-alive t) (:send fake-process "seek 15 0\n") (:is-mplayer t) (:is-alive nil) (:message "There's nothing playing!") (:is-mplayer nil) (:message "Not using mplayer!")))"#
-    ]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_seek_commands_translate_direct_and_raw_prefixes_exactly() {
-    let elisp_form = r##"(let ((anm/default-seek-step 5)
+    ]],
+        ),
+        (
+            "audio_notes_mode_seek_commands_translate_direct_and_raw_prefixes_exactly",
+            r##"(let ((anm/default-seek-step 5)
                                commands)
                            (cl-letf
                                (((symbol-function
@@ -193,17 +188,15 @@ fn audio_notes_mode_seek_commands_translate_direct_and_raw_prefixes_exactly() {
                                      (anm/mplayer-seek-backward '(16)))))
                                (list
                                 results
-                                (nreverse commands)))))"##;
-    let expect = expect![[
+                                (nreverse commands)))))"##,
+            true,
+            expect![[
         r#"OK (("sent:seek 5 0" "sent:seek 3 0" "sent:seek -2 0" "sent:seek 10 0" "sent:seek -5 0" "sent:seek -3 0" "sent:seek 2 0" "sent:seek -15 0") ("seek 5 0" "seek 3 0" "seek -2 0" "seek 10 0" "seek -5 0" "seek -3 0" "seek 2 0" "seek -15 0"))"#
-    ]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_seek_commands_honor_interactive_prefix_protocol() {
-    let elisp_form = r##"(let ((anm/default-seek-step 4)
+    ]],
+        ),
+        (
+            "audio_notes_mode_seek_commands_honor_interactive_prefix_protocol",
+            r##"(let ((anm/default-seek-step 4)
                                commands)
                            (cl-letf
                                (((symbol-function
@@ -223,16 +216,13 @@ fn audio_notes_mode_seek_commands_honor_interactive_prefix_protocol() {
                                       (cadr entry)))
                                  (call-interactively
                                   (car entry))))
-                             (nreverse commands)))"##;
-    let expect =
-        expect![[r#"OK ("seek 4 0" "seek 3 0" "seek 8 0" "seek -4 0" "seek 2 0" "seek -12 0")"#]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_stop_kills_live_player_or_reports_exact_idle_message() {
-    let elisp_form = r##"(let (events alive)
+                             (nreverse commands)))"##,
+            true,
+            expect![[r#"OK ("seek 4 0" "seek 3 0" "seek 8 0" "seek -4 0" "seek 2 0" "seek -12 0")"#]],
+        ),
+        (
+            "audio_notes_mode_stop_kills_live_player_or_reports_exact_idle_message",
+            r##"(let (events alive)
                            (cl-letf
                                (((symbol-function
                                   'anm/-is-alive-p)
@@ -270,17 +260,15 @@ fn audio_notes_mode_stop_kills_live_player_or_reports_exact_idle_message() {
                                    (list
                                     live-result
                                     idle-result
-                                    (nreverse events)))))))"##;
-    let expect = expect![[
+                                    (nreverse events)))))))"##,
+            true,
+            expect![[
         r#"OK (:killed "There's nothing playing!" ((:alive t) (:kill fake-player) (:alive nil) (:message "There's nothing playing!")))"#
-    ]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_bug_report_opens_exact_url_and_formats_version_message() {
-    let elisp_form = r##"(let ((emacs-version
+    ]],
+        ),
+        (
+            "audio_notes_mode_bug_report_opens_exact_url_and_formats_version_message",
+            r##"(let ((emacs-version
                                 "99.88-test")
                                events)
                            (cl-letf
@@ -305,17 +293,15 @@ fn audio_notes_mode_bug_report_opens_exact_url_and_formats_version_message() {
                                      text))))
                              (list
                               (anm/bug-report)
-                              (nreverse events))))"##;
-    let expect = expect![[
+                              (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK ("Your anm/version is: 1.1.1, and your emacs version is: 99.88-test.\nPlease include this in your report!" ((:browse "https://github.com/Bruce-Connor/audio-notes-mode/issues/new" nil) (:message "Your anm/version is: 1.1.1, and your emacs version is: 99.88-test.\nPlease include this in your report!")))"#
-    ]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_customize_opens_exact_group_with_other_window_flag() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "audio_notes_mode_customize_opens_exact_group_with_other_window_flag",
+            r##"(let (calls)
                            (cl-letf
                                (((symbol-function
                                   'customize-group)
@@ -327,8 +313,9 @@ fn audio_notes_mode_customize_opens_exact_group_with_other_window_flag() {
                                    :customized)))
                              (list
                               (anm/customize)
-                              (nreverse calls))))"##;
-    let expect = expect!["OK (:customized ((audio-notes-mode t)))"];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
+                              (nreverse calls))))"##,
+            true,
+            expect!["OK (:customized ((audio-notes-mode t)))"],
+        ),
+    ]);
 }

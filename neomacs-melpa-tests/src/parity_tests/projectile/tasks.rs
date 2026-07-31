@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_projectile_parity;
+use super::assert_projectile_batch;
 
 #[test]
-fn projectile_task_safety_rejects_executable_or_malformed_values() {
-    let elisp_form = r##"(list
+fn tasks_public_surface_batch() {
+    assert_projectile_batch(&[
+        (
+            "projectile_task_safety_rejects_executable_or_malformed_values",
+            r##"(list
               (projectile-tasks-safe-p nil)
               (projectile-tasks-safe-p
                '(("lint" . "make lint")
@@ -16,15 +19,13 @@ fn projectile_task_safety_rejects_executable_or_malformed_values() {
               (projectile-tasks-safe-p '("lint"))
               (projectile-tasks-safe-p '((lint . "make lint")))
               (projectile-tasks-safe-p
-               '(("lint" . "make lint") . "junk")))"##;
-    let expect = expect![[r#"OK (t t nil nil nil nil nil nil)"#]];
-
-    assert_projectile_parity(elisp_form, expect);
-}
-
-#[test]
-fn projectile_project_tasks_merge_configured_and_type_tasks_with_stable_precedence() {
-    let elisp_form = r##"(let ((projectile-project-types nil)
+               '(("lint" . "make lint") . "junk")))"##,
+            true,
+            expect![[r#"OK (t t nil nil nil nil nil nil)"#]],
+        ),
+        (
+            "projectile_project_tasks_merge_configured_and_type_tasks_with_stable_precedence",
+            r##"(let ((projectile-project-types nil)
                     (projectile-project-root-files nil)
                     (projectile-discover-tasks nil)
                     (projectile-tasks
@@ -39,10 +40,11 @@ fn projectile_project_tasks_merge_configured_and_type_tasks_with_stable_preceden
                 (copy-tree (projectile-project-tasks 'tasked))
                 (let ((projectile-tasks nil))
                   (copy-tree (projectile-project-tasks 'tasked)))
-                (copy-tree (projectile-project-tasks 'generic))))"##;
-    let expect = expect![[
+                (copy-tree (projectile-project-tasks 'generic))))"##,
+            true,
+            expect![[
         r#"OK ((("lint" . "make custom-lint") ("docs" . "make docs") ("bench" . "make bench")) (("lint" . "make lint") ("bench" . "make bench")) (("lint" . "make custom-lint") ("docs" . "make docs")))"#
-    ]];
-
-    assert_projectile_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

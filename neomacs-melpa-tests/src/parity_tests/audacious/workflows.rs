@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_audacious_parity;
+use super::assert_audacious_batch;
 
 #[test]
-fn audacious_practical_playback_session_updates_backend_and_reports_each_transition() {
-    let elisp_form = r##"(let ((status "")
+fn workflows_public_surface_batch() {
+    assert_audacious_batch(&[
+        (
+            "audacious_practical_playback_session_updates_backend_and_reports_each_transition",
+            r##"(let ((status "")
                (volume 60)
                (playlist-position 1)
                (playlist-length 3)
@@ -112,16 +115,15 @@ fn audacious_practical_playback_session_updates_backend_and_reports_each_transit
              audacious-song-title
              audacious-song-position
              audacious-song-length)
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK ("[1/3]: Opening [00:00 / 03:00]" "70%" "[1/3]: Opening [00:10 / 03:00]" "[2/3]: Second [00:00 / 03:00]" "paused" 0 ("stopped\n" 70 2 "Second" "00:00") ("2" "3" "Second" "00:00" "03:00") ((:shell "audtool --playback-status") (:call "audacious" nil 0 nil "-H" "2>/dev/null") (:call "/fixture/bin/audtool" nil nil nil "--playback-play") (:sleep 0 20) (:shell "audtool --playlist-position") (:shell "audtool --playlist-length") (:shell "audtool --current-song") (:shell "audtool --current-song-output-length") (:shell "audtool --current-song-length") (:message "[1/3]: Opening [00:00 / 03:00]") (:call "/fixture/bin/audtool" nil nil nil "--set-volume" "+10%") (:shell "audtool --get-volume") (:message "70%") (:call "/fixture/bin/audtool" nil nil nil "--playback-seek-relative" "+10") (:shell "audtool --playlist-position") (:shell "audtool --playlist-length") (:shell "audtool --current-song") (:shell "audtool --current-song-output-length") (:shell "audtool --current-song-length") (:message "[1/3]: Opening [00:10 / 03:00]") (:call "/fixture/bin/audtool" nil nil nil "--playlist-advance") (:sleep 0 20) (:shell "audtool --playlist-position") (:shell "audtool --playlist-length") (:shell "audtool --current-song") (:shell "audtool --current-song-output-length") (:shell "audtool --current-song-length") (:message "[2/3]: Second [00:00 / 03:00]") (:call "/fixture/bin/audtool" nil nil nil "--playback-pause") (:shell "audtool --playback-status") (:message "paused") (:call "/fixture/bin/audtool" nil nil nil "--playback-stop")))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_playlist_then_song_selection_forms_one_ordered_user_workflow() {
-    let elisp_form = r##"(let ((answers
+    ]],
+        ),
+        (
+            "audacious_playlist_then_song_selection_forms_one_ordered_user_workflow",
+            r##"(let ((answers
                 '("2"
                   "4"))
                events)
@@ -172,16 +174,15 @@ fn audacious_playlist_then_song_selection_forms_one_ordered_user_workflow() {
             audacious-song-position
             audacious-msg
             answers
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:playlist-refreshed :song-refreshed "2" "4" " 1 | One\n 4 | Four\n" nil ((:shell "audtool --number-of-playlists") (:prompt "Playlist No. [1 - 5]: ") (:call "/fixture/bin/audtool" nil nil nil "--set-current-playlist" "2") (:sleep 0 20) (:call "/fixture/bin/audtool" nil nil nil "--play-current-playlist") :playlist-refresh (:shell "audtool --playlist-display") (:prompt " 1 | One\n 4 | Four\nSong No.: ") (:call "/fixture/bin/audtool" nil nil nil "--playlist-jump" "4") (:sleep 0 20) :song-refresh))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_playback_process_failure_propagates_before_sleep_or_refresh() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "audacious_playback_process_failure_propagates_before_sleep_or_refresh",
+            r##"(let (events)
          (cl-letf
              (((symbol-function
                 'shell-command-to-string)
@@ -209,16 +210,15 @@ fn audacious_playback_process_failure_propagates_before_sleep_or_refresh() {
            (list
             (audacious-test-error-data
              #'audacious-play)
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK ((:error error ("fixture process failure")) ((:shell "audtool --playback-status") (:call "/fixture/bin/audtool" nil nil nil "--playback-play")))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_custom_command_controls_process_calls_while_queries_keep_upstream_cli_literal() {
-    let elisp_form = r##"(let ((audacious-command
+    ]],
+        ),
+        (
+            "audacious_custom_command_controls_process_calls_while_queries_keep_upstream_cli_literal",
+            r##"(let ((audacious-command
                 "/opt/player/bin/audtool")
                events)
          (cl-letf
@@ -249,9 +249,11 @@ fn audacious_custom_command_controls_process_calls_while_queries_keep_upstream_c
            (list
             (audacious-volume "-10%")
             (audacious-volume-up)
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (0 "88%" ((:call "/opt/player/bin/audtool" nil nil nil "--set-volume" "-10%") (:call "/opt/player/bin/audtool" nil nil nil "--set-volume" "+10%") (:shell "audtool --get-volume") (:message "88%")))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

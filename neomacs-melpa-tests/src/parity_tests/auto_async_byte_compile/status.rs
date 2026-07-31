@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_async_byte_compile_parity;
+use super::assert_auto_async_byte_compile_batch;
 
 #[test]
-fn auto_async_byte_compile_status_exit_and_warning_matrix_match() {
-    let elisp_form = r##"(mapcar
+fn status_public_surface_batch() {
+    assert_auto_async_byte_compile_batch(&[
+        (
+            "auto_async_byte_compile_status_exit_and_warning_matrix_match",
+            r##"(mapcar
           (lambda (case)
             (let ((buffer
                    (generate-new-buffer
@@ -26,17 +29,15 @@ fn auto_async_byte_compile_status_exit_and_warning_matrix_match() {
             (1 "file.el:1:1:Warning: fixture")
             (2 "")
             (2 "file.el:1:1:Warning: fixture")
-            (127 "plain failure text")))"##;
-    let expect = expect![[
+            (127 "plain failure text")))"##,
+            true,
+            expect![[
         r#"OK (((0 "") normal 1) ((0 "file.el:1:1:Warning: fixture") warning 21) ((1 "") error 1) ((1 "file.el:1:1:Warning: fixture") error 29) ((2 "") normal 1) ((2 "file.el:1:1:Warning: fixture") warning 21) ((127 "plain failure text") normal 1))"#
-    ]];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_status_warning_scan_uses_default_case_folding_and_is_unanchored() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_async_byte_compile_status_warning_scan_uses_default_case_folding_and_is_unanchored",
+            r##"(mapcar
           (lambda (text)
             (let ((buffer
                    (generate-new-buffer
@@ -56,17 +57,15 @@ fn auto_async_byte_compile_status_warning_scan_uses_default_case_folding_and_is_
             "Warning:"
             ":Warning"
             ":\nWarning:"
-            "before\n:Warning:\nafter"))"##;
-    let expect = expect![[
+            "before\n:Warning:\nafter"))"##,
+            true,
+            expect![[
         r#"OK ((":Warning:" warning 10) ("prefix:Warning:suffix" warning 16) (":warning:" warning 10) (":WARNING:" warning 10) ("Warning:" normal 1) (":Warning" normal 1) (":\nWarning:" normal 1) ("before\n:Warning:\nafter" warning 17))"#
-    ]];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_status_resets_and_mutates_result_buffer_point_exactly() {
-    let elisp_form = r##"(let ((buffer
+    ]],
+        ),
+        (
+            "auto_async_byte_compile_status_resets_and_mutates_result_buffer_point_exactly",
+            r##"(let ((buffer
                                 (generate-new-buffer
                                  " *aabc-point*")))
           (unwind-protect
@@ -83,15 +82,13 @@ fn auto_async_byte_compile_status_resets_and_mutates_result_buffer_point_exactly
                  (point)
                  (aabc/status 0 buffer)
                  (point)))
-            (kill-buffer buffer)))"##;
-    let expect = expect!["OK (20 warning 16 error 16 warning 16)"];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_display_routes_normal_warning_and_error_statuses_exactly() {
-    let elisp_form = r##"(let ((buffer
+            (kill-buffer buffer)))"##,
+            true,
+            expect!["OK (20 warning 16 error 16 warning 16)"],
+        ),
+        (
+            "auto_async_byte_compile_display_routes_normal_warning_and_error_statuses_exactly",
+            r##"(let ((buffer
                                 (generate-new-buffer
                                  " *aabc-display*"))
                                calls)
@@ -142,17 +139,15 @@ fn auto_async_byte_compile_display_routes_normal_warning_and_error_statuses_exac
                   buffer
                   :custom)
                  (nreverse calls)))
-            (kill-buffer buffer)))"##;
-    let expect = expect![[
+            (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK ("compile one.el completed" "compile two.el completed with warnings." :displayed :displayed :displayed ((:message "compile one.el completed") (:message "compile two.el completed with warnings.") (:display " *aabc-display*" nil) (:display " *aabc-display*" nil) (:display " *aabc-display*" nil)))"#
-    ]];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_display_uses_configured_function_return_and_propagates_failure() {
-    let elisp_form = r##"(let ((buffer
+    ]],
+        ),
+        (
+            "auto_async_byte_compile_display_uses_configured_function_return_and_propagates_failure",
+            r##"(let ((buffer
                                 (generate-new-buffer
                                  " *aabc-custom-display*"))
                                calls)
@@ -179,17 +174,15 @@ fn auto_async_byte_compile_display_uses_configured_function_return_and_propagate
                      "fixture"
                      buffer
                      'warning)))))
-            (kill-buffer buffer)))"##;
-    let expect = expect![[
+            (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK (:custom-return (" *aabc-custom-display*") (:error error ("fixture display failed")))"#
-    ]];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_process_sentinel_observes_process_data_and_orders_display_before_hook() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "auto_async_byte_compile_process_sentinel_observes_process_data_and_orders_display_before_hook",
+            r##"(let (events)
           (cl-letf
               (((symbol-function 'process-exit-status)
                 (lambda (process)
@@ -240,17 +233,15 @@ fn auto_async_byte_compile_process_sentinel_observes_process_data_and_orders_dis
                (aabc/process-sentinel
                 'fixture-process-object
                 "ignored state")
-               (nreverse events)))))"##;
-    let expect = expect![[
+               (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK (nil ((:exit fixture-process-object) (:status 7 " *auto-async-byte-compile*") (:name fixture-process-object) (:buffer fixture-process-object) (:display "fixture-process" fixture-buffer warning) (:hook nil)))"#
-    ]];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_process_sentinel_stops_before_hook_on_display_failure() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "auto_async_byte_compile_process_sentinel_stops_before_hook_on_display_failure",
+            r##"(let (events)
           (cl-letf
               (((symbol-function 'process-exit-status)
                 (lambda (_)
@@ -279,15 +270,13 @@ fn auto_async_byte_compile_process_sentinel_stops_before_hook_on_display_failure
                   (aabc/process-sentinel
                    'fixture
                    "done")))
-               (nreverse events)))))"##;
-    let expect = expect![[r#"OK ((:error error ("fixture display failure")) (:display))"#]];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_process_sentinel_propagates_hook_failure_after_display() {
-    let elisp_form = r##"(let (events)
+               (nreverse events)))))"##,
+            true,
+            expect![[r#"OK ((:error error ("fixture display failure")) (:display))"#]],
+        ),
+        (
+            "auto_async_byte_compile_process_sentinel_propagates_hook_failure_after_display",
+            r##"(let (events)
           (cl-letf
               (((symbol-function 'process-exit-status)
                 (lambda (_)
@@ -317,8 +306,9 @@ fn auto_async_byte_compile_process_sentinel_propagates_hook_failure_after_displa
                   (aabc/process-sentinel
                    'fixture
                    "done")))
-               (nreverse events)))))"##;
-    let expect = expect![[r#"OK ((:error error ("fixture hook failure")) (:display :hook))"#]];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
+               (nreverse events)))))"##,
+            true,
+            expect![[r#"OK ((:error error ("fixture hook failure")) (:display :hook))"#]],
+        ),
+    ]);
 }

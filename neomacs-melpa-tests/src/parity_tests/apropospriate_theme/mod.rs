@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{APROPOSPRIATE_THEME_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const APROPOSPRIATE_THEME_TEST_TIMEOUT: Duration = Duration::from_secs(180);
@@ -102,4 +104,15 @@ pub(crate) fn assert_apropospriate_theme_parity(elisp_form: &str, expected: Expe
             panic!("apropospriate-theme parity case `{name}` failed:\n{error}")
         });
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+/// Multi-probe batch for `assert_apropospriate_theme_parity` cases (2a).
+pub(crate) fn assert_apropospriate_theme_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        apropospriate_theme_oracle(),
+        &name,
+        "apropospriate_theme_parity",
+        cases,
+    );
 }

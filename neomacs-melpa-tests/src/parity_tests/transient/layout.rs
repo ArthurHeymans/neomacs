@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_transient_parity;
+use super::assert_transient_batch;
 
 #[test]
-fn transient_define_prefix_builds_exact_layout_and_reuses_it() {
-    let elisp_form = r##"(progn
+fn layout_public_surface_batch() {
+    assert_transient_batch(&[
+        (
+            "transient_define_prefix_builds_exact_layout_and_reuses_it",
+            r##"(progn
                (transient-define-suffix neomacs-test-a ()
                  :key "a" (interactive))
                (transient-define-suffix neomacs-test-b ()
@@ -23,17 +26,15 @@ fn transient_define_prefix_builds_exact_layout_and_reuses_it() {
                  (list layout
                        (eq layout
                            (transient--get-layout
-                            'neomacs-test-menu)))))"##;
-    let expect = expect![[
+                            'neomacs-test-menu)))))"##,
+            true,
+            expect![[
         r#"OK ([2 nil ([transient-column nil ((transient-suffix :command neomacs-test-a) (transient-suffix :command neomacs-test-b :key "b") (transient-suffix :command neomacs-test-c :key "C") (transient-suffix :command neomacs-test-m :key "m"))])] t)"#
-    ]];
-
-    assert_transient_parity(elisp_form, expect);
-}
-
-#[test]
-fn transient_groups_preserve_rows_columns_and_included_layouts() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "transient_groups_preserve_rows_columns_and_included_layouts",
+            r##"(progn
                (dolist (entry '((neomacs-test-a "a")
                                 (neomacs-test-b "b")
                                 (neomacs-test-c "c")
@@ -60,17 +61,15 @@ fn transient_groups_preserve_rows_columns_and_included_layouts() {
                 (transient--get-layout 'neomacs-test-row)
                 (transient--get-layout 'neomacs-test-columns)
                 (transient--get-layout 'neomacs-test-list)
-                (transient--get-layout 'neomacs-test-menu)))"##;
-    let expect = expect![[
+                (transient--get-layout 'neomacs-test-menu)))"##,
+            true,
+            expect![[
         r#"OK ([2 nil ([transient-row nil ((transient-suffix :command neomacs-test-a) (transient-suffix :command neomacs-test-b))])] [2 nil ([transient-columns nil ([transient-column nil ((transient-suffix :command neomacs-test-c))] [transient-column nil ((transient-suffix :command neomacs-test-d))])])] [2 nil ((transient-suffix :command neomacs-test-e) (transient-suffix :command neomacs-test-f))] [2 nil (neomacs-test-row neomacs-test-columns [transient-columns nil (neomacs-test-list)])])"#
-    ]];
-
-    assert_transient_parity(elisp_form, expect);
-}
-
-#[test]
-fn transient_get_suffix_supports_positive_negative_key_and_nested_coordinates() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "transient_get_suffix_supports_positive_negative_key_and_nested_coordinates",
+            r##"(progn
                (dolist (entry '((neomacs-test-a "a")
                                 (neomacs-test-b "b")
                                 (neomacs-test-c "c")
@@ -90,17 +89,15 @@ fn transient_get_suffix_supports_positive_negative_key_and_nested_coordinates() 
                  'neomacs-test-menu [1 0 "d"])
                 (copy-tree
                  (transient-get-suffix
-                  'neomacs-test-menu [-1 -1 -1]))))"##;
-    let expect = expect![[
+                  'neomacs-test-menu [-1 -1 -1]))))"##,
+            true,
+            expect![[
         r#"OK ((transient-suffix :command neomacs-test-a) (transient-suffix :command neomacs-test-c) (transient-suffix :command neomacs-test-b) (transient-suffix :command neomacs-test-d :description "nested") (transient-suffix :command neomacs-test-d :description "nested"))"#
-    ]];
-
-    assert_transient_parity(elisp_form, expect);
-}
-
-#[test]
-fn transient_suffix_put_mutates_keys_in_place() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "transient_suffix_put_mutates_keys_in_place",
+            r##"(progn
                (dolist (entry '((neomacs-test-a "a")
                                 (neomacs-test-b "b")
                                 (neomacs-test-c "c")
@@ -125,17 +122,15 @@ fn transient_suffix_put_mutates_keys_in_place() {
                  (list
                   (eq layout
                       (transient--get-layout 'neomacs-test-menu))
-                  (transient--get-layout 'neomacs-test-menu))))"##;
-    let expect = expect![[
+                  (transient--get-layout 'neomacs-test-menu))))"##,
+            true,
+            expect![[
         r#"OK (t [2 nil ([transient-column nil ((transient-suffix :command neomacs-test-a :key "A") (transient-suffix :command neomacs-test-b :key "B") (transient-suffix :command neomacs-test-c :key "C") (transient-suffix :command neomacs-test-d :key "D"))])])"#
-    ]];
-
-    assert_transient_parity(elisp_form, expect);
-}
-
-#[test]
-fn transient_insert_append_and_replace_apply_at_exact_locations() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "transient_insert_append_and_replace_apply_at_exact_locations",
+            r##"(progn
                (dolist (entry '((neomacs-test-a "a")
                                 (neomacs-test-b "b")
                                 (neomacs-test-c "c")
@@ -157,17 +152,15 @@ fn transient_insert_append_and_replace_apply_at_exact_locations() {
                 '(neomacs-test-x :description "replacement"))
                (transient-append-suffix
                 'neomacs-test-menu "c" '(neomacs-test-b))
-               (transient--get-layout 'neomacs-test-menu))"##;
-    let expect = expect![[
+               (transient--get-layout 'neomacs-test-menu))"##,
+            true,
+            expect![[
         r#"OK [2 nil ([transient-column nil ((transient-suffix :command neomacs-test-z) (transient-suffix :command neomacs-test-a) (transient-suffix :command neomacs-test-y) (transient-suffix :command neomacs-test-x :description "replacement") (transient-suffix :command neomacs-test-c) (transient-suffix :command neomacs-test-b))])]"#
-    ]];
-
-    assert_transient_parity(elisp_form, expect);
-}
-
-#[test]
-fn transient_remove_suffix_accepts_keys_commands_and_coordinates() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "transient_remove_suffix_accepts_keys_commands_and_coordinates",
+            r##"(progn
                (dolist (entry '((neomacs-test-a "a")
                                 (neomacs-test-b "b")
                                 (neomacs-test-c "c")
@@ -191,17 +184,15 @@ fn transient_remove_suffix_accepts_keys_commands_and_coordinates() {
                (transient-remove-suffix 'neomacs-test-menu "c")
                (transient-remove-suffix 'neomacs-test-menu [0 0])
                (transient-remove-suffix 'neomacs-test-menu [0 -1])
-               (transient--get-layout 'neomacs-test-menu))"##;
-    let expect = expect![[
+               (transient--get-layout 'neomacs-test-menu))"##,
+            true,
+            expect![[
         r#"OK [2 nil ([transient-column nil ((transient-suffix :command neomacs-test-e) (transient-suffix :command neomacs-test-f))])]"#
-    ]];
-
-    assert_transient_parity(elisp_form, expect);
-}
-
-#[test]
-fn transient_inline_group_expands_nested_includes_without_reordering() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "transient_inline_group_expands_nested_includes_without_reordering",
+            r##"(progn
                (dolist (entry '((neomacs-test-a "a")
                                 (neomacs-test-b "b")
                                 (neomacs-test-c "c")
@@ -225,10 +216,11 @@ fn transient_inline_group_expands_nested_includes_without_reordering() {
                 'neomacs-test-menu 'neomacs-test-group-b)
                (transient-inline-group
                 'neomacs-test-menu 'neomacs-test-group-d)
-               (transient--get-layout 'neomacs-test-menu))"##;
-    let expect = expect![[
+               (transient--get-layout 'neomacs-test-menu))"##,
+            true,
+            expect![[
         r#"OK [2 nil ([transient-column nil ((transient-suffix :command neomacs-test-a))] [transient-columns nil ([transient-column nil ((transient-suffix :command neomacs-test-b))] [transient-column nil ((transient-suffix :command neomacs-test-c))] [transient-column nil ((transient-suffix :command neomacs-test-d))])])]"#
-    ]];
-
-    assert_transient_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

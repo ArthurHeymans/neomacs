@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_asdf_vm_parity;
+use super::assert_asdf_vm_batch;
 
 #[test]
-fn asdf_vm_plugin_menu_entries_merge_repository_and_installed_state_with_exact_faces() {
-    let elisp_form = r##"(cl-letf
+fn plugin_menu_public_surface_batch() {
+    assert_asdf_vm_batch(&[
+        (
+            "asdf_vm_plugin_menu_entries_merge_repository_and_installed_state_with_exact_faces",
+            r##"(cl-letf
                (((symbol-function
                   'asdf-vm-plugin--repository-alist)
                  (lambda ()
@@ -35,16 +38,15 @@ fn asdf_vm_plugin_menu_entries_merge_repository_and_installed_state_with_exact_f
                     (append
                      (cadr entry)
                      nil))))
-                (asdf-vm-plugin-menu--list-entries)))"##;
-    let expect = expect![[
+                (asdf-vm-plugin-menu--list-entries)))"##,
+            true,
+            expect![[
         r#"OK (("https://example/ruby.git" (("available" asdf-vm-plugin-menu-status-available) ("ruby" asdf-vm-plugin-menu-status-available) ("https://example/ruby.git" asdf-vm-plugin-menu-status-available))) ("https://example/node.git" (("installed" asdf-vm-plugin-menu-status-installed) ("nodejs" asdf-vm-plugin-menu-status-installed) ("https://example/node.git" asdf-vm-plugin-menu-status-installed))) ("https://example/資料.git" (("installed" asdf-vm-plugin-menu-status-installed) ("資料" asdf-vm-plugin-menu-status-installed) ("https://example/資料.git" asdf-vm-plugin-menu-status-installed))))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_plugin_menu_mode_initializes_columns_padding_sort_refresh_imenu_and_keymap() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "asdf_vm_plugin_menu_mode_initializes_columns_padding_sort_refresh_imenu_and_keymap",
+            r##"(with-temp-buffer
                (let ((asdf-vm-plugin-menu-list-padding
                       4)
                      (asdf-vm-plugin-menu-status-column-width
@@ -76,16 +78,15 @@ fn asdf_vm_plugin_menu_mode_initializes_columns_padding_sort_refresh_imenu_and_k
                      "i"
                      "r"
                      "w"
-                     "x")))))"##;
-    let expect = expect![[
+                     "x")))))"##,
+            true,
+            expect![[
         r#"OK (asdf-vm-plugin-menu-mode "ASDF-VM Plugin Menu" [("Status" 12 asdf-vm-plugin-menu--status-predicate) ("Plugin" 31 asdf-vm-plugin-menu--name-predicate) ("Repository Url" 42 asdf-vm-plugin-menu--url-predicate)] 4 ("Status") asdf-vm-plugin-menu--refresh asdf-vm-plugin-menu--imenu-prev-index-position-function tabulated-list-get-id (("u" asdf-vm-plugin-menu-mark-unmark) ("DEL" asdf-vm-plugin-menu-backup-unmark) ("d" asdf-vm-plugin-menu-mark-delete) ("i" asdf-vm-plugin-menu-mark-install) ("r" revert-buffer) ("w" asdf-vm-plugin-browse-url) ("x" asdf-vm-plugin-menu-execute)))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_plugin_menu_field_getters_return_selected_entry_columns_or_empty_strings() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "asdf_vm_plugin_menu_field_getters_return_selected_entry_columns_or_empty_strings",
+            r##"(with-temp-buffer
                (asdf-vm-plugin-menu-mode)
                (setq
                 tabulated-list-entries
@@ -124,16 +125,15 @@ fn asdf_vm_plugin_menu_field_getters_return_selected_entry_columns_or_empty_stri
                       header
                       missing
                       ruby
-                      (funcall read-fields))))))"##;
-    let expect = expect![[
+                      (funcall read-fields))))))"##,
+            true,
+            expect![[
         r#"OK (("ruby-id" "installed" "ruby" "https://example/ruby.git") (nil (nil "" "" "")) ("ruby-id" "installed" "ruby" "https://example/ruby.git") ("node-id" "available" "nodejs" "https://example/node.git"))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_plugin_menu_mark_commands_enforce_mode_and_only_mark_eligible_statuses() {
-    let elisp_form = r##"(let ((wrong-mode
+    ]],
+        ),
+        (
+            "asdf_vm_plugin_menu_mark_commands_enforce_mode_and_only_mark_eligible_statuses",
+            r##"(let ((wrong-mode
                     (with-temp-buffer
                       (asdf-vm-test-error-data
                        (lambda ()
@@ -198,16 +198,15 @@ fn asdf_vm_plugin_menu_mark_commands_enforce_mode_and_only_mark_eligible_statuse
                             (char-after
                              (line-beginning-position))))
                          '("ruby-id"
-                           "node-id"))))))))"##;
-    let expect = expect![[
+                           "node-id"))))))))"##,
+            true,
+            expect![[
         r#"OK ((:error asdf-vm-incorrect-mode-error (fundamental-mode)) "node-id" nil (("ruby-id" 68) ("node-id" 73)) (("ruby-id" 32) ("node-id" 32)))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_plugin_browse_url_dispatches_primary_secondary_and_missing_url_error() {
-    let elisp_form = r##"(let ((browse-url-secondary-browser-function
+    ]],
+        ),
+        (
+            "asdf_vm_plugin_browse_url_dispatches_primary_secondary_and_missing_url_error",
+            r##"(let ((browse-url-secondary-browser-function
                     (lambda (url)
                       (list
                        :secondary
@@ -233,16 +232,15 @@ fn asdf_vm_plugin_browse_url_dispatches_primary_secondary_and_missing_url_error(
                    (lambda ()
                      (asdf-vm-plugin-browse-url
                       "")))
-                  (nreverse calls))))"##;
-    let expect = expect![[
+                  (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK (:primary (:secondary "https://example/node") (:error asdf-vm-plugin-menu-missing-url-error ("ruby")) (("https://example/ruby")))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_plugin_menu_execute_scans_marks_runs_delete_and_install_batches_then_refreshes() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "asdf_vm_plugin_menu_execute_scans_marks_runs_delete_and_install_batches_then_refreshes",
+            r##"(with-temp-buffer
                (setq major-mode
                      'asdf-vm-plugin-menu-mode)
                (insert
@@ -296,16 +294,15 @@ fn asdf_vm_plugin_menu_execute_scans_marks_runs_delete_and_install_batches_then_
                          :refreshed)))
                    (list
                     (asdf-vm-plugin-menu-execute)
-                    (nreverse calls)))))"##;
-    let expect = expect![[
+                    (nreverse calls)))))"##,
+            true,
+            expect![[
         r#"OK (:refreshed ((:remove "ruby" t) (:add "資料" "https://example/資料.git" t) (:add "nodejs" "https://example/nodejs.git" t) (:refresh)))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_plugin_menu_sort_predicates_apply_status_name_and_repository_rules() {
-    let elisp_form = r##"(let ((available-z
+    ]],
+        ),
+        (
+            "asdf_vm_plugin_menu_sort_predicates_apply_status_name_and_repository_rules",
+            r##"(let ((available-z
                     '("z"
                       ["available"
                        "zeta"
@@ -335,14 +332,13 @@ fn asdf_vm_plugin_menu_sort_predicates_apply_status_name_and_repository_rules() 
                  available-z)
                 (asdf-vm-plugin-menu--url-predicate
                  available-z
-                 available-a)))"##;
-    let expect = expect!["OK (t nil t t nil)"];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_plugin_menu_command_creates_utf8_buffer_refreshes_and_displays_same_window() {
-    let elisp_form = r##"(let ((asdf-vm-plugin-menu-buffer-name
+                 available-a)))"##,
+            true,
+            expect!["OK (t nil t t nil)"],
+        ),
+        (
+            "asdf_vm_plugin_menu_command_creates_utf8_buffer_refreshes_and_displays_same_window",
+            r##"(let ((asdf-vm-plugin-menu-buffer-name
                     "*fixture-plugin-menu*")
                    calls)
                (cl-letf
@@ -375,9 +371,11 @@ fn asdf_vm_plugin_menu_command_creates_utf8_buffer_refreshes_and_displays_same_w
                       (buffer-name result)
                       major-mode
                       buffer-file-coding-system
-                      (nreverse calls))))))"##;
-    let expect = expect![[
+                      (nreverse calls))))))"##,
+            true,
+            expect![[
         r#"OK ("*fixture-plugin-menu*" asdf-vm-plugin-menu-mode utf-8 ((:refresh "*fixture-plugin-menu*" nil) (:display "*fixture-plugin-menu*" nil)))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

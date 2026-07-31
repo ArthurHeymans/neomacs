@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_aio_parity;
+use super::assert_aio_batch;
 
 #[test]
-fn async_functions_await_each_other_and_the_caller_gets_the_final_value() {
-    let elisp_form = r##"
+fn workflows_public_surface_batch() {
+    assert_aio_batch(&[
+        (
+            "async_functions_await_each_other_and_the_caller_gets_the_final_value",
+            r##"
 (progn
   ;; Two async functions, one awaiting the other, exactly as the README
   ;; composes them.
@@ -40,18 +43,15 @@ fn async_functions_await_each_other_and_the_caller_gets_the_final_value() {
                                           (aio-sleep 0.02 'c)))
                      (push (aio-await promise) results))
                    (nreverse results))))))))
-"##;
-
-    let expect = expect![
+"##,
+            true,
+            expect![
         "OK (:returns-a-promise t :unresolved-at-first t :value 16 :resolved-afterwards t :result-is-a-function t :calling-it-again 16 :awaiting-a-plain-value 42 :awaiting-many (a b c))"
-    ];
-
-    assert_aio_parity(elisp_form, expect);
-}
-
-#[test]
-fn an_error_inside_an_async_function_reaches_whoever_awaits_it() {
-    let elisp_form = r##"
+    ],
+        ),
+        (
+            "an_error_inside_an_async_function_reaches_whoever_awaits_it",
+            r##"
 (progn
   (aio-defun aio-test-boom ()
     (aio-await (aio-sleep 0))
@@ -84,18 +84,15 @@ fn an_error_inside_an_async_function_reaches_whoever_awaits_it() {
              (error (aio-test-plain error)))
            (condition-case error (funcall (aio-result promise))
              (error (aio-test-plain error)))))))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:signalled (error "kaboom 7") :through-a-caller (error "kaboom 7") :caught-failure (:error error "kaboom 7") :caught-success (:success . ok) :handled-inside (:tag :error :data (error "kaboom 7")) :signals-every-time ((error "kaboom 7") (error "kaboom 7")))"#
-    ]];
-
-    assert_aio_parity(elisp_form, expect);
-}
-
-#[test]
-fn racing_promises_against_each_other_and_against_a_timeout() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "racing_promises_against_each_other_and_against_a_timeout",
+            r##"
 (progn
   (aio-defun aio-test-race ()
     (let* ((slow (aio-sleep 0.4 'slow))
@@ -121,18 +118,15 @@ fn racing_promises_against_each_other_and_against_a_timeout() {
    (aio-test-plain (aio-wait-for (aio-test-against-timeout 0.01 0.4)))
    :misses-the-clock
    (aio-test-plain (aio-wait-for (aio-test-against-timeout 0.4 0.02)))))
-"##;
-
-    let expect = expect![
+"##,
+            true,
+            expect![
         "OK (:both-in-finishing-order (fast slow) :beats-the-clock (:success . finished) :misses-the-clock (:error aio-timeout . 0.02))"
-    ];
-
-    assert_aio_parity(elisp_form, expect);
-}
-
-#[test]
-fn a_real_subprocess_feeds_a_chain_of_promises_through_one_callback() {
-    let elisp_form = r##"
+    ],
+        ),
+        (
+            "a_real_subprocess_feeds_a_chain_of_promises_through_one_callback",
+            r##"
 (progn
   (aio-test-script "emit.sh"
                    "#!/bin/sh\nprintf 'alpha\\n'\nprintf 'beta\\n'\nprintf 'gamma\\n'\nexit 3\n")
@@ -161,18 +155,15 @@ fn a_real_subprocess_feeds_a_chain_of_promises_through_one_callback() {
           (setq text (concat text (car (aio-chain chunks)))))
         (list :text text :exit ended))))
   (aio-test-plain (aio-wait-for (aio-test-run))))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:text "alpha\nbeta\ngamma\n" :exit (exited 3 "exited abnormally with code 3"))"#
-    ]];
-
-    assert_aio_parity(elisp_form, expect);
-}
-
-#[test]
-fn a_promise_settles_once_and_cancel_never_reports_that_it_worked() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "a_promise_settles_once_and_cancel_never_reports_that_it_worked",
+            r##"
 (list
  ;; The first resolution wins and later ones are silently dropped, which is
  ;; what makes a promise safe to hand to several producers.
@@ -216,18 +207,15 @@ fn a_promise_settles_once_and_cancel_never_reports_that_it_worked() {
    (aio-listen promise (lambda (value) (setq seen (funcall value))))
    (aio-wait-for (aio-sleep 0.05))
    seen))
-"##;
-
-    let expect = expect![
+"##,
+            true,
+            expect![
         "OK (:resolved-twice first :cancelled (:return-value nil :awaiting (aio-cancel . because)) :cancel-after-settling (:return-value nil :value already) :cancel-return-values-are-indistinguishable (:on-a-fresh-promise nil :on-a-settled-promise nil :but-the-fresh-one-did-cancel aio-cancel :and-the-settled-one-kept-its-value done) :late-listener value)"
-    ];
-
-    assert_aio_parity(elisp_form, expect);
-}
-
-#[test]
-fn aio_with_async_forces_its_result_and_drops_the_bindings_around_it() {
-    let elisp_form = r##"
+    ],
+        ),
+        (
+            "aio_with_async_forces_its_result_and_drops_the_bindings_around_it",
+            r##"
 (progn
   (defvar aio-test-dynamic 'global)
   (defun aio-test-inside-a-binding ()
@@ -251,11 +239,11 @@ fn aio_with_async_forces_its_result_and_drops_the_bindings_around_it() {
    (condition-case error
        (aio-wait-for (aio-with-async (error "unattended %s" 'failure)))
      (error (aio-test-plain error)))))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:value 3 :awaiting slept :dynamic-binding-does-not-reach-it outer :without-any-binding global :error-is-realised (error "unattended failure"))"#
-    ]];
-
-    assert_aio_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

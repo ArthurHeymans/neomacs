@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_indent_mode_parity;
+use super::assert_auto_indent_mode_batch;
 
 #[test]
-fn auto_indent_mode_programming_detection_combines_text_list_and_flyspell_state() {
-    let elisp_form = r##"(mapcar
+fn editing_public_surface_batch() {
+    assert_auto_indent_mode_batch(&[
+        (
+            "auto_indent_mode_programming_detection_combines_text_list_and_flyspell_state",
+            r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (setq major-mode (nth 0 case)
@@ -18,16 +21,15 @@ fn auto_indent_mode_programming_detection_combines_text_list_and_flyspell_state(
            (markdown-mode nil nil)
            (emacs-lisp-mode nil nil)
            (text-mode t flyspell-generic-progmode-verify)
-           (text-mode t other-predicate)))"##;
-    let expect = expect![
+           (text-mode t other-predicate)))"##,
+            true,
+            expect![
         "OK (((text-mode nil nil) nil) ((markdown-mode nil nil) nil) ((emacs-lisp-mode nil nil) t) ((text-mode t flyspell-generic-progmode-verify) t) ((text-mode t other-predicate) nil))"
-    ];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_handle_end_of_line_collapses_and_removes_contextual_space() {
-    let elisp_form = r##"(mapcar
+    ],
+        ),
+        (
+            "auto_indent_mode_handle_end_of_line_collapses_and_removes_contextual_space",
+            r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (insert (nth 0 case))
@@ -43,16 +45,15 @@ fn auto_indent_mode_handle_end_of_line_collapses_and_removes_contextual_space() 
          '(("(   value" 2 t)
            ("list(    item" 6 t)
            ("list(    item" 6 nil)
-           ("word    next" 5 t)))"##;
-    let expect = expect![[
+           ("word    next" 5 t)))"##,
+            true,
+            expect![[
         r#"OK ((("(   value" 2 t) "(value" 2) (("list(    item" 6 t) "list(item" 6) (("list(    item" 6 nil) "list( item" 6) (("word    next" 5 t) "word next" 5))"#
-    ]];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_handle_end_of_line_adds_space_only_for_matching_nonspace_neighbors() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_indent_mode_handle_end_of_line_adds_space_only_for_matching_nonspace_neighbors",
+            r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (insert (car case))
@@ -68,16 +69,15 @@ fn auto_indent_mode_handle_end_of_line_adds_space_only_for_matching_nonspace_nei
          '(("wordnext" . 5)
            ("word next" . 5)
            ("(item" . 2)
-           ("x\"value" . 3)))"##;
-    let expect = expect![[
+           ("x\"value" . 3)))"##,
+            true,
+            expect![[
         r#"OK ((("wordnext" . 5) "word next" 5) (("word next" . 5) "word next" 5) (("(item" . 2) "(item" 2) (("x\"value" . 3) "x\"value" 3))"#
-    ]];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_delete_char_joins_program_lines_with_contextual_spacing() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_indent_mode_delete_char_joins_program_lines_with_contextual_spacing",
+            r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (emacs-lisp-mode)
@@ -96,16 +96,15 @@ fn auto_indent_mode_delete_char_joins_program_lines_with_contextual_spacing() {
          '(("(alpha\n    beta)" . 7)
            ("word\n    next" . 5)
            ("\"first\",\n    \"second\"" . 9)
-           ("left \n    right" . 6)))"##;
-    let expect = expect![[
+           ("left \n    right" . 6)))"##,
+            true,
+            expect![[
         r#"OK ((("(alpha\n    beta)" . 7) "(alpha beta)" 7) (("word\n    next" . 5) "word next" 5) (("\"first\",\n    \"second\"" . 9) "\"first\", \"second\"" 9) (("left \n    right" . 6) "left right" 6))"#
-    ]];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_backward_delete_variants_apply_configured_whitespace_method() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_indent_mode_backward_delete_variants_apply_configured_whitespace_method",
+            r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (insert (nth 0 case))
@@ -122,16 +121,15 @@ fn auto_indent_mode_backward_delete_variants_apply_configured_whitespace_method(
          '(("word    " hungry auto-indent-delete-backward-char)
            ("word    " all auto-indent-backward-delete-char)
            ("word\t" untabify auto-indent-backward-delete-char-untabify)
-           ("word x" nil auto-indent-delete-backward-char)))"##;
-    let expect = expect![[
+           ("word x" nil auto-indent-delete-backward-char)))"##,
+            true,
+            expect![[
         r#"OK ((("word    " hungry auto-indent-delete-backward-char) "word" 5 auto-indent-delete-backward-char) (("word    " all auto-indent-backward-delete-char) "word" 5 auto-indent-delete-backward-char) (("word\11" untabify auto-indent-backward-delete-char-untabify) "word   " 8 auto-indent-delete-backward-char) (("word x" nil auto-indent-delete-backward-char) "word " 6 auto-indent-delete-backward-char))"#
-    ]];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_yank_post_command_runs_hook_indents_and_untabifies_region() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "auto_indent_mode_yank_post_command_runs_hook_indents_and_untabifies_region",
+            r##"(let (events)
          (with-temp-buffer
            (emacs-lisp-mode)
            (insert "(progn\n\t(message \"x\")\n)")
@@ -151,16 +149,15 @@ fn auto_indent_mode_yank_post_command_runs_hook_indents_and_untabifies_region() 
               (buffer-string)
               (nreverse events)
               (mark t)
-              (point)))))"##;
-    let expect = expect![[
+              (point)))))"##,
+            true,
+            expect![[
         r#"OK ("(progn\n  (message \"x\")\n  )" ((1 24 "(progn\n\11(message \"x\")\n)")) 1 27)"#
-    ]];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_yank_post_command_supports_reverse_region_and_tabify() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_indent_mode_yank_post_command_supports_reverse_region_and_tabify",
+            r##"(with-temp-buffer
          (setq tab-width 4)
          (insert "    alpha\n        beta")
          (set-mark (point-max))
@@ -173,14 +170,13 @@ fn auto_indent_mode_yank_post_command_supports_reverse_region_and_tabify() {
            (list
             (buffer-string)
             (mark t)
-            (point))))"##;
-    let expect = expect![[r#"OK ("\11alpha\n\11\11beta" 14 1)"#]];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_whole_buffer_save_indents_untabifies_and_trims() {
-    let elisp_form = r##"(with-temp-buffer
+            (point))))"##,
+            true,
+            expect![[r#"OK ("\11alpha\n\11\11beta" 14 1)"#]],
+        ),
+        (
+            "auto_indent_mode_whole_buffer_save_indents_untabifies_and_trims",
+            r##"(with-temp-buffer
          (emacs-lisp-mode)
          (insert "(progn\n(message \"x\")   \n\t(message \"y\"))\n")
          (let ((auto-indent-indent-style 'aggressive)
@@ -192,14 +188,13 @@ fn auto_indent_mode_whole_buffer_save_indents_untabifies_and_trims() {
            (list
             (auto-indent-whole-buffer t)
             (buffer-string)
-            (buffer-modified-p))))"##;
-    let expect = expect![[r#"OK (nil "(progn\n  (message \"x\")\n  (message \"y\"))\n" t)"#]];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_whole_buffer_visit_uses_distinct_visit_options() {
-    let elisp_form = r##"(with-temp-buffer
+            (buffer-modified-p))))"##,
+            true,
+            expect![[r#"OK (nil "(progn\n  (message \"x\")\n  (message \"y\"))\n" t)"#]],
+        ),
+        (
+            "auto_indent_mode_whole_buffer_visit_uses_distinct_visit_options",
+            r##"(with-temp-buffer
          (emacs-lisp-mode)
          (insert "(progn\n(message \"x\") \n\t(message \"y\"))\n")
          (let ((auto-indent-indent-style 'aggressive)
@@ -210,14 +205,13 @@ fn auto_indent_mode_whole_buffer_visit_uses_distinct_visit_options() {
            (list
             (auto-indent-whole-buffer nil)
             (buffer-string)
-            (buffer-modified-p))))"##;
-    let expect = expect![[r#"OK (nil "(progn\n  (message \"x\")\n  (message \"y\"))\n" t)"#]];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_whole_buffer_skips_disabled_and_conservative_cases() {
-    let elisp_form = r##"(mapcar
+            (buffer-modified-p))))"##,
+            true,
+            expect![[r#"OK (nil "(progn\n  (message \"x\")\n  (message \"y\"))\n" t)"#]],
+        ),
+        (
+            "auto_indent_mode_whole_buffer_skips_disabled_and_conservative_cases",
+            r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (funcall (nth 0 case))
@@ -233,16 +227,15 @@ fn auto_indent_mode_whole_buffer_skips_disabled_and_conservative_cases() {
                 (buffer-string)))))
          '((fundamental-mode aggressive (fundamental-mode))
            (text-mode conservative nil)
-           (text-mode aggressive nil)))"##;
-    let expect = expect![[
+           (text-mode aggressive nil)))"##,
+            true,
+            expect![[
         r#"OK (((fundamental-mode aggressive (fundamental-mode)) nil "\11text   \n") ((text-mode conservative nil) nil "text\n") ((text-mode aggressive nil) nil "text\n"))"#
-    ]];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_file_visit_can_restore_unmodified_state_after_cleanup() {
-    let elisp_form = r##"(let ((file
+    ]],
+        ),
+        (
+            "auto_indent_mode_file_visit_can_restore_unmodified_state_after_cleanup",
+            r##"(let ((file
                                 (expand-file-name
                                  "auto-indent-visit.el"
                                  default-directory)))
@@ -266,14 +259,13 @@ fn auto_indent_mode_file_visit_can_restore_unmodified_state_after_cleanup() {
                   (buffer-modified-p)
                   (point))))
            (when (file-exists-p file)
-             (delete-file file))))"##;
-    let expect = expect![[r#"OK ("(progn\n  (message \"x\"))\n" nil 25)"#]];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_text_boundaries_distinguish_visual_whitespace_from_physical_edges() {
-    let elisp_form = r##"(mapcar
+             (delete-file file))))"##,
+            true,
+            expect![[r#"OK ("(progn\n  (message \"x\"))\n" nil 25)"#]],
+        ),
+        (
+            "auto_indent_mode_text_boundaries_distinguish_visual_whitespace_from_physical_edges",
+            r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (insert (car case))
@@ -288,8 +280,9 @@ fn auto_indent_mode_text_boundaries_distinguish_visual_whitespace_from_physical_
               '(nil t))))
          '(("   alpha   \nbeta" . 3)
            ("   alpha   \nbeta" . 9)
-           ("alpha\n\nbeta" . 7)))"##;
-    let expect =
-        expect!["OK (((nil nil nil) (t t nil)) ((nil nil nil) (t nil t)) ((nil t t) (t t t)))"];
-    assert_auto_indent_mode_parity(elisp_form, expect);
+           ("alpha\n\nbeta" . 7)))"##,
+            true,
+            expect!["OK (((nil nil nil) (t t nil)) ((nil nil nil) (t nil t)) ((nil t t) (t t t)))"],
+        ),
+    ]);
 }

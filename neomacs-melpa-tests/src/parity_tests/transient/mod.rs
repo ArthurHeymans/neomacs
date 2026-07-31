@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{CachedMelpaOracle, TRANSIENT_MELPA_PIN};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod layout;
 mod state;
 
@@ -37,4 +39,15 @@ pub(crate) fn assert_transient_signal_parity(form: &str, expected: Expect) {
         .run_signal(&name, form)
         .unwrap_or_else(|error| panic!("Transient signal parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+/// Multi-probe batch for `assert_transient_parity` cases (2a).
+pub(crate) fn assert_transient_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        transient_oracle(),
+        &name,
+        "transient_parity",
+        cases,
+    );
 }

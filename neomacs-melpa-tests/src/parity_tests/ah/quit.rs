@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_ah_parity;
+use super::assert_ah_batch;
 
 #[test]
-fn keyboard_quit_and_real_isearch_abort_deliver_deferred_after_hooks() {
-    let elisp_form = r##"
+fn quit_public_surface_batch() {
+    assert_ah_batch(&[
+        (
+            "keyboard_quit_and_real_isearch_abort_deliver_deferred_after_hooks",
+            r##"
 (let* ((events nil)
        (ah-before-c-g-hook
         (list
@@ -74,9 +77,11 @@ fn keyboard_quit_and_real_isearch_abort_deliver_deferred_after_hooks() {
     (ah-mode -1)
     (when (buffer-live-p search-buffer)
       (kill-buffer search-buffer))))
-"##;
-    let expect = expect![
+"##,
+            true,
+            expect![
         "OK ((quit nil) (quit nil) 1 nil ((before keyboard-quit nil 1) (after keyboard-quit nil 1) (before isearch-abort t 11) (after isearch-abort nil 1)) nil)"
-    ];
-    assert_ah_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }

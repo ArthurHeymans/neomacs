@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_agent_shell_parity;
+use super::assert_agent_shell_batch;
 
 #[test]
-fn live_session_completes_real_project_files_and_advertised_agent_commands() {
-    let elisp_form = r##"
+fn completion_public_surface_batch() {
+    assert_agent_shell_batch(&[
+        (
+            "live_session_completes_real_project_files_and_advertised_agent_commands",
+            r##"
 (let* ((root
         (file-name-as-directory
          (expand-file-name
@@ -110,9 +113,11 @@ fn live_session_completes_real_project_files_and_advertised_agent_commands() {
                     (neomacs-agent-shell-test-visible-buffer-string)))))))))
     (neomacs-agent-shell-test-kill shell))
   snapshot)
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (t [((name . "review") (description . "Review current changes")) ((name . "resume") (description . "Resume the previous session")) ((name . "release") (description . "Prepare a release candidate"))] (2 6) ("README.md" "conversation.md" "docs/usage.md" "src/lib.rs" "src/parity/session.rs") (file file file file file) t nil (2 4) ("review" "resume" "release") ("  Review current changes" "  Resume the previous session" "  Prepare a release candidate") t "re" "/re")"#
-    ]];
-    assert_agent_shell_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

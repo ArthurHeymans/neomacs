@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_archive_region_parity;
+use super::assert_archive_region_batch;
 
 #[test]
-fn archive_region_prefix_workflow_moves_repeated_selections_and_opens_the_companion_file() {
-    let elisp_form = r##"(save-window-excursion
+fn workflows_public_surface_batch() {
+    assert_archive_region_batch(&[
+        (
+            "archive_region_prefix_workflow_moves_repeated_selections_and_opens_the_companion_file",
+            r##"(save-window-excursion
   (let* ((source
           (archive-region-test-path
            "project.el"))
@@ -109,17 +112,15 @@ fn archive_region_prefix_workflow_moves_repeated_selections_and_opens_the_compan
              (nreverse received-formats)
              dates)))
       (archive-region-test-cleanup
-       source archive))))"##;
-    let expect = expect![[
+       source archive))))"##,
+            true,
+            expect![[
         r##"OK ("(setq project-name \"Neomacs\")\n\n(setq current-cache nil)\n(message \"current deploy\")\n" "(setq project-name \"Neomacs\")\n\n(setq current-cache nil)\n(message \"current deploy\")\n" ";; [2026/07/27]\n;; (archive-region-pos \"(setq project-name \\\"Neomacs\\\")\")\n(setq obsolete-cache t)\n\n;; [2026/07/28]\n;; (archive-region-pos \"(setq current-cache nil)\")\n(message \"old deploy\")\n\n" "(message \"draft deploy\")\n" (";; (message \"old deploy\")\n" ";; (setq obsolete-cache t)\n" "(message \"draft deploy\")\n") "project.el_archive" ";; [2026/07/27]\n;; (archive-region-pos \"(setq project-name \\\"Neomacs\\\")\")\n(setq obsolete-cache t)\n\n;; [2026/07/28]\n;; (archive-region-pos \"(setq current-cache nil)\")\n(message \"old deploy\")\n\n" ("[%Y/%m/%d]" "[%Y/%m/%d]") nil)"##
-    ]];
-
-    assert_archive_region_parity(elisp_form, expect);
-}
-
-#[test]
-fn archive_region_navigation_link_supports_a_real_copy_and_restore_workflow() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "archive_region_navigation_link_supports_a_real_copy_and_restore_workflow",
+            r##"(save-window-excursion
   (let* ((source
           (archive-region-test-path
            "restore.el"))
@@ -218,17 +219,15 @@ fn archive_region_navigation_link_supports_a_real_copy_and_restore_workflow() {
                (archive-region-test-read-file
                 archive)))))
       (archive-region-test-cleanup
-       source archive))))"##;
-    let expect = expect![[
+       source archive))))"##,
+            true,
+            expect![[
         r##"OK (";; [2026/07/28]\n;; (archive-region-pos \"(setq checkpoint 'stable)\")\n(message \"restore λ\")\n\n" (archive-region-pos "(setq checkpoint 'stable)") ("restore.el" 2 "(setq checkpoint 'stable)") "(message \"restore λ\")\n" "(setq project 'neomacs)\n(setq checkpoint 'stable)\n(message \"restore λ\")\n(setq next-step 'ship)\n" "(setq project 'neomacs)\n(setq checkpoint 'stable)\n(message \"restore \316\273\")\n(setq next-step 'ship)\n" "")"##
-    ]];
-
-    assert_archive_region_parity(elisp_form, expect);
-}
-
-#[test]
-fn archive_region_custom_markdown_history_keeps_comment_syntax_suffix_and_date_contract() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "archive_region_custom_markdown_history_keeps_comment_syntax_suffix_and_date_contract",
+            r##"(save-window-excursion
   (let* ((source
           (archive-region-test-path
            "release-notes.md"))
@@ -293,17 +292,15 @@ fn archive_region_custom_markdown_history_keeps_comment_syntax_suffix_and_date_c
               (point-min)
               (point-max)))))
       (archive-region-test-cleanup
-       source archive))))"##;
-    let expect = expect![[
+       source archive))))"##,
+            true,
+            expect![[
         r##"OK ("%Y-%m-%dT%H:%M" "# Release notes\n\nCurrent rollout procedure\n" "release-notes.md.history.md" "<!-- 2026-07-28T09:30 -->\n<!-- (archive-region-pos \"# Release notes\") -->\nold rollout procedure\n\n" "<!-- 2026-07-28T09:30 -->\n<!-- (archive-region-pos \"# Release notes\") -->\nold rollout procedure\n\n")"##
-    ]];
-
-    assert_archive_region_parity(elisp_form, expect);
-}
-
-#[test]
-fn archive_region_failed_append_can_be_reverted_and_retried_without_losing_source_text() {
-    let elisp_form = r##"(let* ((source
+    ]],
+        ),
+        (
+            "archive_region_failed_append_can_be_reverted_and_retried_without_losing_source_text",
+            r##"(let* ((source
          (archive-region-test-path
           "recovery.el"))
         (archive
@@ -384,10 +381,11 @@ fn archive_region_failed_append_can_be_reverted_and_retried_without_losing_sourc
                   archive)
                  clock-reads))))))
     (archive-region-test-cleanup
-     source archive)))"##;
-    let expect = expect![[
+     source archive)))"##,
+            true,
+            expect![[
         r##"OK ((:error file-error ("Opening output file" "Is a directory" "[ORACLE-SANDBOX]/recovery.el_archive")) "(setq retained t)\n;; [2026/07/28]\n;; (archive-region-pos \"(setq retained t)\")\n(message \"archive after recovery\")\n\n(setq tail t)\n" "(setq retained t)\n;; (message \"archive after recovery\")\n(setq tail t)\n" "(setq retained t)\n(setq tail t)\n" ";; [2026/07/28]\n;; (archive-region-pos \"(setq retained t)\")\n(message \"archive after recovery\")\n\n" 2)"##
-    ]];
-
-    assert_archive_region_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

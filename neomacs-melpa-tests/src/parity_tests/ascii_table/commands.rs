@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_ascii_table_autoload_parity, assert_ascii_table_parity};
+use super::{assert_ascii_table_autoload_batch, assert_ascii_table_batch};
 
 #[test]
-fn ascii_table_set_base_normalizes_inputs_and_refreshes_once_per_change() {
-    let elisp_form = r##"(let ((ascii-table-base 16)
+fn commands_ascii_table_batch() {
+    assert_ascii_table_batch(&[
+        (
+            "ascii_table_set_base_normalizes_inputs_and_refreshes_once_per_change",
+            r##"(let ((ascii-table-base 16)
                calls
                results)
          (cl-letf
@@ -23,17 +26,15 @@ fn ascii_table_set_base_normalizes_inputs_and_refreshes_once_per_change() {
               results)))
          (list
           (nreverse results)
-          (nreverse calls)))"##;
-    let expect = expect![[
+          (nreverse calls)))"##,
+            true,
+            expect![[
         r#"OK (((2 :refreshed 2) (8 :refreshed 8) (10 :refreshed 10) (16 :refreshed 16) (3 :refreshed 10) (0 :refreshed 10) (-1 :refreshed 10) (nil :refreshed 10) (caret :refreshed 10) ("16" :refreshed 10)) (2 8 10 16 10 10 10 10 10 10))"#
-    ]];
-
-    assert_ascii_table_parity(elisp_form, expect);
-}
-
-#[test]
-fn ascii_table_radix_commands_are_interactive_and_delegate_exact_supported_values() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "ascii_table_radix_commands_are_interactive_and_delegate_exact_supported_values",
+            r##"(let (calls)
          (cl-letf
              (((symbol-function
                 'ascii-table--set-base)
@@ -49,16 +50,13 @@ fn ascii_table_radix_commands_are_interactive_and_delegate_exact_supported_value
              #'ascii-table-base-decimal)
             (call-interactively
              #'ascii-table-base-hex)
-            (nreverse calls))))"##;
-    let expect =
-        expect!["OK ((:selected 2) (:selected 8) (:selected 10) (:selected 16) (2 8 10 16))"];
-
-    assert_ascii_table_parity(elisp_form, expect);
-}
-
-#[test]
-fn ascii_table_toggle_control_cycles_false_and_all_truthy_states_and_refreshes() {
-    let elisp_form = r##"(let (calls results)
+            (nreverse calls))))"##,
+            true,
+            expect!["OK ((:selected 2) (:selected 8) (:selected 10) (:selected 16) (2 8 10 16))"],
+        ),
+        (
+            "ascii_table_toggle_control_cycles_false_and_all_truthy_states_and_refreshes",
+            r##"(let (calls results)
          (cl-letf
              (((symbol-function
                 'ascii-table--revert-if-active)
@@ -78,17 +76,15 @@ fn ascii_table_toggle_control_cycles_false_and_all_truthy_states_and_refreshes()
                 results))))
          (list
           (nreverse results)
-          (nreverse calls)))"##;
-    let expect = expect![[
+          (nreverse calls)))"##,
+            true,
+            expect![[
         r#"OK (((nil :refreshed caret :refreshed nil) (caret :refreshed nil :refreshed caret) (t :refreshed nil :refreshed caret) (1 :refreshed nil :refreshed caret) ("yes" :refreshed nil :refreshed caret)) (caret nil nil caret nil caret nil caret nil caret))"#
-    ]];
-
-    assert_ascii_table_parity(elisp_form, expect);
-}
-
-#[test]
-fn ascii_table_toggle_escape_uses_boolean_not_semantics_and_refreshes() {
-    let elisp_form = r##"(let (calls results)
+    ]],
+        ),
+        (
+            "ascii_table_toggle_escape_uses_boolean_not_semantics_and_refreshes",
+            r##"(let (calls results)
          (cl-letf
              (((symbol-function
                 'ascii-table--revert-if-active)
@@ -108,17 +104,15 @@ fn ascii_table_toggle_escape_uses_boolean_not_semantics_and_refreshes() {
                 results))))
          (list
           (nreverse results)
-          (nreverse calls)))"##;
-    let expect = expect![[
+          (nreverse calls)))"##,
+            true,
+            expect![[
         r#"OK (((nil :refreshed t :refreshed nil) (t :refreshed nil :refreshed t) (caret :refreshed nil :refreshed t) (0 :refreshed nil :refreshed t) ("yes" :refreshed nil :refreshed t)) (t nil nil t nil t nil t nil t))"#
-    ]];
-
-    assert_ascii_table_parity(elisp_form, expect);
-}
-
-#[test]
-fn ascii_table_revert_if_active_is_noop_without_display_buffer_and_refreshes_named_buffer() {
-    let elisp_form = r##"(let ((existing
+    ]],
+        ),
+        (
+            "ascii_table_revert_if_active_is_noop_without_display_buffer_and_refreshes_named_buffer",
+            r##"(let ((existing
                 (get-buffer "*ASCII*"))
                calls
                absent-result
@@ -160,16 +154,13 @@ fn ascii_table_revert_if_active_is_noop_without_display_buffer_and_refreshes_nam
                    (nreverse calls))
                   (with-current-buffer buffer
                     (buffer-string))))
-             (kill-buffer buffer))))"##;
-    let expect =
-        expect![[r#"OK (nil :reverted ((t "*ASCII*" fundamental-mode "fixture" nil)) "fixture")"#]];
-
-    assert_ascii_table_parity(elisp_form, expect);
-}
-
-#[test]
-fn ascii_table_real_command_sequence_rerenders_same_buffer_across_all_modes() {
-    let elisp_form = r##"(let ((buffer
+             (kill-buffer buffer))))"##,
+            true,
+            expect![[r#"OK (nil :reverted ((t "*ASCII*" fundamental-mode "fixture" nil)) "fixture")"#]],
+        ),
+        (
+            "ascii_table_real_command_sequence_rerenders_same_buffer_across_all_modes",
+            r##"(let ((buffer
                 (generate-new-buffer
                  " *ascii-table-command-sequence*"))
                (ascii-table-base 16)
@@ -212,17 +203,15 @@ fn ascii_table_real_command_sequence_rerenders_same_buffer_across_all_modes() {
                        (point-max))))
                     snapshots)))
                (nreverse snapshots))
-           (kill-buffer buffer)))"##;
-    let expect = expect![[
+           (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK ((ascii-table-base-binary 2 nil nil 1 25 "344a0c231cd072fadb0317786488acf41a4ec96dcad2b865efa5e7cd2f1d0046" 520) (ascii-table-base-octal 8 nil nil 1 19 "e2519d17b65982239fb2c15e4477ac277fbba4bc8bad1eab5e740d24cd9595cb" 776) (ascii-table-base-decimal 10 nil nil 1 19 "caabf05c29a5ef6f9e7401da13a594a7a830e9486ff074d60aceaafae4e423ef" 1032) (ascii-table-base-hex 16 nil nil 1 19 "a7b33d4144b327ae7701b2011d98b0cb84434a0643791e317aa4510639d3ac25" 1288) (ascii-table-toggle-control 16 caret nil 1 19 "65ca8d45a9597358d9988b42392152b5493b8dc0f2bcb78e09585421ae9ef30d" 1544) (ascii-table-toggle-escape 16 caret t 1 19 "d6d85406d481f6ac0af7fc5f7fdd25a280315873f8ef8d8a2b7a1d5137d0c26a" 1800) (ascii-table-toggle-control 16 nil t 1 19 "0a5ce70f185e38aec3ae97286eb3fd70dc82ef13e59d45e0eaa18b4525f69a5e" 2056) (ascii-table-toggle-escape 16 nil nil 1 19 "a7b33d4144b327ae7701b2011d98b0cb84434a0643791e317aa4510639d3ac25" 2312))"#
-    ]];
-
-    assert_ascii_table_parity(elisp_form, expect);
-}
-
-#[test]
-fn ascii_table_mode_key_bindings_drive_practical_navigation_and_rendering_workflow() {
-    let elisp_form = r##"(let ((buffer
+    ]],
+        ),
+        (
+            "ascii_table_mode_key_bindings_drive_practical_navigation_and_rendering_workflow",
+            r##"(let ((buffer
                 (generate-new-buffer
                  " *ascii-table-key-workflow*"))
                (ascii-table-base 16)
@@ -260,17 +249,15 @@ fn ascii_table_mode_key_bindings_drive_practical_navigation_and_rendering_workfl
                         (buffer-string)))
                       states))))
                (nreverse states))
-           (kill-buffer buffer)))"##;
-    let expect = expect![[
+           (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK (("b" ascii-table-base-binary 2 nil nil "ASCII Table (binary)" "344a0c231cd072fadb0317786488acf41a4ec96dcad2b865efa5e7cd2f1d0046") ("o" ascii-table-base-octal 8 nil nil "ASCII Table (octal)" "e2519d17b65982239fb2c15e4477ac277fbba4bc8bad1eab5e740d24cd9595cb") ("d" ascii-table-base-decimal 10 nil nil "ASCII Table (decimal)" "caabf05c29a5ef6f9e7401da13a594a7a830e9486ff074d60aceaafae4e423ef") ("x" ascii-table-base-hex 16 nil nil "ASCII Table (hex)" "a7b33d4144b327ae7701b2011d98b0cb84434a0643791e317aa4510639d3ac25") ("TAB" ascii-table-toggle-control 16 caret nil "ASCII Table (hex)" "65ca8d45a9597358d9988b42392152b5493b8dc0f2bcb78e09585421ae9ef30d") ("e" ascii-table-toggle-escape 16 caret t "ASCII Table (hex)" "d6d85406d481f6ac0af7fc5f7fdd25a280315873f8ef8d8a2b7a1d5137d0c26a") ("TAB" ascii-table-toggle-control 16 nil t "ASCII Table (hex)" "0a5ce70f185e38aec3ae97286eb3fd70dc82ef13e59d45e0eaa18b4525f69a5e") ("e" ascii-table-toggle-escape 16 nil nil "ASCII Table (hex)" "a7b33d4144b327ae7701b2011d98b0cb84434a0643791e317aa4510639d3ac25"))"#
-    ]];
-
-    assert_ascii_table_parity(elisp_form, expect);
-}
-
-#[test]
-fn ascii_table_inherited_navigation_and_revert_keys_move_through_real_rendered_table() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "ascii_table_inherited_navigation_and_revert_keys_move_through_real_rendered_table",
+            r##"(with-temp-buffer
          (let ((ascii-table-base 16)
                (ascii-table-control nil)
                (ascii-table-escape nil)
@@ -306,17 +293,15 @@ fn ascii_table_inherited_navigation_and_revert_keys_move_through_real_rendered_t
                     (line-beginning-position)
                     (line-end-position)))
                   states)))
-             (nreverse states))))"##;
-    let expect = expect![[
+             (nreverse states))))"##,
+            true,
+            expect![[
         r#"OK ((:initial 325 8 "05  ENQ  15  NAK  25  %  35  5  45  E  55  U  65  e  75  u  ") (">" end-of-buffer 996 19 "") ("<" beginning-of-buffer 1 1 "ASCII Table (hex)") ("g" revert-buffer 1 1 "ASCII Table (hex)"))"#
-    ]];
-
-    assert_ascii_table_parity(elisp_form, expect);
-}
-
-#[test]
-fn ascii_table_display_command_creates_selects_and_initializes_exact_named_buffer() {
-    let elisp_form = r##"(let ((existing
+    ]],
+        ),
+        (
+            "ascii_table_display_command_creates_selects_and_initializes_exact_named_buffer",
+            r##"(let ((existing
                 (get-buffer "*ASCII*"))
                calls
                result)
@@ -364,17 +349,15 @@ fn ascii_table_display_command_creates_selects_and_initializes_exact_named_buffe
                  (buffer-string))))
            (when-let ((buffer
                        (get-buffer "*ASCII*")))
-             (kill-buffer buffer))))"##;
-    let expect = expect![[
+             (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK (nil (((:buffer nil) nil "*ASCII*")) "*ASCII*" t ascii-table-mode "ASCII" t ascii-table--revert 1 "ASCII Table (hex)" "a7b33d4144b327ae7701b2011d98b0cb84434a0643791e317aa4510639d3ac25")"#
-    ]];
-
-    assert_ascii_table_parity(elisp_form, expect);
-}
-
-#[test]
-fn ascii_table_display_command_reuses_existing_buffer_and_erases_previous_contents() {
-    let elisp_form = r##"(let ((buffer
+    ]],
+        ),
+        (
+            "ascii_table_display_command_reuses_existing_buffer_and_erases_previous_contents",
+            r##"(let ((buffer
                 (get-buffer-create "*ASCII*"))
                calls)
          (unwind-protect
@@ -422,62 +405,15 @@ fn ascii_table_display_command_reuses_existing_buffer_and_erases_previous_conten
                     (secure-hash
                      'sha256
                      (buffer-string))))))
-           (kill-buffer buffer)))"##;
-    let expect = expect![[
+           (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK ((t t) t ascii-table-mode 1 nil "a7b33d4144b327ae7701b2011d98b0cb84434a0643791e317aa4510639d3ac25" "a7b33d4144b327ae7701b2011d98b0cb84434a0643791e317aa4510639d3ac25")"#
-    ]];
-
-    assert_ascii_table_parity(elisp_form, expect);
-}
-
-#[test]
-fn ascii_table_autoloaded_public_command_loads_feature_then_initializes_display() {
-    let elisp_form = r##"(let ((before
-                (list
-                 (featurep 'ascii-table)
-                 (autoloadp
-                  (symbol-function
-                   'ascii-table))))
-               calls)
-         (unwind-protect
-             (cl-letf
-                 (((symbol-function
-                    'switch-to-buffer-other-window)
-                   (lambda (buffer-or-name &rest _arguments)
-                     (push buffer-or-name calls)
-                     (set-buffer
-                      (get-buffer-create
-                       buffer-or-name))))
-                  ((symbol-function
-                    'window-width)
-                   (lambda (&optional _window)
-                     90)))
-               (call-interactively #'ascii-table)
-               (list
-                before
-                (featurep 'ascii-table)
-                (autoloadp
-                 (symbol-function
-                  'ascii-table))
-                (nreverse calls)
-                (buffer-name)
-                major-mode
-                (secure-hash
-                 'sha256
-                 (buffer-string))))
-           (when-let ((buffer
-                       (get-buffer "*ASCII*")))
-             (kill-buffer buffer))))"##;
-    let expect = expect![[
-        r#"OK ((nil t) t nil ((:buffer nil)) "*ASCII*" ascii-table-mode "a7b33d4144b327ae7701b2011d98b0cb84434a0643791e317aa4510639d3ac25")"#
-    ]];
-
-    assert_ascii_table_autoload_parity(elisp_form, expect);
-}
-
-#[test]
-fn ascii_table_independent_buffers_share_global_preferences_but_keep_mode_state_local() {
-    let elisp_form = r##"(let ((first
+    ]],
+        ),
+        (
+            "ascii_table_independent_buffers_share_global_preferences_but_keep_mode_state_local",
+            r##"(let ((first
                 (generate-new-buffer
                  " *ascii-table-first*"))
                (second
@@ -524,10 +460,60 @@ fn ascii_table_independent_buffers_share_global_preferences_but_keep_mode_state_
                     'sha256
                     (buffer-string))))))
            (kill-buffer first)
-           (kill-buffer second)))"##;
-    let expect = expect![[
+           (kill-buffer second)))"##,
+            true,
+            expect![[
         r#"OK (10 caret nil (ascii-table-mode nil nil "a7b33d4144b327ae7701b2011d98b0cb84434a0643791e317aa4510639d3ac25") (ascii-table-mode nil nil "a7b33d4144b327ae7701b2011d98b0cb84434a0643791e317aa4510639d3ac25"))"#
-    ]];
+    ]],
+        ),
+    ]);
+}
 
-    assert_ascii_table_parity(elisp_form, expect);
+#[test]
+fn commands_ascii_table_autoload_batch() {
+    assert_ascii_table_autoload_batch(&[
+        (
+            "ascii_table_autoloaded_public_command_loads_feature_then_initializes_display",
+            r##"(let ((before
+                (list
+                 (featurep 'ascii-table)
+                 (autoloadp
+                  (symbol-function
+                   'ascii-table))))
+               calls)
+         (unwind-protect
+             (cl-letf
+                 (((symbol-function
+                    'switch-to-buffer-other-window)
+                   (lambda (buffer-or-name &rest _arguments)
+                     (push buffer-or-name calls)
+                     (set-buffer
+                      (get-buffer-create
+                       buffer-or-name))))
+                  ((symbol-function
+                    'window-width)
+                   (lambda (&optional _window)
+                     90)))
+               (call-interactively #'ascii-table)
+               (list
+                before
+                (featurep 'ascii-table)
+                (autoloadp
+                 (symbol-function
+                  'ascii-table))
+                (nreverse calls)
+                (buffer-name)
+                major-mode
+                (secure-hash
+                 'sha256
+                 (buffer-string))))
+           (when-let ((buffer
+                       (get-buffer "*ASCII*")))
+             (kill-buffer buffer))))"##,
+            true,
+            expect![[
+        r#"OK ((nil t) t nil ((:buffer nil)) "*ASCII*" ascii-table-mode "a7b33d4144b327ae7701b2011d98b0cb84434a0643791e317aa4510639d3ac25")"#
+    ]],
+        ),
+    ]);
 }

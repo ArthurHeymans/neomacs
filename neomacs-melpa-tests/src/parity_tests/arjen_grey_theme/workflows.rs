@@ -1,13 +1,13 @@
 use expect_test::expect;
 
-use super::{
-    assert_arjen_grey_theme_autoload_parity, assert_arjen_grey_theme_parity,
-    assert_arjen_grey_theme_with_helm_parity, assert_arjen_grey_theme_with_prelude_parity,
-};
+use super::{assert_arjen_grey_theme_autoload_parity, assert_arjen_grey_theme_parity, assert_arjen_grey_theme_with_helm_parity, assert_arjen_grey_theme_with_prelude_parity, assert_arjen_grey_theme_autoload_batch, assert_arjen_grey_theme_batch, assert_arjen_grey_theme_with_helm_batch};
 
 #[test]
-fn installed_theme_loads_from_its_registered_path_and_survives_a_reload_cycle() {
-    let elisp_form = r##"(let ((before
+fn workflows_arjen_grey_theme_autoload_batch() {
+    assert_arjen_grey_theme_autoload_batch(&[
+        (
+            "installed_theme_loads_from_its_registered_path_and_survives_a_reload_cycle",
+            r##"(let ((before
                     (list
                      (custom-theme-p 'arjen-grey)
                      (custom-theme-enabled-p 'arjen-grey)
@@ -69,16 +69,21 @@ fn installed_theme_loads_from_its_registered_path_and_survives_a_reload_cycle() 
                  (when
                      (custom-theme-enabled-p 'arjen-grey)
                    (disable-theme 'arjen-grey)))
-               (list before first second after))"##;
-    let expect = expect![[
+               (list before first second after))"##,
+            true,
+            expect![[
         r##"OK ((nil nil nil "unspecified-bg") (#1=(arjen-grey) #1# "#bdc3ce" "#2a2f38" "#bdc3ce" "#242a34" 1) (#2=(arjen-grey) #2# "#bdc3ce" "#2a2f38" "#e1cb8c" "#3c4449") (nil nil "unspecified-fg" "unspecified-bg"))"##
-    ]];
-    assert_arjen_grey_theme_autoload_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }
 
 #[test]
-fn styles_a_real_elisp_editing_session_with_semantic_and_editor_surfaces() {
-    let elisp_form = r##"(unwind-protect
+fn workflows_arjen_grey_theme_batch() {
+    assert_arjen_grey_theme_batch(&[
+        (
+            "styles_a_real_elisp_editing_session_with_semantic_and_editor_surfaces",
+            r##"(unwind-protect
                (progn
                  (load-theme 'arjen-grey t)
                  (with-temp-buffer
@@ -152,16 +157,21 @@ fn styles_a_real_elisp_editing_session_with_semantic_and_editor_surfaces() {
                        :selection selection)))))
              (when
                  (custom-theme-enabled-p 'arjen-grey)
-               (disable-theme 'arjen-grey)))"##;
-    let expect = expect![[
+               (disable-theme 'arjen-grey)))"##,
+            true,
+            expect![[
         r##"OK (";; Publish one validated release artifact.\n(defun publish-release (artifact)\n  (if (file-exists-p artifact)\n      (message \"Publishing %s\" artifact)\n    (error \"Missing artifact\")))\n" (("Publish one" font-lock-comment-face "#63747c" unspecified) ("defun" font-lock-keyword-face "#b894b0" unspecified) ("publish-release" font-lock-function-name-face "#909fab" unspecified) ("if (" font-lock-keyword-face "#b894b0" unspecified) ("file-exists-p" nil nil nil) ("message" nil nil nil) ("\"Publishing %s\"" font-lock-string-face "#a8c194" unspecified) ("error" font-lock-warning-face "red" bold)) (:default "#bdc3ce" "#2a2f38" :cursor "#e1cb8c" :mode-line "#bdc3ce" "#242a34" :region "#3c4449" :selection "  (if (file-exists-p artifact)"))"##
-    ]];
-    assert_arjen_grey_theme_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }
 
 #[test]
-fn filters_and_selects_a_deployment_target_in_a_real_helm_session() {
-    let elisp_form = r##"(progn
+fn workflows_arjen_grey_theme_with_helm_batch() {
+    assert_arjen_grey_theme_with_helm_batch(&[
+        (
+            "filters_and_selects_a_deployment_target_in_a_real_helm_session",
+            r##"(progn
                (require 'helm)
                (let (selected rendered)
                  (unwind-protect
@@ -255,11 +265,13 @@ fn filters_and_selects_a_deployment_target_in_a_real_helm_session() {
                      (kill-buffer
                       "*helm deployment targets*"))
                    (fmakunbound
-                    'arjen-grey-deployment-target))))"##;
-    let expect = expect![[
+                    'arjen-grey-deployment-target))))"##,
+            true,
+            expect![[
         r##"OK ((:environment staging :directory "/srv/app-staging") ("stag" "staging — /srv/app-staging" "#bdc3ce" "#2a2f38" bold (:line-width -1 :style released-button) "#3c4449" nil))"##
-    ]];
-    assert_arjen_grey_theme_with_helm_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }
 
 #[test]

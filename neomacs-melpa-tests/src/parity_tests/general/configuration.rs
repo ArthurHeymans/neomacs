@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_general_parity;
+use super::assert_general_batch;
 
 #[test]
-fn general_public_sorters_order_mixed_key_and_state_descriptors_exactly() {
-    let elisp_form = r##"(let ((by-car
+fn configuration_public_surface_batch() {
+    assert_general_batch(&[
+        (
+            "general_public_sorters_order_mixed_key_and_state_descriptors_exactly",
+            r##"(let ((by-car
                      '((z . 1)
                        ([f2] . 2)
                        (nil . 3)
@@ -20,17 +23,15 @@ fn general_public_sorters_order_mixed_key_and_state_descriptors_exactly() {
                 (general-sort-by-car
                  (copy-tree by-car))
                 (general-sort-by-cadr
-                 (copy-tree by-cadr))))"##;
-    let expect = expect![[
+                 (copy-tree by-cadr))))"##,
+            true,
+            expect![[
         r#"OK (((nil . 3) ([f2] . 2) ("alpha" . 4) (beta . 5) (z . 1)) ((three nil) (two [f2]) (four "alpha") (five beta) (one z)))"#
-    ]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_setq_uses_custom_setters_for_defined_variables() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "general_setq_uses_custom_setters_for_defined_variables",
+            r##"(progn
                (defcustom
                  neomacs-general-custom-value nil
                  "General parity variable."
@@ -49,17 +50,15 @@ fn general_setq_uses_custom_setters_for_defined_variables() {
                  'neomacs-general-custom-value)
                 (get
                  'neomacs-general-custom-value
-                 'custom-set)))"##;
-    let expect = expect![[
+                 'custom-set)))"##,
+            true,
+            expect![[
         r#"OK (#1=(:set requested) #1# #[(symbol value) ((set-default symbol (list :set value))) (t)])"#
-    ]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_setting_helpers_preserve_default_local_and_equal_pushnew_semantics() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "general_setting_helpers_preserve_default_local_and_equal_pushnew_semantics",
+            r##"(progn
                (defvar
                  neomacs-general-setting
                  'initial)
@@ -90,15 +89,13 @@ fn general_setting_helpers_preserve_default_local_and_equal_pushnew_semantics() 
                    'neomacs-general-setting)
                   neomacs-general-items
                   (local-variable-p
-                   'neomacs-general-setting))))"##;
-    let expect = expect![[r#"OK (local default ((three) (one) (two)) t)"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_add_and_remove_hook_support_lists_order_append_and_local_values() {
-    let elisp_form = r##"(progn
+                   'neomacs-general-setting))))"##,
+            true,
+            expect![[r#"OK (local default ((three) (one) (two)) t)"#]],
+        ),
+        (
+            "general_add_and_remove_hook_support_lists_order_append_and_local_values",
+            r##"(progn
                (defvar
                  neomacs-general-hook-a nil)
                (defvar
@@ -136,17 +133,15 @@ fn general_add_and_remove_hook_support_lists_order_append_and_local_values() {
                   global
                   local
                   neomacs-general-hook-a
-                  neomacs-general-hook-b)))"##;
-    let expect = expect![[
+                  neomacs-general-hook-b)))"##,
+            true,
+            expect![[
         r#"OK (((backward-char forward-char next-line) (backward-char forward-char)) (t previous-line) nil nil)"#
-    ]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_transient_hooks_remove_after_one_run_or_first_truthy_result() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "general_transient_hooks_remove_after_one_run_or_first_truthy_result",
+            r##"(progn
                (defvar
                  neomacs-general-once-hook nil)
                (defvar
@@ -187,15 +182,13 @@ fn general_transient_hooks_remove_after_one_run_or_first_truthy_result() {
                 neomacs-general-once-count
                 neomacs-general-until-count
                 neomacs-general-once-hook
-                neomacs-general-until-hook))"##;
-    let expect = expect![[r#"OK (1 2 nil nil)"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_advice_helpers_apply_lists_and_aliases_then_remove_cleanly() {
-    let elisp_form = r##"(progn
+                neomacs-general-until-hook))"##,
+            true,
+            expect![[r#"OK (1 2 nil nil)"#]],
+        ),
+        (
+            "general_advice_helpers_apply_lists_and_aliases_then_remove_cleanly",
+            r##"(progn
                (defvar
                  neomacs-general-advice-events nil)
                (setq
@@ -249,17 +242,15 @@ fn general_advice_helpers_apply_lists_and_aliases_then_remove_cleanly() {
                    (indirect-function
                     'general-remove-advice)
                    (indirect-function
-                    'general-advice-remove)))))"##;
-    let expect = expect![[
+                    'general-advice-remove)))))"##,
+            true,
+            expect![[
         r#"OK ((a b) (before-two before-one body-a before-two before-one body-b) a (body-a) t t)"#
-    ]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_transient_advice_removes_after_the_configured_result_condition() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "general_transient_advice_removes_after_the_configured_result_condition",
+            r##"(progn
                (defvar
                  neomacs-general-advice-count 0)
                (setq
@@ -284,15 +275,13 @@ fn general_transient_advice_removes_after_the_configured_result_condition() {
                 (neomacs-general-advice-target)
                 (neomacs-general-advice-target)
                 (neomacs-general-advice-target)
-                neomacs-general-advice-count))"##;
-    let expect = expect![[r#"OK (nil nil finished original 3)"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_package_and_initialization_macros_run_in_the_documented_context() {
-    let elisp_form = r##"(let (events)
+                neomacs-general-advice-count))"##,
+            true,
+            expect![[r#"OK (nil nil finished original 3)"#]],
+        ),
+        (
+            "general_package_and_initialization_macros_run_in_the_documented_context",
+            r##"(let (events)
                (general-with-package
                    'general
                  (push
@@ -312,8 +301,9 @@ fn general_package_and_initialization_macros_run_in_the_documented_context() {
                  (indirect-function
                   'general-with)
                  (indirect-function
-                  'general-with-package))))"##;
-    let expect = expect![[r#"OK (((package general) after-init after-tty) nil t)"#]];
-
-    assert_general_parity(elisp_form, expect);
+                  'general-with-package))))"##,
+            true,
+            expect![[r#"OK (((package general) after-init after-tty) nil t)"#]],
+        ),
+    ]);
 }

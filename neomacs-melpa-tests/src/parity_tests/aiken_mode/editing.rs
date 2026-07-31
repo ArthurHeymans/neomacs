@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_aiken_mode_parity;
+use super::assert_aiken_mode_batch;
 
 #[test]
-fn comment_and_uncomment_region_roundtrip_preserves_aiken_program() {
-    let elisp_form = r##"
+fn editing_public_surface_batch() {
+    assert_aiken_mode_batch(&[
+        (
+            "comment_and_uncomment_region_roundtrip_preserves_aiken_program",
+            r##"
 (with-temp-buffer
   (aiken-mode)
   (insert
@@ -17,16 +20,15 @@ trace @\"validated\"\n")
       (uncomment-region (point-min) (point-max))
       (list original commented (buffer-string)
             (equal original (buffer-string))))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("let amount = 42\nexpect amount > 0\ntrace @\"validated\"\n" "// let amount = 42\n// expect amount > 0\n// trace @\"validated\"\n" "let amount = 42\nexpect amount > 0\ntrace @\"validated\"\n" t)"#
-    ]];
-    assert_aiken_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn syntax_parser_tracks_code_line_comments_strings_and_nested_delimiters() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "syntax_parser_tracks_code_line_comments_strings_and_nested_delimiters",
+            r##"
 (with-temp-buffer
   (aiken-mode)
   (insert
@@ -45,16 +47,15 @@ fn syntax_parser_tracks_code_line_comments_strings_and_nested_delimiters() {
              (and (nth 3 state) t)
              (and (nth 4 state) t))))
    '("fn" "// not" "real comment" "when" "fields, _" "}")))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("fn" 0 nil nil) ("// not" 1 t nil) ("real comment" 1 nil t) ("when" 1 nil nil) ("fields, _" 2 nil nil) ("}" 1 nil t))"#
-    ]];
-    assert_aiken_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn underscore_identifiers_move_and_extract_as_single_symbols() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "underscore_identifiers_move_and_extract_as_single_symbols",
+            r##"
 (with-temp-buffer
   (aiken-mode)
   (insert "let payment_output_reference = own_ref\n")
@@ -71,14 +72,13 @@ fn underscore_identifiers_move_and_extract_as_single_symbols() {
         (point)
         (progn (forward-symbol 1) (point))))
      (char-syntax ?_))))
-"##;
-    let expect = expect![[r#"OK ("payment_output_reference" 29 "payment_output_reference" 119)"#]];
-    assert_aiken_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn balanced_expression_navigation_skips_strings_and_comment_delimiters() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect![[r#"OK ("payment_output_reference" 29 "payment_output_reference" 119)"#]],
+        ),
+        (
+            "balanced_expression_navigation_skips_strings_and_comment_delimiters",
+            r##"
 (with-temp-buffer
   (aiken-mode)
   (insert
@@ -92,16 +92,15 @@ fn balanced_expression_navigation_skips_strings_and_comment_delimiters() {
     (forward-sexp 1)
     (list text end (point) (= end (point))
           (char-before end))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("{ Payment { owner: \"}\" }, // ignored }\n  [Some(1), Some(2)] }" 62 62 t 125)"#
-    ]];
-    assert_aiken_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn inherited_indent_region_produces_stable_tabs_free_editing_result() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "inherited_indent_region_produces_stable_tabs_free_editing_result",
+            r##"
 (with-temp-buffer
   (aiken-mode)
   (insert
@@ -119,16 +118,15 @@ _ -> False\n\
    (string-match-p "\t" (buffer-string))
    indent-line-function
    indent-tabs-mode))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("validator spend {\nspend(datum: Data) {\nwhen datum is {\nConstr(fields) -> True\n_ -> False\n}\n}\n}\n" nil indent-relative nil)"#
-    ]];
-    assert_aiken_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn newline_and_indent_uses_inherited_prog_mode_behavior_inside_validator() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "newline_and_indent_uses_inherited_prog_mode_behavior_inside_validator",
+            r##"
 (with-temp-buffer
   (aiken-mode)
   (insert "validator spend {")
@@ -149,15 +147,13 @@ fn newline_and_indent_uses_inherited_prog_mode_behavior_inside_validator() {
         (forward-line line)
         (current-indentation)))
     '(0 1 2 3 4))))
-"##;
-    let expect =
-        expect![[r#"OK ("validator spend {\nspend(datum: Data) {\nTrue\n}\n}" (0 0 0 0 0))"#]];
-    assert_aiken_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn comment_filling_changes_only_comment_text_not_neighboring_code() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect![[r#"OK ("validator spend {\nspend(datum: Data) {\nTrue\n}\n}" (0 0 0 0 0))"#]],
+        ),
+        (
+            "comment_filling_changes_only_comment_text_not_neighboring_code",
+            r##"
 (with-temp-buffer
   (aiken-mode)
   (setq fill-column 36)
@@ -175,16 +171,15 @@ let amount = calculate_payment_amount(transaction)\n")
    (string-match-p
     "let amount = calculate_payment_amount(transaction)"
     (buffer-string))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("// This validator checks that every\n// payment output remains positive\n// and belongs to the expected owner\n// before settlement.\nlet amount = calculate_payment_amount(transaction)\n" t 130)"#
-    ]];
-    assert_aiken_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn comment_dwim_appends_and_removes_end_of_line_comment_practically() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "comment_dwim_appends_and_removes_end_of_line_comment_practically",
+            r##"
 (with-temp-buffer
   (aiken-mode)
   (insert "let amount = 42")
@@ -196,9 +191,11 @@ fn comment_dwim_appends_and_removes_end_of_line_comment_practically() {
     (search-forward "//")
     (comment-kill nil)
     (list commented (buffer-string) (current-column))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("let amount = 42                 // positive amount" "let amount = 42" 15)"#
-    ]];
-    assert_aiken_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

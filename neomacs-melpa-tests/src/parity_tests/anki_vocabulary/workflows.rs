@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_anki_vocabulary_parity;
+use super::assert_anki_vocabulary_batch;
 
 #[test]
-fn configures_a_real_anki_model_from_the_server_catalog() {
-    let elisp_form = r##"(let ((answers
+fn workflows_public_surface_batch() {
+    assert_anki_vocabulary_batch(&[
+        (
+            "configures_a_real_anki_model_from_the_server_catalog",
+            r##"(let ((answers
        '("Language::English"
          "Vocabulary"
          "${expression:单词}"
@@ -58,16 +61,15 @@ fn configures_a_real_anki_model_from_the_server_catalog() {
      (lambda (buffer)
        (when (buffer-live-p buffer)
          (kill-buffer buffer)))
-     response-buffers)))"##;
-    let expect = expect![[
+     response-buffers)))"##,
+            true,
+            expect![[
         r#"OK ((((action . "deckNames") (version . 6)) ((action . "modelNames") (version . 6)) ((action . "modelFieldNames") (version . 6) (params (modelName . "Vocabulary")))) "Language::English" "Vocabulary" (("Translation" . "${translation:翻译例句}") ("Highlighted" . "${sentence_bold:标粗的原文例句}") ("Context" . "${sentence:原文例句}") ("IPA" . "${phonetic:音标}") ("Meaning" . "${glossary:释义}") ("Word" . "${expression:单词}")) ("Audio") nil)"#
-    ]];
-    assert_anki_vocabulary_parity(elisp_form, expect);
-}
-
-#[test]
-fn selected_prose_becomes_a_complete_contextual_vocabulary_note_with_audio() {
-    let elisp_form = r##"(let ((anki-vocabulary-deck-name "Language::English")
+    ]],
+        ),
+        (
+            "selected_prose_becomes_a_complete_contextual_vocabulary_note_with_audio",
+            r##"(let ((anki-vocabulary-deck-name "Language::English")
       (anki-vocabulary-model-name "Vocabulary")
       (anki-vocabulary-field-alist
        '(("Word" . "${expression:单词}")
@@ -153,9 +155,11 @@ fn selected_prose_becomes_a_complete_contextual_vocabulary_note_with_audio() {
      (lambda (buffer)
        (when (buffer-live-p buffer)
          (kill-buffer buffer)))
-     response-buffers)))"##;
-    let expect = expect![[
+     response-buffers)))"##,
+            true,
+            expect![[
         r#"OK ("Practice makes progress;\npractice builds confidence." "Practice makes progress;\npractice builds confidence.\nA second sentence should not enter the card." (((action . "addNote") (version . 6) (params (note (deckName . "Language::English") (modelName . "Vocabulary") (fields (Word . "practice") (Meaning . "v. rehearse") (IPA . "/ˈpræktɪs/") (Context . "Practice makes progress; practice builds confidence.") (Highlighted . "<B>Practice</B> makes progress; <b>practice</b> builds confidence.") (Translation . "练习带来进步；练习建立信心。")) (tags) (audio (url . "http://dict.youdao.com/dictvoice?type=2&audio=practice") (filename . "youdao-e8302675b1c057aa7eecf27f7b0e2c9f.mp3") (fields "Audio")))))) ((choose "Pick The Word: " ("Practice" "makes" "progress" "practice" "builds" "confidence" "") "practice") (translate "Practice makes progress; practice builds confidence.") (lookup "practice") (choose "练习带来进步；练习建立信心。(practice):" ("n. practice" "v. rehearse") "v. rehearse") (before-add "practice" "Practice makes progress; practice builds confidence." "<B>Practice</B> makes progress; <b>practice</b> builds confidence." "练习带来进步；练习建立信心。" "v. rehearse" "ˈpræktɪs") (after-add "practice" "Practice makes progress; practice builds confidence." "<B>Practice</B> makes progress; <b>practice</b> builds confidence." "练习带来进步；练习建立信心。" "v. rehearse" "ˈpræktɪs")))"#
-    ]];
-    assert_anki_vocabulary_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

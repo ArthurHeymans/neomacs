@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_async_http_queue_parity;
+use super::assert_async_http_queue_batch;
 
 #[test]
-fn async_http_queue_fetch_json_success_uses_exact_url_contract_cancels_timer_and_kills_buffer() {
-    let elisp_form = r##"(let* ((state
+fn responses_public_surface_batch() {
+    assert_async_http_queue_batch(&[
+        (
+            "async_http_queue_fetch_json_success_uses_exact_url_contract_cancels_timer_and_kills_buffer",
+            r##"(let* ((state
                 (async-http-queue-test-state
                  nil
                  3
@@ -81,16 +84,15 @@ fn async_http_queue_fetch_json_success_uses_exact_url_contract_cancels_timer_and
                (buffer-live-p buffer)
                (nreverse canceled)
                (async-http-queue-test-timer-summary
-                (list timeout-event))))))"##;
-    let expect = expect![[
+                (list timeout-event))))))"##,
+            true,
+            expect![[
         r#"OK (t ("https://api.test/json" nil t nil) (42 "hello" (t :false)) nil nil ((t 17)) ((1 17 nil t)))"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_fetch_raw_and_custom_parser_receive_exact_body_start() {
-    let elisp_form = r##"(let (observations)
+    ]],
+        ),
+        (
+            "async_http_queue_fetch_raw_and_custom_parser_receive_exact_body_start",
+            r##"(let (observations)
           (dolist
               (case
                '(("raw" nil "λ raw\nsecond line")
@@ -164,16 +166,15 @@ fn async_http_queue_fetch_raw_and_custom_parser_receive_exact_body_start() {
                   failures
                   (buffer-live-p buffer))
                  observations))))
-          (nreverse observations))"##;
-    let expect = expect![[
+          (nreverse observations))"##,
+            true,
+            expect![[
         r#"OK (("raw" "λ raw\nsecond line" nil nil) ("custom" (:point 76 :prefix "alpha" :parts ("alpha" "beta" "gamma")) nil nil))"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_http_status_boundary_matrix_routes_success_and_failure() {
-    let elisp_form = r##"(let (observations)
+    ]],
+        ),
+        (
+            "async_http_queue_http_status_boundary_matrix_routes_success_and_failure",
+            r##"(let (observations)
           (dolist (status '(199 200 204 299 300 404 500))
             (let* ((state
                     (async-http-queue-test-state
@@ -232,16 +233,15 @@ fn async_http_queue_http_status_boundary_matrix_routes_success_and_failure() {
                   (nreverse messages)
                   (buffer-live-p buffer))
                  observations))))
-          (nreverse observations))"##;
-    let expect = expect![[
+          (nreverse observations))"##,
+            true,
+            expect![[
         r#"OK ((199 nil 1 ("HTTP 199 error fetching URL: https://api.test/status/199") nil) (200 "body-200" nil nil nil) (204 "body-204" nil nil nil) (299 "body-299" nil nil nil) (300 nil 1 ("HTTP 300 error fetching URL: https://api.test/status/300") nil) (404 nil 1 ("HTTP 404 error fetching URL: https://api.test/status/404") nil) (500 nil 1 ("HTTP 500 error fetching URL: https://api.test/status/500") nil))"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_transport_error_takes_precedence_over_valid_http_body() {
-    let elisp_form = r##"(let* ((state
+    ]],
+        ),
+        (
+            "async_http_queue_transport_error_takes_precedence_over_valid_http_body",
+            r##"(let* ((state
                 (async-http-queue-test-state
                  nil
                  1
@@ -296,16 +296,15 @@ fn async_http_queue_transport_error_takes_precedence_over_valid_http_body() {
              success
              failures
              (nreverse messages)
-             (buffer-live-p buffer))))"##;
-    let expect = expect![[
+             (buffer-live-p buffer))))"##,
+            true,
+            expect![[
         r#"OK (nil 1 ("Error fetching URL https://api.test/transport: Download failed: (error connection-refused)") nil)"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_invalid_http_response_matrix_reports_error_and_cleans_buffers() {
-    let elisp_form = r##"(let (observations)
+    ]],
+        ),
+        (
+            "async_http_queue_invalid_http_response_matrix_reports_error_and_cleans_buffers",
+            r##"(let (observations)
           (dolist
               (response
                '("garbage"
@@ -364,16 +363,15 @@ fn async_http_queue_invalid_http_response_matrix_reports_error_and_cleans_buffer
                   (nreverse messages)
                   (buffer-live-p buffer))
                  observations))))
-          (nreverse observations))"##;
-    let expect = expect![[
+          (nreverse observations))"##,
+            true,
+            expect![[
         r#"OK (("garbage" nil 1 ("Invalid HTTP response for URL: https://api.test/invalid") nil) ("HTTP/2 200 OK\15\n\15\nbody" nil 1 ("Invalid HTTP response for URL: https://api.test/invalid") nil) ("http/1.1 200 OK\15\n\15\nbody" "body" nil nil nil) ("HTTP/1.1 20 OK\15\n\15\nbody" nil 1 ("Invalid HTTP response for URL: https://api.test/invalid") nil) ("HTTP/1.1 200OK\15\n\15\nbody" "body" nil nil nil))"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_parser_error_and_nil_result_both_route_to_error_callback() {
-    let elisp_form = r##"(let (observations)
+    ]],
+        ),
+        (
+            "async_http_queue_parser_error_and_nil_result_both_route_to_error_callback",
+            r##"(let (observations)
           (dolist (mode '(signal nil-result))
             (let* ((parser
                     (if (eq mode 'signal)
@@ -437,16 +435,15 @@ fn async_http_queue_parser_error_and_nil_result_both_route_to_error_callback() {
                   (nreverse messages)
                   (buffer-live-p buffer))
                  observations))))
-          (nreverse observations))"##;
-    let expect = expect![[
+          (nreverse observations))"##,
+            true,
+            expect![[
         r#"OK ((signal nil 1 ("Error fetching URL https://api.test/signal: parser exploded at 77") nil) (nil-result nil 1 nil nil))"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_response_callback_is_guarded_against_duplicate_delivery() {
-    let elisp_form = r##"(let* ((state
+    ]],
+        ),
+        (
+            "async_http_queue_response_callback_is_guarded_against_duplicate_delivery",
+            r##"(let* ((state
                 (async-http-queue-test-state
                  nil
                  1
@@ -504,14 +501,13 @@ fn async_http_queue_response_callback_is_guarded_against_duplicate_delivery() {
              failures
              (nreverse cancellations)
              (buffer-live-p buffer)
-             (aref timer 6))))"##;
-    let expect = expect![[r#"OK (("first") nil (t t) nil t)"#]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_timeout_kills_live_request_and_suppresses_late_response() {
-    let elisp_form = r##"(let* ((state
+             (aref timer 6))))"##,
+            true,
+            expect![[r#"OK (("first") nil (t t) nil t)"#]],
+        ),
+        (
+            "async_http_queue_timeout_kills_live_request_and_suppresses_late_response",
+            r##"(let* ((state
                 (async-http-queue-test-state
                  nil
                  1
@@ -589,16 +585,15 @@ fn async_http_queue_timeout_kills_live_request_and_suppresses_late_response() {
                (process-live-p request-process)
                (process-status request-process)
                (buffer-live-p buffer)
-               (aref timeout-event 6)))))"##;
-    let expect = expect![[
+               (aref timeout-event 6)))))"##,
+            true,
+            expect![[
         r#"OK ((t (open listen connect stop) t) nil 1 ("Timeout fetching URL https://api.test/slow (3 seconds)") nil closed nil t)"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_timeout_handles_nil_retrieval_buffer_without_process_cleanup() {
-    let elisp_form = r##"(let* ((state
+    ]],
+        ),
+        (
+            "async_http_queue_timeout_handles_nil_retrieval_buffer_without_process_cleanup",
+            r##"(let* ((state
                 (async-http-queue-test-state
                  nil
                  1
@@ -635,14 +630,13 @@ fn async_http_queue_timeout_handles_nil_retrieval_buffer_without_process_cleanup
              failures
              process-lookups
              (aref timer 2)
-             (aref timer 6))))"##;
-    let expect = expect!["OK (1 nil 2 nil)"];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_url_retrieve_signal_propagates_before_timeout_is_registered() {
-    let elisp_form = r##"(let* ((state
+             (aref timer 6))))"##,
+            true,
+            expect!["OK (1 nil 2 nil)"],
+        ),
+        (
+            "async_http_queue_url_retrieve_signal_propagates_before_timeout_is_registered",
+            r##"(let* ((state
                 (async-http-queue-test-state
                  nil
                  1
@@ -671,14 +665,13 @@ fn async_http_queue_url_retrieve_signal_propagates_before_timeout_is_registered(
                  (lambda ()
                    (push :error callbacks)))))
              timers
-             callbacks)))"##;
-    let expect = expect![[r#"OK ((:error error ("resolver unavailable")) nil nil)"#]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_success_callback_signal_propagates_after_response_buffer_cleanup() {
-    let elisp_form = r##"(let* ((state
+             callbacks)))"##,
+            true,
+            expect![[r#"OK ((:error error ("resolver unavailable")) nil nil)"#]],
+        ),
+        (
+            "async_http_queue_success_callback_signal_propagates_after_response_buffer_cleanup",
+            r##"(let* ((state
                 (async-http-queue-test-state
                  nil
                  1
@@ -721,14 +714,13 @@ fn async_http_queue_success_callback_signal_propagates_after_response_buffer_cle
               (list
                outcome
                failures
-               (buffer-live-p buffer)))))"##;
-    let expect = expect![[r#"OK ((:error error ("consumer exploded")) nil nil)"#]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_error_callback_signal_propagates_after_response_buffer_cleanup() {
-    let elisp_form = r##"(let* ((state
+               (buffer-live-p buffer)))))"##,
+            true,
+            expect![[r#"OK ((:error error ("consumer exploded")) nil nil)"#]],
+        ),
+        (
+            "async_http_queue_error_callback_signal_propagates_after_response_buffer_cleanup",
+            r##"(let* ((state
                 (async-http-queue-test-state
                  nil
                  1
@@ -773,14 +765,13 @@ fn async_http_queue_error_callback_signal_propagates_after_response_buffer_clean
               (list
                outcome
                successes
-               (buffer-live-p buffer)))))"##;
-    let expect = expect![[r#"OK ((:error error ("failure consumer exploded")) nil nil)"#]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_non_numeric_timeout_breaks_timeout_message_before_cleanup() {
-    let elisp_form = r##"(let* ((state
+               (buffer-live-p buffer)))))"##,
+            true,
+            expect![[r#"OK ((:error error ("failure consumer exploded")) nil nil)"#]],
+        ),
+        (
+            "async_http_queue_non_numeric_timeout_breaks_timeout_message_before_cleanup",
+            r##"(let* ((state
                 (async-http-queue-test-state
                  nil
                  1
@@ -823,9 +814,11 @@ fn async_http_queue_non_numeric_timeout_breaks_timeout_message_before_cleanup() 
                    (buffer-live-p buffer)
                    (aref timer 2)))
               (async-http-queue-test-kill-buffer
-               buffer))))"##;
-    let expect = expect![[
+               buffer))))"##,
+            true,
+            expect![[
         r#"OK ((:error error ("Format specifier doesn’t match argument type")) nil t "soon")"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

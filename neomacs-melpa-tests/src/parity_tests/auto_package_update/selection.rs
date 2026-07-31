@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_package_update_parity;
+use super::assert_auto_package_update_batch;
 
 #[test]
-fn auto_package_update_quelpa_filter_reads_cache_and_removes_each_cached_name() {
-    let elisp_form = r##"(let
+fn selection_public_surface_batch() {
+    assert_auto_package_update_batch(&[
+        (
+            "auto_package_update_quelpa_filter_reads_cache_and_removes_each_cached_name",
+            r##"(let
                              ((packages
                                (list
                                 'alpha
@@ -31,10 +34,11 @@ fn auto_package_update_quelpa_filter_reads_cache_and_removes_each_cached_name() 
                                 packages
                                 (nreverse calls)
                                 quelpa-cache
-                                (featurep 'quelpa)))))"##;
-    let expect = expect![
+                                (featurep 'quelpa)))))"##,
+            true,
+            expect![
         "OK (#1=(alpha gamma) #1# (:read-cache) ((beta . first) (delta . second) (absent . third)) t)"
-    ];
-
-    assert_auto_package_update_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_arduino_mode_parity;
+use super::assert_arduino_mode_batch;
 
 #[test]
-fn upload_builds_exact_process_request_and_success_sentinel_cleans_source_state() {
-    let elisp_form = r##"(let ((source
+fn processes_public_surface_batch() {
+    assert_arduino_mode_batch(&[
+        (
+            "upload_builds_exact_process_request_and_success_sentinel_cleans_source_state",
+            r##"(let ((source
                          (get-buffer-create
                           "*arduino-upload-source-contract*"))
                         process-args sentinel events)
@@ -59,16 +62,15 @@ fn upload_builds_exact_process_request_and_success_sentinel_cleans_source_state(
                                  arduino-upload-process-buf
                                  before mode-line-process
                                  (nreverse events))))))
-                      (kill-buffer source)))"##;
-    let expect = expect![[
+                      (kill-buffer source)))"##,
+            true,
+            expect![[
         r#"OK ((:command ("arduino-custom" "--upload" "/workspace/Blink/Blink.ino") :name "arduino-upload" :buffer "*arduino-upload*" :sentinel #[(_proc event) ((if (string= event "finished\n") (progn (save-current-buffer (set-buffer arduino-upload-process-buf) (setq mode-line-process nil)) (message "Arduino upload succeed.")) (save-current-buffer (set-buffer arduino-upload-process-buf) (display-buffer "*arduino-upload*"))) (setq mode-line-process (prog1 nil (make-local-variable 'mode-line-process))) (save-current-buffer (set-buffer arduino-upload-process-buf) (if spinner-current (progn (spinner-stop))))) (t)]) "*arduino-upload-source-contract*" "arduino-upload" nil ((:start triangle) (:message "Arduino upload succeed.") :stop))"#
-    ]];
-    assert_arduino_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn upload_failure_sentinel_displays_diagnostics_and_stops_active_spinner() {
-    let elisp_form = r##"(let ((source
+    ]],
+        ),
+        (
+            "upload_failure_sentinel_displays_diagnostics_and_stops_active_spinner",
+            r##"(let ((source
                          (get-buffer-create
                           "*arduino-upload-failure-contract*"))
                         sentinel events)
@@ -108,14 +110,13 @@ fn upload_failure_sentinel_displays_diagnostics_and_stops_active_spinner() {
                               (list
                                mode-line-process
                                (nreverse events)))))
-                      (kill-buffer source)))"##;
-    let expect = expect![[r#"OK (nil ((:display "*arduino-upload*") :stop))"#]];
-    assert_arduino_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn verify_builds_exact_request_and_both_sentinel_paths_have_expected_lifecycle() {
-    let elisp_form = r##"(let ((source
+                      (kill-buffer source)))"##,
+            true,
+            expect![[r#"OK (nil ((:display "*arduino-upload*") :stop))"#]],
+        ),
+        (
+            "verify_builds_exact_request_and_both_sentinel_paths_have_expected_lifecycle",
+            r##"(let ((source
                          (get-buffer-create
                           "*arduino-verify-source-contract*"))
                         process-args sentinel events)
@@ -169,16 +170,15 @@ fn verify_builds_exact_request_and_both_sentinel_paths_have_expected_lifecycle()
                                  arduino-verify-process-buf
                                  before mode-line-process
                                  (nreverse events))))))
-                      (kill-buffer source)))"##;
-    let expect = expect![[
+                      (kill-buffer source)))"##,
+            true,
+            expect![[
         r#"OK ((:command ("arduino-cli" "--verify" "/workspace/Sensor/Sensor.ino") :name "arduino-verify" :buffer "*arduino-verify*" :sentinel #[(_proc event) ((if (string= event "finished\n") (progn (save-current-buffer (set-buffer arduino-verify-process-buf) (setq mode-line-process nil)) (message "Arduino verify build succeed.")) (display-buffer "*arduino-verify*")) (setq mode-line-process (prog1 nil (make-local-variable 'mode-line-process))) (save-current-buffer (set-buffer arduino-verify-process-buf) (if spinner-current (progn (spinner-stop))))) (t)]) "*arduino-verify-source-contract*" "arduino-verify" nil ((:start moon) (:message "Arduino verify build succeed.") :stop (:display "*arduino-verify*") :stop))"#
-    ]];
-    assert_arduino_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn open_with_ide_builds_exact_request_and_success_sentinel_reports_completion() {
-    let elisp_form = r##"(let ((source
+    ]],
+        ),
+        (
+            "open_with_ide_builds_exact_request_and_success_sentinel_reports_completion",
+            r##"(let ((source
                          (get-buffer-create
                           "*arduino-open-source-contract*"))
                         process-args sentinel events)
@@ -224,16 +224,15 @@ fn open_with_ide_builds_exact_request_and_success_sentinel_reports_completion() 
                                  arduino-open-process-buf
                                  before mode-line-process
                                  (nreverse events))))))
-                      (kill-buffer source)))"##;
-    let expect = expect![[
+                      (kill-buffer source)))"##,
+            true,
+            expect![[
         r#"OK ((:command ("/opt/arduino/arduino" "/workspace/Robot/Robot.ino") :name "arduino-open" :buffer "*arduino-open*" :sentinel #[(_proc event) ((if (string= event "finished\n") (progn (save-current-buffer (set-buffer arduino-open-process-buf) (setq mode-line-process nil)) (message "Opened with Arduino succeed."))) (setq mode-line-process (prog1 nil (make-local-variable 'mode-line-process))) (save-current-buffer (set-buffer arduino-open-process-buf) (if spinner-current (progn (spinner-stop))))) (t)]) "*arduino-open-source-contract*" "arduino-open" nil ((:start rotating-line) (:message "Opened with Arduino succeed.") :stop))"#
-    ]];
-    assert_arduino_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn board_and_library_installers_dispatch_exact_start_process_arguments() {
-    let elisp_form = r##"(let ((arduino-executable
+    ]],
+        ),
+        (
+            "board_and_library_installers_dispatch_exact_start_process_arguments",
+            r##"(let ((arduino-executable
                          "/opt/arduino/bin/arduino")
                         calls)
                     (cl-letf
@@ -249,16 +248,15 @@ fn board_and_library_installers_dispatch_exact_start_process_arguments() {
                         "arduino:samd")
                        (arduino-install-library
                         "Servo:1.2.1")
-                       (nreverse calls))))"##;
-    let expect = expect![[
+                       (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK (process-1 process-2 (("arduino-install-boards" "*arduino-install-boards*" "/opt/arduino/bin/arduino" "--install-boards" "arduino:samd") ("arduino-install-library" "*arduino-install-library*" "/opt/arduino/bin/arduino" "--install-library" "Servo:1.2.1")))"#
-    ]];
-    assert_arduino_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn interactive_installers_preserve_prompts_defaults_and_user_values() {
-    let elisp_form = r##"(let (reads calls)
+    ]],
+        ),
+        (
+            "interactive_installers_preserve_prompts_defaults_and_user_values",
+            r##"(let (reads calls)
                     (cl-letf
                         (((symbol-function 'read-string)
                           (lambda (prompt initial &rest _args)
@@ -280,16 +278,15 @@ fn interactive_installers_preserve_prompts_defaults_and_user_values() {
                        #'arduino-install-library)
                       (list
                        (nreverse reads)
-                       (nreverse calls))))"##;
-    let expect = expect![[
+                       (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ((("Arduino install board: " "arduino:sam") ("Arduino install library: " "Bridge:1.0.0")) (("arduino-install-boards" "*arduino-install-boards*" "arduino" "--install-boards" "vendor:board") ("arduino-install-library" "*arduino-install-library*" "arduino" "--install-library" "Wire:2.0")))"#
-    ]];
-    assert_arduino_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn serial_monitor_switches_to_live_port_or_opens_serial_with_explicit_and_prompted_speed() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "serial_monitor_switches_to_live_port_or_opens_serial_with_explicit_and_prompted_speed",
+            r##"(let (events)
                     (cl-letf
                         (((symbol-function 'get-buffer-process)
                           (lambda (port)
@@ -320,9 +317,11 @@ fn serial_monitor_switches_to_live_port_or_opens_serial_with_explicit_and_prompt
                         "/dev/ttyUSB0" 57600)
                        (arduino-serial-monitor
                         "/dev/ttyACM0" nil)
-                       (nreverse events))))"##;
-    let expect = expect![[
+                       (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:switched :serial-opened :serial-opened ((:switch "/dev/ttyLIVE") (:serial "/dev/ttyUSB0" 57600) :read-speed (:serial "/dev/ttyACM0" 115200)))"#
-    ]];
-    assert_arduino_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_alchemist_parity;
+use super::assert_alchemist_batch;
 
 #[test]
-fn alchemist_help_prepares_alias_qualified_searches_context_arguments_and_module_candidates() {
-    let elisp_form = r##"(with-temp-buffer
+fn help_navigation_public_surface_batch() {
+    assert_alchemist_batch(&[
+        (
+            "alchemist_help_prepares_alias_qualified_searches_context_arguments_and_module_candidates",
+            r##"(with-temp-buffer
                       (insert
                        "defmodule App do\n"
                        "  alias Phoenix.Controller, as: Controller\n"
@@ -32,16 +35,15 @@ fn alchemist_help_prepares_alias_qualified_searches_context_arguments_and_module
                             (alchemist-help--completion-server-arguments
                              "Enum.map")))
                          (alchemist-help--elixir-modules-to-list
-                          "Elixir.String\nEnum\nElixir.String\n:lists\nMap\n"))))"##;
-    let expect = expect![[
+                          "Elixir.String\nEnum\nElixir.String\n:lists\nMap\n"))))"##,
+            true,
+            expect![[
         r#"OK (("Phoenix.Controller.redirect" "Phoenix.Controller" ":gen_tcp.accept" "assert") "{ \"Controller.redirect\", [ context: Elixir, imports: [ExUnit.Assertions,GenServer,App], aliases: [] ] }" "{ \"Controller.redirect\", [ context: Elixir, imports: [ExUnit.Assertions,GenServer,App], aliases: [{Controller, Phoenix.Controller}] ] }" ("{ \"Enum.map\", [ context: Elixir, imports: [], aliases: [] ] }" "{ \"Enum.map\", [ context: Elixir, imports: [], aliases: [] ] }") (":lists" "Enum" "Map" "String"))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_help_lookup_completion_and_document_filters_execute_the_full_async_protocol() {
-    let elisp_form = r##"(let ((alchemist-help-search-history nil)
+    ]],
+        ),
+        (
+            "alchemist_help_lookup_completion_and_document_filters_execute_the_full_async_protocol",
+            r##"(let ((alchemist-help-search-history nil)
                           (alchemist-help-current-search-text nil)
                           (alchemist-help-filter-output nil)
                           events)
@@ -82,16 +84,15 @@ fn alchemist_help_lookup_completion_and_document_filters_execute_the_full_async_
                           "Deletes an element.\nEND-OF-DOCL\n")
                          alchemist-help-current-search-text
                          alchemist-help-filter-output
-                         (nreverse events))))"##;
-    let expect = expect![[
+                         (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (completion "List.del" help "List.delete/2" nil nil nil nil ((complete "{ \"List.del\", [ context: Elixir, imports: [], aliases: [] ] }" alchemist-help-complete-filter-output) (prompt "List.del" ("List.delete" "delete/2" "delete_at/2")) (help "{ \"List.delete/2\", [ context: Elixir, imports: [], aliases: [] ] }" alchemist-help-filter-output) (display "Deletes an element.")))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_help_modules_filter_sorts_deduplicates_prompts_and_normalizes_module_selection() {
-    let elisp_form = r##"(let ((alchemist-help-filter-output nil)
+    ]],
+        ),
+        (
+            "alchemist_help_modules_filter_sorts_deduplicates_prompts_and_normalizes_module_selection",
+            r##"(let ((alchemist-help-filter-output nil)
                           events)
                       (cl-letf
                           (((symbol-function 'completing-read)
@@ -114,16 +115,15 @@ fn alchemist_help_modules_filter_sorts_deduplicates_prompts_and_normalizes_modul
                           'process
                           "Elixir.String\nEND-OF-INFO\n")
                          alchemist-help-filter-output
-                         (nreverse events))))"##;
-    let expect = expect![[
+                         (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (nil #1=("Elixir.String\nEnum\nElixir.String.Chars\n") looked-up ("Elixir.String\nEND-OF-INFO\n" . #1#) ((prompt "Elixir help: " ("Enum" "String" "String.Chars")) (lookup "String.Chars")))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_help_display_replaces_real_buffer_content_enables_mode_and_tracks_history() {
-    let elisp_form = r##"(let ((alchemist-help-search-history
+    ]],
+        ),
+        (
+            "alchemist_help_display_replaces_real_buffer_content_enables_mode_and_tracks_history",
+            r##"(let ((alchemist-help-search-history
                            '("Enum.map/2"))
                           (alchemist-help-current-search-text
                            "List.flatten/1")
@@ -168,16 +168,15 @@ fn alchemist_help_display_replaces_real_buffer_content_enables_mode_and_tracks_h
                                    (buffer-string)))))
                           (when (get-buffer alchemist-help-buffer-name)
                             (kill-buffer
-                             alchemist-help-buffer-name)))))"##;
-    let expect = expect![[
+                             alchemist-help-buffer-name)))))"##,
+            true,
+            expect![[
         r#"OK (("List.flatten/1\nFlattens nested lists." t t) "*alchemist help*" ("List.flatten/1" "Enum.map/2") "No documentation for [Unknown.Module] found." "List.flatten/1\nFlattens nested lists.")"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_goto_maps_core_source_paths_classifies_files_and_extracts_real_definitions() {
-    let elisp_form = r##"(let ((alchemist-goto-elixir-source-dir
+    ]],
+        ),
+        (
+            "alchemist_goto_maps_core_source_paths_classifies_files_and_extracts_real_definitions",
+            r##"(let ((alchemist-goto-elixir-source-dir
                            "/sources/elixir")
                           (alchemist-goto-erlang-source-dir
                            "/sources/otp"))
@@ -204,16 +203,15 @@ fn alchemist_goto_maps_core_source_paths_classifies_files_and_extracts_real_defi
                           "defmodule Test.Module do"
                           "defp render! do"
                           "defmacro __using__(_) do"
-                          "def one_line, do: :ok"))))"##;
-    let expect = expect![[
+                          "def one_line, do: :ok"))))"##,
+            true,
+            expect![[
         r#"OK ((("lib/elixir/lib/list.ex" 19 nil) ("test/example.exs" 12 nil) ("lib/stdlib/src/lists.erl" nil 20) ("README.md" nil nil)) "/sources/elixir/lib/elixir/lib/string.ex" "/sources/elixir/lib/elixir/src/elixir.erl" "/sources/otp/lib/stdlib/src/lists.erl" (#("def dgettext(backend, domain, msgid, bindings) when is_list(bindings)" 0 3 (face alchemist-goto--def-face) 4 12 (face alchemist-goto--name-face)) #("defmodule Test.Module" 0 9 (face alchemist-goto--def-face) 10 14 (face alchemist-goto--name-face)) #("defp render!" 0 4 (face alchemist-goto--def-face) 5 12 (face alchemist-goto--name-face)) #("defmacro __using__(_)" 0 8 (face alchemist-goto--def-face) 9 18 (face alchemist-goto--name-face)) #("def one_line" 0 3 (face alchemist-goto--def-face) 4 12 (face alchemist-goto--name-face))))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_goto_scans_real_buffer_skips_heredoc_definitions_and_navigates_duplicates() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "alchemist_goto_scans_real_buffer_skips_heredoc_definitions_and_navigates_duplicates",
+            r##"(with-temp-buffer
                       (insert
                        "defmodule Demo do\n"
                        "  @doc \"\"\"\n"
@@ -257,16 +255,15 @@ fn alchemist_goto_scans_real_buffer_skips_heredoc_definitions_and_navigates_dupl
                              prompt
                              (mapcar
                               #'substring-no-properties
-                              candidates))))))"##;
-    let expect = expect![[
+                              candidates))))))"##,
+            true,
+            expect![[
         r#"OK (("defmodule Demo" "def run(value)" "def run(value, opts)" "defp helper!") ("Demo" "run" "run" "helper!") (("defmodule Demo" :marker nil nil) ("def run(value)" :marker nil nil) ("def run(value, opts)" :marker nil nil) ("defp helper!" :marker nil nil)) 1 99 9 "Symbol definitions:" ("def run(value)" "def run(value, opts)"))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_goto_remote_request_filter_and_real_file_open_land_on_requested_function() {
-    let elisp_form = r##"(let* ((sandbox
+    ]],
+        ),
+        (
+            "alchemist_goto_remote_request_filter_and_real_file_open_land_on_requested_function",
+            r##"(let* ((sandbox
                            (file-name-as-directory
                             (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                           (source
@@ -314,16 +311,15 @@ fn alchemist_goto_remote_request_filter_and_real_file_open_land_on_requested_fun
                                (line-number-at-pos)
                                (thing-at-point 'line t))
                             (set-buffer-modified-p nil)
-                            (kill-buffer (current-buffer))))))"##;
-    let expect = expect![[
+                            (kill-buffer (current-buffer))))))"##,
+            true,
+            expect![[
         r#"OK (("{ \"Cart,total\", [ context: Elixir, imports: [Enum,Caller], aliases: [{Cart, Shop.Cart}] ] }" alchemist-goto-filter) "lib/shop/cart.ex" "cart.ex" 2 "  def total(items), do: length(items)\n")"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_info_extracts_real_terms_builds_requests_and_renders_chunked_datatype_output() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "alchemist_info_extracts_real_terms_builds_requests_and_renders_chunked_datatype_output",
+            r##"(with-temp-buffer
                       (insert
                        "Enum.any?(items)\n"
                        ":ok\n"
@@ -367,9 +363,11 @@ fn alchemist_info_extracts_real_terms_builds_requests_and_renders_chunked_dataty
                                first second
                                (nreverse requests)
                                alchemist-info-filter-output
-                               (nreverse events)))))))"##;
-    let expect = expect![[
+                               (nreverse events)))))))"##,
+            true,
+            expect![[
         r#"OK ("Enum.any?" ":ok" (("{ :type, :info, 'Enum.any?' }" alchemist-info-datatype-filter) ("{ :type, :types, 'Enum.any?' }" alchemist-info-datatype-filter)) nil (("*alchemist-info-mode*" "Term\n  :ok\nData type\n  Atom" :anonymous-mode)))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

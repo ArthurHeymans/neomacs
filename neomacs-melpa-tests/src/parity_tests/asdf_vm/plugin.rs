@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_asdf_vm_parity;
+use super::assert_asdf_vm_batch;
 
 #[test]
-fn asdf_vm_plugin_index_parser_reads_real_repository_files_and_signals_exact_failures() {
-    let elisp_form = r##"(let* ((valid
+fn plugin_public_surface_batch() {
+    assert_asdf_vm_batch(&[
+        (
+            "asdf_vm_plugin_index_parser_reads_real_repository_files_and_signals_exact_failures",
+            r##"(let* ((valid
                      (asdf-vm-test-path
                       "plugin-index/ruby"))
                     (unicode
@@ -37,16 +40,15 @@ fn asdf_vm_plugin_index_parser_reads_real_repository_files_and_signals_exact_fai
                  valid
                  unicode
                  missing
-                 malformed)))"##;
-    let expect = expect![[
+                 malformed)))"##,
+            true,
+            expect![[
         r#"OK ((:ok ("ruby" . "https://github.com/asdf-vm/asdf-ruby.git")) (:ok ("資料" . "ssh://example/資料 λ.git")) (:error asdf-vm-plugin-unreadable-repository-file ("[ORACLE-SANDBOX]/plugin-index/missing")) (:error search-failed ("repository = ")))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_plugin_repository_alist_loads_real_disk_index_memoizes_then_refreshes_when_cleared() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "asdf_vm_plugin_repository_alist_loads_real_disk_index_memoizes_then_refreshes_when_cleared",
+            r##"(let* ((root
                      (asdf-vm-test-path
                       "repository"))
                     (plugins
@@ -84,16 +86,15 @@ fn asdf_vm_plugin_repository_alist_loads_real_disk_index_memoizes_then_refreshes
                    (list
                     first
                     memoized
-                    (asdf-vm-plugin--repository-alist)))))"##;
-    let expect = expect![[
+                    (asdf-vm-plugin--repository-alist)))))"##,
+            true,
+            expect![[
         r#"OK (#1=(("nodejs" . "https://example/node.git") ("ruby" . "https://example/ruby-v1.git")) #1# (("nodejs" . "https://example/node.git") ("ruby" . "https://example/ruby-v2.git")))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_plugin_name_and_url_readers_forward_completion_options_and_repository_default() {
-    let elisp_form = r##"(let ((asdf-vm-plugin--repository-alist
+    ]],
+        ),
+        (
+            "asdf_vm_plugin_name_and_url_readers_forward_completion_options_and_repository_default",
+            r##"(let ((asdf-vm-plugin--repository-alist
                     '(("ruby" .
                        "https://example/ruby.git")
                       ("nodejs" .
@@ -132,27 +133,15 @@ fn asdf_vm_plugin_name_and_url_readers_forward_completion_options_and_repository
                    'history
                    "default"
                    t)
-                  (nreverse calls))))"##;
-    let expect = expect![[
+                  (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ("ruby" "https://chosen/repository.git" "https://chosen/repository.git" ((:complete "Plugin name: " ("ruby" "nodejs") predicate t "ru" history "ruby" t) (:read "Plugin git url: " "https://example/ruby.git" nil nil nil) (:read "Plugin git url: " "https://initial/value.git" history "default" t)))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-/// RED ON NEOMACS ON PURPOSE: this is DIVERGENCES.md entry 6,
-/// "`directory-files` returns undecoded bytes".
-///
-/// `asdf-vm-plugin.el:73` lists installed plugins with
-/// `(directory-files plugins-directory t ...)', so a plugin directory whose
-/// name is non-ASCII comes back as raw bytes: GNU reports
-/// `("ruby" "standalone" "資料")' where Neomacs reports
-/// `("ruby" "standalone" "...")'.  The second list in the same value is
-/// correct in both editors, because it is built from a parsed alist rather
-/// than from the filesystem -- that asymmetry is the signature of entry 6
-/// and is why this is not a new finding.  GNU's answer is the expectation.
-#[test]
-fn asdf_vm_plugin_installed_and_available_lists_reflect_real_filesystem_and_messages() {
-    let elisp_form = r##"(let* ((asdf-vm--plugins-directory
+    ]],
+        ),
+        (
+            "asdf_vm_plugin_installed_and_available_lists_reflect_real_filesystem_and_messages",
+            r##"(let* ((asdf-vm--plugins-directory
                      (file-name-as-directory
                       (asdf-vm-test-path
                        "installed-plugins")))
@@ -185,16 +174,15 @@ fn asdf_vm_plugin_installed_and_available_lists_reflect_real_filesystem_and_mess
                 "ignored")
                (list
                 (asdf-vm-plugin-list)
-                (asdf-vm-plugin-list-all)))"##;
-    let expect = expect![[
+                (asdf-vm-plugin-list-all)))"##,
+            true,
+            expect![[
         r#"OK (("ruby" "standalone" "資料") (("ruby" "https://example/ruby.git") ("nodejs" "https://example/node.git") ("資料" "https://example/資料.git")))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_plugin_installed_completion_forwards_all_arguments_and_disk_candidates() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "asdf_vm_plugin_installed_completion_forwards_all_arguments_and_disk_candidates",
+            r##"(let (calls)
                (cl-letf
                    (((symbol-function
                       'asdf-vm-plugin--installed-plugins)
@@ -215,16 +203,15 @@ fn asdf_vm_plugin_installed_completion_forwards_all_arguments_and_disk_candidate
                    'history
                    "ruby"
                    t)
-                  (nreverse calls))))"##;
-    let expect = expect![[
+                  (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ("資料" (("Installed plugin name: " ("ruby" "nodejs" "資料") predicate t "資" history "ruby" t)))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_plugin_mutating_commands_construct_add_remove_update_and_update_all_calls_exactly() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "asdf_vm_plugin_mutating_commands_construct_add_remove_update_and_update_all_calls_exactly",
+            r##"(let (calls)
                (cl-letf
                    (((symbol-function
                       'asdf-vm-call)
@@ -249,9 +236,11 @@ fn asdf_vm_plugin_mutating_commands_construct_add_remove_update_and_update_all_c
                    4)
                   (asdf-vm-plugin-update-all
                    1)
-                  (nreverse calls))))"##;
-    let expect = expect![[
+                  (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK (:queued :queued :queued :queued :queued ((:call :command (plugin add) :command-arguments ("ruby" "https://example/ruby.git") :blocking 1) (:call :command (plugin remove) :command-arguments ("nodejs") :blocking nil) (:call :command #1=(plugin update) :command-arguments ("python") :blocking nil) (:call :command #1# :command-arguments ("python" "feature/λ") :blocking 4) (:call :command (plugin update) :command-arguments ("--all") :blocking 1)))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

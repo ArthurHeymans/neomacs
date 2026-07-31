@@ -1,3 +1,5 @@
+mod batch_support;
+
 mod a;
 mod aa_edit_mode;
 mod aangit;

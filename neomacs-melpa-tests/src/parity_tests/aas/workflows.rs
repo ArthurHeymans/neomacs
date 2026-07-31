@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_aas_parity;
+use super::assert_aas_batch;
 
 #[test]
-fn aas_expands_configured_snippets_while_the_user_types_prose() {
-    let elisp_form = r##"(aas-test-with-live-buffer
+fn workflows_public_surface_batch() {
+    assert_aas_batch(&[
+        (
+            "aas_expands_configured_snippets_while_the_user_types_prose",
+            r##"(aas-test-with-live-buffer
  (text-mode)
  (aas-set-snippets 'aas-workflow-mode
    "inf" "∞"
@@ -24,17 +27,15 @@ fn aas_expands_configured_snippets_while_the_user_types_prose() {
   (and (memq #'aas-post-self-insert-hook post-self-insert-hook) t)
   (local-variable-p 'post-self-insert-hook)
   (hash-table-count aas-keymaps)
-  (keymapp (gethash 'aas-workflow-mode aas-keymaps))))"##;
-    let expect = expect![[
+  (keymapp (gethash 'aas-workflow-mode aas-keymaps))))"##,
+            true,
+            expect![[
         r#"OK ("the set is ∞ and α = ½\n#+latex_header: amsmath" 47 2 t (aas-workflow-mode) t t 1 t)"#
-    ]];
-
-    assert_aas_parity(elisp_form, expect);
-}
-
-#[test]
-fn aas_conditions_gate_expansion_and_a_nil_condition_clears_the_previous_one() {
-    let elisp_form = r##"(aas-test-with-live-buffer
+    ]],
+        ),
+        (
+            "aas_conditions_gate_expansion_and_a_nil_condition_clears_the_previous_one",
+            r##"(aas-test-with-live-buffer
  (text-mode)
  (aas-set-snippets 'aas-condition-mode
    :cond #'bolp
@@ -47,15 +48,13 @@ fn aas_conditions_gate_expansion_and_a_nil_condition_clears_the_previous_one() {
  (list
   (buffer-string)
   (point)
-  (line-number-at-pos)))"##;
-    let expect = expect![[r##"OK ("#+latex_header: x\npad #+lh ∞" 29 2)"##]];
-
-    assert_aas_parity(elisp_form, expect);
-}
-
-#[test]
-fn aas_function_expansions_see_the_transient_variables_and_run_both_hooks() {
-    let elisp_form = r##"(aas-test-with-live-buffer
+  (line-number-at-pos)))"##,
+            true,
+            expect![[r##"OK ("#+latex_header: x\npad #+lh ∞" 29 2)"##]],
+        ),
+        (
+            "aas_function_expansions_see_the_transient_variables_and_run_both_hooks",
+            r##"(aas-test-with-live-buffer
  (text-mode)
  (let (events)
    (aas-set-snippets 'aas-function-mode
@@ -82,17 +81,15 @@ fn aas_function_expansions_see_the_transient_variables_and_run_both_hooks() {
     (nreverse events)
     aas-transient-snippet-key
     aas-transient-snippet-expansion
-    aas-transient-snippet-condition-result)))"##;
-    let expect = expect![[
+    aas-transient-snippet-condition-result)))"##,
+            true,
+            expect![[
         r#"OK ("bye\n-- Signed, " 16 ((cond 5 t) (pre "sig" 5) (expand "sig" checked t) (post "sig" 16)) nil nil nil)"#
-    ]];
-
-    assert_aas_parity(elisp_form, expect);
-}
-
-#[test]
-fn aas_walks_multi_key_prefixes_and_leaves_dead_ends_and_split_keys_alone() {
-    let elisp_form = r##"(aas-test-with-live-buffer
+    ]],
+        ),
+        (
+            "aas_walks_multi_key_prefixes_and_leaves_dead_ends_and_split_keys_alone",
+            r##"(aas-test-with-live-buffer
  (text-mode)
  (aas-set-snippets 'aas-tree-mode
    ";a" "α"
@@ -115,15 +112,13 @@ fn aas_walks_multi_key_prefixes_and_leaves_dead_ends_and_split_keys_alone() {
            split
            (buffer-string)
            (point)
-           aas-global-condition-hook))))"##;
-    let expect = expect![[r#"OK ("α \\alpha \\beta ;z" ";;" ";;a" 2 (aas--key-is-fully-typed?))"#]];
-
-    assert_aas_parity(elisp_form, expect);
-}
-
-#[test]
-fn aas_activation_lifecycle_decides_which_snippets_are_live_in_the_buffer() {
-    let elisp_form = r##"(aas-test-with-live-buffer
+           aas-global-condition-hook))))"##,
+            true,
+            expect![[r#"OK ("α \\alpha \\beta ;z" ";;" ";;a" 2 (aas--key-is-fully-typed?))"#]],
+        ),
+        (
+            "aas_activation_lifecycle_decides_which_snippets_are_live_in_the_buffer",
+            r##"(aas-test-with-live-buffer
  (aas-set-snippets 'text-mode "tm" "TEXT ")
  (aas-set-snippets 'prog-mode "pm" "PROG ")
  (aas-set-snippets 'aas-extra-mode "xm" "EXTRA ")
@@ -157,17 +152,15 @@ fn aas_activation_lifecycle_decides_which_snippets_are_live_in_the_buffer() {
                aas-active-keymaps
                aas-mode
                (aas--modes-to-activate 'text-mode)
-               (and (memq #'aas-post-self-insert-hook post-self-insert-hook) t)))))))"##;
-    let expect = expect![[
+               (and (memq #'aas-post-self-insert-hook post-self-insert-hook) t)))))))"##,
+            true,
+            expect![[
         r#"OK ("TEXT pmxm" "TEXT EXTRA " (aas-extra-mode text-mode) "tmEXTRA " "xm" "xm" (aas-extra-mode) nil (text-mode) nil)"#
-    ]];
-
-    assert_aas_parity(elisp_form, expect);
-}
-
-#[test]
-fn aas_rejects_invalid_snippet_definitions_with_exact_errors() {
-    let elisp_form = r##"(let (observed)
+    ]],
+        ),
+        (
+            "aas_rejects_invalid_snippet_definitions_with_exact_errors",
+            r##"(let (observed)
   (dolist (probe
            (list
             (cons 'number-expansion
@@ -191,10 +184,11 @@ fn aas_rejects_invalid_snippet_definitions_with_exact_errors() {
   (list (nreverse observed)
         (gethash 'aas-invalid-mode aas-keymaps)
         (and (gethash 'aas-clash-mode aas-keymaps) t)
-        (gethash 'aas-never-defined-mode aas-keymaps)))"##;
-    let expect = expect![[
+        (gethash 'aas-never-defined-mode aas-keymaps)))"##,
+            true,
+            expect![[
         r#"OK (((number-expansion signal error ("Expansion must be either a string, function, tempel/yas form, or nil")) (symbol-condition signal error ("Condition must be either nil or a function")) (unknown-keyword signal error ("Unknown keyword: :nope")) (prefix-clash signal error ("Key sequence ; a b starts with non-prefix key ; a")) (unknown-keymap value nil)) nil t nil)"#
-    ]];
-
-    assert_aas_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

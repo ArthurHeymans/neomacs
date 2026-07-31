@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AC_SKK_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const AC_SKK_TEST_TIMEOUT: Duration = Duration::from_secs(240);
@@ -197,4 +199,15 @@ pub(crate) fn assert_ac_skk_parity(form: &str, expected: Expect) {
         .run_value(&name, form)
         .unwrap_or_else(|error| panic!("ac-skk parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+/// Multi-probe batch for `assert_ac_skk_parity` cases (2a).
+pub(crate) fn assert_ac_skk_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        ac_skk_oracle(),
+        &name,
+        "ac_skk_parity",
+        cases,
+    );
 }

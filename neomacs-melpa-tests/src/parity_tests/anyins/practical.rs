@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_anyins_parity;
+use super::assert_anyins_batch;
 
 #[test]
-fn anyins_documented_yank_fills_an_irregular_status_column_from_the_current_point() {
-    let elisp_form = r##"(with-temp-buffer
+fn practical_public_surface_batch() {
+    assert_anyins_batch(&[
+        (
+            "anyins_documented_yank_fills_an_irregular_status_column_from_the_current_point",
+            r##"(with-temp-buffer
   (insert "Name Status\nAda\nBob\nCy")
   (goto-char (point-min))
   (search-forward "Ada")
@@ -31,16 +34,15 @@ fn anyins_documented_yank_fills_an_irregular_status_column_from_the_current_poin
         :mode anyins-mode
         :read-only buffer-read-only
         :highlight-count
-        (neomacs-anyins-highlight-count))))))"##;
-    let expect = expect![[
+        (neomacs-anyins-highlight-count))))))"##,
+            true,
+            expect![[
         r#"OK (:yank-binding anyins-yank :enabled (:result t :mode t :read-only t) :yank-result nil :document "Name Status\nAda | active\nBob | invited\nCy  | disabled" :point 54 :finished (:mode nil :read-only nil :highlight-count 0))"#
-    ]];
-    assert_anyins_parity(elisp_form, expect);
-}
-
-#[test]
-fn anyins_marked_yank_prefixes_multiple_fields_per_line_in_recording_order() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "anyins_marked_yank_prefixes_multiple_fields_per_line_in_recording_order",
+            r##"(with-temp-buffer
   (insert "host port\napi 443\ncache 6379")
   (let ((kill-ring
          '("server=\nnumber=\nserver=\nnumber=\nserver=\nnumber="))
@@ -79,16 +81,15 @@ fn anyins_marked_yank_prefixes_multiple_fields_per_line_in_recording_order() {
         :mode anyins-mode
         :read-only buffer-read-only
         :highlight-count
-        (neomacs-anyins-highlight-count))))))"##;
-    let expect = expect![[
+        (neomacs-anyins-highlight-count))))))"##,
+            true,
+            expect![[
         r#"OK (:yank-binding anyins-yank :duplicate-mark (:points (1) :faces (anyins-recorded-positions) :highlight-count 1 :read-only t) :marked (:points (1 6 11 15 19 25) :faces (anyins-recorded-positions anyins-recorded-positions anyins-recorded-positions anyins-recorded-positions anyins-recorded-positions anyins-recorded-positions) :highlight-count 6 :read-only t) :document "server=host number=port\nserver=api number=443\nserver=cache number=6379" :point 67 :finished (:mode nil :read-only nil :highlight-count 0))"#
-    ]];
-    assert_anyins_parity(elisp_form, expect);
-}
-
-#[test]
-fn anyins_shell_workflow_runs_a_real_generator_through_the_interactive_command() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "anyins_shell_workflow_runs_a_real_generator_through_the_interactive_command",
+            r##"(let* ((root
          (file-name-as-directory
           (expand-file-name
            "anyins-shell-workflow"
@@ -162,16 +163,15 @@ fn anyins_shell_workflow_runs_a_real_generator_through_the_interactive_command()
                   (neomacs-anyins-highlight-count))))))))
     (setenv "NEOMACS_ANYINS_TRACE" nil)
     (when (file-exists-p root)
-      (delete-directory root t))))"##;
-    let expect = expect![[
+      (delete-directory root t))))"##,
+            true,
+            expect![[
         r#"OK (:insert-binding anyins-insert-command :prompt "Shell command: " :answer "[ORACLE-SANDBOX]/anyins-shell-workflow/generate-statuses production" :invocation (anyins-insert-command "[ORACLE-SANDBOX]/anyins-shell-workflow/generate-statuses production") :marked (:points (4 11 21) :faces (anyins-recorded-positions anyins-recorded-positions nil) :highlight-count 2 :read-only t) :document "api | active\nworker | paused\nscheduler | active" :point 48 :generator-trace "production\n" :finished (:mode nil :read-only nil :highlight-count 0))"#
-    ]];
-    assert_anyins_parity(elisp_form, expect);
-}
-
-#[test]
-fn anyins_shell_output_cardinality_handles_exact_short_and_long_real_process_results() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "anyins_shell_output_cardinality_handles_exact_short_and_long_real_process_results",
+            r##"(let* ((root
          (file-name-as-directory
           (expand-file-name
            "anyins-shell-cardinality"
@@ -235,16 +235,15 @@ fn anyins_shell_output_cardinality_handles_exact_short_and_long_real_process_res
              (buffer-string)))))
     (setenv "NEOMACS_ANYINS_TRACE" nil)
     (when (file-exists-p root)
-      (delete-directory root t))))"##;
-    let expect = expect![[
+      (delete-directory root t))))"##,
+            true,
+            expect![[
         r#"OK (:phases ((:case "exact" :command "[ORACLE-SANDBOX]/anyins-shell-cardinality/generate-prefixes exact" :document "1.alpha\n2.beta\n3.gamma" :point 18 :finished (:mode nil :read-only nil :highlight-count 0)) (:case "short" :command "[ORACLE-SANDBOX]/anyins-shell-cardinality/generate-prefixes short" :document "1.alpha\n2.beta\ngamma\ndelta" :point 22 :finished (:mode nil :read-only nil :highlight-count 0)) (:case "long" :command "[ORACLE-SANDBOX]/anyins-shell-cardinality/generate-prefixes long" :document "1.alpha\n2.beta" :point 11 :finished (:mode nil :read-only nil :highlight-count 0))) :generator-trace "exact\nshort\nlong\n")"#
-    ]];
-    assert_anyins_parity(elisp_form, expect);
-}
-
-#[test]
-fn anyins_abort_key_leaves_the_document_untouched_and_removes_every_marker() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "anyins_abort_key_leaves_the_document_untouched_and_removes_every_marker",
+            r##"(with-temp-buffer
   (insert
    "A computer is a general purpose device.\n"
    "It performs arithmetic operations.\n"
@@ -304,9 +303,11 @@ fn anyins_abort_key_leaves_the_document_untouched_and_removes_every_marker() {
         :mode anyins-mode
         :read-only buffer-read-only
         :highlight-count
-        (neomacs-anyins-highlight-count))))))"##;
-    let expect = expect![[
+        (neomacs-anyins-highlight-count))))))"##,
+            true,
+            expect![[
         r#"OK (:abort-binding anyins-disable-mode :other-buffer (:document "isolated document" :marked (:points (10) :faces (anyins-recorded-positions) :highlight-count 1 :read-only t) :finished (:mode nil :read-only nil :highlight-count 0)) :marked (:points (17 53 78) :faces (anyins-recorded-positions anyins-recorded-positions anyins-recorded-positions) :highlight-count 3 :read-only t) :unchanged t :document "A computer is a general purpose device.\nIt performs arithmetic operations.\nA sequence can be changed safely." :point 86 :finished (:mode nil :read-only nil :highlight-count 0))"#
-    ]];
-    assert_anyins_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ATOM_DARK_THEME_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod faces;
 mod lifecycle;
 mod registry;
@@ -102,4 +104,28 @@ pub(crate) fn assert_atom_dark_theme_parity(elisp_form: &str, expected: Expect) 
 
 pub(crate) fn assert_atom_dark_theme_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_atom_dark_theme_source_parity("atom-dark-theme-autoloads.el", elisp_form, expected);
+}
+
+
+
+/// Multi-probe batch for `assert_atom_dark_theme_autoload_parity` cases (2a).
+pub(crate) fn assert_atom_dark_theme_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        atom_dark_theme_oracle("atom-dark-theme-autoloads.el"),
+        &name,
+        "atom_dark_theme_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_atom_dark_theme_parity` cases (2a).
+pub(crate) fn assert_atom_dark_theme_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        atom_dark_theme_oracle("atom-dark-theme.el"),
+        &name,
+        "atom_dark_theme_parity",
+        cases,
+    );
 }

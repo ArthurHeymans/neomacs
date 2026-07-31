@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_aurora_config_mode_parity;
+use super::assert_aurora_config_mode_batch;
 
 #[test]
-fn aurora_config_mode_last_job_path_default_and_automatic_buffer_local_contract_are_exact() {
-    let elisp_form = r##"(list
+fn jobpath_public_surface_batch() {
+    assert_aurora_config_mode_batch(&[
+        (
+            "aurora_config_mode_last_job_path_default_and_automatic_buffer_local_contract_are_exact",
+            r##"(list
           (default-value
            'aurora-config-last-job-path)
           (local-variable-if-set-p
@@ -30,17 +33,15 @@ fn aurora_config_mode_last_job_path_default_and_automatic_buffer_local_contract_
             (list
              aurora-config-last-job-path
              (local-variable-p
-              'aurora-config-last-job-path))))"##;
-    let expect = expect![[
+              'aurora-config-last-job-path))))"##,
+            true,
+            expect![[
         r#"OK ("smf1/" t t ("smf1/" nil ("cluster/role/dev/job-a" t) "smf1/") ("smf1/" nil))"#
-    ]];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurora_config_mode_read_jobpath_passes_exact_prompt_default_updates_local_and_returns_input() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "aurora_config_mode_read_jobpath_passes_exact_prompt_default_updates_local_and_returns_input",
+            r##"(with-temp-buffer
           (setq
            aurora-config-last-job-path
            "cluster/role/prod/old")
@@ -57,17 +58,15 @@ fn aurora_config_mode_read_jobpath_passes_exact_prompt_default_updates_local_and
                 'aurora-config-last-job-path)
                (nreverse calls)
                (default-value
-                'aurora-config-last-job-path)))))"##;
-    let expect = expect![[
+                'aurora-config-last-job-path)))))"##,
+            true,
+            expect![[
         r#"OK ("cluster/role/prod/new" "cluster/role/prod/new" t (("Job path as 'cluster/role/env/job': " "cluster/role/prod/old")) "smf1/")"#
-    ]];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurora_config_mode_repeated_jobpath_reads_feed_each_answer_into_the_next_prompt() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "aurora_config_mode_repeated_jobpath_reads_feed_each_answer_into_the_next_prompt",
+            r##"(with-temp-buffer
           (let ((answers
                  '("west/role/dev/one"
                    "east/role/stage/two"
@@ -89,17 +88,15 @@ fn aurora_config_mode_repeated_jobpath_reads_feed_each_answer_into_the_next_prom
              (nreverse results)
              (nreverse calls)
              aurora-config-last-job-path
-             answers)))"##;
-    let expect = expect![[
+             answers)))"##,
+            true,
+            expect![[
         r#"OK (("west/role/dev/one" "east/role/stage/two" "prod/role/prod/three") (("Job path as 'cluster/role/env/job': " "smf1/") ("Job path as 'cluster/role/env/job': " "west/role/dev/one") ("Job path as 'cluster/role/env/job': " "east/role/stage/two")) "prod/role/prod/three" nil)"#
-    ]];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurora_config_mode_jobpath_read_accepts_empty_nil_and_non_string_stub_results_exactly() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "aurora_config_mode_jobpath_read_accepts_empty_nil_and_non_string_stub_results_exactly",
+            r##"(mapcar
           (lambda (answer)
             (with-temp-buffer
               (setq
@@ -116,17 +113,15 @@ fn aurora_config_mode_jobpath_read_accepts_empty_nil_and_non_string_stub_results
                  (local-variable-p
                   'aurora-config-last-job-path)))))
           '("" nil 0 job-symbol
-            ("nested" "path")))"##;
-    let expect = expect![[
+            ("nested" "path")))"##,
+            true,
+            expect![[
         r#"OK (("" "" "" t) (nil nil nil t) (0 0 0 t) (job-symbol job-symbol job-symbol t) (#1=("nested" "path") #1# #1# t))"#
-    ]];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurora_config_mode_read_jobpath_error_propagates_without_overwriting_previous_buffer_value() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "aurora_config_mode_read_jobpath_error_propagates_without_overwriting_previous_buffer_value",
+            r##"(with-temp-buffer
           (setq
            aurora-config-last-job-path
            "stable/path")
@@ -143,17 +138,15 @@ fn aurora_config_mode_read_jobpath_error_propagates_without_overwriting_previous
                aurora-config-last-job-path
                (local-variable-p
                 'aurora-config-last-job-path)
-               (nreverse calls)))))"##;
-    let expect = expect![[
+               (nreverse calls)))))"##,
+            true,
+            expect![[
         r#"OK ((:error error ("fixture minibuffer failure")) "stable/path" t (("Job path as 'cluster/role/env/job': " "stable/path")))"#
-    ]];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurora_config_mode_major_mode_reentry_discards_buffer_job_history_then_uses_global_default() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "aurora_config_mode_major_mode_reentry_discards_buffer_job_history_then_uses_global_default",
+            r##"(with-temp-buffer
           (setq-default
            aurora-config-last-job-path
            "global/default")
@@ -185,10 +178,11 @@ fn aurora_config_mode_major_mode_reentry_discards_buffer_job_history_then_uses_g
                  after-mode
                  (aurora-config-read-jobpath)
                  aurora-config-last-job-path
-                 (nreverse calls))))))"##;
-    let expect = expect![[
+                 (nreverse calls))))))"##,
+            true,
+            expect![[
         r#"OK (("buffer/remembered" t) ("global/default" nil) "buffer/new" "buffer/new" (("Job path as 'cluster/role/env/job': " "global/default")))"#
-    ]];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

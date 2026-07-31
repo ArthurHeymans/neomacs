@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auth_source_keytar_parity;
+use super::assert_auth_source_keytar_batch;
 
 #[test]
-fn auth_source_keytar_enable_adds_keytar_to_front_and_forgets_cached_credentials() {
-    let elisp_form = r##"(let ((auth-sources
+fn enable_public_surface_batch() {
+    assert_auth_source_keytar_batch(&[
+        (
+            "auth_source_keytar_enable_adds_keytar_to_front_and_forgets_cached_credentials",
+            r##"(let ((auth-sources
                                 '("~/.authinfo"
                                   "~/.netrc"))
                                calls)
@@ -19,17 +22,15 @@ fn auth_source_keytar_enable_adds_keytar_to_front_and_forgets_cached_credentials
             (list
              (auth-source-keytar-enable)
              auth-sources
-             (nreverse calls))))"##;
-    let expect = expect![[
+             (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK (:cache-cleared (keytar "~/.authinfo" "~/.netrc") ((keytar "~/.authinfo" "~/.netrc")))"#
-    ]];
-
-    assert_auth_source_keytar_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_keytar_enable_is_idempotent_for_source_membership_but_clears_cache_each_time() {
-    let elisp_form = r##"(let ((auth-sources
+    ]],
+        ),
+        (
+            "auth_source_keytar_enable_is_idempotent_for_source_membership_but_clears_cache_each_time",
+            r##"(let ((auth-sources
                                 '("first-source"))
                                calls)
           (cl-letf
@@ -45,17 +46,15 @@ fn auth_source_keytar_enable_is_idempotent_for_source_membership_but_clears_cach
              (auth-source-keytar-enable)
              (auth-source-keytar-enable)
              auth-sources
-             (nreverse calls))))"##;
-    let expect = expect![[
+             (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK (1 2 3 (keytar "first-source") ((keytar "first-source") (keytar "first-source") (keytar "first-source")))"#
-    ]];
-
-    assert_auth_source_keytar_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_keytar_enable_preserves_existing_keytar_position_in_auth_sources() {
-    let elisp_form = r##"(let ((auth-sources
+    ]],
+        ),
+        (
+            "auth_source_keytar_enable_preserves_existing_keytar_position_in_auth_sources",
+            r##"(let ((auth-sources
                                 '("first"
                                   keytar
                                   "last"))
@@ -70,15 +69,13 @@ fn auth_source_keytar_enable_preserves_existing_keytar_position_in_auth_sources(
             (list
              (auth-source-keytar-enable)
              auth-sources
-             calls)))"##;
-    let expect = expect![[r#"OK (:cleared ("first" keytar "last") 1)"#]];
-
-    assert_auth_source_keytar_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_keytar_enable_distinguishes_symbolic_source_from_similarly_named_entries() {
-    let elisp_form = r##"(let ((auth-sources
+             calls)))"##,
+            true,
+            expect![[r#"OK (:cleared ("first" keytar "last") 1)"#]],
+        ),
+        (
+            "auth_source_keytar_enable_distinguishes_symbolic_source_from_similarly_named_entries",
+            r##"(let ((auth-sources
                                 '("keytar"
                                   (keytar)
                                   keytar-config
@@ -90,16 +87,13 @@ fn auth_source_keytar_enable_distinguishes_symbolic_source_from_similarly_named_
                   :cleared)))
             (list
              (auth-source-keytar-enable)
-             auth-sources)))"##;
-    let expect =
-        expect![[r#"OK (:cleared (keytar "keytar" (keytar) keytar-config (:source keytar)))"#]];
-
-    assert_auth_source_keytar_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_keytar_enable_propagates_cache_clear_failure_after_registering_source() {
-    let elisp_form = r##"(let ((auth-sources
+             auth-sources)))"##,
+            true,
+            expect![[r#"OK (:cleared (keytar "keytar" (keytar) keytar-config (:source keytar)))"#]],
+        ),
+        (
+            "auth_source_keytar_enable_propagates_cache_clear_failure_after_registering_source",
+            r##"(let ((auth-sources
                                 '("existing")))
           (cl-letf
               (((symbol-function
@@ -110,15 +104,13 @@ fn auth_source_keytar_enable_propagates_cache_clear_failure_after_registering_so
             (list
              (auth-source-keytar-test-error-data
               #'auth-source-keytar-enable)
-             auth-sources)))"##;
-    let expect = expect![[r#"OK ((:error error ("fixture cache failure")) (keytar "existing"))"#]];
-
-    assert_auth_source_keytar_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_keytar_enable_returns_exact_cache_clear_result() {
-    let elisp_form = r##"(mapcar
+             auth-sources)))"##,
+            true,
+            expect![[r#"OK ((:error error ("fixture cache failure")) (keytar "existing"))"#]],
+        ),
+        (
+            "auth_source_keytar_enable_returns_exact_cache_clear_result",
+            r##"(mapcar
           (lambda (result)
             (let ((auth-sources nil))
               (cl-letf
@@ -135,18 +127,15 @@ fn auth_source_keytar_enable_returns_exact_cache_clear_result() {
             :cleared
             17
             "done"
-            (:cache "result")))"##;
-    let expect = expect![[
+            (:cache "result")))"##,
+            true,
+            expect![[
         r#"OK ((nil nil (keytar)) (t t (keytar)) (:cleared :cleared (keytar)) (17 17 (keytar)) ("done" "done" (keytar)) (#1=(:cache "result") #1# (keytar)))"#
-    ]];
-
-    assert_auth_source_keytar_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_keytar_enable_respects_dynamic_auth_sources_binding_without_mutating_global_default()
-{
-    let elisp_form = r##"(let ((global-before
+    ]],
+        ),
+        (
+            "auth_source_keytar_enable_respects_dynamic_auth_sources_binding_without_mutating_global_default",
+            r##"(let ((global-before
                                 (copy-tree
                                  (default-value
                                   'auth-sources)))
@@ -171,17 +160,15 @@ fn auth_source_keytar_enable_respects_dynamic_auth_sources_binding_without_mutat
            (equal
             global-before
             (default-value
-             'auth-sources))))"##;
-    let expect = expect![[
+             'auth-sources))))"##,
+            true,
+            expect![[
         r#"OK ((:cleared #1=(keytar "sandbox-authinfo") #1#) ("~/.authinfo" "~/.authinfo.gpg" "~/.netrc") t)"#
-    ]];
-
-    assert_auth_source_keytar_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_keytar_enable_uses_structural_membership_for_preexisting_keytar_symbol() {
-    let elisp_form = r##"(let ((auth-sources
+    ]],
+        ),
+        (
+            "auth_source_keytar_enable_uses_structural_membership_for_preexisting_keytar_symbol",
+            r##"(let ((auth-sources
                                 (list
                                  (copy-sequence "first")
                                  (intern
@@ -201,8 +188,9 @@ fn auth_source_keytar_enable_uses_structural_membership_for_preexisting_keytar_s
               (seq-filter
                (lambda (entry)
                  (eq entry 'keytar))
-               auth-sources)))))"##;
-    let expect = expect![[r#"OK (:cleared ("first" keytar "last") 1)"#]];
-
-    assert_auth_source_keytar_parity(elisp_form, expect);
+               auth-sources)))))"##,
+            true,
+            expect![[r#"OK (:cleared ("first" keytar "last") 1)"#]],
+        ),
+    ]);
 }

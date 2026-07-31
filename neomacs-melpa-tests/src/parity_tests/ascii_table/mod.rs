@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ASCII_TABLE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod commands;
 mod formatting;
 mod registry;
@@ -85,4 +87,30 @@ pub(crate) fn assert_ascii_table_parity(elisp_form: &str, expected: Expect) {
 
 pub(crate) fn assert_ascii_table_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_ascii_table_source_parity("ascii-table-autoloads.el", elisp_form, expected);
+}
+
+
+
+
+
+/// Multi-probe batch for `assert_ascii_table_autoload_parity` cases (2a).
+pub(crate) fn assert_ascii_table_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        ascii_table_oracle("ascii-table-autoloads.el"),
+        &name,
+        "ascii_table_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_ascii_table_parity` cases (2a).
+pub(crate) fn assert_ascii_table_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        ascii_table_oracle("ascii-table.el"),
+        &name,
+        "ascii_table_parity",
+        cases,
+    );
 }

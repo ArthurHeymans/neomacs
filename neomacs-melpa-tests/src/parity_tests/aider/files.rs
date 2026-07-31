@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_aider_parity;
+use super::assert_aider_batch;
 
 #[test]
-fn aider_file_paths_are_repo_relative_local_and_shell_space_aware() {
-    let elisp_form = r##"(list
+fn files_public_surface_batch() {
+    assert_aider_batch(&[
+        (
+            "aider_file_paths_are_repo_relative_local_and_shell_space_aware",
+            r##"(list
          (cl-letf (((symbol-function 'magit-toplevel)
                     (lambda () "/repo/root/")))
            (mapcar
@@ -19,16 +22,15 @@ fn aider_file_paths_are_repo_relative_local_and_shell_space_aware() {
            (mapcar #'aider--get-file-path
                    '("/outside/file.py" "./relative.el")))
          (mapcar #'aider--format-file-path
-                 '("plain.el" "two words.el" "tabs\tstay.el")))"##;
-    let expect = expect![[
+                 '("plain.el" "two words.el" "tabs\tstay.el")))"##,
+            true,
+            expect![[
         r#"OK (("src/main.py" "\"docs/user guide.md\"" "../../outside/data.txt") ("/outside/file.py" "[ORACLE-SANDBOX]/relative.el") ("plain.el" "\"two words.el\"" "tabs\11stay.el"))"#
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_real_directory_suffix_and_content_filter_pipeline_matches() {
-    let elisp_form = r##"(let* ((root (expand-file-name "module"
+    ]],
+        ),
+        (
+            "aider_real_directory_suffix_and_content_filter_pipeline_matches",
+            r##"(let* ((root (expand-file-name "module"
                                            (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                 (nested (expand-file-name "nested" root)))
          (make-directory nested t)
@@ -52,16 +54,15 @@ fn aider_real_directory_suffix_and_content_filter_pipeline_matches() {
             (mapcar (lambda (file) (file-relative-name file root)) feature)
             (aider--filter-files-by-content-regex python "NO_MATCH")
             (length
-             (aider--filter-files-by-content-regex python nil)))))"##;
-    let expect = expect![[
+             (aider--filter-files-by-content-regex python nil)))))"##,
+            true,
+            expect![[
         r#"OK (("helper.py" "main.py" "view.py" "test_main.py") ("main.py" "nested/view.py" "test_main.py") nil 4)"#
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_dependency_scanner_ignores_comments_strings_tests_and_flycheck_files() {
-    let elisp_form = r##"(let* ((root (expand-file-name "context"
+    ]],
+        ),
+        (
+            "aider_dependency_scanner_ignores_comments_strings_tests_and_flycheck_files",
+            r##"(let* ((root (expand-file-name "context"
                                            (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                 (main (expand-file-name "main.py" root)))
          (make-directory root t)
@@ -87,16 +88,15 @@ fn aider_dependency_scanner_ignores_comments_strings_tests_and_flycheck_files() 
             (mapcar #'file-name-nondirectory
                     (aider--filter-test-files dependents nil))
             (mapcar #'file-name-nondirectory
-                    (aider--filter-test-files dependents t)))))"##;
-    let expect = expect![[
+                    (aider--filter-test-files dependents t)))))"##,
+            true,
+            expect![[
         r#"OK (("helper.py" "ignored.py") ("client.py" "test_main.py") ("client.py" "test_main.py") ("client.py" "test_main.py"))"#
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_context_processing_deduplicates_and_sends_one_formatted_command_per_file() {
-    let elisp_form = r##"(let (sent switched)
+    ]],
+        ),
+        (
+            "aider_context_processing_deduplicates_and_sends_one_formatted_command_per_file",
+            r##"(let (sent switched)
          (cl-letf (((symbol-function 'completing-read)
                     (lambda (&rest _) "/read-only"))
                    ((symbol-function 'aider--get-file-path)
@@ -111,16 +111,15 @@ fn aider_context_processing_deduplicates_and_sends_one_formatted_command_per_fil
             "/repo/main.py"
             '("/repo/helper.py" "/repo/shared file.py")
             '("/repo/client.py" "/repo/helper.py"))
-           (list (nreverse sent) switched)))"##;
-    let expect = expect![[
+           (list (nreverse sent) switched)))"##,
+            true,
+            expect![[
         r#"OK ((("/read-only main.py" nil) ("/read-only helper.py" nil) ("/read-only \"shared file.py\"" nil) ("/read-only client.py" nil)) t)"#
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_current_file_and_dired_command_workflows_build_exact_session_messages() {
-    let elisp_form = r##"(let* ((root (expand-file-name "files"
+    ]],
+        ),
+        (
+            "aider_current_file_and_dired_command_workflows_build_exact_session_messages",
+            r##"(let* ((root (expand-file-name "files"
                                            (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                 (one (expand-file-name "one.el" root))
                 (two (expand-file-name "two words.el" root))
@@ -142,16 +141,15 @@ fn aider_current_file_and_dired_command_workflows_build_exact_session_messages()
                       (lambda () (list one two))))
              (aider--batch-add-dired-marked-files-with-command
               "/read-only"))
-           (nreverse sent)))"##;
-    let expect = expect![[
+           (nreverse sent)))"##,
+            true,
+            expect![[
         r#"OK (("/add one.el" nil) ("/drop one.el" nil) ("/read-only one.el \"two words.el\"" t))"#
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_source_pattern_file_discovery_and_import_keyword_detection_match() {
-    let elisp_form = r##"(let* ((root (expand-file-name "patterns"
+    ]],
+        ),
+        (
+            "aider_source_pattern_file_discovery_and_import_keyword_detection_match",
+            r##"(let* ((root (expand-file-name "patterns"
                                            (getenv "NEOMACS_TEST_SANDBOX_ROOT"))))
          (make-directory root t)
          (dolist (entry
@@ -174,14 +172,13 @@ fn aider_source_pattern_file_discovery_and_import_keyword_detection_match() {
                     "from x import y"
                     "  require('x')"
                     "ordinary prose"
-                    "// import only comment"))))"##;
-    let expect = expect![[r#"OK (("*.rs") ("a.rs" "b.rs") (nil 7 2 nil 3))"#]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_file_at_point_resolution_and_drop_command_use_real_workspace_file() {
-    let elisp_form = r##"(let* ((root (expand-file-name "cursor-file"
+                    "// import only comment"))))"##,
+            true,
+            expect![[r#"OK (("*.rs") ("a.rs" "b.rs") (nil 7 2 nil 3))"#]],
+        ),
+        (
+            "aider_file_at_point_resolution_and_drop_command_use_real_workspace_file",
+            r##"(let* ((root (expand-file-name "cursor-file"
                                            (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                 (file (expand-file-name "src/demo file.el" root))
                 sent)
@@ -203,7 +200,9 @@ fn aider_file_at_point_resolution_and_drop_command_use_real_workspace_file() {
                root)
               (aider--file-path-under-cursor-is-file)
               (aider--drop-file-under-cursor)
-              sent))))"##;
-    let expect = expect![[r#"OK ("src/demo file.el" t sent "/drop \"src/demo file.el\"")"#]];
-    assert_aider_parity(elisp_form, expect);
+              sent))))"##,
+            true,
+            expect![[r#"OK ("src/demo file.el" t sent "/drop \"src/demo file.el\"")"#]],
+        ),
+    ]);
 }

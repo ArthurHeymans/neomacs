@@ -1,11 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_dim_other_buffers_parity;
+use super::assert_auto_dim_other_buffers_batch;
 
 #[test]
-fn auto_dim_other_buffers_dim_buffer_sets_distinct_parameters_for_two_windows_showing_same_buffer()
-{
-    let elisp_form = r##"(save-window-excursion
+fn windows_public_surface_batch() {
+    assert_auto_dim_other_buffers_batch(&[
+        (
+            "auto_dim_other_buffers_dim_buffer_sets_distinct_parameters_for_two_windows_showing_same_buffer",
+            r##"(save-window-excursion
           (let ((buffer
                  (generate-new-buffer
                   " *adob-shared*")))
@@ -40,18 +42,15 @@ fn auto_dim_other_buffers_dim_buffer_sets_distinct_parameters_for_two_windows_sh
                          (adob-test-remap-summary
                           buffer))))))
               (when (buffer-live-p buffer)
-                (kill-buffer buffer)))))"##;
-    let expect = expect![[
+                (kill-buffer buffer)))))"##,
+            true,
+            expect![[
         r#"OK ((((t " *adob-shared*" nil) (nil " *adob-shared*" t)) (t 1 (default) ((default (#1=(:filtered (:window adob--dim t) auto-dim-other-buffers)))))) ((t " *adob-shared*" nil) (nil " *adob-shared*" t)) (t 1 (default) ((default (#1#)))))"#
-    ]];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_never_dim_buffer_removes_existing_remaps_without_mutating_window_parameters()
- {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_dim_other_buffers_never_dim_buffer_removes_existing_remaps_without_mutating_window_parameters",
+            r##"(save-window-excursion
           (let ((buffer
                  (generate-new-buffer
                   " *adob-never-real*")))
@@ -91,17 +90,15 @@ fn auto_dim_other_buffers_never_dim_buffer_removes_existing_remaps_without_mutat
                        (adob-test-remap-summary
                         buffer)))))
               (when (buffer-live-p buffer)
-                (kill-buffer buffer)))))"##;
-    let expect = expect![[
+                (kill-buffer buffer)))))"##,
+            true,
+            expect![[
         r#"OK (nil ((t " *adob-never-real*" :selected-before) (nil " *adob-never-real*" :other-before)) (nil 0 nil nil))"#
-    ]];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_update_switches_real_selected_window_and_buffer_state() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_dim_other_buffers_update_switches_real_selected_window_and_buffer_state",
+            r##"(save-window-excursion
           (let ((first
                  (generate-new-buffer
                   " *adob-update-first*"))
@@ -154,17 +151,15 @@ fn auto_dim_other_buffers_update_switches_real_selected_window_and_buffer_state(
               (when (buffer-live-p first)
                 (kill-buffer first))
               (when (buffer-live-p second)
-                (kill-buffer second)))))"##;
-    let expect = expect![[
+                (kill-buffer second)))))"##,
+            true,
+            expect![[
         r#"OK ((((t " *adob-update-first*" nil) (nil " *adob-update-second*" nil)) " *adob-update-first*" t) ((t " *adob-update-second*" nil) (nil " *adob-update-first*" t)) " *adob-update-second*" t (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
-    ]];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_update_moves_highlight_between_windows_showing_same_buffer() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_dim_other_buffers_update_moves_highlight_between_windows_showing_same_buffer",
+            r##"(save-window-excursion
           (let ((buffer
                  (generate-new-buffer
                   " *adob-update-shared*")))
@@ -205,17 +200,15 @@ fn auto_dim_other_buffers_update_moves_highlight_between_windows_showing_same_bu
                          (adob-test-remap-summary
                           buffer))))))
               (when (buffer-live-p buffer)
-                (kill-buffer buffer)))))"##;
-    let expect = expect![[
+                (kill-buffer buffer)))))"##,
+            true,
+            expect![[
         r#"OK (((t " *adob-update-shared*" nil) (nil " *adob-update-shared*" nil)) ((t " *adob-update-shared*" nil) (nil " *adob-update-shared*" t)) t t (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
-    ]];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_rescan_real_windows_repairs_parameters_and_missing_remaps() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_dim_other_buffers_rescan_real_windows_repairs_parameters_and_missing_remaps",
+            r##"(save-window-excursion
           (let ((first
                  (generate-new-buffer
                   " *adob-rescan-first*"))
@@ -258,18 +251,15 @@ fn auto_dim_other_buffers_rescan_real_windows_repairs_parameters_and_missing_rem
               (when (buffer-live-p first)
                 (kill-buffer first))
               (when (buffer-live-p second)
-                (kill-buffer second)))))"##;
-    let expect = expect![[
+                (kill-buffer second)))))"##,
+            true,
+            expect![[
         r#"OK (((t " *adob-rescan-first*" nil) (nil " *adob-rescan-second*" t)) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
-    ]];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_buffer_list_hook_routes_selected_and_nonselected_buffers_to_distinct_paths()
- {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_dim_other_buffers_buffer_list_hook_routes_selected_and_nonselected_buffers_to_distinct_paths",
+            r##"(save-window-excursion
           (let ((selected-buffer
                  (generate-new-buffer
                   " *adob-hook-selected*"))
@@ -314,16 +304,13 @@ fn auto_dim_other_buffers_buffer_list_hook_routes_selected_and_nonselected_buffe
                 (kill-buffer selected-buffer))
               (when
                   (buffer-live-p other-buffer)
-                (kill-buffer other-buffer)))))"##;
-    let expect = expect![[r#"OK (:update (:dim " *adob-hook-other*" nil))"#]];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_minibuffer_switch_option_controls_update_while_real_minibuffer_is_identified()
- {
-    let elisp_form = r##"(let ((real-minibuffer
+                (kill-buffer other-buffer)))))"##,
+            true,
+            expect![[r#"OK (:update (:dim " *adob-hook-other*" nil))"#]],
+        ),
+        (
+            "auto_dim_other_buffers_minibuffer_switch_option_controls_update_while_real_minibuffer_is_identified",
+            r##"(let ((real-minibuffer
                                 (window-minibuffer-p
                                  (minibuffer-window)))
                                events)
@@ -376,17 +363,15 @@ fn auto_dim_other_buffers_minibuffer_switch_option_controls_update_while_real_mi
                events))
             (list
              real-minibuffer
-             (nreverse events))))"##;
-    let expect = expect![
+             (nreverse events))))"##,
+            true,
+            expect![
         "OK (t ((:disabled nil :previous-window) (:enabled nil :fixture-minibuffer-window)))"
-    ];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_initialize_records_selected_pair_and_dims_each_supplied_live_buffer() {
-    let elisp_form = r##"(let ((first
+    ],
+        ),
+        (
+            "auto_dim_other_buffers_initialize_records_selected_pair_and_dims_each_supplied_live_buffer",
+            r##"(let ((first
                                 (generate-new-buffer
                                  " *adob-init-first*"))
                                (second
@@ -421,16 +406,13 @@ fn auto_dim_other_buffers_initialize_records_selected_pair_and_dims_each_supplie
             (when (buffer-live-p first)
               (kill-buffer first))
             (when (buffer-live-p second)
-              (kill-buffer second))))"##;
-    let expect = expect![[r#"OK (t t ((" *adob-init-first*" t) (" *adob-init-second*" t)))"#]];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_base_and_indirect_buffers_keep_independent_remap_cookies_in_real_windows()
-{
-    let elisp_form = r##"(save-window-excursion
+              (kill-buffer second))))"##,
+            true,
+            expect![[r#"OK (t t ((" *adob-init-first*" t) (" *adob-init-second*" t)))"#]],
+        ),
+        (
+            "auto_dim_other_buffers_base_and_indirect_buffers_keep_independent_remap_cookies_in_real_windows",
+            r##"(save-window-excursion
           (let* ((base
                   (generate-new-buffer
                    " *adob-base*"))
@@ -470,10 +452,11 @@ fn auto_dim_other_buffers_base_and_indirect_buffers_keep_independent_remap_cooki
               (when (buffer-live-p indirect)
                 (kill-buffer indirect))
               (when (buffer-live-p base)
-                (kill-buffer base)))))"##;
-    let expect = expect![[
+                (kill-buffer base)))))"##,
+            true,
+            expect![[
         r#"OK ((:buffer nil) ((t " *adob-base*" nil) (nil " *adob-indirect*" t)) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
-    ]];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_atom_one_dark_theme_parity;
+use super::assert_atom_one_dark_theme_batch;
 
 #[test]
-fn atom_one_dark_theme_complete_palette_key_order_values_and_uniqueness_match() {
-    let elisp_form = r##"(list
+fn palette_public_surface_batch() {
+    assert_atom_one_dark_theme_batch(&[
+        (
+            "atom_one_dark_theme_complete_palette_key_order_values_and_uniqueness_match",
+            r##"(list
          (display-color-cells
           (selected-frame))
          (length
@@ -20,17 +23,15 @@ fn atom_one_dark_theme_complete_palette_key_order_values_and_uniqueness_match() 
                               atom-one-dark-colors-alist))
          (seq-every-p #'stringp
                       (mapcar #'cdr
-                              atom-one-dark-colors-alist)))"##;
-    let expect = expect![[
+                              atom-one-dark-colors-alist)))"##,
+            true,
+            expect![[
         r##"OK (0 30 (("atom-one-dark-accent" . "#528BFF") ("atom-one-dark-fg" if nil "color-248" "#ABB2BF") ("atom-one-dark-bg" if nil "color-235" "#282C34") ("atom-one-dark-bg-1" if nil "color-234" "#121417") ("atom-one-dark-bg-hl" if nil "color-236" "#2C323C") ("atom-one-dark-gutter" if nil "color-239" "#4B5363") ("atom-one-dark-insert" . "#43D08A") ("atom-one-dark-change" . "#E0C285") ("atom-one-dark-delete" . "#E05252") ("atom-one-dark-info" . "#6494ED") ("atom-one-dark-success" . "#73C900") ("atom-one-dark-warning" . "#E2C08D") ("atom-one-dark-error" . "#FF6347") ("atom-one-dark-mono-1" if nil "color-248" "#ABB2BF") ("atom-one-dark-mono-2" if nil "color-244" "#828997") ("atom-one-dark-mono-3" if nil "color-240" "#5C6370") ("atom-one-dark-cyan" . "#56B6C2") ("atom-one-dark-blue" . "#61AFEF") ("atom-one-dark-purple" . "#C678DD") ("atom-one-dark-green" . "#98C379") ("atom-one-dark-red-1" . "#E06C75") ("atom-one-dark-red-2" . "#BE5046") ("atom-one-dark-orange-1" . "#D19A66") ("atom-one-dark-orange-2" . "#E5C07B") ("atom-one-dark-gray" if nil "color-237" "#3E4451") ("atom-one-dark-silver" if nil "color-247" "#9DA5B4") ("atom-one-dark-black" if nil "color-233" "#21252B") ("atom-one-dark-ui-fg" if nil "color-247" "#9DA5B4") ("atom-one-dark-level-3-color" if nil "color-233" "#21252B") ("atom-one-dark-border" if nil "color-232" "#181A1F")) 30 t nil)"##
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_color_macro_expansion_arglist_documentation_and_indent_match() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_color_macro_expansion_arglist_documentation_and_indent_match",
+            r##"(list
          (macrop
           'atom-one-dark-with-color-variables)
          (prin1-to-string
@@ -49,17 +50,15 @@ fn atom_one_dark_theme_color_macro_expansion_arglist_documentation_and_indent_ma
               class
               atom-one-dark-fg
               atom-one-dark-bg
-              atom-one-dark-accent))))"##;
-    let expect = expect![[
+              atom-one-dark-accent))))"##,
+            true,
+            expect![[
         r##"OK (t "(&rest body)" "Bind the colors list around BODY." 0 (let ((class '((class color) (min-colors 89))) (atom-one-dark-accent "#528BFF") (atom-one-dark-fg (if nil "color-248" "#ABB2BF")) (atom-one-dark-bg (if nil "color-235" "#282C34")) (atom-one-dark-bg-1 (if nil "color-234" "#121417")) (atom-one-dark-bg-hl (if nil "color-236" "#2C323C")) (atom-one-dark-gutter (if nil "color-239" "#4B5363")) (atom-one-dark-insert "#43D08A") (atom-one-dark-change "#E0C285") (atom-one-dark-delete "#E05252") (atom-one-dark-info "#6494ED") (atom-one-dark-success "#73C900") (atom-one-dark-warning "#E2C08D") (atom-one-dark-error "#FF6347") (atom-one-dark-mono-1 (if nil "color-248" "#ABB2BF")) (atom-one-dark-mono-2 (if nil "color-244" "#828997")) (atom-one-dark-mono-3 (if nil "color-240" "#5C6370")) (atom-one-dark-cyan "#56B6C2") (atom-one-dark-blue "#61AFEF") (atom-one-dark-purple "#C678DD") (atom-one-dark-green "#98C379") (atom-one-dark-red-1 "#E06C75") (atom-one-dark-red-2 "#BE5046") (atom-one-dark-orange-1 "#D19A66") (atom-one-dark-orange-2 "#E5C07B") (atom-one-dark-gray (if nil "color-237" "#3E4451")) (atom-one-dark-silver (if nil "color-247" "#9DA5B4")) (atom-one-dark-black (if nil "color-233" "#21252B")) (atom-one-dark-ui-fg (if nil "color-247" "#9DA5B4")) (atom-one-dark-level-3-color (if nil "color-233" "#21252B")) (atom-one-dark-border (if nil "color-232" "#181A1F"))) (list class atom-one-dark-fg atom-one-dark-bg atom-one-dark-accent)))"##
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_color_macro_binds_all_thirty_symbols_without_leaking_them() {
-    let elisp_form = r##"(let ((symbols
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_color_macro_binds_all_thirty_symbols_without_leaking_them",
+            r##"(let ((symbols
                 (mapcar
                  (lambda (entry)
                    (intern
@@ -113,17 +112,15 @@ fn atom_one_dark_theme_color_macro_binds_all_thirty_symbols_without_leaking_them
              (list
               symbol
               (boundp symbol)))
-           symbols)))"##;
-    let expect = expect![[
+           symbols)))"##,
+            true,
+            expect![[
         r##"OK (((atom-one-dark-accent nil) (atom-one-dark-fg nil) (atom-one-dark-bg nil) (atom-one-dark-bg-1 nil) (atom-one-dark-bg-hl nil) (atom-one-dark-gutter nil) (atom-one-dark-insert nil) (atom-one-dark-change nil) (atom-one-dark-delete nil) (atom-one-dark-info nil) (atom-one-dark-success nil) (atom-one-dark-warning nil) (atom-one-dark-error nil) (atom-one-dark-mono-1 nil) (atom-one-dark-mono-2 nil) (atom-one-dark-mono-3 nil) (atom-one-dark-cyan nil) (atom-one-dark-blue nil) (atom-one-dark-purple nil) (atom-one-dark-green nil) (atom-one-dark-red-1 nil) (atom-one-dark-red-2 nil) (atom-one-dark-orange-1 nil) (atom-one-dark-orange-2 nil) (atom-one-dark-gray nil) (atom-one-dark-silver nil) (atom-one-dark-black nil) (atom-one-dark-ui-fg nil) (atom-one-dark-level-3-color nil) (atom-one-dark-border nil)) ((atom-one-dark-accent "#528BFF") (atom-one-dark-fg "#ABB2BF") (atom-one-dark-bg "#282C34") (atom-one-dark-bg-1 "#121417") (atom-one-dark-bg-hl "#2C323C") (atom-one-dark-gutter "#4B5363") (atom-one-dark-insert "#43D08A") (atom-one-dark-change "#E0C285") (atom-one-dark-delete "#E05252") (atom-one-dark-info "#6494ED") (atom-one-dark-success "#73C900") (atom-one-dark-warning "#E2C08D") (atom-one-dark-error "#FF6347") (atom-one-dark-mono-1 "#ABB2BF") (atom-one-dark-mono-2 "#828997") (atom-one-dark-mono-3 "#5C6370") (atom-one-dark-cyan "#56B6C2") (atom-one-dark-blue "#61AFEF") (atom-one-dark-purple "#C678DD") (atom-one-dark-green "#98C379") (atom-one-dark-red-1 "#E06C75") (atom-one-dark-red-2 "#BE5046") (atom-one-dark-orange-1 "#D19A66") (atom-one-dark-orange-2 "#E5C07B") (atom-one-dark-gray "#3E4451") (atom-one-dark-silver "#9DA5B4") (atom-one-dark-black "#21252B") (atom-one-dark-ui-fg "#9DA5B4") (atom-one-dark-level-3-color "#21252B") (atom-one-dark-border "#181A1F")) ((atom-one-dark-accent nil) (atom-one-dark-fg nil) (atom-one-dark-bg nil) (atom-one-dark-bg-1 nil) (atom-one-dark-bg-hl nil) (atom-one-dark-gutter nil) (atom-one-dark-insert nil) (atom-one-dark-change nil) (atom-one-dark-delete nil) (atom-one-dark-info nil) (atom-one-dark-success nil) (atom-one-dark-warning nil) (atom-one-dark-error nil) (atom-one-dark-mono-1 nil) (atom-one-dark-mono-2 nil) (atom-one-dark-mono-3 nil) (atom-one-dark-cyan nil) (atom-one-dark-blue nil) (atom-one-dark-purple nil) (atom-one-dark-green nil) (atom-one-dark-red-1 nil) (atom-one-dark-red-2 nil) (atom-one-dark-orange-1 nil) (atom-one-dark-orange-2 nil) (atom-one-dark-gray nil) (atom-one-dark-silver nil) (atom-one-dark-black nil) (atom-one-dark-ui-fg nil) (atom-one-dark-level-3-color nil) (atom-one-dark-border nil)))"##
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_color_macro_uses_palette_present_when_form_is_expanded() {
-    let elisp_form = r##"(let ((original
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_color_macro_uses_palette_present_when_form_is_expanded",
+            r##"(let ((original
                 (copy-tree
                  atom-one-dark-colors-alist)))
          (unwind-protect
@@ -150,15 +147,13 @@ fn atom_one_dark_theme_color_macro_uses_palette_present_when_form_is_expanded() 
                   "atom-one-dark-accent"
                   atom-one-dark-colors-alist))))
            (setq atom-one-dark-colors-alist
-                 original)))"##;
-    let expect = expect![[r##"OK (("#010203" "#111213" "#282C34") "#010203")"##]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_forced_256_color_reload_recomputes_palette_and_new_face_specs() {
-    let elisp_form = r##"(let ((source
+                 original)))"##,
+            true,
+            expect![[r##"OK (("#010203" "#111213" "#282C34") "#010203")"##]],
+        ),
+        (
+            "atom_one_dark_theme_forced_256_color_reload_recomputes_palette_and_new_face_specs",
+            r##"(let ((source
                 (getenv "NEOMACS_PACKAGE_SOURCE")))
          (makunbound
           'atom-one-dark-colors-alist)
@@ -185,17 +180,15 @@ fn atom_one_dark_theme_forced_256_color_reload_recomputes_palette_and_new_face_s
           (car
            (last
             (atom-one-dark-test-face-specs
-             'line-number)))))"##;
-    let expect = expect![[
+             'line-number)))))"##,
+            true,
+            expect![[
         r##"OK ((("atom-one-dark-accent" . "#528BFF") ("atom-one-dark-fg" if t "color-248" "#ABB2BF") ("atom-one-dark-bg" if t "color-235" "#282C34") ("atom-one-dark-bg-1" if t "color-234" "#121417") ("atom-one-dark-bg-hl" if t "color-236" "#2C323C") ("atom-one-dark-gutter" if t "color-239" "#4B5363") ("atom-one-dark-insert" . "#43D08A") ("atom-one-dark-change" . "#E0C285") ("atom-one-dark-delete" . "#E05252") ("atom-one-dark-info" . "#6494ED") ("atom-one-dark-success" . "#73C900") ("atom-one-dark-warning" . "#E2C08D") ("atom-one-dark-error" . "#FF6347") ("atom-one-dark-mono-1" if t "color-248" "#ABB2BF") ("atom-one-dark-mono-2" if t "color-244" "#828997") ("atom-one-dark-mono-3" if t "color-240" "#5C6370") ("atom-one-dark-cyan" . "#56B6C2") ("atom-one-dark-blue" . "#61AFEF") ("atom-one-dark-purple" . "#C678DD") ("atom-one-dark-green" . "#98C379") ("atom-one-dark-red-1" . "#E06C75") ("atom-one-dark-red-2" . "#BE5046") ("atom-one-dark-orange-1" . "#D19A66") ("atom-one-dark-orange-2" . "#E5C07B") ("atom-one-dark-gray" if t "color-237" "#3E4451") ("atom-one-dark-silver" if t "color-247" "#9DA5B4") ("atom-one-dark-black" if t "color-233" "#21252B") ("atom-one-dark-ui-fg" if t "color-247" "#9DA5B4") ("atom-one-dark-level-3-color" if t "color-233" "#21252B") ("atom-one-dark-border" if t "color-232" "#181A1F")) ((t (:foreground "color-248" :background "color-235"))) ((t (:foreground "color-240" :slant italic))) ((t (:background "color-233" :foreground "color-247" :box (:color "color-232" :line-width 1)))) ((t (:foreground "color-239" :background "color-235"))))"##
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_color_macro_duplicate_palette_keys_follow_let_binding_order() {
-    let elisp_form = r##"(let ((atom-one-dark-colors-alist
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_color_macro_duplicate_palette_keys_follow_let_binding_order",
+            r##"(let ((atom-one-dark-colors-alist
                 '(("atom-one-dark-fg" . "first")
                   ("atom-one-dark-fg" . "second"))))
          (list
@@ -204,17 +197,15 @@ fn atom_one_dark_theme_color_macro_duplicate_palette_keys_follow_let_binding_ord
               atom-one-dark-fg))
           (eval
            '(atom-one-dark-with-color-variables
-              atom-one-dark-fg))))"##;
-    let expect = expect![[
+              atom-one-dark-fg))))"##,
+            true,
+            expect![[
         r#"OK ((let ((class '((class color) (min-colors 89))) (atom-one-dark-fg "first") (atom-one-dark-fg "second")) atom-one-dark-fg) "second")"#
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_color_macro_malformed_palette_entries_signal_exact_errors() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_color_macro_malformed_palette_entries_signal_exact_errors",
+            r##"(mapcar
          (lambda (palette)
            (let ((atom-one-dark-colors-alist
                   palette))
@@ -226,10 +217,11 @@ fn atom_one_dark_theme_color_macro_malformed_palette_entries_signal_exact_errors
          '(((42 . "#fff"))
            ((nil . "#fff"))
            (not-a-cons)
-           nil))"##;
-    let expect = expect![
+           nil))"##,
+            true,
+            expect![
         "OK ((:signal wrong-type-argument (stringp 42)) (:signal wrong-type-argument (stringp nil)) (:signal wrong-type-argument (listp not-a-cons)) (:ok (let ((class '((class color) (min-colors 89)))) atom-one-dark-fg)))"
-    ];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }

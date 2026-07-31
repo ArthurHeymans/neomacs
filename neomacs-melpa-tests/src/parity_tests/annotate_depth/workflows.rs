@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_annotate_depth_parity;
+use super::assert_annotate_depth_batch;
 
 #[test]
-fn readme_prog_mode_setup_marks_excessive_nesting_in_real_lisp_and_cpp_buffers() {
-    let elisp_form = r##"
+fn workflows_public_surface_batch() {
+    assert_annotate_depth_batch(&[
+        (
+            "readme_prog_mode_setup_marks_excessive_nesting_in_real_lisp_and_cpp_buffers",
+            r##"
 (let ((scheduled nil)
       (cancelled nil)
       (timer-sequence 0)
@@ -104,16 +107,15 @@ fn readme_prog_mode_setup_marks_excessive_nesting_in_real_lisp_and_cpp_buffers()
      (nreverse results)
      (nreverse scheduled)
      (nreverse cancelled))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (((emacs-lisp-mode t 3 ((4 6 "(when receipt" annotate-depth) (5 8 "(message \"sent: %s\" receipt)))))" annotate-depth)) "(defun publish-order (order)\n  (when order\n    (let ((receipt (charge order)))\n      (when receipt\n        (message \"sent: %s\" receipt)))))\n" review-timer-1 nil nil) (c++-mode t 2 ((3 4 "for (auto item : order.items()) {" annotate-depth) (4 6 "if (item.in_stock()) {" annotate-depth) (5 8 "charge(item);" annotate-depth) (6 6 "}" annotate-depth) (7 4 "}" annotate-depth)) "int checkout(Order order) {\n  if (order.valid()) {\n    for (auto item : order.items()) {\n      if (item.in_stock()) {\n        charge(item);\n      }\n    }\n  }\n}\n" review-timer-2 nil nil)) ((2 t annotate-depth--annotate) (2 t annotate-depth--annotate)) (review-timer-1 review-timer-2))"#
-    ]];
-    assert_annotate_depth_parity(elisp_form, expect);
-}
-
-#[test]
-fn idle_rescan_replaces_stale_highlights_after_a_real_refactoring_and_disable_cleans_up() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "idle_rescan_replaces_stale_highlights_after_a_real_refactoring_and_disable_cleans_up",
+            r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert
@@ -173,9 +175,11 @@ fn idle_rescan_replaces_stale_highlights_after_a_real_refactoring_and_disable_cl
                annotate-depth--overlays
                (buffer-substring-no-properties
                 (point-min) (point-max))))))))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ((((3 "(let ((cents (order-total order)))") (4 "(charge cents))))")) "(defun checkout (order)\n  (when order\n    (let ((cents (order-total order)))\n      (charge cents))))\n") ((4 "") (4 "")) (((3 "(charge (order-total order))))")) "(defun checkout (order)\n  (when order\n    (charge (order-total order))))\n") (1.5 t annotate-depth--annotate) refactor-idle-timer nil nil "(defun checkout (order)\n  (when order\n    (charge (order-total order))))\n")"#
-    ]];
-    assert_annotate_depth_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

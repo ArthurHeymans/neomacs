@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_auth_source_xoauth2_autoload_parity, assert_auth_source_xoauth2_parity};
+use super::{assert_auth_source_xoauth2_autoload_batch, assert_auth_source_xoauth2_batch};
 
 #[test]
-fn auth_source_xoauth2_descriptor_and_sources_pin_exact_melpa_payload() {
-    let elisp_form = r##"(let* ((descriptor
+fn registry_auth_source_xoauth2_batch() {
+    assert_auth_source_xoauth2_batch(&[
+        (
+            "auth_source_xoauth2_descriptor_and_sources_pin_exact_melpa_payload",
+            r##"(let* ((descriptor
                 (cadr
                  (assq
                   'auth-source-xoauth2
@@ -36,16 +39,15 @@ fn auth_source_xoauth2_descriptor_and_sources_pin_exact_melpa_payload() {
                 (secure-hash
                  'sha256
                  (current-buffer)))))
-           sources)))"##;
-    let expect = expect![[
+           sources)))"##,
+            true,
+            expect![[
         r#"OK ((auth-source-xoauth2 "20220804.2219" "Integrate auth-source with XOAUTH2." ((emacs (26 1))) ((:maintainers ("Cesar Crusius" . "ccrusius@google.com")) (:authors ("Cesar Crusius" . "ccrusius@google.com")) (:revdesc . "99a03f8ce835") (:commit . "99a03f8ce835412943d311b2746e77fcf5a1b500") (:url . "https://github.com/ccrusius/auth-source-xoauth2"))) (("auth-source-xoauth2-pkg.el" 419 "48758de84d025a9d7ae07624f15b4a216b7f534a1dea7c6eaef1324d83650eb8") ("auth-source-xoauth2.el" 13178 "6e554d868b29a7b0c1e9cb72e38776de6b51a7dfa02da5d036f484009e9bb639")))"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_feature_and_definition_origins_are_exact() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "auth_source_xoauth2_feature_and_definition_origins_are_exact",
+            r##"(list
          (featurep 'auth-source-xoauth2)
          (mapcar
           (lambda (symbol)
@@ -73,16 +75,15 @@ fn auth_source_xoauth2_feature_and_definition_origins_are_exact() {
               (symbol-file symbol 'defvar))))
           '(auth-source-xoauth2-creds
             auth-source-xoauth2-use-curl
-            auth-source-xoauth2-backend)))"##;
-    let expect = expect![[
+            auth-source-xoauth2-backend)))"##,
+            true,
+            expect![[
         r#"OK (t ((auth-source-xoauth2-search t "auth-source-xoauth2.el") (auth-source-xoauth2--search t "auth-source-xoauth2.el") (auth-source-xoauth2--url-post t "auth-source-xoauth2.el") (auth-source-xoauth2-enable t "auth-source-xoauth2.el") (auth-source-xoauth2-backend-parse t "auth-source-xoauth2.el") (auth-source-xoauth2--file-creds t "auth-source-xoauth2.el") (auth-source-xoauth2-pass--find-match t "auth-source-xoauth2.el") (auth-source-xoauth2--smtpmail-auth-method t "auth-source-xoauth2.el") (auth-source-xoauth2--pass-get t "auth-source-xoauth2.el") (auth-source-xoauth2-pass-creds t "auth-source-xoauth2.el")) ((auth-source-xoauth2-creds t "auth-source-xoauth2.el") (auth-source-xoauth2-use-curl t "auth-source-xoauth2.el") (auth-source-xoauth2-backend t "auth-source-xoauth2.el")))"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_public_functions_have_exact_callable_contracts() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auth_source_xoauth2_public_functions_have_exact_callable_contracts",
+            r##"(mapcar
          (lambda (symbol)
            (list
             symbol
@@ -98,16 +99,15 @@ fn auth_source_xoauth2_public_functions_have_exact_callable_contracts() {
            auth-source-xoauth2-pass--find-match
            auth-source-xoauth2--smtpmail-auth-method
            auth-source-xoauth2--pass-get
-           auth-source-xoauth2-pass-creds))"##;
-    let expect = expect![
+           auth-source-xoauth2-pass-creds))"##,
+            true,
+            expect![
         "OK ((auth-source-xoauth2-search nil nil (&rest spec)) (auth-source-xoauth2--search nil nil (host user port)) (auth-source-xoauth2--url-post nil nil (url data)) (auth-source-xoauth2-enable nil nil nil) (auth-source-xoauth2-backend-parse nil nil (entry)) (auth-source-xoauth2--file-creds nil nil (file host user port)) (auth-source-xoauth2-pass--find-match nil nil (host user port)) (auth-source-xoauth2--smtpmail-auth-method nil nil (process user password)) (auth-source-xoauth2--pass-get nil nil (key entry)) (auth-source-xoauth2-pass-creds nil nil (host user port)))"
-    ];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_defaults_and_backend_object_are_exact() {
-    let elisp_form = r##"(list
+    ],
+        ),
+        (
+            "auth_source_xoauth2_defaults_and_backend_object_are_exact",
+            r##"(list
          auth-source-xoauth2-creds
          auth-source-xoauth2-use-curl
          (mapcar
@@ -122,16 +122,15 @@ fn auth_source_xoauth2_defaults_and_backend_object_are_exact() {
                  auth-source-xoauth2-backend)))
            (list
             (stringp name)
-            (> (length name) 0))))"##;
-    let expect = expect![[
+            (> (length name) 0))))"##,
+            true,
+            expect![[
         r#"OK (nil nil (xoauth2 "." t t t nil ignore auth-source-xoauth2-search) (t t))"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_source_load_history_records_definitions_and_provide() {
-    let elisp_form = r##"(let* ((file
+    ]],
+        ),
+        (
+            "auth_source_xoauth2_source_load_history_records_definitions_and_provide",
+            r##"(let* ((file
                  (locate-library
                   "auth-source-xoauth2"))
                 (history
@@ -142,16 +141,44 @@ fn auth_source_xoauth2_source_load_history_records_definitions_and_provide() {
             (memq
              (car-safe event)
              '(defun defvar provide)))
-          history))"##;
-    let expect = expect![
+          history))"##,
+            true,
+            expect![
         "OK ((defun . nnimap-capability) (defun . nnimap-command) (defun . nnimap-login) (defun . auth-source-xoauth2-search) (defun . auth-source-xoauth2--search) (defun . auth-source-xoauth2--url-post) (defun . auth-source-xoauth2-enable) (defun . auth-source-xoauth2-backend-parse) (defun . auth-source-xoauth2--file-creds) (defun . auth-source-xoauth2-pass--find-match) (defun . auth-source-xoauth2--smtpmail-auth-method) (defun . auth-source-xoauth2--pass-get) (defun . auth-source-xoauth2-pass-creds) (provide . auth-source-xoauth2))"
-    ];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
+    ],
+        ),
+        (
+            "auth_source_xoauth2_reload_preserves_configuration_and_parser_advice",
+            r##"(let ((source
+                (locate-library
+                 "auth-source-xoauth2")))
+         (setq auth-source-xoauth2-creds
+               '(:token-url "custom")
+               auth-source-xoauth2-use-curl
+               t)
+         (load source nil t t)
+         (load source nil t t)
+         (list
+          auth-source-xoauth2-creds
+          auth-source-xoauth2-use-curl
+          (and
+           (advice-member-p
+            #'auth-source-xoauth2-backend-parse
+            'auth-source-backend-parse)
+           t)
+          (featurep 'auth-source-xoauth2)))"##,
+            true,
+            expect![[r#"OK ((:token-url "custom") t t t)"#]],
+        ),
+    ]);
 }
 
 #[test]
-fn auth_source_xoauth2_generated_autoload_registers_enable_function() {
-    let elisp_form = r##"(let* ((file
+fn registry_auth_source_xoauth2_autoload_batch() {
+    assert_auth_source_xoauth2_autoload_batch(&[
+        (
+            "auth_source_xoauth2_generated_autoload_registers_enable_function",
+            r##"(let* ((file
                  (locate-library
                   "auth-source-xoauth2-autoloads"))
                 (history
@@ -173,33 +200,11 @@ fn auth_source_xoauth2_generated_autoload_registers_enable_function() {
           (commandp 'auth-source-xoauth2-enable)
           (help-function-arglist
            'auth-source-xoauth2-enable
-           t)))"##;
-    let expect = expect![[
+           t)))"##,
+            true,
+            expect![[
         r#"OK (t nil ((defun . auth-source-xoauth2-enable) (provide . auth-source-xoauth2-autoloads)) t t nil "[Arg list not available until function definition is loaded.]")"#
-    ]];
-    assert_auth_source_xoauth2_autoload_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_reload_preserves_configuration_and_parser_advice() {
-    let elisp_form = r##"(let ((source
-                (locate-library
-                 "auth-source-xoauth2")))
-         (setq auth-source-xoauth2-creds
-               '(:token-url "custom")
-               auth-source-xoauth2-use-curl
-               t)
-         (load source nil t t)
-         (load source nil t t)
-         (list
-          auth-source-xoauth2-creds
-          auth-source-xoauth2-use-curl
-          (and
-           (advice-member-p
-            #'auth-source-xoauth2-backend-parse
-            'auth-source-backend-parse)
-           t)
-          (featurep 'auth-source-xoauth2)))"##;
-    let expect = expect![[r#"OK ((:token-url "custom") t t t)"#]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

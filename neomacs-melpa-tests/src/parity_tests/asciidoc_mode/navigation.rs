@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_asciidoc_mode_parity;
+use super::assert_asciidoc_mode_batch;
 
 #[test]
-fn imenu_defun_sentence_and_outline_navigation_traverse_a_real_document_hierarchy() {
-    let elisp_form = r##"(with-temp-buffer
+fn navigation_public_surface_batch() {
+    assert_asciidoc_mode_batch(&[
+        (
+            "imenu_defun_sentence_and_outline_navigation_traverse_a_real_document_hierarchy",
+            r##"(with-temp-buffer
   (insert
    "= Handbook\n\n"
    "Opening sentence. Second sentence.\n\n"
@@ -68,16 +71,15 @@ fn imenu_defun_sentence_and_outline_navigation_traverse_a_real_document_hierarch
          (goto-char (point-min))
          (search-forward "== Install")
          (match-beginning 0))
-       'asciidoc)))))"##;
-    let expect = expect![[
+       'asciidoc)))))"##,
+            true,
+            expect![[
         r#"OK ((("Install\n" 49) ("Linux\n" 77) ("macOS\n" 102) ("Operate\n" 127)) ("== Install" "=== Linux" "=== macOS" "== Operate") ("== Install" "=== Linux" "=== macOS" "== Operate") ((48 "") (76 "")) "")"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn outline_subtree_move_reports_the_exact_editor_error_without_mutating_the_document() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "outline_subtree_move_reports_the_exact_editor_error_without_mutating_the_document",
+            r##"(with-temp-buffer
   (insert
    "= Runbook\n\n"
    "== Prepare\n\n"
@@ -124,16 +126,15 @@ fn outline_subtree_move_reports_the_exact_editor_error_without_mutating_the_docu
         (car down-error)
         (cdr down-error)
         before
-        (buffer-string))))))"##;
-    let expect = expect![[
+        (buffer-string))))))"##,
+            true,
+            expect![[
         r#"OK (down-error wrong-type-argument (number-or-marker-p nil) #("= Runbook\n\n== Prepare\n\nPreparation body.\n\n=== Verify\n\nVerification body.\n\n== Deploy\n\nDeployment body.\n" 0 1 (face asciidoc-document-title-face) 2 10 (face asciidoc-document-title-face) 11 22 (face asciidoc-title-1-face) 42 53 (face asciidoc-title-2-face) 74 84 (face asciidoc-title-1-face)) #("= Runbook\n\n== Prepare\n\nPreparation body.\n\n=== Verify\n\nVerification body.\n\n== Deploy\n\nDeployment body.\n" 0 1 (face asciidoc-document-title-face) 2 10 (face asciidoc-document-title-face) 11 22 (face asciidoc-title-1-face) 42 53 (face asciidoc-title-2-face) 74 84 (face asciidoc-title-1-face)))"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn public_follow_command_jumps_to_anchors_and_routes_supported_urls_and_macros() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "public_follow_command_jumps_to_anchors_and_routes_supported_urls_and_macros",
+            r##"(with-temp-buffer
   (insert
    "[[target]] Explicit destination.\n\n"
    "== Natural Section\n\n"
@@ -208,16 +209,15 @@ fn public_follow_command_jumps_to_anchors_and_routes_supported_urls_and_macros()
            (nreverse results)
            (nreverse opened)
            image-error
-           plain-error))))))"##;
-    let expect = expect![[
+           plain-error))))))"##,
+            true,
+            expect![[
         r#"OK (((anchor 61 1 61 "[[target]] Explicit destination.") (section 76 35 76 "== Natural Section") opened opened opened) (("https://example.com/path.\nSee") ("https://docs.example.org") ("mailto:ada@example.org")) (user-error ("Nothing to follow at point")) (user-error ("No reference at point")))"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn xref_backend_identifies_defines_completes_and_lists_real_reference_usages() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "xref_backend_identifies_defines_completes_and_lists_real_reference_usages",
+            r##"(with-temp-buffer
   (insert
    "= Manual\n\n"
    "== Getting Started\n\n"
@@ -278,16 +278,15 @@ fn xref_backend_identifies_defines_completes_and_lists_real_reference_usages() {
           (xref-location-marker
            (xref-item-location item)))))
       (xref-backend-references
-       'asciidoc "explicit")))))"##;
-    let expect = expect![[
+       'asciidoc "explicit")))))"##,
+            true,
+            expect![[
         r#"OK (asciidoc "explicit" "explicit" "explicit" (1 31 "[[explicit]] Definition.") (1 11 "== Getting Started") (1 11 "== Getting Started") ("explicit" "_manual" "Manual" "_getting_started" "Getting Started") (("See <<explicit>>, xref:explicit[again], <<explicit,caption>>, and <<_getting_started>>." 61) ("See <<explicit>>, xref:explicit[again], <<explicit,caption>>, and <<_getting_started>>." 97) ("See <<explicit>>, xref:explicit[again], <<explicit,caption>>, and <<_getting_started>>." 75)))"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn section_and_anchor_algorithms_cover_defaults_custom_attributes_and_precedence() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "section_and_anchor_algorithms_cover_defaults_custom_attributes_and_precedence",
+            r##"(list
  (with-temp-buffer
    (list
     (asciidoc--section-id
@@ -324,16 +323,15 @@ fn section_and_anchor_algorithms_cover_defaults_custom_attributes_and_precedence
     (asciidoc--anchor-position "short")
     (asciidoc--anchor-position
      "Hello World")
-    (asciidoc--all-anchor-ids))))"##;
-    let expect = expect![[
+    (asciidoc--all-anchor-ids))))"##,
+            true,
+            expect![[
         r#"OK (("_introduction_to_asciidoc" "_what_s_new" "_section_1_2" "_multiple_separators" "sect-already-clean") ("sect_" "" "fallback" ("sect_" . "-") "sect_hello-world" 43 76 43 92 76 ("_hello-world" "short" "sect_hello-world" "Hello World")))"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn generic_and_antora_cross_file_resolution_use_deterministic_real_project_layouts() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "generic_and_antora_cross_file_resolution_use_deterministic_real_project_layouts",
+            r##"(let* ((root
          (expand-file-name
           "asciidoc-mode-reference-contract"
           (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
@@ -457,9 +455,11 @@ fn generic_and_antora_cross_file_resolution_use_deterministic_real_project_layou
     (dolist (buffer (delete-dups opened))
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))
-    (delete-directory root t)))"##;
-    let expect = expect![[
+    (delete-directory root t)))"##,
+            true,
+            expect![[
         r#"OK (("generic/guide/target.adoc" 11 "[[anchor]] destination." "guide/target.adoc" nil) (("antora" "ROOT" "practical-docs") (("antora/modules/ROOT/pages/basics/install.adoc" 12) ("antora/modules/ROOT/pages/basics/install.adoc" 12) ("antora/modules/ROOT/pages/basics/install.adoc" 12)) nil ("" . "-")))"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

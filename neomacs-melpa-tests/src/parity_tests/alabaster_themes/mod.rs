@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ALABASTER_THEMES_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod faces;
 mod lifecycle;
 mod palettes;
@@ -55,5 +57,31 @@ pub(crate) fn assert_alabaster_themes_autoload_parity(elisp_form: &str, expected
         "",
         elisp_form,
         expected,
+    );
+}
+
+
+
+
+
+/// Multi-probe batch for `assert_alabaster_themes_autoload_parity` cases (2a).
+pub(crate) fn assert_alabaster_themes_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        alabaster_themes_oracle("alabaster-themes-autoloads.el", ""),
+        &name,
+        "alabaster_themes_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_alabaster_themes_parity` cases (2a).
+pub(crate) fn assert_alabaster_themes_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        alabaster_themes_oracle("alabaster-themes.el", ""),
+        &name,
+        "alabaster_themes_parity",
+        cases,
     );
 }

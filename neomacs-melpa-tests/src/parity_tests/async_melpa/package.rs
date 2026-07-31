@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_async_melpa_package_parity;
+use super::assert_async_melpa_package_batch;
 
 #[test]
-fn current_package_modeline_mode_counts_only_install_jobs_and_dings_on_disable() {
-    let elisp_form = r##"
+fn package_public_surface_batch() {
+    assert_async_melpa_package_batch(&[
+        (
+            "current_package_modeline_mode_counts_only_install_jobs_and_dings_on_disable",
+            r##"
 (let (dinged observed)
   (cl-letf (((symbol-function 'dired-async-processes)
              (lambda (&optional property)
@@ -28,16 +31,15 @@ fn current_package_modeline_mode_counts_only_install_jobs_and_dings_on_disable()
                   observed dinged
                   async-package--modeline-mode)))
       (async-package--modeline-mode -1))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (" [3 async job Installing package(s)]" async-package-message async-pkg-install t nil)"#
-    ]];
-    assert_async_melpa_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_package_install_builds_child_executes_packages_and_finishes_lifecycle() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_package_install_builds_child_executes_packages_and_finishes_lifecycle",
+            r##"
 (let* ((root (file-name-as-directory
               (async-melpa-test-path "package/install/")))
        (temporary-file-directory root)
@@ -100,16 +102,15 @@ fn current_package_install_builds_child_executes_packages_and_finishes_lifecycle
            hook-runs
            (file-exists-p error-file))))
     (remove-hook 'async-pkg-install-after-hook after-hook)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ((one two) (one two) ((fixture-install-process async-pkg-install t)) (one two) (package-selected-packages (one two existing)) t (1 -1) ("Installing 2 package(s)..." "Installing 2 packages done") (("%s %d package(s) done" async-package-message "Installing" 2)) 1 nil)"#
-    ]];
-    assert_async_melpa_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_package_upgrade_and_reinstall_select_exact_functions_and_messages() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_package_upgrade_and_reinstall_select_exact_functions_and_messages",
+            r##"
 (let* ((root (file-name-as-directory
               (async-melpa-test-path "package/actions/")))
        (temporary-file-directory root)
@@ -145,16 +146,15 @@ fn current_package_upgrade_and_reinstall_select_exact_functions_and_messages() {
      (nreverse messages)
      (nreverse modeline)
      (nreverse process-properties))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (((upgrade nil t) (nil reinstall t)) ("Upgrading 3 package(s)..." "Reinstalling 1 package(s)...") (1 1) ((fixture-process async-pkg-install t) (fixture-process async-pkg-install t)))"#
-    ]];
-    assert_async_melpa_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_package_error_callback_opens_special_buffer_deletes_error_and_runs_hook() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_package_error_callback_opens_special_buffer_deletes_error_and_runs_hook",
+            r##"
 (let* ((root (file-name-as-directory
               (async-melpa-test-path "package/error/")))
        (temporary-file-directory root)
@@ -193,9 +193,11 @@ fn current_package_error_callback_opens_special_buffer_deletes_error_and_runs_ho
                modeline hook-runs)
             (when buffer (kill-buffer buffer)))))
     (remove-hook 'async-pkg-install-after-hook #'ignore)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (lambda ("errors.log" (nil (window-height . fit-window-to-buffer))) ("fixture package failure" special-mode) nil (-1 1) (async-pkg-install-after-hook))"#
-    ]];
-    assert_async_melpa_package_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

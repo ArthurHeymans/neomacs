@@ -1,9 +1,12 @@
-use super::assert_astyle_parity;
+use super::assert_astyle_batch;
 use expect_test::{Expect, expect};
 
 #[test]
-fn enabling_disabling_and_toggling_mode_updates_only_local_before_save_hook() {
-    let elisp_form = r##"
+fn mode_public_surface_batch() {
+    assert_astyle_batch(&[
+        (
+            "enabling_disabling_and_toggling_mode_updates_only_local_before_save_hook",
+            r##"
 (with-temp-buffer
   (let ((global-before-save
          (default-value
@@ -42,15 +45,13 @@ fn enabling_disabling_and_toggling_mode_updates_only_local_before_save_hook() {
       global-before-save
       (default-value
        'before-save-hook)))))
-"##;
-    let expect: Expect =
-        expect!["OK ((t t (astyle-buffer t)) (t 1) (nil nil) (t #1=(astyle-buffer t)) (t #1#) t)"];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn lighter_customization_is_reflected_by_enabled_minor_mode_without_changing_hook_behavior() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect!["OK ((t t (astyle-buffer t)) (t 1) (nil nil) (t #1=(astyle-buffer t)) (t #1#) t)"],
+        ),
+        (
+            "lighter_customization_is_reflected_by_enabled_minor_mode_without_changing_hook_behavior",
+            r##"
 (with-temp-buffer
   (let ((astyle-on-save-mode-lighter
          " Format[C++]"))
@@ -70,16 +71,15 @@ fn lighter_customization_is_reflected_by_enabled_minor_mode_without_changing_hoo
      (get
       'astyle-on-save-mode-lighter
       'custom-group))))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (t " Format[C++]" (astyle-on-save-mode astyle-on-save-mode-lighter) (astyle-buffer t) string nil)"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn mode_instances_and_hooks_remain_independent_across_two_c_buffers() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "mode_instances_and_hooks_remain_independent_across_two_c_buffers",
+            r##"
 (let ((first
        (generate-new-buffer
         " *astyle-mode-first*"))
@@ -106,14 +106,13 @@ fn mode_instances_and_hooks_remain_independent_across_two_c_buffers() {
           'astyle-on-save-mode)))
     (kill-buffer first)
     (kill-buffer second)))
-"##;
-    let expect: Expect = expect!["OK ((t (astyle-buffer t)) (nil nil) nil)"];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn enabled_mode_formats_buffer_before_save_and_persists_formatted_content() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect!["OK ((t (astyle-buffer t)) (nil nil) nil)"],
+        ),
+        (
+            "enabled_mode_formats_buffer_before_save_and_persists_formatted_content",
+            r##"
 (let* ((installation
         (astyle-test-install-formatter))
        (argument-log
@@ -160,16 +159,15 @@ fn enabled_mode_formats_buffer_before_save_and_persists_formatted_content() {
         (set-buffer-modified-p nil))
       (kill-buffer buffer))
     (astyle-test-kill-error-buffer)))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (t "int main() {\n    return 0;\n}\n/* saved */\n" "int main() {\n    return 0;\n}\n/* saved */\n" "--style=google\n--indent=spaces=4\n--suffix=none\n" nil (astyle-buffer t))"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn disabled_mode_saves_original_unformatted_content_and_does_not_run_program() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "disabled_mode_saves_original_unformatted_content_and_does_not_run_program",
+            r##"
 (let* ((installation
         (astyle-test-install-formatter))
        (argument-log
@@ -212,16 +210,15 @@ fn disabled_mode_saves_original_unformatted_content_and_does_not_run_program() {
         (set-buffer-modified-p nil))
       (kill-buffer buffer))
     (astyle-test-kill-error-buffer)))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (nil #("int main(){\nreturn 0;\n}\n/* raw */\n" 0 24 (fontified nil) 24 34 (fontified nil)) "int main(){\nreturn 0;\n}\n/* raw */\n" nil nil)"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn formatter_failure_during_save_keeps_raw_content_but_save_still_completes() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "formatter_failure_during_save_keeps_raw_content_but_save_still_completes",
+            r##"
 (let* ((installation
         (astyle-test-install-formatter))
        (argument-log
@@ -272,9 +269,11 @@ fn formatter_failure_during_save_keeps_raw_content_but_save_still_completes() {
         (set-buffer-modified-p nil))
       (kill-buffer buffer))
     (astyle-test-kill-error-buffer)))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (#("int main(){\nreturn 0;\n}\n/* failure still saves */\n" 0 24 (fontified nil) 24 50 (fontified nil)) "int main(){\nreturn 0;\n}\n/* failure still saves */\n" "--style=google\n--indent=spaces=4\n--pad-oper\n--pad-header\n--break-blocks\n--delete-empty-lines\n--align-pointer=type\n--align-reference=name\n" nil nil "fixture formatter failed\n")"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

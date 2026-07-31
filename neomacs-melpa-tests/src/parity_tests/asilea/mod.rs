@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ASILEA_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod acceptance;
 mod configuration;
 mod engine;
@@ -150,4 +152,28 @@ pub(crate) fn assert_asilea_parity(elisp_form: &str, expected: Expect) {
 
 pub(crate) fn assert_asilea_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_asilea_source_parity("asilea-autoloads.el", elisp_form, expected);
+}
+
+
+
+/// Multi-probe batch for `assert_asilea_autoload_parity` cases (2a).
+pub(crate) fn assert_asilea_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        asilea_oracle("asilea-autoloads.el"),
+        &name,
+        "asilea_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_asilea_parity` cases (2a).
+pub(crate) fn assert_asilea_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        asilea_oracle("asilea.el"),
+        &name,
+        "asilea_parity",
+        cases,
+    );
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_zero_x_c_parity, assert_zero_x_c_signal_parity};
+use super::{assert_zero_x_c_batch};
 
 #[test]
-fn zero_x_c_number_recognition_honors_strict_padding_and_extension_rules() {
-    let elisp_form = r##"(list
+fn inference_public_surface_batch() {
+    assert_zero_x_c_batch(&[
+        (
+            "zero_x_c_number_recognition_honors_strict_padding_and_extension_rules",
+            r##"(list
                (let ((0xc-strict nil))
                  (mapcar
                   #'0xc--is-number-string
@@ -22,15 +25,13 @@ fn zero_x_c_number_recognition_honors_strict_padding_and_extension_rules() {
                   '("123"
                     "1_000"
                     "0xff"
-                    "101.."))))"##;
-    let expect = expect!["OK ((t t t t t nil nil nil) (t nil t t))"];
-
-    assert_zero_x_c_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_c_strip_base_hint_covers_named_numeric_and_short_prefixes() {
-    let elisp_form = r##"(mapcar
+                    "101.."))))"##,
+            true,
+            expect!["OK ((t t t t t nil nil nil) (t nil t t))"],
+        ),
+        (
+            "zero_x_c_strip_base_hint_covers_named_numeric_and_short_prefixes",
+            r##"(mapcar
                #'0xc--strip-base-hint
                '("0:0"
                  "1234567890"
@@ -42,16 +43,13 @@ fn zero_x_c_strip_base_hint_covers_named_numeric_and_short_prefixes() {
                  "0b"
                  "0:"
                  "ffffff"
-                 "1234567890:1"))"##;
-    let expect =
-        expect![[r#"OK ("0" "1234567890" "10ff" "10ff" "246810" "246810" "" "" "" "ffffff" "1")"#]];
-
-    assert_zero_x_c_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_c_base_prefix_and_output_prefix_cover_builtin_and_numeric_bases() {
-    let elisp_form = r##"(list
+                 "1234567890:1"))"##,
+            true,
+            expect![[r#"OK ("0" "1234567890" "10ff" "10ff" "246810" "246810" "" "" "" "ffffff" "1")"#]],
+        ),
+        (
+            "zero_x_c_base_prefix_and_output_prefix_cover_builtin_and_numeric_bases",
+            r##"(list
                (mapcar
                 #'0xc--base-prefix
                 '("0b1"
@@ -69,17 +67,15 @@ fn zero_x_c_base_prefix_and_output_prefix_cover_builtin_and_numeric_bases() {
                   "plain"))
                (mapcar
                 #'0xc--prefix-for-base
-                '(2 3 8 10 16 7 36)))"##;
-    let expect = expect![[
+                '(2 3 8 10 16 7 36)))"##,
+            true,
+            expect![[
         r#"OK ((2 2 3 8 8 10 10 16 16 22 nil nil nil) ("0b" "0t" "0o" "0d" "0x" "7:" "36:"))"#
-    ]];
-
-    assert_zero_x_c_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_c_infer_base_reproduces_every_upstream_clamp_profile() {
-    let elisp_form = r##"(let ((0xc-max-base 36)
+    ]],
+        ),
+        (
+            "zero_x_c_infer_base_reproduces_every_upstream_clamp_profile",
+            r##"(let ((0xc-max-base 36)
                      (inputs
                       '("efefef"
                         "abcde"
@@ -113,17 +109,15 @@ fn zero_x_c_infer_base_reproduces_every_upstream_clamp_profile() {
                 '((nil)
                   (t)
                   (nil . t)
-                  (t . t))))"##;
-    let expect = expect![[
+                  (t . t))))"##,
+            true,
+            expect![[
         r#"OK ((16 15 11 8 3 2 36 29 2 3 8 10 16 2 8 10 16 22 1 7) (16 15 11 10 10 2 36 29 2 3 8 10 16 2 8 10 16 22 1 7) (16 16 16 16 16 2 36 29 2 3 8 10 16 2 8 10 16 22 1 7) (16 16 16 10 10 2 36 29 2 3 8 10 16 2 8 10 16 22 1 7))"#
-    ]];
-
-    assert_zero_x_c_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_c_infer_base_reports_invalid_prefix_digit_and_maximum_cases() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "zero_x_c_infer_base_reports_invalid_prefix_digit_and_maximum_cases",
+            r##"(mapcar
                (lambda (case)
                  (condition-case err
                      (let ((0xc-max-base
@@ -140,17 +134,15 @@ fn zero_x_c_infer_base_reports_invalid_prefix_digit_and_maximum_cases() {
                  (16 . "-1:f9281")
                  (16 . "2:102")
                  (10 . "0x0101")
-                 (10 . "ziltoid")))"##;
-    let expect = expect![[
+                 (10 . "ziltoid")))"##,
+            true,
+            expect![[
         r#"OK ((error ("Number exceeds maximum allowed base: 16")) (error ("Not a number")) (error ("Not a number")) (error ("Not a number")) (error ("Number has a digit of a higher base than its prefix")) (error ("Number exceeds maximum allowed base: 10")) (error ("Number exceeds maximum allowed base: 10")))"#
-    ]];
-
-    assert_zero_x_c_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_c_padding_removal_obeys_the_custom_character_set() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "zero_x_c_padding_removal_obeys_the_custom_character_set",
+            r##"(list
                (let ((0xc-padding " _.,"))
                  (mapcar
                   #'0xc--strip-padding
@@ -161,25 +153,21 @@ fn zero_x_c_padding_removal_obeys_the_custom_character_set() {
                     "1       7.:,30,30,30")))
                (let ((0xc-padding "0"))
                  (0xc--strip-padding
-                  "0b001010110100")))"##;
-    let expect = expect![[r#"OK (("123" "1" "100000:0123456789" "0xabff" "17:303030") "b11111")"#]];
-
-    assert_zero_x_c_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_c_highest_base_tracks_empty_numeric_and_alphabetic_digits() {
-    let elisp_form = r##"(mapcar
+                  "0b001010110100")))"##,
+            true,
+            expect![[r#"OK (("123" "1" "100000:0123456789" "0xabff" "17:303030") "b11111")"#]],
+        ),
+        (
+            "zero_x_c_highest_base_tracks_empty_numeric_and_alphabetic_digits",
+            r##"(mapcar
                #'0xc--highest-base
-               '("" "0" "101" "75" "0a0a" "abcde" "Z"))"##;
-    let expect = expect!["OK (0 1 2 8 11 15 36)"];
-
-    assert_zero_x_c_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_c_extension_expands_to_power_of_two_widths() {
-    let elisp_form = r##"(mapcar
+               '("" "0" "101" "75" "0a0a" "abcde" "Z"))"##,
+            true,
+            expect!["OK (0 1 2 8 11 15 36)"],
+        ),
+        (
+            "zero_x_c_extension_expands_to_power_of_two_widths",
+            r##"(mapcar
                #'0xc--extend-number
                '("12345"
                  "10100.."
@@ -189,17 +177,15 @@ fn zero_x_c_extension_expands_to_power_of_two_widths() {
                  "WHEEEEEEEE.."
                  "..111"
                  "01..100"
-                 "..."))"##;
-    let expect = expect![[
+                 "..."))"##,
+            true,
+            expect![[
         r#"OK ("12345" "10100000" "1010" "ffffffff" "1.2.3.4.5.666666" "WHEEEEEEEEEEEEEE" "1111" "01111100" ".")"#
-    ]];
-
-    assert_zero_x_c_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_c_extension_rejects_multiple_tokens_and_mismatched_neighbors() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "zero_x_c_extension_rejects_multiple_tokens_and_mismatched_neighbors",
+            r##"(mapcar
                (lambda (number)
                  (condition-case err
                      (0xc--extend-number
@@ -209,30 +195,27 @@ fn zero_x_c_extension_rejects_multiple_tokens_and_mismatched_neighbors() {
                      (car err)
                      (cdr err)))))
                '("..00.."
-                 "12345..6789"))"##;
-    let expect = expect![[
+                 "12345..6789"))"##,
+            true,
+            expect![[
         r#"OK ((error ("Only one extension token may be used")) (error ("The digit before and after the extension token must be the same")))"#
-    ]];
-
-    assert_zero_x_c_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_c_next_power_of_two_returns_the_smallest_power_at_least_as_large() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "zero_x_c_next_power_of_two_returns_the_smallest_power_at_least_as_large",
+            r##"(mapcar
                #'0xc--next-power-of-2
-               '(1 2 3 4 5 7 8 9 15 16))"##;
-    let expect = expect!["OK (1 2 4 4 8 8 8 16 16 16)"];
-
-    assert_zero_x_c_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_c_string_to_number_rejects_a_prefix_above_the_maximum() {
-    let elisp_form = r##"(let ((0xc-max-base 10))
+               '(1 2 3 4 5 7 8 9 15 16))"##,
+            true,
+            expect!["OK (1 2 4 4 8 8 8 16 16 16)"],
+        ),
+        (
+            "zero_x_c_string_to_number_rejects_a_prefix_above_the_maximum",
+            r##"(let ((0xc-max-base 10))
                (0xc-string-to-number
-                "16:ff"))"##;
-    let expect = expect![[r#"ERR (error "Number exceeds maximum allowed base: 10")"#]];
-
-    assert_zero_x_c_signal_parity(elisp_form, expect);
+                "16:ff"))"##,
+            false,
+            expect![[r#"ERR (error "Number exceeds maximum allowed base: 10")"#]],
+        ),
+    ]);
 }

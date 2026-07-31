@@ -5,6 +5,8 @@ use crate::{
 };
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod actions;
 mod candidates;
 mod context;
@@ -89,5 +91,29 @@ pub(crate) fn assert_auto_complete_nxml_autoload_parity(elisp_form: &str, expect
         "auto-complete-nxml-autoloads.el",
         elisp_form,
         expected,
+    );
+}
+
+
+
+/// Multi-probe batch for `assert_auto_complete_nxml_autoload_parity` cases (2a).
+pub(crate) fn assert_auto_complete_nxml_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_complete_nxml_oracle("auto-complete-nxml-autoloads.el"),
+        &name,
+        "auto_complete_nxml_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_auto_complete_nxml_parity` cases (2a).
+pub(crate) fn assert_auto_complete_nxml_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_complete_nxml_oracle("auto-complete-nxml.el"),
+        &name,
+        "auto_complete_nxml_parity",
+        cases,
     );
 }

@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AC_EMMET_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const AC_EMMET_TEST_TIMEOUT: Duration = Duration::from_secs(120);
@@ -107,4 +109,30 @@ pub(crate) fn assert_unshimmed_ac_emmet_parity(elisp_form: &str, expected: Expec
         .run_signal(&name, elisp_form)
         .unwrap_or_else(|error| panic!("unshimmed ac-emmet parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+
+
+
+
+/// Multi-probe batch for `assert_ac_emmet_parity` cases (2a).
+pub(crate) fn assert_ac_emmet_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        ac_emmet_oracle(AC_EMMET_TEST_PRELUDE),
+        &name,
+        "ac_emmet_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_unshimmed_ac_emmet_parity` cases (2a).
+pub(crate) fn assert_unshimmed_ac_emmet_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        ac_emmet_oracle(""),
+        &name,
+        "unshimmed_ac_emmet_parity",
+        cases,
+    );
 }

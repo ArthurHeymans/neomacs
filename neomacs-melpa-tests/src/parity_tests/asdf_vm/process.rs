@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_asdf_vm_parity;
+use super::assert_asdf_vm_batch;
 
 #[test]
-fn asdf_vm_process_defaults_use_buffer_file_parent_then_default_directory() {
-    let elisp_form = r##"(let ((asdf-vm-process-executable
+fn process_public_surface_batch() {
+    assert_asdf_vm_batch(&[
+        (
+            "asdf_vm_process_defaults_use_buffer_file_parent_then_default_directory",
+            r##"(let ((asdf-vm-process-executable
                     "/fixture/asdf")
                    (asdf-vm-process-executable-arguments
                     '("--color" "never"))
@@ -16,16 +19,15 @@ fn asdf_vm_process_defaults_use_buffer_file_parent_then_default_directory() {
                         "/project/src/main.ex")
                   (asdf-vm--make-process-defaults))
                 (with-temp-buffer
-                  (asdf-vm--make-process-defaults))))"##;
-    let expect = expect![[
+                  (asdf-vm--make-process-defaults))))"##,
+            true,
+            expect![[
         r#"OK ((:executable "/fixture/asdf" :executable-arguments #1=("--color" "never") :directory "/project/src/") (:executable "/fixture/asdf" :executable-arguments #1# :directory "/fallback/work/"))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_call_args_merge_supported_overrides_and_ignore_dispatch_only_keys() {
-    let elisp_form = r##"(let ((asdf-vm-process-executable
+    ]],
+        ),
+        (
+            "asdf_vm_call_args_merge_supported_overrides_and_ignore_dispatch_only_keys",
+            r##"(let ((asdf-vm-process-executable
                     "/default/asdf")
                    (asdf-vm-process-executable-arguments
                     '("--default"))
@@ -44,16 +46,15 @@ fn asdf_vm_call_args_merge_supported_overrides_and_ignore_dispatch_only_keys() {
                   :output t
                   :success-codes (0 7)
                   :unknown "ignored")
-                "*selected-buffer*"))"##;
-    let expect = expect![[
+                "*selected-buffer*"))"##,
+            true,
+            expect![[
         r#"OK (:executable "/custom/asdf" :executable-arguments ("--custom") :directory "/custom/work/" :buffer-name "*ignored-input*" :name "explicit" :name-prefix "prefix" :command (plugin add) :command-arguments ("ruby" "url"))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_process_name_formatting_covers_explicit_nested_and_empty_commands() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "asdf_vm_process_name_formatting_covers_explicit_nested_and_empty_commands",
+            r##"(mapcar
                (lambda (arguments)
                  (apply
                   #'asdf-vm-process--format-name
@@ -62,14 +63,13 @@ fn asdf_vm_process_name_formatting_covers_explicit_nested_and_empty_commands() {
                  (nil "asdf" current)
                  (nil "asdf" (plugin add))
                  (nil "asdf" nil)
-                 ("" "asdf" current)))"##;
-    let expect = expect![[r#"OK ("explicit" "asdf[current]" "asdf[(plugin add)]" "asdf" "")"#]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_make_process_constructs_exact_async_process_plist_and_working_directory() {
-    let elisp_form = r##"(let ((asdf-vm-process-stderr-buffer-name
+                 ("" "asdf" current)))"##,
+            true,
+            expect![[r#"OK ("explicit" "asdf[current]" "asdf[(plugin add)]" "asdf" "")"#]],
+        ),
+        (
+            "asdf_vm_make_process_constructs_exact_async_process_plist_and_working_directory",
+            r##"(let ((asdf-vm-process-stderr-buffer-name
                     "*fixture-stderr*")
                    calls)
                (cl-letf
@@ -95,16 +95,15 @@ fn asdf_vm_make_process_constructs_exact_async_process_plist_and_working_directo
                    :directory "/work/project/"
                    :buffer-name "*fixture-output*"
                    :name-prefix "manager")
-                  (nreverse calls))))"##;
-    let expect = expect![[
+                  (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK (:process (((:name "manager[(plugin add)]" :buffer (:buffer "*fixture-output*") :sentinel asdf-vm-process--sentinel :command ("/fixture/asdf" "--global" "資料" "plugin" "add" "ruby" "https://example/ruby.git") :stderr "*fixture-stderr*") "/work/project/" "*fixture-output*")))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_call_runs_deterministic_external_executable_with_exact_order_directory_and_output() {
-    let elisp_form = r##"(let* ((directory
+    ]],
+        ),
+        (
+            "asdf_vm_call_runs_deterministic_external_executable_with_exact_order_directory_and_output",
+            r##"(let* ((directory
                      (file-name-as-directory
                       (asdf-vm-test-path
                        "process-real/work")))
@@ -127,16 +126,15 @@ fn asdf_vm_call_runs_deterministic_external_executable_with_exact_order_director
                 '("ruby"
                   "https://example/ruby repo.git")
                 :directory directory
-                :output t))"##;
-    let expect = expect![[
+                :output t))"##,
+            true,
+            expect![[
         r#"OK "PWD=<[ORACLE-SANDBOX]/process-real/work>\nARG=<--global>\nARG=<資料 λ>\nARG=<plugin>\nARG=<add>\nARG=<ruby>\nARG=<https://example/ruby repo.git>\n""#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_sync_call_returns_nil_without_output_and_ignores_external_exit_status() {
-    let elisp_form = r##"(let ((executable
+    ]],
+        ),
+        (
+            "asdf_vm_sync_call_returns_nil_without_output_and_ignores_external_exit_status",
+            r##"(let ((executable
                     (asdf-vm-test-make-executable
                      "failing-asdf"
                      (concat
@@ -150,14 +148,13 @@ fn asdf_vm_sync_call_returns_nil_without_output_and_ignores_external_exit_status
                 (asdf-vm-call
                  :executable executable
                  :command 'version
-                 :output nil)))"##;
-    let expect = expect!["OK (nil nil)"];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_call_dispatch_uses_presence_of_blocking_or_output_even_when_nil() {
-    let elisp_form = r##"(let (calls)
+                 :output nil)))"##,
+            true,
+            expect!["OK (nil nil)"],
+        ),
+        (
+            "asdf_vm_call_dispatch_uses_presence_of_blocking_or_output_even_when_nil",
+            r##"(let (calls)
                (cl-letf
                    (((symbol-function
                       'asdf-vm--sync-call)
@@ -186,16 +183,15 @@ fn asdf_vm_call_dispatch_uses_presence_of_blocking_or_output_even_when_nil() {
                    :command 'four
                    :blocking nil
                    :output nil)
-                  (nreverse calls))))"##;
-    let expect = expect![
+                  (nreverse calls))))"##,
+            true,
+            expect![
         "OK (:async :sync :sync :sync ((:async :command one) (:sync :command two :blocking nil) (:sync :command three :output nil) (:sync :command four :blocking nil :output nil)))"
-    ];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_async_call_starts_immediately_or_enqueues_complete_call_args_fifo() {
-    let elisp_form = r##"(let ((asdf-vm-process-executable
+    ],
+        ),
+        (
+            "asdf_vm_async_call_starts_immediately_or_enqueues_complete_call_args_fifo",
+            r##"(let ((asdf-vm-process-executable
                     "/fixture/asdf")
                    (asdf-vm-process-executable-arguments
                     '("--base"))
@@ -239,16 +235,15 @@ fn asdf_vm_async_call_starts_immediately_or_enqueues_complete_call_args_fifo() {
                       first
                       second
                       asdf-vm-process--call-queue
-                      (nreverse calls))))))"##;
-    let expect = expect![[
+                      (nreverse calls))))))"##,
+            true,
+            expect![[
         r#"OK (:started #1=((:command old) (:executable "/fixture/asdf" :executable-arguments #2=("--base") :directory "/work/custom/" :buffer-name "*asdf-vm*" :command (plugin update) :command-arguments ("--all"))) #1# ((:running "*asdf-vm*" nil) (:make :executable "/fixture/asdf" :executable-arguments #2# :directory "/work/default/" :buffer-name "*asdf-vm*" :command current :command-arguments ("ruby")) (:running "*asdf-vm*" t)))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_buffer_process_running_p_handles_missing_buffer_process_and_statuses() {
-    let elisp_form = r##"(let (status)
+    ]],
+        ),
+        (
+            "asdf_vm_buffer_process_running_p_handles_missing_buffer_process_and_statuses",
+            r##"(let (status)
                (cl-letf
                    (((symbol-function
                       'get-buffer)
@@ -287,14 +282,13 @@ fn asdf_vm_buffer_process_running_p_handles_missing_buffer_process_and_statuses(
                       value
                       (asdf-vm-process--buffer-process-running-p
                        "present")))
-                   '(run stop exit signal none)))))"##;
-    let expect = expect!["OK (nil ((run t) (stop nil) (exit nil) (signal nil) (none nil)))"];
-    assert_asdf_vm_parity(elisp_form, expect);
-}
-
-#[test]
-fn asdf_vm_process_sentinel_preserves_idle_states_signals_errors_and_drains_one_queue_item() {
-    let elisp_form = r##"(let ((asdf-vm-process--call-queue
+                   '(run stop exit signal none)))))"##,
+            true,
+            expect!["OK (nil ((run t) (stop nil) (exit nil) (signal nil) (none nil)))"],
+        ),
+        (
+            "asdf_vm_process_sentinel_preserves_idle_states_signals_errors_and_drains_one_queue_item",
+            r##"(let ((asdf-vm-process--call-queue
                     '((:command first
                        :command-arguments
                        ("one"))
@@ -329,9 +323,11 @@ fn asdf_vm_process_sentinel_preserves_idle_states_signals_errors_and_drains_one_
                    (list
                     results
                     asdf-vm-process--call-queue
-                    (nreverse calls)))))"##;
-    let expect = expect![[
+                    (nreverse calls)))))"##,
+            true,
+            expect![[
         r#"OK (((run (:ok nil)) (stop (:ok nil)) (signal (:error asdf-vm-sentinel-nonsense-process-status (signal "fixture event"))) (open (:error asdf-vm-sentinel-nonsense-process-status (open "fixture event"))) (nil (:error asdf-vm-sentinel-missing-process (nil "fixture event"))) (mystery (:error asdf-vm-sentinel-unknown-status (mystery "fixture event"))) (exit (:ok :started)) (exit (:ok :started))) nil ((:call :command first :command-arguments ("one")) (:call :command second)))"#
-    ]];
-    assert_asdf_vm_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

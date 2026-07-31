@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ANGRY_POLICE_CAPTAIN_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const ANGRY_POLICE_CAPTAIN_TEST_TIMEOUT: Duration = Duration::from_secs(120);
@@ -143,4 +145,15 @@ pub(crate) fn assert_angry_police_captain_parity(elisp_form: &str, expected: Exp
             panic!("angry-police-captain parity case `{name}` failed:\n{error}")
         });
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+/// Multi-probe batch for `assert_angry_police_captain_parity` cases (2a).
+pub(crate) fn assert_angry_police_captain_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        angry_police_captain_oracle(),
+        &name,
+        "angry_police_captain_parity",
+        cases,
+    );
 }

@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ANNALIST_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const ANNALIST_TEST_TIMEOUT: Duration = Duration::from_secs(180);
@@ -30,4 +32,15 @@ fn assert_annalist_source_parity(source_file: &str, elisp_form: &str, expected: 
 
 fn assert_annalist_parity(elisp_form: &str, expected: Expect) {
     assert_annalist_source_parity("annalist.el", elisp_form, expected);
+}
+
+/// Multi-probe batch for `assert_annalist_parity` cases (2a).
+pub(crate) fn assert_annalist_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        annalist_oracle("annalist.el"),
+        &name,
+        "annalist_parity",
+        cases,
+    );
 }

@@ -5,6 +5,8 @@ use crate::{
 };
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod candidates;
 mod filesystem;
 mod options;
@@ -91,5 +93,29 @@ pub(crate) fn assert_auto_complete_c_headers_autoload_parity(elisp_form: &str, e
         "auto-complete-c-headers-autoloads.el",
         elisp_form,
         expected,
+    );
+}
+
+
+
+/// Multi-probe batch for `assert_auto_complete_c_headers_autoload_parity` cases (2a).
+pub(crate) fn assert_auto_complete_c_headers_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_complete_c_headers_oracle("auto-complete-c-headers-autoloads.el"),
+        &name,
+        "auto_complete_c_headers_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_auto_complete_c_headers_parity` cases (2a).
+pub(crate) fn assert_auto_complete_c_headers_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_complete_c_headers_oracle("auto-complete-c-headers.el"),
+        &name,
+        "auto_complete_c_headers_parity",
+        cases,
     );
 }

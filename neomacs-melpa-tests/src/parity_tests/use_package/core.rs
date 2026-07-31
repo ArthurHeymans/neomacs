@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_use_package_parity, assert_use_package_signal_parity};
+use super::{assert_use_package_batch};
 
 #[test]
-fn use_package_public_version_keywords_and_defaults_match_the_pinned_release() {
-    let elisp_form = r##"(list
+fn core_public_surface_batch() {
+    assert_use_package_batch(&[
+        (
+            "use_package_public_version_keywords_and_defaults_match_the_pinned_release",
+            r##"(list
                use-package-version
                use-package-always-defer
                use-package-always-demand
@@ -12,15 +15,13 @@ fn use_package_public_version_keywords_and_defaults_match_the_pinned_release() {
                (and (memq :preface use-package-keywords) t)
                (and (memq :config use-package-keywords) t)
                (and (memq :vc use-package-keywords) t)
-               (length use-package-keywords))"##;
-    let expect = expect![[r#"OK ("2.4.5" nil nil "-hook" t t t 35)"#]];
-
-    assert_use_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn use_package_preface_init_and_config_execute_in_declaration_order() {
-    let elisp_form = r##"(progn
+               (length use-package-keywords))"##,
+            true,
+            expect![[r#"OK ("2.4.5" nil nil "-hook" t t t 35)"#]],
+        ),
+        (
+            "use_package_preface_init_and_config_execute_in_declaration_order",
+            r##"(progn
                (defvar neomacs-use-package-events nil)
                (setq neomacs-use-package-events nil)
                (use-package neomacs-use-package-order
@@ -31,15 +32,13 @@ fn use_package_preface_init_and_config_execute_in_declaration_order() {
                  (push 'init neomacs-use-package-events)
                  :config
                  (push 'config neomacs-use-package-events))
-               (nreverse neomacs-use-package-events))"##;
-    let expect = expect![[r#"OK (preface init config)"#]];
-
-    assert_use_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn use_package_disabled_if_unless_and_requires_gate_all_runtime_forms() {
-    let elisp_form = r##"(let (events)
+               (nreverse neomacs-use-package-events))"##,
+            true,
+            expect![[r#"OK (preface init config)"#]],
+        ),
+        (
+            "use_package_disabled_if_unless_and_requires_gate_all_runtime_forms",
+            r##"(let (events)
                (provide 'neomacs-use-package-required)
                (use-package neomacs-use-package-disabled
                  :disabled t
@@ -61,15 +60,13 @@ fn use_package_disabled_if_unless_and_requires_gate_all_runtime_forms() {
                  :requires neomacs-use-package-absent
                  :no-require t
                  :init (push 'missing events))
-               (nreverse events))"##;
-    let expect = expect![[r#"OK (if requires)"#]];
-
-    assert_use_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn use_package_catch_converts_a_missing_required_library_into_an_exact_warning() {
-    let elisp_form = r##"(let (warnings)
+               (nreverse events))"##,
+            true,
+            expect![[r#"OK (if requires)"#]],
+        ),
+        (
+            "use_package_catch_converts_a_missing_required_library_into_an_exact_warning",
+            r##"(let (warnings)
                (cl-letf (((symbol-function 'display-warning)
                           (lambda (type message &optional level _buffer)
                             (push (list type message level) warnings))))
@@ -77,17 +74,15 @@ fn use_package_catch_converts_a_missing_required_library_into_an_exact_warning()
                         (use-package
                             neomacs-use-package-definitely-missing
                           :catch t)))
-                   (list result (nreverse warnings)))))"##;
-    let expect = expect![[
+                   (list result (nreverse warnings)))))"##,
+            true,
+            expect![[
         r#"OK (#1=((use-package "Cannot load neomacs-use-package-definitely-missing" :error)) #1#)"#
-    ]];
-
-    assert_use_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn use_package_function_normalization_matches_upstream_function_forms() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "use_package_function_normalization_matches_upstream_function_forms",
+            r##"(list
                (mapcar
                 #'use-package-normalize-function
                 '(nil t symbol
@@ -100,17 +95,15 @@ fn use_package_function_normalization_matches_upstream_function_forms() {
                   (use-package-recognize-function value t))
                 '(nil t symbol
                   (lambda () value)
-                  1 "text" (nil))))"##;
-    let expect = expect![[
+                  1 "text" (nil))))"##,
+            true,
+            expect![[
         r#"OK ((nil t symbol symbol (lambda nil value) (lambda nil quoted) 1 "text" (nil)) (t t t nil nil t nil))"#
-    ]];
-
-    assert_use_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn use_package_hook_normalization_handles_default_functions_groups_and_pairs() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "use_package_hook_normalization_handles_default_functions_groups_and_pairs",
+            r##"(mapcar
                (lambda (args)
                  (use-package-normalize/:hook
                   'neomacs-package :hook args))
@@ -118,19 +111,18 @@ fn use_package_hook_normalization_handles_default_functions_groups_and_pairs() {
                  ((mode . explicit-function))
                  (mode-a mode-b)
                  (((mode-a mode-b) . shared-function))
-                 ((mode-a . one) (mode-b . two))))"##;
-    let expect = expect![[
+                 ((mode-a . one) (mode-b . two))))"##,
+            true,
+            expect![[
         r#"OK (((mode . neomacs-package-mode)) ((mode . explicit-function)) (((mode-a mode-b) . neomacs-package-mode)) (((mode-a mode-b) . shared-function)) ((mode-a . one) (mode-b . two)))"#
-    ]];
-
-    assert_use_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn use_package_empty_hook_spec_signals_the_exact_normalization_error() {
-    let elisp_form = r##"(use-package-normalize/:hook
-               'neomacs-use-package-invalid :hook nil)"##;
-    let expect = expect![[r#"ERR (error "use-package: :hook wants a non-empty list")"#]];
-
-    assert_use_package_signal_parity(elisp_form, expect);
+    ]],
+        ),
+        (
+            "use_package_empty_hook_spec_signals_the_exact_normalization_error",
+            r##"(use-package-normalize/:hook
+               'neomacs-use-package-invalid :hook nil)"##,
+            false,
+            expect![[r#"ERR (error "use-package: :hook wants a non-empty list")"#]],
+        ),
+    ]);
 }

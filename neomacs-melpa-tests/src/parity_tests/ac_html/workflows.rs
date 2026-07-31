@@ -1,13 +1,17 @@
 use expect_test::expect;
 
-use super::assert_ac_html_parity;
+use super::assert_ac_html_batch;
 
 /// The package's primary story: type `<di', pick a tag, keep writing.  The
 /// candidates come from the shipped `completion-data/html-tag-list' and carry
 /// the tag source's "t" symbol.
+
 #[test]
-fn completing_html_tags_while_writing_a_real_document() {
-    let elisp_form = r####"
+fn workflows_public_surface_batch() {
+    assert_ac_html_batch(&[
+        (
+            "completing_html_tags_while_writing_a_real_document",
+            r####"
 (aht-test-in-buffer
  (insert "<di")
  (let* ((candidates (aht-test-candidates))
@@ -32,21 +36,15 @@ fn completing_html_tags_while_writing_a_real_document() {
              :buffer (buffer-string)
              :point (point)
              :modified (buffer-modified-p))))))
-"####;
-    let expect = expect![[
+"####,
+            true,
+            expect![[
         r#"OK (:mode html-mode :providers (ac-html-default-data-provider) :sources (ac-source-html-tag ac-source-html-attr ac-source-html-attrv) :prefix "di" :candidates ("dir" "div" "dialog") :symbols ("t") :after-first (:buffer "<dir" :point 5) :second-candidates ("input") :buffer "<dir >alpha</div>\n<input" :point 25 :modified t)"#
-    ]];
-
-    assert_ac_html_parity(elisp_form, expect);
-}
-
-/// A real quirk of the documented three-source configuration: the tag
-/// source's prefix function matches from just after the `<' regardless of
-/// what follows, so with it first no attribute is ever offered.  With the
-/// attribute source alone the same buffer completes attributes correctly.
-#[test]
-fn the_tag_sources_prefix_shadows_attribute_completion() {
-    let elisp_form = r####"
+    ]],
+        ),
+        (
+            "the_tag_sources_prefix_shadows_attribute_completion",
+            r####"
 (aht-test-in-buffer
  (list
   :with-tag-source-first (aht-test-offer "<div cl")
@@ -61,20 +59,15 @@ fn the_tag_sources_prefix_shadows_attribute_completion() {
          (list :tag-prefix (save-excursion (ac-html-tag-prefix))
                :attr-prefix (save-excursion (ac-html-attr-prefix))
                :current-tag (save-excursion (ac-html-current-tag))))))
-"####;
-    let expect = expect![[
+"####,
+            true,
+            expect![[
         r#"OK (:with-tag-source-first (:typed "<div cl" :prefix "div cl" :count 0 :symbols nil :candidates nil) :with-attr-source-only ((:typed "<div cl" :prefix "cl" :count 1 :symbols ("a") :candidates ("class")) (:typed "<a hr" :prefix "hr" :count 2 :symbols ("a") :candidates ("href" "hreflang")) (:typed "<div id=\"main\" ta" :prefix "ta" :count 1 :symbols ("a") :candidates ("tabindex"))) :tag-prefix-claims-the-whole-run (:tag-prefix 2 :attr-prefix 6 :current-tag "div"))"#
-    ]];
-
-    assert_ac_html_parity(elisp_form, expect);
-}
-
-/// Attribute values come from `completion-data/html-attrv-list', keyed by
-/// tag and attribute, which the package resolves from the buffer text around
-/// point.
-#[test]
-fn completing_an_attribute_value_inside_a_quoted_string() {
-    let elisp_form = r####"
+    ]],
+        ),
+        (
+            "completing_an_attribute_value_inside_a_quoted_string",
+            r####"
 (aht-test-in-buffer
  (list
   :input-type (aht-test-offer-with-docs "<input type=\"che")
@@ -90,19 +83,15 @@ fn completing_an_attribute_value_inside_a_quoted_string() {
          (aht-test-candidates)
          (ac-complete)
          (list :buffer (buffer-string) :point (point)))))
-"####;
-    let expect = expect![[
+"####,
+            true,
+            expect![[
         r#"OK (:input-type (:typed "<input type=\"che" :prefix "che" :candidates ("checkbox") :documentation (("checkbox" "v" "A set of zero or more values from a predefined list.nA checkboxn\n"))) :a-target (:typed "<a target=\"_" :prefix "_" :count 4 :symbols ("v") :candidates ("_top" "_self" "_blank" "_parent")) :current-attr (:tag "input" :attr "type") :complete (:buffer "<input type=\"checkbox" :point 22))"#
-    ]];
-
-    assert_ac_html_parity(elisp_form, expect);
-}
-
-/// Every candidate carries the documentation the package ships for it, read
-/// off disk per candidate; a tag with no data file has none.
-#[test]
-fn candidate_documentation_is_read_from_the_shipped_data_files() {
-    let elisp_form = r####"
+    ]],
+        ),
+        (
+            "candidate_documentation_is_read_from_the_shipped_data_files",
+            r####"
 (aht-test-in-buffer
  (list
   :tag-docs (aht-test-offer-with-docs "<inp")
@@ -112,19 +101,15 @@ fn candidate_documentation_is_read_from_the_shipped_data_files() {
                 :attr (progn (erase-buffer) (insert "<img sr")
                              (ac-html-attr-documentation "src"))
                 :missing-tag (ac-html-tag-documentation "notatag"))))
-"####;
-    let expect = expect![[
+"####,
+            true,
+            expect![[
         r#"OK (:tag-docs (:typed "<inp" :prefix "inp" :candidates ("input") :documentation (("input" "t" "The HTML <input> element is used to create interactive controls for web-based forms in order to accept data from the user. The semantics of an <input> varies considerably depending on the value of its type attribute.\n\nContent categories:\nFlow content, listed, submittable, resettable, form-associated element, phrasing content.\nIf the type has not the hidden value, labellable element, palpable content.\n\nPermitted content:\nNone, it is an empty element.\n\nTag omission:\nMust have a start tag and must not have an end tag.\n\nPermitted parent elements:\nAny element that accepts phrasing content.\n\nDOM interface:\nHTMLInputElement"))) :attrv-docs (:typed "<input type=\"rad" :prefix "rad" :candidates ("radio") :documentation (("radio" "v" "An enumerated value.nA radio buttonn\n"))) :direct (:tag "The HTML <div> element (or HTML Document Division Element) is the generic container for flow content, which does not inherently represent anything. It can be used to group elements for styling purposes (using the class or id attributes), or because they share attribute values, such as lang. It should be used only when no other semantic element (such as <article> or <nav>) is appropriate.\n\nContent categories:\nFlow content, palpable content.\n\nPermitted content:\nFlow content.\n\nTag omission:\nNone, both the starting and ending tag are mandatory.\n\nPermitted parent elements:\nAny element that accepts flow content.\n\nDOM interface:\nHTMLDivElement" :attr "src\n\nImage URL, this attribute is obligatory for the <img> element. On browsers supporting srcset, src is ignored if this one is provided." :missing-tag nil))"#
-    ]];
-
-    assert_ac_html_parity(elisp_form, expect);
-}
-
-/// Data providers are the package's extension point.  Enabling a second one
-/// makes its tags available without displacing the default provider's.
-#[test]
-fn enabling_a_second_data_provider_adds_its_tags_to_the_offer() {
-    let elisp_form = r####"
+    ]],
+        ),
+        (
+            "enabling_a_second_data_provider_adds_its_tags_to_the_offer",
+            r####"
 (aht-test-in-buffer
  (let ((before (list :providers ac-html-enabled-data-providers
                      :offer (aht-test-offer "<tag"))))
@@ -140,20 +125,15 @@ fn enabling_a_second_data_provider_adds_its_tags_to_the_offer() {
            (list (ac-html-query-data-provider 'ac-html-testing-data-provider :tag-func)
                  (ac-html-query-data-provider 'ac-html-testing-data-provider :class-func)
                  (ac-html-query-data-provider 'ac-html-default-data-provider :tag-doc-func))))))
-"####;
-    let expect = expect![[
+"####,
+            true,
+            expect![[
         r#"OK (:registered (ac-html-testing-data-provider ac-html-default-data-provider) :before (:providers #1=(ac-html-default-data-provider) :offer (:typed "<tag" :prefix "tag" :count 0 :symbols nil :candidates nil)) :after (:providers (ac-html-testing-data-provider . #1#) :offer (:typed "<tag" :prefix "tag" :count 3 :symbols ("t") :candidates ("tag1" "tag2" "tag3")) :still-has-defaults (:typed "<inp" :prefix "inp" :count 1 :symbols ("t") :candidates ("input"))) :provider-keys (ac-html-testing-tags ac-html-testing-classes ac-html-default-tag-doc))"#
-    ]];
-
-    assert_ac_html_parity(elisp_form, expect);
-}
-
-/// For the `class' and `id' attributes the attribute-value source appends the
-/// providers' class and id candidates, which is how a project-specific
-/// provider contributes its own names.
-#[test]
-fn class_and_id_values_come_from_the_providers_class_and_id_functions() {
-    let elisp_form = r####"
+    ]],
+        ),
+        (
+            "class_and_id_values_come_from_the_providers_class_and_id_functions",
+            r####"
 (aht-test-in-buffer
  (require 'ac-html-testing-data-provider)
  (ac-html-enable-data-provider 'ac-html-testing-data-provider)
@@ -163,20 +143,15 @@ fn class_and_id_values_come_from_the_providers_class_and_id_functions() {
          :other-attr (aht-test-offer "<input type=\"che")
          :class-candidates (ac-html-all-class-candidates)
          :id-candidates (ac-html-all-id-candidates))))
-"####;
-    let expect = expect![[
+"####,
+            true,
+            expect![[
         r#"OK (:class (:typed "<div class=\"cl" :prefix "cl" :count 2 :symbols ("v") :candidates ("class1" "class2")) :id (:typed "<div id=\"id" :prefix "id" :count 3 :symbols ("v") :candidates ("id1" "id2" "id3")) :other-attr (:typed "<input type=\"che" :prefix "che" :count 1 :symbols ("v") :candidates ("checkbox")) :class-candidates ("class1" "class2") :id-candidates ("id1" "id2" "id3"))"#
-    ]];
-
-    assert_ac_html_parity(elisp_form, expect);
-}
-
-/// A realistic miss: a tag the data files do not know offers no candidates,
-/// `ac-complete' must not alter the surrounding markup, and the next real tag
-/// must still complete.
-#[test]
-fn an_unknown_tag_offers_nothing_and_leaves_the_document_untouched() {
-    let elisp_form = r####"
+    ]],
+        ),
+        (
+            "an_unknown_tag_offers_nothing_and_leaves_the_document_untouched",
+            r####"
 (aht-test-in-buffer
  (insert "<p>keep me</p>\n<zzq")
  (let ((before (buffer-string))
@@ -195,10 +170,11 @@ fn an_unknown_tag_offers_nothing_and_leaves_the_document_untouched() {
                :unchanged (equal before after)
                :recovered recovered
                :final (buffer-string)))))))
-"####;
-    let expect = expect![[
+"####,
+            true,
+            expect![[
         r#"OK (:before "<p>keep me</p>\n<zzq" :point-before 20 :prefix "zzq" :candidates nil :after "<p>keep me</p>\n<zzq" :point-after 27 :unchanged t :recovered ("input") :final "<p>keep me</p>\n<zzq\n<input")"#
-    ]];
-
-    assert_ac_html_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

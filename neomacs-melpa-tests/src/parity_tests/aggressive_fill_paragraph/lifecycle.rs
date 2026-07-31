@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_aggressive_fill_paragraph_parity;
+use super::assert_aggressive_fill_paragraph_batch;
 
 #[test]
-fn aggressive_fill_paragraph_recommended_setup_keeps_live_buffers_independent() {
-    let elisp_form = r####"(let ((text-mode-hook
+fn lifecycle_public_surface_batch() {
+    assert_aggressive_fill_paragraph_batch(&[
+        (
+            "aggressive_fill_paragraph_recommended_setup_keeps_live_buffers_independent",
+            r####"(let ((text-mode-hook
                                   nil)
                                  (prog-mode-hook
                                   nil)
@@ -108,10 +111,11 @@ fn aggressive_fill_paragraph_recommended_setup_keeps_live_buffers_independent() 
                                      (set-buffer-modified-p
                                       nil))
                                    (kill-buffer
-                                    buffer)))))"####;
-    let expect = expect![[
+                                    buffer)))))"####,
+            true,
+            expect![[
         r#"OK (((t "The release operator verifies\nrecovery state before promoting\nthe parser " 74) (t ";; The parser preserves every request\n;; while retrying a failed recovery\n;; transition " 89)) (nil "The release operator verifies\nrecovery state before promoting\nthe parser \n\nA disabled buffer leaves this second deliberately long paragraph completely unchanged " 162) (t ";; The parser preserves every request\n;; while retrying a failed recovery\n;; transition " 89))"#
-    ]];
-
-    assert_aggressive_fill_paragraph_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

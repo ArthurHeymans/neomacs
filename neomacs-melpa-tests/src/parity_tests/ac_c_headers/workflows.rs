@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_ac_c_headers_parity;
+use super::assert_ac_c_headers_batch;
 
 #[test]
-fn ac_c_headers_completes_an_angle_bracket_include_and_closes_the_directive() {
-    let elisp_form = r##"(let ((directory (ac-c-headers-test-include-tree))
+fn workflows_public_surface_batch() {
+    assert_ac_c_headers_batch(&[
+        (
+            "ac_c_headers_completes_an_angle_bracket_include_and_closes_the_directive",
+            r##"(let ((directory (ac-c-headers-test-include-tree))
       (ac-c-headers--files-cache nil)
       (ac-c-headers--symbols-cache nil))
   (ac-c-headers-test-in-buffer
@@ -18,17 +21,15 @@ fn ac_c_headers_completes_an_angle_bracket_include_and_closes_the_directive() {
              (line-number-at-pos)
              (mapcar #'car ac-c-headers--symbols-cache)
              (cdr (assq 'symbol ac-source-c-headers))
-             (cdr (assq 'requires ac-source-c-headers)))))))"##;
-    let expect = expect![[
+             (cdr (assq 'requires ac-source-c-headers)))))))"##,
+            true,
+            expect![[
         r##"OK (("stdio.h") "#include <stdio.h>\n" 20 2 (#("stdio.h" 0 7 (action (lambda nil (when (string-match "\\.h$" candidate) (ac-c-headers--symbols-update candidate) (cond ((looking-at "[>\"]") (forward-char 1) (newline-and-indent)) ((looking-back "#include *<\\([^<]*\\)") (insert ">\n")) (t (insert "\"\n"))))) symbol "h"))) "h" 0)"##
-    ]];
-
-    assert_ac_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn ac_c_headers_completes_a_quoted_include_with_a_closing_quote() {
-    let elisp_form = r##"(let ((directory (ac-c-headers-test-include-tree))
+    ]],
+        ),
+        (
+            "ac_c_headers_completes_a_quoted_include_with_a_closing_quote",
+            r##"(let ((directory (ac-c-headers-test-include-tree))
       (ac-c-headers--files-cache nil)
       (ac-c-headers--symbols-cache nil))
   (ac-c-headers-test-in-buffer
@@ -39,17 +40,15 @@ fn ac_c_headers_completes_a_quoted_include_with_a_closing_quote() {
        (list candidates
              (buffer-string)
              (point)
-             (mapcar #'car ac-c-headers--symbols-cache))))))"##;
-    let expect = expect![[
+             (mapcar #'car ac-c-headers--symbols-cache))))))"##,
+            true,
+            expect![[
         r##"OK (("string.h") "#include \"string.h\"\n" 21 (#("string.h" 0 8 (action (lambda nil (when (string-match "\\.h$" candidate) (ac-c-headers--symbols-update candidate) (cond ((looking-at "[>\"]") (forward-char 1) (newline-and-indent)) ((looking-back "#include *<\\([^<]*\\)") (insert ">\n")) (t (insert "\"\n"))))) symbol "h"))))"##
-    ]];
-
-    assert_ac_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn ac_c_headers_offers_directories_and_descends_into_a_nested_include_path() {
-    let elisp_form = r##"(let ((directory (ac-c-headers-test-include-tree))
+    ]],
+        ),
+        (
+            "ac_c_headers_offers_directories_and_descends_into_a_nested_include_path",
+            r##"(let ((directory (ac-c-headers-test-include-tree))
       (ac-c-headers--files-cache nil)
       (ac-c-headers--symbols-cache nil))
   (ac-c-headers-test-in-buffer
@@ -67,17 +66,15 @@ fn ac_c_headers_offers_directories_and_descends_into_a_nested_include_path() {
                  nested
                  filtered
                  (buffer-string)
-                 (mapcar #'car ac-c-headers--files-cache))))))))"##;
-    let expect = expect![[
+                 (mapcar #'car ac-c-headers--files-cache))))))))"##,
+            true,
+            expect![[
         r##"OK (("sys/" "stdio.h" "string.h") ("./" "../" "stat.h" "types.h") ("types.h") "#include <sys/types.h>\n" ("sys/" ""))"##
-    ]];
-
-    assert_ac_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn ac_c_headers_completes_symbols_declared_by_the_headers_the_buffer_includes() {
-    let elisp_form = r##"(let ((directory (ac-c-headers-test-include-tree))
+    ]],
+        ),
+        (
+            "ac_c_headers_completes_symbols_declared_by_the_headers_the_buffer_includes",
+            r##"(let ((directory (ac-c-headers-test-include-tree))
       (ac-c-headers--files-cache nil)
       (ac-c-headers--symbols-cache nil))
   (ac-c-headers-test-in-buffer
@@ -94,17 +91,15 @@ fn ac_c_headers_completes_symbols_declared_by_the_headers_the_buffer_includes() 
              everything
              (sort (mapcar #'car ac-c-headers--symbols-cache) #'string<)
              (buffer-substring-no-properties (line-beginning-position) (point-max))
-             (point))))))"##;
-    let expect = expect![[
+             (point))))))"##,
+            true,
+            expect![[
         r#"OK (("printf") ("c" "char" "char" "const" "const" "int" "int" "printf" "puts" "size_t" "strlen") ("stdio.h" "string.h") "int main(void) { printf" 84)"#
-    ]];
-
-    assert_ac_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn ac_c_headers_serves_a_prefix_from_its_cache_until_a_new_prefix_is_typed() {
-    let elisp_form = r##"(let ((directory (ac-c-headers-test-include-tree))
+    ]],
+        ),
+        (
+            "ac_c_headers_serves_a_prefix_from_its_cache_until_a_new_prefix_is_typed",
+            r##"(let ((directory (ac-c-headers-test-include-tree))
       (ac-c-headers--files-cache nil)
       (ac-c-headers--symbols-cache nil))
   (ac-c-headers-test-in-buffer
@@ -119,17 +114,15 @@ fn ac_c_headers_serves_a_prefix_from_its_cache_until_a_new_prefix_is_typed() {
            (list first
                  cached
                  fresh
-                 (mapcar #'car ac-c-headers--files-cache))))))))"##;
-    let expect = expect![[
+                 (mapcar #'car ac-c-headers--files-cache))))))))"##,
+            true,
+            expect![[
         r#"OK (("sys/" "stdio.h" "string.h") ("sys/" "stdio.h" "string.h") ("stdio.h" "string.h") (""))"#
-    ]];
-
-    assert_ac_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn ac_c_headers_ignores_non_header_files_and_unknown_prefixes() {
-    let elisp_form = r##"(let ((directory (ac-c-headers-test-include-tree))
+    ]],
+        ),
+        (
+            "ac_c_headers_ignores_non_header_files_and_unknown_prefixes",
+            r##"(let ((directory (ac-c-headers-test-include-tree))
       (ac-c-headers--files-cache nil)
       (ac-c-headers--symbols-cache nil))
   (ac-c-headers-test-in-buffer
@@ -148,10 +141,11 @@ fn ac_c_headers_ignores_non_header_files_and_unknown_prefixes() {
                  unknown
                  outside
                  (buffer-string)
-                 (mapcar #'car ac-c-headers--files-cache))))))))"##;
-    let expect = expect![[
+                 (mapcar #'car ac-c-headers--files-cache))))))))"##,
+            true,
+            expect![[
         r##"OK (nil "#include <nota\n\n\n\n\n\n\n\n\n\n\n" nil nil "int main(void) { ret" (""))"##
-    ]];
-
-    assert_ac_c_headers_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

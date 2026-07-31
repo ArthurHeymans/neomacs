@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_nxml_parity;
+use super::assert_auto_complete_nxml_batch;
 
 #[test]
-fn auto_complete_nxml_expand_tag_adds_attribute_space_for_open_element() {
-    let elisp_form = r##"(with-temp-buffer
+fn actions_public_surface_batch() {
+    assert_auto_complete_nxml_batch(&[
+        (
+            "auto_complete_nxml_expand_tag_adds_attribute_space_for_open_element",
+            r##"(with-temp-buffer
          (insert "<table")
          (cl-letf (((symbol-function 'rng-qname-p)
                     (lambda (name) (equal name "table")))
@@ -16,14 +19,13 @@ fn auto_complete_nxml_expand_tag_adds_attribute_space_for_open_element() {
                     (lambda () nil)))
            (let ((rng-open-elements '(root)))
              (auto-complete-nxml-expand-tag)
-             (list (buffer-string) (point)))))"##;
-    let expect = expect![[r#"OK ("<table " 8)"#]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_expand_tag_handles_extra_strings_and_invalid_names() {
-    let elisp_form = r##"(cl-letf (((symbol-function 'rng-qname-p)
+             (list (buffer-string) (point)))))"##,
+            true,
+            expect![[r#"OK ("<table " 8)"#]],
+        ),
+        (
+            "auto_complete_nxml_expand_tag_handles_extra_strings_and_invalid_names",
+            r##"(cl-letf (((symbol-function 'rng-qname-p)
                                     (lambda (_name) nil)))
          (mapcar
           (lambda (case)
@@ -33,14 +35,13 @@ fn auto_complete_nxml_expand_tag_handles_extra_strings_and_invalid_names() {
               (auto-complete-nxml-expand-tag)
               (buffer-string)))
           '(("<!--" "<!--" "<![CDATA[")
-            ("<unknown" "<!--" "<![CDATA["))))"##;
-    let expect = expect![[r#"OK ("<!--" "<unknown")"#]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_expand_tag_respects_closed_schema_match_and_root_state() {
-    let elisp_form = r##"(cl-letf (((symbol-function 'rng-qname-p)
+            ("<unknown" "<!--" "<![CDATA["))))"##,
+            true,
+            expect![[r#"OK ("<!--" "<unknown")"#]],
+        ),
+        (
+            "auto_complete_nxml_expand_tag_respects_closed_schema_match_and_root_state",
+            r##"(cl-letf (((symbol-function 'rng-qname-p)
                                     (lambda (_name) t))
                    ((symbol-function 'rng-expand-qname)
                     (lambda (&rest _args) '(ns . "root")))
@@ -57,15 +58,13 @@ fn auto_complete_nxml_expand_tag_respects_closed_schema_match_and_root_state() {
                   (list case (buffer-string))))))
           '(((parent) . t)
             ((parent) . nil)
-            (nil . t))))"##;
-    let expect =
-        expect![[r#"OK ((((parent) . t) "<root") (((parent)) "<root ") ((nil . t) "<root "))"#]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_expand_xmlns_emits_all_nondefault_prefixed_namespaces() {
-    let elisp_form = r##"(with-temp-buffer
+            (nil . t))))"##,
+            true,
+            expect![[r#"OK ((((parent) . t) "<root") (((parent)) "<root ") ((nil . t) "<root "))"#]],
+        ),
+        (
+            "auto_complete_nxml_expand_xmlns_emits_all_nondefault_prefixed_namespaces",
+            r##"(with-temp-buffer
          (insert "<root xmlns=\"urn:default")
          (let ((indent-tabs-mode nil))
            (cl-letf (((symbol-function 'rng-match-possible-namespace-uris)
@@ -84,16 +83,15 @@ fn auto_complete_nxml_expand_xmlns_emits_all_nondefault_prefixed_namespaces() {
                                       ("urn:svg" . "svg")
                                       ("urn:unused" . "")))))))
              (auto-complete-nxml-expand-other-xmlns)
-             (list (buffer-string) (point)))))"##;
-    let expect = expect![[
+             (list (buffer-string) (point)))))"##,
+            true,
+            expect![[
         r#"OK ("<root xmlns=\"urn:default\" xmlns:m=\"urn:math\" xmlns:svg=\"urn:svg\"" 65)"#
-    ]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_get_prefix_walks_schema_location_rules_in_order() {
-    let elisp_form = r##"(let ((rng-schema-locating-files
+    ]],
+        ),
+        (
+            "auto_complete_nxml_get_prefix_walks_schema_location_rules_in_order",
+            r##"(let ((rng-schema-locating-files
                                 '("first.xml" "second.xml" "third.xml")))
          (cl-letf (((symbol-function 'rng-get-parsed-schema-locating-file)
                     (lambda (file)
@@ -112,14 +110,13 @@ fn auto_complete_nxml_get_prefix_walks_schema_location_rules_in_order() {
            (list
             (auto-complete-nxml-get-prefix "urn:target")
             (auto-complete-nxml-get-prefix "urn:other")
-            (auto-complete-nxml-get-prefix "urn:missing"))))"##;
-    let expect = expect![[r#"OK ("t" "o" nil)"#]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_tag_source_action_expands_and_closes_end_tags() {
-    let elisp_form = r##"(cl-letf (((symbol-function 'auto-complete-nxml-expand-tag)
+            (auto-complete-nxml-get-prefix "urn:missing"))))"##,
+            true,
+            expect![[r#"OK ("t" "o" nil)"#]],
+        ),
+        (
+            "auto_complete_nxml_tag_source_action_expands_and_closes_end_tags",
+            r##"(cl-letf (((symbol-function 'auto-complete-nxml-expand-tag)
                                     (lambda () (insert " "))))
          (mapcar
           (lambda (text)
@@ -127,44 +124,40 @@ fn auto_complete_nxml_tag_source_action_expands_and_closes_end_tags() {
               (insert text)
               (funcall (cdr (assq 'action ac-source-nxml-tag)))
               (list text (buffer-string) (point))))
-          '("</item" "</item>" "<item")))"##;
-    let expect =
-        expect![[r#"OK (("</item" "</item " 8) ("</item>" "</item> " 9) ("<item" "<item " 7))"#]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_attribute_source_action_builds_quotes_and_positions_point() {
-    let elisp_form = r##"(let ((auto-complete-nxml-automatic-p nil))
+          '("</item" "</item>" "<item")))"##,
+            true,
+            expect![[r#"OK (("</item" "</item " 8) ("</item>" "</item> " 9) ("<item" "<item " 7))"#]],
+        ),
+        (
+            "auto_complete_nxml_attribute_source_action_builds_quotes_and_positions_point",
+            r##"(let ((auto-complete-nxml-automatic-p nil))
          (mapcar
           (lambda (text)
             (with-temp-buffer
               (insert text)
               (funcall (cdr (assq 'action ac-source-nxml-attr)))
               (list text (buffer-string) (point) (char-after))))
-          '("<node class" "<node class\"tail")))"##;
-    let expect = expect![[
+          '("<node class" "<node class\"tail")))"##,
+            true,
+            expect![[
         r#"OK (("<node class" "<node class=\"\"" 14 34) ("<node class\"tail" "<node class\"tail=\"\"" 19 34))"#
-    ]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_css_source_actions_chain_property_and_value_editing() {
-    let elisp_form = r##"(let ((auto-complete-nxml-automatic-p nil))
+    ]],
+        ),
+        (
+            "auto_complete_nxml_css_source_actions_chain_property_and_value_editing",
+            r##"(let ((auto-complete-nxml-automatic-p nil))
          (with-temp-buffer
            (insert "<p style=\"color")
            (funcall (cdr (assq 'action ac-source-nxml-css)))
            (insert "red")
            (funcall (cdr (assq 'action ac-source-nxml-css-property)))
-           (list (buffer-string) (point))))"##;
-    let expect = expect![[r#"OK ("<p style=\"color: red;" 22)"#]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_tag_value_action_inserts_only_missing_matching_end_tag() {
-    let elisp_form = r##"(mapcar
+           (list (buffer-string) (point))))"##,
+            true,
+            expect![[r#"OK ("<p style=\"color: red;" 22)"#]],
+        ),
+        (
+            "auto_complete_nxml_tag_value_action_inserts_only_missing_matching_end_tag",
+            r##"(mapcar
          (lambda (text)
            (with-temp-buffer
              (insert text)
@@ -173,16 +166,15 @@ fn auto_complete_nxml_tag_value_action_inserts_only_missing_matching_end_tag() {
          '("<item>choice"
            "<item>choice</item>"
            "<item class=\"x\">choice"
-           "plain choice"))"##;
-    let expect = expect![[
+           "plain choice"))"##,
+            true,
+            expect![[
         r#"OK (("<item>choice" "<item>choice</item>" 20) ("<item>choice</item>" "<item>choice</item><//item>" 28) ("<item class=\"x\">choice" "<item class=\"x\">choice</item>" 30) ("plain choice" "plain choice" 13))"#
-    ]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_insert_command_and_toggle_drive_real_command_state() {
-    let elisp_form = r##"(let ((auto-complete-nxml-automatic-p t)
+    ]],
+        ),
+        (
+            "auto_complete_nxml_insert_command_and_toggle_drive_real_command_state",
+            r##"(let ((auto-complete-nxml-automatic-p t)
              events)
          (cl-letf (((symbol-function 'self-insert-command)
                     (lambda (count)
@@ -202,9 +194,11 @@ fn auto_complete_nxml_insert_command_and_toggle_drive_real_command_state() {
                 auto-complete-nxml-automatic-p
                 disabled-message
                 (current-message)
-                (nreverse events))))))"##;
-    let expect = expect![[
+                (nreverse events))))))"##,
+            true,
+            expect![[
         r#"OK ("xxxxx" t nil nil ((:insert 3) (:complete :triggered trigger-key) (:insert 2)))"#
-    ]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_asciidoc_mode_parity;
+use super::assert_asciidoc_mode_batch;
 
 #[test]
-fn construct_dense_document_applies_exact_semantic_faces_and_interaction_properties() {
-    let elisp_form = r##"(with-temp-buffer
+fn font_lock_public_surface_batch() {
+    assert_asciidoc_mode_batch(&[
+        (
+            "construct_dense_document_applies_exact_semantic_faces_and_interaction_properties",
+            r##"(with-temp-buffer
   (insert
    "= Practical AsciiDoc\n"
    ":author: Ada Lovelace\n\n"
@@ -96,16 +99,15 @@ fn construct_dense_document_applies_exact_semantic_faces_and_interaction_propert
         ("table-fence" "|===" 0)
         ("cell-specifier" "a| cell" 0)
         ("block-macro" "toc::" 0)
-        ("comment" "// final comment" 0))))))"##;
-    let expect = expect![[
+        ("comment" "// final comment" 0))))))"##,
+            true,
+            expect![[
         r#"OK "((\"document-title\" 1 asciidoc-document-title-face nil nil nil nil nil) (\"attribute-key\" 23 asciidoc-metadata-key-face nil nil nil nil nil) (\"attribute-value\" 31 asciidoc-metadata-value-face nil nil nil nil nil) (\"section-title\" 45 asciidoc-title-1-face nil nil nil nil nil) (\"bold\" 70 bold nil nil nil nil nil) (\"italic\" 78 italic nil nil nil nil nil) (\"code\" 88 asciidoc-code-face nil nil nil nil nil) (\"highlight\" 96 asciidoc-highlight-face nil nil nil nil nil) (\"superscript\" 110 asciidoc-superscript-face (raise 0.4) nil nil nil nil) (\"subscript\" 120 asciidoc-subscript-face (raise -0.25) nil nil nil nil) (\"role\" 129 font-lock-preprocessor-face nil nil nil nil nil) (\"role-text\" 140 asciidoc-underline-face nil nil nil nil nil) (\"quote-marker\" 157 asciidoc-markup-face nil nil nil nil nil) (\"quote-text\" 159 nil nil nil nil nil nil) (\"url\" 179 asciidoc-url-face nil t asciidoc-link-mouse-face t nil) (\"link-label\" 199 asciidoc-link-face nil t asciidoc-link-mouse-face t nil) (\"xref\" 212 asciidoc-cross-reference-face nil t asciidoc-link-mouse-face t nil) (\"footnote-marker\" 226 asciidoc-footnote-marker-face nil nil nil nil nil) (\"footnote-body\" 236 asciidoc-footnote-text-face nil nil nil nil nil) (\"anchor\" 250 asciidoc-anchor-face nil nil nil nil nil) (\"description-term\" 259 font-lock-keyword-face nil nil nil nil nil) (\"description-marker\" 262 asciidoc-markup-face nil nil nil nil nil) (\"list-marker\" 292 asciidoc-markup-face nil nil nil nil nil) (\"checkbox\" 294 font-lock-constant-face nil nil nil nil nil) (\"admonition-label\" 308 (asciidoc-admonition-note-label-face . #1=(asciidoc-admonition-note-face)) nil nil nil nil t) (\"admonition-body\" 314 #1# nil nil nil nil t) (\"admonition-continuation\" 339 (asciidoc-admonition-note-face) nil nil nil nil t) (\"source-attribute\" 373 font-lock-preprocessor-face nil nil nil nil nil) (\"listing-fence\" 392 asciidoc-markup-face nil nil nil nil nil) (\"native-keyword\" 398 font-lock-keyword-face nil nil nil nil nil) (\"table-fence\" 431 asciidoc-markup-face nil nil nil nil nil) (\"cell-specifier\" 436 font-lock-preprocessor-face nil nil nil nil nil) (\"block-macro\" 450 font-lock-function-call-face nil nil nil nil nil) (\"comment\" 458 font-lock-comment-face nil nil nil nil nil))""#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn fontification_is_idempotent_across_flush_and_reparse_for_a_mixed_document() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "fontification_is_idempotent_across_flush_and_reparse_for_a_mixed_document",
+            r##"(with-temp-buffer
   (insert
    "= Stable Document\n"
    ":toc: left\n\n"
@@ -172,14 +174,13 @@ fn fontification_is_idempotent_across_flush_and_reparse_for_a_mixed_document() {
          (length
           (delete-dups
            (delq nil
-                 (mapcar #'cadr after)))))))))"##;
-    let expect = expect!["OK (t t t t 16)"];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn source_language_extraction_and_mode_resolution_cover_options_aliases_and_fallbacks() {
-    let elisp_form = r##"(list
+                 (mapcar #'cadr after)))))))))"##,
+            true,
+            expect!["OK (t t t t 16)"],
+        ),
+        (
+            "source_language_extraction_and_mode_resolution_cover_options_aliases_and_fallbacks",
+            r##"(list
  (mapcar
   (lambda (value)
     (cons value
@@ -219,16 +220,15 @@ fn source_language_extraction_and_mode_resolution_cover_options_aliases_and_fall
         '((emacs-lisp-mode
            . lisp-interaction-mode))))
    (asciidoc--code-block-lang-mode
-    "mapped")))"##;
-    let expect = expect![[
+    "mapped")))"##,
+            true,
+            expect![[
         r#"OK ((("source,ruby" . "ruby") (",js" . "js") ("source%nowrap,python" . "python") (" source , emacs-lisp " . "emacs-lisp") ("source,lang,linenums" . "lang") ("source,language=rust") ("NOTE") ("quote,ruby") ("source") ("")) (("direct" . emacs-lisp-mode) ("DIRECT" . emacs-lisp-mode) ("candidates" . emacs-lisp-mode) ("emacs-lisp" . emacs-lisp-mode) ("json") ("missing")) lisp-interaction-mode)"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn native_source_fontification_honors_enablement_size_language_and_recursion_guards() {
-    let elisp_form = r##"(cl-labels
+    ]],
+        ),
+        (
+            "native_source_fontification_honors_enablement_size_language_and_recursion_guards",
+            r##"(cl-labels
     ((inspect
       (setting attribute body needle)
       (let ((asciidoc-fontify-code-blocks-natively
@@ -265,16 +265,15 @@ fn native_source_fontification_honors_enablement_size_language_and_recursion_gua
     t "" "(defun demo () nil)" "defun")
    (inspect
     t "[source,asciidoc]"
-    "== Nested" "Nested")))"##;
-    let expect = expect![[
+    "== Nested" "Nested")))"##,
+            true,
+            expect![[
         r#"OK ((font-lock-keyword-face #("= Source Matrix\n\n[source,emacs-lisp]\n----\n(defun demo () nil)\n----\n" 0 1 (face asciidoc-document-title-face) 2 16 (face asciidoc-document-title-face) 17 37 (face font-lock-preprocessor-face) 37 41 (face asciidoc-markup-face) 42 43 (face nil) 43 48 (face font-lock-keyword-face) 48 49 (face nil) 49 53 (face font-lock-function-name-face) 53 62 (face nil) 62 66 (face asciidoc-markup-face))) (asciidoc-code-face #("= Source Matrix\n\n[source,emacs-lisp]\n----\n(defun demo () nil)\n----\n" 0 1 (face asciidoc-document-title-face) 2 16 (face asciidoc-document-title-face) 17 37 (face font-lock-preprocessor-face) 37 41 (face asciidoc-markup-face) 42 62 (face asciidoc-code-face) 62 66 (face asciidoc-markup-face))) (asciidoc-code-face #("= Source Matrix\n\n[source,emacs-lisp]\n----\n(defun demo () nil)\n----\n" 0 1 (face asciidoc-document-title-face) 2 16 (face asciidoc-document-title-face) 17 37 (face font-lock-preprocessor-face) 37 41 (face asciidoc-markup-face) 42 62 (face asciidoc-code-face) 62 66 (face asciidoc-markup-face))) (asciidoc-code-face #("= Source Matrix\n\n[source,nosuchlang]\n----\nplain body\n----\n" 0 1 (face asciidoc-document-title-face) 2 16 (face asciidoc-document-title-face) 17 37 (face font-lock-preprocessor-face) 37 41 (face asciidoc-markup-face) 42 53 (face asciidoc-code-face) 53 57 (face asciidoc-markup-face))) (asciidoc-code-face #("= Source Matrix\n\n\n----\n(defun demo () nil)\n----\n" 0 1 (face asciidoc-document-title-face) 2 16 (face asciidoc-document-title-face) 18 22 (face asciidoc-markup-face) 23 43 (face asciidoc-code-face) 43 47 (face asciidoc-markup-face))) (asciidoc-code-face #("= Source Matrix\n\n[source,asciidoc]\n----\n== Nested\n----\n" 0 1 (face asciidoc-document-title-face) 2 16 (face asciidoc-document-title-face) 17 35 (face font-lock-preprocessor-face) 35 39 (face asciidoc-markup-face) 40 50 (face asciidoc-code-face) 50 54 (face asciidoc-markup-face))))"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn editing_an_admonition_clears_multiline_background_and_preserves_inline_faces() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "editing_an_admonition_clears_multiline_background_and_preserves_inline_faces",
+            r##"(with-temp-buffer
   (insert
    "= Editing\n\n"
    "NOTE: inspect `code` first.\n"
@@ -312,16 +311,15 @@ fn editing_an_admonition_clears_multiline_background_and_preserves_inline_faces(
         (faces-at "code")
         (faces-at "Continue")
         (faces-at "Plain"))
-       (buffer-string)))))"##;
-    let expect = expect![[
+       (buffer-string)))))"##,
+            true,
+            expect![[
         r#"OK ((((asciidoc-admonition-note-label-face asciidoc-admonition-note-face) t) ((asciidoc-admonition-note-face asciidoc-code-face) t) ((asciidoc-admonition-note-face) t) (nil nil)) ((nil nil) (asciidoc-code-face nil) (nil nil) (nil nil)) #("= Editing\n\nTEXT: inspect `code` first.\nContinue on this line.\n\nPlain paragraph.\n" 0 1 (face asciidoc-document-title-face) 2 10 (face asciidoc-document-title-face) 25 31 (face asciidoc-code-face)))"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn inline_parser_ranges_exclude_block_markers_and_macro_attribute_urls_stay_plain() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "inline_parser_ranges_exclude_block_markers_and_macro_attribute_urls_stay_plain",
+            r##"(with-temp-buffer
   (insert
    "= Parser Ranges\n\n"
    "* bullet with `code`\n"
@@ -370,16 +368,15 @@ fn inline_parser_ranges_exclude_block_markers_and_macro_attribute_urls_stay_plai
         (memq property
               font-lock-extra-managed-props))
       '(display keymap mouse-face
-        follow-link help-echo)))))"##;
-    let expect = expect![[
+        follow-link help-echo)))))"##,
+            true,
+            expect![[
         r#"OK ("document" "inline" nil nil ((20 . 39) (45 . 63) (69 . 121) (121 . 152)) nil nil nil ((display . #1=(keymap . #2=(mouse-face . #3=(follow-link . #4=(help-echo))))) #1# #2# #3# #4#))"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn large_construct_dense_handbook_fontifies_stably_with_both_parsers_and_native_code() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "large_construct_dense_handbook_fontifies_stably_with_both_parsers_and_native_code",
+            r##"(with-temp-buffer
   (insert
    "= Generated Operations Handbook\n"
    ":author: Reliability Team\n"
@@ -474,9 +471,11 @@ fn large_construct_dense_handbook_fontifies_stably_with_both_parsers_and_native_
           after)
          (secure-hash
           'sha256
-          (prin1-to-string after)))))))"##;
-    let expect = expect![[
+          (prin1-to-string after)))))))"##,
+            true,
+            expect![[
         r#"OK (10318 532 510 t nil nil 24 24 48 "ba24d017bc1dee85e8946dd358bc978598b44a647739b133a3135dad5686a6d8")"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_dark_parity;
+use super::assert_auto_dark_batch;
 
 #[test]
-fn auto_dark_start_timer_stops_previous_then_schedules_immediate_repeating_check() {
-    let elisp_form = r##"(let ((auto-dark--timer
+fn listeners_public_surface_batch() {
+    assert_auto_dark_batch(&[
+        (
+            "auto_dark_start_timer_stops_previous_then_schedules_immediate_repeating_check",
+            r##"(let ((auto-dark--timer
                                 'old-timer)
                                events)
           (cl-letf
@@ -28,17 +31,15 @@ fn auto_dark_start_timer_stops_previous_then_schedules_immediate_repeating_check
               (list
                (auto-dark-start-timer)
                auto-dark--timer
-               (nreverse events)))))"##;
-    let expect = expect![
+               (nreverse events)))))"##,
+            true,
+            expect![
         "OK (new-timer new-timer ((:stop old-timer) (:run 0 17 auto-dark--check-and-set-dark-mode)))"
-    ];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_stop_timer_cancels_only_timer_objects_and_preserves_stale_slot() {
-    let elisp_form = r##"(let (calls)
+    ],
+        ),
+        (
+            "auto_dark_stop_timer_cancels_only_timer_objects_and_preserves_stale_slot",
+            r##"(let (calls)
           (cl-letf
               (((symbol-function 'timerp)
                 (lambda (value)
@@ -64,17 +65,15 @@ fn auto_dark_stop_timer_cancels_only_timer_objects_and_preserves_stale_slot() {
                 not-a-timer
                 valid-timer
                 second-timer))
-             (nreverse calls))))"##;
-    let expect = expect![
+             (nreverse calls))))"##,
+            true,
+            expect![
         "OK (((nil nil nil) (not-a-timer nil not-a-timer) (valid-timer (:cancelled valid-timer) valid-timer) (second-timer (:cancelled second-timer) second-timer)) (valid-timer second-timer))"
-    ];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_real_timer_contains_exact_callback_repeat_and_cancel_lifecycle() {
-    let elisp_form = r##"(let ((auto-dark--timer nil)
+    ],
+        ),
+        (
+            "auto_dark_real_timer_contains_exact_callback_repeat_and_cancel_lifecycle",
+            r##"(let ((auto-dark--timer nil)
                                (auto-dark-polling-interval-seconds
                                 29))
           (cl-letf
@@ -95,15 +94,13 @@ fn auto_dark_real_timer_contains_exact_callback_repeat_and_cancel_lifecycle() {
                      (memq timer timer-list)
                      (eq timer
                          auto-dark--timer))))
-              (auto-dark-stop-timer))))"##;
-    let expect = expect!["OK (t auto-dark--check-and-set-dark-mode 29 nil t nil t)"];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_register_dbus_listener_forwards_exact_signal_and_callback_mapping() {
-    let elisp_form = r##"(let (register-calls
+              (auto-dark-stop-timer))))"##,
+            true,
+            expect!["OK (t auto-dark--check-and-set-dark-mode 29 nil t nil t)"],
+        ),
+        (
+            "auto_dark_register_dbus_listener_forwards_exact_signal_and_callback_mapping",
+            r##"(let (register-calls
                                callback
                                theme-calls)
           (cl-letf
@@ -157,17 +154,15 @@ fn auto_dark_register_dbus_listener_forwards_exact_signal_and_callback_mapping()
                  (1))
                 ("org.freedesktop.appearance"
                  "other-setting"
-                 (1)))))))"##;
-    let expect = expect![[
+                 (1)))))))"##,
+            true,
+            expect![[
         r#"OK (fixture-dbus-object fixture-dbus-object (:session "org.freedesktop.portal.Desktop" "/org/freedesktop/portal/desktop" "org.freedesktop.portal.Settings" "SettingChanged") t ((("org.freedesktop.appearance" "color-scheme" (1)) (:theme dark) (dark)) (("org.freedesktop.appearance" "color-scheme" (0)) (:theme light) (light)) (("org.freedesktop.appearance" "color-scheme" (2)) (:theme light) (light)) (("org.freedesktop.appearance" "color-scheme" (3)) nil nil) (("other.path" "color-scheme" (1)) nil nil) (("org.freedesktop.appearance" "other-setting" (1)) nil nil)))"#
-    ]];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_unregister_dbus_listener_forwards_current_object_and_return_value() {
-    let elisp_form = r##"(let ((auto-dark--dbus-listener-object
+    ]],
+        ),
+        (
+            "auto_dark_unregister_dbus_listener_forwards_current_object_and_return_value",
+            r##"(let ((auto-dark--dbus-listener-object
                                 'fixture-listener)
                                calls)
           (cl-letf
@@ -181,16 +176,13 @@ fn auto_dark_unregister_dbus_listener_forwards_current_object_and_return_value()
             (list
              (auto-dark--unregister-dbus-listener)
              auto-dark--dbus-listener-object
-             calls)))"##;
-    let expect =
-        expect!["OK ((:unregistered fixture-listener) fixture-listener (fixture-listener))"];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_register_change_listener_selects_ns_mac_dbus_then_timer_priority() {
-    let elisp_form = r##"(let (events)
+             calls)))"##,
+            true,
+            expect!["OK ((:unregistered fixture-listener) fixture-listener (fixture-listener))"],
+        ),
+        (
+            "auto_dark_register_change_listener_selects_ns_mac_dbus_then_timer_priority",
+            r##"(let (events)
           (cl-letf
               (((symbol-function 'add-hook)
                 (lambda (&rest arguments)
@@ -236,17 +228,15 @@ fn auto_dark_register_change_listener_selects_ns_mac_dbus_then_timer_priority() 
              '((t t t)
                (nil t t)
                (nil nil t)
-               (nil nil nil)))))"##;
-    let expect = expect![
+               (nil nil nil)))))"##,
+            true,
+            expect![
         "OK (((t t t) :hook-added ((:add-hook ns-system-appearance-change-functions auto-dark--set-theme))) ((nil t t) :hook-added ((:add-hook mac-effective-appearance-change-hook auto-dark--check-and-set-dark-mode))) ((nil nil t) :dbus-registered (:dbus)) ((nil nil nil) :timer-started (:timer)))"
-    ];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_unregister_change_listener_selects_matching_ns_mac_dbus_then_timer_path() {
-    let elisp_form = r##"(let (events)
+    ],
+        ),
+        (
+            "auto_dark_unregister_change_listener_selects_matching_ns_mac_dbus_then_timer_path",
+            r##"(let (events)
           (cl-letf
               (((symbol-function 'remove-hook)
                 (lambda (&rest arguments)
@@ -292,17 +282,15 @@ fn auto_dark_unregister_change_listener_selects_matching_ns_mac_dbus_then_timer_
              '((t t t)
                (nil t t)
                (nil nil t)
-               (nil nil nil)))))"##;
-    let expect = expect![
+               (nil nil nil)))))"##,
+            true,
+            expect![
         "OK (((t t t) :hook-removed ((:remove-hook ns-system-appearance-change-functions auto-dark--set-theme))) ((nil t t) :hook-removed ((:remove-hook mac-effective-appearance-change-hook auto-dark--check-and-set-dark-mode))) ((nil nil t) :dbus-unregistered (:dbus)) ((nil nil nil) :timer-stopped (:timer)))"
-    ];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_listener_feature_predicates_follow_binding_and_configured_method_exactly() {
-    let elisp_form = r##"(list
+    ],
+        ),
+        (
+            "auto_dark_listener_feature_predicates_follow_binding_and_configured_method_exactly",
+            r##"(list
           (let ((auto-dark-detection-method
                  'dbus))
             (list
@@ -328,8 +316,9 @@ fn auto_dark_listener_feature_predicates_follow_binding_and_configured_method_ex
               (list
                (auto-dark--use-ns-system-appearance)
                (auto-dark--use-mac-system-appearance)
-               (auto-dark--use-dbus)))))"##;
-    let expect = expect!["OK ((nil nil t) (t nil nil) (t t t))"];
-
-    assert_auto_dark_parity(elisp_form, expect);
+               (auto-dark--use-dbus)))))"##,
+            true,
+            expect!["OK ((nil nil t) (t nil nil) (t t t))"],
+        ),
+    ]);
 }

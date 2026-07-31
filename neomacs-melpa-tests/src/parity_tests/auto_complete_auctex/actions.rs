@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_auctex_parity;
+use super::assert_auto_complete_auctex_batch;
 
 #[test]
-fn auto_complete_auctex_macro_action_expands_the_selected_macro_arguments_at_point() {
-    let elisp_form = r##"(with-temp-buffer
+fn actions_public_surface_batch() {
+    assert_auto_complete_auctex_batch(&[
+        (
+            "auto_complete_auctex_macro_action_expands_the_selected_macro_arguments_at_point",
+            r##"(with-temp-buffer
           (insert "\\includegraphics")
           (goto-char (point-max))
           (let ((candidate
@@ -29,16 +32,13 @@ fn auto_complete_auctex_macro_action_expands_the_selected_macro_arguments_at_poi
                :expanded))
             (list
              (ac-auctex-macro-action)
-             captured)))"##;
-    let expect =
-        expect![[r#"OK (:expanded ("${[${item-2}]}{${Filename}}" nil 17 "\\includegraphics"))"#]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_symbol_action_inside_math_replaces_typed_command_and_expands_arguments() {
-    let elisp_form = r##"(with-temp-buffer
+             captured)))"##,
+            true,
+            expect![[r#"OK (:expanded ("${[${item-2}]}{${Filename}}" nil 17 "\\includegraphics"))"#]],
+        ),
+        (
+            "auto_complete_auctex_symbol_action_inside_math_replaces_typed_command_and_expands_arguments",
+            r##"(with-temp-buffer
           (insert "\\operator")
           (goto-char (point-max))
           (let ((candidate
@@ -64,16 +64,13 @@ fn auto_complete_auctex_symbol_action_inside_math_replaces_typed_command_and_exp
              (ac-auctex-symbol-action)
              captured
              (point)
-             (buffer-string))))"##;
-    let expect = expect![[r#"OK (:expanded ("{${Name}}" nil 10 "\\operator") 10 "\\operator")"#]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_symbol_action_outside_math_wraps_command_and_leaves_point_before_closing_dollar()
- {
-    let elisp_form = r##"(with-temp-buffer
+             (buffer-string))))"##,
+            true,
+            expect![[r#"OK (:expanded ("{${Name}}" nil 10 "\\operator") 10 "\\operator")"#]],
+        ),
+        (
+            "auto_complete_auctex_symbol_action_outside_math_wraps_command_and_leaves_point_before_closing_dollar",
+            r##"(with-temp-buffer
           (insert "Euler wrote \\alpha")
           (goto-char (point-max))
           (let ((candidate
@@ -100,17 +97,15 @@ fn auto_complete_auctex_symbol_action_outside_math_wraps_command_and_leaves_poin
              captured
              (point)
              (char-after)
-             (buffer-string))))"##;
-    let expect = expect![[
+             (buffer-string))))"##,
+            true,
+            expect![[
         r#"OK (:expanded ("" nil 20 "Euler wrote $\\alpha$") 20 36 "Euler wrote $\\alpha$")"#
-    ]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_environment_action_replaces_prefix_with_complete_nested_figure_snippet() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_auctex_environment_action_replaces_prefix_with_complete_nested_figure_snippet",
+            r##"(with-temp-buffer
           (insert "Before\n\\begfigure")
           (goto-char (point-max))
           (let ((candidate
@@ -133,17 +128,15 @@ fn auto_complete_auctex_environment_action_replaces_prefix_with_complete_nested_
             (list
              (ac-auctex-environment-action)
              captured
-             (buffer-string))))"##;
-    let expect = expect![[
+             (buffer-string))))"##,
+            true,
+            expect![[
         r#"OK (:expanded ("\\begin{figure}${[${htbp!}]}{${Filename}}\n$0\n\\end{figure}" nil 8 "Before\n") "Before\n")"#
-    ]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_environment_action_honors_custom_candidate_prefix_and_tab_stops() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_auctex_environment_action_honors_custom_candidate_prefix_and_tab_stops",
+            r##"(with-temp-buffer
           (insert "\\begin:itemize")
           (goto-char (point-max))
           (let ((candidate
@@ -167,17 +160,15 @@ fn auto_complete_auctex_environment_action_honors_custom_candidate_prefix_and_ta
                :expanded))
             (list
              (ac-auctex-environment-action)
-             captured)))"##;
-    let expect = expect![[
+             captured)))"##,
+            true,
+            expect![[
         r#"OK (:expanded ("\\begin{itemize}${[${compact}]}{${Label}}\n$0\n\\end{itemize}" nil 1 ""))"#
-    ]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_macro_action_drives_current_yasnippet_through_its_legacy_alias() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_auctex_macro_action_drives_current_yasnippet_through_its_legacy_alias",
+            r##"(with-temp-buffer
           (insert "\\section")
           (goto-char (point-max))
           (let ((candidate
@@ -193,16 +184,13 @@ fn auto_complete_auctex_macro_action_drives_current_yasnippet_through_its_legacy
              (point)
              (buffer-substring-no-properties
               (line-beginning-position)
-              (point-max)))))"##;
-    let expect =
-        expect![[r#"OK (t "\\section[Short title]{Title}" 9 "\\section[Short title]{Title}")"#]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_environment_action_builds_real_current_yasnippet_document_structure() {
-    let elisp_form = r##"(with-temp-buffer
+              (point-max)))))"##,
+            true,
+            expect![[r#"OK (t "\\section[Short title]{Title}" 9 "\\section[Short title]{Title}")"#]],
+        ),
+        (
+            "auto_complete_auctex_environment_action_builds_real_current_yasnippet_document_structure",
+            r##"(with-temp-buffer
           (insert "\\begdocument")
           (goto-char (point-max))
           (let ((candidate
@@ -215,8 +203,9 @@ fn auto_complete_auctex_environment_action_builds_real_current_yasnippet_documen
              (buffer-string)
              (point)
              (line-number-at-pos)
-             (current-column))))"##;
-    let expect = expect![[r#"OK (t "\\begin{document}\n\n\\end{document}" 18 2 0)"#]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
+             (current-column))))"##,
+            true,
+            expect![[r#"OK (t "\\begin{document}\n\n\\end{document}" 18 2 0)"#]],
+        ),
+    ]);
 }

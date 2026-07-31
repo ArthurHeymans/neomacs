@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ASYNC1_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod construction;
 mod pipelines;
 mod plist;
@@ -137,4 +139,28 @@ pub(crate) fn assert_async1_parity(elisp_form: &str, expected: Expect) {
 
 pub(crate) fn assert_async1_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_async1_source_parity("async1-autoloads.el", elisp_form, expected);
+}
+
+
+
+/// Multi-probe batch for `assert_async1_autoload_parity` cases (2a).
+pub(crate) fn assert_async1_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        async1_oracle("async1-autoloads.el"),
+        &name,
+        "async1_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_async1_parity` cases (2a).
+pub(crate) fn assert_async1_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        async1_oracle("async1.el"),
+        &name,
+        "async1_parity",
+        cases,
+    );
 }

@@ -9,7 +9,7 @@
 
 use expect_test::expect;
 
-use super::assert_atom_one_dark_theme_parity;
+use super::assert_atom_one_dark_theme_batch;
 
 /// The same HTML buffer with the remapping on and off, side by side.
 ///
@@ -34,9 +34,13 @@ use super::assert_atom_one_dark_theme_parity;
 /// manufacturing one would be inventing the capability. The relative-spec
 /// lookup here is what the display engine does with the same alist, and the
 /// unremapped `face-attribute` value beside it is what the entry overrides.
+
 #[test]
-fn the_html_remap_changes_the_colour_and_leaves_the_face_property_untouched() {
-    let elisp_form = r##"(cl-labels
+fn workflows_public_surface_batch() {
+    assert_atom_one_dark_theme_batch(&[
+        (
+            "the_html_remap_changes_the_colour_and_leaves_the_face_property_untouched",
+            r##"(cl-labels
               ((observe
                 ()
                 (with-temp-buffer
@@ -84,10 +88,11 @@ fn the_html_remap_changes_the_colour_and_leaves_the_face_property_untouched() {
                      (not (equal (plist-get on :remapped)
                                  (plist-get off :remapped))))))
               (when (custom-theme-enabled-p 'atom-one-dark)
-                (disable-theme 'atom-one-dark))))"##;
-    let expect = expect![[
+                (disable-theme 'atom-one-dark))))"##,
+            true,
+            expect![[
         r##"OK (:with-remapping (:face-properties (font-lock-function-name-face font-lock-variable-name-face) :remapped ((font-lock-function-name-face "#61AFEF" "#E06C75") (font-lock-variable-name-face "#E06C75" "#D19A66"))) :without-remapping (:face-properties (font-lock-function-name-face font-lock-variable-name-face) :remapped ((font-lock-function-name-face "#61AFEF" nil) (font-lock-variable-name-face "#E06C75" nil))) :face-properties-are-identical t :colours-differ t)"##
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

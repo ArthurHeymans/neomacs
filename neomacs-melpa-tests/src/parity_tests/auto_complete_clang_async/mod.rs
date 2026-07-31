@@ -6,6 +6,8 @@ use crate::{
 };
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod arguments;
 mod async_process;
 mod parsing;
@@ -120,5 +122,29 @@ pub(crate) fn assert_auto_complete_clang_async_autoload_parity(elisp_form: &str,
         "auto-complete-clang-async-autoloads.el",
         elisp_form,
         expected,
+    );
+}
+
+
+
+/// Multi-probe batch for `assert_auto_complete_clang_async_autoload_parity` cases (2a).
+pub(crate) fn assert_auto_complete_clang_async_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_complete_clang_async_oracle("auto-complete-clang-async-autoloads.el"),
+        &name,
+        "auto_complete_clang_async_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_auto_complete_clang_async_parity` cases (2a).
+pub(crate) fn assert_auto_complete_clang_async_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_complete_clang_async_oracle("auto-complete-clang-async.el"),
+        &name,
+        "auto_complete_clang_async_parity",
+        cases,
     );
 }

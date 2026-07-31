@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_ah_autoload_parity;
+use super::assert_ah_autoload_batch;
 
 #[test]
-fn autoloaded_public_mode_enables_hooks_updates_its_lighter_and_disables_cleanly() {
-    let elisp_form = r##"
+fn lifecycle_public_surface_batch() {
+    assert_ah_autoload_batch(&[
+        (
+            "autoloaded_public_mode_enables_hooks_updates_its_lighter_and_disables_cleanly",
+            r##"
 (let ((was-autoloaded (autoloadp (symbol-function 'ah-mode)))
       (loaded-before (featurep 'ah))
       (events nil)
@@ -52,9 +55,11 @@ fn autoloaded_public_mode_enables_hooks_updates_its_lighter_and_disables_cleanly
          (nreverse events)
          ah-mode))
     (ah-mode -1)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (t nil (t t " Hooks" #1=((:eval (format "%s" ah-lighter))) 2) (" AH!" #1#) 1 ((before 1) (after 2)) nil)"#
-    ]];
-    assert_ah_autoload_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

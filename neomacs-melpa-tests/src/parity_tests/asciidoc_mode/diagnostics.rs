@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_asciidoc_mode_parity;
+use super::assert_asciidoc_mode_batch;
 
 #[test]
-fn flymake_output_parser_maps_all_severities_lines_and_messages_to_exact_regions() {
-    let elisp_form = r##"(with-temp-buffer
+fn diagnostics_public_surface_batch() {
+    assert_asciidoc_mode_batch(&[
+        (
+            "flymake_output_parser_maps_all_severities_lines_and_messages_to_exact_regions",
+            r##"(with-temp-buffer
   (insert
    "first line\n"
    "second line has an invalid reference\n"
@@ -31,16 +34,15 @@ fn flymake_output_parser_maps_all_severities_lines_and_messages_to_exact_regions
         (buffer-substring-no-properties
          (flymake-diagnostic-beg diagnostic)
          (flymake-diagnostic-end diagnostic))))
-     diagnostics)))"##;
-    let expect = expect![[
+     diagnostics)))"##,
+            true,
+            expect![[
         r#"OK ((:warning 12 48 "invalid reference" "second line has an invalid reference") (:error 49 81 "missing include" "third line has a missing include") (:note 82 109 "old syntax" "fourth line uses old syntax") (:warning 82 109 "outside buffer" "fourth line uses old syntax"))"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn fatal_asciidoctor_failure_becomes_one_buffer_error_only_when_no_line_diagnostic_exists() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "fatal_asciidoctor_failure_becomes_one_buffer_error_only_when_no_line_diagnostic_exists",
+            r##"(with-temp-buffer
   (insert "= Document\n\nbody\n")
   (cl-labels
       ((summaries
@@ -68,16 +70,15 @@ fn fatal_asciidoctor_failure_becomes_one_buffer_error_only_when_no_line_diagnost
      (summaries
       "asciidoctor: FAILED: ignored on success\n"
       0)
-     (summaries "all good\n" 0))))"##;
-    let expect = expect![[
+     (summaries "all good\n" 0))))"##,
+            true,
+            expect![[
         r#"OK (((:error 1 11 "asciidoctor: FAILED: missing converter for backend")) ((:warning 12 13 "warning wins")) nil nil)"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn public_flymake_backend_runs_unsaved_buffer_through_a_deterministic_real_process() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "public_flymake_backend_runs_unsaved_buffer_through_a_deterministic_real_process",
+            r##"(with-temp-buffer
   (insert
    "= Process Contract\n\n"
    "include::missing.adoc[]\n"
@@ -125,16 +126,15 @@ fn public_flymake_backend_runs_unsaved_buffer_through_a_deterministic_real_proce
       result)
      (and asciidoc--flymake-proc
           (process-status
-           asciidoc--flymake-proc)))))"##;
-    let expect = expect![[
+           asciidoc--flymake-proc)))))"##,
+            true,
+            expect![[
         r#"OK (t ("/bin/sh" "-c" "cat >/dev/null; printf 'asciidoctor: ERROR: <stdin>: line 3: deterministic include\\nasciidoctor: DEPRECATED: <stdin>: Line 4: deterministic syntax\\n' >&2; exit 1" "asciidoc-mode-test" "-B" "[ORACLE-SANDBOX]/" "-o" "/dev/null" "-") nil ((:error 21 44 "deterministic include") (:note 45 55 "deterministic syntax")) exit)"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn public_flymake_backend_rejects_missing_executable_before_mutating_process_state() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "public_flymake_backend_rejects_missing_executable_before_mutating_process_state",
+            r##"(with-temp-buffer
   (insert "= Missing Tool\n")
   (asciidoc-mode)
   (let ((asciidoc-asciidoctor-command
@@ -152,9 +152,11 @@ fn public_flymake_backend_rejects_missing_executable_before_mutating_process_sta
         asciidoc--flymake-proc
         reports
         (memq #'asciidoc-flymake
-              flymake-diagnostic-functions))))))"##;
-    let expect = expect![[
+              flymake-diagnostic-functions))))))"##,
+            true,
+            expect![[
         r#"OK (error ("Cannot find the Asciidoctor executable \"asciidoc-mode-no-such-executable\"") nil nil (asciidoc-flymake t))"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

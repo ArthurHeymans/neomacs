@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_async_parity, assert_async_signal_parity};
+use super::{assert_async_batch};
 
 #[test]
-fn async_public_defaults_and_environment_alias_match_the_pinned_release() {
-    let elisp_form = r##"(list
+fn serialization_public_surface_batch() {
+    assert_async_batch(&[
+        (
+            "async_public_defaults_and_environment_alias_match_the_pinned_release",
+            r##"(list
                async-prompt-for-password
                async-process-noquery-on-exit
                async-debug
@@ -14,15 +17,13 @@ fn async_public_defaults_and_environment_alias_match_the_pinned_release() {
                (eq async-variables-noprops-function
                    #'async--purecopy)
                (eq (indirect-function 'async-inject-environment)
-                   (indirect-function 'async-inject-variables)))"##;
-    let expect = expect![[r#"OK (t nil nil t nil "-Q" t t)"#]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_purecopy_strips_nested_string_properties_without_mutating_the_input() {
-    let elisp_form = r##"(let* ((top (propertize "top" 'face 'bold))
+                   (indirect-function 'async-inject-variables)))"##,
+            true,
+            expect![[r#"OK (t nil nil t nil "-Q" t t)"#]],
+        ),
+        (
+            "async_purecopy_strips_nested_string_properties_without_mutating_the_input",
+            r##"(let* ((top (propertize "top" 'face 'bold))
                     (nested (propertize "nested" 'help-echo "tip"))
                     (key (propertize "key" 'category 'key))
                     (value (propertize "value" 'category 'value))
@@ -48,17 +49,15 @@ fn async_purecopy_strips_nested_string_properties_without_mutating_the_input() {
                  (text-properties-at 0 nested)
                  (text-properties-at 0 key)
                  (text-properties-at 0 value))
-                (eq (nth 4 copy) (nth 4 original))))"##;
-    let expect = expect![[
+                (eq (nth 4 copy) (nth 4 original))))"##,
+            true,
+            expect![[
         r#"OK (("top" (inside "nested") ("key" . "value") 17 [vector]) (nil nil nil nil) ((face bold) (help-echo "tip") (category key) (category value)) t)"#
-    ]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_inject_variables_honors_include_predicate_exclusion_and_noprops() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "async_inject_variables_honors_include_predicate_exclusion_and_noprops",
+            r##"(progn
                (defvar neomacs-async-alpha nil)
                (defvar neomacs-async-beta nil)
                (defvar neomacs-async-excluded nil)
@@ -97,15 +96,13 @@ fn async_inject_variables_honors_include_predicate_exclusion_and_noprops() {
                   (boundp 'neomacs-async-excluded)
                   (boundp 'neomacs-async-rejected)
                   (boundp
-                   'neomacs-async-syntax-table))))"##;
-    let expect = expect![[r#"OK ("alpha" nil (one (two . three)) nil nil nil)"#]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_message_packet_recognition_preserves_the_plist_marker_value() {
-    let elisp_form = r##"(mapcar
+                   'neomacs-async-syntax-table))))"##,
+            true,
+            expect![[r#"OK ("alpha" nil (one (two . three)) nil nil nil)"#]],
+        ),
+        (
+            "async_message_packet_recognition_preserves_the_plist_marker_value",
+            r##"(mapcar
                #'async-message-p
                '(nil
                  t
@@ -115,15 +112,13 @@ fn async_message_packet_recognition_preserves_the_plist_marker_value() {
                  (:async-message t)
                  (:payload 1 :async-message marker)
                  ((:async-message t))
-                 (:async-message 0 :payload "value")))"##;
-    let expect = expect![[r#"OK (nil nil nil nil nil t marker nil 0)"#]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_wire_encoding_round_trips_unicode_vectors_and_dotted_pairs() {
-    let elisp_form = r##"(let ((value
+                 (:async-message 0 :payload "value")))"##,
+            true,
+            expect![[r#"OK (nil nil nil nil nil t marker nil 0)"#]],
+        ),
+        (
+            "async_wire_encoding_round_trips_unicode_vectors_and_dotted_pairs",
+            r##"(let ((value
                      '("λ雪"
                        [alpha 17 "β"]
                        (left . right)
@@ -135,15 +130,13 @@ fn async_wire_encoding_round_trips_unicode_vectors_and_dotted_pairs() {
                    (list
                     (string-prefix-p "\"" wire)
                     (string-suffix-p "\"\n" wire)
-                    (async--receive-sexp wire)))))"##;
-    let expect = expect![[r#"OK (t t ("λ雪" [alpha 17 "β"] (left . right) (:nested (1 2 3))))"#]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_wire_encoding_preserves_shared_and_circular_structure() {
-    let elisp_form = r##"(let* ((shared (list 'shared))
+                    (async--receive-sexp wire)))))"##,
+            true,
+            expect![[r#"OK (t t ("λ雪" [alpha 17 "β"] (left . right) (:nested (1 2 3))))"#]],
+        ),
+        (
+            "async_wire_encoding_preserves_shared_and_circular_structure",
+            r##"(let* ((shared (list 'shared))
                     (cycle (list 'cycle))
                     (value (list shared shared cycle)))
                (setcdr cycle cycle)
@@ -161,15 +154,13 @@ fn async_wire_encoding_preserves_shared_and_circular_structure() {
                         (cadr decoded))
                     (eq decoded-cycle
                         (cdr decoded-cycle))
-                    (car decoded-cycle)))))"##;
-    let expect = expect![[r#"OK (t t t cycle)"#]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_handle_result_without_callback_stores_the_future_value_in_its_buffer() {
-    let elisp_form = r##"(let ((buffer
+                    (car decoded-cycle)))))"##,
+            true,
+            expect![[r#"OK (t t t cycle)"#]],
+        ),
+        (
+            "async_handle_result_without_callback_stores_the_future_value_in_its_buffer",
+            r##"(let ((buffer
                      (generate-new-buffer
                       " *neomacs-async-result*")))
                (unwind-protect
@@ -185,15 +176,13 @@ fn async_handle_result_without_callback_stores_the_future_value_in_its_buffer() 
                         async-callback-value
                         (buffer-live-p buffer))))
                  (when (buffer-live-p buffer)
-                   (kill-buffer buffer))))"##;
-    let expect = expect![[r#"OK (t (:answer 42) t)"#]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_handle_result_callback_receives_value_and_disposes_of_the_buffer() {
-    let elisp_form = r##"(let ((buffer
+                   (kill-buffer buffer))))"##,
+            true,
+            expect![[r#"OK (t (:answer 42) t)"#]],
+        ),
+        (
+            "async_handle_result_callback_receives_value_and_disposes_of_the_buffer",
+            r##"(let ((buffer
                      (generate-new-buffer
                       " *neomacs-async-callback*"))
                     received)
@@ -206,15 +195,13 @@ fn async_handle_result_callback_receives_value_and_disposes_of_the_buffer() {
                   '(:done t)
                   buffer))
                (list received
-                     (buffer-live-p buffer)))"##;
-    let expect = expect![[r#"OK (((:done t) t) nil)"#]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_handle_result_resignals_the_exact_child_error_and_cleans_up() {
-    let elisp_form = r##"(let ((buffer
+                     (buffer-live-p buffer)))"##,
+            true,
+            expect![[r#"OK (((:done t) t) nil)"#]],
+        ),
+        (
+            "async_handle_result_resignals_the_exact_child_error_and_cleans_up",
+            r##"(let ((buffer
                      (generate-new-buffer
                       " *neomacs-async-signal*"))
                     (async-debug nil))
@@ -223,15 +210,13 @@ fn async_handle_result_resignals_the_exact_child_error_and_cleans_up() {
                 '(async-signal
                   (wrong-type-argument
                    integerp not-an-integer))
-                buffer))"##;
-    let expect = expect![[r#"ERR (wrong-type-argument integerp not-an-integer)"#]];
-
-    assert_async_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_child_program_arguments_preserve_quiet_init_batch_and_payload_order() {
-    let elisp_form = r##"(let* ((async-quiet-switch "-q")
+                buffer))"##,
+            false,
+            expect![[r#"ERR (wrong-type-argument integerp not-an-integer)"#]],
+        ),
+        (
+            "async_child_program_arguments_preserve_quiet_init_batch_and_payload_order",
+            r##"(let* ((async-quiet-switch "-q")
                     (async-child-init
                      (expand-file-name
                       "child-init.el"
@@ -252,17 +237,15 @@ fn async_child_program_arguments_preserve_quiet_init_batch_and_payload_order() {
                 (nth 5 args)
                 (nth 6 args)
                 (nth 7 args)
-                (async--receive-sexp payload)))"##;
-    let expect = expect![[
+                (async--receive-sexp payload)))"##,
+            true,
+            expect![[
         r#"OK ("-q" "-l" "async.el" "-l" t "-batch" "-f" "async-batch-invoke" (lambda nil (list "λ" 42)))"#
-    ]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_sandbox_and_async_let_expand_to_the_upstream_callback_shape() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "async_sandbox_and_async_let_expand_to_the_upstream_callback_shape",
+            r##"(list
                (macroexpand
                 '(async-sandbox
                   (lambda () 42)))
@@ -270,10 +253,11 @@ fn async_sandbox_and_async_let_expand_to_the_upstream_callback_shape() {
                 '(async-let
                      ((x (+ 1 2))
                       (y (lambda () (+ x 4))))
-                   (list x y))))"##;
-    let expect = expect![[
+                   (list x y))))"##,
+            true,
+            expect![[
         r#"OK ((async-get (async-start (lambda nil 42))) (async-start (lambda nil (+ 1 2)) (lambda (x) (async-start (lambda nil (+ x 4)) (lambda (y) (progn (list x y)))))))"#
-    ]];
-
-    assert_async_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

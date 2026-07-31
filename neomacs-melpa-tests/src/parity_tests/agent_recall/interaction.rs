@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_agent_recall_parity;
+use super::assert_agent_recall_batch;
 
 #[test]
-fn agent_recall_browses_opens_navigates_and_cleans_a_real_transcript() {
-    let elisp_form = r####"(let* ((root
+fn interaction_public_surface_batch() {
+    assert_agent_recall_batch(&[
+        (
+            "agent_recall_browses_opens_navigates_and_cleans_a_real_transcript",
+            r####"(let* ((root
                                  (expand-file-name
                                   "interaction"
                                   (getenv
@@ -129,10 +132,11 @@ fn agent_recall_browses_opens_navigates_and_cleans_a_real_transcript() {
                                  (kill-buffer buffer)))
                              (delete-directory
                               root
-                              t)))"####;
-    let expect = expect![[
+                              t)))"####,
+            true,
+            expect![[
         r#"OK ("[interaction-project] 2026-07-12-08-15-00" ("2026-07-12-08-15-00.md" t t "33333333-3333-3333-3333-333333333333" "  r Resume (33333333)  c Clean  b Browse  C-j/C-k Navigate  q Quit") (8 17 8) ("2026-07-12-08-15-00-clean.md" t "**Started:** 2026-07-12 08:15:00\n**Agent:** Claude Code\n**Working Directory:** [ORACLE-SANDBOX]/interaction/interaction-project\n**Session:** 33333333-3333-3333-3333-333333333333\n\n---\n\n## ## User Message\n> Diagnose the parser state leak.\n\n## Agent Response\nThe lookahead token survives recovery.\n\n## User Message\n> Apply the smallest safe correction.\n\n## Agent Response\nReset lookahead after the recovery branch.\n"))"#
-    ]];
-
-    assert_agent_recall_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

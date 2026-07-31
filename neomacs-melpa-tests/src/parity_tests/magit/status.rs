@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_magit_parity;
+use super::assert_magit_batch;
 
 #[test]
-fn magit_status_sections_track_unicode_spaced_and_plain_files_across_states() {
-    let elisp_form = r##"(let* ((root (make-temp-file "magit-status-files-" t))
+fn status_public_surface_batch() {
+    assert_magit_batch(&[
+        (
+            "magit_status_sections_track_unicode_spaced_and_plain_files_across_states",
+            r##"(let* ((root (make-temp-file "magit-status-files-" t))
                     (default-directory (file-name-as-directory root))
                     status-buffer)
                (unwind-protect
@@ -71,15 +74,13 @@ fn magit_status_sections_track_unicode_spaced_and_plain_files_across_states() {
                                "file with äöüéλ")))))))
                  (when (buffer-live-p status-buffer)
                    (kill-buffer status-buffer))
-                 (delete-directory root t)))"##;
-    let expect = expect![[r#"OK ((t t t) (t t t) (t t t))"#]];
-
-    assert_magit_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_status_section_visibility_commands_preserve_exact_visible_text() {
-    let elisp_form = r##"(let* ((root (make-temp-file "magit-status-text-" t))
+                 (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK ((t t t) (t t t) (t t t))"#]],
+        ),
+        (
+            "magit_status_section_visibility_commands_preserve_exact_visible_text",
+            r##"(let* ((root (make-temp-file "magit-status-text-" t))
                     (default-directory (file-name-as-directory root))
                     status-buffer)
                (unwind-protect
@@ -129,10 +130,11 @@ fn magit_status_section_visibility_commands_preserve_exact_visible_text() {
                               (visible-text)))))))
                  (when (buffer-live-p status-buffer)
                    (kill-buffer status-buffer))
-                 (delete-directory root t)))"##;
-    let expect = expect![[
+                 (delete-directory root t)))"##,
+            true,
+            expect![[
         r#"OK ("Head:     master dummy\n\nRecent commits" "Head:     master dummy\n\nRecent commits\n<HASH> master dummy" "Head:     master dummy\n\nRecent commits")"#
-    ]];
-
-    assert_magit_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

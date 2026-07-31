@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AC_ISPELL_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const AC_ISPELL_TEST_TIMEOUT: Duration = Duration::from_secs(120);
@@ -189,4 +191,15 @@ pub(crate) fn assert_ac_ispell_parity(form: &str, expected: Expect) {
         .run_value(&name, form)
         .unwrap_or_else(|error| panic!("ac-ispell parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+/// Multi-probe batch for `assert_ac_ispell_parity` cases (2a).
+pub(crate) fn assert_ac_ispell_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        ac_ispell_oracle(),
+        &name,
+        "ac_ispell_parity",
+        cases,
+    );
 }

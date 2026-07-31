@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_atl_markup_parity;
+use super::assert_atl_markup_batch;
 
 #[test]
-fn atl_markup_practical_html_navigation_enables_inside_tags_and_disables_in_text() {
-    let elisp_form = r##"(with-temp-buffer
+fn truncation_public_surface_batch() {
+    assert_atl_markup_batch(&[
+        (
+            "atl_markup_practical_html_navigation_enables_inside_tags_and_disables_in_text",
+            r##"(with-temp-buffer
           (insert
            "<article class=\"card\">\n"
            "  <h1>Hello world</h1>\n"
@@ -36,16 +39,15 @@ fn atl_markup_practical_html_navigation_enables_inside_tags_and_disables_in_text
              (equal
               original-text
               (buffer-string))
-             (buffer-modified-p))))"##;
-    let expect = expect![[
+             (buffer-modified-p))))"##,
+            true,
+            expect![[
         r#"OK ((("class" "Truncate long lines enabled" t 15) ("Hello" "Truncate long lines disabled" nil 35) ("</art" "Truncate long lines enabled" t 52) ("tail" nil t 62)) t nil)"#
-    ]];
-    assert_atl_markup_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_markup_truncation_guard_matrix_skips_boundaries_whitespace_comments_and_eol() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "atl_markup_truncation_guard_matrix_skips_boundaries_whitespace_comments_and_eol",
+            r##"(mapcar
           (lambda (specification)
             (pcase-let
                 ((`(,name ,contents ,mode)
@@ -79,16 +81,15 @@ fn atl_markup_truncation_guard_matrix_skips_boundaries_whitespace_comments_and_e
             (eol "<tag>value|\nnext" nil)
             (elisp-comment ";; comment bod|y\n(value)" emacs-lisp-mode)
             (ordinary-tag "<tag attrib|ute>value</tag>" nil)
-            (ordinary-text "<tag>val|ue</tag>" nil)))"##;
-    let expect = expect![
+            (ordinary-text "<tag>val|ue</tag>" nil)))"##,
+            true,
+            expect![
         "OK ((bob nil nil :unchanged 1) (eob nil nil :unchanged 17) (space nil nil :unchanged 12) (tab nil nil :unchanged 12) (newline nil nil :unchanged 12) (eol nil nil :unchanged 11) (elisp-comment nil nil :unchanged 15) (ordinary-tag :toggled (1) :unchanged 12) (ordinary-text :toggled (-1) :unchanged 9))"
-    ];
-    assert_atl_markup_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_markup_custom_ignore_regex_controls_exact_previous_character_gate_and_errors() {
-    let elisp_form = r##"(mapcar
+    ],
+        ),
+        (
+            "atl_markup_custom_ignore_regex_controls_exact_previous_character_gate_and_errors",
+            r##"(mapcar
           (lambda (specification)
             (pcase-let
                 ((`(,regex ,contents)
@@ -126,16 +127,15 @@ fn atl_markup_custom_ignore_regex_controls_exact_previous_character_gate_and_err
             ("[[:digit:]]" "<tag>7|value</tag>")
             ("[[:digit:]]" "<tag>a|value</tag>")
             ("[" "<tag>a|value</tag>")
-            (nil "<tag>a|value</tag>")))"##;
-    let expect = expect![[
+            (nil "<tag>a|value</tag>")))"##,
+            true,
+            expect![[
         r#"OK (("[ \11\15\n]" "<tag>space |value</tag>" (:ok nil) nil 12) ("x" "<tag>x|value</tag>" (:ok nil) nil 7) ("x" "<tag> |value</tag>" (:ok :toggled) (1) 7) ("" "<tag>a|value</tag>" (:ok nil) nil 7) ("β" "<tag>β|value</tag>" (:ok nil) nil 7) ("[[:digit:]]" "<tag>7|value</tag>" (:ok nil) nil 7) ("[[:digit:]]" "<tag>a|value</tag>" (:ok :toggled) (1) 7) ("[" "<tag>a|value</tag>" (:error invalid-regexp ("Unmatched [ or [^")) nil 7) (nil "<tag>a|value</tag>" (:error wrong-type-argument (stringp nil)) nil 7))"#
-    ]];
-    assert_atl_markup_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_markup_markup_comments_block_tag_shaped_text_but_real_tags_still_toggle() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "atl_markup_markup_comments_block_tag_shaped_text_but_real_tags_still_toggle",
+            r##"(mapcar
           (lambda (contents)
             (with-temp-buffer
               (atl-markup-test-place-marker
@@ -159,16 +159,15 @@ fn atl_markup_markup_comments_block_tag_shaped_text_but_real_tags_still_toggle()
             "<article class=\"car|d\">visible</article>"
             "<article><!-- comment bod|y --></article>"
             "<article>visible bod|y</article>"
-            "<!-- multiline\n <nested attrib|ute>\n --><p>x</p>"))"##;
-    let expect = expect![[
+            "<!-- multiline\n <nested attrib|ute>\n --><p>x</p>"))"##,
+            true,
+            expect![[
         r#"OK (("<!-- <article class=\"car|d\">hidden</article> -->" t t nil nil 25) ("<article class=\"car|d\">visible</article>" nil t :toggled (1) 20) ("<article><!-- comment bod|y --></article>" t t nil nil 26) ("<article>visible bod|y</article>" nil nil :toggled (-1) 21) ("<!-- multiline\n <nested attrib|ute>\n --><p>x</p>" t t nil nil 31))"#
-    ]];
-    assert_atl_markup_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_markup_web_truncation_is_independent_of_fontification_and_face_properties() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "atl_markup_web_truncation_is_independent_of_fontification_and_face_properties",
+            r##"(mapcar
           (lambda (face)
             (with-temp-buffer
               (insert
@@ -209,16 +208,15 @@ fn atl_markup_web_truncation_is_independent_of_fontification_and_face_properties
           '(nil
             font-lock-keyword-face
             (:foreground "red" :weight bold)
-            (font-lock-comment-face underline)))"##;
-    let expect = expect![[
+            (font-lock-comment-face underline)))"##,
+            true,
+            expect![[
         r#"OK ((nil 1 -1 (1 -1) nil t) (font-lock-keyword-face 1 -1 (1 -1) font-lock-keyword-face t) ((:foreground "red" :weight bold) 1 -1 (1 -1) (:foreground "red" :weight bold) t) ((font-lock-comment-face underline) 1 -1 (1 -1) (font-lock-comment-face underline) t))"#
-    ]];
-    assert_atl_markup_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_markup_web_truncation_propagates_guard_classifier_and_toggle_failures() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "atl_markup_web_truncation_propagates_guard_classifier_and_toggle_failures",
+            r##"(mapcar
           (lambda (failure)
             (with-temp-buffer
               (insert
@@ -258,17 +256,15 @@ fn atl_markup_web_truncation_propagates_guard_classifier_and_toggle_failures() {
                    message-log-max
                    inhibit-message
                    (point))))))
-          '(none comment inside toggle))"##;
-    let expect = expect![[
+          '(none comment inside toggle))"##,
+            true,
+            expect![[
         r#"OK ((none (:ok :toggled) 21 nil 15) (comment (:error error ("comment failed")) 21 nil 15) (inside (:error error ("inside failed")) 21 nil 15) (toggle (:error error ("toggle failed")) 21 nil 15))"#
-    ]];
-    assert_atl_markup_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_markup_web_truncation_preserves_text_point_and_modified_state_but_records_match_data_effect()
-{
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "atl_markup_web_truncation_preserves_text_point_and_modified_state_but_records_match_data_effect",
+            r##"(with-temp-buffer
           (insert
            "<article data-id=\"42\">payload</article>")
           (goto-char
@@ -310,7 +306,9 @@ fn atl_markup_web_truncation_preserves_text_point_and_modified_state_but_records
              after-match
              (equal
               before-match
-              after-match))))"##;
-    let expect = expect!["OK ((:toggle 1) t t nil (0 4 1 4) (22 23 (:buffer nil)) nil)"];
-    assert_atl_markup_parity(elisp_form, expect);
+              after-match))))"##,
+            true,
+            expect!["OK ((:toggle 1) t t nil (0 4 1 4) (22 23 (:buffer nil)) nil)"],
+        ),
+    ]);
 }

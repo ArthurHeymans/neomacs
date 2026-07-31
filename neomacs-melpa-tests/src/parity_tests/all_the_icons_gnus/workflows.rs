@@ -1,40 +1,33 @@
 use expect_test::expect;
 
-use super::assert_all_the_icons_gnus_parity;
+use super::assert_all_the_icons_gnus_batch;
 
 /// The package is installed by calling one function, and all it does is rewrite
 /// Gnus's line formats.  Pinned here: the stock format of every variable it
 /// touches, the format afterwards with each icon glyph and the font it comes
 /// from, and that calling the setup a second time leaves everything exactly as
 /// the first call did.
+
 #[test]
-fn the_setup_function_rewrites_every_gnus_line_format_it_owns() {
-    let elisp_form = r##"(let ((before (aig-test-formats)))
+fn workflows_public_surface_batch() {
+    assert_all_the_icons_gnus_batch(&[
+        (
+            "the_setup_function_rewrites_every_gnus_line_format_it_owns",
+            r##"(let ((before (aig-test-formats)))
   (all-the-icons-gnus-setup)
   (let ((after (aig-test-formats)))
     (all-the-icons-gnus-setup)
     (list :before before
           :after after
-          :idempotent (equal after (aig-test-formats)))))"##;
-
-    let expect = expect![[
+          :idempotent (equal after (aig-test-formats)))))"##,
+            true,
+            expect![[
         r#"OK (:before (:summary ("%U%R%z%I%(%[%4L: %-23,23f%]%) %s\n" nil) :group ("%M%S%p%P%5y:%B%(%g%)\n" nil) :topic ("%i[ %(%{%n%}%) -- %A ]%v\n" nil) :user-date ("%b %d %Y" nil) :tree-root ("> " nil) :tree-false-root ("> " nil) :tree-vertical ("| " nil) :tree-single-leaf ("\\-> " nil)) :after (:summary ("%1{%U%R%z: %}%[%2{%&user-date;%}%] <icon 59389> %4{%-34,34n%} %3{<icon 57699> %}%(%1{%B%}%s%)\n" ((35 59389 "Material Icons") (54 57699 "Material Icons"))) :group ("%1M%1S%5y <icon 57688> : %(%-50,50G%)\n" ((10 57688 "Material Icons"))) :topic ("%i[ <icon 58055> %(%{%n -- %A%}%) ]%v\n" ((4 58055 "Material Icons"))) :user-date ("<icon 59670> %Y-%m-%d %H:%M" ((0 59670 "Material Icons"))) :tree-root ("<icon 57688> " ((0 57688 "Material Icons"))) :tree-false-root ("<icon 57684> " ((0 57684 "Material Icons"))) :tree-vertical (" " nil) :tree-single-leaf ("<icon 57688> " ((0 57688 "Material Icons")))) :idempotent t)"#
-    ]];
-
-    assert_all_the_icons_gnus_parity(elisp_form, expect);
-}
-
-/// The formats only matter if Gnus renders through them, so this opens a real
-/// summary buffer: an `nndoc' ephemeral group over an mbox written into the
-/// sandbox, with two messages the second of which replies to the first.  The
-/// same mbox is rendered twice -- once with stock Gnus formats and once after
-/// the package's setup -- so the two summaries differ only by what the package
-/// changed: the date column comes from its `gnus-user-date-format-alist', the
-/// person and send glyphs from its summary format, and the threaded reply is
-/// marked with its thread-tree glyph instead of the stock characters.
-#[test]
-fn a_real_mbox_group_renders_its_summary_through_the_icon_formats() {
-    let elisp_form = r##"(let ((path (aig-test-write "mail/inbox.mbox" aig-test-mbox)))
+    ]],
+        ),
+        (
+            "a_real_mbox_group_renders_its_summary_through_the_icon_formats",
+            r##"(let ((path (aig-test-write "mail/inbox.mbox" aig-test-mbox)))
   (aig-test-prepare-gnus)
   (unwind-protect
       (progn
@@ -48,25 +41,15 @@ fn a_real_mbox_group_renders_its_summary_through_the_icon_formats() {
                   :iconised iconised
                   :buffer-name (and (aig-test-summary-buffer)
                                     (buffer-name (aig-test-summary-buffer)))))))
-    (aig-test-kill-gnus-buffers)))"##;
-
-    let expect = expect![[
+    (aig-test-kill-gnus-buffers)))"##,
+            true,
+            expect![[
         r#"OK (:stock (:mode gnus-summary-mode :lines ((" . [   2: Alice Adams            ] Release plan" nil) (" .     [   2: Bob Brown              ] " nil))) :iconised (:mode gnus-summary-mode :lines ((" . : [<icon 59670> 2024-01-01 10:00] <icon 59389> Alice Adams                        <icon 57699> <icon 57688> Release plan" ((6 59670 nil) (26 59389 nil) (63 57699 nil) (65 57688 nil))) (" . : [<icon 59670> 2024-01-02 11:30] <icon 59389> Bob Brown                          <icon 57699> <icon 57688> " ((6 59670 nil) (26 59389 nil) (63 57699 nil) (65 57688 nil))))) :buffer-name "*Summary nndoc+[ORACLE-SANDBOX]/mail/inbox.mbox-ephemeral:iconised*")"#
-    ]];
-
-    assert_all_the_icons_gnus_parity(elisp_form, expect);
-}
-
-/// The package's other half is a command that replaces header labels with icons
-/// in the buffer.  Two things about it are worth having on the record.  It is
-/// written with `dash' macros but never requires `dash', so out of the box the
-/// command fails; and its patterns match a label followed by a literal " : ",
-/// which is the shape the package's *own* group format produces, not the shape
-/// of a real article header -- so on a genuine article buffer it composes
-/// nothing at all.  Both pinned as they behave.
-#[test]
-fn the_header_composition_command_needs_dash_and_its_own_label_shape() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "the_header_composition_command_needs_dash_and_its_own_label_shape",
+            r##"(list
  :without-dash
  (list :dash-loaded (featurep 'dash)
        :outcome (with-temp-buffer
@@ -95,23 +78,15 @@ fn the_header_composition_command_needs_dash_and_its_own_label_shape() {
            "Body text.\n")
    (all-the-icons-gnus--add-faces)
    (list :compositions (aig-test-compositions)
-         :text (buffer-substring-no-properties (point-min) (point-max)))))"##;
-
-    let expect = expect![[
+         :text (buffer-substring-no-properties (point-min) (point-max)))))"##,
+            true,
+            expect![[
         r##"OK (:without-dash (:dash-loaded nil :outcome (void-function --each)) :real-article (:compositions nil :text "From: Alice Adams <alice@example.org>\nSubject: Release plan\nTo: team@example.org\nDate: Mon, 1 Jan 2024 10:00:00 +0000\n\nLet us ship on Friday.\n") :labels-as-the-group-format-writes-them (:compositions (("From:  : " (:foreground "#375E97")) ("Subject:  : " (:foreground "#375E97")) ("CC:  : " (:foreground "#375E97"))) :text "From:  : Alice Adams\nSubject:  : Release plan\nCC:  : nobody\nBody text.\n"))"##
-    ]];
-
-    assert_all_the_icons_gnus_parity(elisp_form, expect);
-}
-
-/// The replacement table itself, built as the file loads: which header labels
-/// the package knows, the icon each one is composed into and the font it comes
-/// from, and the face it adds.  This is what decides whether a header a user
-/// actually has gets an icon, so it is worth pinning as a whole rather than
-/// sampling.
-#[test]
-fn the_package_builds_a_table_of_header_labels_and_their_icons() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "the_package_builds_a_table_of_header_labels_and_their_icons",
+            r##"(list
  :entries (length pretty-gnus-article-alist)
  :table (mapcar (lambda (entry)
                   (list (nth 0 entry)
@@ -119,11 +94,11 @@ fn the_package_builds_a_table_of_header_labels_and_their_icons() {
                         (nth 2 entry)))
                 pretty-gnus-article-alist)
  :faces-are-plists (cl-every (lambda (entry) (plist-get (nth 2 entry) :foreground))
-                             pretty-gnus-article-alist))"##;
-
-    let expect = expect![[
+                             pretty-gnus-article-alist))"##,
+            true,
+            expect![[
         r##"OK (:entries 11 :table (("\\<\\(X-PGP-Fingerprint:  : \\)" ("<icon 62014>" ((0 62014 "FontAwesome"))) (:foreground "#375E97")) ("\\<\\(X-mailer:  : \\)" ("<icon 62056>" ((0 62056 "FontAwesome"))) (:foreground "#375E97")) ("\\<\\(User-Agent:  : \\)" ("<icon 62056>" ((0 62056 "FontAwesome"))) (:foreground "#375E97")) ("\\<\\(Content-Type:  : \\)" ("<icon 61529>" ((0 61529 "FontAwesome"))) (:foreground "#375E97")) ("\\<\\(Organization:  : \\)" ("<icon 61852>" ((0 61852 "FontAwesome"))) (:foreground "#375E97")) ("\\<\\(Date:  : \\)" ("<icon 61555>" ((0 61555 "FontAwesome"))) (:foreground "#375E97")) ("\\<\\(Reply-To:  : \\)" ("<icon 61579>" ((0 61579 "FontAwesome"))) (:foreground "#375E97")) ("\\<\\(CC:  : \\)" ("<icon 61632>" ((0 61632 "github-octicons"))) (:foreground "#375E97")) ("\\<\\(To:  : \\)" ("<icon 61447>" ((0 61447 "FontAwesome"))) (:foreground "#375E97")) ("\\<\\(Subject:  : \\)" ("<icon 61443>" ((0 61443 "FontAwesome"))) (:foreground "#375E97")) ("\\<\\(From:  : \\)" ("<icon 61447>" ((0 61447 "FontAwesome"))) (:foreground "#375E97"))) :faces-are-plists t)"##
-    ]];
-
-    assert_all_the_icons_gnus_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

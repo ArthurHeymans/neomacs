@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_flycheck_arduino_parity;
+use super::assert_flycheck_arduino_batch;
 
 #[test]
-fn optional_module_loads_real_pinned_flycheck_and_registers_complete_checker_definition() {
-    let elisp_form = r##"(let* ((descriptor
+fn flycheck_public_surface_batch() {
+    assert_flycheck_arduino_batch(&[
+        (
+            "optional_module_loads_real_pinned_flycheck_and_registers_complete_checker_definition",
+            r##"(let* ((descriptor
                           (cadr
                            (assq 'flycheck package-alist)))
                          (command
@@ -25,16 +28,15 @@ fn optional_module_loads_real_pinned_flycheck_and_registers_complete_checker_def
                      (mapcar #'cdr patterns)
                      (documentation
                       'flycheck-arduino-setup)
-                     flycheck-arduino-board))"##;
-    let expect = expect![[
+                     flycheck-arduino-board))"##,
+            true,
+            expect![[
         r#"OK (t t "20260728.931" ("arduino" "--verify" source) (arduino-mode) 2 (warning error) "Setup Flycheck Arduino.\nAdd ‘arduino’ to ‘flycheck-checkers’." nil)"#
-    ]];
-    assert_flycheck_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn setup_adds_arduino_checker_once_and_keeps_existing_checker_order_stable() {
-    let elisp_form = r##"(let ((flycheck-checkers
+    ]],
+        ),
+        (
+            "setup_adds_arduino_checker_once_and_keeps_existing_checker_order_stable",
+            r##"(let ((flycheck-checkers
                          '(emacs-lisp
                            c/c++-clang
                            emacs-lisp-checkdoc)))
@@ -46,14 +48,13 @@ fn setup_adds_arduino_checker_once_and_keeps_existing_checker_order_stable() {
                       (seq-filter
                        (lambda (checker)
                          (eq checker 'arduino))
-                       flycheck-checkers))))"##;
-    let expect = expect!["OK ((arduino emacs-lisp c/c++-clang emacs-lisp-checkdoc) 1)"];
-    assert_flycheck_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn realistic_compiler_warning_and_fatal_error_parse_into_precise_flycheck_objects() {
-    let elisp_form = r##"(let ((buffer
+                       flycheck-checkers))))"##,
+            true,
+            expect!["OK ((arduino emacs-lisp c/c++-clang emacs-lisp-checkdoc) 1)"],
+        ),
+        (
+            "realistic_compiler_warning_and_fatal_error_parse_into_precise_flycheck_objects",
+            r##"(let ((buffer
                          (get-buffer-create
                           " *arduino-flycheck-source*")))
                     (unwind-protect
@@ -83,16 +84,15 @@ fn realistic_compiler_warning_and_fatal_error_parse_into_precise_flycheck_object
                              "/workspace/Blink/Blink.ino:18:3: fatal error: Servo.h: No such file or directory\n"
                              "collect2: unrelated noise\n")
                             'arduino buffer)))
-                      (kill-buffer buffer)))"##;
-    let expect = expect![[
+                      (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK (("/workspace/Blink/Blink.ino" 12 7 warning "unused variable 'reading'" arduino t) ("/workspace/Blink/Blink.ino" 18 3 error "Servo.h: No such file or directory" arduino t))"#
-    ]];
-    assert_flycheck_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn checker_supports_only_arduino_mode_and_substitutes_real_source_argument() {
-    let elisp_form = r##"(let ((source
+    ]],
+        ),
+        (
+            "checker_supports_only_arduino_mode_and_substitutes_real_source_argument",
+            r##"(let ((source
                          (make-temp-file
                           "arduino-flycheck-" nil ".ino")))
                     (unwind-protect
@@ -124,7 +124,9 @@ fn checker_supports_only_arduino_mode_and_substitutes_real_source_argument() {
                                (t argument)))
                             (flycheck-checker-get
                              'arduino 'command))))
-                      (delete-file source)))"##;
-    let expect = expect![[r#"OK ((arduino-mode) nil ("arduino" "--verify" (t t)))"#]];
-    assert_flycheck_arduino_parity(elisp_form, expect);
+                      (delete-file source)))"##,
+            true,
+            expect![[r#"OK ((arduino-mode) nil ("arduino" "--verify" (t t)))"#]],
+        ),
+    ]);
 }

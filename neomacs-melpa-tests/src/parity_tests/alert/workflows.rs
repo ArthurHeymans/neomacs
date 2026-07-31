@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_alert_parity;
+use super::assert_alert_batch;
 
 /// The default path: three alerts of different severity through the `message'
 /// style.  Each reaches the echo area with its `%' left alone, each is written
@@ -8,9 +8,13 @@ use super::assert_alert_parity;
 /// ERROR, trivial to TRACE) because `alert-log-messages' logs independently of
 /// the style, and each stays on `alert-active-alerts' with a fade timer holding
 /// its remover.
+
 #[test]
-fn alerting_shows_the_message_and_logs_every_severity() {
-    let elisp_form = r##"(let ((alert-default-style 'message)
+fn workflows_public_surface_batch() {
+    assert_alert_batch(&[
+        (
+            "alerting_shows_the_message_and_logs_every_severity",
+            r##"(let ((alert-default-style 'message)
       (alert-user-configuration nil)
       (alert-internal-configuration nil)
       (alert-active-alerts nil)
@@ -31,24 +35,15 @@ fn alerting_shows_the_message_and_logs_every_severity() {
               (al-test-active-alerts)
               (al-test-pending-fades)
               alert-log-level))
-    (kill-buffer buffer)))"##;
-    let expect = expect![[
+    (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK (("Build finished" "Disk almost full" "100% done") "<TIME> [INFO ] Build finished\n<TIME> [ERROR] Disk almost full\n<TIME> [TRACE] 100% done\n" (("*alert-origin*" "100% done" alert-message-remove) ("*alert-origin*" "Disk almost full" alert-message-remove) ("*alert-origin*" "Build finished" alert-message-remove)) ("100% done" "Build finished" "Disk almost full") normal)"#
-    ]];
-
-    assert_alert_parity(elisp_form, expect);
-}
-
-/// The extension contract.  `alert-define-style' registers a style, and when
-/// an alert is routed to it the notifier is handed the whole plist - message,
-/// title, severity, category, mode, originating buffer, data, id and
-/// persistence - which is what every real back end reads.  Running any command
-/// in the originating buffer then calls the style's remover with the same plist
-/// and clears the alert, which is how `alert-remove-on-command' retires a
-/// notification.
-#[test]
-fn a_custom_style_receives_the_complete_alert_plist() {
-    let elisp_form = r##"(let ((alert-default-style 'al-test-recorder)
+    ]],
+        ),
+        (
+            "a_custom_style_receives_the_complete_alert_plist",
+            r##"(let ((alert-default-style 'al-test-recorder)
       (alert-user-configuration nil)
       (alert-internal-configuration nil)
       (alert-active-alerts nil)
@@ -77,22 +72,15 @@ fn a_custom_style_receives_the_complete_alert_plist() {
                 (length alert-active-alerts)
                 (and (memq #'alert-remove-on-command post-command-hook) t)
                 (buffer-string))))
-    (kill-buffer buffer)))"##;
-    let expect = expect![[
+    (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK ((al-test-recorder "Recorder al-test-recorder" t t) (((:message . "Nightly build failed") (:title . "CI") (:severity . urgent) (:category . build) (:mode . text-mode) (:buffer . "*alert-origin*") (:data job 42) (:id . nightly) (:persistent . t) (:never-persist) (:style))) (((:message . "Nightly build failed") (:severity . urgent))) 0 t "x")"#
-    ]];
-
-    assert_alert_parity(elisp_form, expect);
-}
-
-/// `alert-user-configuration' is the package's real value: rules pick the style
-/// per alert.  An urgent alert from a text-mode buffer takes the first rule and
-/// stops there; a chat alert takes the second rule, which carries `:continue',
-/// so a later rule matching its message notifies as well; and an alert matching
-/// no rule falls through to `alert-default-style'.
-#[test]
-fn user_configuration_rules_route_each_alert_to_a_style() {
-    let elisp_form = r##"(let ((alert-default-style 'al-test-fallback)
+    ]],
+        ),
+        (
+            "user_configuration_rules_route_each_alert_to_a_style",
+            r##"(let ((alert-default-style 'al-test-fallback)
       (alert-internal-configuration nil)
       (alert-active-alerts nil)
       (alert-hide-all-notifications nil)
@@ -117,24 +105,15 @@ fn user_configuration_rules_route_each_alert_to_a_style() {
     (mapcar (lambda (entry)
               (cons (car entry)
                     (al-test-info (cdr entry) :message :severity :category)))
-            (al-test-captured-infos :notify))))"##;
-    let expect = expect![[
+            (al-test-captured-infos :notify))))"##,
+            true,
+            expect![[
         r#"OK ((al-test-urgent (:message . "server on fire") (:severity . urgent) (:category)) (al-test-chat (:message . "ping from audit team") (:severity . normal) (:category . chat)) (al-test-fallback (:message . "ping from audit team") (:severity . normal) (:category . chat)) (al-test-fallback (:message . "nothing matches me") (:severity . low) (:category . misc)))"#
-    ]];
-
-    assert_alert_parity(elisp_form, expect);
-}
-
-/// `alert-hide-all-notifications' does less than its name suggests.  It skips
-/// rule matching entirely, so the style a rule would have chosen never runs -
-/// but the fallback is outside that guard, so the *default* style is still
-/// notified, with the bare plist that never gets `:never-persist' added.  Only
-/// setting `alert-default-style' to nil actually silences everything, and the
-/// log is written either way.  `:style' passed to `alert' forces a style past
-/// the rules.
-#[test]
-fn hiding_all_notifications_still_delivers_the_default_style() {
-    let elisp_form = r##"(let ((alert-internal-configuration nil)
+    ]],
+        ),
+        (
+            "hiding_all_notifications_still_delivers_the_default_style",
+            r##"(let ((alert-internal-configuration nil)
       (alert-active-alerts nil)
       (alert-log-messages t)
       (al-test-captured nil))
@@ -168,24 +147,15 @@ fn hiding_all_notifications_still_delivers_the_default_style() {
                           (cons (car entry)
                                 (al-test-info (cdr entry) :message :severity :never-persist)))
                         (al-test-captured-infos :notify))
-                (al-test-buffer-text " *log4e-alert*")))))))"##;
-    let expect = expect![[
+                (al-test-buffer-text " *log4e-alert*")))))))"##,
+            true,
+            expect![[
         r#"OK (((al-test-default (:message . "hidden with a default style") (:persistent) (:never-persist))) nil ((al-test-rule (:message . "shown through the rule") (:severity . urgent) (:never-persist)) (al-test-forced (:message . "forced past the rules") (:severity . low) (:never-persist))) "<TIME> [FATAL] hidden with a default style\n<TIME> [FATAL] hidden with no default style\n<TIME> [FATAL] shown through the rule\n<TIME> [DEBUG] forced past the rules\n")"#
-    ]];
-
-    assert_alert_parity(elisp_form, expect);
-}
-
-/// `alert-add-rule' is the Lisp route to the same configuration: the first rule
-/// is prepended and the `:append' one goes last, selectors are normalised into
-/// anchored regexps, and the `:persistent' option may be a function of the
-/// alert.  Its effect is on the fade timer rather than on the plist - the
-/// urgent alert routed through the persistent rule is the one with no fade
-/// timer pending, while the plist the style sees still reports `:persistent'
-/// nil.
-#[test]
-fn programmatic_rules_control_persistence_and_ordering() {
-    let elisp_form = r##"(let ((alert-default-style 'al-test-default)
+    ]],
+        ),
+        (
+            "programmatic_rules_control_persistence_and_ordering",
+            r##"(let ((alert-default-style 'al-test-default)
       (alert-user-configuration nil)
       (alert-internal-configuration nil)
       (alert-active-alerts nil)
@@ -217,23 +187,15 @@ fn programmatic_rules_control_persistence_and_ordering() {
                           (al-test-info (cdr entry) :message :severity :persistent :never-persist)))
                   (al-test-captured-infos :notify))
           (length alert-active-alerts)
-          (al-test-pending-fades))))"##;
-    let expect = expect![[
+          (al-test-pending-fades))))"##,
+            true,
+            expect![[
         r#"OK (((:selectors ((:severity urgent high) (:mode . "\\`text-mode\\'")) :style al-test-chat :options ((:persistent . :function) (:continue . t))) (:selectors ((:category . "audit")) :style al-test-audit :options ((:never-persist . t)))) ((:selectors ((:severity urgent high) (:mode . "\\`text-mode\\'")) :style al-test-chat :options ((:persistent . :function) (:continue . t))) (:selectors ((:category . "audit")) :style al-test-audit :options ((:never-persist . t)))) ((al-test-chat (:message . "urgent audit finding") (:severity . urgent) (:persistent) (:never-persist)) (al-test-audit (:message . "urgent audit finding") (:severity . urgent) (:persistent) (:never-persist . t)) (al-test-chat (:message . "routine note") (:severity . high) (:persistent) (:never-persist))) 3 ("routine note" "urgent audit finding"))"#
-    ]];
-
-    assert_alert_parity(elisp_form, expect);
-}
-
-/// growlnotify is not installed on this host, which is the case the growl back
-/// end guards against: with `alert-growl-command' nil the alert is delivered by
-/// the message style instead, and no process is started.  Pointed at a
-/// recording stand-in, the same alerts produce the exact command line the
-/// package builds - severity mapped to a priority, `--sticky' only for the
-/// persistent one, and the buffer name as the default title.
-#[test]
-fn an_unavailable_backend_falls_back_to_the_message_style() {
-    let elisp_form = r##"(let ((alert-user-configuration nil)
+    ]],
+        ),
+        (
+            "an_unavailable_backend_falls_back_to_the_message_style",
+            r##"(let ((alert-user-configuration nil)
       (alert-internal-configuration nil)
       (alert-log-messages nil)
       (alert-active-alerts nil)
@@ -255,10 +217,11 @@ fn an_unavailable_backend_falls_back_to_the_message_style() {
        (alert "Build finished" :title "CI" :severity 'high :persistent t)
        (alert "Coffee ready" :severity 'trivial))
      (list (al-test-commands)
-           (al-test-messages-since mark)))))"##;
-    let expect = expect![[
+           (al-test-messages-since mark)))))"##,
+            true,
+            expect![[
         r#"OK ((nil nil) (("Growl is not installed") no-command-ran) (("growlnotify --appIcon Emacs --name Emacs --title CI --priority 2 --sticky --message Build finished" "growlnotify --appIcon Emacs --name Emacs --title *alert-origin* --priority -2 --message Coffee ready") ("Growl is not installed")))"#
-    ]];
-
-    assert_alert_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_with_editor_parity;
+use super::assert_with_editor_batch;
 
 #[test]
-fn with_editor_finish_runs_query_pre_return_and_post_hooks_in_order() {
-    let elisp_form = r##"(with-temp-buffer
+fn lifecycle_public_surface_batch() {
+    assert_with_editor_batch(&[
+        (
+            "with_editor_finish_runs_query_pre_return_and_post_hooks_in_order",
+            r##"(with-temp-buffer
                (let (events)
                  (setq-local
                   with-editor-finish-query-functions
@@ -24,15 +27,13 @@ fn with_editor_finish_runs_query_pre_return_and_post_hooks_in_order() {
                            ((symbol-function 'accept-process-output)
                             (lambda (&rest _arguments) nil)))
                    (with-editor-finish 'force))
-                 (nreverse events)))"##;
-    let expect = expect![[r#"OK ((query force) pre (return nil) post)"#]];
-
-    assert_with_editor_parity(elisp_form, expect);
-}
-
-#[test]
-fn with_editor_finish_stops_when_any_query_rejects_session() {
-    let elisp_form = r##"(with-temp-buffer
+                 (nreverse events)))"##,
+            true,
+            expect![[r#"OK ((query force) pre (return nil) post)"#]],
+        ),
+        (
+            "with_editor_finish_stops_when_any_query_rejects_session",
+            r##"(with-temp-buffer
                (let (events)
                  (setq-local
                   with-editor-finish-query-functions
@@ -53,15 +54,13 @@ fn with_editor_finish_stops_when_any_query_rejects_session() {
                             (lambda (_cancel)
                               (push 'return events))))
                    (with-editor-finish nil))
-                 (nreverse events)))"##;
-    let expect = expect![[r#"OK ((first nil) (second nil))"#]];
-
-    assert_with_editor_parity(elisp_form, expect);
-}
-
-#[test]
-fn with_editor_cancel_runs_cancel_hooks_and_reports_custom_message() {
-    let elisp_form = r##"(with-temp-buffer
+                 (nreverse events)))"##,
+            true,
+            expect![[r#"OK ((first nil) (second nil))"#]],
+        ),
+        (
+            "with_editor_cancel_runs_cancel_hooks_and_reports_custom_message",
+            r##"(with-temp-buffer
                (let (events)
                  (setq-local
                   with-editor-cancel-query-functions
@@ -90,15 +89,13 @@ fn with_editor_cancel_runs_cancel_hooks_and_reports_custom_message() {
                                       format-string arguments)
                                events))))
                    (with-editor-cancel 'force))
-                 (nreverse events)))"##;
-    let expect = expect![[r#"OK ((query force) pre (return t) post "custom cancel")"#]];
-
-    assert_with_editor_parity(elisp_form, expect);
-}
-
-#[test]
-fn with_editor_mode_installs_local_kill_guard_and_disabling_keeps_guard() {
-    let elisp_form = r##"(with-temp-buffer
+                 (nreverse events)))"##,
+            true,
+            expect![[r#"OK ((query force) pre (return t) post "custom cancel")"#]],
+        ),
+        (
+            "with_editor_mode_installs_local_kill_guard_and_disabling_keeps_guard",
+            r##"(with-temp-buffer
                (let ((with-editor-show-usage nil))
                  (with-editor-mode 1)
                  (let ((enabled
@@ -118,8 +115,9 @@ fn with_editor_mode_installs_local_kill_guard_and_disabling_keeps_guard() {
                      (memq
                       #'with-editor-kill-buffer-noop
                       kill-buffer-query-functions)
-                     t)))))"##;
-    let expect = expect![[r#"OK ((t t t) nil t)"#]];
-
-    assert_with_editor_parity(elisp_form, expect);
+                     t)))))"##,
+            true,
+            expect![[r#"OK ((t t t) nil t)"#]],
+        ),
+    ]);
 }

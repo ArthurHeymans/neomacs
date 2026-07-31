@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_pcmp_parity;
+use super::assert_auto_complete_pcmp_batch;
 
 #[test]
-fn auto_complete_pcmp_candidates_capture_direct_pcomplete_result() {
-    let elisp_form = r##"(with-temp-buffer
+fn candidates_public_surface_batch() {
+    assert_auto_complete_pcmp_batch(&[
+        (
+            "auto_complete_pcmp_candidates_capture_direct_pcomplete_result",
+            r##"(with-temp-buffer
          (insert "git ch")
          (cl-letf (((symbol-function 'call-interactively)
                     (lambda (_command)
@@ -13,16 +16,15 @@ fn auto_complete_pcmp_candidates_capture_direct_pcomplete_result() {
            (list
             (ac-pcmp/get-ac-candidates)
             (point)
-            (ac-pcmp-test-state))))"##;
-    let expect = expect![[
+            (ac-pcmp-test-state))))"##,
+            true,
+            expect![[
         r#"OK (("checkout" "cherry-pick" "cherry") 7 (:active nil :candidates nil :status none :point 7 :last-length nil :last-stub nil))"#
-    ]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_candidates_capture_show_completions_advice_path() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_pcmp_candidates_capture_show_completions_advice_path",
+            r##"(with-temp-buffer
          (insert "cargo ")
          (cl-letf (((symbol-function 'call-interactively)
                     (lambda (_command)
@@ -31,16 +33,15 @@ fn auto_complete_pcmp_candidates_capture_show_completions_advice_path() {
            (list
             (ac-pcmp/get-ac-candidates)
             (buffer-string)
-            (ac-pcmp-test-state))))"##;
-    let expect = expect![[
+            (ac-pcmp-test-state))))"##,
+            true,
+            expect![[
         r#"OK (("build" "check" "clippy" "nextest") "cargo " (:active nil :candidates nil :status none :point 7 :last-length nil :last-stub nil))"#
-    ]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_candidates_capture_stub_advice_and_real_insertion() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_pcmp_candidates_capture_stub_advice_and_real_insertion",
+            r##"(with-temp-buffer
          (insert "sta")
          (cl-letf (((symbol-function 'call-interactively)
                     (lambda (_command)
@@ -53,16 +54,15 @@ fn auto_complete_pcmp_candidates_capture_stub_advice_and_real_insertion() {
               (buffer-string)
               (point)
               ac-pcmp--status
-              (ac-pcmp-test-state)))))"##;
-    let expect = expect![[
+              (ac-pcmp-test-state)))))"##,
+            true,
+            expect![[
         r#"OK (("status" "stash" "stage") "sta" 4 nil (:active nil :candidates nil :status nil :point 4 :last-length nil :last-stub nil))"#
-    ]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_candidates_capture_pcomplete_completions_return_value() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_pcmp_candidates_capture_pcomplete_completions_return_value",
+            r##"(with-temp-buffer
          (insert "deploy ")
          (cl-letf (((symbol-function 'call-interactively)
                     (lambda (_command)
@@ -78,14 +78,13 @@ fn auto_complete_pcmp_candidates_capture_pcomplete_completions_return_value() {
            (list
             (ac-pcmp/get-ac-candidates)
             ac-pcmp--status
-            ac-pcmp--point)))"##;
-    let expect = expect![[r#"OK (("staging" "production" "preview") none 8)"#]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_first_candidate_capture_wins_across_multiple_advice_paths() {
-    let elisp_form = r##"(with-temp-buffer
+            ac-pcmp--point)))"##,
+            true,
+            expect![[r#"OK (("staging" "production" "preview") none 8)"#]],
+        ),
+        (
+            "auto_complete_pcmp_first_candidate_capture_wins_across_multiple_advice_paths",
+            r##"(with-temp-buffer
          (insert "tool ")
          (cl-letf (((symbol-function 'call-interactively)
                     (lambda (_command)
@@ -95,14 +94,13 @@ fn auto_complete_pcmp_first_candidate_capture_wins_across_multiple_advice_paths(
            (list
             (ac-pcmp/get-ac-candidates)
             ac-pcmp--status
-            (buffer-string))))"##;
-    let expect = expect![[r#"OK (("first" "choice") nil "tool ")"#]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_candidate_request_resets_stale_global_state_each_time() {
-    let elisp_form = r##"(progn
+            (buffer-string))))"##,
+            true,
+            expect![[r#"OK (("first" "choice") nil "tool ")"#]],
+        ),
+        (
+            "auto_complete_pcmp_candidate_request_resets_stale_global_state_each_time",
+            r##"(progn
          (setq ac-pcmp--candidates '("stale")
                ac-pcmp--status 'sole
                ac-pcmp--point 999)
@@ -119,16 +117,15 @@ fn auto_complete_pcmp_candidate_request_resets_stale_global_state_each_time() {
                  (list
                   first
                   (ac-pcmp/get-ac-candidates)
-                  (ac-pcmp-test-state)))))))"##;
-    let expect = expect![[
+                  (ac-pcmp-test-state)))))))"##,
+            true,
+            expect![[
         r#"OK (("fresh") nil (:active nil :candidates ("stale") :status none :point 13 :last-length nil :last-stub nil))"#
-    ]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_candidate_request_records_exact_point_without_mutating_text() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_pcmp_candidate_request_records_exact_point_without_mutating_text",
+            r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (insert (car case))
@@ -145,16 +142,15 @@ fn auto_complete_pcmp_candidate_request_records_exact_point_without_mutating_tex
                   (equal before (buffer-string)))))))
          '(("abc" . 1)
            ("abc" . 2)
-           ("long command" . 8)))"##;
-    let expect = expect![[
+           ("long command" . 8)))"##,
+            true,
+            expect![[
         r#"OK ((("abc" . 1) #1=("candidate") 1 1 t) (("abc" . 2) #1# 2 2 t) (("long command" . 8) #1# 8 8 t))"#
-    ]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_candidate_errors_become_prefixed_messages_and_nil_results() {
-    let elisp_form = r##"(cl-letf (((symbol-function 'call-interactively)
+    ]],
+        ),
+        (
+            "auto_complete_pcmp_candidate_errors_become_prefixed_messages_and_nil_results",
+            r##"(cl-letf (((symbol-function 'call-interactively)
                                     (lambda (_command)
                                       (error "fixture failure %s" 17))))
          (with-temp-buffer
@@ -165,14 +161,13 @@ fn auto_complete_pcmp_candidate_errors_become_prefixed_messages_and_nil_results(
               (current-message)
               ac-pcmp--status
               ac-pcmp--point
-              (buffer-string)))))"##;
-    let expect = expect![[r#"OK (nil nil none 7 "broken")"#]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_candidate_dynamic_activation_does_not_leak_after_call() {
-    let elisp_form = r##"(let ((ac-pcmp--active-p nil)
+              (buffer-string)))))"##,
+            true,
+            expect![[r#"OK (nil nil none 7 "broken")"#]],
+        ),
+        (
+            "auto_complete_pcmp_candidate_dynamic_activation_does_not_leak_after_call",
+            r##"(let ((ac-pcmp--active-p nil)
              (ac-pcmp--candidates '("outer")))
          (cl-letf (((symbol-function 'call-interactively)
                     (lambda (_command)
@@ -184,14 +179,13 @@ fn auto_complete_pcmp_candidate_dynamic_activation_does_not_leak_after_call() {
               result
               ac-pcmp--active-p
               ac-pcmp--candidates
-              ac-pcmp--status))))"##;
-    let expect = expect![[r#"OK (nil nil ("outer") none)"#]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_empty_pcomplete_result_is_distinct_from_error() {
-    let elisp_form = r##"(cl-letf (((symbol-function 'call-interactively)
+              ac-pcmp--status))))"##,
+            true,
+            expect![[r#"OK (nil nil ("outer") none)"#]],
+        ),
+        (
+            "auto_complete_pcmp_empty_pcomplete_result_is_distinct_from_error",
+            r##"(cl-letf (((symbol-function 'call-interactively)
                                     (lambda (_command) nil)))
          (with-temp-buffer
            (insert "nothing")
@@ -200,7 +194,9 @@ fn auto_complete_pcmp_empty_pcomplete_result_is_distinct_from_error() {
               result
               (current-message)
               ac-pcmp--status
-              ac-pcmp--point))))"##;
-    let expect = expect!["OK (nil nil none 8)"];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
+              ac-pcmp--point))))"##,
+            true,
+            expect!["OK (nil nil none 8)"],
+        ),
+    ]);
 }

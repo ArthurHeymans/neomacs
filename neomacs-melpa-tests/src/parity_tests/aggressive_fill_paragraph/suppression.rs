@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_aggressive_fill_paragraph_parity;
+use super::assert_aggressive_fill_paragraph_batch;
 
 #[test]
-fn aggressive_fill_paragraph_preserves_structured_prefixes_but_fills_ordinary_comments_and_prose() {
-    let elisp_form = r####"(list
+fn suppression_public_surface_batch() {
+    assert_aggressive_fill_paragraph_batch(&[
+        (
+            "aggressive_fill_paragraph_preserves_structured_prefixes_but_fills_ordinary_comments_and_prose",
+            r####"(list
                             (with-temp-buffer
                               (c++-mode)
                               (setq
@@ -93,10 +96,11 @@ fn aggressive_fill_paragraph_preserves_structured_prefixes_but_fills_ordinary_co
                                (buffer-string)
                                (point)
                                (line-number-at-pos)
-                               (current-column))))"####;
-    let expect = expect![[
+                               (current-column))))"####,
+            true,
+            expect![[
         r#"OK (("// * Deploy the parser canary to one region before promoting it to every production region \n\n// This ordinary explanation is\n// deliberately long enough to require\n// comment-aware wrapping " 191 5 26) ("| Owner Name | Status |\n| Parser | Canary |\n\n#+BEGIN_SRC emacs-lisp :results output\n(message \"deploy\")\n#+END_SRC\n\nThis operational note explains why the\nparser canary remains isolated until\nevery recovery check succeeds. " 222 10 31))"#
-    ]];
-
-    assert_aggressive_fill_paragraph_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

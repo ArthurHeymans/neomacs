@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_auto_dictionary_autoload_parity, assert_auto_dictionary_parity};
+use super::{assert_auto_dictionary_autoload_batch, assert_auto_dictionary_batch};
 
 #[test]
-fn auto_dictionary_descriptor_and_sources_pin_exact_melpa_payload() {
-    let elisp_form = r##"(let* ((descriptor
+fn registry_auto_dictionary_batch() {
+    assert_auto_dictionary_batch(&[
+        (
+            "auto_dictionary_descriptor_and_sources_pin_exact_melpa_payload",
+            r##"(let* ((descriptor
                 (cadr
                  (assq 'auto-dictionary
                        package-alist)))
@@ -35,16 +38,15 @@ fn auto_dictionary_descriptor_and_sources_pin_exact_melpa_payload() {
                 (secure-hash
                  'sha256
                  (current-buffer)))))
-           sources)))"##;
-    let expect = expect![[
+           sources)))"##,
+            true,
+            expect![[
         r#"OK ((auto-dictionary "20150410.1610" "Automatic dictionary switcher for flyspell." nil ((:maintainers ("Nikolaj Schumacher" . "bugs*nschumde")) (:authors ("Nikolaj Schumacher" . "bugs*nschumde")) (:keywords "wp") (:revdesc . "b364e08009fe") (:commit . "b364e08009fe0062cf0927d8a0582fad5a12b8e7") (:url . "http://nschum.de/src/emacs/auto-dictionary/"))) (("auto-dictionary-pkg.el" 422 "7d2e84f5d0e137a4008f02603fd178bd2154a300cb851234d7cefa678d2c520b") ("auto-dictionary.el" 46235 "fc414c5be331a2d039119bacde01050cf33b15fce6665a17bde3e36ec9317863")))"#
-    ]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_feature_aliases_and_definition_origins_are_exact() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "auto_dictionary_feature_aliases_and_definition_origins_are_exact",
+            r##"(list
          (featurep 'auto-dictionary)
          (eq
           (indirect-variable
@@ -71,16 +73,15 @@ fn auto_dictionary_feature_aliases_and_definition_origins_are_exact() {
             adict-conditional-insert
             adict-conditional-update
             adict-guess-word-language
-            adict-guess-buffer-language)))"##;
-    let expect = expect![[
+            adict-guess-buffer-language)))"##,
+            true,
+            expect![[
         r#"OK (t nil t ((auto-dictionary-mode t "auto-dictionary.el") (adict-mode t "auto-dictionary.el") (adict-guess-dictionary t "auto-dictionary.el") (adict-change-dictionary t "auto-dictionary.el") (adict-guess-dictionary-maybe t "auto-dictionary.el") (adict-evaluate-word t "auto-dictionary.el") (adict-evaluate-buffer t "auto-dictionary.el") (adict-conditional-insert t "auto-dictionary.el") (adict-conditional-update t "auto-dictionary.el") (adict-guess-word-language t "auto-dictionary.el") (adict-guess-buffer-language t "auto-dictionary.el")))"#
-    ]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_public_entry_points_have_exact_interactive_contracts() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_dictionary_public_entry_points_have_exact_interactive_contracts",
+            r##"(mapcar
          (lambda (symbol)
            (list
             symbol
@@ -94,16 +95,15 @@ fn auto_dictionary_public_entry_points_have_exact_interactive_contracts() {
            adict-guess-dictionary-maybe
            adict-conditional-insert
            adict-guess-word-language
-           adict-guess-buffer-language))"##;
-    let expect = expect![
+           adict-guess-buffer-language))"##,
+            true,
+            expect![
         "OK ((auto-dictionary-mode t (interactive #1=(list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) #2=(&optional arg)) (adict-mode t (interactive #1#) #2#) (adict-guess-dictionary t (interactive nil) (&optional idle-only)) (adict-change-dictionary t (interactive nil) (&optional lang)) (adict-guess-dictionary-maybe nil nil (timer-buffer)) (adict-conditional-insert nil nil (&rest language-text-pairs)) (adict-guess-word-language nil nil (word)) (adict-guess-buffer-language nil nil (&optional idle-only)))"
-    ];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_options_language_order_and_deterministic_defaults_are_exact() {
-    let elisp_form = r##"(list
+    ],
+        ),
+        (
+            "auto_dictionary_options_language_order_and_deterministic_defaults_are_exact",
+            r##"(list
          adict-idle-time
          adict-change-threshold
          adict-language-list
@@ -120,16 +120,15 @@ fn auto_dictionary_options_language_order_and_deterministic_defaults_are_exact()
             adict-change-dictionary-hook
             adict-dictionary-list))
          (get 'adict-conditional-text-face
-              'face-defface-spec))"##;
-    let expect = expect![[
+              'face-defface-spec))"##,
+            true,
+            expect![[
         r#"OK (2 0.02 (nil "en" "de" "fr" "es" "sv" "sl" "hu" "ro" "pt" "nb" "da" "grc" "el" "hi" "nn" "ca" "eo" "sk") (("en" . "en") ("de" . "de") ("fr" . "fr") ("es" . "es") ("sv" . "sv") ("sl" . "sl") ("hu" . "hu") ("ro" . "ro") ("pt" . "pt") ("nb" . "nb") ("da" . "da") ("grc" . "grc") ("el" . "el") ("hi" . "hi") ("nn" . "nn") ("ca" . "ca") ("eo" . "eo") ("sk" . "sk")) t ((adict-idle-time number nil) (adict-change-threshold number nil) (adict-change-dictionary-hook hook nil) (adict-dictionary-list (repeat (cons (choice (const "en") (const "de") (const "fr") (const "es") (const "sv") (const "sl") (const "hu") (const "ro") (const "pt") (const "nb") (const "da") (const "grc") (const "el") (const "hi") (const "nn") (const "ca") (const "eo") (const "sk")) (choice (const :tag "Off" nil) (string :tag "Dictionary name")))) nil)) ((((class color) (background dark)) (:background "MediumBlue")) (((class color) (background light)) (:background "turquoise"))))"#
-    ]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_word_table_covers_each_language_and_unknown_bucket() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "auto_dictionary_word_table_covers_each_language_and_unknown_bucket",
+            r##"(list
          (eq
           (hash-table-test adict-hash)
           'equal)
@@ -160,16 +159,15 @@ fn auto_dictionary_word_table_covers_each_language_and_unknown_bucket() {
              "felicitacions"
              "morgaŭ"
              "človek"
-             "unclassified-token"))))"##;
-    let expect = expect![[
+             "unclassified-token"))))"##,
+            true,
+            expect![[
         r#"OK (t t "((\"HELLO\" 1 \"en\") (\"zunächst\" 2 \"de\") (\"bonjour\" 3 \"fr\") (\"además\" 4 \"es\") (\"svenska\" 5 \"sv\") (\"pozdrav\" 6 \"sl\") (\"talán\" 7 \"hu\") (\"oricare\" 8 \"ro\") (\"obrigado\" 9 \"pt\") (\"aftenposten\" 10 \"nb\") (\"afskrækkende\" 11 \"da\") (\"ἐγώγε\" 12 \"grc\") (\"καλημέρα\" 13 \"el\") (\"भारत\" 14 \"hi\") (\"noreg\" 15 \"nn\") (\"felicitacions\" 16 \"ca\") (\"morgaŭ\" 17 \"eo\") (\"človek\" 18 \"sk\") (\"unclassified-token\" 0 nil))")"#
-    ]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_source_load_history_records_data_functions_aliases_and_provider() {
-    let elisp_form = r##"(let* ((file
+    ]],
+        ),
+        (
+            "auto_dictionary_source_load_history_records_data_functions_aliases_and_provider",
+            r##"(let* ((file
                  (locate-library
                   "auto-dictionary"))
                 (history
@@ -189,16 +187,47 @@ fn auto_dictionary_source_load_history_records_data_functions_aliases_and_provid
                 (cadr event)
                 '(adict-mode
                   switch-language-hook))))))
-          history))"##;
-    let expect = expect![
+          history))"##,
+            true,
+            expect![
         "OK ((defface . adict-conditional-text-face) (defun . adict-guess-dictionary-name) (defun . adict--guess-dictionary-cons) (defun . adict--dictionary-alist-type) (defun . switch-language-hook) (defun . auto-dictionary-mode) (defun . adict-mode) (defun . adict-guess-dictionary) (defun . adict--cancel-timer) (defun . adict-valid-dictionary-p) (defun . adict-change-dictionary) (defun . adict-guess-dictionary-maybe) (defun . adict--next-guess-tick) (defun . adict-update-lighter) (defun . adict--shorten-dict) (defun . adict-foreach-word) (defun . adict-add-word) (defun . adict-evaluate-word) (defun . adict-evaluate-buffer) (defun . adict--evaluate-buffer-find-max-index) (defun . adict--evaluate-buffer-find-dictionary) (defun . adict--evaluate-buffer-find-lang) (defun . adict-conditional-insert) (defun . adict-conditional-insert-1) (defun . adict-conditional-modification) (defun . adict-conditional-update) (defun . adict-guess-word-language) (defun . adict-guess-buffer-language) (provide . auto-dictionary))"
-    ];
-    assert_auto_dictionary_parity(elisp_form, expect);
+    ],
+        ),
+        (
+            "auto_dictionary_reload_preserves_customization_and_buffer_local_runtime_state",
+            r##"(let ((source
+                (locate-library
+                 "auto-dictionary"))
+               (adict-idle-time 17)
+               (adict-change-threshold 0.5)
+               (adict-dictionary-list
+                '(("en" . "custom-en"))))
+         (with-temp-buffer
+           (setq-local adict-lighter " custom"
+                       adict-last-check 42)
+           (load source nil t t)
+           (load source nil t t)
+           (list
+            adict-idle-time
+            adict-change-threshold
+            adict-dictionary-list
+            adict-lighter
+            adict-last-check
+            (featurep 'auto-dictionary)
+            (local-variable-p
+             'adict-conditional-overlay-list))))"##,
+            true,
+            expect![[r#"OK (17 0.5 (("en" . "custom-en")) " custom" 42 t nil)"#]],
+        ),
+    ]);
 }
 
 #[test]
-fn auto_dictionary_generated_autoloads_register_commands_without_loading_source() {
-    let elisp_form = r##"(let* ((file
+fn registry_auto_dictionary_autoload_batch() {
+    assert_auto_dictionary_autoload_batch(&[
+        (
+            "auto_dictionary_generated_autoloads_register_commands_without_loading_source",
+            r##"(let* ((file
                  (locate-library
                   "auto-dictionary-autoloads"))
                 (history
@@ -224,36 +253,11 @@ fn auto_dictionary_generated_autoloads_register_commands_without_loading_source(
               (commandp symbol)))
            '(auto-dictionary-mode
              adict-guess-dictionary
-             adict-change-dictionary))))"##;
-    let expect = expect![
+             adict-change-dictionary))))"##,
+            true,
+            expect![
         "OK (t nil ((defun . auto-dictionary-mode) (defun . adict-guess-dictionary) (defun . adict-change-dictionary) (provide . auto-dictionary-autoloads)) ((auto-dictionary-mode t t t) (adict-guess-dictionary t t t) (adict-change-dictionary t t t)))"
-    ];
-    assert_auto_dictionary_autoload_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_reload_preserves_customization_and_buffer_local_runtime_state() {
-    let elisp_form = r##"(let ((source
-                (locate-library
-                 "auto-dictionary"))
-               (adict-idle-time 17)
-               (adict-change-threshold 0.5)
-               (adict-dictionary-list
-                '(("en" . "custom-en"))))
-         (with-temp-buffer
-           (setq-local adict-lighter " custom"
-                       adict-last-check 42)
-           (load source nil t t)
-           (load source nil t t)
-           (list
-            adict-idle-time
-            adict-change-threshold
-            adict-dictionary-list
-            adict-lighter
-            adict-last-check
-            (featurep 'auto-dictionary)
-            (local-variable-p
-             'adict-conditional-overlay-list))))"##;
-    let expect = expect![[r#"OK (17 0.5 (("en" . "custom-en")) " custom" 42 t nil)"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }

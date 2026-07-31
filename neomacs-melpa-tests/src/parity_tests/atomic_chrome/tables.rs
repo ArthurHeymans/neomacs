@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_atomic_chrome_parity;
+use super::assert_atomic_chrome_batch;
 
 #[test]
-fn atomic_chrome_buffer_table_lookup_round_trips_live_buffers_sockets_and_frames() {
-    let elisp_form = r##"(let ((first
+fn tables_public_surface_batch() {
+    assert_atomic_chrome_batch(&[
+        (
+            "atomic_chrome_buffer_table_lookup_round_trips_live_buffers_sockets_and_frames",
+            r##"(let ((first
                 (generate-new-buffer
                  " *atomic-table-first*"))
                (second
@@ -36,16 +39,15 @@ fn atomic_chrome_buffer_table_lookup_round_trips_live_buffers_sockets_and_frames
                   atomic-chrome-buffer-table)
                  (atomic-chrome-test-buffer-table-snapshot)))
             (atomic-chrome-test-kill-buffer first)
-            (atomic-chrome-test-kill-buffer second)))"##;
-    let expect = expect![[
+            (atomic-chrome-test-kill-buffer second)))"##,
+            true,
+            expect![[
         r#"OK (#1=(socket 1) frame-a " *atomic-table-second*" " *atomic-table-first*" 2 ((" *atomic-table-first*" #1# frame-a) (" *atomic-table-second*" (socket 2) frame-b)))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_buffer_table_lookup_handles_missing_short_and_non_list_entries_exactly() {
-    let elisp_form = r##"(let ((atomic-chrome-buffer-table
+    ]],
+        ),
+        (
+            "atomic_chrome_buffer_table_lookup_handles_missing_short_and_non_list_entries_exactly",
+            r##"(let ((atomic-chrome-buffer-table
                 (make-hash-table
                  :test 'equal)))
           (puthash
@@ -80,16 +82,15 @@ fn atomic_chrome_buffer_table_lookup_handles_missing_short_and_non_list_entries_
               (atomic-chrome-get-buffer-by-socket
                :absent)))
            (hash-table-count
-            atomic-chrome-buffer-table)))"##;
-    let expect = expect![
+            atomic-chrome-buffer-table)))"##,
+            true,
+            expect![
         "OK (nil nil :socket-only nil nil nil (:error wrong-type-argument (listp 42)) (:error wrong-type-argument (listp 42)) (:error wrong-type-argument (listp 42)) 3)"
-    ];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_socket_lookup_uses_equal_and_returns_the_last_matching_hash_iteration_entry() {
-    let elisp_form = r##"(let ((atomic-chrome-buffer-table
+    ],
+        ),
+        (
+            "atomic_chrome_socket_lookup_uses_equal_and_returns_the_last_matching_hash_iteration_entry",
+            r##"(let ((atomic-chrome-buffer-table
                 (make-hash-table
                  :test 'equal)))
           (puthash
@@ -114,14 +115,13 @@ fn atomic_chrome_socket_lookup_uses_equal_and_returns_the_last_matching_hash_ite
              (atomic-chrome-get-buffer-by-socket
               (list 'shared 'socket))
              (atomic-chrome-get-buffer-by-socket
-              (list 'other 'socket)))))"##;
-    let expect = expect![[r#"OK (("alpha" "beta" "gamma") "beta" "gamma")"#]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_close_connection_removes_current_buffer_before_closing_socket() {
-    let elisp_form = r##"(let ((atomic-chrome-buffer-table
+              (list 'other 'socket)))))"##,
+            true,
+            expect![[r#"OK (("alpha" "beta" "gamma") "beta" "gamma")"#]],
+        ),
+        (
+            "atomic_chrome_close_connection_removes_current_buffer_before_closing_socket",
+            r##"(let ((atomic-chrome-buffer-table
                 (make-hash-table
                  :test 'equal))
                events)
@@ -150,14 +150,13 @@ fn atomic_chrome_close_connection_removes_current_buffer_before_closing_socket()
                 (current-buffer)
                 atomic-chrome-buffer-table)
                (hash-table-count
-                atomic-chrome-buffer-table)))))"##;
-    let expect = expect!["OK (:closed ((:socket-a nil 0)) nil 0)"];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_close_connection_no_socket_is_noop_and_close_errors_leave_entry_removed() {
-    let elisp_form = r##"(let ((atomic-chrome-buffer-table
+                atomic-chrome-buffer-table)))))"##,
+            true,
+            expect!["OK (:closed ((:socket-a nil 0)) nil 0)"],
+        ),
+        (
+            "atomic_chrome_close_connection_no_socket_is_noop_and_close_errors_leave_entry_removed",
+            r##"(let ((atomic-chrome-buffer-table
                 (make-hash-table
                  :test 'equal))
                close-calls)
@@ -186,9 +185,11 @@ fn atomic_chrome_close_connection_no_socket_is_noop_and_close_errors_leave_entry
                     buffer
                     atomic-chrome-buffer-table)
                    (hash-table-count
-                    atomic-chrome-buffer-table)))))))"##;
-    let expect = expect![[
+                    atomic-chrome-buffer-table)))))))"##,
+            true,
+            expect![[
         r#"OK (nil (:error error ("close failed :socket-failing")) (:socket-failing) nil 0)"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

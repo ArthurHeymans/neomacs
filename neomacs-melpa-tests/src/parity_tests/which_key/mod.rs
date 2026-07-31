@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{CachedMelpaOracle, WHICH_KEY_MELPA_PIN};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod defaults;
 mod keymaps;
 mod layout;
@@ -39,4 +41,15 @@ pub(crate) fn assert_which_key_signal_parity(form: &str, expected: Expect) {
         .run_signal(&name, form)
         .unwrap_or_else(|error| panic!("Which-Key signal parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+/// Multi-probe batch for `assert_which_key_parity` cases (2a).
+pub(crate) fn assert_which_key_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        which_key_oracle(),
+        &name,
+        "which_key_parity",
+        cases,
+    );
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_compile_parity;
+use super::assert_auto_compile_batch;
 
 #[test]
-fn auto_compile_source_file_predicate_recognizes_plain_and_representation_suffixes() {
-    let elisp_form = r##"(let ((load-file-rep-suffixes
+fn source_files_public_surface_batch() {
+    assert_auto_compile_batch(&[
+        (
+            "auto_compile_source_file_predicate_recognizes_plain_and_representation_suffixes",
+            r##"(let ((load-file-rep-suffixes
                                 '("" ".gz" ".xz")))
          (mapcar
           (lambda (file)
@@ -17,16 +20,15 @@ fn auto_compile_source_file_predicate_recognizes_plain_and_representation_suffix
             "library.el.gz.backup"
             ".el"
             "LIBRARY.EL"
-            "/nested/path/library.el")))"##;
-    let expect = expect![[
+            "/nested/path/library.el")))"##,
+            true,
+            expect![[
         r#"OK (("library.el" 7) ("library.el.gz" 7) ("library.el.xz" 7) ("library.elc" nil) ("library.el.gz.backup" nil) (".el" 0) ("LIBRARY.EL" 7) ("/nested/path/library.el" 20))"#
-    ]];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_source_resolution_prefers_first_existing_representation() {
-    let elisp_form = r##"(let* ((load-file-rep-suffixes
+    ]],
+        ),
+        (
+            "auto_compile_source_resolution_prefers_first_existing_representation",
+            r##"(let* ((load-file-rep-suffixes
                                  '("" ".gz"))
                                 (plain
                                  (auto-compile-test-write
@@ -52,14 +54,13 @@ fn auto_compile_source_resolution_prefers_first_existing_representation() {
             (delete-file compressed)
             (auto-compile--byte-compile-source-file dest t))
           (file-name-nondirectory
-           (auto-compile--byte-compile-source-file dest nil))))"##;
-    let expect = expect![[r#"OK ("library.el" "library.el.gz" nil "library.el")"#]];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_tree_member_finds_top_level_and_deep_nested_tails() {
-    let elisp_form = r##"(let ((tree
+           (auto-compile--byte-compile-source-file dest nil))))"##,
+            true,
+            expect![[r#"OK ("library.el" "library.el.gz" nil "library.el")"#]],
+        ),
+        (
+            "auto_compile_tree_member_finds_top_level_and_deep_nested_tails",
+            r##"(let ((tree
                 '(alpha
                   (beta gamma delta)
                   ((epsilon zeta) eta)
@@ -70,16 +71,15 @@ fn auto_compile_tree_member_finds_top_level_and_deep_nested_tails() {
           (auto-compile--tree-member 'zeta tree)
           (auto-compile--tree-member 'theta tree)
           (auto-compile--tree-member 'missing tree)
-          (auto-compile--tree-member 'alpha 'atom)))"##;
-    let expect = expect![
+          (auto-compile--tree-member 'alpha 'atom)))"##,
+            true,
+            expect![
         "OK ((alpha (beta . #1=(gamma delta)) ((epsilon . #2=(zeta)) eta) . #3=(theta)) #1# #2# #3# nil nil)"
-    ];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_tree_member_delete_mutates_middle_last_and_nested_members_correctly() {
-    let elisp_form = r##"(let ((middle
+    ],
+        ),
+        (
+            "auto_compile_tree_member_delete_mutates_middle_last_and_nested_members_correctly",
+            r##"(let ((middle
                 (copy-tree
                  '(alpha beta gamma delta)))
                (last
@@ -100,16 +100,15 @@ fn auto_compile_tree_member_delete_mutates_middle_last_and_nested_members_correc
           nested
           (auto-compile--tree-member
            'missing nested 'delete)
-          nested))"##;
-    let expect = expect![
+          nested))"##,
+            true,
+            expect![
         "OK (nil (alpha gamma delta) nil (alpha beta) nil #1=(alpha (beta delta) omega) nil #1#)"
-    ];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_modify_mode_line_moves_single_control_between_nested_anchors() {
-    let elisp_form = r##"(let ((original
+    ],
+        ),
+        (
+            "auto_compile_modify_mode_line_moves_single_control_between_nested_anchors",
+            r##"(let ((original
                 (default-value 'mode-line-format)))
          (unwind-protect
              (progn
@@ -136,16 +135,15 @@ fn auto_compile_modify_mode_line_moves_single_control_between_nested_anchors() {
                     (flatten-tree
                      (default-value
                       'mode-line-format)))))))
-           (set-default 'mode-line-format original)))"##;
-    let expect = expect![
+           (set-default 'mode-line-format original)))"##,
+            true,
+            expect![
         "OK ((alpha (beta gamma mode-line-auto-compile) delta) (alpha mode-line-auto-compile (beta gamma) delta) 1)"
-    ];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_modify_mode_line_missing_anchor_removes_old_control_and_reports_message() {
-    let elisp_form = r##"(let ((original
+    ],
+        ),
+        (
+            "auto_compile_modify_mode_line_missing_anchor_removes_old_control_and_reports_message",
+            r##"(let ((original
                 (default-value 'mode-line-format)))
          (unwind-protect
              (progn
@@ -157,14 +155,13 @@ fn auto_compile_modify_mode_line_missing_anchor_removes_old_control_and_reports_
                (list
                 (default-value 'mode-line-format)
                 (current-message)))
-           (set-default 'mode-line-format original)))"##;
-    let expect = expect!["OK ((alpha omega) nil)"];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_mode_line_reports_missing_destination_and_failed_compile_states() {
-    let elisp_form = r##"(let* ((source
+           (set-default 'mode-line-format original)))"##,
+            true,
+            expect!["OK ((alpha omega) nil)"],
+        ),
+        (
+            "auto_compile_mode_line_reports_missing_destination_and_failed_compile_states",
+            r##"(let* ((source
                  (auto-compile-test-write
                   "mode-line/missing.el"
                   "(provide 'missing)\n"))
@@ -193,16 +190,15 @@ fn auto_compile_mode_line_reports_missing_destination_and_failed_compile_states(
                             0 'help-echo item))))
                        control))
                     (list missing failed)))))
-           (kill-buffer buffer)))"##;
-    let expect = expect![[
+           (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK (((":" "No compile warnings\nmouse-1 display compile log") ("-" "Byte-compile destination is writable") ("%%" "Byte-compiled file doesn't exist\nmouse-1 create")) ((":" "No compile warnings\nmouse-1 display compile log") ("-" "Byte-compile destination is writable") ("!" "Failed to byte-compile\nmouse-1 retry")))"#
-    ]];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_mode_line_distinguishes_outdated_and_up_to_date_bytecode() {
-    let elisp_form = r##"(let* ((source
+    ]],
+        ),
+        (
+            "auto_compile_mode_line_distinguishes_outdated_and_up_to_date_bytecode",
+            r##"(let* ((source
                  (auto-compile-test-write
                   "mode-line/times.el"
                   "(provide 'times)\n"))
@@ -235,16 +231,15 @@ fn auto_compile_mode_line_distinguishes_outdated_and_up_to_date_bytecode() {
                             0 'help-echo item))))
                        control))
                     (list outdated current)))))
-           (kill-buffer buffer)))"##;
-    let expect = expect![[
+           (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK ((("" nil) ("-" "Byte-compile destination is writable") ("*" "Byte-compiled file needs updating\nmouse-1 update")) (("" nil) ("-" "Byte-compile destination is writable") ("-" "Byte-compiled file is up-to-date\nmouse-1 remove")))"#
-    ]];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_mode_line_warning_counter_carries_practical_display_metadata() {
-    let elisp_form = r##"(let* ((source
+    ]],
+        ),
+        (
+            "auto_compile_mode_line_warning_counter_carries_practical_display_metadata",
+            r##"(let* ((source
                  (auto-compile-test-write
                   "mode-line/warnings.el"
                   "(provide 'warnings)\n"))
@@ -270,9 +265,11 @@ fn auto_compile_mode_line_warning_counter_carries_practical_display_metadata() {
                    (get-text-property
                     0 'local-map counter)
                    [mode-line mouse-1]))))
-           (kill-buffer buffer)))"##;
-    let expect = expect![[
+           (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK ("3" "3 compile warnings\nmouse-1 display compile log" error mode-line-highlight auto-compile-display-log)"#
-    ]];
-    assert_auto_compile_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

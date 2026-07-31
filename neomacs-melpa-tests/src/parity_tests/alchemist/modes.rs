@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_alchemist_parity;
+use super::assert_alchemist_batch;
 
 #[test]
-fn alchemist_major_and_minor_modes_install_real_read_only_keymap_and_buffer_local_contracts() {
-    let elisp_form = r##"(mapcar
+fn modes_public_surface_batch() {
+    assert_alchemist_batch(&[
+        (
+            "alchemist_major_and_minor_modes_install_real_read_only_keymap_and_buffer_local_contracts",
+            r##"(mapcar
                       (lambda (mode)
                         (with-temp-buffer
                           (funcall mode)
@@ -24,16 +27,15 @@ fn alchemist_major_and_minor_modes_install_real_read_only_keymap_and_buffer_loca
                         alchemist-execute-mode
                         alchemist-mix-mode
                         alchemist-test-report-mode
-                        alchemist-iex-mode))"##;
-    let expect = expect![[
+                        alchemist-iex-mode))"##,
+            true,
+            expect![[
         r#"OK ((alchemist-compile-mode alchemist-compile-mode "Elixir Compile Mode" t t nil quit-window self-insert-command self-insert-command nil nil) (alchemist-execute-mode alchemist-execute-mode "Elixir Execute Mode" t t nil quit-window self-insert-command self-insert-command nil nil) (alchemist-mix-mode alchemist-mix-mode "Mix Mode" t t nil quit-window alchemist-mix-rerun-last-task alchemist-mix-send-input-to-mix-process nil nil) (alchemist-test-report-mode alchemist-test-report-mode "Alchemist Test Report" t t nil quit-window alchemist-mix-rerun-last-test self-insert-command nil nil) (alchemist-iex-mode alchemist-iex-mode "Alchemist-IEx" nil nil (10) self-insert-command self-insert-command self-insert-command nil nil))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_test_help_eval_macroexpand_info_hex_and_phoenix_minor_modes_toggle_exact_state() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "alchemist_test_help_eval_macroexpand_info_hex_and_phoenix_minor_modes_toggle_exact_state",
+            r##"(mapcar
                       (lambda (mode)
                         (with-temp-buffer
                           (let ((before
@@ -59,16 +61,15 @@ fn alchemist_test_help_eval_macroexpand_info_hex_and_phoenix_minor_modes_toggle_
                         alchemist-macroexpand-mode
                         alchemist-info-mode
                         alchemist-hex-mode
-                        alchemist-phoenix-mode))"##;
-    let expect = expect![[
+                        alchemist-phoenix-mode))"##,
+            true,
+            expect![[
         r#"OK ((alchemist-test-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" nil self-insert-command nil nil) nil nil) (alchemist-help-minor-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" t quit-window nil nil) nil nil) (alchemist-eval-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" nil quit-window nil nil) nil nil) (alchemist-macroexpand-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" nil quit-window nil nil) nil nil) (alchemist-info-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" nil quit-window nil nil) nil nil) (alchemist-hex-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" t quit-window nil nil) nil t) (alchemist-phoenix-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" nil self-insert-command nil nil) nil nil))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_save_hooks_only_run_hidden_project_test_and_compile_reports_when_enabled() {
-    let elisp_form = r##"(let* ((sandbox
+    ]],
+        ),
+        (
+            "alchemist_save_hooks_only_run_hidden_project_test_and_compile_reports_when_enabled",
+            r##"(let* ((sandbox
                            (file-name-as-directory
                             (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                           (project
@@ -95,16 +96,15 @@ fn alchemist_save_hooks_only_run_hidden_project_test_and_compile_reports_when_en
                            (alchemist-hooks-test-on-save))
                          (let ((alchemist-hooks-compile-on-save nil))
                            (alchemist-hooks-compile-on-save))
-                         (nreverse events))))"##;
-    let expect = expect![[
+                         (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (reported reported nil nil (("mix test" "alchemist-test-process" "*alchemist test report*" alchemist-test-report-mode alchemist-test--handle-exit t) ("mix compile" "alchemist-mix-report" "*alchemist mix*" alchemist-mix-mode nil t)))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_refcard_resolves_real_multiple_bindings_and_builds_strict_tabulated_rows() {
-    let elisp_form = r##"(let ((alchemist-server-processes nil))
+    ]],
+        ),
+        (
+            "alchemist_refcard_resolves_real_multiple_bindings_and_builds_strict_tabulated_rows",
+            r##"(let ((alchemist-server-processes nil))
                       (cl-letf
                           (((symbol-function
                              'alchemist-server-start-if-not-running)
@@ -133,17 +133,15 @@ fn alchemist_refcard_resolves_real_multiple_bindings_and_builds_strict_tabulated
                            (alchemist-refcard--build-tabulated-refcard-title-row
                             "Alchemist Refcard v1.8.2")
                            (length
-                            (alchemist-refcard--tabulated-list-entries))))))"##;
-    let expect = expect![[
+                            (alchemist-refcard--tabulated-list-entries))))))"##,
+            true,
+            expect![[
         r#"OK ((("alchemist-mix-test" "C-c a t" ("alchemist-mix-test" ["alchemist-mix-test" #("C-c a t" 0 7 (face font-lock-builtin-face))])) ("alchemist-goto-definition-at-point" "M-." ("alchemist-goto-definition-at-point" ["alchemist-goto-definition-at-point" #("M-." 0 3 (face font-lock-builtin-face))])) ("alchemist-eval-current-line" "C-c a v l" ("alchemist-eval-current-line" ["alchemist-eval-current-line" #("C-c a v l" 0 9 (face font-lock-builtin-face))])) ("alchemist-phoenix-router" "C-c a n r" ("alchemist-phoenix-router" ["alchemist-phoenix-router" #("C-c a n r" 0 9 (face font-lock-builtin-face))])) ("alchemist-refcard" "C-c a h r" ("alchemist-refcard" ["alchemist-refcard" #("C-c a h r" 0 9 (face font-lock-builtin-face))]))) ("" ["" ""]) ("" [#("Navigation" 0 10 (face font-lock-constant-face)) ""]) ("" [#("Alchemist Refcard v1.8.2" 0 24 (face font-lock-variable-name-face)) ""]) 99)"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_report_callbacks_status_mode_activation_and_cleanup_follow_process_lifecycle_contract()
-{
-    let elisp_form = r##"(let ((alchemist-report-on-render-function
+    ]],
+        ),
+        (
+            "alchemist_report_callbacks_status_mode_activation_and_cleanup_follow_process_lifecycle_contract",
+            r##"(let ((alchemist-report-on-render-function
                            (lambda (buffer)
                              (with-current-buffer buffer
                                (goto-char (point-max))
@@ -190,16 +188,15 @@ fn alchemist_report_callbacks_status_mode_activation_and_cleanup_follow_process_
                                     "exited abnormally\n")
                                    (alchemist-report--last-run-successful-p))))))
                         (when (buffer-live-p buffer)
-                          (kill-buffer buffer))))"##;
-    let expect = expect![[
+                          (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK ("old output|rendered|exit:finished\n" "finished\n" t (alchemist-test-report-mode "Alchemist Test Report" t t t) "" nil)"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_message_replaces_real_buffer_applies_ansi_read_only_mode_and_display_boundary() {
-    let elisp_form = r##"(let (displayed)
+    ]],
+        ),
+        (
+            "alchemist_message_replaces_real_buffer_applies_ansi_read_only_mode_and_display_boundary",
+            r##"(let (displayed)
                       (cl-letf
                           (((symbol-function 'display-buffer)
                             (lambda (buffer)
@@ -227,9 +224,11 @@ fn alchemist_message_replaces_real_buffer_applies_ansi_read_only_mode_and_displa
                               (get-buffer
                                alchemist-message--buffer-name)
                             (kill-buffer
-                             alchemist-message--buffer-name)))))"##;
-    let expect = expect![[
+                             alchemist-message--buffer-name)))))"##,
+            true,
+            expect![[
         r#"OK (t "*alchemist message*" ("Compilation failed\nline 2" t t "Fundamental" quit-window))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

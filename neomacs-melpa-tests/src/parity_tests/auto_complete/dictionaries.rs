@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_parity;
+use super::assert_auto_complete_batch;
 
 #[test]
-fn auto_complete_file_dictionary_caches_contents_until_explicit_clear() {
-    let elisp_form = r##"(let* ((root
+fn dictionaries_public_surface_batch() {
+    assert_auto_complete_batch(&[
+        (
+            "auto_complete_file_dictionary_caches_contents_until_explicit_clear",
+            r##"(let* ((root
                                  (expand-file-name
                                   "auto-complete-dictionary-cache"
                                   (getenv "TMPDIR")))
@@ -33,15 +36,13 @@ fn auto_complete_file_dictionary_caches_contents_until_explicit_clear() {
                                 cached
                                 (ac-file-dictionary file)
                                 (hash-table-count
-                                 ac-file-dictionary)))))"##;
-    let expect = expect![[r#"OK (#1=("alpha" "beta" "alpha") #1# ("gamma" "delta") 1)"#]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_buffer_dictionary_combines_user_mode_extension_and_explicit_files_in_order() {
-    let elisp_form = r##"(let* ((root
+                                 ac-file-dictionary)))))"##,
+            true,
+            expect![[r#"OK (#1=("alpha" "beta" "alpha") #1# ("gamma" "delta") 1)"#]],
+        ),
+        (
+            "auto_complete_buffer_dictionary_combines_user_mode_extension_and_explicit_files_in_order",
+            r##"(let* ((root
                                  (expand-file-name
                                   "auto-complete-dictionary-combine"
                                   (getenv "TMPDIR")))
@@ -96,17 +97,15 @@ fn auto_complete_buffer_dictionary_combines_user_mode_extension_and_explicit_fil
                                 (ac-buffer-dictionary)
                                 (local-variable-p
                                  'ac-buffer-dictionary)
-                                (ac-buffer-dictionary)))))"##;
-    let expect = expect![[
+                                (ac-buffer-dictionary)))))"##,
+            true,
+            expect![[
         r#"OK (("mode-one" "shared" "extension-one" "shared") #1=("user-one" "shared" "mode-one" "shared" "extension-one" "shared" "file-one" "shared") t #1#)"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_dictionary_cache_is_buffer_local_and_clear_invalidates_every_live_buffer() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "auto_complete_dictionary_cache_is_buffer_local_and_clear_invalidates_every_live_buffer",
+            r##"(let* ((root
                                  (expand-file-name
                                   "auto-complete-dictionary-buffers"
                                   (getenv "TMPDIR")))
@@ -157,15 +156,13 @@ fn auto_complete_dictionary_cache_is_buffer_local_and_clear_invalidates_every_li
                                           (ac-buffer-dictionary))))
                                      (list first second)))))
                              (kill-buffer first)
-                             (kill-buffer second)))"##;
-    let expect = expect![[r#"OK (((t #1=("before")) (t #1#)) ((nil #2=("after")) (nil #2#)))"#]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_missing_dictionary_file_is_cached_as_nil_until_cache_clear() {
-    let elisp_form = r##"(let* ((root
+                             (kill-buffer second)))"##,
+            true,
+            expect![[r#"OK (((t #1=("before")) (t #1#)) ((nil #2=("after")) (nil #2#)))"#]],
+        ),
+        (
+            "auto_complete_missing_dictionary_file_is_cached_as_nil_until_cache_clear",
+            r##"(let* ((root
                                  (expand-file-name
                                   "auto-complete-dictionary-missing"
                                   (getenv "TMPDIR")))
@@ -187,15 +184,13 @@ fn auto_complete_missing_dictionary_file_is_cached_as_nil_until_cache_clear() {
                                (list
                                 missing
                                 still-cached
-                                (ac-file-dictionary file)))))"##;
-    let expect = expect![[r#"OK (nil ("appeared") ("appeared"))"#]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_builtin_c_and_python_dictionaries_support_practical_prefix_queries() {
-    let elisp_form = r##"(let ((ac-dictionary-files nil)
+                                (ac-file-dictionary file)))))"##,
+            true,
+            expect![[r#"OK (nil ("appeared") ("appeared"))"#]],
+        ),
+        (
+            "auto_complete_builtin_c_and_python_dictionaries_support_practical_prefix_queries",
+            r##"(let ((ac-dictionary-files nil)
                                (ac-user-dictionary nil))
                            (list
                             (with-temp-buffer
@@ -234,17 +229,15 @@ fn auto_complete_builtin_c_and_python_dictionaries_support_practical_prefix_quer
                                   (member
                                    "ArithmeticError"
                                    dictionary)
-                                  t))))))"##;
-    let expect = expect![[
+                                  t))))))"##,
+            true,
+            expect![[
         r#"OK ((55 ("struct") ("volatile") t) (379 ("ImportError" "ImportWarning") ("UnicodeDecodeError" "UnicodeEncodeError" "UnicodeError" "UnicodeTranslateError" "UnicodeWarning") ("zip" "zipfile" "zipimport") t))"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_dictionary_source_completes_real_user_address_and_retains_source_symbol() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_dictionary_source_completes_real_user_address_and_retains_source_symbol",
+            r##"(save-window-excursion
                           (with-temp-buffer
                             (switch-to-buffer
                              (current-buffer))
@@ -299,18 +292,15 @@ fn auto_complete_dictionary_source_completes_real_user_address_and_retains_sourc
                                           (substring-no-properties
                                            (cdr
                                             ac-last-completion)))))))
-                                (auto-complete-mode -1)))))"##;
-    let expect = expect![[
+                                (auto-complete-mode -1)))))"##,
+            true,
+            expect![[
         r#"OK ((("alice@example.com" "d") ("alice@engineering.example" "d")) "alice" "alice@example.com" "alice@engineering.example" "alice@engineering.example" "alice@engineering.example" nil nil "alice@engineering.example")"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_filename_source_lists_files_directories_and_respects_comment_and_regular_file_guards()
- {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "auto_complete_filename_source_lists_files_directories_and_respects_comment_and_regular_file_guards",
+            r##"(let* ((root
                                  (file-name-as-directory
                                   (expand-file-name
                                    "auto-complete-filename"
@@ -361,17 +351,13 @@ fn auto_complete_filename_source_lists_files_directories_and_respects_comment_an
                                  comment-start-skip
                                  "#[ \t]*")
                                 (ac-filename-candidate))
-                              (length ac-filename-cache))))"##;
-    let expect =
-        expect![[r#"OK (("" "alpha.txt" "amber.log") ("alpha.txt" "amber.log") nil nil 1)"#]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_mode_dictionary_uses_both_major_mode_and_filename_extension_with_duplicate_data_intact()
- {
-    let elisp_form = r##"(let* ((root
+                              (length ac-filename-cache))))"##,
+            true,
+            expect![[r#"OK (("" "alpha.txt" "amber.log") ("alpha.txt" "amber.log") nil nil 1)"#]],
+        ),
+        (
+            "auto_complete_mode_dictionary_uses_both_major_mode_and_filename_extension_with_duplicate_data_intact",
+            r##"(let* ((root
                                  (expand-file-name
                                   "auto-complete-mode-extension"
                                   (getenv "TMPDIR")))
@@ -408,10 +394,11 @@ fn auto_complete_mode_dictionary_uses_both_major_mode_and_filename_extension_wit
                                 (ac-mode-dictionary
                                  major-mode)
                                 (ac-mode-dictionary
-                                 'fundamental-mode)))))"##;
-    let expect = expect![[
+                                 'fundamental-mode)))))"##,
+            true,
+            expect![[
         r#"OK (("mode-only" "duplicate" "extension-only" "duplicate") ("extension-only" "duplicate"))"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AMX_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const AMX_TEST_TIMEOUT: Duration = Duration::from_secs(180);
@@ -118,4 +120,15 @@ pub(crate) fn assert_amx_parity(elisp_form: &str, expected: Expect) {
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("amx parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+/// Multi-probe batch for `assert_amx_parity` cases (2a).
+pub(crate) fn assert_amx_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        amx_oracle(),
+        &name,
+        "amx_parity",
+        cases,
+    );
 }

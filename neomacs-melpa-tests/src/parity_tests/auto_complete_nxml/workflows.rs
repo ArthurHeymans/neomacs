@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_nxml_parity;
+use super::assert_auto_complete_nxml_batch;
 
 #[test]
-fn auto_complete_nxml_real_nxml_mode_setup_installs_completion_environment() {
-    let elisp_form = r##"(with-temp-buffer
+fn workflows_public_surface_batch() {
+    assert_auto_complete_nxml_batch(&[
+        (
+            "auto_complete_nxml_real_nxml_mode_setup_installs_completion_environment",
+            r##"(with-temp-buffer
          (insert "<?xml version=\"1.0\"?><root><child/></root>")
          (nxml-mode)
          (list
@@ -14,16 +17,15 @@ fn auto_complete_nxml_real_nxml_mode_setup_installs_completion_environment() {
           (memq 'nxml-mode ac-modes)
           (memq 'auto-complete-nxml-ac-start-with-insert
                 ac-trigger-commands)
-          (key-binding (kbd "SPC"))))"##;
-    let expect = expect![
+          (key-binding (kbd "SPC"))))"##,
+            true,
+            expect![
         "OK (nxml-mode t (ac-source-nxml-tag ac-source-nxml-attr ac-source-nxml-attr-value ac-source-nxml-css ac-source-nxml-css-property ac-source-nxml-tag-value-by-nxml ac-source-nxml-tag-value-by-myself) (nxml-mode emacs-lisp-mode lisp-mode lisp-interaction-mode slime-repl-mode nim-mode c-mode cc-mode c++-mode objc-mode swift-mode go-mode java-mode malabar-mode clojure-mode clojurescript-mode scala-mode scheme-mode ocaml-mode tuareg-mode coq-mode haskell-mode agda-mode agda2-mode perl-mode cperl-mode python-mode ruby-mode lua-mode tcl-mode ecmascript-mode javascript-mode js-mode js-jsx-mode js2-mode js2-jsx-mode coffee-mode php-mode css-mode scss-mode less-css-mode elixir-mode makefile-mode sh-mode fortran-mode f90-mode ada-mode xml-mode sgml-mode web-mode ts-mode sclang-mode verilog-mode qml-mode apples-mode) (auto-complete-nxml-ac-start-with-insert self-insert-command) auto-complete-nxml-ac-start-with-insert)"
-    ];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_practical_content_completion_reuses_words_from_open_document() {
-    let elisp_form = r##"(let ((auto-complete-nxml-tag-value-words-hash
+    ],
+        ),
+        (
+            "auto_complete_nxml_practical_content_completion_reuses_words_from_open_document",
+            r##"(let ((auto-complete-nxml-tag-value-words-hash
                                 (make-hash-table :test 'equal))
              (auto-complete-nxml-automatic-p t)
              (this-command 'self-insert-command)
@@ -44,16 +46,15 @@ fn auto_complete_nxml_practical_content_completion_reuses_words_from_open_docume
               auto-complete-nxml-buffer-current-tag
               candidates
               (member "Neomacs" candidates)
-              (member "Native" candidates)))))"##;
-    let expect = expect![[
+              (member "Native" candidates)))))"##,
+            true,
+            expect![[
         r#"OK (content "title" ("runtime" "Emacs" . #2=("Native" "Editor" . #1=("Neomacs" ""))) #1# #2#)"#
-    ]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_practical_attribute_completion_reuses_matching_attribute_values() {
-    let elisp_form = r##"(let ((auto-complete-nxml-attr-words-hash-hash
+    ]],
+        ),
+        (
+            "auto_complete_nxml_practical_attribute_completion_reuses_matching_attribute_values",
+            r##"(let ((auto-complete-nxml-attr-words-hash-hash
                                 (make-hash-table :test 'equal))
              (auto-complete-nxml-automatic-p t)
              (this-command 'self-insert-command)
@@ -75,16 +76,15 @@ fn auto_complete_nxml_practical_attribute_completion_reuses_matching_attribute_v
                 auto-complete-nxml-buffer-current-attr
                 candidates
                 (member "primary" candidates)
-                (member "secondary" candidates))))))"##;
-    let expect = expect![[
+                (member "secondary" candidates))))))"##,
+            true,
+            expect![[
         r#"OK (attrvalue "class" ("compact" . #2=("secondary" "wide" . #1=("primary"))) #1# #2#)"#
-    ]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_document_capture_and_popup_render_end_to_end() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "auto_complete_nxml_document_capture_and_popup_render_end_to_end",
+            r##"(progn
          (auto-complete-nxml-start-make-doc4ac-in-nxml)
          (puthash 0 '(name (nil . "section"))
                   auto-complete-nxml-ncls-store-hash)
@@ -99,16 +99,15 @@ fn auto_complete_nxml_document_capture_and_popup_render_end_to_end() {
             (acnxml-test-doc-value
              (gethash "section"
                       auto-complete-nxml-element-document-hash))
-            (auto-complete-nxml-get-document-tag "section"))))"##;
-    let expect = expect![[
+            (auto-complete-nxml-get-document-tag "section"))))"##,
+            true,
+            expect![[
         r#"OK ((:name "section" :ns "" :comment "Structural element." :note "Groups related content.") "'section' is ELEMENT in ''.\n\nComment: \nStructural element.\n\nNote: \nGroups related content.\n")"#
-    ]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_source_actions_build_a_complete_attribute_and_element() {
-    let elisp_form = r##"(let ((auto-complete-nxml-automatic-p nil))
+    ]],
+        ),
+        (
+            "auto_complete_nxml_source_actions_build_a_complete_attribute_and_element",
+            r##"(let ((auto-complete-nxml-automatic-p nil))
          (cl-letf (((symbol-function 'auto-complete-nxml-expand-tag)
                     (lambda () (insert " "))))
            (with-temp-buffer
@@ -122,14 +121,13 @@ fn auto_complete_nxml_source_actions_build_a_complete_attribute_and_element() {
              (funcall
               (cdr
                (assq 'action ac-source-nxml-tag-value-by-nxml)))
-             (list (buffer-string) (point)))))"##;
-    let expect = expect![[r#"OK ("<article class=\"featured\">Body</article>" 41)"#]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_popup_help_routes_context_document_to_popup_backend() {
-    let elisp_form = r##"(let ((auto-complete-nxml-element-document-hash
+             (list (buffer-string) (point)))))"##,
+            true,
+            expect![[r#"OK ("<article class=\"featured\">Body</article>" 41)"#]],
+        ),
+        (
+            "auto_complete_nxml_popup_help_routes_context_document_to_popup_backend",
+            r##"(let ((auto-complete-nxml-element-document-hash
                                 (make-hash-table :test 'equal))
              calls)
          (puthash
@@ -152,14 +150,13 @@ fn auto_complete_nxml_popup_help_routes_context_document_to_popup_backend() {
              (auto-complete-nxml-popup-help)
              (list
               auto-complete-nxml-buffer-current-tag
-              (nreverse calls)))))"##;
-    let expect = expect![[r#"OK ("<" ("'<' is ELEMENT in ''.\n\nNot documented.\n"))"#]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_project_initialization_indexes_deterministic_xml_files() {
-    let elisp_form = r##"(let* ((root
+              (nreverse calls)))))"##,
+            true,
+            expect![[r#"OK ("<" ("'<' is ELEMENT in ''.\n\nNot documented.\n"))"#]],
+        ),
+        (
+            "auto_complete_nxml_project_initialization_indexes_deterministic_xml_files",
+            r##"(let* ((root
                                  (expand-file-name
                                   "auto-complete-nxml-project"
                                   default-directory))
@@ -200,16 +197,15 @@ fn auto_complete_nxml_project_initialization_indexes_deterministic_xml_files() {
                     (directory-files root t "\\.xml\\'"))
                    #'string<))))
            (when (file-exists-p root)
-             (delete-directory root t))))"##;
-    let expect = expect![[
+             (delete-directory root t))))"##,
+            true,
+            expect![[
         r#"OK (("Beta" "text" "Alpha") (("class" "secondary" "primary")) ("first.xml" "second.xml"))"#
-    ]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_namespace_completion_and_document_lookup_share_prefix_mapping() {
-    let elisp_form = r##"(let ((auto-complete-nxml-element-document-hash
+    ]],
+        ),
+        (
+            "auto_complete_nxml_namespace_completion_and_document_lookup_share_prefix_mapping",
+            r##"(let ((auto-complete-nxml-element-document-hash
                                 (make-hash-table :test 'equal)))
          (puthash
           "urn:math:sum"
@@ -235,9 +231,11 @@ fn auto_complete_nxml_namespace_completion_and_document_lookup_share_prefix_mapp
              (auto-complete-nxml-expand-other-xmlns)
              (list
               (buffer-string)
-              (auto-complete-nxml-get-document-tag "m:sum")))))"##;
-    let expect = expect![[
+              (auto-complete-nxml-get-document-tag "m:sum")))))"##,
+            true,
+            expect![[
         r#"OK ("<html xmlns=\"urn:html\"\n      xmlns:m=\"urn:math\"" "'sum' is ELEMENT in 'urn:math'.\n\nComment: \nSummation.\n\nNote: \nMathML.\n")"#
-    ]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

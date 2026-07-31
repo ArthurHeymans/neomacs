@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_anybar_parity;
+use super::assert_anybar_batch;
 
 #[test]
-fn documented_indicator_lifecycle_updates_the_default_anybar_instance() {
-    let elisp_form = r##"
+fn workflows_public_surface_batch() {
+    assert_anybar_batch(&[
+        (
+            "documented_indicator_lifecycle_updates_the_default_anybar_instance",
+            r##"
 (progn
   (neomacs-anybar-test-reset)
   (let ((anybar-executable-location "/Users/demo/Applications/AnyBar.app")
@@ -23,17 +26,15 @@ fn documented_indicator_lifecycle_updates_the_default_anybar_instance() {
     (list
      (reverse states)
      (neomacs-anybar-test-events))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ((nil ((:port 1738 :application "/Users/demo/Applications/AnyBar.app" :style "white")) ((:port 1738 :application "/Users/demo/Applications/AnyBar.app" :style "green")) ((:port 1738 :application "/Users/demo/Applications/AnyBar.app" :style "purple")) nil) ((launch :port 1738 :application "/Users/demo/Applications/AnyBar.app" :output-buffer nil :error-buffer nil) (connect :name "anybar" :type datagram :host local :port 1738) (send :port 1738 :command "green") (close :port 1738) (connect :name "anybar" :type datagram :host local :port 1738) (send :port 1738 :command "purple") (close :port 1738) (connect :name "anybar" :type datagram :host local :port 1738) (send :port 1738 :command "quit") (close :port 1738)))"#
-    ]];
-
-    assert_anybar_parity(elisp_form, expect);
-}
-
-#[test]
-fn custom_images_refresh_while_two_ports_keep_independent_indicator_state() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "custom_images_refresh_while_two_ports_keep_independent_indicator_state",
+            r##"
 (let* ((home (getenv "HOME"))
        (image-directory (expand-file-name ".AnyBar" home))
        (image-file
@@ -104,17 +105,15 @@ fn custom_images_refresh_while_two_ports_keep_independent_indicator_state() {
         (file-exists-p image-directory)
       (delete-directory image-directory t)))
   result)
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:initial-images ("deploy" "review") :before-refresh ((:port 2401 :application "/Applications/AnyBar.app" :style "deploy") (:port 2402 :application "/Applications/AnyBar.app" :style "review")) :refreshed-images ("canary" "review") :after-refresh ((:port 2401 :application "/Applications/AnyBar.app" :style "canary") (:port 2402 :application "/Applications/AnyBar.app" :style "review")) :warning-buffer "Warning (AnyBar): Not a style: deploy\n" :events ((launch :port 2401 :application "/Applications/AnyBar.app" :output-buffer nil :error-buffer nil) (launch :port 2402 :application "/Applications/AnyBar.app" :output-buffer nil :error-buffer nil) (connect :name "anybar" :type datagram :host local :port 2401) (send :port 2401 :command "deploy") (close :port 2401) (connect :name "anybar" :type datagram :host local :port 2402) (send :port 2402 :command "review") (close :port 2402) (connect :name "anybar" :type datagram :host local :port 2401) (send :port 2401 :command "canary") (close :port 2401)))"#
-    ]];
-
-    assert_anybar_parity(elisp_form, expect);
-}
-
-#[test]
-fn interactive_commands_drive_a_complete_indicator_session_through_their_prompts() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "interactive_commands_drive_a_complete_indicator_session_through_their_prompts",
+            r##"
 (progn
   (neomacs-anybar-test-reset)
   (let ((ports '(4173 4173 4173 4173))
@@ -183,10 +182,11 @@ fn interactive_commands_drive_a_complete_indicator_session_through_their_prompts
      :states (reverse states)
      :events (neomacs-anybar-test-events)
      :unused-input (list ports styles commands))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:prompts ((:kind port :prompt "Port: " :default 1738 :answer 4173) (:kind style :prompt "Style: " :choices ("white" "red" "orange" "yellow" "green" "cyan" "blue" "purple" "black" "question" "exclamation") :require-match nil :initial-input nil :history nil :default nil :inherit-input-method nil :answer "orange") (:kind port :prompt "Port: " :default 1738 :answer 4173) (:kind command :prompt "Command: " :initial-input nil :history nil :default-value nil :inherit-input-method nil :answer "question") (:kind port :prompt "Port: " :default 1738 :answer 4173) (:kind port :prompt "Port: " :default 1738 :answer 4173)) :states (((:port 4173 :application "/Applications/AnyBar.app" :style "white")) ((:port 4173 :application "/Applications/AnyBar.app" :style "orange")) ((:port 4173 :application "/Applications/AnyBar.app" :style "question")) nil) :events ((launch :port 4173 :application "/Applications/AnyBar.app" :output-buffer nil :error-buffer nil) (connect :name "anybar" :type datagram :host local :port 4173) (send :port 4173 :command "orange") (close :port 4173) (connect :name "anybar" :type datagram :host local :port 4173) (send :port 4173 :command "question") (close :port 4173) (connect :name "anybar" :type datagram :host local :port 4173) (send :port 4173 :command "quit") (close :port 4173)) :unused-input (nil nil nil))"#
-    ]];
-
-    assert_anybar_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_atomic_chrome_parity;
+use super::assert_atomic_chrome_batch;
 
 #[test]
-fn atomic_chrome_start_websocket_server_forwards_exact_local_callbacks_and_port() {
-    let elisp_form = r##"(let (calls)
+fn servers_public_surface_batch() {
+    assert_atomic_chrome_batch(&[
+        (
+            "atomic_chrome_start_websocket_server_forwards_exact_local_callbacks_and_port",
+            r##"(let (calls)
           (cl-letf
               (((symbol-function 'websocket-server)
                 (lambda (&rest arguments)
@@ -15,16 +18,15 @@ fn atomic_chrome_start_websocket_server_forwards_exact_local_callbacks_and_port(
               64292)
              (atomic-chrome-start-websocket-server
               4001)
-             (nreverse calls))))"##;
-    let expect = expect![
+             (nreverse calls))))"##,
+            true,
+            expect![
         "OK (:server-handle :server-handle ((64292 :host local :on-message atomic-chrome-on-message :on-open nil :on-close atomic-chrome-on-close) (4001 :host local :on-message atomic-chrome-on-message :on-open nil :on-close atomic-chrome-on-close)))"
-    ];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_start_httpd_forwards_custom_port_and_exact_network_process_contract() {
-    let elisp_form = r##"(let ((atomic-chrome-server-ghost-text-port
+    ],
+        ),
+        (
+            "atomic_chrome_start_httpd_forwards_custom_port_and_exact_network_process_contract",
+            r##"(let ((atomic-chrome-server-ghost-text-port
                 4777)
                calls)
           (cl-letf
@@ -38,16 +40,15 @@ fn atomic_chrome_start_httpd_forwards_custom_port_and_exact_network_process_cont
              (commandp
               'atomic-chrome-start-httpd)
              (interactive-form
-              'atomic-chrome-start-httpd))))"##;
-    let expect = expect![[
+              'atomic-chrome-start-httpd))))"##,
+            true,
+            expect![[
         r#"OK (:httpd-process ((:name "atomic-chrome-httpd" :family ipv4 :host local :service 4777 :filter atomic-chrome-httpd-process-filter :filter-multibyte nil :server t :noquery t)) t (interactive nil))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_start_server_obeys_extension_selection_existing_state_and_process_status() {
-    let elisp_form = r##"(let (snapshots)
+    ]],
+        ),
+        (
+            "atomic_chrome_start_server_obeys_extension_selection_existing_state_and_process_status",
+            r##"(let (snapshots)
           (dolist
               (scenario
                '((:both
@@ -112,16 +113,15 @@ fn atomic_chrome_start_server_obeys_extension_selection_existing_state_and_proce
                   atomic-chrome-server-atomic-chrome
                   (nreverse events))
                  snapshots))))
-          (nreverse snapshots))"##;
-    let expect = expect![[
+          (nreverse snapshots))"##,
+            true,
+            expect![[
         r#"OK ((:both :global-enabled :started-atomic ((websocket 64292) (status "atomic-chrome-httpd") (httpd) (global 1))) (:atomic-existing :global-enabled :existing-atomic ((status "atomic-chrome-httpd") (global 1))) (:ghost-running :global-enabled nil ((status "atomic-chrome-httpd") (global 1))) (:none :global-enabled nil ((status "atomic-chrome-httpd") (global 1))))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_start_server_swallows_failures_and_stops_at_exact_failed_stage() {
-    let elisp_form = r##"(let (snapshots)
+    ]],
+        ),
+        (
+            "atomic_chrome_start_server_swallows_failures_and_stops_at_exact_failed_stage",
+            r##"(let (snapshots)
           (dolist
               (failure
                '(:websocket
@@ -179,16 +179,15 @@ fn atomic_chrome_start_server_swallows_failures_and_stops_at_exact_failed_stage(
                   atomic-chrome-server-atomic-chrome
                   (nreverse events))
                  snapshots))))
-          (nreverse snapshots))"##;
-    let expect = expect![[
+          (nreverse snapshots))"##,
+            true,
+            expect![[
         r#"OK ((:websocket nil nil ((websocket 64292))) (:status nil :atomic-server ((websocket 64292) (status "atomic-chrome-httpd"))) (:httpd nil :atomic-server ((websocket 64292) (status "atomic-chrome-httpd") #1=(httpd))) (:global nil :atomic-server ((websocket 64292) (status "atomic-chrome-httpd") #1# (global 1))) (:none :enabled :atomic-server ((websocket 64292) (status "atomic-chrome-httpd") #1# (global 1))))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_stop_server_closes_both_websockets_httpd_and_global_mode_in_order() {
-    let elisp_form = r##"(let ((atomic-chrome-server-atomic-chrome
+    ]],
+        ),
+        (
+            "atomic_chrome_stop_server_closes_both_websockets_httpd_and_global_mode_in_order",
+            r##"(let ((atomic-chrome-server-atomic-chrome
                 :atomic-server)
                (atomic-chrome-server-ghost-text
                 :ghost-server)
@@ -224,16 +223,15 @@ fn atomic_chrome_stop_server_closes_both_websockets_httpd_and_global_mode_in_ord
              (atomic-chrome-stop-server)
              atomic-chrome-server-atomic-chrome
              atomic-chrome-server-ghost-text
-             (nreverse events))))"##;
-    let expect = expect![[
+             (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:disabled nil nil ((close :atomic-server) (close :ghost-server) (status "atomic-chrome-httpd") (delete "atomic-chrome-httpd") (global 0)))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_stop_server_skips_absent_resources_but_always_disables_global_mode() {
-    let elisp_form = r##"(let ((atomic-chrome-server-atomic-chrome
+    ]],
+        ),
+        (
+            "atomic_chrome_stop_server_skips_absent_resources_but_always_disables_global_mode",
+            r##"(let ((atomic-chrome-server-atomic-chrome
                 nil)
                (atomic-chrome-server-ghost-text
                 nil)
@@ -265,14 +263,13 @@ fn atomic_chrome_stop_server_skips_absent_resources_but_always_disables_global_m
                   :disabled)))
             (list
              (atomic-chrome-stop-server)
-             (nreverse events))))"##;
-    let expect = expect![[r#"OK (:disabled ((status "atomic-chrome-httpd") (global 0)))"#]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_stop_server_propagates_failures_with_exact_partial_cleanup_state() {
-    let elisp_form = r##"(let (snapshots)
+             (nreverse events))))"##,
+            true,
+            expect![[r#"OK (:disabled ((status "atomic-chrome-httpd") (global 0)))"#]],
+        ),
+        (
+            "atomic_chrome_stop_server_propagates_failures_with_exact_partial_cleanup_state",
+            r##"(let (snapshots)
           (dolist
               (failure
                '(:atomic-close
@@ -341,9 +338,11 @@ fn atomic_chrome_stop_server_propagates_failures_with_exact_partial_cleanup_stat
                   atomic-chrome-server-ghost-text
                   (nreverse events))
                  snapshots))))
-          (nreverse snapshots))"##;
-    let expect = expect![[
+          (nreverse snapshots))"##,
+            true,
+            expect![[
         r#"OK ((:atomic-close (:error error ("close failed :atomic-server")) :atomic-server :ghost-server ((close :atomic-server))) (:ghost-close (:error error ("close failed :ghost-server")) nil :ghost-server ((close :atomic-server) (close :ghost-server))) (:status (:error error ("status failed")) nil nil ((close :atomic-server) (close :ghost-server) (status "atomic-chrome-httpd"))) (:delete (:error error ("delete failed")) nil nil ((close :atomic-server) (close :ghost-server) (status "atomic-chrome-httpd") (delete "atomic-chrome-httpd"))) (:global (:error error ("global failed")) nil nil ((close :atomic-server) (close :ghost-server) (status "atomic-chrome-httpd") (delete "atomic-chrome-httpd") (global 0))))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

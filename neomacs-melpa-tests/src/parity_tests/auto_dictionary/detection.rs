@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_dictionary_parity;
+use super::assert_auto_dictionary_batch;
 
 #[test]
-fn auto_dictionary_dictionary_name_search_honors_candidate_and_valid_list_order() {
-    let elisp_form = r##"(list
+fn detection_public_surface_batch() {
+    assert_auto_dictionary_batch(&[
+        (
+            "auto_dictionary_dictionary_name_search_honors_candidate_and_valid_list_order",
+            r##"(list
          (adict-guess-dictionary-name
           '("de" "deutsch" "german")
           '("francais" "deutsch" "english"))
@@ -19,14 +22,13 @@ fn auto_dictionary_dictionary_name_search_honors_candidate_and_valid_list_order(
            (adict-guess-dictionary-name
             '("en" "english")))
          (adict-guess-dictionary-name nil
-                                      '("en")))"##;
-    let expect = expect![[r#"OK ("deutsch" nil "german" "english" nil)"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_dictionary_cons_preserves_language_even_when_dictionary_missing() {
-    let elisp_form = r##"(let ((adict-test-valid-dictionaries
+                                      '("en")))"##,
+            true,
+            expect![[r#"OK ("deutsch" nil "german" "english" nil)"#]],
+        ),
+        (
+            "auto_dictionary_dictionary_cons_preserves_language_even_when_dictionary_missing",
+            r##"(let ((adict-test-valid-dictionaries
                                 '("deutsch" "english")))
          (list
           (adict--guess-dictionary-cons
@@ -34,25 +36,23 @@ fn auto_dictionary_dictionary_cons_preserves_language_even_when_dictionary_missi
           (adict--guess-dictionary-cons
            '("en" "english"))
           (adict--guess-dictionary-cons
-           '("fr" "francais" "french"))))"##;
-    let expect = expect![[r#"OK (("de" . "deutsch") ("en" . "english") ("fr"))"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_custom_type_is_derived_from_language_list_in_order() {
-    let elisp_form = r##"(let ((adict-language-list
+           '("fr" "francais" "french"))))"##,
+            true,
+            expect![[r#"OK (("de" . "deutsch") ("en" . "english") ("fr"))"#]],
+        ),
+        (
+            "auto_dictionary_custom_type_is_derived_from_language_list_in_order",
+            r##"(let ((adict-language-list
                                 '(nil "de" "en" "eo")))
-         (adict--dictionary-alist-type))"##;
-    let expect = expect![[
+         (adict--dictionary-alist-type))"##,
+            true,
+            expect![[
         r#"OK (repeat (cons (choice (const "de") (const "en") (const "eo")) (choice (const :tag "Off" nil) (string :tag "Dictionary name"))))"#
-    ]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_real_multilingual_buffer_produces_exact_score_vector_and_winner() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_dictionary_real_multilingual_buffer_produces_exact_score_vector_and_winner",
+            r##"(with-temp-buffer
          (insert
           "Hello dear friend, you are welcome and we have some news.\n"
           "Bonjour, vous allez revoir cette nouvelle.\n"
@@ -67,14 +67,13 @@ fn auto_dictionary_real_multilingual_buffer_produces_exact_score_vector_and_winn
           (adict--evaluate-buffer-find-lang
            nil)
           (adict--evaluate-buffer-find-dictionary
-           nil)))"##;
-    let expect = expect![[r#"OK ((7 8 4 5 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0) "en" 1 "en" "en")"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_tied_scores_choose_lowest_positive_language_index() {
-    let elisp_form = r##"(list
+           nil)))"##,
+            true,
+            expect![[r#"OK ((7 8 4 5 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0) "en" 1 "en" "en")"#]],
+        ),
+        (
+            "auto_dictionary_tied_scores_choose_lowest_positive_language_index",
+            r##"(list
          (cl-letf
              (((symbol-function
                 'adict-evaluate-buffer)
@@ -95,14 +94,13 @@ fn auto_dictionary_tied_scores_choose_lowest_positive_language_index() {
                (lambda (_idle)
                  [99 0 0])))
            (adict--evaluate-buffer-find-max-index
-            nil)))"##;
-    let expect = expect!["OK (1 2 1)"];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_current_and_legacy_dictionary_formats_map_same_language_index() {
-    let elisp_form = r##"(list
+            nil)))"##,
+            true,
+            expect!["OK (1 2 1)"],
+        ),
+        (
+            "auto_dictionary_current_and_legacy_dictionary_formats_map_same_language_index",
+            r##"(list
          (let ((adict-language-list
                 '(nil "de" "en" "fr"))
                (adict-dictionary-list
@@ -130,14 +128,13 @@ fn auto_dictionary_current_and_legacy_dictionary_formats_map_same_language_index
               (adict--evaluate-buffer-find-lang
                t)
               (adict--evaluate-buffer-find-dictionary
-               t)))))"##;
-    let expect = expect![[r#"OK (("en" "en_US") ("en" "en_US"))"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_disabled_language_still_detects_language_but_returns_no_dictionary() {
-    let elisp_form = r##"(with-temp-buffer
+               t)))))"##,
+            true,
+            expect![[r#"OK (("en" "en_US") ("en" "en_US"))"#]],
+        ),
+        (
+            "auto_dictionary_disabled_language_still_detects_language_but_returns_no_dictionary",
+            r##"(with-temp-buffer
          (insert
           "kaj ĉu ankaŭ antaŭ morgaŭ ĉar ŝi ĉiam estas ĉi tie")
          (let ((adict-dictionary-list
@@ -147,14 +144,13 @@ fn auto_dictionary_disabled_language_still_detects_language_but_returns_no_dicti
             (adict-guess-buffer-language)
             (adict--evaluate-buffer-find-dictionary
              nil)
-            (adict-guess-dictionary))))"##;
-    let expect = expect![[r#"OK ("eo" nil nil)"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_foreach_word_handles_punctuation_case_length_and_region_bounds() {
-    let elisp_form = r##"(with-temp-buffer
+            (adict-guess-dictionary))))"##,
+            true,
+            expect![[r#"OK ("eo" nil nil)"#]],
+        ),
+        (
+            "auto_dictionary_foreach_word_handles_punctuation_case_length_and_region_bounds",
+            r##"(with-temp-buffer
          (insert
           "zero HELLO, bonjour extraordinarily drei; goodbye")
          (let (words)
@@ -164,14 +160,13 @@ fn auto_dictionary_foreach_word_handles_punctuation_case_length_and_region_bound
             8
             (lambda (word)
               (push word words)))
-           (nreverse words)))"##;
-    let expect = expect![[r#"OK ("HELLO" "bonjour" "drei" "goodbye")"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_foreach_word_respects_flyspell_generic_word_predicate() {
-    let elisp_form = r##"(with-temp-buffer
+           (nreverse words)))"##,
+            true,
+            expect![[r#"OK ("HELLO" "bonjour" "drei" "goodbye")"#]],
+        ),
+        (
+            "auto_dictionary_foreach_word_respects_flyspell_generic_word_predicate",
+            r##"(with-temp-buffer
          (insert
           "hello skipme bonjour keepme")
          (let ((flyspell-generic-check-word-p
@@ -187,14 +182,13 @@ fn auto_dictionary_foreach_word_respects_flyspell_generic_word_predicate() {
             20
             (lambda (word)
               (push word words)))
-           (nreverse words)))"##;
-    let expect = expect![[r#"OK ("hello" "bonjour")"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_foreach_word_excludes_conditional_overlay_text_from_scoring() {
-    let elisp_form = r##"(with-temp-buffer
+           (nreverse words)))"##,
+            true,
+            expect![[r#"OK ("hello" "bonjour")"#]],
+        ),
+        (
+            "auto_dictionary_foreach_word_excludes_conditional_overlay_text_from_scoring",
+            r##"(with-temp-buffer
          (insert "hello ")
          (let ((overlay
                 (make-overlay
@@ -218,14 +212,13 @@ fn auto_dictionary_foreach_word_excludes_conditional_overlay_text_from_scoring()
               (nreverse words)
               (append
                (adict-evaluate-buffer)
-               nil)))))"##;
-    let expect = expect![[r#"OK (("hello" "drei") (0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0))"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_idle_only_scan_stops_when_input_becomes_pending() {
-    let elisp_form = r##"(with-temp-buffer
+               nil)))))"##,
+            true,
+            expect![[r#"OK (("hello" "drei") (0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0))"#]],
+        ),
+        (
+            "auto_dictionary_idle_only_scan_stops_when_input_becomes_pending",
+            r##"(with-temp-buffer
          (insert
           "hello bonjour zunächst además svenska pozdrav")
          (let ((polls 0)
@@ -245,14 +238,13 @@ fn auto_dictionary_idle_only_scan_stops_when_input_becomes_pending() {
               t)
              (list
               (nreverse words)
-              polls))))"##;
-    let expect = expect![[r#"OK (("hello" "bonjour" "zunächst" "además") 5)"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_third_party_word_and_buffer_apis_cover_case_unknown_and_idle_abort() {
-    let elisp_form = r##"(list
+              polls))))"##,
+            true,
+            expect![[r#"OK (("hello" "bonjour" "zunächst" "además") 5)"#]],
+        ),
+        (
+            "auto_dictionary_third_party_word_and_buffer_apis_cover_case_unknown_and_idle_abort",
+            r##"(list
          (mapcar
           #'adict-guess-word-language
           '("HELLO" "Bonjour" "MORGAŬ"
@@ -267,7 +259,9 @@ fn auto_dictionary_third_party_word_and_buffer_apis_cover_case_unknown_and_idle_
                (((symbol-function
                   'input-pending-p)
                  (lambda () t)))
-             (adict-guess-buffer-language t))))"##;
-    let expect = expect![[r#"OK (("en" "fr" "eo" nil) "eo" nil)"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
+             (adict-guess-buffer-language t))))"##,
+            true,
+            expect![[r#"OK (("en" "fr" "eo" nil) "eo" nil)"#]],
+        ),
+    ]);
 }

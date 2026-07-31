@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_async_melpa_bytecomp_parity;
+use super::assert_async_melpa_bytecomp_batch;
 
 #[test]
-fn current_bytecomp_defaults_and_customization_metadata_match_gnu_emacs() {
-    let elisp_form = r##"
+fn bytecomp_public_surface_batch() {
+    assert_async_melpa_bytecomp_batch(&[
+        (
+            "current_bytecomp_defaults_and_customization_metadata_match_gnu_emacs",
+            r##"
 (list
  async-bytecomp-allowed-packages
  async-byte-compile-log-file
@@ -14,16 +17,15 @@ fn current_bytecomp_defaults_and_customization_metadata_match_gnu_emacs() {
  (get 'async-bytecomp-package-mode 'globalized-minor-mode)
  (documentation 'async-byte-compile-file)
  (help-function-arglist 'async-bytecomp--file-to-comp-buffer t))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (all "async-bytecomp.log" "\\`load-path\\'" (choice (const :tag "All packages" all) (repeat symbol)) boolean nil "Byte compile Lisp code FILE asynchronously.\n\nSame as ‘byte-compile-file’ but asynchronous." (file-or-dir &optional quiet type log-file))"#
-    ]];
-    assert_async_melpa_bytecomp_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_bytecomp_log_file_is_imported_into_compilation_buffer_and_removed() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_bytecomp_log_file_is_imported_into_compilation_buffer_and_removed",
+            r##"
 (let* ((log-file (async-melpa-test-path "bytecomp/import.log"))
        (byte-compile-log-buffer "*async-bytecomp-import*")
        displayed
@@ -46,16 +48,15 @@ fn current_bytecomp_log_file_is_imported_into_compilation_buffer_and_removed() {
                 (buffer-string)
                 (file-exists-p log-file))))
     (async-melpa-test-kill-buffers byte-compile-log-buffer)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("*async-bytecomp-import*" t compilation-mode "fixture.el:3:2: Warning: first\nfixture.el:8:1: Error: broken\n" nil)"#
-    ]];
-    assert_async_melpa_bytecomp_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_bytecomp_completion_reports_success_warnings_and_error_counts() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_bytecomp_completion_reports_success_warnings_and_error_counts",
+            r##"
 (let* ((root (async-melpa-test-path "bytecomp/completion/"))
        (warning-log (expand-file-name "warnings.log" root))
        (error-log (expand-file-name "errors.log" root))
@@ -79,16 +80,15 @@ fn current_bytecomp_completion_reports_success_warnings_and_error_counts() {
         (async-bytecomp--file-to-comp-buffer root nil 'directory error-log)
         (nreverse messages))
     (async-melpa-test-kill-buffers byte-compile-log-buffer)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("Directory `completion' compiled asynchronously with success" "File `one.el' compiled asynchronously with warnings" "Directory `completion' compiled asynchronously with warnings")"#
-    ]];
-    assert_async_melpa_bytecomp_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_comp_buffer_to_file_uses_sandbox_prefix_and_preserves_diagnostics() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_comp_buffer_to_file_uses_sandbox_prefix_and_preserves_diagnostics",
+            r##"
 (let* ((root (file-name-as-directory
               (async-melpa-test-path "bytecomp/export/")))
        (temporary-file-directory root)
@@ -110,16 +110,15 @@ fn current_comp_buffer_to_file_uses_sandbox_prefix_and_preserves_diagnostics() {
                       (async-melpa-test-read-file log-file))
               (delete-file log-file)))))
     (async-melpa-test-kill-buffers byte-compile-log-buffer)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (nil "[ORACLE-SANDBOX]/bytecomp/export/" t "fixture.el:9: Error: deterministic\n")"#
-    ]];
-    assert_async_melpa_bytecomp_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_package_dependency_walk_is_transitive_deduplicated_and_cycle_safe() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_package_dependency_walk_is_transitive_deduplicated_and_cycle_safe",
+            r##"
 (let* ((desc (lambda (name reqs)
                (package-desc-create
                 :name name :version '(1 0) :summary "fixture"
@@ -136,16 +135,15 @@ fn current_package_dependency_walk_is_transitive_deduplicated_and_cycle_safe() {
    (async-bytecomp--get-package-deps '(app))
    (async-bytecomp--get-package-deps '(fallback))
    (async-bytecomp--get-package-deps '(absent app right))))
-"##;
-    let expect = expect![
+"##,
+            true,
+            expect![
         "OK ((right shared left app) (right left app shared fallback) (right shared left app))"
-    ];
-    assert_async_melpa_bytecomp_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_directory_recompile_removes_stale_elc_and_constructs_real_job() {
-    let elisp_form = r##"
+    ],
+        ),
+        (
+            "current_directory_recompile_removes_stale_elc_and_constructs_real_job",
+            r##"
 (let* ((root (file-name-as-directory
               (async-melpa-test-path "bytecomp/recompile/")))
        (source (expand-file-name "fixture.el" root))
@@ -173,16 +171,15 @@ fn current_directory_recompile_removes_stale_elc_and_constructs_real_job() {
              t)
             (functionp callback)
             (nreverse messages)))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (#1=("Started compiling asynchronously directory [ORACLE-SANDBOX]/bytecomp/recompile/") nil ("async") lambda t t #1#)"#
-    ]];
-    assert_async_melpa_bytecomp_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_single_file_compile_constructs_child_and_callback_protocol() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_single_file_compile_constructs_child_and_callback_protocol",
+            r##"
 (let* ((file (async-melpa-test-path "bytecomp/single/fixture.el"))
        child callback imported)
   (async-melpa-test-write-file file "(defun fixture-single () :ok)\n")
@@ -203,16 +200,15 @@ fn current_single_file_compile_constructs_child_and_callback_protocol() {
              (string-match-p "byte-compile-file" (prin1-to-string child))
              t)
             imported))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (fixture-process lambda t t ("[ORACLE-SANDBOX]/bytecomp/single/fixture.el" nil file "fixture.log"))"#
-    ]];
-    assert_async_melpa_bytecomp_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_package_compile_routes_allowed_dependency_and_sync_packages() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_package_compile_routes_allowed_dependency_and_sync_packages",
+            r##"
 (let* ((root (async-melpa-test-path "bytecomp/package/"))
        (make-desc
         (lambda (name reqs)
@@ -239,16 +235,15 @@ fn current_package_compile_routes_allowed_dependency_and_sync_packages() {
       (async--package-compile #'fixture-original dep :dependency)
       (async--package-compile #'fixture-original other :other))
     (list (nreverse compiled) (nreverse synchronous))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ((("[ORACLE-SANDBOX]/bytecomp/package/other/" t) ("[ORACLE-SANDBOX]/bytecomp/package/dep/" t)) ((other (:other))))"#
-    ]];
-    assert_async_melpa_bytecomp_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_bytecomp_package_mode_adds_and_removes_exact_advice() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_bytecomp_package_mode_adds_and_removes_exact_advice",
+            r##"
 (unwind-protect
     (progn
       (async-bytecomp-package-mode -1)
@@ -263,7 +258,9 @@ fn current_bytecomp_package_mode_adds_and_removes_exact_advice() {
                  t)
                 async-bytecomp-package-mode))))
   (async-bytecomp-package-mode -1))
-"##;
-    let expect = expect!["OK (nil t nil nil)"];
-    assert_async_melpa_bytecomp_parity(elisp_form, expect);
+"##,
+            true,
+            expect!["OK (nil t nil nil)"],
+        ),
+    ]);
 }

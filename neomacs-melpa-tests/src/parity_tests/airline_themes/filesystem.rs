@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_airline_themes_parity;
+use super::assert_airline_themes_batch;
 
 #[test]
-fn airline_themes_reads_symbolic_and_detached_git_heads_with_exact_shortening() {
-    let elisp_form = r##"(let* ((root
+fn filesystem_public_surface_batch() {
+    assert_airline_themes_batch(&[
+        (
+            "airline_themes_reads_symbolic_and_detached_git_heads_with_exact_shortening",
+            r##"(let* ((root
                  (expand-file-name
                   "git-heads/"
                   (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
@@ -25,14 +28,13 @@ fn airline_themes_reads_symbolic_and_detached_git_heads_with_exact_shortening() 
           (airline--git-branch-from-head-file detached)
           (airline--git-branch-from-head-file malformed)
           (airline--git-branch-from-head-file
-           (expand-file-name "missing/HEAD" root))))"##;
-    let expect = expect![[r#"OK ("practical-airline" "0123456" nil nil)"#]];
-    assert_airline_themes_parity(elisp_form, expect);
-}
-
-#[test]
-fn airline_themes_discovers_real_nested_repository_branches_and_non_repositories() {
-    let elisp_form = r##"(progn
+           (expand-file-name "missing/HEAD" root))))"##,
+            true,
+            expect![[r#"OK ("practical-airline" "0123456" nil nil)"#]],
+        ),
+        (
+            "airline_themes_discovers_real_nested_repository_branches_and_non_repositories",
+            r##"(progn
          (require 'esh-ext)
          (let* ((root
                  (expand-file-name
@@ -61,14 +63,13 @@ fn airline_themes_discovers_real_nested_repository_branches_and_non_repositories
           (airline-curr-dir-git-branch-string nested)
           (airline-curr-dir-git-branch-string outside)
           (airline-curr-dir-git-branch-string
-           "/ssh:host:/work/project/"))))"##;
-    let expect = expect![[r#"OK ("modeline" "modeline" nil nil)"#]];
-    assert_airline_themes_parity(elisp_form, expect);
-}
-
-#[test]
-fn airline_themes_resolves_one_level_gitdir_indirection_like_a_real_submodule() {
-    let elisp_form = r##"(progn
+           "/ssh:host:/work/project/"))))"##,
+            true,
+            expect![[r#"OK ("modeline" "modeline" nil nil)"#]],
+        ),
+        (
+            "airline_themes_resolves_one_level_gitdir_indirection_like_a_real_submodule",
+            r##"(progn
          (require 'esh-ext)
          (let* ((sandbox
                  (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
@@ -93,14 +94,13 @@ fn airline_themes_resolves_one_level_gitdir_indirection_like_a_real_submodule() 
           (file-regular-p head)
           (airline-curr-dir-git-branch-string root)
           (airline-curr-dir-git-branch-string
-           (expand-file-name "nested/" root)))))"##;
-    let expect = expect![[r#"OK (t t "submodule-release" "submodule-release")"#]];
-    assert_airline_themes_parity(elisp_form, expect);
-}
-
-#[test]
-fn airline_themes_shortens_real_directory_shapes_to_the_requested_budget() {
-    let elisp_form = r##"(let ((cases
+           (expand-file-name "nested/" root)))))"##,
+            true,
+            expect![[r#"OK (t t "submodule-release" "submodule-release")"#]],
+        ),
+        (
+            "airline_themes_shortens_real_directory_shapes_to_the_requested_budget",
+            r##"(let ((cases
                 '(("/alpha/beta/gamma/delta/file.el" 80)
                   ("/alpha/beta/gamma/delta/file.el" 24)
                   ("/alpha/beta/gamma/delta/file.el" 14)
@@ -114,16 +114,15 @@ fn airline_themes_shortens_real_directory_shapes_to_the_requested_budget() {
                    (airline-shorten-directory
                     (car case) (cadr case))))
               (list case result (length result))))
-          cases))"##;
-    let expect = expect![[
+          cases))"##,
+            true,
+            expect![[
         r#"OK ((("/alpha/beta/gamma/delta/file.el" 80) "/alpha/beta/gamma/delta/file.el" 31) (("/alpha/beta/gamma/delta/file.el" 24) "/a/b/g/delta/file.el" 20) (("/alpha/beta/gamma/delta/file.el" 14) "/a/b/g/d/file.el" 16) (("/one/two/three/" 10) "/o/t/t/" 7) (("relative/deeply/nested/path" 12) "r/d/n/path" 10) (("/single" 1) "/single" 7) (("/" 0) "/" 1))"#
-    ]];
-    assert_airline_themes_parity(elisp_form, expect);
-}
-
-#[test]
-fn airline_themes_eshell_prompt_renders_real_directory_branch_and_face_segments() {
-    let elisp_form = r##"(condition-case prompt-error
+    ]],
+        ),
+        (
+            "airline_themes_eshell_prompt_renders_real_directory_branch_and_face_segments",
+            r##"(condition-case prompt-error
          (let* ((root
                  (expand-file-name
                   "prompt/project/very/long/component/"
@@ -166,9 +165,11 @@ fn airline_themes_eshell_prompt_renders_real_directory_branch_and_face_segments(
                  (branch . ,branch-position)
                  (trailing-space
                   . ,(1- (length prompt)))))))))
-      (error (list 'prompt-error prompt-error)))"##;
-    let expect = expect![[
+      (error (list 'prompt-error prompt-error)))"##,
+            true,
+            expect![[
         r##"OK ("  [ORACLE-SANDBOX]/prompt/project/very/long/component  prompt-workflow  $ " t "^ [^#$]* [#$] " ((leading-space 32 (face (:foreground "#141413" :background "#0a9dff"))) (first-separator 57520 (face (:foreground "#0a9dff" :background "#005faf"))) (directory 99 (face (:foreground "#f4cf86" :background "#005faf"))) (branch 112 (face (:foreground "#0a9dff" :background "#242321"))) (trailing-space 32 (face nil))))"##
-    ]];
-    assert_airline_themes_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_dictionary_parity;
+use super::assert_auto_dictionary_batch;
 
 #[test]
-fn auto_dictionary_idle_timer_drives_real_detection_and_dictionary_switch() {
-    let elisp_form = r##"(with-temp-buffer
+fn workflows_public_surface_batch() {
+    assert_auto_dictionary_batch(&[
+        (
+            "auto_dictionary_idle_timer_drives_real_detection_and_dictionary_switch",
+            r##"(with-temp-buffer
          (let ((scheduled nil)
                (ispell-local-dictionary "de")
                (ispell-dictionary "de")
@@ -45,15 +48,13 @@ fn auto_dictionary_idle_timer_drives_real_detection_and_dictionary_switch() {
               ispell-local-dictionary
               adict-lighter
               (numberp adict-last-check)
-              adict-timer))))"##;
-    let expect =
-        expect![[r#"OK (t (0.25 t adict-guess-dictionary-maybe) ("en") "en" " en" t idle-timer)"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_automatic_switch_updates_localized_text_without_cancelling_timer() {
-    let elisp_form = r##"(with-temp-buffer
+              adict-timer))))"##,
+            true,
+            expect![[r#"OK (t (0.25 t adict-guess-dictionary-maybe) ("en") "en" " en" t idle-timer)"#]],
+        ),
+        (
+            "auto_dictionary_automatic_switch_updates_localized_text_without_cancelling_timer",
+            r##"(with-temp-buffer
          (let ((ispell-local-dictionary "en")
                (changes nil)
                (cancelled nil)
@@ -89,16 +90,15 @@ fn auto_dictionary_automatic_switch_updates_localized_text_without_cancelling_ti
                 adict-timer
                 adict-lighter
                 (length
-                 adict-conditional-overlay-list))))))"##;
-    let expect = expect![[
+                 adict-conditional-overlay-list))))))"##,
+            true,
+            expect![[
         r#"OK ("de" "de" "Alice schreibt\n\nzunächst zwei deutsche Wörter sind dafür und nicht englisch" ("de") nil periodic " de" 1)"#
-    ]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_guess_same_effective_dictionary_updates_tick_without_hook_or_ispell_call() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_dictionary_guess_same_effective_dictionary_updates_tick_without_hook_or_ispell_call",
+            r##"(with-temp-buffer
          (insert
           "hello dear friend you are welcome and we have news")
          (let ((ispell-local-dictionary "en")
@@ -126,14 +126,13 @@ fn auto_dictionary_guess_same_effective_dictionary_updates_tick_without_hook_or_
                 changes
                 hooks
                 ispell-local-dictionary
-                ispell-dictionary)))))"##;
-    let expect = expect![[r#"OK ("en" t 0 0 "en" "de")"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_idle_abort_preserves_dictionary_last_check_and_hooks() {
-    let elisp_form = r##"(with-temp-buffer
+                ispell-dictionary)))))"##,
+            true,
+            expect![[r#"OK ("en" t 0 0 "en" "de")"#]],
+        ),
+        (
+            "auto_dictionary_idle_abort_preserves_dictionary_last_check_and_hooks",
+            r##"(with-temp-buffer
          (insert
           "bonjour vous allez revoir cette nouvelle")
          (let ((ispell-local-dictionary "en")
@@ -159,14 +158,13 @@ fn auto_dictionary_idle_abort_preserves_dictionary_last_check_and_hooks() {
               ispell-local-dictionary
               adict-last-check
               changes
-              hooks))))"##;
-    let expect = expect![[r#"OK (nil "en" :never 0 0)"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_threshold_callback_waits_then_switches_after_practical_edit() {
-    let elisp_form = r##"(with-temp-buffer
+              hooks))))"##,
+            true,
+            expect![[r#"OK (nil "en" :never 0 0)"#]],
+        ),
+        (
+            "auto_dictionary_threshold_callback_waits_then_switches_after_practical_edit",
+            r##"(with-temp-buffer
          (let ((ispell-local-dictionary "en")
                (changes nil)
                (adict-change-threshold 0.05)
@@ -196,14 +194,13 @@ fn auto_dictionary_threshold_callback_waits_then_switches_after_practical_edit()
                 before-edit
                 (nreverse changes)
                 ispell-local-dictionary
-                (numberp adict-last-check))))))"##;
-    let expect = expect![[r#"OK (nil ("fr") "fr" t)"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_program_mode_predicate_scores_only_comment_words() {
-    let elisp_form = r##"(with-temp-buffer
+                (numberp adict-last-check))))))"##,
+            true,
+            expect![[r#"OK (nil ("fr") "fr" t)"#]],
+        ),
+        (
+            "auto_dictionary_program_mode_predicate_scores_only_comment_words",
+            r##"(with-temp-buffer
          (emacs-lisp-mode)
          (insert
           "(defun bonjour () zunächst)\n"
@@ -217,14 +214,13 @@ fn auto_dictionary_program_mode_predicate_scores_only_comment_words() {
             (append
              (adict-evaluate-buffer)
              nil)
-            (adict-guess-buffer-language))))"##;
-    let expect = expect![[r#"OK ((3 7 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0) "en")"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_custom_region_mapping_returns_and_activates_configured_dictionary_name() {
-    let elisp_form = r##"(with-temp-buffer
+            (adict-guess-buffer-language))))"##,
+            true,
+            expect![[r#"OK ((3 7 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0) "en")"#]],
+        ),
+        (
+            "auto_dictionary_custom_region_mapping_returns_and_activates_configured_dictionary_name",
+            r##"(with-temp-buffer
          (insert
           "hello dear friend you are welcome and we have news")
          (let ((adict-dictionary-list
@@ -251,14 +247,13 @@ fn auto_dictionary_custom_region_mapping_returns_and_activates_configured_dictio
               (adict-guess-dictionary)
               (nreverse changes)
               ispell-local-dictionary
-              adict-lighter))))"##;
-    let expect = expect![[r#"OK ("en" "en_GB" "en_GB" ("en_GB") "en_GB" " en")"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_repeated_real_document_rewrites_switch_english_french_esperanto() {
-    let elisp_form = r##"(with-temp-buffer
+              adict-lighter))))"##,
+            true,
+            expect![[r#"OK ("en" "en_GB" "en_GB" ("en_GB") "en_GB" " en")"#]],
+        ),
+        (
+            "auto_dictionary_repeated_real_document_rewrites_switch_english_french_esperanto",
+            r##"(with-temp-buffer
          (let ((ispell-local-dictionary "de")
                (changes nil)
                (adict-change-dictionary-hook nil))
@@ -288,14 +283,13 @@ fn auto_dictionary_repeated_real_document_rewrites_switch_english_french_esperan
                     english french esperanto
                     (nreverse changes)
                     ispell-local-dictionary
-                    adict-lighter)))))))"##;
-    let expect = expect![[r#"OK ("en" "fr" "eo" ("en" "fr" "eo") "eo" " eo")"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_killing_enabled_buffer_cancels_exact_scheduled_timer_once() {
-    let elisp_form = r##"(let ((buffer
+                    adict-lighter)))))))"##,
+            true,
+            expect![[r#"OK ("en" "fr" "eo" ("en" "fr" "eo") "eo" " eo")"#]],
+        ),
+        (
+            "auto_dictionary_killing_enabled_buffer_cancels_exact_scheduled_timer_once",
+            r##"(let ((buffer
                 (generate-new-buffer
                  " *adict-kill-workflow*"))
                (cancelled nil))
@@ -313,14 +307,13 @@ fn auto_dictionary_killing_enabled_buffer_cancels_exact_scheduled_timer_once() {
            (kill-buffer buffer)
            (list
             (buffer-live-p buffer)
-            (nreverse cancelled))))"##;
-    let expect = expect!["OK (nil (scheduled-timer))"];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_conditional_foreign_signature_does_not_overpower_authored_language() {
-    let elisp_form = r##"(with-temp-buffer
+            (nreverse cancelled))))"##,
+            true,
+            expect!["OK (nil (scheduled-timer))"],
+        ),
+        (
+            "auto_dictionary_conditional_foreign_signature_does_not_overpower_authored_language",
+            r##"(with-temp-buffer
          (let ((ispell-local-dictionary "de"))
            (adict-conditional-insert
             "de"
@@ -336,9 +329,11 @@ fn auto_dictionary_conditional_foreign_signature_does_not_overpower_authored_lan
              nil)
             (adict-guess-buffer-language)
             (length
-             adict-conditional-overlay-list))))"##;
-    let expect = expect![[
+             adict-conditional-overlay-list))))"##,
+            true,
+            expect![[
         r#"OK ("bonjour vous allez revoir cette nouvelle française\n\nhello dear friend you are welcome and we have news" (3 7 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0) "en" 1)"#
-    ]];
-    assert_auto_dictionary_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

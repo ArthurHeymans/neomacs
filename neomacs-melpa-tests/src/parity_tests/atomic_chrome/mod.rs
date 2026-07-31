@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ATOMIC_CHROME_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod buffers;
 mod httpd;
 mod messaging;
@@ -134,4 +136,28 @@ pub(crate) fn assert_atomic_chrome_parity(elisp_form: &str, expected: Expect) {
 
 pub(crate) fn assert_atomic_chrome_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_atomic_chrome_source_parity("atomic-chrome-autoloads.el", elisp_form, expected);
+}
+
+
+
+/// Multi-probe batch for `assert_atomic_chrome_autoload_parity` cases (2a).
+pub(crate) fn assert_atomic_chrome_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        atomic_chrome_oracle("atomic-chrome-autoloads.el"),
+        &name,
+        "atomic_chrome_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_atomic_chrome_parity` cases (2a).
+pub(crate) fn assert_atomic_chrome_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        atomic_chrome_oracle("atomic-chrome.el"),
+        &name,
+        "atomic_chrome_parity",
+        cases,
+    );
 }

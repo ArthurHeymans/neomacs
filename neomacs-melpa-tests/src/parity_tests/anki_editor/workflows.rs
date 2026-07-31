@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_anki_editor_parity;
+use super::assert_anki_editor_batch;
 
 #[test]
-fn pushes_a_readme_style_card_with_real_html_and_media_through_ankiconnect() {
-    let elisp_form = r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+fn workflows_public_surface_batch() {
+    assert_anki_editor_batch(&[
+        (
+            "pushes_a_readme_style_card_with_real_html_and_media_through_ankiconnect",
+            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
          (project (expand-file-name "anki-editor-create" sandbox))
          (cards-file (expand-file-name "cards.org" project))
          (image-file (expand-file-name "osi.gif" project))
@@ -91,16 +94,15 @@ fn pushes_a_readme_style_card_with_real_html_and_media_through_ankiconnect() {
         (when (buffer-live-p buffer)
           (with-current-buffer buffer
             (set-buffer-modified-p nil))
-          (kill-buffer buffer)))))"##;
-    let expect = expect![[
+          (kill-buffer buffer)))))"##,
+            true,
+            expect![[
         r#"OK ((((action . "modelNames") (version . 6)) ((action . "multi") (version . 6) (params (actions ((action . "modelFieldNames") (version . 6) (params (modelName . "Basic")))))) ((action . "retrieveMediaFile") (version . 6) (params (filename . "osi-25c9b37ae36a0a08318d4dca7ca57ea98d776821.gif"))) ((action . "storeMediaFile") (version . 6) (params (filename . "osi-25c9b37ae36a0a08318d4dca7ca57ea98d776821.gif") (data . "R0lGODlh"))) ((action . "multi") (version . 6) (params (actions ((action . "createDeck") (version . 6) (params (deck . "Computing::Networks"))) ((action . "addNote") (version . 6) (params (note (id . 0) (deckName . "Computing::Networks") (modelName . "Basic") (fields (Back . "<p>\nThe <b>transport layer</b>.\n</p>\n\n<p>\n<a href=\"osi-25c9b37ae36a0a08318d4dca7ca57ea98d776821.gif\">OSI diagram</a>\n</p>\n") (Front . "<p>\nWhich layer provides end-to-end delivery?\n</p>\n")) (options (allowDuplicate . :json-false)) (tags "exam" "osi" "study")))))))) "* Network layers :study:noexport:\n:PROPERTIES:\n:ANKI_DECK: Computing::Networks\n:ANKI_NOTE_TYPE: Basic\n:ANKI_TAGS: exam osi\n:ANKI_NOTE_ID: 424242\n:ANKI_NOTE_HASH: 228e4bb11039df47d3051bb539dcc795\n:END:\n** Front\nWhich layer provides end-to-end delivery?\n** Back\nThe *transport layer*.\n\n[[file:osi.gif][OSI diagram]]\n" "* Network layers :study:noexport:\n:PROPERTIES:\n:ANKI_DECK: Computing::Networks\n:ANKI_NOTE_TYPE: Basic\n:ANKI_TAGS: exam osi\n:ANKI_NOTE_ID: 424242\n:ANKI_NOTE_HASH: 228e4bb11039df47d3051bb539dcc795\n:END:\n** Front\nWhich layer provides end-to-end delivery?\n** Back\nThe *transport layer*.\n\n[[file:osi.gif][OSI diagram]]\n")"#
-    ]];
-    assert_anki_editor_parity(elisp_form, expect);
-}
-
-#[test]
-fn updates_an_existing_card_and_preserves_server_managed_tags() {
-    let elisp_form = r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    ]],
+        ),
+        (
+            "updates_an_existing_card_and_preserves_server_managed_tags",
+            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
          (project (expand-file-name "anki-editor-update" sandbox))
          (cards-file (expand-file-name "cards.org" project))
          requests)
@@ -181,16 +183,15 @@ fn updates_an_existing_card_and_preserves_server_managed_tags() {
         (when (buffer-live-p buffer)
           (with-current-buffer buffer
             (set-buffer-modified-p nil))
-          (kill-buffer buffer)))))"##;
-    let expect = expect![[
+          (kill-buffer buffer)))))"##,
+            true,
+            expect![[
         r#"OK ((((action . "modelNames") (version . 6)) ((action . "multi") (version . 6) (params (actions ((action . "modelFieldNames") (version . 6) (params (modelName . "Basic")))))) ((action . "multi") (version . 6) (params (actions ((action . "notesInfo") (version . 6) (params (notes 9001)))))) ((action . "multi") (version . 6) (params (actions ((action . "updateNote") (version . 6) (params (note (id . 9001) (deckName . "Computing::Networks") (modelName . "Basic") (fields (Back . "<p>\nSYN, SYN-ACK, ACK.\n</p>\n") (Front . "<p>\nWhat is the TCP handshake?\n</p>\n")) (options (allowDuplicate . :json-false)) (tags "protected" "current" "review"))))))) ((action . "multi") (version . 6) (params (actions ((action . "changeDeck") (version . 6) (params (deck . "Computing::Networks") (cards 71 72))))))) "* TCP handshake :review:\n:PROPERTIES:\n:ANKI_DECK: Computing::Networks\n:ANKI_NOTE_TYPE: Basic\n:ANKI_NOTE_ID: 9001\n:ANKI_NOTE_HASH: 02d71d167a5678f4ffed4582a61777f1\n:ANKI_TAGS: current\n:END:\n** Front\nWhat is the TCP handshake?\n** Back\nSYN, SYN-ACK, ACK.\n" "* TCP handshake :review:\n:PROPERTIES:\n:ANKI_DECK: Computing::Networks\n:ANKI_NOTE_TYPE: Basic\n:ANKI_NOTE_ID: 9001\n:ANKI_NOTE_HASH: 02d71d167a5678f4ffed4582a61777f1\n:ANKI_TAGS: current\n:END:\n** Front\nWhat is the TCP handshake?\n** Back\nSYN, SYN-ACK, ACK.\n")"#
-    ]];
-    assert_anki_editor_parity(elisp_form, expect);
-}
-
-#[test]
-fn records_a_rejected_note_without_silently_saving_the_failed_edit() {
-    let elisp_form = r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    ]],
+        ),
+        (
+            "records_a_rejected_note_without_silently_saving_the_failed_edit",
+            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
          (project (expand-file-name "anki-editor-rejection" sandbox))
          (cards-file (expand-file-name "cards.org" project))
          requests)
@@ -272,16 +273,15 @@ fn records_a_rejected_note_without_silently_saving_the_failed_edit() {
         (when (buffer-live-p buffer)
           (with-current-buffer buffer
             (set-buffer-modified-p nil))
-          (kill-buffer buffer)))))"##;
-    let expect = expect![[
+          (kill-buffer buffer)))))"##,
+            true,
+            expect![[
         r#"OK ((user-error "Push failed; see ANKI_FAILURE_REASON property") (((action . "modelNames") (version . 6)) ((action . "multi") (version . 6) (params (actions ((action . "modelFieldNames") (version . 6) (params (modelName . "Basic")))))) ((action . "multi") (version . 6) (params (actions ((action . "createDeck") (version . 6) (params (deck . "Computing"))) ((action . "addNote") (version . 6) (params (note (id . 0) (deckName . "Computing") (modelName . "Basic") (fields (Back . "<p>\nIt resolves names to addresses.\n</p>\n") (Front . "<p>\nWhat does DNS do?\n</p>\n")) (options (allowDuplicate . :json-false)) (tags)))))))) "* Duplicate card\n:PROPERTIES:\n:ANKI_DECK: Computing\n:ANKI_NOTE_TYPE: Basic\n:ANKI_FAILURE_REASON: duplicate note\n:END:\n** Front\nWhat does DNS do?\n** Back\nIt resolves names to addresses.\n" t "* Duplicate card\n:PROPERTIES:\n:ANKI_DECK: Computing\n:ANKI_NOTE_TYPE: Basic\n:END:\n** Front\nWhat does DNS do?\n** Back\nIt resolves names to addresses.\n")"#
-    ]];
-    assert_anki_editor_parity(elisp_form, expect);
-}
-
-#[test]
-fn creates_and_exports_a_cloze_card_from_an_actual_org_edit() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "creates_and_exports_a_cloze_card_from_an_actual_org_edit",
+            r##"(with-temp-buffer
     (org-mode)
     (insert
      "* OSI model :networking:\n"
@@ -310,9 +310,11 @@ fn creates_and_exports_a_cloze_card_from_an_actual_org_edit() {
               (buffer-substring-no-properties (point-min) (point-max)))
              (note (anki-editor-note-at-point))
              (anki-payload (anki-editor-api--note note)))
-        (list edited-org anki-payload))))"##;
-    let expect = expect![[
+        (list edited-org anki-payload))))"##,
+            true,
+            expect![[
         r#"OK ("* OSI model :networking:\n:PROPERTIES:\n:ANKI_DECK: Computing::Networks\n:ANKI_NOTE_TYPE: Cloze\n:ANKI_TAGS: exam\n:END:\n** Text\nThe {{c2::transport layer::OSI layer}} provides end-to-end delivery.\n** Extra\nRemember TCP and UDP.\n" (:id 0 :deckName "Computing::Networks" :modelName "Cloze" :fields (("Extra" . "<p>\nRemember TCP and UDP.\n</p>\n") ("Text" . "<p>\nThe {{c2::transport layer::OSI layer}} provides end-to-end delivery.\n</p>\n")) :options (:allowDuplicate :json-false) :tags ["exam" "networking"]))"#
-    ]];
-    assert_anki_editor_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

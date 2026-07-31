@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_clang_parity;
+use super::assert_auto_complete_clang_batch;
 
 #[test]
-fn auto_complete_clang_action_builds_template_candidate_and_starts_template_completion() {
-    let elisp_form = r##"(with-temp-buffer
+fn actions_public_surface_batch() {
+    assert_auto_complete_clang_batch(&[
+        (
+            "auto_complete_clang_action_builds_template_candidate_and_starts_template_completion",
+            r##"(with-temp-buffer
          (insert "foo")
          (let* ((candidate
                  (propertize
@@ -37,15 +40,13 @@ fn auto_complete_clang_action_builds_template_candidate_and_starts_template_comp
                #'ac-clang-test-candidate-state
                ac-template-candidates)
               starts
-              (nreverse messages)))))"##;
-    let expect =
-        expect![[r#"OK (4 (("(int value)" "" "(<#int value#>)")) 1 ("int foo(int value)"))"#]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_action_preserves_multiple_overloads_as_distinct_template_choices() {
-    let elisp_form = r##"(with-temp-buffer
+              (nreverse messages)))))"##,
+            true,
+            expect![[r#"OK (4 (("(int value)" "" "(<#int value#>)")) 1 ("int foo(int value)"))"#]],
+        ),
+        (
+            "auto_complete_clang_action_preserves_multiple_overloads_as_distinct_template_choices",
+            r##"(with-temp-buffer
          (insert "draw")
          (let* ((candidate
                  (propertize
@@ -79,16 +80,15 @@ fn auto_complete_clang_action_preserves_multiple_overloads_as_distinct_template_
                #'ac-clang-test-candidate-state
                ac-template-candidates)
               starts
-              messages))))"##;
-    let expect = expect![[
+              messages))))"##,
+            true,
+            expect![[
         r#"OK ((("(int x)" "" "(<#int x#>)") ("(double x, double y)" "" "(<#double x#>, <#double y#>)") ("()" "" "()")) 1 nil)"#
-    ]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_action_expands_optional_argument_variant_and_variadic_variant() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_clang_action_expands_optional_argument_variant_and_variadic_variant",
+            r##"(with-temp-buffer
          (insert "log")
          (let* ((candidate
                  (propertize
@@ -112,16 +112,15 @@ fn auto_complete_clang_action_expands_optional_argument_variant_and_variadic_var
               (mapcar
                #'ac-clang-test-candidate-state
                ac-template-candidates)
-              starts))))"##;
-    let expect = expect![[
+              starts))))"##,
+            true,
+            expect![[
         r#"OK ((("(const char *fmt, {#int level#}, ...)" "" "(<#const char *fmt#>, {#int level#}, ...)") ("(const char *fmt, , ...)" "" "(<#const char *fmt#>, , ...)") ("(const char *fmt, )" "" "(<#const char *fmt#>, )")) 1)"#
-    ]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_action_extracts_function_pointer_return_signature() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_clang_action_extracts_function_pointer_return_signature",
+            r##"(with-temp-buffer
          (insert "callback")
          (let* ((candidate
                  (propertize
@@ -145,16 +144,15 @@ fn auto_complete_clang_action_extracts_function_pointer_return_signature() {
               (mapcar
                #'ac-clang-test-candidate-state
                ac-template-candidates)
-              starts))))"##;
-    let expect = expect![[
+              starts))))"##,
+            true,
+            expect![[
         r#"OK ((("(double, const char *, ...)" "int " "") ("(double, const char *)" "int " "")) 1)"#
-    ]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_action_without_callable_signature_only_displays_clean_help() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_clang_action_without_callable_signature_only_displays_clean_help",
+            r##"(with-temp-buffer
          (insert "constant")
          (let* ((candidate
                  (propertize
@@ -185,14 +183,13 @@ fn auto_complete_clang_action_without_callable_signature_only_displays_clean_hel
              (list
               ac-template-candidates
               starts
-              (nreverse messages)))))"##;
-    let expect = expect![[r#"OK (("stale") 0 ("const int constant   ;    second detail"))"#]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_action_deduplicates_identical_overload_templates() {
-    let elisp_form = r##"(with-temp-buffer
+              (nreverse messages)))))"##,
+            true,
+            expect![[r#"OK (("stale") 0 ("const int constant   ;    second detail"))"#]],
+        ),
+        (
+            "auto_complete_clang_action_deduplicates_identical_overload_templates",
+            r##"(with-temp-buffer
          (insert "same")
          (let* ((candidate
                  (propertize
@@ -214,15 +211,13 @@ fn auto_complete_clang_action_deduplicates_identical_overload_templates() {
              (ac-clang-action)
              (mapcar
               #'ac-clang-test-candidate-state
-              ac-template-candidates))))"##;
-    let expect =
-        expect![[r#"OK (("(int x)" "" "(<#int x#>)") ("(double x)" "" "(<#double x#>)"))"#]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_action_single_template_flattens_multiline_message_after_start() {
-    let elisp_form = r##"(with-temp-buffer
+              ac-template-candidates))))"##,
+            true,
+            expect![[r#"OK (("(int x)" "" "(<#int x#>)") ("(double x)" "" "(<#double x#>)"))"#]],
+        ),
+        (
+            "auto_complete_clang_action_single_template_flattens_multiline_message_after_start",
+            r##"(with-temp-buffer
          (insert "only")
          (let* ((candidate
                  (propertize
@@ -252,16 +247,15 @@ fn auto_complete_clang_action_single_template_flattens_multiline_message_after_s
               (nreverse events)
               (mapcar
                #'ac-clang-test-candidate-state
-               ac-template-candidates)))))"##;
-    let expect = expect![[
+               ac-template-candidates)))))"##,
+            true,
+            expect![[
         r#"OK ((complete (message "int only(int x)   ;    additional note")) (("(int x)" "" "(<#int x#>)")))"#
-    ]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_action_signals_for_missing_or_unpropertized_completion_state() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "auto_complete_clang_action_signals_for_missing_or_unpropertized_completion_state",
+            r##"(list
          (let ((ac-last-completion nil))
            (ac-clang-test-error
             #'ac-clang-action))
@@ -272,9 +266,11 @@ fn auto_complete_clang_action_signals_for_missing_or_unpropertized_completion_st
                  (lambda (&rest _arguments)
                    nil)))
              (ac-clang-test-error
-              #'ac-clang-action))))"##;
-    let expect = expect![
+              #'ac-clang-action))))"##,
+            true,
+            expect![
         "OK ((:signal args-out-of-range (0 0)) (:signal wrong-type-argument (stringp nil)))"
-    ];
-    assert_auto_complete_clang_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }

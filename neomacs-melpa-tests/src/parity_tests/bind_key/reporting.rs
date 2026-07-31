@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_bind_key_parity;
+use super::assert_bind_key_batch;
 
 #[test]
-fn bind_key_descriptions_cover_symbols_lambdas_closures_keymaps_and_byte_code() {
-    let elisp_form = r##"(let ((map-symbol
+fn reporting_public_surface_batch() {
+    assert_bind_key_batch(&[
+        (
+            "bind_key_descriptions_cover_symbols_lambdas_closures_keymaps_and_byte_code",
+            r##"(let ((map-symbol
                     (make-symbol "neomacs-described-map")))
                (set map-symbol (make-sparse-keymap))
                (fset map-symbol (symbol-value map-symbol))
@@ -30,17 +33,15 @@ fn bind_key_descriptions_cover_symbols_lambdas_closures_keymaps_and_byte_code() 
                    (get-binding-description
                     '(closure nil nil "Closure documentation"
                               (interactive)))
-                   (get-binding-description map-symbol)))))"##;
-    let expect = expect![[
+                   (get-binding-description map-symbol)))))"##,
+            true,
+            expect![[
         r##"OK ((forward-char "#<lambda>" "#<closure>" "#<keymap>" "#<byte-compiled lambda>") ("Lambda documentation" "Closure documentation" "A documented keymap"))"##
-    ]];
-
-    assert_bind_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn compare_keybindings_reports_order_and_group_boundaries_for_maps_and_prefixes() {
-    let elisp_form = r##"(let ((bind-key-segregation-regexp
+    ]],
+        ),
+        (
+            "compare_keybindings_reports_order_and_group_boundaries_for_maps_and_prefixes",
+            r##"(let ((bind-key-segregation-regexp
                     "\\`\\(?:C-c \\|M-g \\)"))
                (mapcar
                 (lambda (pair)
@@ -54,15 +55,13 @@ fn compare_keybindings_reports_order_and_group_boundaries_for_maps_and_prefixes(
                   ((("C-c a" . map-a) ignore nil)
                    (("C-c b" . map-a) ignore nil))
                   ((("C-c b" . map-a) ignore nil)
-                   (("C-c a" . map-a) ignore nil)))))"##;
-    let expect = expect![[r#"OK ((t . t) (t . t) (nil . t) (t) (nil))"#]];
-
-    assert_bind_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn describe_personal_keybindings_reports_original_current_and_rebound_commands() {
-    let elisp_form = r##"(progn
+                   (("C-c a" . map-a) ignore nil)))))"##,
+            true,
+            expect![[r#"OK ((t . t) (t . t) (nil . t) (t) (nil))"#]],
+        ),
+        (
+            "describe_personal_keybindings_reports_original_current_and_rebound_commands",
+            r##"(progn
                (defvar neomacs-bind-key-report-map
                  (make-sparse-keymap))
                (define-key neomacs-bind-key-report-map "a"
@@ -78,17 +77,15 @@ fn describe_personal_keybindings_reports_original_current_and_rebound_commands()
                  (describe-personal-keybindings)
                  (with-current-buffer "*Personal Keybindings*"
                    (buffer-substring-no-properties
-                    (point-min) (point-max)))))"##;
-    let expect = expect![[
+                    (point-min) (point-max)))))"##,
+            true,
+            expect![[
         r#"OK "Key name    Command                     Comments\n----------- --------------------------- ---------------------\n\n\nneomacs-bind-key-report-map: a\n-------------------------------------------------------------\n\na           `forward-char'              was `beginning-of-line'\nb           `backward-char'             [now: `end-of-line']\n""#
-    ]];
-
-    assert_bind_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn bind_key_registry_distinguishes_global_symbol_and_direct_map_descriptors() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "bind_key_registry_distinguishes_global_symbol_and_direct_map_descriptors",
+            r##"(progn
                (defvar neomacs-bind-key-symbol-map
                  (make-sparse-keymap))
                (let ((personal-keybindings nil)
@@ -109,10 +106,11 @@ fn bind_key_registry_distinguishes_global_symbol_and_direct_map_descriptors() {
                         (t descriptor)))
                      (nth 1 entry)
                      (nth 2 entry)))
-                  (reverse personal-keybindings))))"##;
-    let expect = expect![[
+                  (reverse personal-keybindings))))"##,
+            true,
+            expect![[
         r#"OK (("C-c g" global forward-line nil) ("x" neomacs-bind-key-symbol-map forward-char nil) ("y" direct-map backward-char nil))"#
-    ]];
-
-    assert_bind_key_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_airline_themes_parity;
+use super::assert_airline_themes_batch;
 
 #[test]
-fn airline_themes_modeline_expression_renders_a_real_editing_buffer_with_properties() {
-    let elisp_form = r##"(progn
+fn modeline_public_surface_batch() {
+    assert_airline_themes_batch(&[
+        (
+            "airline_themes_modeline_expression_renders_a_real_editing_buffer_with_properties",
+            r##"(progn
          (load-theme 'airline-doom-one t)
          (delete-other-windows)
          (let ((buffer (get-buffer-create "airline-practical.el")))
@@ -58,16 +61,15 @@ fn airline_themes_modeline_expression_renders_a_real_editing_buffer_with_propert
                            (string-trim
                             (nth 2 interval)))))
                        (nreverse intervals))))))
-             (kill-buffer buffer))))"##;
-    let expect = expect![[
+             (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK ("%*   %b   utf-8-unix %3p═%l/2ln :%3c " 42 "deffb17dcb403153adcc287d962912568e16a2d8a722abe9924f20235e2f3517" ((38 42 "%3c " (face (airline-normal-outer)))))"#
-    ]];
-    assert_airline_themes_parity(elisp_form, expect);
-}
-
-#[test]
-fn airline_themes_selected_and_inactive_windows_render_distinct_real_segments() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "airline_themes_selected_and_inactive_windows_render_distinct_real_segments",
+            r##"(progn
          (load-theme 'airline-light t)
          (delete-other-windows)
          (let* ((left (selected-window))
@@ -120,16 +122,15 @@ fn airline_themes_selected_and_inactive_windows_render_distinct_real_segments() 
                         (text-properties-at 0 inactive)))))))
              (delete-other-windows left)
              (kill-buffer left-buffer)
-             (kill-buffer right-buffer))))"##;
-    let expect = expect![[
+             (kill-buffer right-buffer))))"##,
+            true,
+            expect![[
         r#"OK ("%*   %b   utf-8-unix %3p═%l/2ln :%3c " "%*   %b   utf-8-unix %3p═%l/1ln :%3c " (airline-normal-outer) (airline-normal-outer) "c5f460e38f22fbad7f0db944f16cf0d5f1b835aa4412675e9d48af9aba84c9c6" "c5f460e38f22fbad7f0db944f16cf0d5f1b835aa4412675e9d48af9aba84c9c6")"#
-    ]];
-    assert_airline_themes_parity(elisp_form, expect);
-}
-
-#[test]
-fn airline_themes_inactive_visibility_customizations_remove_state_branch_and_eyebrowse() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "airline_themes_inactive_visibility_customizations_remove_state_branch_and_eyebrowse",
+            r##"(progn
          (load-theme 'airline-dark t)
          (provide 'eyebrowse)
          (fset 'eyebrowse-mode-line-indicator
@@ -189,16 +190,15 @@ fn airline_themes_inactive_visibility_customizations_remove_state_branch_and_eye
                      "feature/palette"
                      (substring-no-properties hidden)))))
              (delete-other-windows active-window)
-             (kill-buffer buffer))))"##;
-    let expect = expect![[
+             (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK ("%*  [workspace-7]  %b   utf-8-unix %3p═%l/1ln :%3c " "%*  [workspace-7]  %b   utf-8-unix %3p═%l/1ln :%3c " 0 5 5 nil nil)"#
-    ]];
-    assert_airline_themes_parity(elisp_form, expect);
-}
-
-#[test]
-fn airline_themes_real_powerline_separator_variants_change_rendering_without_losing_content() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "airline_themes_real_powerline_separator_variants_change_rendering_without_losing_content",
+            r##"(progn
          (load-theme 'airline-doom-one t)
          (delete-other-windows)
          (let ((buffer
@@ -239,16 +239,15 @@ fn airline_themes_real_powerline_separator_variants_change_rendering_without_los
                              0
                              (1- (length rendered)))))))))
                     '(arrow utf-8 butt))))
-             (kill-buffer buffer))))"##;
-    let expect = expect![[
+             (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK ((arrow "%*   %b   utf-8-unix %3p═%l/3ln :%3c " 42 "4c09a74ce2c07568bc49a86264bc1609787a3467160b57318d2d292aee03093d") (utf-8 "%*   %b   utf-8-unix %3p═%l/3ln :%3c " 42 "4c09a74ce2c07568bc49a86264bc1609787a3467160b57318d2d292aee03093d") (butt "%*   %b   utf-8-unix %3p═%l/3ln :%3c " 42 "4c09a74ce2c07568bc49a86264bc1609787a3467160b57318d2d292aee03093d"))"#
-    ]];
-    assert_airline_themes_parity(elisp_form, expect);
-}
-
-#[test]
-fn airline_themes_optional_evil_states_render_full_and_narrow_real_state_labels() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "airline_themes_optional_evil_states_render_full_and_narrow_real_state_labels",
+            r##"(progn
          (load-theme 'airline-doom-one t)
          (provide 'evil)
          (defvar evil-state 'normal)
@@ -291,16 +290,15 @@ fn airline_themes_optional_evil_states_render_full_and_narrow_real_state_labels(
                       (visual block)
                       (replace char)
                       (emacs char)))))
-             (kill-buffer buffer))))"##;
-    let expect = expect![[
+             (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK (((normal char) " NORMAL %*  %b   utf-8-unix %3p═%l/1ln :%3c " (airline-normal-outer)) ((insert char) " INSERT %*  %b   utf-8-unix %3p═%l/1ln :%3c " (airline-insert-outer)) ((visual char) " VISUAL %*  %b   utf-8-unix %3p═%l/1ln :%3c " (airline-visual-outer)) ((visual line) " VISUAL-LINE %*  %b   utf-8-unix %3p═%l/1ln :%3c " (airline-visual-outer)) ((visual block) " VISUAL-BLOCK %*  %b   utf-8-unix %3p═%l/1ln :%3c " (airline-visual-outer)) ((replace char) " REPLACE %*  %b   utf-8-unix %3p═%l/1ln :%3c " (airline-replace-outer)) ((emacs char) " EMACS %*  %b   utf-8-unix %3p═%l/1ln :%3c " (airline-emacs-outer)))"#
-    ]];
-    assert_airline_themes_parity(elisp_form, expect);
-}
-
-#[test]
-fn airline_themes_directory_display_and_representative_major_modes_render_real_workflows() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "airline_themes_directory_display_and_representative_major_modes_render_real_workflows",
+            r##"(progn
          (load-theme 'airline-catppuccin_mocha t)
          (delete-other-windows)
          (let* ((sandbox
@@ -377,9 +375,11 @@ fn airline_themes_directory_display_and_representative_major_modes_render_real_w
                            (substring-no-properties none))
                           results))))
                  (kill-buffer buffer))))
-           (nreverse results)))"##;
-    let expect = expect![[
+           (nreverse results)))"##,
+            true,
+            expect![[
         r#"OK (("source.el" emacs-lisp-mode "%*  [ORACLE-SANDBOX]/modes/project/src/component/%b   utf-8-unix %3p═%l/1ln :%3c " "%*  /f/m/p/s/c/%b   utf-8-unix %3p═%l/1ln :%3c " "%*   %b   utf-8-unix %3p═%l/1ln :%3c ") ("notes.txt" text-mode "%*  [ORACLE-SANDBOX]/modes/project/src/component/%b   utf-8-unix %3p═%l/1ln :%3c " "%*  /f/m/p/s/c/%b   utf-8-unix %3p═%l/1ln :%3c " "%*   %b   utf-8-unix %3p═%l/1ln :%3c ") ("listing" dired-mode "%*   %b   utf-8-unix %3p═%l/0ln :%3c " "%*   %b   utf-8-unix %3p═%l/0ln :%3c " "%*   %b   utf-8-unix %3p═%l/0ln :%3c ") ("build.log" compilation-mode "%*  [ORACLE-SANDBOX]/modes/project/src/component/%b   utf-8-unix %3p═%l/1ln :%3c " "%*  /f/m/p/s/c/%b   utf-8-unix %3p═%l/1ln :%3c " "%*   %b   utf-8-unix %3p═%l/1ln :%3c "))"#
-    ]];
-    assert_airline_themes_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

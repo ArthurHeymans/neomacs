@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_sage_parity;
+use super::assert_auto_complete_sage_batch;
 
 #[test]
-fn auto_complete_sage_setup_enables_mode_and_prepends_repl_sources_in_real_buffer_state() {
-    let elisp_form = r##"(with-temp-buffer
+fn workflows_public_surface_batch() {
+    assert_auto_complete_sage_batch(&[
+        (
+            "auto_complete_sage_setup_enables_mode_and_prepends_repl_sources_in_real_buffer_state",
+            r##"(with-temp-buffer
                            (setq major-mode
                                  'sage-shell-mode
                                  ac-sources
@@ -26,17 +29,15 @@ fn auto_complete_sage_setup_enables_mode_and_prepends_repl_sources_in_real_buffe
                                     (memq
                                      major-mode
                                      ac-modes)))
-                               (auto-complete-mode -1))))"##;
-    let expect = expect![
+                               (auto-complete-mode -1))))"##,
+            true,
+            expect![
         "OK ((nil #1=(ac-source-filename ac-source-words-in-buffer)) t (ac-sage-repl-modules ac-source-sage-methods ac-sage-repl-vars-in-module ac-source-sage-other-interfaces as-source-sage-repl-argspec ac-source-sage-repl-python-kwds ac-source-repl-sage-commands ac-source-sage-words-in-buffers . #1#) t (sage-shell-mode emacs-lisp-mode lisp-mode lisp-interaction-mode slime-repl-mode nim-mode c-mode cc-mode c++-mode objc-mode swift-mode go-mode java-mode malabar-mode clojure-mode clojurescript-mode scala-mode scheme-mode ocaml-mode tuareg-mode coq-mode haskell-mode agda-mode agda2-mode perl-mode cperl-mode python-mode ruby-mode lua-mode tcl-mode ecmascript-mode javascript-mode js-mode js-jsx-mode js2-mode js2-jsx-mode coffee-mode php-mode css-mode scss-mode less-css-mode elixir-mode makefile-mode sh-mode fortran-mode f90-mode ada-mode xml-mode sgml-mode web-mode ts-mode sclang-mode verilog-mode qml-mode apples-mode))"
-    ];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_setup_enables_mode_and_appends_edit_sources_in_real_buffer_state() {
-    let elisp_form = r##"(with-temp-buffer
+    ],
+        ),
+        (
+            "auto_complete_sage_setup_enables_mode_and_appends_edit_sources_in_real_buffer_state",
+            r##"(with-temp-buffer
                            (setq major-mode
                                  'sage-shell:sage-mode
                                  ac-sources
@@ -53,17 +54,15 @@ fn auto_complete_sage_setup_enables_mode_and_appends_edit_sources_in_real_buffer
                                   (memq
                                    major-mode
                                    ac-modes)))
-                             (auto-complete-mode -1)))"##;
-    let expect = expect![
+                             (auto-complete-mode -1)))"##,
+            true,
+            expect![
         "OK (t (ac-source-filename ac-source-words-in-buffer ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers) t (sage-shell:sage-mode sage-shell-mode emacs-lisp-mode lisp-mode lisp-interaction-mode slime-repl-mode nim-mode c-mode cc-mode c++-mode objc-mode swift-mode go-mode java-mode malabar-mode clojure-mode clojurescript-mode scala-mode scheme-mode ocaml-mode tuareg-mode coq-mode haskell-mode agda-mode agda2-mode perl-mode cperl-mode python-mode ruby-mode lua-mode tcl-mode ecmascript-mode javascript-mode js-mode js-jsx-mode js2-mode js2-jsx-mode coffee-mode php-mode css-mode scss-mode less-css-mode elixir-mode makefile-mode sh-mode fortran-mode f90-mode ada-mode xml-mode sgml-mode web-mode ts-mode sclang-mode verilog-mode qml-mode apples-mode))"
-    ];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_repeated_setup_preserves_packages_duplicate_source_semantics() {
-    let elisp_form = r##"(mapcar
+    ],
+        ),
+        (
+            "auto_complete_sage_repeated_setup_preserves_packages_duplicate_source_semantics",
+            r##"(mapcar
                            (lambda (mode)
                              (with-temp-buffer
                                (setq major-mode mode
@@ -90,17 +89,15 @@ fn auto_complete_sage_repeated_setup_preserves_packages_duplicate_source_semanti
                                            ac-source-sage-modules)))))
                                  (auto-complete-mode -1))))
                            '(sage-shell-mode
-                             sage-shell:sage-mode))"##;
-    let expect = expect![
+                             sage-shell:sage-mode))"##,
+            true,
+            expect![
         "OK ((sage-shell-mode #1=(ac-sage-repl-modules ac-source-sage-methods ac-sage-repl-vars-in-module ac-source-sage-other-interfaces as-source-sage-repl-argspec ac-source-sage-repl-python-kwds ac-source-repl-sage-commands ac-source-sage-words-in-buffers ac-source-filename) (ac-sage-repl-modules ac-source-sage-methods ac-sage-repl-vars-in-module ac-source-sage-other-interfaces as-source-sage-repl-argspec ac-source-sage-repl-python-kwds ac-source-repl-sage-commands ac-source-sage-words-in-buffers . #1#) ((ac-source-filename 1) (ac-source-sage-methods 2) (ac-source-sage-modules 0))) (sage-shell:sage-mode (ac-source-filename . #2=(ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers)) (ac-source-filename ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers . #2#) ((ac-source-filename 1) (ac-source-sage-methods 0) (ac-source-sage-modules 2))))"
-    ];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_setup_in_unsupported_mode_only_enables_auto_complete() {
-    let elisp_form = r##"(with-temp-buffer
+    ],
+        ),
+        (
+            "auto_complete_sage_setup_in_unsupported_mode_only_enables_auto_complete",
+            r##"(with-temp-buffer
                            (text-mode)
                            (setq ac-sources
                                  '(ac-source-abbrev
@@ -117,15 +114,13 @@ fn auto_complete_sage_setup_in_unsupported_mode_only_enables_auto_complete() {
                                     (equal
                                      before
                                      ac-sources)))
-                               (auto-complete-mode -1))))"##;
-    let expect = expect!["OK (text-mode t #1=(ac-source-abbrev ac-source-filename) #1# t)"];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_command_cache_hook_clears_only_command_docs_until_method_clear_runs() {
-    let elisp_form = r##"(let ((process-buffer
+                               (auto-complete-mode -1))))"##,
+            true,
+            expect!["OK (text-mode t #1=(ac-source-abbrev ac-source-filename) #1# t)"],
+        ),
+        (
+            "auto_complete_sage_command_cache_hook_clears_only_command_docs_until_method_clear_runs",
+            r##"(let ((process-buffer
                                 (generate-new-buffer
                                  " *acsage-hook-process*")))
                            (unwind-protect
@@ -154,15 +149,13 @@ fn auto_complete_sage_command_cache_hook_clears_only_command_docs_until_method_c
                                       (cl-count
                                        'ac-sage--sage-commands-doc-clear-cache
                                        sage-shell:clear-command-cache-hook)))))
-                             (kill-buffer process-buffer)))"##;
-    let expect = expect![[r#"OK ((nil (("matrix.rank" . "rank docs"))) nil nil 1)"#]];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_document_caches_and_completion_states_remain_buffer_isolated() {
-    let elisp_form = r##"(let ((first
+                             (kill-buffer process-buffer)))"##,
+            true,
+            expect![[r#"OK ((nil (("matrix.rank" . "rank docs"))) nil nil 1)"#]],
+        ),
+        (
+            "auto_complete_sage_document_caches_and_completion_states_remain_buffer_isolated",
+            r##"(let ((first
                                 (generate-new-buffer
                                  " *acsage-isolation-first*"))
                                (second
@@ -210,17 +203,15 @@ fn auto_complete_sage_document_caches_and_completion_states_remain_buffer_isolat
                                         "rank"))))
                                   (list first second)))
                              (kill-buffer first)
-                             (kill-buffer second)))"##;
-    let expect = expect![[
+                             (kill-buffer second)))"##,
+            true,
+            expect![[
         r#"OK ((" *acsage-isolation-first*" nil (("matrix.rank" . "first rank")) ((interface . "sage") (var-base-name . "matrix") (types "attributes")) ("matrix" . "matrix.rank")) (" *acsage-isolation-second*" (("plot" . "second plot")) (("graph.order" . "second order")) ((interface . "gap") (var-base-name . "graph") (types "attributes")) ("graph" . "graph.rank")))"#
-    ]];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_setup_routes_independent_repl_and_edit_buffers_without_cross_leakage() {
-    let elisp_form = r##"(let ((repl-buffer
+    ]],
+        ),
+        (
+            "auto_complete_sage_setup_routes_independent_repl_and_edit_buffers_without_cross_leakage",
+            r##"(let ((repl-buffer
                                 (generate-new-buffer
                                  " *acsage-routing-repl*"))
                                (edit-buffer
@@ -264,10 +255,11 @@ fn auto_complete_sage_setup_routes_independent_repl_and_edit_buffers_without_cro
                                      (auto-complete-mode -1))
                                    result))
                              (kill-buffer repl-buffer)
-                             (kill-buffer edit-buffer)))"##;
-    let expect = expect![
+                             (kill-buffer edit-buffer)))"##,
+            true,
+            expect![
         "OK ((sage-shell-mode t (ac-sage-repl-modules ac-source-sage-methods ac-sage-repl-vars-in-module ac-source-sage-other-interfaces as-source-sage-repl-argspec ac-source-sage-repl-python-kwds ac-source-repl-sage-commands ac-source-sage-words-in-buffers ac-source-filename) t) (sage-shell:sage-mode t (ac-source-filename ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers) t))"
-    ];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }

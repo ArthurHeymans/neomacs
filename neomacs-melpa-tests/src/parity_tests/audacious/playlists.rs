@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_audacious_parity;
+use super::assert_audacious_batch;
 
 #[test]
-fn audacious_playlist_filters_only_pipe_rows_and_resets_prior_message_state() {
-    let elisp_form = r##"(let ((audacious-msg
+fn playlists_public_surface_batch() {
+    assert_audacious_batch(&[
+        (
+            "audacious_playlist_filters_only_pipe_rows_and_resets_prior_message_state",
+            r##"(let ((audacious-msg
                 "stale-data")
                messages)
          (cl-letf
@@ -26,16 +29,15 @@ fn audacious_playlist_filters_only_pipe_rows_and_resets_prior_message_state() {
            (list
             (audacious-playlist)
             audacious-msg
-            (nreverse messages))))"##;
-    let expect = expect![[
+            (nreverse messages))))"##,
+            true,
+            expect![[
         r#"OK (" 1 | First\n 2 || Second\n" " 1 | First\n 2 || Second\n" (" 1 | First\n 2 || Second\n"))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_playlist_current_info_trims_queries_updates_state_and_formats_message() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "audacious_playlist_current_info_trims_queries_updates_state_and_formats_message",
+            r##"(let (events)
          (audacious-test-reset-state)
          (cl-letf
              (((symbol-function
@@ -64,16 +66,15 @@ fn audacious_playlist_current_info_trims_queries_updates_state_and_formats_messa
              audacious-playlist-position
              audacious-playlist-length
              audacious-playlist-name)
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK ("[2/5] \"Focus Mix\"" ("2" "5" "Focus Mix") ("audtool --current-playlist-name" "audtool --current-playlist" "audtool --number-of-playlists" "[2/5] \"Focus Mix\""))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_private_playlist_goto_switches_waits_plays_and_refreshes_in_order() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "audacious_private_playlist_goto_switches_waits_plays_and_refreshes_in_order",
+            r##"(let (events)
          (cl-letf
              (((symbol-function 'call-process)
                (lambda (&rest arguments)
@@ -94,16 +95,15 @@ fn audacious_private_playlist_goto_switches_waits_plays_and_refreshes_in_order()
                  :refreshed)))
            (list
             (audacious-playlist--goto "+02")
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:refreshed ((:call "/fixture/bin/audtool" nil nil nil "--set-current-playlist" "+02") (:sleep 0 20) (:call "/fixture/bin/audtool" nil nil nil "--play-current-playlist") :refresh))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_public_playlist_goto_reads_live_length_and_executes_numeric_selection() {
-    let elisp_form = r##"(let (events prompts)
+    ]],
+        ),
+        (
+            "audacious_public_playlist_goto_reads_live_length_and_executes_numeric_selection",
+            r##"(let (events prompts)
          (audacious-test-reset-state)
          (cl-letf
              (((symbol-function
@@ -138,16 +138,15 @@ fn audacious_public_playlist_goto_reads_live_length_and_executes_numeric_selecti
             audacious-playlist-position
             audacious-playlist-length
             (nreverse prompts)
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:refreshed "003" "4" ("Playlist No. [1 - 4]: ") ((:shell "audtool --number-of-playlists") (:call "/fixture/bin/audtool" nil nil nil "--set-current-playlist" "003") (:sleep 0 20) (:call "/fixture/bin/audtool" nil nil nil "--play-current-playlist") :refresh))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_public_playlist_goto_invalid_value_reports_without_process_or_sleep() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "audacious_public_playlist_goto_invalid_value_reports_without_process_or_sleep",
+            r##"(let (events)
          (cl-letf
              (((symbol-function
                 'shell-command-to-string)
@@ -179,16 +178,15 @@ fn audacious_public_playlist_goto_invalid_value_reports_without_process_or_sleep
             (audacious-playlist-goto)
             audacious-playlist-position
             audacious-playlist-length
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK ("\"two\" is not number." "two" "9" ((:prompt "Playlist No. [1 - 9]: ") (:message "\"two\" is not number.")))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_playlist_next_and_prev_boundaries_report_without_switching() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "audacious_playlist_next_and_prev_boundaries_report_without_switching",
+            r##"(mapcar
          (lambda (case)
            (pcase-let
                ((`(,direction
@@ -228,16 +226,15 @@ fn audacious_playlist_next_and_prev_boundaries_report_without_switching() {
             "4\n")
            (audacious-playlist-prev
             "1\n"
-            "4\n")))"##;
-    let expect = expect![[
+            "4\n")))"##,
+            true,
+            expect![[
         r#"OK ((audacious-playlist-next "Last playlist" 4 4 ("Last playlist")) (audacious-playlist-prev "First playlist" 1 4 ("First playlist")))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_playlist_next_runs_complete_switch_refresh_and_song_workflow() {
-    let elisp_form = r##"(let ((answers
+    ]],
+        ),
+        (
+            "audacious_playlist_next_runs_complete_switch_refresh_and_song_workflow",
+            r##"(let ((answers
                 '(("audtool --current-playlist-name"
                    . "Old Mix\n")
                   ("audtool --current-playlist"
@@ -306,16 +303,15 @@ fn audacious_playlist_next_runs_complete_switch_refresh_and_song_workflow() {
              audacious-playlist-length
              audacious-playlist-name)
             answers
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:song-refreshed ("3" "4" "New Mix") nil ((:shell "audtool --current-playlist-name") (:shell "audtool --current-playlist") (:shell "audtool --number-of-playlists") (:call "/fixture/bin/audtool" nil nil nil "--set-current-playlist" "3") (:sleep 0 20) (:call "/fixture/bin/audtool" nil nil nil "--play-current-playlist") (:shell "audtool --current-playlist-name") (:shell "audtool --current-playlist") (:shell "audtool --number-of-playlists") (:message "[3/4] \"New Mix\"") (:message "[3/4] \"New Mix\"") (:sit 2) :song-refresh))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_playlist_prev_runs_complete_switch_refresh_and_song_workflow() {
-    let elisp_form = r##"(let ((answers
+    ]],
+        ),
+        (
+            "audacious_playlist_prev_runs_complete_switch_refresh_and_song_workflow",
+            r##"(let ((answers
                 '(("Old Mix\n"
                    "3\n"
                    "5\n")
@@ -381,9 +377,11 @@ fn audacious_playlist_prev_runs_complete_switch_refresh_and_song_workflow() {
              audacious-playlist-name)
             phase
             field
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:song-refreshed ("2" "5" "Previous Mix") 2 0 ((:call "/fixture/bin/audtool" nil nil nil "--set-current-playlist" "2") (:sleep 0 20) (:call "/fixture/bin/audtool" nil nil nil "--play-current-playlist") (:message "[2/5] \"Previous Mix\"") (:message "[2/5] \"Previous Mix\"") (:sit 2) :song-refresh))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

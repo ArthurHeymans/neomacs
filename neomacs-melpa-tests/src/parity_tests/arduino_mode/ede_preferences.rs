@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_ede_arduino_parity, assert_ede_arduino_signal_parity};
+use super::{assert_ede_arduino_batch};
 
 #[test]
-fn preferences_reader_parses_real_file_expands_sketchbook_and_attaches_board_data() {
-    let elisp_form = r##"(let ((prefs-file
+fn ede_preferences_public_surface_batch() {
+    assert_ede_arduino_batch(&[
+        (
+            "preferences_reader_parses_real_file_expands_sketchbook_and_attaches_board_data",
+            r##"(let ((prefs-file
                          (make-temp-file
                           "arduino-preferences-"))
                         (ede-arduino-active-prefs nil)
@@ -44,16 +47,15 @@ fn preferences_reader_parses_real_file_expands_sketchbook_and_attaches_board_dat
                                ede-arduino-active-prefs
                                timestamp))
                              (nreverse board-lookups))))
-                      (delete-file prefs-file)))"##;
-    let expect = expect![[
+                      (delete-file prefs-file)))"##,
+            true,
+            expect![[
         r#"OK ("/dev/ttyACM2" "mega" "[ORACLE-HOME]/Embedded Projects/" (:board "mega") t t ("mega"))"#
-    ]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn preferences_cache_skips_unchanged_file_then_refreshes_when_size_changes() {
-    let elisp_form = r##"(let ((prefs-file
+    ]],
+        ),
+        (
+            "preferences_cache_skips_unchanged_file_then_refreshes_when_size_changes",
+            r##"(let ((prefs-file
                          (make-temp-file
                           "arduino-preferences-cache-"))
                         (ede-arduino-active-prefs nil)
@@ -89,14 +91,13 @@ fn preferences_cache_skips_unchanged_file_then_refreshes_when_size_changes() {
                               ede-arduino-active-prefs
                               sketchbook)))
                            (nreverse board-lookups)))
-                      (delete-file prefs-file)))"##;
-    let expect = expect![[r#"OK ("/dev/ttyUSB123" "nano" "Arduino Projects" ("uno" "nano"))"#]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn malformed_preferences_report_each_missing_required_key_precisely() {
-    let elisp_form = r##"(let ((root
+                      (delete-file prefs-file)))"##,
+            true,
+            expect![[r#"OK ("/dev/ttyUSB123" "nano" "Arduino Projects" ("uno" "nano"))"#]],
+        ),
+        (
+            "malformed_preferences_report_each_missing_required_key_precisely",
+            r##"(let ((root
                          (make-temp-file
                           "arduino-malformed-prefs-" t))
                         outcomes)
@@ -129,32 +130,30 @@ fn malformed_preferences_report_each_missing_required_key_precisely() {
                                    (cadr error-data))))
                                outcomes)))
                           (nreverse outcomes))
-                      (delete-directory root t)))"##;
-    let expect = expect![[
+                      (delete-directory root t)))"##,
+            true,
+            expect![[
         r#"OK ((error "Cannot find serial.port from the arduino preferences") (error "Cannot find board from the arduino preferences") (error "Cannot find sketchbook.path from the arduino preferences"))"#
-    ]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn sync_declining_to_launch_ide_when_preferences_are_missing_signals_exact_error() {
-    let elisp_form = r##"(let ((ede-arduino-preferences-file
+    ]],
+        ),
+        (
+            "sync_declining_to_launch_ide_when_preferences_are_missing_signals_exact_error",
+            r##"(let ((ede-arduino-preferences-file
                          (expand-file-name
                           "definitely-missing-preferences.txt"
                           temporary-file-directory)))
                     (cl-letf
                         (((symbol-function 'y-or-n-p)
                           (lambda (_prompt) nil)))
-                      (ede-arduino-sync)))"##;
-    let expect = expect![[
+                      (ede-arduino-sync)))"##,
+            false,
+            expect![[
         r#"ERR (error "EDE cannot build/upload arduino projects without preferences from the arduino IDE")"#
-    ]];
-    assert_ede_arduino_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn sync_accepting_missing_preferences_launches_ide_then_reads_and_returns_active_object() {
-    let elisp_form = r##"(let ((ede-arduino-preferences-file
+    ]],
+        ),
+        (
+            "sync_accepting_missing_preferences_launches_ide_then_reads_and_returns_active_object",
+            r##"(let ((ede-arduino-preferences-file
                          (expand-file-name
                           "missing-but-created-by-ide.txt"
                           temporary-file-directory))
@@ -190,16 +189,15 @@ fn sync_accepting_missing_preferences_launches_ide_then_reads_and_returns_active
                          (eq
                           result
                           ede-arduino-active-prefs)
-                         (nreverse events)))))"##;
-    let expect = expect![[
+                         (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK (t ((:confirm "Can't find arduino preferences.  Start IDE to configure? ") :launch (:read "missing-but-created-by-ide.txt")))"#
-    ]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn configured_install_paths_honor_container_prefix_and_host_fallback() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "configured_install_paths_honor_container_prefix_and_host_fallback",
+            r##"(let* ((root
                           (make-temp-file
                            "arduino-install-paths-" t))
                          (host
@@ -232,14 +230,13 @@ fn configured_install_paths_honor_container_prefix_and_host_fallback() {
                               (file-equal-p
                                (ede-arduino-find-install t)
                                container-app)))))
-                      (delete-directory root t)))"##;
-    let expect = expect![[r#"OK (t ("opt/arduino" t))"#]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn install_discovery_parses_appdir_from_a_real_arduino_launcher_script() {
-    let elisp_form = r##"(let ((launcher
+                      (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK (t ("opt/arduino" t))"#]],
+        ),
+        (
+            "install_discovery_parses_appdir_from_a_real_arduino_launcher_script",
+            r##"(let ((launcher
                          (make-temp-file
                           "arduino-launcher-"))
                         (ede-arduino-appdir nil))
@@ -255,25 +252,23 @@ fn install_discovery_parses_appdir_from_a_real_arduino_launcher_script() {
                             (list
                              (ede-arduino-find-install)
                              ede-arduino-appdir)))
-                      (delete-file launcher)))"##;
-    let expect = expect!["OK (nil nil)"];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn missing_install_command_reports_exact_discovery_error() {
-    let elisp_form = r##"(let ((ede-arduino-appdir nil)
+                      (delete-file launcher)))"##,
+            true,
+            expect!["OK (nil nil)"],
+        ),
+        (
+            "missing_install_command_reports_exact_discovery_error",
+            r##"(let ((ede-arduino-appdir nil)
                         (ede-arduino-arduino-command
                          "arduino-command-that-cannot-exist")
                         (exec-path nil))
-                    (ede-arduino-find-install))"##;
-    let expect = expect!["ERR (wrong-type-argument stringp nil)"];
-    assert_ede_arduino_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn version_makefile_boards_and_library_helpers_resolve_real_install_layout() {
-    let elisp_form = r##"(let* ((root
+                    (ede-arduino-find-install))"##,
+            false,
+            expect!["ERR (wrong-type-argument stringp nil)"],
+        ),
+        (
+            "version_makefile_boards_and_library_helpers_resolve_real_install_layout",
+            r##"(let* ((root
                           (make-temp-file
                            "arduino-layout-" t))
                          (lib
@@ -306,16 +301,15 @@ fn version_makefile_boards_and_library_helpers_resolve_real_install_layout() {
                              (file-relative-name
                               (ede-arduino-libdir "Servo")
                               root))))
-                      (delete-directory root t)))"##;
-    let expect = expect![[
+                      (delete-directory root t)))"##,
+            true,
+            expect![[
         r#"OK ("2.3.4" "Arduino.mk" "hardware/vendor/boards.txt" "libraries" "libraries/Servo")"#
-    ]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn board_reader_builds_complete_board_object_from_realistic_boards_file() {
-    let elisp_form = r##"(let ((boards-file
+    ]],
+        ),
+        (
+            "board_reader_builds_complete_board_object_from_realistic_boards_file",
+            r##"(let ((boards-file
                          (make-temp-file
                           "arduino-boards-")))
                     (unwind-protect
@@ -348,16 +342,15 @@ fn board_reader_builds_complete_board_object_from_realistic_boards_file() {
                                (oref board mcu)
                                (oref board f_cpu)
                                (oref board core)))))
-                      (delete-file boards-file)))"##;
-    let expect = expect![[
+                      (delete-file boards-file)))"##,
+            true,
+            expect![[
         r#"OK (t "Arduino Uno" "arduino" "115200" "32256" "atmega328p" "16000000L" "arduino")"#
-    ]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn ide_launcher_uses_current_directory_buffer_and_configured_command() {
-    let elisp_form = r##"(let ((work
+    ]],
+        ),
+        (
+            "ide_launcher_uses_current_directory_buffer_and_configured_command",
+            r##"(let ((work
                          (make-temp-file
                           "arduino-ide-work-" t))
                         (ede-arduino-arduino-command
@@ -390,9 +383,11 @@ fn ide_launcher_uses_current_directory_buffer_and_configured_command() {
                                (buffer-string)))))
                       (when (get-buffer "*Arduino IDE*")
                         (kill-buffer "*Arduino IDE*"))
-                      (delete-directory work t)))"##;
-    let expect = expect![[
+                      (delete-directory work t)))"##,
+            true,
+            expect![[
         r#"OK (fake-process ((("arduino" (:buffer nil) "/opt/arduino/arduino") t "")) "")"#
-    ]];
-    assert_ede_arduino_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

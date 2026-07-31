@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_package_update_parity;
+use super::assert_auto_package_update_batch;
 
 #[test]
-fn auto_package_update_file_helpers_distinguish_missing_overwrite_and_unwritable_files() {
-    let elisp_form = r##"(let*
+fn schedule_public_surface_batch() {
+    assert_auto_package_update_batch(&[
+        (
+            "auto_package_update_file_helpers_distinguish_missing_overwrite_and_unwritable_files",
+            r##"(let*
                              ((root
                                (auto-package-update-test-root
                                 "file-helpers"))
@@ -41,15 +44,13 @@ fn auto_package_update_file_helpers_distinguish_missing_overwrite_and_unwritable
                               (apu--read-file-as-string file)
                               (file-attribute-size
                                (file-attributes file))
-                              (file-exists-p missing))))"##;
-    let expect = expect![[r#"OK (("old\n" nil) "new-value" 9 nil)"#]];
-
-    assert_auto_package_update_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_package_update_current_day_round_trips_through_configured_sandbox_file() {
-    let elisp_form = r##"(let*
+                              (file-exists-p missing))))"##,
+            true,
+            expect![[r#"OK (("old\n" nil) "new-value" 9 nil)"#]],
+        ),
+        (
+            "auto_package_update_current_day_round_trips_through_configured_sandbox_file",
+            r##"(let*
                              ((root
                                (auto-package-update-test-root
                                 "current-day"))
@@ -73,15 +74,13 @@ fn auto_package_update_current_day_round_trips_through_configured_sandbox_file()
                                 (auto-package-update-test-read
                                  auto-package-update-last-update-day-path)
                                 (file-exists-p
-                                 auto-package-update-last-update-day-path)))))"##;
-    let expect = expect![[r#"OK (nil 24680 "24680" t)"#]];
-
-    assert_auto_package_update_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_package_update_daily_timer_uses_exact_period_callback_and_return_value() {
-    let elisp_form = r##"(let (calls)
+                                 auto-package-update-last-update-day-path)))))"##,
+            true,
+            expect![[r#"OK (nil 24680 "24680" t)"#]],
+        ),
+        (
+            "auto_package_update_daily_timer_uses_exact_period_callback_and_return_value",
+            r##"(let (calls)
                            (cl-letf
                                (((symbol-function
                                   'run-at-time)
@@ -99,8 +98,9 @@ fn auto_package_update_daily_timer_uses_exact_period_callback_and_return_value()
                              (list
                               (auto-package-update-at-time
                                "03:15")
-                              (nreverse calls))))"##;
-    let expect = expect![[r#"OK (fixture-timer (("03:15" 86400 auto-package-update-maybe nil)))"#]];
-
-    assert_auto_package_update_parity(elisp_form, expect);
+                              (nreverse calls))))"##,
+            true,
+            expect![[r#"OK (fixture-timer (("03:15" 86400 auto-package-update-maybe nil)))"#]],
+        ),
+    ]);
 }

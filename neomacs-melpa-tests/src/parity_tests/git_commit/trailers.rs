@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_git_commit_parity, assert_git_commit_signal_parity};
+use super::{assert_git_commit_batch};
 
 #[test]
-fn git_commit_public_trailer_commands_insert_exact_labels_and_identity_format() {
-    let elisp_form = r##"(with-temp-buffer
+fn trailers_public_surface_batch() {
+    assert_git_commit_batch(&[
+        (
+            "git_commit_public_trailer_commands_insert_exact_labels_and_identity_format",
+            r##"(with-temp-buffer
                (setq-local comment-start "#")
                (insert "Summary\n\nBody\n")
                (git-commit-ack "Ack" "ack@example.test")
@@ -17,17 +20,15 @@ fn git_commit_public_trailer_commands_insert_exact_labels_and_identity_format() 
                (git-commit-suggested "Suggest" "suggest@example.test")
                (git-commit-co-authored "Author" "author@example.test")
                (git-commit-co-developed "Dev" "dev@example.test")
-               (buffer-string))"##;
-    let expect = expect![[
+               (buffer-string))"##,
+            true,
+            expect![[
         r#"OK "Summary\n\nBody\n\nAcked-by: Ack <ack@example.test>\nModified-by: Mod <mod@example.test>\nReviewed-by: Rev <rev@example.test>\nSigned-off-by: Sign <sign@example.test>\nTested-by: Test <test@example.test>\nCc: Cc <cc@example.test>\nReported-by: Report <report@example.test>\nSuggested-by: Suggest <suggest@example.test>\nCo-authored-by: Author <author@example.test>\nCo-developed-by: Dev <dev@example.test>\n\n""#
-    ]];
-
-    assert_git_commit_parity(elisp_form, expect);
-}
-
-#[test]
-fn git_commit_trailers_stay_above_comments_and_verbose_diff() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "git_commit_trailers_stay_above_comments_and_verbose_diff",
+            r##"(list
                (with-temp-buffer
                  (setq-local comment-start "#")
                  (insert "Summary\n\n# status\n")
@@ -42,17 +43,15 @@ fn git_commit_trailers_stay_above_comments_and_verbose_diff() {
                  (setq-local comment-start "#")
                  (insert "# instructions\n")
                  (git-commit-signoff "A" "a@example.test")
-                 (buffer-string)))"##;
-    let expect = expect![[
+                 (buffer-string)))"##,
+            true,
+            expect![[
         r##"OK ("Summary\n\nSigned-off-by: A <a@example.test>\n\n# status\n" "Summary\n\nBody\n\nSigned-off-by: A <a@example.test>\n\n# ---------------- >8 ----------------\ndiff --git a/a b/a\n" "\n\nSigned-off-by: A <a@example.test>\n\n# instructions\n")"##
-    ]];
-
-    assert_git_commit_parity(elisp_form, expect);
-}
-
-#[test]
-fn git_commit_trailers_append_to_recognized_blocks_without_reordering_existing_lines() {
-    let elisp_form = r##"(let ((git-commit-trailers
+    ]],
+        ),
+        (
+            "git_commit_trailers_append_to_recognized_blocks_without_reordering_existing_lines",
+            r##"(let ((git-commit-trailers
                     '("Signed-off-by" "Reviewed-by")))
                (with-temp-buffer
                  (setq-local comment-start "#")
@@ -63,17 +62,15 @@ fn git_commit_trailers_append_to_recognized_blocks_without_reordering_existing_l
                   "# status\n")
                  (git-commit-review "Second" "second@example.test")
                  (git-commit-signoff "Third" "third@example.test")
-                 (buffer-string)))"##;
-    let expect = expect![[
+                 (buffer-string)))"##,
+            true,
+            expect![[
         r##"OK "Summary\n\nBody\n\nSigned-off-by: First <first@example.test>\nReviewed-by: Second <second@example.test>\nSigned-off-by: Third <third@example.test>\n\nCustom-field: untouched\n# status\n""##
-    ]];
-
-    assert_git_commit_parity(elisp_form, expect);
-}
-
-#[test]
-fn git_commit_get_ident_obeys_author_committer_email_and_user_fallback_precedence() {
-    let elisp_form = r##"(let ((process-environment
+    ]],
+        ),
+        (
+            "git_commit_get_ident_obeys_author_committer_email_and_user_fallback_precedence",
+            r##"(let ((process-environment
                     (copy-sequence process-environment))
                    (user-full-name "Fallback User"))
                (dolist (name
@@ -97,17 +94,15 @@ fn git_commit_get_ident_obeys_author_committer_email_and_user_fallback_precedenc
                      (list
                       fallback
                       committer
-                      (git-commit-get-ident))))))"##;
-    let expect = expect![[
+                      (git-commit-get-ident))))))"##,
+            true,
+            expect![[
         r#"OK (("Fallback User" "prompt@example.test") ("Committer" "email@example.test") ("Author" "author@example.test"))"#
-    ]];
-
-    assert_git_commit_parity(elisp_form, expect);
-}
-
-#[test]
-fn git_commit_read_ident_trims_valid_input_and_preserves_match_data() {
-    let elisp_form = r##"(let ((git-commit-read-ident-history nil))
+    ]],
+        ),
+        (
+            "git_commit_read_ident_trims_valid_input_and_preserves_match_data",
+            r##"(let ((git-commit-read-ident-history nil))
                (string-match "keep-\\([0-9]+\\)" "keep-42")
                (let ((before (match-data)))
                  (cl-letf (((symbol-function 'magit-completing-read)
@@ -116,19 +111,18 @@ fn git_commit_read_ident_trims_valid_input_and_preserves_match_data() {
                    (list
                     (git-commit-read-ident "Reviewed-by")
                     (equal before (match-data))
-                    git-commit-read-ident-history))))"##;
-    let expect = expect![[r#"OK (("Example Person" "person@example.test") t nil)"#]];
-
-    assert_git_commit_parity(elisp_form, expect);
-}
-
-#[test]
-fn git_commit_read_ident_rejects_text_without_a_name_email_pair() {
-    let elisp_form = r##"(cl-letf (((symbol-function 'magit-completing-read)
+                    git-commit-read-ident-history))))"##,
+            true,
+            expect![[r#"OK (("Example Person" "person@example.test") t nil)"#]],
+        ),
+        (
+            "git_commit_read_ident_rejects_text_without_a_name_email_pair",
+            r##"(cl-letf (((symbol-function 'magit-completing-read)
                           (lambda (&rest _arguments)
                             "not an identity")))
-               (git-commit-read-ident "Reviewed-by"))"##;
-    let expect = expect![[r#"ERR (user-error "Invalid input")"#]];
-
-    assert_git_commit_signal_parity(elisp_form, expect);
+               (git-commit-read-ident "Reviewed-by"))"##,
+            false,
+            expect![[r#"ERR (user-error "Invalid input")"#]],
+        ),
+    ]);
 }

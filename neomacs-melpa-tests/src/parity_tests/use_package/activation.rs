@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_use_package_parity;
+use super::assert_use_package_batch;
 
 #[test]
-fn use_package_commands_create_interactive_autoloads_without_loading_the_feature() {
-    let elisp_form = r##"(progn
+fn activation_public_surface_batch() {
+    assert_use_package_batch(&[
+        (
+            "use_package_commands_create_interactive_autoloads_without_loading_the_feature",
+            r##"(progn
                (fmakunbound 'neomacs-use-package-command-one)
                (fmakunbound 'neomacs-use-package-command-two)
                (use-package neomacs-use-package-command-library
@@ -21,17 +24,15 @@ fn use_package_commands_create_interactive_autoloads_without_loading_the_feature
                      (nth 4 definition)
                      (commandp symbol))))
                 '(neomacs-use-package-command-one
-                  neomacs-use-package-command-two)))"##;
-    let expect = expect![[
+                  neomacs-use-package-command-two)))"##,
+            true,
+            expect![[
         r#"OK ((neomacs-use-package-command-one t "neomacs-use-package-command-library" nil t) (neomacs-use-package-command-two t "neomacs-use-package-command-library" nil t))"#
-    ]];
-
-    assert_use_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn use_package_hooks_apply_suffixes_autoload_symbols_and_run_lambda_entries() {
-    let elisp_form = r##"(let ((neomacs-use-package-mode-hook nil)
+    ]],
+        ),
+        (
+            "use_package_hooks_apply_suffixes_autoload_symbols_and_run_lambda_entries",
+            r##"(let ((neomacs-use-package-mode-hook nil)
                     events)
                (fmakunbound 'neomacs-use-package-hook-function)
                (use-package neomacs-use-package-hook-library
@@ -54,15 +55,13 @@ fn use_package_hooks_apply_suffixes_autoload_symbols_and_run_lambda_entries() {
                  (fset 'neomacs-use-package-hook-function
                        (lambda () (push 'symbol events)))
                  (run-hooks 'neomacs-use-package-mode-hook)
-                 (list before (nreverse events))))"##;
-    let expect = expect![[r#"OK ((nil) (lambda symbol))"#]];
-
-    assert_use_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn use_package_mode_interpreter_magic_and_fallback_register_exact_alist_entries() {
-    let elisp_form = r##"(let ((auto-mode-alist nil)
+                 (list before (nreverse events))))"##,
+            true,
+            expect![[r#"OK ((nil) (lambda symbol))"#]],
+        ),
+        (
+            "use_package_mode_interpreter_magic_and_fallback_register_exact_alist_entries",
+            r##"(let ((auto-mode-alist nil)
                     (interpreter-mode-alist nil)
                     (magic-mode-alist nil)
                     (magic-fallback-mode-alist nil))
@@ -85,17 +84,15 @@ fn use_package_mode_interpreter_magic_and_fallback_register_exact_alist_entries(
                 magic-fallback-mode-alist
                 (autoloadp
                  (symbol-function
-                  'neomacs-use-package-detect-mode))))"##;
-    let expect = expect![[
+                  'neomacs-use-package-detect-mode))))"##,
+            true,
+            expect![[
         r##"OK ((("\\.neo2\\'" . neomacs-use-package-detect-mode) ("\\.neo\\'" . neomacs-use-package-detect-mode)) (("neo2" . neomacs-use-package-detect-mode) ("neo" . neomacs-use-package-detect-mode)) (("NEO!" . neomacs-use-package-detect-mode)) (("fallback" . neomacs-use-package-detect-mode)) t)"##
-    ]];
-
-    assert_use_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn use_package_after_all_waits_for_every_feature_in_normalized_order() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "use_package_after_all_waits_for_every_feature_in_normalized_order",
+            r##"(progn
                (defvar neomacs-use-package-events nil)
                (setq neomacs-use-package-events nil)
                (use-package neomacs-use-package-after-all-target
@@ -113,15 +110,13 @@ fn use_package_after_all_waits_for_every_feature_in_normalized_order() {
                     initial
                     after-one
                     (nreverse
-                     neomacs-use-package-events)))))"##;
-    let expect = expect![[r#"OK (nil nil (configured))"#]];
-
-    assert_use_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn use_package_after_any_runs_once_when_the_first_of_several_features_loads() {
-    let elisp_form = r##"(progn
+                     neomacs-use-package-events)))))"##,
+            true,
+            expect![[r#"OK (nil nil (configured))"#]],
+        ),
+        (
+            "use_package_after_any_runs_once_when_the_first_of_several_features_loads",
+            r##"(progn
                (defvar neomacs-use-package-events nil)
                (setq neomacs-use-package-events nil)
                (use-package neomacs-use-package-after-any-target
@@ -138,15 +133,13 @@ fn use_package_after_any_runs_once_when_the_first_of_several_features_loads() {
                  (provide 'neomacs-use-package-after-left)
                  (list
                   after-first
-                  neomacs-use-package-events)))"##;
-    let expect = expect![[r#"OK ((configured) (configured))"#]];
-
-    assert_use_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn use_package_deferred_config_runs_when_the_declared_feature_is_provided() {
-    let elisp_form = r##"(progn
+                  neomacs-use-package-events)))"##,
+            true,
+            expect![[r#"OK ((configured) (configured))"#]],
+        ),
+        (
+            "use_package_deferred_config_runs_when_the_declared_feature_is_provided",
+            r##"(progn
                (defvar neomacs-use-package-events nil)
                (setq neomacs-use-package-events nil)
                (use-package neomacs-use-package-deferred-feature
@@ -158,15 +151,13 @@ fn use_package_deferred_config_runs_when_the_declared_feature_is_provided() {
                  (list
                   before
                   (nreverse
-                   neomacs-use-package-events))))"##;
-    let expect = expect![[r#"OK (nil (configured))"#]];
-
-    assert_use_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn use_package_demand_loads_a_real_library_between_init_and_config() {
-    let elisp_form = r##"(let* ((root
+                   neomacs-use-package-events))))"##,
+            true,
+            expect![[r#"OK (nil (configured))"#]],
+        ),
+        (
+            "use_package_demand_loads_a_real_library_between_init_and_config",
+            r##"(let* ((root
                     (make-temp-file "use-package-demand-" t))
                    (load-path
                     (cons root load-path))
@@ -189,8 +180,9 @@ fn use_package_demand_loads_a_real_library_between_init_and_config() {
                       neomacs-use-package-demand-loaded
                       (featurep
                        'neomacs-use-package-demand)))
-                 (delete-directory root t)))"##;
-    let expect = expect![[r#"OK ((init config) t t)"#]];
-
-    assert_use_package_parity(elisp_form, expect);
+                 (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK ((init config) t t)"#]],
+        ),
+    ]);
 }

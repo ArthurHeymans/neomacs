@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auth_source_xoauth2_parity;
+use super::assert_auth_source_xoauth2_batch;
 
 #[test]
-fn auth_source_xoauth2_enable_registers_source_and_smtp_mechanism() {
-    let elisp_form = r##"(let ((auth-sources
+fn enable_public_surface_batch() {
+    assert_auth_source_xoauth2_batch(&[
+        (
+            "auth_source_xoauth2_enable_registers_source_and_smtp_mechanism",
+            r##"(let ((auth-sources
                 '("~/.authinfo"))
                (smtpmail-auth-supported
                 '(plain login cram-md5)))
@@ -16,14 +19,13 @@ fn auth_source_xoauth2_enable_registers_source_and_smtp_mechanism() {
            (advice-member-p
             #'auth-source-xoauth2-backend-parse
             'auth-source-backend-parse)
-           t)))"##;
-    let expect = expect![[r#"OK ((xoauth2 "~/.authinfo") (xoauth2 plain login cram-md5) t)"#]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_nnimap_advice_sends_exact_sasl_initial_response() {
-    let elisp_form = r##"(let (calls)
+           t)))"##,
+            true,
+            expect![[r#"OK ((xoauth2 "~/.authinfo") (xoauth2 plain login cram-md5) t)"#]],
+        ),
+        (
+            "auth_source_xoauth2_nnimap_advice_sends_exact_sasl_initial_response",
+            r##"(let (calls)
          (setq nnimap-authenticator
                'xoauth2)
          (fset
@@ -45,16 +47,15 @@ fn auth_source_xoauth2_nnimap_advice_sends_exact_sasl_initial_response() {
             (nnimap-login
              "alice@example"
              "access-token")
-            (nreverse calls))))"##;
-    let expect = expect![[
+            (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK (:authenticated ((:capability "AUTH=XOAUTH2") (:capability "SASL-IR") (:command "AUTHENTICATE XOAUTH2 dXNlcj1hbGljZUBleGFtcGxlAWF1dGg9QmVhcmVyIGFjY2Vzcy10b2tlbgEB")))"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_nnimap_advice_falls_back_for_each_unsatisfied_condition() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "auth_source_xoauth2_nnimap_advice_falls_back_for_each_unsatisfied_condition",
+            r##"(let (calls)
          (setq nnimap-authenticator
                'plain
                auth-source-xoauth2-test-capabilities
@@ -96,16 +97,15 @@ fn auth_source_xoauth2_nnimap_advice_falls_back_for_each_unsatisfied_condition()
                     auth-source-xoauth2-test-capabilities
                     'xoauth2-only)
               (nnimap-login "no-sasl-ir" "password"))
-            (nreverse calls))))"##;
-    let expect = expect![[
+            (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ((:fallback "plain-user" "plain-password") (:fallback "no-xoauth2" "password") (:fallback "no-sasl-ir" "password") ((:fallback "plain-user" "plain-password") (:fallback "no-xoauth2" "password") (:fallback "no-sasl-ir" "password")))"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_smtp_helper_sends_exact_command_and_code() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "auth_source_xoauth2_smtp_helper_sends_exact_command_and_code",
+            r##"(let (calls)
          (cl-letf
              (((symbol-function 'smtpmail-command-or-throw)
                (lambda (&rest arguments)
@@ -116,16 +116,15 @@ fn auth_source_xoauth2_smtp_helper_sends_exact_command_and_code() {
              'fixture-process
              "alice@example"
              "access-token")
-            (nreverse calls))))"##;
-    let expect = expect![[
+            (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK (:accepted ((fixture-process "AUTH XOAUTH2 dXNlcj1hbGljZUBleGFtcGxlAWF1dGg9QmVhcmVyIGFjY2Vzcy10b2tlbgEB" 235)))"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_enable_installs_smtp_generic_method() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "auth_source_xoauth2_enable_installs_smtp_generic_method",
+            r##"(let (calls)
          (cl-letf
              (((symbol-function
                 'auth-source-xoauth2--smtpmail-auth-method)
@@ -139,14 +138,13 @@ fn auth_source_xoauth2_enable_installs_smtp_generic_method() {
              'xoauth2
              "alice"
              "token")
-            (nreverse calls))))"##;
-    let expect = expect![[r#"OK (:xoauth2-authenticated ((fixture-process "alice" "token")))"#]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_repeated_enable_deduplicates_lists_and_preserves_one_fallback_call() {
-    let elisp_form = r##"(let ((auth-sources nil)
+            (nreverse calls))))"##,
+            true,
+            expect![[r#"OK (:xoauth2-authenticated ((fixture-process "alice" "token")))"#]],
+        ),
+        (
+            "auth_source_xoauth2_repeated_enable_deduplicates_lists_and_preserves_one_fallback_call",
+            r##"(let ((auth-sources nil)
                (smtpmail-auth-supported nil)
                calls)
          (fset
@@ -167,8 +165,9 @@ fn auth_source_xoauth2_repeated_enable_deduplicates_lists_and_preserves_one_fall
             (nnimap-login "alice" "password")
             auth-sources
             smtpmail-auth-supported
-            (nreverse calls))))"##;
-    let expect =
-        expect![[r#"OK (:fallback (xoauth2) (xoauth2) ((:fallback "alice" "password")))"#]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
+            (nreverse calls))))"##,
+            true,
+            expect![[r#"OK (:fallback (xoauth2) (xoauth2) ((:fallback "alice" "password")))"#]],
+        ),
+    ]);
 }

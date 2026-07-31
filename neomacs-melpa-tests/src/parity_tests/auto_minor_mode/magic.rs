@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_minor_mode_parity;
+use super::assert_auto_minor_mode_batch;
 
 #[test]
-fn auto_minor_mode_magic_regex_matches_practical_file_headers_only_at_start() {
-    let elisp_form = r##"(mapcar
+fn magic_public_surface_batch() {
+    assert_auto_minor_mode_batch(&[
+        (
+            "auto_minor_mode_magic_regex_matches_practical_file_headers_only_at_start",
+            r##"(mapcar
                            (lambda (contents)
                              (with-temp-buffer
                                (auto-minor-mode-test-reset)
@@ -21,17 +24,15 @@ fn auto_minor_mode_magic_regex_matches_practical_file_headers_only_at_start() {
                              "#!/usr/bin/python3\n"
                              "#!/bin/sh\npython app.py\n"
                              "\n#!/usr/bin/env python\n"
-                             ""))"##;
-    let expect = expect![[
+                             ""))"##,
+            true,
+            expect![[
         r##"OK (("#!/usr/bin/env python\nprint('ok')\n" t) ("#!/usr/bin/python3\n" nil) ("#!/bin/sh\npython app.py\n" nil) ("\n#!/usr/bin/env python\n" nil) ("" nil))"##
-    ]];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_magic_matching_is_always_case_folded() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_minor_mode_magic_matching_is_always_case_folded",
+            r##"(mapcar
                            (lambda (contents)
                              (with-temp-buffer
                                (auto-minor-mode-test-reset)
@@ -47,17 +48,15 @@ fn auto_minor_mode_magic_matching_is_always_case_folded() {
                            '("PROJECT: alpha"
                              "Project: beta"
                              "project: gamma"
-                             "xPROJECT: delta"))"##;
-    let expect = expect![[
+                             "xPROJECT: delta"))"##,
+            true,
+            expect![[
         r#"OK (("PROJECT: alpha" t) ("Project: beta" t) ("project: gamma" t) ("xPROJECT: delta" nil))"#
-    ]];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_magic_runner_enables_all_matching_modes_and_preserves_order() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_minor_mode_magic_runner_enables_all_matching_modes_and_preserves_order",
+            r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (insert
                             "---\n"
@@ -77,17 +76,15 @@ fn auto_minor_mode_magic_runner_enables_all_matching_modes_and_preserves_order()
                             auto-minor-mode-test-beta-mode
                             auto-minor-mode-test-gamma-mode
                             (nreverse
-                             auto-minor-mode-test-events)))"##;
-    let expect = expect![
+                             auto-minor-mode-test-events)))"##,
+            true,
+            expect![
         "OK (t t t ((:alpha 1 t 1 fundamental-mode) (:beta 1 t 1 fundamental-mode) (:gamma 1 t 1 fundamental-mode)))"
-    ];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_magic_function_matchers_see_reset_point_and_limited_buffer() {
-    let elisp_form = r##"(with-temp-buffer
+    ],
+        ),
+        (
+            "auto_minor_mode_magic_function_matchers_see_reset_point_and_limited_buffer",
+            r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (insert "MAGIC payload beyond-boundary")
                            (let ((magic-mode-regexp-match-limit
@@ -129,17 +126,15 @@ fn auto_minor_mode_magic_function_matchers_see_reset_point_and_limited_buffer() 
                               (nreverse
                                auto-minor-mode-test-events)
                               auto-minor-mode-test-alpha-mode
-                              auto-minor-mode-test-beta-mode)))"##;
-    let expect = expect![[
+                              auto-minor-mode-test-beta-mode)))"##,
+            true,
+            expect![[
         r#"OK (((:first 1 1 14 "MAGIC payload") (:second 1 1 14 "MAGIC payload")) ((:alpha 1 t 14 fundamental-mode) (:beta 1 t 1 fundamental-mode)) t t)"#
-    ]];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_magic_match_limit_has_exact_boundary_behavior() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_minor_mode_magic_match_limit_has_exact_boundary_behavior",
+            r##"(mapcar
                            (lambda (contents)
                              (with-temp-buffer
                                (auto-minor-mode-test-reset)
@@ -158,17 +153,15 @@ fn auto_minor_mode_magic_match_limit_has_exact_boundary_behavior() {
                              "aaaaax"
                              " aaaax"
                              "x"
-                             "aaaa"))"##;
-    let expect = expect![[
+                             "aaaa"))"##,
+            true,
+            expect![[
         r#"OK (("aaaax" 5 t) ("aaaaax" 6 nil) (" aaaax" 6 nil) ("x" 1 t) ("aaaa" 4 nil))"#
-    ]];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_magic_scan_restores_point_mark_and_full_restriction() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_minor_mode_magic_scan_restores_point_mark_and_full_restriction",
+            r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (insert
                             "prefix\nMAGIC body\nsuffix")
@@ -197,15 +190,13 @@ fn auto_minor_mode_magic_scan_restores_point_mark_and_full_restriction() {
                                (point-min)
                                (point-max))
                               (nreverse
-                               auto-minor-mode-test-events))))"##;
-    let expect = expect!["OK ((12 4 1 25) (12 4 1 25) ((:alpha 1 t 25 fundamental-mode)))"];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_magic_scan_honors_preexisting_narrowing() {
-    let elisp_form = r##"(with-temp-buffer
+                               auto-minor-mode-test-events))))"##,
+            true,
+            expect!["OK ((12 4 1 25) (12 4 1 25) ((:alpha 1 t 25 fundamental-mode)))"],
+        ),
+        (
+            "auto_minor_mode_magic_scan_honors_preexisting_narrowing",
+            r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (insert "ignored\nMAGIC\nignored")
                            (narrow-to-region 9 14)
@@ -219,15 +210,13 @@ fn auto_minor_mode_magic_scan_honors_preexisting_narrowing() {
                               (point)
                               (point-min)
                               (point-max)
-                              (buffer-string))))"##;
-    let expect = expect![[r#"OK (t 11 9 14 "MAGIC")"#]];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_magic_keep_skips_enabled_mode_and_runs_disabled_mode() {
-    let elisp_form = r##"(with-temp-buffer
+                              (buffer-string))))"##,
+            true,
+            expect![[r#"OK (t 11 9 14 "MAGIC")"#]],
+        ),
+        (
+            "auto_minor_mode_magic_keep_skips_enabled_mode_and_runs_disabled_mode",
+            r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (insert "MAGIC service")
                            (setq
@@ -243,15 +232,13 @@ fn auto_minor_mode_magic_keep_skips_enabled_mode_and_runs_disabled_mode() {
                             auto-minor-mode-test-alpha-mode
                             auto-minor-mode-test-beta-mode
                             (nreverse
-                             auto-minor-mode-test-events)))"##;
-    let expect = expect!["OK (t t ((:beta 1 t 1 fundamental-mode)))"];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_magic_rules_work_in_non_file_buffers() {
-    let elisp_form = r##"(with-temp-buffer
+                             auto-minor-mode-test-events)))"##,
+            true,
+            expect!["OK (t t ((:beta 1 t 1 fundamental-mode)))"],
+        ),
+        (
+            "auto_minor_mode_magic_rules_work_in_non_file_buffers",
+            r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (rename-buffer
                             "generated-config")
@@ -267,15 +254,13 @@ fn auto_minor_mode_magic_rules_work_in_non_file_buffers() {
                             buffer-file-name
                             auto-minor-mode-test-alpha-mode
                             (nreverse
-                             auto-minor-mode-test-events)))"##;
-    let expect = expect![[r#"OK ("generated-config" nil t ((:alpha 1 t 1 fundamental-mode)))"#]];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_magic_function_runs_after_major_mode_selection_and_invalid_matcher_signals() {
-    let elisp_form = r##"(with-temp-buffer
+                             auto-minor-mode-test-events)))"##,
+            true,
+            expect![[r#"OK ("generated-config" nil t ((:alpha 1 t 1 fundamental-mode)))"#]],
+        ),
+        (
+            "auto_minor_mode_magic_function_runs_after_major_mode_selection_and_invalid_matcher_signals",
+            r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (insert "plain text")
                            (setq
@@ -304,10 +289,11 @@ fn auto_minor_mode_magic_function_runs_after_major_mode_selection_and_invalid_ma
                                  (auto-minor-mode--run-magic
                                   '((17
                                      . auto-minor-mode-test-beta-mode))
-                                  nil))))))"##;
-    let expect = expect![
+                                  nil))))))"##,
+            true,
+            expect![
         "OK ((text-mode t ((:alpha 1 t 1 text-mode))) (:signal wrong-type-argument (stringp 17)))"
-    ];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }

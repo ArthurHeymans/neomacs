@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AUTH_SOURCE_KEYTAR_MELPA_PIN, CachedMelpaOracle, KEYTAR_MELPA_PIN, S_MELPA_PIN};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod backend;
 mod enable;
 mod parsing;
@@ -68,5 +70,29 @@ pub(crate) fn assert_auth_source_keytar_autoload_parity(elisp_form: &str, expect
         "auth-source-keytar-autoloads.el",
         elisp_form,
         expected,
+    );
+}
+
+
+
+/// Multi-probe batch for `assert_auth_source_keytar_autoload_parity` cases (2a).
+pub(crate) fn assert_auth_source_keytar_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auth_source_keytar_oracle("auth-source-keytar-autoloads.el"),
+        &name,
+        "auth_source_keytar_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_auth_source_keytar_parity` cases (2a).
+pub(crate) fn assert_auth_source_keytar_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auth_source_keytar_oracle("auth-source-keytar.el"),
+        &name,
+        "auth_source_keytar_parity",
+        cases,
     );
 }

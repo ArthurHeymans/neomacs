@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_all_the_icons_ivy_rich_parity;
+use super::assert_all_the_icons_ivy_rich_batch;
 
 #[test]
-fn real_local_file_reports_exact_size_time_modes_and_per_character_privilege_faces() {
-    let elisp_form = r##"(let* ((root
+fn files_public_surface_batch() {
+    assert_all_the_icons_ivy_rich_batch(&[
+        (
+            "real_local_file_reports_exact_size_time_modes_and_per_character_privilege_faces",
+            r##"(let* ((root
                      (expand-file-name
                       "all-the-icons-ivy-rich-metadata"
                       (getenv "TMPDIR")))
@@ -38,17 +41,15 @@ fn real_local_file_reports_exact_size_time_modes_and_per_character_privilege_fac
                           0
                           (1- (length modes)))))))
                  (when (file-exists-p root)
-                   (delete-directory root t))))"##;
-    let expect = expect![[
+                   (delete-directory root t))))"##,
+            true,
+            expect![[
         r#"OK ("10" "Jan 02 12:34" "" "-rwxr-xr--" (all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-read all-the-icons-ivy-rich-file-priv-write all-the-icons-ivy-rich-file-priv-exec all-the-icons-ivy-rich-file-priv-read all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-exec all-the-icons-ivy-rich-file-priv-read all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no))"#
-    ]];
-
-    assert_all_the_icons_ivy_rich_parity(elisp_form, expect);
-}
-
-#[test]
-fn missing_and_remote_files_short_circuit_every_metadata_lookup_without_io() {
-    let elisp_form = r##"(let ((missing
+    ]],
+        ),
+        (
+            "missing_and_remote_files_short_circuit_every_metadata_lookup_without_io",
+            r##"(let ((missing
                     (expand-file-name
                      "does-not-exist"
                      (getenv "TMPDIR")))
@@ -65,18 +66,13 @@ fn missing_and_remote_files_short_circuit_every_metadata_lookup_without_io() {
                     (all-the-icons-ivy-rich--file-modification-time
                      path)))
                  (list missing remote))
-                (file-exists-p missing)))"##;
-    let expect =
-        expect![[r#"OK (((nil "" "" "" "") ("/ssh:neomacs-parity.invalid:" "" "" "" "")) nil)"#]];
-
-    assert_all_the_icons_ivy_rich_parity(elisp_form, expect);
-}
-
-#[test]
-fn counsel_file_candidate_resolves_a_real_symlink_and_preserves_ivy_faces() {
-    // Current Neomacs divergence: `file-attributes` follows this symlink and
-    // reports the 20-byte target, while GNU Emacs reports the 9-byte link.
-    let elisp_form = r##"(let* ((root
+                (file-exists-p missing)))"##,
+            true,
+            expect![[r#"OK (((nil "" "" "" "") ("/ssh:neomacs-parity.invalid:" "" "" "" "")) nil)"#]],
+        ),
+        (
+            "counsel_file_candidate_resolves_a_real_symlink_and_preserves_ivy_faces",
+            r##"(let* ((root
                      (file-name-as-directory
                       (expand-file-name
                        "all-the-icons-ivy-rich-symlink"
@@ -112,17 +108,15 @@ fn counsel_file_candidate_resolves_a_real_symlink_and_preserves_ivy_faces() {
                          (all-the-icons-ivy-rich-file-modes
                           "link.el")))))
                  (when (file-exists-p root)
-                   (delete-directory root t))))"##;
-    let expect = expect![[
+                   (delete-directory root t))))"##,
+            true,
+            expect![[
         r#"OK ("link.el -> target.el" nil all-the-icons-ivy-rich-doc-face "9" "lrwxrwxrwx")"#
-    ]];
-
-    assert_all_the_icons_ivy_rich_parity(elisp_form, expect);
-}
-
-#[test]
-fn project_root_respects_disabled_remote_and_builtin_project_boundaries() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "project_root_respects_disabled_remote_and_builtin_project_boundaries",
+            r##"(let* ((root
                      (file-name-as-directory
                       (expand-file-name
                        "all-the-icons-ivy-rich-project"
@@ -146,17 +140,15 @@ fn project_root_respects_disabled_remote_and_builtin_project_boundaries() {
                               "/ssh:neomacs-parity.invalid:/workspace/"))
                         (all-the-icons-ivy-rich--project-root))))
                  (when (file-exists-p root)
-                   (delete-directory root t))))"##;
-    let expect = expect![[
+                   (delete-directory root t))))"##,
+            true,
+            expect![[
         r#"OK ("all-the-icons-ivy-rich-project/" nil "/ssh:neomacs-parity.invalid:/workspace/")"#
-    ]];
-
-    assert_all_the_icons_ivy_rich_parity(elisp_form, expect);
-}
-
-#[test]
-fn project_columns_read_real_candidate_metadata_from_the_detected_root() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "project_columns_read_real_candidate_metadata_from_the_detected_root",
+            r##"(let* ((root
                      (file-name-as-directory
                       (expand-file-name
                        "all-the-icons-ivy-rich-project-columns"
@@ -191,16 +183,13 @@ fn project_columns_read_real_candidate_metadata_from_the_detected_root() {
                       (all-the-icons-ivy-rich-project-file-id
                        "lib/main.rs")))
                  (when (file-exists-p root)
-                   (delete-directory root t))))"##;
-    let expect =
-        expect![[r#"OK (#("lib/" 0 4 (face ivy-subdir)) "lib/main.rs" "-rw-r-----" "13" "")"#]];
-
-    assert_all_the_icons_ivy_rich_parity(elisp_form, expect);
-}
-
-#[test]
-fn project_transformer_distinguishes_directory_unvisited_and_visited_real_files() {
-    let elisp_form = r##"(let* ((root
+                   (delete-directory root t))))"##,
+            true,
+            expect![[r#"OK (#("lib/" 0 4 (face ivy-subdir)) "lib/main.rs" "-rw-r-----" "13" "")"#]],
+        ),
+        (
+            "project_transformer_distinguishes_directory_unvisited_and_visited_real_files",
+            r##"(let* ((root
                      (file-name-as-directory
                       (expand-file-name
                        "all-the-icons-ivy-rich-project-transformer"
@@ -256,16 +245,13 @@ fn project_transformer_distinguishes_directory_unvisited_and_visited_real_files(
                  (when (buffer-live-p buffer)
                    (kill-buffer buffer))
                  (when (file-exists-p root)
-                   (delete-directory root t))))"##;
-    let expect =
-        expect![[r#"OK (("src/" ivy-subdir) ("src/core.el" ivy-virtual) ("src/core.el" nil) t)"#]];
-
-    assert_all_the_icons_ivy_rich_parity(elisp_form, expect);
-}
-
-#[test]
-fn file_mode_cache_reuses_one_propertized_mode_string_across_matching_files() {
-    let elisp_form = r##"(let* ((root
+                   (delete-directory root t))))"##,
+            true,
+            expect![[r#"OK (("src/" ivy-subdir) ("src/core.el" ivy-virtual) ("src/core.el" nil) t)"#]],
+        ),
+        (
+            "file_mode_cache_reuses_one_propertized_mode_string_across_matching_files",
+            r##"(let* ((root
                      (expand-file-name
                       "all-the-icons-ivy-rich-mode-cache"
                       (getenv "TMPDIR")))
@@ -305,10 +291,11 @@ fn file_mode_cache_reuses_one_propertized_mode_string_across_matching_files() {
                           0
                           (1- (length first)))))))
                  (when (file-exists-p root)
-                   (delete-directory root t))))"##;
-    let expect = expect![[
+                   (delete-directory root t))))"##,
+            true,
+            expect![[
         r#"OK ("-rw-------" t t 1 (all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-read all-the-icons-ivy-rich-file-priv-write all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no))"#
-    ]];
-
-    assert_all_the_icons_ivy_rich_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

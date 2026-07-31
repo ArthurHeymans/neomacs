@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_aggressive_fill_paragraph_parity;
+use super::assert_aggressive_fill_paragraph_batch;
 
 #[test]
-fn aggressive_fill_paragraph_real_space_command_reflows_and_undo_restores_prose() {
-    let elisp_form = r##"(with-temp-buffer
+fn editing_public_surface_batch() {
+    assert_aggressive_fill_paragraph_batch(&[
+        (
+            "aggressive_fill_paragraph_real_space_command_reflows_and_undo_restores_prose",
+            r##"(with-temp-buffer
                            (text-mode)
                            (buffer-enable-undo)
                            (setq
@@ -56,17 +59,15 @@ fn aggressive_fill_paragraph_real_space_command_reflows_and_undo_restores_prose(
                                 (equal
                                  original
                                  (buffer-string))
-                                buffer-undo-list))))"##;
-    let expect = expect![[
+                                buffer-undo-list))))"##,
+            true,
+            expect![[
         r#"OK (t "Release notes explain how parser\nrecovery prevents data loss while\npreserving request order across every\nretry. " 113 4 7 32 "Release notes explain how parser recovery prevents data loss while preserving request order across every retry." 112 t nil)"#
-    ]];
-
-    assert_aggressive_fill_paragraph_parity(elisp_form, expect);
-}
-
-#[test]
-fn aggressive_fill_paragraph_real_commands_fill_comments_without_reformatting_code() {
-    let elisp_form = r####"(with-temp-buffer
+    ]],
+        ),
+        (
+            "aggressive_fill_paragraph_real_commands_fill_comments_without_reformatting_code",
+            r####"(with-temp-buffer
                             (emacs-lisp-mode)
                             (setq
                              fill-column
@@ -116,10 +117,11 @@ fn aggressive_fill_paragraph_real_commands_fill_comments_without_reformatting_co
                                 (point)
                                 (line-number-at-pos)
                                 (current-column))
-                               aggressive-fill-paragraph-mode)))"####;
-    let expect = expect![[
+                               aggressive-fill-paragraph-mode)))"####,
+            true,
+            expect![[
         r#"OK ("(defun publish-result (result)\n  ;; Explain why the parser retries the\n  ;; request while preserving the original\n  ;; ordering guarantee. \n  (message \"result=%S and this source form must remain on one line\" result)) " (140 4 25) (218 5 77) t)"#
-    ]];
-
-    assert_aggressive_fill_paragraph_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

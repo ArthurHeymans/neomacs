@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_exuberant_ctags_parity;
+use super::assert_auto_complete_exuberant_ctags_batch;
 
 #[test]
-fn auto_complete_exuberant_ctags_finds_tags_in_current_project_directory() {
-    let elisp_form = r##"(let* ((root
+fn discovery_public_surface_batch() {
+    assert_auto_complete_exuberant_ctags_batch(&[
+        (
+            "auto_complete_exuberant_ctags_finds_tags_in_current_project_directory",
+            r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "current-project"))
                                 (tags
@@ -14,15 +17,13 @@ fn auto_complete_exuberant_ctags_finds_tags_in_current_project_directory() {
                             "main\tmain.c\tkind:f\tlanguage:C\n")
                            (auto-complete-exuberant-ctags-test-relative
                             (ac-exuberant-ctags-find-tag-file root)
-                            root))"##;
-    let expect = expect![[r#"OK "./""#]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_walks_multiple_ancestors_to_project_root() {
-    let elisp_form = r##"(let* ((root
+                            root))"##,
+            true,
+            expect![[r#"OK "./""#]],
+        ),
+        (
+            "auto_complete_exuberant_ctags_walks_multiple_ancestors_to_project_root",
+            r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "ancestor-project"))
                                 (nested
@@ -35,15 +36,13 @@ fn auto_complete_exuberant_ctags_walks_multiple_ancestors_to_project_root() {
                             "Widget\twidget.rs\tkind:s\tlanguage:Rust\n")
                            (auto-complete-exuberant-ctags-test-relative
                             (ac-exuberant-ctags-find-tag-file nested)
-                            root))"##;
-    let expect = expect![[r#"OK "./""#]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_search_limit_includes_exact_boundary_only() {
-    let elisp_form = r##"(let* ((root
+                            root))"##,
+            true,
+            expect![[r#"OK "./""#]],
+        ),
+        (
+            "auto_complete_exuberant_ctags_search_limit_includes_exact_boundary_only",
+            r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "search-boundary"))
                                 (nested
@@ -59,15 +58,13 @@ fn auto_complete_exuberant_ctags_search_limit_includes_exact_boundary_only() {
                                 (auto-complete-exuberant-ctags-test-relative
                                  (ac-exuberant-ctags-find-tag-file nested)
                                  root)))
-                            '(0 1 2 3 4)))"##;
-    let expect = expect![[r#"OK (nil nil nil "./" "./")"#]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_custom_filename_selects_only_requested_database() {
-    let elisp_form = r##"(let* ((root
+                            '(0 1 2 3 4)))"##,
+            true,
+            expect![[r#"OK (nil nil nil "./" "./")"#]],
+        ),
+        (
+            "auto_complete_exuberant_ctags_custom_filename_selects_only_requested_database",
+            r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "custom-name"))
                                 (nested
@@ -83,15 +80,13 @@ fn auto_complete_exuberant_ctags_custom_filename_selects_only_requested_database
                             "right")
                            (auto-complete-exuberant-ctags-test-relative
                             (ac-exuberant-ctags-find-tag-file nested)
-                            root))"##;
-    let expect = expect![[r#"OK "./""#]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_get_tag_file_returns_path_and_records_directory() {
-    let elisp_form = r##"(let* ((root
+                            root))"##,
+            true,
+            expect![[r#"OK "./""#]],
+        ),
+        (
+            "auto_complete_exuberant_ctags_get_tag_file_returns_path_and_records_directory",
+            r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "get-tag-file"))
                                 (nested
@@ -109,15 +104,13 @@ fn auto_complete_exuberant_ctags_get_tag_file_returns_path_and_records_directory
                              root)
                             (auto-complete-exuberant-ctags-test-relative
                              ac-exuberant-ctags-tag-file-dir
-                             root)))"##;
-    let expect = expect![[r#"OK ("tags" "./")"#]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_missing_file_preserves_stale_directory_state() {
-    let elisp_form = r##"(let* ((root
+                             root)))"##,
+            true,
+            expect![[r#"OK ("tags" "./")"#]],
+        ),
+        (
+            "auto_complete_exuberant_ctags_missing_file_preserves_stale_directory_state",
+            r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "missing-tag-file"))
                                 (empty
@@ -130,15 +123,13 @@ fn auto_complete_exuberant_ctags_missing_file_preserves_stale_directory_state() 
                            (make-directory empty t)
                            (list
                             (ac-exuberant-ctags-get-tag-file)
-                            ac-exuberant-ctags-tag-file-dir))"##;
-    let expect = expect![[r#"OK (nil "stale-project/")"#]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_ignores_unrelated_sibling_tag_files() {
-    let elisp_form = r##"(let* ((root
+                            ac-exuberant-ctags-tag-file-dir))"##,
+            true,
+            expect![[r#"OK (nil "stale-project/")"#]],
+        ),
+        (
+            "auto_complete_exuberant_ctags_ignores_unrelated_sibling_tag_files",
+            r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "sibling-projects"))
                                 (left
@@ -156,8 +147,9 @@ fn auto_complete_exuberant_ctags_ignores_unrelated_sibling_tag_files() {
                             (auto-complete-exuberant-ctags-test-relative
                              (ac-exuberant-ctags-find-tag-file left)
                              root)
-                            (ac-exuberant-ctags-find-tag-file right)))"##;
-    let expect = expect![[r#"OK ("left/" nil)"#]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
+                            (ac-exuberant-ctags-find-tag-file right)))"##,
+            true,
+            expect![[r#"OK ("left/" nil)"#]],
+        ),
+    ]);
 }

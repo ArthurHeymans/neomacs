@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ARDUINO_MODE_FLYCHECK_MELPA_PIN, ARDUINO_MODE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod ede_makefile;
 mod ede_preferences;
 mod ede_projects;
@@ -226,4 +228,69 @@ pub(crate) fn assert_ob_arduino_parity(elisp_form: &str, expected: Expect) {
 
 pub(crate) fn assert_ob_arduino_signal_parity(elisp_form: &str, expected: Expect) {
     assert_arduino_source_signal_parity("ob-arduino.el", elisp_form, expected);
+}
+
+
+
+
+
+
+
+
+
+
+
+/// Multi-probe batch for `assert_arduino_init_parity` cases (2a).
+pub(crate) fn assert_arduino_init_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        arduino_mode_oracle("arduino-mode-init.el"),
+        &name,
+        "arduino_init_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_arduino_mode_parity` cases (2a).
+pub(crate) fn assert_arduino_mode_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        arduino_mode_oracle("arduino-mode.el"),
+        &name,
+        "arduino_mode_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_ede_arduino_parity` cases (2a).
+pub(crate) fn assert_ede_arduino_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        arduino_mode_oracle("ede-arduino.el"),
+        &name,
+        "ede_arduino_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_flycheck_arduino_parity` cases (2a).
+pub(crate) fn assert_flycheck_arduino_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        arduino_mode_oracle("flycheck-arduino.el"),
+        &name,
+        "flycheck_arduino_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_ob_arduino_parity` cases (2a).
+pub(crate) fn assert_ob_arduino_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        arduino_mode_oracle("ob-arduino.el"),
+        &name,
+        "ob_arduino_parity",
+        cases,
+    );
 }

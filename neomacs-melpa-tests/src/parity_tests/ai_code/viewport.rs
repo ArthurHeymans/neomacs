@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_ai_code_parity;
+use super::assert_ai_code_batch;
 
 #[test]
-fn viewport_request_protocol_decodes_versioned_regular_and_staging_payloads() {
-    let elisp_form = r##"
+fn viewport_public_surface_batch() {
+    assert_ai_code_batch(&[
+        (
+            "viewport_request_protocol_decodes_versioned_regular_and_staging_payloads",
+            r##"
 (progn
   (require 'ai-code-editor-viewport)
   (let ((encode
@@ -25,16 +28,15 @@ fn viewport_request_protocol_decodes_versioned_regular_and_staging_payloads() {
        (list "/status/two" "/repo" "1"
              ai-code-editor-viewport--request-version
              "staging" "--" "-literal-name.txt"))))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ((:status-file "/status/one" :directory "/repo" :submit-p nil :staging-request-p nil :arguments ("+42:7" "src/lib.rs")) (:status-file "/status/two" :directory "/repo" :submit-p t :staging-request-p t :arguments ("--" "-literal-name.txt")))"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn viewport_request_protocol_validates_malformed_intent_kind_and_field_count() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "viewport_request_protocol_validates_malformed_intent_kind_and_field_count",
+            r##"
 (progn
   (require 'ai-code-editor-viewport)
   (let ((encode
@@ -53,16 +55,15 @@ fn viewport_request_protocol_validates_malformed_intent_kind_and_field_count() {
       (list "/status" "/repo" "0"
             ai-code-editor-viewport--request-version "unknown")
       '("/status" "/repo" "0")))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ((error "Invalid AI Code editor submit intent") (error "Invalid AI Code editor request kind") (error "Malformed AI Code editor request"))"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn viewport_file_arguments_apply_positions_once_and_respect_double_dash() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "viewport_file_arguments_apply_positions_once_and_respect_double_dash",
+            r##"
 (progn
   (require 'ai-code-editor-viewport)
   (mapcar
@@ -75,16 +76,15 @@ fn viewport_file_arguments_apply_positions_once_and_respect_double_dash() {
     "/workspace/project/"
     '("--wait" "+12:4" "src/api.el" "README.md"
       "+7" "src/model.el" "--" "+literal.el" "-draft.txt"))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("api.el" 12 4) ("README.md" nil nil) ("model.el" 7 nil) ("+literal.el" nil nil) ("-draft.txt" nil nil))"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn viewport_status_file_is_scoped_and_writes_submit_token_atomically() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "viewport_status_file_is_scoped_and_writes_submit_token_atomically",
+            r##"
 (progn
   (require 'ai-code-editor-viewport)
   (let* ((root (make-temp-file "ai-code-viewport-status-" t))
@@ -109,14 +109,13 @@ fn viewport_status_file_is_scoped_and_writes_submit_token_atomically() {
              (error (error-message-string err)))))
       (delete-directory root t)
       (delete-file outside))))
-"##;
-    let expect = expect![[r#"OK (t nil "0 1 submit-7\n" "Invalid AI Code editor submit token")"#]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn viewport_attachment_references_are_repo_relative_and_external_absolute() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect![[r#"OK (t nil "0 1 submit-7\n" "Invalid AI Code editor submit token")"#]],
+        ),
+        (
+            "viewport_attachment_references_are_repo_relative_and_external_absolute",
+            r##"
 (progn
   (require 'ai-code-editor-viewport)
   (require 'ai-code-editor-viewport-attachments)
@@ -143,16 +142,15 @@ fn viewport_attachment_references_are_repo_relative_and_external_absolute() {
                 arguments)))))
       (delete-directory root t)
       (delete-file outside))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("@notes/design.txt" t ("--output" "$ROOT//notes/design.txt" "--format=$ROOT//notes/design.txt"))"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn viewport_attachment_serialization_spaces_adjacent_images_without_mutation() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "viewport_attachment_serialization_spaces_adjacent_images_without_mutation",
+            r##"
 (progn
   (require 'ai-code-editor-viewport)
   (require 'ai-code-editor-viewport-attachments)
@@ -178,9 +176,11 @@ fn viewport_attachment_serialization_spaces_adjacent_images_without_mutation() {
         (current-buffer))
        before
        (buffer-string)))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("Compare @first.png with @second.png now" #("Compare@first.pngwith@second.pngnow" 7 17 (ai-code-editor-viewport-file #1="/repo/first.png" ai-code-editor-viewport-image first) 21 32 (ai-code-editor-viewport-file #2="/repo/second.png" ai-code-editor-viewport-image second)) #("Compare@first.pngwith@second.pngnow" 7 17 (ai-code-editor-viewport-file #1# ai-code-editor-viewport-image first) 21 32 (ai-code-editor-viewport-file #2# ai-code-editor-viewport-image second)))"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

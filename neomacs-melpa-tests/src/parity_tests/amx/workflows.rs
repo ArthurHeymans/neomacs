@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_amx_parity;
+use super::assert_amx_batch;
 
 /// Turning on `amx-mode' is the whole installation: it initializes the ranking
 /// cache from the (empty) save file, remaps `execute-extended-command' so `M-x'
@@ -9,9 +9,13 @@ use super::assert_amx_parity;
 /// commands are ordered by the two remaining rules -- shortest name first, ties
 /// alphabetically.  Turning the mode off gives `M-x' back and removes the
 /// auto-save hook.
+
 #[test]
-fn enabling_amx_mode_takes_over_m_x_and_ranks_the_commands_it_finds() {
-    let elisp_form = r##"(unwind-protect
+fn workflows_public_surface_batch() {
+    assert_amx_batch(&[
+        (
+            "enabling_amx_mode_takes_over_m_x_and_ranks_the_commands_it_finds",
+            r##"(unwind-protect
     (progn
       (amx-test-setup)
       (let ((before (list :m-x (key-binding (kbd "M-x"))
@@ -38,25 +42,15 @@ fn enabling_amx_mode_takes_over_m_x_and_ranks_the_commands_it_finds() {
                                         [remap execute-extended-command])
                                 :auto-save (and (memq 'amx-save-to-file auto-save-hook) t)
                                 :still-initialized amx-initialized)))))
-  (amx-test-cleanup))"##;
-
-    let expect = expect![
+  (amx-test-cleanup))"##,
+            true,
+            expect![
         "OK (:before (:m-x execute-extended-command :remap 1 :initialized nil :auto-save nil) :enabled (:m-x amx :remap amx :initialized t :auto-save t :kill-emacs t :order ((amx-probe-open) (amx-probe-quit) (amx-probe-zoom) (amx-probe-close) (amx-probe-refresh)) :data nil :history nil :save-file-written no-save-file) :disabled (:m-x execute-extended-command :remap nil :auto-save nil :still-initialized t))"
-    ];
-
-    assert_amx_parity(elisp_form, expect);
-}
-
-/// The point of the package: commands the user runs often rise to the top.
-/// After a session of six invocations the cache is ordered by run count, the
-/// counts are recorded in `amx-data', and the most recent three commands are
-/// remembered in `amx-history'.  `amx-sort-according-to-cache' -- what the
-/// major-mode command list is filtered through -- reports any subset in the
-/// same ranked order, and a command run once more moves ahead of one with the
-/// same count.
-#[test]
-fn a_session_of_command_invocations_reorders_the_ranked_list() {
-    let elisp_form = r##"(unwind-protect
+    ],
+        ),
+        (
+            "a_session_of_command_invocations_reorders_the_ranked_list",
+            r##"(unwind-protect
     (progn
       (amx-test-setup)
       (amx-mode 1)
@@ -78,24 +72,15 @@ fn a_session_of_command_invocations_reorders_the_ranked_list() {
                 :after-more-use (list :order (amx-test-order)
                                       :data (copy-tree amx-data)
                                       :history (copy-sequence amx-history))))))
-  (amx-test-cleanup))"##;
-
-    let expect = expect![[
+  (amx-test-cleanup))"##,
+            true,
+            expect![[
         r#"OK (:initial ((amx-probe-open) (amx-probe-quit) (amx-probe-zoom) (amx-probe-close) (amx-probe-refresh)) :ranked (:order ((amx-probe-open . 1) (amx-probe-close . 2) (amx-probe-zoom . 3) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 3) (amx-probe-close . 2) (amx-probe-open . 1)) :history (amx-probe-open amx-probe-close amx-probe-zoom) :subset (amx-probe-open amx-probe-zoom amx-probe-quit amx-probe-refresh) :default "amx-probe-open") :after-more-use (:order ((amx-probe-open . 3) (amx-probe-close . 2) (amx-probe-zoom . 3) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 3) (amx-probe-close . 2) (amx-probe-open . 3)) :history (amx-probe-open amx-probe-close amx-probe-zoom)))"#
-    ]];
-
-    assert_amx_parity(elisp_form, expect);
-}
-
-/// The ranking is meant to survive a restart.  Under `emacs -Q' amx refuses to
-/// write anything and says so in a warning -- which is exactly the state a
-/// batch editor is in -- so the workflow first pins that refusal, then saves as
-/// a configured editor would, pins the file's exact contents, throws away
-/// everything amx knows, and re-initializes: the counts, the history and the
-/// resulting order all come back from disk.
-#[test]
-fn the_save_file_round_trips_the_ranking_into_a_fresh_session() {
-    let elisp_form = r##"(unwind-protect
+    ]],
+        ),
+        (
+            "the_save_file_round_trips_the_ranking_into_a_fresh_session",
+            r##"(unwind-protect
     (progn
       (amx-test-setup)
       (amx-mode 1)
@@ -123,24 +108,15 @@ fn the_save_file_round_trips_the_ranking_into_a_fresh_session() {
                                   :data (copy-tree amx-data)
                                   :history (copy-sequence amx-history)
                                   :initialized amx-initialized))))))
-  (amx-test-cleanup))"##;
-
-    let expect = expect![[
+  (amx-test-cleanup))"##,
+            true,
+            expect![[
         r#"OK (:refused (:init-file-user nil :file no-save-file :warnings ("Warning (amx): Not saving amx state from \"emacs -Q\".")) :saved (:file "\n;; ----- amx-history -----\n(\n amx-probe-open\n amx-probe-close\n amx-probe-zoom\n)\n\n;; ----- amx-data -----\n(\n (amx-probe-zoom . 3)\n (amx-probe-close . 2)\n (amx-probe-open . 1)\n)\n" :order ((amx-probe-open . 1) (amx-probe-close . 2) (amx-probe-zoom . 3) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 3) (amx-probe-close . 2) (amx-probe-open . 1)) :history (amx-probe-open amx-probe-close amx-probe-zoom)) :forgotten (:cache nil :data nil :history nil) :restored (:order ((amx-probe-open . 1) (amx-probe-close . 2) (amx-probe-zoom . 3) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 3) (amx-probe-close . 2) (amx-probe-open . 1)) :history (amx-probe-open amx-probe-close amx-probe-zoom) :initialized t))"#
-    ]];
-
-    assert_amx_parity(elisp_form, expect);
-}
-
-/// Commands a user never types at `M-x' are kept out of the completion list:
-/// `self-insert-command' and the `menu-bar' commands by the default regexps,
-/// mouse-only commands by their `interactive' spec, and anything the user
-/// hides with `amx-ignore-command'.  Ignoring a command also moves the
-/// default -- what `RET' would accept -- past it, and `amx-unignore-command'
-/// undoes all of it.
-#[test]
-fn ignored_commands_are_hidden_from_completion_and_can_be_unignored() {
-    let elisp_form = r##"(unwind-protect
+    ]],
+        ),
+        (
+            "ignored_commands_are_hidden_from_completion_and_can_be_unignored",
+            r##"(unwind-protect
     (progn
       (amx-test-setup)
       (amx-mode 1)
@@ -170,24 +146,15 @@ fn ignored_commands_are_hidden_from_completion_and_can_be_unignored() {
                                                  t)
                                  :property (get 'amx-probe-open 'amx-ignored)
                                  :default (amx-get-default amx-cache))))))
-  (amx-test-cleanup))"##;
-
-    let expect = expect![[
+  (amx-test-cleanup))"##,
+            true,
+            expect![[
         r#"OK (:defaults (:matchers ("\\`self-insert-command\\'" "\\`self-insert-and-exit\\'" "\\`ad-Orig-" "\\`menu-bar" "\\`kill-emacs\\'" amx-command-marked-ignored-p amx-command-obsolete-p amx-command-mouse-interactive-p) :ignored ((self-insert-command . t) (menu-bar-open . t) (kill-emacs . t) (amx-probe-mouse . t) (amx-probe-open) (amx-probe-helper)) :order ((amx-probe-open . 1) (amx-probe-close . 1) (amx-probe-zoom . 1) (amx-probe-quit) (amx-probe-refresh)) :default "amx-probe-open") :ignored (:ignored-p t :property t :marked-p t :still-in-cache t :default "amx-probe-close") :unignored (:ignored-p nil :property nil :default "amx-probe-open"))"#
-    ]];
-
-    assert_amx_parity(elisp_form, expect);
-}
-
-/// A command defined after amx started -- by loading a package, say -- has to
-/// appear in the list.  `amx-detect-new-commands' notices the obarray grew,
-/// `amx-update-if-needed' rebuilds only when asked to count, and the rebuilt
-/// cache places the newcomer by the sorting rules while every previously
-/// recorded count survives the rebuild.  Command counts are editor-specific, so
-/// only the change in count is pinned, never the count itself.
-#[test]
-fn commands_defined_during_the_session_are_detected_and_folded_into_the_ranking() {
-    let elisp_form = r##"(unwind-protect
+    ]],
+        ),
+        (
+            "commands_defined_during_the_session_are_detected_and_folded_into_the_ranking",
+            r##"(unwind-protect
     (progn
       (amx-test-setup)
       (amx-mode 1)
@@ -215,11 +182,11 @@ fn commands_defined_during_the_session_are_detected_and_folded_into_the_ranking(
                           :order (amx-test-order)
                           :data (copy-tree amx-data)
                           :history (copy-sequence amx-history))))))))
-  (amx-test-cleanup))"##;
-
-    let expect = expect![
+  (amx-test-cleanup))"##,
+            true,
+            expect![
         "OK (:steady (:detected-again nil :order ((amx-probe-open . 1) (amx-probe-close . 1) (amx-probe-zoom . 2) (amx-probe-quit) (amx-probe-refresh))) :detection (:detected t :delta 1 :in-cache nil) :without-counting nil :after-counting (:newcomer t :latecomer t :order ((amx-probe-open . 1) (amx-probe-close . 1) (amx-probe-zoom . 2) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 2) (amx-probe-close . 1) (amx-probe-open . 1)) :history (amx-probe-open amx-probe-close amx-probe-zoom)))"
-    ];
-
-    assert_amx_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }

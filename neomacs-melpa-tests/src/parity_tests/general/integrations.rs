@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_general_parity;
+use super::assert_general_batch;
 
 #[test]
-fn general_use_package_keyword_accepts_primary_positional_and_repeated_forms() {
-    let elisp_form = r##"(progn
+fn integrations_public_surface_batch() {
+    assert_general_batch(&[
+        (
+            "general_use_package_keyword_accepts_primary_positional_and_repeated_forms",
+            r##"(progn
                (require 'use-package)
                (defvar
                  neomacs-general-use-package-map
@@ -35,15 +38,13 @@ fn general_use_package_keyword_accepts_primary_positional_and_repeated_forms() {
                  (kbd "b"))
                 (lookup-key
                  neomacs-general-use-package-map
-                 (kbd "c"))))"##;
-    let expect = expect![[r#"OK (forward-char backward-char next-line)"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_ghook_keyword_infers_mode_functions_and_supports_explicit_lists() {
-    let elisp_form = r##"(progn
+                 (kbd "c"))))"##,
+            true,
+            expect![[r#"OK (forward-char backward-char next-line)"#]],
+        ),
+        (
+            "general_ghook_keyword_infers_mode_functions_and_supports_explicit_lists",
+            r##"(progn
                (require 'use-package)
                (defvar
                  neomacs-general-hook-a nil)
@@ -72,17 +73,15 @@ fn general_ghook_keyword_infers_mode_functions_and_supports_explicit_lists() {
                   t))
                (list
                 neomacs-general-hook-a
-                neomacs-general-hook-b))"##;
-    let expect = expect![[
+                neomacs-general-hook-b))"##,
+            true,
+            expect![[
         r#"OK ((neomacs-general-fake-mode forward-char backward-char) (neomacs-general-fake-mode))"#
-    ]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_gfhook_keyword_infers_hook_names_and_preserves_append_order() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "general_gfhook_keyword_infers_hook_names_and_preserves_append_order",
+            r##"(progn
                (require 'use-package)
                (defvar
                  neomacs-general-fake-mode-hook nil)
@@ -109,10 +108,11 @@ fn general_gfhook_keyword_infers_hook_names_and_preserves_append_order() {
                     beginning-of-line)))
                (list
                 neomacs-general-fake-mode-hook
-                neomacs-general-other-hook))"##;
-    let expect = expect![[
+                neomacs-general-other-hook))"##,
+            true,
+            expect![[
         r#"OK ((backward-char forward-char next-line) (beginning-of-line previous-line))"#
-    ]];
-
-    assert_general_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

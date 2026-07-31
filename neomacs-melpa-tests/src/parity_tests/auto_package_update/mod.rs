@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AUTO_PACKAGE_UPDATE_MELPA_PIN, CachedMelpaOracle, DASH_MELPA_PIN};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod buffers;
 mod install;
 mod registry;
@@ -254,5 +256,29 @@ pub(crate) fn assert_auto_package_update_autoload_parity(elisp_form: &str, expec
         "auto-package-update-autoloads.el",
         elisp_form,
         expected,
+    );
+}
+
+
+
+/// Multi-probe batch for `assert_auto_package_update_autoload_parity` cases (2a).
+pub(crate) fn assert_auto_package_update_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_package_update_oracle("auto-package-update-autoloads.el"),
+        &name,
+        "auto_package_update_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_auto_package_update_parity` cases (2a).
+pub(crate) fn assert_auto_package_update_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_package_update_oracle("auto-package-update.el"),
+        &name,
+        "auto_package_update_parity",
+        cases,
     );
 }

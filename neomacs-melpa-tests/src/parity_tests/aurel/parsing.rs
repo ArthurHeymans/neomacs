@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_aurel_parity;
+use super::assert_aurel_batch;
 
 #[test]
-fn aurel_aur_json_interprets_error_empty_info_and_search_shapes() {
-    let elisp_form = r##"(let ((responses
+fn parsing_public_surface_batch() {
+    assert_aurel_batch(&[
+        (
+            "aurel_aur_json_interprets_error_empty_info_and_search_shapes",
+            r##"(let ((responses
                 '((("type" . "error")
                    ("error" . "bad request")
                    ("resultcount" . 0))
@@ -36,16 +39,15 @@ fn aurel_aur_json_interprets_error_empty_info_and_search_shapes() {
             (aurel-get-aur-packages-info
              "fixture:info")
             (aurel-get-aur-packages-info
-             "fixture:search"))))"##;
-    let expect = expect![[
+             "fixture:search"))))"##,
+            true,
+            expect![[
         r#"OK ((:error error ("ERROR from AUR server: bad request")) nil ((("Name" . "emacs-git") ("ID" . 41))) ((("Name" . "one")) (("Name" . "two"))))"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_parameter_maps_round_trip_known_and_unknown_names() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "aurel_parameter_maps_round_trip_known_and_unknown_names",
+            r##"(list
          (mapcar
           (lambda (symbol)
             (list
@@ -85,16 +87,15 @@ fn aurel_parameter_maps_round_trip_known_and_unknown_names() {
           '("Name"
             "Optional Deps"
             "Installed Size"
-            "Missing")))"##;
-    let expect = expect![[
+            "Missing")))"##,
+            true,
+            expect![[
         r#"OK (((name "Name") (pkg-url "URLPath") (depends-make "MakeDepends") (missing nil)) (("Name" name) ("URLPath" pkg-url) ("MakeDepends" depends-make) ("Missing" nil)) ((installed-name "Name") (depends-opt "Optional Deps") (installed-size "Installed Size") (missing nil)) (("Name" installed-name) ("Optional Deps" depends-opt) ("Installed Size" installed-size) ("Missing" nil)))"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_filter_intern_keeps_known_fields_and_reports_unknown_once() {
-    let elisp_form = r##"(let (messages)
+    ]],
+        ),
+        (
+            "aurel_filter_intern_keeps_known_fields_and_reports_unknown_once",
+            r##"(let (messages)
          (cl-letf
              (((symbol-function 'message)
                (lambda (format-string &rest arguments)
@@ -115,16 +116,15 @@ fn aurel_filter_intern_keeps_known_fields_and_reports_unknown_once() {
              '(("Name" . "demo")
                ("Version" . "1.2")
                ("UnknownField" . "drop")))
-            (nreverse messages))))"##;
-    let expect = expect![[
+            (nreverse messages))))"##,
+            true,
+            expect![[
         r#"OK (((name . "demo") (votes . 17) (description)) ((installed-name . "demo") (installed-version . "1.2")) ("Warning: unknown parameter `UnknownField'. It will be omitted."))"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_pacman_name_parser_returns_matching_names_in_scan_reverse_order() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "aurel_pacman_name_parser_returns_matching_names_in_scan_reverse_order",
+            r##"(with-temp-buffer
          (insert
           "alpha 1.0-1\n"
           "c++-headers 2.0\n"
@@ -135,14 +135,13 @@ fn aurel_pacman_name_parser_returns_matching_names_in_scan_reverse_order() {
          (list
           (aurel-pacman-query-names-buffer-parse
            (current-buffer))
-          (point)))"##;
-    let expect = expect![[r#"OK (("z-last" "_private" "c++-headers" "alpha") 62)"#]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_pacman_info_parser_handles_multiple_packages_and_continuations() {
-    let elisp_form = r##"(with-temp-buffer
+          (point)))"##,
+            true,
+            expect![[r#"OK (("z-last" "_private" "c++-headers" "alpha") 62)"#]],
+        ),
+        (
+            "aurel_pacman_info_parser_handles_multiple_packages_and_continuations",
+            r##"(with-temp-buffer
          (insert
           "Name            : alpha\n"
           "Version         : 1.0-1\n"
@@ -155,16 +154,15 @@ fn aurel_pacman_info_parser_handles_multiple_packages_and_continuations() {
           "Description     : ignored field\n"
           "\n")
          (aurel-pacman-query-buffer-parse
-          (current-buffer)))"##;
-    let expect = expect![[
+          (current-buffer)))"##,
+            true,
+            expect![[
         r#"OK ((("Name" . "alpha") ("Version" . "1.0-1") ("Depends On" . "one  two\n                  three") ("Optional Deps" . "None")) (("Name" . "beta") ("Version" . "2.0") ("Description" . "ignored field")))"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_call_pacman_erases_buffer_sets_locale_and_forwards_arguments() {
-    let elisp_form = r##"(let ((aurel-pacman-locale
+    ]],
+        ),
+        (
+            "aurel_call_pacman_erases_buffer_sets_locale_and_forwards_arguments",
+            r##"(let ((aurel-pacman-locale
                 "C.UTF-8")
                captured)
          (with-temp-buffer
@@ -193,16 +191,15 @@ fn aurel_call_pacman_erases_buffer_sets_locale_and_forwards_arguments() {
                "alpha"
                "beta")
               captured
-              (buffer-string)))))"##;
-    let expect = expect![[
+              (buffer-string)))))"##,
+            true,
+            expect![[
         r#"OK (23 ("/fixture/bin/pacman" nil t nil ("--query" "--info" "alpha" "beta") "LC_ALL=C.UTF-8" "") "")"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_call_pacman_missing_program_fails_before_touching_buffer() {
-    let elisp_form = r##"(let ((aurel-pacman-program
+    ]],
+        ),
+        (
+            "aurel_call_pacman_missing_program_fails_before_touching_buffer",
+            r##"(let ((aurel-pacman-program
                 nil))
          (with-temp-buffer
            (insert "preserved")
@@ -212,16 +209,15 @@ fn aurel_call_pacman_missing_program_fails_before_touching_buffer() {
                (aurel-call-pacman
                 (current-buffer)
                 "--query")))
-            (buffer-string))))"##;
-    let expect = expect![[
+            (buffer-string))))"##,
+            true,
+            expect![[
         r#"OK ((:error error ("Couldn’t find pacman.\nSet aurel-pacman-program to a proper value")) "preserved")"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_response_status_accepts_2xx_3xx_and_handles_bad_values() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "aurel_response_status_accepts_2xx_3xx_and_handles_bad_values",
+            r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (setq-local
@@ -239,16 +235,15 @@ fn aurel_response_status_accepts_2xx_3xx_and_handles_bad_values() {
            (400)
            (500 . t)
            (nil)
-           ("200" . t)))"##;
-    let expect = expect![[
+           ("200" . t)))"##,
+            true,
+            expect![[
         r#"OK ((200 (:ok t)) (399 (:ok t)) (400 (:error error ("Error during request: 400"))) (500 (:ok nil)) (nil (:error error ("Error during request: nil"))) ("200" (:ok nil)))"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_receive_parse_info_reads_json_with_string_keys_lists_and_alists() {
-    let elisp_form = r##"(cl-letf
+    ]],
+        ),
+        (
+            "aurel_receive_parse_info_reads_json_with_string_keys_lists_and_alists",
+            r##"(cl-letf
          (((symbol-function
             'url-insert-file-contents)
            (lambda (url)
@@ -264,16 +259,15 @@ fn aurel_receive_parse_info_reads_json_with_string_keys_lists_and_alists() {
              (list url
                    (point-max)))))
          (aurel-receive-parse-info
-          "fixture:packages.json"))"##;
-    let expect = expect![[
+          "fixture:packages.json"))"##,
+            true,
+            expect![[
         r#"OK (("type" . "search") ("resultcount" . 2) ("results" (("Name" . "alpha") ("Keywords" "one" "two") ("OutOfDate")) (("Name" . "beta") ("NumVotes" . 7))))"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_html_action_detection_distinguishes_available_completed_and_unknown() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "aurel_html_action_detection_distinguishes_available_completed_and_unknown",
+            r##"(mapcar
          (lambda (html)
            (with-temp-buffer
              (insert html)
@@ -291,16 +285,15 @@ fn aurel_html_action_detection_distinguishes_available_completed_and_unknown() {
                  missing)))))
          '("<form name=\"do_Vote\">Vote</form><form name=\"do_Notify\">Notify</form>"
            "<form name=\"do_UnVote\">Unvote</form><form name=\"do_UnNotify\">Unnotify</form>"
-           "<html>No user controls</html>"))"##;
-    let expect = expect![[
+           "<html>No user controls</html>"))"##,
+            true,
+            expect![[
         r#"OK ((nil nil ("do_Vote" "do_UnVote" "do_Notify" "do_UnNotify" nil)) (t t ("do_Vote" "do_UnVote" "do_Notify" "do_UnNotify" nil)) ("Unknown" "Unknown" ("do_Vote" "do_UnVote" "do_Notify" "do_UnNotify" nil)))"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_installed_package_wrappers_use_shared_buffer_and_exact_pacman_modes() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "aurel_installed_package_wrappers_use_shared_buffer_and_exact_pacman_modes",
+            r##"(let (calls)
          (cl-letf
              (((symbol-function
                 'aurel-call-pacman)
@@ -332,9 +325,11 @@ fn aurel_installed_package_wrappers_use_shared_buffer_and_exact_pacman_modes() {
             (aurel-get-installed-packages-info
              "alpha"
              "beta")
-            (nreverse calls))))"##;
-    let expect = expect![[
+            (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK (("beta" "alpha") ((("Name" . "alpha") ("Version" . "1")) (("Name" . "beta") ("Version" . "2"))) ((" *aurel-pacman*" ("--query" "--foreign")) (" *aurel-pacman*" ("--query" "--info" "alpha" "beta"))))"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

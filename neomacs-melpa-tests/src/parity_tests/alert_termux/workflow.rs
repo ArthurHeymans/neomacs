@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_alert_termux_parity;
+use super::assert_alert_termux_batch;
 
 #[test]
-fn alert_termux_notify_builds_title_content_unicode_and_output_capture_arguments() {
-    let elisp_form = r##"(let ((alert-termux-command
+fn workflow_public_surface_batch() {
+    assert_alert_termux_batch(&[
+        (
+            "alert_termux_notify_builds_title_content_unicode_and_output_capture_arguments",
+            r##"(let ((alert-termux-command
                 "/data/data/com.termux/files/usr/bin/termux-notification")
                calls)
          (cl-letf
@@ -27,16 +30,15 @@ fn alert_termux_notify_builds_title_content_unicode_and_output_capture_arguments
                    :message "Finished 100% — 成功"))
                 (nreverse calls))
              (when (get-buffer " *termux-notification output*")
-               (kill-buffer " *termux-notification output*")))))"##;
-    let expect = expect![[
+               (kill-buffer " *termux-notification output*")))))"##,
+            true,
+            expect![[
         r#"OK (0 (("/data/data/com.termux/files/usr/bin/termux-notification" nil " *termux-notification output*" t nil ("-t" "<encoded>Deploy ✓" "-c" "<encoded>Finished 100% — 成功"))))"#
-    ]];
-    assert_alert_termux_parity(elisp_form, expect);
-}
-
-#[test]
-fn alert_termux_notify_without_title_emits_only_content_switch() {
-    let elisp_form = r##"(let ((alert-termux-command "termux-notification")
+    ]],
+        ),
+        (
+            "alert_termux_notify_without_title_emits_only_content_switch",
+            r##"(let ((alert-termux-command "termux-notification")
                 calls)
          (cl-letf
              (((symbol-function 'alert-encode-string)
@@ -52,14 +54,13 @@ fn alert_termux_notify_without_title_emits_only_content_switch() {
                  '(:title nil :message "Background task"))
                 (nreverse calls))
              (when (get-buffer " *termux-notification output*")
-               (kill-buffer " *termux-notification output*")))))"##;
-    let expect = expect![[r#"OK (23 (("-c" "[Background task]")))"#]];
-    assert_alert_termux_parity(elisp_form, expect);
-}
-
-#[test]
-fn alert_termux_missing_command_delegates_complete_info_to_message_backend() {
-    let elisp_form = r##"(let ((alert-termux-command nil)
+               (kill-buffer " *termux-notification output*")))))"##,
+            true,
+            expect![[r#"OK (23 (("-c" "[Background task]")))"#]],
+        ),
+        (
+            "alert_termux_missing_command_delegates_complete_info_to_message_backend",
+            r##"(let ((alert-termux-command nil)
                 received)
          (cl-letf
              (((symbol-function 'alert-message-notify)
@@ -77,16 +78,15 @@ fn alert_termux_missing_command_delegates_complete_info_to_message_backend() {
              (list
               (alert-termux-notify info)
               (eq received info)
-              received))))"##;
-    let expect = expect![[
+              received))))"##,
+            true,
+            expect![[
         r#"OK (fallback t (:title "No API" :message "Show in minibuffer" :severity moderate :data (:source timer)))"#
-    ]];
-    assert_alert_termux_parity(elisp_form, expect);
-}
-
-#[test]
-fn alert_termux_reuses_hidden_output_buffer_across_multiple_notifications() {
-    let elisp_form = r##"(let ((alert-termux-command "termux-notification")
+    ]],
+        ),
+        (
+            "alert_termux_reuses_hidden_output_buffer_across_multiple_notifications",
+            r##"(let ((alert-termux-command "termux-notification")
                 buffers)
          (cl-letf
              (((symbol-function 'alert-encode-string) #'identity)
@@ -107,14 +107,13 @@ fn alert_termux_reuses_hidden_output_buffer_across_multiple_notifications() {
                   (buffer-name (car buffers))
                   (buffer-live-p (car buffers))))
              (when (get-buffer " *termux-notification output*")
-               (kill-buffer " *termux-notification output*")))))"##;
-    let expect = expect![[r#"OK (2 t " *termux-notification output*" t)"#]];
-    assert_alert_termux_parity(elisp_form, expect);
-}
-
-#[test]
-fn alert_termux_runtime_command_override_is_used_for_each_delivery() {
-    let elisp_form = r##"(let (programs)
+               (kill-buffer " *termux-notification output*")))))"##,
+            true,
+            expect![[r#"OK (2 t " *termux-notification output*" t)"#]],
+        ),
+        (
+            "alert_termux_runtime_command_override_is_used_for_each_delivery",
+            r##"(let (programs)
          (cl-letf
              (((symbol-function 'alert-encode-string) #'identity)
               ((symbol-function 'call-process)
@@ -131,14 +130,13 @@ fn alert_termux_runtime_command_override_is_used_for_each_delivery() {
                     '(:message "two")))
                  (nreverse programs))
              (when (get-buffer " *termux-notification output*")
-               (kill-buffer " *termux-notification output*")))))"##;
-    let expect = expect![[r#"OK ("/custom/first" "/custom/second")"#]];
-    assert_alert_termux_parity(elisp_form, expect);
-}
-
-#[test]
-fn alert_termux_end_to_end_explicit_style_dispatches_and_tracks_origin() {
-    let elisp_form = r##"(let ((alert-termux-command "termux-notification")
+               (kill-buffer " *termux-notification output*")))))"##,
+            true,
+            expect![[r#"OK ("/custom/first" "/custom/second")"#]],
+        ),
+        (
+            "alert_termux_end_to_end_explicit_style_dispatches_and_tracks_origin",
+            r##"(let ((alert-termux-command "termux-notification")
                 (alert-active-alerts nil)
                 (alert-log-messages nil)
                 calls)
@@ -169,16 +167,15 @@ fn alert_termux_end_to_end_explicit_style_dispatches_and_tracks_origin() {
                     (memq #'alert-remove-on-command
                           post-command-hook))))
              (when (get-buffer " *termux-notification output*")
-               (kill-buffer " *termux-notification output*")))))"##;
-    let expect = expect![[
+               (kill-buffer " *termux-notification output*")))))"##,
+            true,
+            expect![[
         r#"OK (nil (("termux-notification" ("-t" "Termux" "-c" "Battery low"))) ((t "Battery low" nil)) (alert-remove-on-command t))"#
-    ]];
-    assert_alert_termux_parity(elisp_form, expect);
-}
-
-#[test]
-fn alert_termux_encode_boundary_receives_title_before_message_exactly_once() {
-    let elisp_form = r##"(let ((alert-termux-command "termux-notification")
+    ]],
+        ),
+        (
+            "alert_termux_encode_boundary_receives_title_before_message_exactly_once",
+            r##"(let ((alert-termux-command "termux-notification")
                 encoded)
          (cl-letf
              (((symbol-function 'alert-encode-string)
@@ -193,14 +190,13 @@ fn alert_termux_encode_boundary_receives_title_before_message_exactly_once() {
                   '(:title "title" :message "message"))
                  (nreverse encoded))
              (when (get-buffer " *termux-notification output*")
-               (kill-buffer " *termux-notification output*")))))"##;
-    let expect = expect![[r#"OK ("title" "message")"#]];
-    assert_alert_termux_parity(elisp_form, expect);
-}
-
-#[test]
-fn alert_termux_process_exit_status_is_returned_to_caller() {
-    let elisp_form = r##"(let ((alert-termux-command "termux-notification"))
+               (kill-buffer " *termux-notification output*")))))"##,
+            true,
+            expect![[r#"OK ("title" "message")"#]],
+        ),
+        (
+            "alert_termux_process_exit_status_is_returned_to_caller",
+            r##"(let ((alert-termux-command "termux-notification"))
          (cl-letf
              (((symbol-function 'alert-encode-string) #'identity)
               ((symbol-function 'call-process)
@@ -209,7 +205,9 @@ fn alert_termux_process_exit_status_is_returned_to_caller() {
                (alert-termux-notify
                 '(:title "Failure" :message "API unavailable"))
              (when (get-buffer " *termux-notification output*")
-               (kill-buffer " *termux-notification output*")))))"##;
-    let expect = expect!["OK 17"];
-    assert_alert_termux_parity(elisp_form, expect);
+               (kill-buffer " *termux-notification output*")))))"##,
+            true,
+            expect!["OK 17"],
+        ),
+    ]);
 }

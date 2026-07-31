@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_apropospriate_theme_parity;
+use super::assert_apropospriate_theme_batch;
 
 #[test]
-fn apropospriate_dark_renders_and_refontifies_a_real_emacs_lisp_buffer() {
-    let elisp_form = r##"(unwind-protect
+fn workflows_public_surface_batch() {
+    assert_apropospriate_theme_batch(&[
+        (
+            "apropospriate_dark_renders_and_refontifies_a_real_emacs_lisp_buffer",
+            r##"(unwind-protect
          (with-temp-buffer
            (emacs-lisp-mode)
            (insert
@@ -55,17 +58,15 @@ fn apropospriate_dark_renders_and_refontifies_a_real_emacs_lisp_buffer() {
               (buffer-substring-no-properties
                (point-min)
                (point-max)))))
-       (apropospriate-test-disable-themes))"##;
-    let expect = expect![[
+       (apropospriate-test-disable-themes))"##,
+            true,
+            expect![[
         r##"OK ((apropospriate-dark) ("#E0E0E0" "#424242") ((font-lock-comment-face "#757575" "#424242" normal) (font-lock-keyword-face "#E1BEE7" "#424242" normal) (font-lock-function-name-face "#64B5F6" "#424242" normal) (font-lock-string-face "#C5E1A5" "#424242" normal)) (font-lock-keyword-face "#E1BEE7" "#424242" normal) ";; Build the release summary shown to operators.\n(defmacro release-summary (items)\n  \"Summarize ready release ITEMS.\"\n  (let ((ready (seq-filter #'identity items)))\n    (message \"Ready: %d\" (length ready))))\n")"##
-    ]];
-
-    assert_apropospriate_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn apropospriate_light_renders_added_removed_and_hunk_lines_in_a_real_diff() {
-    let elisp_form = r##"(unwind-protect
+    ]],
+        ),
+        (
+            "apropospriate_light_renders_added_removed_and_hunk_lines_in_a_real_diff",
+            r##"(unwind-protect
          (with-temp-buffer
            (require
             'diff-mode)
@@ -104,17 +105,15 @@ fn apropospriate_light_renders_added_removed_and_hunk_lines_in_a_real_diff() {
             (buffer-substring-no-properties
              (point-min)
              (point-max))))
-       (apropospriate-test-disable-themes))"##;
-    let expect = expect![[
+       (apropospriate-test-disable-themes))"##,
+            true,
+            expect![[
         r##"OK ((apropospriate-light) ("#546E7A" "#F5F5F5") (diff-hunk-header "#90A4AE" "#F5F5F5" normal) (diff-removed "#D50000" "#F5F5F5" normal) (diff-added "#66BB6A" "#F5F5F5" normal) "diff --git a/src/release.rs b/src/release.rs\nindex 1111111..2222222 100644\n--- a/src/release.rs\n+++ b/src/release.rs\n@@ -1,3 +1,3 @@\n-let channel = \"nightly\";\n+let channel = \"stable\";\n deploy(channel);\n")"##
-    ]];
-
-    assert_apropospriate_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn apropospriate_dark_applies_org_heading_resizing_and_custom_mode_line_height() {
-    let elisp_form = r##"(unwind-protect
+    ]],
+        ),
+        (
+            "apropospriate_dark_applies_org_heading_resizing_and_custom_mode_line_height",
+            r##"(unwind-protect
          (progn
            (require
             'org)
@@ -209,17 +208,15 @@ fn apropospriate_dark_applies_org_heading_resizing_and_custom_mode_line_height()
               (buffer-substring-no-properties
                (point-min)
                (point-max)))))
-       (apropospriate-test-disable-themes))"##;
-    let expect = expect![[
+       (apropospriate-test-disable-themes))"##,
+            true,
+            expect![[
         r##"OK ((apropospriate-dark) (org-document-title "#FFCC80" "#424242" bold) org-level-1 (org-headline-done org-level-2) (org-todo org-level-1) (org-done org-level-2) ((:level-1 "#E1BEE7" 1.3) (:level-2 "#E1BEE7" 1.2) (:todo "#E57373" normal) (:done "#C5E1A5" normal) (:mode-line "#323232" 1.15)) "#+title: Release Plan\n* TODO Ship version 2.0\n** DONE Validate migration\n*** Notes\nThe rollout passed staging.\n")"##
-    ]];
-
-    assert_apropospriate_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn apropospriate_switches_a_live_code_buffer_from_dark_to_light_and_restores_defaults() {
-    let elisp_form = r##"(let ((before
+    ]],
+        ),
+        (
+            "apropospriate_switches_a_live_code_buffer_from_dark_to_light_and_restores_defaults",
+            r##"(let ((before
                 (list
                  custom-enabled-themes
                  (face-attribute
@@ -297,17 +294,15 @@ fn apropospriate_switches_a_live_code_buffer_from_dark_to_light_and_restores_def
                       :background
                       nil
                       'default))))))
-           (apropospriate-test-disable-themes)))"##;
-    let expect = expect![[
+           (apropospriate-test-disable-themes)))"##,
+            true,
+            expect![[
         r##"OK ((nil "unspecified-fg" "unspecified-bg") ((apropospriate-dark) "#E0E0E0" "#424242" (font-lock-keyword-face "#E1BEE7" "#424242" normal) (font-lock-string-face "#C5E1A5" "#424242" normal)) ((apropospriate-light) "#546E7A" "#F5F5F5" (font-lock-keyword-face "#7E57C2" "#F5F5F5" normal) (font-lock-string-face "#66BB6A" "#F5F5F5" normal)) (nil "unspecified-fg" "unspecified-bg"))"##
-    ]];
-
-    assert_apropospriate_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn apropospriate_dark_colors_real_ansi_build_output() {
-    let elisp_form = r##"(unwind-protect
+    ]],
+        ),
+        (
+            "apropospriate_dark_colors_real_ansi_build_output",
+            r##"(unwind-protect
          (progn
            (require
             'ansi-color)
@@ -338,10 +333,11 @@ fn apropospriate_dark_colors_real_ansi_build_output() {
               (text-properties-at
                success-position
                rendered))))
-       (apropospriate-test-disable-themes))"##;
-    let expect = expect![[
+       (apropospriate-test-disable-themes))"##,
+            true,
+            expect![[
         r##"OK ((apropospriate-dark) "build ERROR then SUCCESS" (font-lock-face (:foreground "#E57373")) (font-lock-face (:foreground "#C5E1A5")))"##
-    ]];
-
-    assert_apropospriate_theme_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

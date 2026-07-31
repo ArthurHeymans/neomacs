@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AQI_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const AQI_TEST_TIMEOUT: Duration = Duration::from_secs(120);
@@ -64,4 +66,15 @@ fn assert_aqi_source_parity(source_file: &str, elisp_form: &str, expected: Expec
 
 pub(crate) fn assert_aqi_parity(elisp_form: &str, expected: Expect) {
     assert_aqi_source_parity("aqi.el", elisp_form, expected);
+}
+
+/// Multi-probe batch for `assert_aqi_parity` cases (2a).
+pub(crate) fn assert_aqi_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        aqi_oracle("aqi.el"),
+        &name,
+        "aqi_parity",
+        cases,
+    );
 }

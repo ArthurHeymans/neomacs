@@ -1,9 +1,12 @@
-use super::assert_async_status_parity;
+use super::assert_async_status_batch;
 use expect_test::expect;
 
 #[test]
-fn add_item_registers_the_exact_file_watch_and_custom_label() {
-    let elisp_form = r##"(let ((id (async-status-req-id "compile"))
+fn items_public_surface_batch() {
+    assert_async_status_batch(&[
+        (
+            "add_item_registers_the_exact_file_watch_and_custom_label",
+            r##"(let ((id (async-status-req-id "compile"))
       calls)
   (unwind-protect
       (cl-letf (((symbol-function 'file-notify-add-watch)
@@ -31,16 +34,15 @@ fn add_item_registers_the_exact_file_watch_and_custom_label() {
            (async-status--item-label item)
            calls)))
     (setq async-status--shown-items nil)
-    (async-status-clean-up id)))"##;
-    let expect = expect![[
+    (async-status-clean-up id)))"##,
+            true,
+            expect![[
         r#"OK (t t (watch . 17) t 0 "Compile project" ((t (change) async-status--update-items)))"#
-    ]];
-    assert_async_status_parity(elisp_form, expect);
-}
-
-#[test]
-fn add_item_defaults_the_label_to_the_allocated_message_id() {
-    let elisp_form = r##"(let ((id (async-status-req-id "default-label")))
+    ]],
+        ),
+        (
+            "add_item_defaults_the_label_to_the_allocated_message_id",
+            r##"(let ((id (async-status-req-id "default-label")))
   (unwind-protect
       (cl-letf (((symbol-function 'file-notify-add-watch)
                  (lambda (&rest _arguments) :watch)))
@@ -53,14 +55,13 @@ fn add_item_defaults_the_label_to_the_allocated_message_id() {
            (async-status--item-progress item)
            (async-status--item-fs-watcher-id item))))
     (setq async-status--shown-items nil)
-    (async-status-clean-up id)))"##;
-    let expect = expect!["OK (t t 0 :watch)"];
-    assert_async_status_parity(elisp_form, expect);
-}
-
-#[test]
-fn newly_added_items_are_displayed_in_reverse_registration_order() {
-    let elisp_form = r##"(let ((first (async-status-req-id "first"))
+    (async-status-clean-up id)))"##,
+            true,
+            expect!["OK (t t 0 :watch)"],
+        ),
+        (
+            "newly_added_items_are_displayed_in_reverse_registration_order",
+            r##"(let ((first (async-status-req-id "first"))
       (second (async-status-req-id "second"))
       (watch-id 0))
   (unwind-protect
@@ -84,14 +85,13 @@ fn newly_added_items_are_displayed_in_reverse_registration_order() {
          async-status--shown-items))
     (setq async-status--shown-items nil)
     (async-status-clean-up first)
-    (async-status-clean-up second)))"##;
-    let expect = expect!["OK ((\"Second\" 2 t) (\"First\" 1 t))"];
-    assert_async_status_parity(elisp_form, expect);
-}
-
-#[test]
-fn find_item_skips_non_items_and_returns_the_first_matching_duplicate() {
-    let elisp_form = r##"(let* ((first
+    (async-status-clean-up second)))"##,
+            true,
+            expect!["OK ((\"Second\" 2 t) (\"First\" 1 t))"],
+        ),
+        (
+            "find_item_skips_non_items_and_returns_the_first_matching_duplicate",
+            r##"(let* ((first
         (make-async-status--item
          :msg-id "same"
          :label "first"))
@@ -114,14 +114,13 @@ fn find_item_skips_non_items_and_returns_the_first_matching_duplicate() {
         (async-status--find-item-by-msgid "other")
         other)
        (async-status--find-item-by-msgid "missing"))
-    (setq async-status--shown-items nil)))"##;
-    let expect = expect!["OK (t t nil)"];
-    assert_async_status_parity(elisp_form, expect);
-}
-
-#[test]
-fn remove_item_uses_identity_and_removes_every_occurrence_of_that_object() {
-    let elisp_form = r##"(let* ((target
+    (setq async-status--shown-items nil)))"##,
+            true,
+            expect!["OK (t t nil)"],
+        ),
+        (
+            "remove_item_uses_identity_and_removes_every_occurrence_of_that_object",
+            r##"(let* ((target
         (make-async-status--item
          :msg-id "same"
          :label "target"))
@@ -140,14 +139,13 @@ fn remove_item_uses_identity_and_removes_every_occurrence_of_that_object() {
            equal-but-distinct)
        (mapcar #'async-status--item-msg-id
                async-status--shown-items))
-    (setq async-status--shown-items nil)))"##;
-    let expect = expect!["OK (2 t (\"same\" \"other\"))"];
-    assert_async_status_parity(elisp_form, expect);
-}
-
-#[test]
-fn remove_from_bar_unregisters_the_watch_removes_item_and_refreshes_once() {
-    let elisp_form = r##"(let* ((target
+    (setq async-status--shown-items nil)))"##,
+            true,
+            expect!["OK (2 t (\"same\" \"other\"))"],
+        ),
+        (
+            "remove_from_bar_unregisters_the_watch_removes_item_and_refreshes_once",
+            r##"(let* ((target
         (make-async-status--item
          :msg-id "target"
          :fs-watcher-id '(watch . 9)))
@@ -170,14 +168,13 @@ fn remove_from_bar_unregisters_the_watch_removes_item_and_refreshes_once() {
        (nreverse calls)
        (mapcar #'async-status--item-msg-id
                async-status--shown-items))
-    (setq async-status--shown-items nil)))"##;
-    let expect = expect!["OK (((:remove (watch . 9)) :refresh) (\"other\"))"];
-    assert_async_status_parity(elisp_form, expect);
-}
-
-#[test]
-fn removing_an_unknown_id_has_no_watch_refresh_or_state_side_effect() {
-    let elisp_form = r##"(let ((item
+    (setq async-status--shown-items nil)))"##,
+            true,
+            expect!["OK (((:remove (watch . 9)) :refresh) (\"other\"))"],
+        ),
+        (
+            "removing_an_unknown_id_has_no_watch_refresh_or_state_side_effect",
+            r##"(let ((item
        (make-async-status--item
         :msg-id "kept"
         :fs-watcher-id :watch))
@@ -193,14 +190,13 @@ fn removing_an_unknown_id_has_no_watch_refresh_or_state_side_effect() {
   (prog1
       (list calls
             (eq (car async-status--shown-items) item))
-    (setq async-status--shown-items nil)))"##;
-    let expect = expect!["OK (nil t)"];
-    assert_async_status_parity(elisp_form, expect);
-}
-
-#[test]
-fn file_event_updates_only_the_matching_item_then_refreshes_and_shows() {
-    let elisp_form = r##"(let ((first-id (async-status-req-id "first"))
+    (setq async-status--shown-items nil)))"##,
+            true,
+            expect!["OK (nil t)"],
+        ),
+        (
+            "file_event_updates_only_the_matching_item_then_refreshes_and_shows",
+            r##"(let ((first-id (async-status-req-id "first"))
       (second-id (async-status-req-id "second"))
       calls)
   (unwind-protect
@@ -230,14 +226,13 @@ fn file_event_updates_only_the_matching_item_then_refreshes_and_shows() {
          (nreverse calls)))
     (setq async-status--shown-items nil)
     (async-status-clean-up first-id)
-    (async-status-clean-up second-id)))"##;
-    let expect = expect!["OK (0 \"0.625\" (:refresh :show))"];
-    assert_async_status_parity(elisp_form, expect);
-}
-
-#[test]
-fn file_event_for_an_unknown_message_surfaces_the_struct_type_error() {
-    let elisp_form = r##"(let ((id (async-status-req-id "unknown-event")))
+    (async-status-clean-up second-id)))"##,
+            true,
+            expect!["OK (0 \"0.625\" (:refresh :show))"],
+        ),
+        (
+            "file_event_for_an_unknown_message_surfaces_the_struct_type_error",
+            r##"(let ((id (async-status-req-id "unknown-event")))
   (unwind-protect
       (progn
         (setq async-status--shown-items nil)
@@ -256,7 +251,9 @@ fn file_event_for_an_unknown_message_surfaces_the_struct_type_error() {
              (format "%S" outcome))
             t))))
     (setq async-status--shown-items nil)
-    (async-status-clean-up id)))"##;
-    let expect = expect!["OK (:error wrong-type-argument t)"];
-    assert_async_status_parity(elisp_form, expect);
+    (async-status-clean-up id)))"##,
+            true,
+            expect!["OK (:error wrong-type-argument t)"],
+        ),
+    ]);
 }

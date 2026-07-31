@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_bind_key_parity, assert_bind_key_signal_parity};
+use super::{assert_bind_key_batch};
 
 #[test]
-fn bind_keys_prefix_map_sets_parent_binding_commands_docstring_and_menu_name() {
-    let elisp_form = r##"(progn
+fn groups_public_surface_batch() {
+    assert_bind_key_batch(&[
+        (
+            "bind_keys_prefix_map_sets_parent_binding_commands_docstring_and_menu_name",
+            r##"(progn
                (defvar neomacs-bind-key-host-map
                  (make-sparse-keymap))
                (let ((personal-keybindings nil))
@@ -24,17 +27,15 @@ fn bind_keys_prefix_map_sets_parent_binding_commands_docstring_and_menu_name() {
                   (get 'neomacs-bind-key-prefix-map
                        'variable-documentation)
                   (keymapp neomacs-bind-key-prefix-map)
-                  (mapcar #'car personal-keybindings))))"##;
-    let expect = expect![[
+                  (mapcar #'car personal-keybindings))))"##,
+            true,
+            expect![[
         r#"OK (neomacs-bind-key-prefix-map beginning-of-line end-of-line "Neomacs prefix documentation" t (("e" . neomacs-bind-key-prefix-map) ("a" . neomacs-bind-key-prefix-map) ("C-c b" . neomacs-bind-key-host-map)))"#
-    ]];
-
-    assert_bind_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn bind_keys_repeat_map_sets_continue_properties_but_not_exit_properties() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "bind_keys_repeat_map_sets_continue_properties_but_not_exit_properties",
+            r##"(progn
                (defun neomacs-bind-key-next () (interactive))
                (defun neomacs-bind-key-prev () (interactive))
                (defun neomacs-bind-key-quit () (interactive))
@@ -56,17 +57,15 @@ fn bind_keys_repeat_map_sets_continue_properties_but_not_exit_properties() {
                   (get 'neomacs-bind-key-prev 'repeat-map)
                   (documentation-property
                    'neomacs-bind-key-repeat-map
-                   'variable-documentation))))"##;
-    let expect = expect![[
+                   'variable-documentation))))"##,
+            true,
+            expect![[
         r#"OK (neomacs-bind-key-next neomacs-bind-key-quit neomacs-bind-key-prev neomacs-bind-key-repeat-map nil neomacs-bind-key-repeat-map "Neomacs repeat map")"#
-    ]];
-
-    assert_bind_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn bind_keys_switches_maps_and_prefix_groups_without_reordering_bindings() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "bind_keys_switches_maps_and_prefix_groups_without_reordering_bindings",
+            r##"(progn
                (defvar neomacs-bind-key-map-one
                  (make-sparse-keymap))
                (defvar neomacs-bind-key-map-two
@@ -87,17 +86,15 @@ fn bind_keys_switches_maps_and_prefix_groups_without_reordering_bindings() {
                   (lookup-key neomacs-bind-key-prefix-one "a")
                   (lookup-key neomacs-bind-key-prefix-one "b")
                   (lookup-key neomacs-bind-key-map-two "Z")
-                  (mapcar #'caar (reverse personal-keybindings)))))"##;
-    let expect = expect![[
+                  (mapcar #'caar (reverse personal-keybindings)))))"##,
+            true,
+            expect![[
         r#"OK (beginning-of-line neomacs-bind-key-prefix-one forward-char backward-char end-of-line ("A" "x" "a" "b" "Z"))"#
-    ]];
-
-    assert_bind_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn bind_keys_package_defers_an_unbound_map_until_the_feature_loads() {
-    let elisp_form = r##"(let ((personal-keybindings nil))
+    ]],
+        ),
+        (
+            "bind_keys_package_defers_an_unbound_map_until_the_feature_loads",
+            r##"(let ((personal-keybindings nil))
                (makunbound 'neomacs-deferred-bind-key-map)
                (bind-keys
                 :package neomacs-deferred-bind-key-feature
@@ -118,37 +115,32 @@ fn bind_keys_package_defers_an_unbound_map_until_the_feature_loads() {
                   (and (nth 1 before) t)
                   (nth 2 before)
                   (lookup-key neomacs-deferred-bind-key-map "x")
-                  personal-keybindings)))"##;
-    let expect = expect![[
+                  personal-keybindings)))"##,
+            true,
+            expect![[
         r#"OK (nil t nil forward-char ((("x" . neomacs-deferred-bind-key-map) forward-char nil)))"#
-    ]];
-
-    assert_bind_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn bind_keys_rejects_a_prefix_without_a_prefix_map() {
-    let elisp_form = r##"(bind-keys :prefix "C-c b"
-               ("x" . forward-char))"##;
-    let expect = expect![[r#"ERR (error "Both :prefix-map and :prefix must be supplied")"#]];
-
-    assert_bind_key_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn bind_keys_rejects_repeat_exit_bindings_without_a_repeat_map() {
-    let elisp_form = r##"(bind-keys :exit
-               ("q" . keyboard-quit))"##;
-    let expect = expect![[r#"ERR (error ":continue and :exit require specifying :repeat-map")"#]];
-
-    assert_bind_key_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn bind_keys_rejects_a_menu_name_without_a_prefix() {
-    let elisp_form = r##"(bind-keys :menu-name "Broken"
-               ("x" . forward-char))"##;
-    let expect = expect![[r#"ERR (error "If :menu-name is supplied, :prefix must be too")"#]];
-
-    assert_bind_key_signal_parity(elisp_form, expect);
+    ]],
+        ),
+        (
+            "bind_keys_rejects_a_prefix_without_a_prefix_map",
+            r##"(bind-keys :prefix "C-c b"
+               ("x" . forward-char))"##,
+            false,
+            expect![[r#"ERR (error "Both :prefix-map and :prefix must be supplied")"#]],
+        ),
+        (
+            "bind_keys_rejects_repeat_exit_bindings_without_a_repeat_map",
+            r##"(bind-keys :exit
+               ("q" . keyboard-quit))"##,
+            false,
+            expect![[r#"ERR (error ":continue and :exit require specifying :repeat-map")"#]],
+        ),
+        (
+            "bind_keys_rejects_a_menu_name_without_a_prefix",
+            r##"(bind-keys :menu-name "Broken"
+               ("x" . forward-char))"##,
+            false,
+            expect![[r#"ERR (error "If :menu-name is supplied, :prefix must be too")"#]],
+        ),
+    ]);
 }

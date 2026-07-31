@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_async1_autoload_parity, assert_async1_parity};
+use super::{assert_async1_autoload_batch, assert_async1_batch};
 
 #[test]
-fn async1_exact_package_descriptor_origin_dependency_and_feature_contract_match() {
-    let elisp_form = r##"(let ((descriptor
+fn registry_async1_batch() {
+    assert_async1_batch(&[
+        (
+            "async1_exact_package_descriptor_origin_dependency_and_feature_contract_match",
+            r##"(let ((descriptor
                 (cadr
                  (assq 'async1 package-alist))))
          (list
@@ -20,17 +23,15 @@ fn async1_exact_package_descriptor_origin_dependency_and_feature_contract_match(
            'async1
            '(20260421 2116))
           (file-name-nondirectory
-           (locate-library "async1"))))"##;
-    let expect = expect![[
+           (locate-library "async1"))))"##,
+            true,
+            expect![[
         r#"OK (async1 "20260421.2116" "Unroll chain of async callbacks, parallel and sequencial." nil ((emacs (24 1)) (compat (30 1))) ((:maintainers (nil . "github.com/Anoncheg1,codeberg.org/Anoncheg")) (:authors (nil . "github.com/Anoncheg1,codeberg.org/Anoncheg")) (:keywords "tools" "async" "callback" "lisp" "extensions") (:revdesc . "88cccffe14bd") (:commit . "88cccffe14bdd0a61dbb2e33edf8c335706f24dc") (:url . "https://github.com/Anoncheg1/emacs-async1")) t t "async1.el")"#
-    ]];
-
-    assert_async1_parity(elisp_form, expect);
-}
-
-#[test]
-fn async1_installed_payload_inventory_hashes_archive_files_not_generated_artifacts() {
-    let elisp_form = r##"(let* ((descriptor
+    ]],
+        ),
+        (
+            "async1_installed_payload_inventory_hashes_archive_files_not_generated_artifacts",
+            r##"(let* ((descriptor
                   (cadr
                    (assq 'async1 package-alist)))
                  (directory
@@ -64,17 +65,15 @@ fn async1_installed_payload_inventory_hashes_archive_files_not_generated_artifac
               (file-regular-p
                (expand-file-name file directory)))
             (directory-files directory nil "\\`[^.]"))
-           #'string<)))"##;
-    let expect = expect![[
+           #'string<)))"##,
+            true,
+            expect![[
         r#"OK (("async1-autoloads.el" :generated t) ("async1-pkg.el" :archive 527 "7548e340551a8ce89d08b81537cf42f0f50109114ead378698a945cb234312b0") ("async1.el" :archive 11529 "97ef51118ed5c11fa4df75e97a41f323a9f77bda89a1b76c0f23464ba1d213ef") ("async1.elc" :generated t))"#
-    ]];
-
-    assert_async1_parity(elisp_form, expect);
-}
-
-#[test]
-fn async1_compat_dependency_is_satisfied_by_builtin_or_installed_runtime_support() {
-    let elisp_form = r##"(let ((descriptor
+    ]],
+        ),
+        (
+            "async1_compat_dependency_is_satisfied_by_builtin_or_installed_runtime_support",
+            r##"(let ((descriptor
                 (cadr
                  (assq 'compat package-alist))))
          (list
@@ -104,16 +103,13 @@ fn async1_compat_dependency_is_satisfied_by_builtin_or_installed_runtime_support
                (cadr requirement))))
            (package-desc-reqs
             (cadr
-             (assq 'async1 package-alist))))))"##;
-    let expect =
-        expect![[r#"OK (nil nil t t t nil "compat.el" ((emacs "24.1") (compat "30.1")))"#]];
-
-    assert_async1_parity(elisp_form, expect);
-}
-
-#[test]
-fn async1_complete_callable_command_arglist_and_source_surface_matches() {
-    let elisp_form = r##"(let (symbols)
+             (assq 'async1 package-alist))))))"##,
+            true,
+            expect![[r#"OK (nil nil t t t nil "compat.el" ((emacs "24.1") (compat "30.1")))"#]],
+        ),
+        (
+            "async1_complete_callable_command_arglist_and_source_surface_matches",
+            r##"(let (symbols)
          (mapatoms
           (lambda (symbol)
             (when
@@ -151,17 +147,15 @@ fn async1_complete_callable_command_arglist_and_source_surface_matches() {
                 (lambda (left right)
                   (string<
                    (symbol-name left)
-                   (symbol-name right))))))"##;
-    let expect = expect![[
+                   (symbol-name right))))))"##,
+            true,
+            expect![[
         r#"OK ((async1--handle-parallel-step nil nil "(specs data chain-step current-index)" "async1.el") (async1--handle-sequential-step nil nil "(step data chain-step current-index)" "async1.el") (async1-create-function nil nil "(spec)" "async1.el") (async1-default-aggregator nil nil "(results)" "async1.el") (async1-default-template nil nil "(data callback delay result-suffix)" "async1.el") (async1-plist-get nil nil "(plist key &optional default)" "async1.el") (async1-plist-remove nil nil "(plist key)" "async1.el") (async1-start nil nil "(initial-data sequence &optional final-callback)" "async1.el"))"#
-    ]];
-
-    assert_async1_parity(elisp_form, expect);
-}
-
-#[test]
-fn async1_declares_no_package_variables_constants_custom_options_or_macros() {
-    let elisp_form = r##"(let (variables macros)
+    ]],
+        ),
+        (
+            "async1_declares_no_package_variables_constants_custom_options_or_macros",
+            r##"(let (variables macros)
          (mapatoms
           (lambda (symbol)
             (when
@@ -202,15 +196,19 @@ fn async1_declares_no_package_variables_constants_custom_options_or_macros() {
                    (symbol-name left)
                    (symbol-name right))))
           (featurep 'async1)
-          (get 'async1 'custom-group)))"##;
-    let expect = expect!["OK (nil nil t nil)"];
-
-    assert_async1_parity(elisp_form, expect);
+          (get 'async1 'custom-group)))"##,
+            true,
+            expect!["OK (nil nil t nil)"],
+        ),
+    ]);
 }
 
 #[test]
-fn async1_generated_autoload_surface_contains_only_the_five_documented_entries() {
-    let elisp_form = r##"(list
+fn registry_async1_autoload_batch() {
+    assert_async1_autoload_batch(&[
+        (
+            "async1_generated_autoload_surface_contains_only_the_five_documented_entries",
+            r##"(list
          (featurep 'async1)
          (mapcar
           (lambda (symbol)
@@ -230,10 +228,11 @@ fn async1_generated_autoload_surface_contains_only_the_five_documented_entries()
             async1-start
             async1-create-function
             async1--handle-parallel-step
-            async1--handle-sequential-step)))"##;
-    let expect = expect![[
+            async1--handle-sequential-step)))"##,
+            true,
+            expect![[
         r#"OK (nil ((async1-default-template t t "async1.el") (async1-default-aggregator t t "async1.el") (async1-plist-remove t t "async1.el") (async1-plist-get t t "async1.el") (async1-start t t "async1.el") (async1-create-function nil nil nil) (async1--handle-parallel-step nil nil nil) (async1--handle-sequential-step nil nil nil)))"#
-    ]];
-
-    assert_async1_autoload_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

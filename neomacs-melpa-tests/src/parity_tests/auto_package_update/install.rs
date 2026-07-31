@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_package_update_parity;
+use super::assert_auto_package_update_batch;
 
 #[test]
-fn auto_package_update_old_version_cleanup_recursively_deletes_real_sandbox_directories() {
-    let elisp_form = r##"(let*
+fn install_public_surface_batch() {
+    assert_auto_package_update_batch(&[
+        (
+            "auto_package_update_old_version_cleanup_recursively_deletes_real_sandbox_directories",
+            r##"(let*
                              ((root
                                (auto-package-update-test-root
                                 "delete-old"))
@@ -42,8 +45,9 @@ fn auto_package_update_old_version_cleanup_recursively_deletes_real_sandbox_dire
                                 (file-exists-p beta)
                                 (file-exists-p alpha-file)
                                 (file-exists-p beta-file)
-                                (file-directory-p root)))))"##;
-    let expect = expect!["OK (nil nil nil nil nil nil t)"];
-
-    assert_auto_package_update_parity(elisp_form, expect);
+                                (file-directory-p root)))))"##,
+            true,
+            expect!["OK (nil nil nil nil nil nil t)"],
+        ),
+    ]);
 }

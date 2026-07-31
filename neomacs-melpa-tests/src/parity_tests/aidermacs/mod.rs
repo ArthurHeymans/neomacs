@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AIDERMACS_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod backends;
 mod commands;
 mod files;
@@ -33,4 +35,15 @@ pub(crate) fn assert_aidermacs_parity(elisp_form: &str, expected: Expect) {
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("aidermacs parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+/// Multi-probe batch for `assert_aidermacs_parity` cases (2a).
+pub(crate) fn assert_aidermacs_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        aidermacs_oracle(),
+        &name,
+        "aidermacs_parity",
+        cases,
+    );
 }

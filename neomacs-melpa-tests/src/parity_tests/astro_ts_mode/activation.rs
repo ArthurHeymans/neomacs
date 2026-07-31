@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_astro_ts_mode_parity;
+use super::assert_astro_ts_mode_batch;
 
 #[test]
-fn mode_activation_builds_mixed_language_parsers_and_exact_local_contract() {
-    let elisp_form = r##"(with-temp-buffer
+fn activation_public_surface_batch() {
+    assert_astro_ts_mode_batch(&[
+        (
+            "mode_activation_builds_mixed_language_parsers_and_exact_local_contract",
+            r##"(with-temp-buffer
           (insert "---\nconst title = \"Hello\";\n---\n")
           (insert "<div class={title}>{title}</div>\n")
           (insert "<script>const count = 1;</script>\n")
@@ -33,16 +36,15 @@ fn mode_activation_builds_mixed_language_parsers_and_exact_local_contract() {
            treesit-language-at-point-function
            (local-variable-p 'treesit-simple-indent-rules)
            (local-variable-p 'treesit-font-lock-settings)
-           (local-variable-p 'treesit-range-settings)))"##;
-    let expect = expect![[
+           (local-variable-p 'treesit-range-settings)))"##,
+            true,
+            expect![[
         r#"OK (astro-ts-mode "Astro" html-mode (astro) astro "\\(?:\\(?:commen\\|tex\\)t\\)" (astro css tsx) 2 ((astro-comment astro-keyword astro-definition css-selector css-comment css-query css-keyword tsx-comment tsx-declaration tsx-jsx) (astro-string css-property css-constant css-string tsx-keyword tsx-string tsx-escape-sequence) (css-error css-variable css-function css-operator tsx-constant tsx-expression tsx-identifier tsx-number tsx-pattern tsx-property) (astro-bracket css-bracket tsx-function tsx-bracket tsx-delimiter)) ((treesit-compiled-query tsx t nil nil) (treesit-compiled-query css t nil nil)) astro-ts-mode--treesit-language-at-point t t t)"#
-    ]];
-    assert_astro_ts_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn missing_grammar_errors_are_checked_in_astro_css_then_tsx_order() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "missing_grammar_errors_are_checked_in_astro_css_then_tsx_order",
+            r##"(mapcar
           (lambda (unavailable)
             (cl-letf
                 (((symbol-function 'treesit-ready-p)
@@ -57,16 +59,15 @@ fn missing_grammar_errors_are_checked_in_astro_css_then_tsx_order() {
                     (car error-data)
                     (cdr error-data)
                     major-mode))))))
-          '(astro css tsx))"##;
-    let expect = expect![[
+          '(astro css tsx))"##,
+            true,
+            expect![[
         r#"OK ((astro error ("Tree-sitter grammar for Astro isn’t available") astro-ts-mode) (css error ("Tree-sitter grammar for CSS isn’t available") astro-ts-mode) (tsx error ("Tree-sitter grammar for Typescript/TSX isn’t available") astro-ts-mode))"#
-    ]];
-    assert_astro_ts_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn real_astro_file_name_selects_mode_only_when_grammar_is_available() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "real_astro_file_name_selects_mode_only_when_grammar_is_available",
+            r##"(mapcar
           (lambda (name)
             (with-temp-buffer
               (setq buffer-file-name
@@ -76,16 +77,15 @@ fn real_astro_file_name_selects_mode_only_when_grammar_is_available() {
               (list name major-mode mode-name
                     (mapcar #'treesit-parser-language
                             (treesit-parser-list)))))
-          '("component.astro" "component.html" "component.txt"))"##;
-    let expect = expect![[
+          '("component.astro" "component.html" "component.txt"))"##,
+            true,
+            expect![[
         r#"OK (("component.astro" astro-ts-mode "Astro" (astro)) ("component.html" mhtml-mode ((sgml-xml-mode "XHTML+" "HTML+") (:eval (mhtml--submode-lighter))) nil) ("component.txt" text-mode "Text" nil))"#
-    ]];
-    assert_astro_ts_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn mode_hook_observes_fully_initialized_parser_and_mixed_language_settings() {
-    let elisp_form = r##"(let (observations)
+    ]],
+        ),
+        (
+            "mode_hook_observes_fully_initialized_parser_and_mixed_language_settings",
+            r##"(let (observations)
           (let ((astro-ts-mode-hook
                  (list
                   (lambda ()
@@ -101,15 +101,13 @@ fn mode_hook_observes_fully_initialized_parser_and_mixed_language_settings() {
             (with-temp-buffer
               (insert "<div>Hello</div>")
               (astro-ts-mode)))
-          observations)"##;
-    let expect =
-        expect!["OK ((astro-ts-mode (astro) astro-ts-mode--treesit-language-at-point 2 33))"];
-    assert_astro_ts_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn language_at_point_routes_real_frontmatter_attributes_html_script_and_style() {
-    let elisp_form = r##"(with-temp-buffer
+          observations)"##,
+            true,
+            expect!["OK ((astro-ts-mode (astro) astro-ts-mode--treesit-language-at-point 2 33))"],
+        ),
+        (
+            "language_at_point_routes_real_frontmatter_attributes_html_script_and_style",
+            r##"(with-temp-buffer
           (insert "---\nconst title = \"Hello\";\n---\n")
           (insert "<article class={title}>{title}</article>\n")
           (insert "<script>const count = title.length;</script>\n")
@@ -129,16 +127,15 @@ fn language_at_point_routes_real_frontmatter_attributes_html_script_and_style() 
                      (funcall treesit-language-at-point-function
                               point))))
            '("const title" "class" "{title}" "article"
-             "const count" ".card" "color")))"##;
-    let expect = expect![[
+             "const count" ".card" "color")))"##,
+            true,
+            expect![[
         r#"OK (("const title" "frontmatter_js_block" tsx tsx) ("class" "attribute_name" astro astro) ("{title}" "attribute_js_expr" tsx tsx) ("article" "tag_name" astro astro) ("const count" "raw_text" tsx tsx) (".card" "raw_text" css css) ("color" "raw_text" css css))"#
-    ]];
-    assert_astro_ts_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn parser_ranges_materialize_tsx_and_css_regions_with_exact_source_slices() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "parser_ranges_materialize_tsx_and_css_regions_with_exact_source_slices",
+            r##"(with-temp-buffer
           (insert "---\nconst front = 1;\n---\n")
           (insert "<div data-value={front}>{front + 1}</div>\n")
           (insert "<script>const embedded = front;</script>\n")
@@ -162,16 +159,15 @@ fn parser_ranges_materialize_tsx_and_css_regions_with_exact_source_slices() {
                (format "%S:%S"
                        (treesit-parser-language right)
                        (treesit-parser-included-ranges
-                        right)))))))"##;
-    let expect = expect![[
+                        right)))))))"##,
+            true,
+            expect![[
         r#"OK ((astro nil "(document (frontmatter (frontmatter_js_block)) (element (start_tag (tag_name) (attribute (attribute_name) (attribute_interpolation (attribute_js_expr)))) (html_interpolation (permissible_text)) (end_tag (tag_name))) (script_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name))) (style_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name))))") (css ((116 . 139)) "(stylesheet (rule_set (selectors (class_selector (class_name (identifier)))) (block (declaration (property_name) (plain_value)))))") (tsx ((4 . 21)) "(program (lexical_declaration (variable_declarator name: (identifier) value: (number))))") (tsx ((43 . 48)) "(program (expression_statement (identifier)))") (tsx ((51 . 60)) "(program (expression_statement (binary_expression left: (identifier) right: (number))))") (tsx ((76 . 99)) "(program (lexical_declaration (variable_declarator name: (identifier) value: (identifier))))"))"#
-    ]];
-    assert_astro_ts_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn custom_indent_offset_is_copied_into_both_astro_and_css_local_settings() {
-    let elisp_form = r##"(let ((astro-ts-mode-indent-offset 5))
+    ]],
+        ),
+        (
+            "custom_indent_offset_is_copied_into_both_astro_and_css_local_settings",
+            r##"(let ((astro-ts-mode-indent-offset 5))
           (with-temp-buffer
             (insert "<div><span>Hello</span></div>")
             (astro-ts-mode)
@@ -183,16 +179,15 @@ fn custom_indent_offset_is_copied_into_both_astro_and_css_local_settings() {
                 (equal (car-safe (car-safe rule))
                        'parent-is))
               (alist-get
-               'astro treesit-simple-indent-rules)))))"##;
-    let expect = expect![[
+               'astro treesit-simple-indent-rules)))))"##,
+            true,
+            expect![[
         r#"OK (5 5 (((parent-is "document") column-0 0) ((parent-is "comment") prev-adaptive-prefix 0) ((parent-is "element") parent-bol astro-ts-mode-indent-offset) ((parent-is "script_element") parent-bol astro-ts-mode-indent-offset) ((parent-is "style_element") parent-bol astro-ts-mode-indent-offset) ((parent-is "start_tag") parent-bol astro-ts-mode-indent-offset) ((parent-is "self_closing_tag") parent-bol astro-ts-mode-indent-offset)))"#
-    ]];
-    assert_astro_ts_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn repeated_mode_activation_replaces_parsers_without_accumulating_duplicates() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "repeated_mode_activation_replaces_parsers_without_accumulating_duplicates",
+            r##"(with-temp-buffer
           (insert "<div>{value}</div>")
           (let (snapshots)
             (dotimes (_ 3)
@@ -213,16 +208,15 @@ fn repeated_mode_activation_replaces_parsers_without_accumulating_duplicates() {
              snapshots
              (and (equal (nth 0 snapshots) (nth 1 snapshots))
                   (equal (nth 1 snapshots)
-                         (nth 2 snapshots))))))"##;
-    let expect = expect![
+                         (nth 2 snapshots))))))"##,
+            true,
+            expect![
         "OK (((astro-ts-mode (astro) 1) (astro-ts-mode (astro) 1) (astro-ts-mode (astro) 1)) t)"
-    ];
-    assert_astro_ts_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn inherited_html_comment_and_syntax_behavior_remains_practical() {
-    let elisp_form = r##"(with-temp-buffer
+    ],
+        ),
+        (
+            "inherited_html_comment_and_syntax_behavior_remains_practical",
+            r##"(with-temp-buffer
           (insert "<section>\nHello\n</section>")
           (astro-ts-mode)
           (goto-char (point-min))
@@ -235,9 +229,11 @@ fn inherited_html_comment_and_syntax_behavior_remains_practical() {
            (nth 4 (syntax-ppss
                    (+ (line-beginning-position) 5)))
            (char-syntax ?<)
-           (char-syntax ?>)))"##;
-    let expect = expect![[
+           (char-syntax ?>)))"##,
+            true,
+            expect![[
         r#"OK ("<!-- " " -->" #("<section>\n<!-- Hello -->\n</section>" 0 10 (fontified nil) 10 11 (syntax-table (2097163) fontified nil) 11 15 (fontified nil) 15 20 (fontified nil) 20 23 (fontified nil) 23 24 (syntax-table (2097164) fontified nil) 24 35 (fontified nil)) nil 40 41)"#
-    ]];
-    assert_astro_ts_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

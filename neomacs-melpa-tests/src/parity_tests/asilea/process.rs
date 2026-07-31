@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_asilea_parity;
+use super::assert_asilea_batch;
 
 #[test]
-fn asilea_start_process_builds_pipe_process_with_exact_program_and_flattened_options() {
-    let elisp_form = r##"(let ((options
+fn process_public_surface_batch() {
+    assert_asilea_batch(&[
+        (
+            "asilea_start_process_builds_pipe_process_with_exact_program_and_flattened_options",
+            r##"(let ((options
                 [["-O0" "-O3"]
                  [nil ("-march=native" "-mtune=native")]
                  ["file name.c"]])
@@ -39,17 +42,15 @@ fn asilea_start_process_builds_pipe_process_with_exact_program_and_flattened_opt
                   (nreverse calls))))
            (when
                (buffer-live-p created-buffer)
-             (kill-buffer created-buffer))))"##;
-    let expect = expect![[
+             (kill-buffer created-buffer))))"##,
+            true,
+            expect![[
         r#"OK (:fake-process ((("/opt/compiler driver" (:buffer nil) "/opt/compiler driver" "-O3" "-march=native" "-mtune=native" "file name.c") nil t " *asilea process output*")))"#
-    ]];
-
-    assert_asilea_parity(elisp_form, expect);
-}
-
-#[test]
-fn asilea_start_process_creates_unique_internal_buffers_for_repeated_jobs() {
-    let elisp_form = r##"(let ((options [["-O2"]])
+    ]],
+        ),
+        (
+            "asilea_start_process_creates_unique_internal_buffers_for_repeated_jobs",
+            r##"(let ((options [["-O2"]])
                buffers
                calls)
          (unwind-protect
@@ -86,17 +87,15 @@ fn asilea_start_process_creates_unique_internal_buffers_for_repeated_jobs() {
            (dolist (buffer buffers)
              (when
                  (buffer-live-p buffer)
-               (kill-buffer buffer)))))"##;
-    let expect = expect![[
+               (kill-buffer buffer)))))"##,
+            true,
+            expect![[
         r#"OK (1 2 (("compiler" :base-name t "compiler" ("-O2") nil) ("compiler" :unique-suffixed-name t "compiler" ("-O2") nil)) (t t) nil)"#
-    ]];
-
-    assert_asilea_parity(elisp_form, expect);
-}
-
-#[test]
-fn asilea_start_process_omits_nil_groups_and_preserves_duplicate_arguments() {
-    let elisp_form = r##"(let ((options
+    ]],
+        ),
+        (
+            "asilea_start_process_omits_nil_groups_and_preserves_duplicate_arguments",
+            r##"(let ((options
                 [[nil]
                  [("x" "x" "")]
                  ["λ"]
@@ -116,15 +115,13 @@ fn asilea_start_process_omits_nil_groups_and_preserves_duplicate_arguments() {
                 options))
            (when
                (buffer-live-p captured-buffer)
-             (kill-buffer captured-buffer))))"##;
-    let expect = expect![[r#"OK ("driver" (:buffer nil) "driver" "x" "x" "" "λ")"#]];
-
-    assert_asilea_parity(elisp_form, expect);
-}
-
-#[test]
-fn asilea_start_process_surfaces_state_shape_and_start_process_errors_without_leaking_contract() {
-    let elisp_form = r##"(let ((options [["x"]])
+             (kill-buffer captured-buffer))))"##,
+            true,
+            expect![[r#"OK ("driver" (:buffer nil) "driver" "x" "x" "" "λ")"#]],
+        ),
+        (
+            "asilea_start_process_surfaces_state_shape_and_start_process_errors_without_leaking_contract",
+            r##"(let ((options [["x"]])
                created)
          (cl-letf
              (((symbol-function
@@ -166,10 +163,11 @@ fn asilea_start_process_surfaces_state_shape_and_start_process_errors_without_le
              (dolist (buffer created)
                (when
                    (buffer-live-p buffer)
-                 (kill-buffer buffer))))))"##;
-    let expect = expect![[
+                 (kill-buffer buffer))))))"##,
+            true,
+            expect![[
         r#"OK ((("missing-driver" [0] #1=[#2=["x"]]) :error file-missing ("Searching for program" "No such file" "missing-driver")) (("driver" [1] #1#) :error args-out-of-range (#2# 1)) (("driver" [] #1#) :error file-missing ("Searching for program" "No such file" "driver")))"#
-    ]];
-
-    assert_asilea_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

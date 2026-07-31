@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ALL_EXT_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const ALL_EXT_TEST_TIMEOUT: Duration = Duration::from_secs(120);
@@ -119,4 +121,15 @@ pub(crate) fn assert_all_ext_parity(elisp_form: &str, expected: Expect) {
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("all-ext parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+/// Multi-probe batch for `assert_all_ext_parity` cases (2a).
+pub(crate) fn assert_all_ext_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        all_ext_oracle(),
+        &name,
+        "all_ext_parity",
+        cases,
+    );
 }

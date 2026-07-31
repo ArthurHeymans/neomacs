@@ -1,10 +1,13 @@
 use expect_test::{Expect, expect};
 
-use super::assert_async_job_queue_parity;
+use super::assert_async_job_queue_batch;
 
 #[test]
-fn queue_creation_builds_fixed_doubly_linked_slots_and_stable_display_state() {
-    let elisp_form = r##"
+fn structures_public_surface_batch() {
+    assert_async_job_queue_batch(&[
+        (
+            "queue_creation_builds_fixed_doubly_linked_slots_and_stable_display_state",
+            r##"
 (let ((async-job-queue--num-tables-created 0)
       (async-job-queue-default-size 3))
   (let ((active
@@ -22,16 +25,15 @@ fn queue_creation_builds_fixed_doubly_linked_slots_and_stable_display_state() {
        nil))
      (async-job-queue-displayable-table inactive)
      async-job-queue--num-tables-created)))
-"##;
-    let expect: Expect = expect![
+"##,
+            true,
+            expect![
         "OK ((:id async-job-queue-table-1 :active t :in-use 0 :free 3 :used-slots nil :free-slots (0 1 2) :queued 0 :timer nil) ((async-job-queue--slot (table async-job-queue-table-1) (index 0) (next 1) (prev nil) (job nil)) (async-job-queue--slot (table async-job-queue-table-1) (index 1) (next 2) (prev 0) (job nil)) (async-job-queue--slot (table async-job-queue-table-1) (index 2) (next nil) (prev 1) (job nil))) (async-job-queue--table (id fixture-inactive) (slots 2) (active nil) (in-use 0 nil nil nil) (free 2 0 1 (0 1)) (queue 0) (on-empty nil) (freq 1) (timer nil)) 2)"
-    ];
-    assert_async_job_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_slot_public_construction_signals_before_a_queue_can_be_scheduled() {
-    let elisp_form = r##"
+    ],
+        ),
+        (
+            "zero_slot_public_construction_signals_before_a_queue_can_be_scheduled",
+            r##"
 (let ((async-job-queue--num-tables-created 0))
   (let ((explicit
          (condition-case error-data
@@ -54,16 +56,15 @@ fn zero_slot_public_construction_signals_before_a_queue_can_be_scheduled() {
      explicit
      defaulted
      async-job-queue--num-tables-created)))
-"##;
-    let expect: Expect = expect![
+"##,
+            true,
+            expect![
         "OK ((wrong-type-argument async-job-queue--slot nil) (wrong-type-argument async-job-queue--slot nil) 2)"
-    ];
-    assert_async_job_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn slot_allocation_reclamation_and_fifo_reuse_preserve_all_list_invariants() {
-    let elisp_form = r##"
+    ],
+        ),
+        (
+            "slot_allocation_reclamation_and_fifo_reuse_preserve_all_list_invariants",
+            r##"
 (let* ((table
         (async-job-queue-make-job-queue
          1 3 nil t nil nil 'slots))
@@ -118,16 +119,15 @@ fn slot_allocation_reclamation_and_fifo_reuse_preserve_all_list_invariants() {
     (append
      (async-job-queue--table-slots table)
      nil))))
-"##;
-    let expect: Expect = expect![
+"##,
+            true,
+            expect![
         "OK ((0 1 2 1) #s(async-job-queue--job job-one nil nil nil nil nil nil nil nil nil nil nil nil nil) (:id slots :active nil :in-use 1 :free 2 :used-slots (0) :free-slots (1 2) :queued 0 :timer nil) (:id slots :active nil :in-use 3 :free 0 :used-slots (0 1 2) :free-slots nil :queued 0 :timer nil) (:id slots :active nil :in-use 2 :free 1 :used-slots (0 2) :free-slots (1) :queued 0 :timer nil) (:id slots :active nil :in-use 2 :free 1 :used-slots (2 1) :free-slots (0) :queued 0 :timer nil) ((async-job-queue--slot (table slots) (index 0) (next nil) (prev nil) (job nil)) (async-job-queue--slot (table slots) (index 1) (next nil) (prev 2) (job job-reused)) (async-job-queue--slot (table slots) (index 2) (next 1) (prev nil) (job job-two))))"
-    ];
-    assert_async_job_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn allocation_and_double_reclamation_fail_atomically_with_named_conditions() {
-    let elisp_form = r##"
+    ],
+        ),
+        (
+            "allocation_and_double_reclamation_fail_atomically_with_named_conditions",
+            r##"
 (let* ((table
         (async-job-queue-make-job-queue
          1 1 nil t nil nil 'errors))
@@ -160,16 +160,15 @@ fn allocation_and_double_reclamation_fail_atomically_with_named_conditions() {
      reclaim-signal
      (async-job-queue-parity-table-state table)
      (async-job-queue-displayable-slot slot))))
-"##;
-    let expect: Expect = expect![
+"##,
+            true,
+            expect![
         "OK (async-job-queue--table-no-free-slot only-job async-job-queue-slot-already-free (:id errors :active nil :in-use 0 :free 1 :used-slots nil :free-slots (0) :queued 0 :timer nil) (async-job-queue--slot (table errors) (index 0) (next nil) (prev nil) (job nil)))"
-    ];
-    assert_async_job_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn generated_struct_constructors_copies_accessors_and_setters_have_value_semantics() {
-    let elisp_form = r##"
+    ],
+        ),
+        (
+            "generated_struct_constructors_copies_accessors_and_setters_have_value_semantics",
+            r##"
 (let* ((queue
         (async-job-queue--queue-create
          :head 'alpha :last 'omega))
@@ -232,15 +231,13 @@ fn generated_struct_constructors_copies_accessors_and_setters_have_value_semanti
     (equal
      (async-job-queue--job-program job)
      (async-job-queue--job-program job-copy)))))
-"##;
-    let expect: Expect =
-        expect!["OK ((t alpha omega changed) (t original copy t) (t 0 9 t) (t job-a job-copy t))"];
-    assert_async_job_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn display_helpers_and_job_slot_cover_nil_queued_running_and_completed_shapes() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect!["OK ((t alpha omega changed) (t original copy t) (t 0 9 t) (t job-a job-copy t))"],
+        ),
+        (
+            "display_helpers_and_job_slot_cover_nil_queued_running_and_completed_shapes",
+            r##"
 (let* ((table
         (async-job-queue-make-job-queue
          0.5 2 nil t nil nil 'display))
@@ -282,16 +279,15 @@ fn display_helpers_and_job_slot_cover_nil_queued_running_and_completed_shapes() 
       (async-job-queue--job-run-slot job)
       nil)
      (async-job-queue--job-slot job))))
-"##;
-    let expect: Expect = expect![
+"##,
+            true,
+            expect![
         "OK ((async-job-queue--table nil) (async-job-queue--slot nil) (async-job-queue--job nil) (async-job-queue--table (id display) (slots 2) (active nil) (in-use 1 0 0 (0)) (free 1 1 1 (1)) (queue 0) (on-empty nil) (freq 0.5) (timer nil)) (async-job-queue--slot (table display) (index 0) (next nil) (prev nil) (job report)) (async-job-queue--job (id report) (table display) (run-slot 0) (started (26000 10 0 0)) (ended (26000 20 0 0)) (max-time 12) (future future-token) (returned t) (result (:ok 42)) (dispatched t) (succeed t) (timeout t) (quit t)) t nil)"
-    ];
-    assert_async_job_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn expression_conversion_and_cycle_safe_slot_walks_match_exactly() {
-    let elisp_form = r##"
+    ],
+        ),
+        (
+            "expression_conversion_and_cycle_safe_slot_walks_match_exactly",
+            r##"
 (let* ((closure
         (let ((captured 4))
           (lambda ()
@@ -333,9 +329,11 @@ fn expression_conversion_and_cycle_safe_slot_walks_match_exactly() {
     table)
    (async-job-queue--slots-free-list
     table)))
-"##;
-    let expect: Expect = expect![
+"##,
+            true,
+            expect![
         "OK (t t t (lambda nil named-symbol) (lambda nil (+ 1 2)) (lambda nil 42) (0 1 0) (2))"
-    ];
-    assert_async_job_queue_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }

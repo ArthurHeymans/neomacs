@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_archive_phar_parity;
+use super::assert_archive_phar_batch;
 
 #[test]
-fn archive_phar_opens_a_release_and_extracts_the_selected_source_file() {
-    let elisp_form = r##"(let* ((release-dir
+fn workflows_public_surface_batch() {
+    assert_archive_phar_batch(&[
+        (
+            "archive_phar_opens_a_release_and_extracts_the_selected_source_file",
+            r##"(let* ((release-dir
                (expand-file-name "release/" temporary-file-directory))
               (archive-file
                (expand-file-name "application.phar" release-dir))
@@ -55,16 +58,15 @@ fn archive_phar_opens_a_release_and_extracts_the_selected_source_file() {
            (when (buffer-live-p member-buffer)
              (kill-buffer member-buffer))
            (when (buffer-live-p archive-buffer)
-             (kill-buffer archive-buffer))))"##;
-    let expect = expect![[
+             (kill-buffer archive-buffer))))"##,
+            true,
+            expect![[
         r##"OK ((archive-mode "Phar-Archive" t "M Si       Date&time         Filename\n- --  --------------------  ----------------\n  52  14-Nov-2023 22:13:20  bin/console\n  86  14-Nov-2023 22:14:20  src/Main.php\n- --  --------------------  ----------------\n 138                         2 files\n") ("Main.php (application.phar)" "application.phar:src/Main.php" "<?php\nfinal class Main { public static function run(): string { return \"ready\"; } }\n" nil nil))"##
-    ]];
-    assert_archive_phar_parity(elisp_form, expect);
-}
-
-#[test]
-fn archive_phar_reverts_an_updated_release_and_opens_its_new_documentation_member() {
-    let elisp_form = r##"(let* ((release-dir
+    ]],
+        ),
+        (
+            "archive_phar_reverts_an_updated_release_and_opens_its_new_documentation_member",
+            r##"(let* ((release-dir
                (expand-file-name "release/" temporary-file-directory))
               (archive-file
                (expand-file-name "application.phar" release-dir))
@@ -118,16 +120,15 @@ fn archive_phar_reverts_an_updated_release_and_opens_its_new_documentation_membe
            (when (buffer-live-p member-buffer)
              (kill-buffer member-buffer))
            (when (buffer-live-p archive-buffer)
-             (kill-buffer archive-buffer))))"##;
-    let expect = expect![[
+             (kill-buffer archive-buffer))))"##,
+            true,
+            expect![[
         r##"OK ("M Si       Date&time         Filename\n- --  --------------------  ----------------\n  52  14-Nov-2023 22:13:20  bin/console\n  86  14-Nov-2023 22:14:20  src/Main.php\n  46  14-Nov-2023 22:15:20  docs/release notes.txt\n- --  --------------------  ----------------\n 184                         3 files\n" ("release notes.txt (application.phar)" "application.phar:docs/release notes.txt" "Version 2\n- safer migrations\n- faster startup\n" nil))"##
-    ]];
-    assert_archive_phar_parity(elisp_form, expect);
-}
-
-#[test]
-fn archive_phar_keeps_the_listing_open_when_a_member_cannot_be_read() {
-    let elisp_form = r##"(let* ((release-dir
+    ]],
+        ),
+        (
+            "archive_phar_keeps_the_listing_open_when_a_member_cannot_be_read",
+            r##"(let* ((release-dir
                (expand-file-name "release/" temporary-file-directory))
               (archive-file
                (expand-file-name "damaged.phar" release-dir))
@@ -174,9 +175,11 @@ fn archive_phar_keeps_the_listing_open_when_a_member_cannot_be_read() {
                    (buffer-substring-no-properties
                     (point-min) (point-max))))))
            (when (buffer-live-p archive-buffer)
-             (kill-buffer archive-buffer))))"##;
-    let expect = expect![[
+             (kill-buffer archive-buffer))))"##,
+            true,
+            expect![[
         r##"OK (t nil "damaged.phar\11src/missing.php" (archive-mode t nil "M Si       Date&time         Filename\n- --  --------------------  ----------------\n  25  14-Nov-2023 22:13:20  src/Present.php\n  31  14-Nov-2023 22:14:20  src/missing.php\n- --  --------------------  ----------------\n  56                         2 files\n"))"##
-    ]];
-    assert_archive_phar_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

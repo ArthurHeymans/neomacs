@@ -1,26 +1,28 @@
 use expect_test::expect;
 
-use super::assert_auth_source_gopass_parity;
+use super::assert_auth_source_gopass_batch;
 
 #[test]
-fn auth_source_gopass_default_path_maps_real_account_coordinates() {
-    let elisp_form = r##"(mapcar
+fn paths_public_surface_batch() {
+    assert_auth_source_gopass_batch(&[
+        (
+            "auth_source_gopass_default_path_maps_real_account_coordinates",
+            r##"(mapcar
          (lambda (coordinates)
            (apply
             #'auth-source-gopass--gopass-construct-query-path
             coordinates))
          '((backend login "smtp.example.test" "alice@example.test" 587)
            (nil nil "space host" "Ada Lovelace" nil)
-           (ignored ignored "δοκιμή.example" "λ-user" "443")))"##;
-    let expect = expect![[
+           (ignored ignored "δοκιμή.example" "λ-user" "443")))"##,
+            true,
+            expect![[
         r#"OK ("accounts/smtp.example.test/alice@example.test" "accounts/space host/Ada Lovelace" "accounts/δοκιμή.example/λ-user")"#
-    ]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_path_respects_custom_prefix_and_separator() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auth_source_gopass_path_respects_custom_prefix_and_separator",
+            r##"(mapcar
          (lambda (configuration)
            (let ((auth-source-gopass-path-prefix
                   (nth 0 configuration))
@@ -35,16 +37,15 @@ fn auth_source_gopass_path_respects_custom_prefix_and_separator() {
          '(("team/vault" "::" "mail.example" "alice")
            ("" "/" "host" "user")
            ("root" "" "host" "user")
-           ("accounts" " → " "主机" "用户")))"##;
-    let expect = expect![[
+           ("accounts" " → " "主机" "用户")))"##,
+            true,
+            expect![[
         r#"OK ("team/vault::mail.example::alice" "/host/user" "roothostuser" "accounts → 主机 → 用户")"#
-    ]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_path_exposes_nil_and_non_string_component_contracts() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auth_source_gopass_path_exposes_nil_and_non_string_component_contracts",
+            r##"(mapcar
          (lambda (arguments)
            (auth-source-gopass-test-error-data
             (lambda ()
@@ -54,16 +55,15 @@ fn auth_source_gopass_path_exposes_nil_and_non_string_component_contracts() {
          '((nil nil nil "alice" nil)
            (nil nil "host" nil nil)
            (nil nil host "alice" nil)
-           (nil nil "host" 42 nil)))"##;
-    let expect = expect![[
+           (nil nil "host" 42 nil)))"##,
+            true,
+            expect![[
         r#"OK ((:ok "accounts//alice") (:ok "accounts/host/") (:error wrong-type-argument (sequencep host)) (:error wrong-type-argument (sequencep 42)))"#
-    ]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_path_dynamic_configuration_does_not_leak() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "auth_source_gopass_path_dynamic_configuration_does_not_leak",
+            r##"(list
          (auth-source-gopass--gopass-construct-query-path
           nil nil "host" "alice" nil)
          (let ((auth-source-gopass-path-prefix "work")
@@ -73,16 +73,15 @@ fn auth_source_gopass_path_dynamic_configuration_does_not_leak() {
          (auth-source-gopass--gopass-construct-query-path
           nil nil "host" "alice" nil)
          auth-source-gopass-path-prefix
-         auth-source-gopass-path-separator)"##;
-    let expect = expect![[
+         auth-source-gopass-path-separator)"##,
+            true,
+            expect![[
         r#"OK ("accounts/host/alice" "work.host.alice" "accounts/host/alice" "accounts" "/")"#
-    ]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_search_passes_every_coordinate_to_custom_constructor() {
-    let elisp_form = r##"(let (constructor-arguments
+    ]],
+        ),
+        (
+            "auth_source_gopass_search_passes_every_coordinate_to_custom_constructor",
+            r##"(let (constructor-arguments
                events)
          (let ((auth-source-gopass-construct-query-path
                 (lambda (&rest arguments)
@@ -108,16 +107,15 @@ fn auth_source_gopass_search_passes_every_coordinate_to_custom_constructor() {
                :require '(:user :secret)
                :max 1)
               constructor-arguments
-              (nreverse events)))))"##;
-    let expect = expect![[
+              (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK (((:user "alice" :secret "secret")) (fixture-backend gopass "smtp.example" "alice" 587) ((:find "gopass") (:shell "gopass show -o vault/item")))"#
-    ]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_custom_constructor_output_is_shell_quoted_once() {
-    let elisp_form = r##"(let ((auth-source-gopass-executable
+    ]],
+        ),
+        (
+            "auth_source_gopass_custom_constructor_output_is_shell_quoted_once",
+            r##"(let ((auth-source-gopass-executable
                 "/fixture/bin/go pass")
                (auth-source-gopass-construct-query-path
                 (lambda (&rest _arguments)
@@ -135,9 +133,11 @@ fn auth_source_gopass_custom_constructor_output_is_shell_quoted_once() {
             (auth-source-gopass-search
              :host "smtp.example"
              :user "alice")
-            (nreverse commands))))"##;
-    let expect = expect![[
+            (nreverse commands))))"##,
+            true,
+            expect![[
         r#"OK (((:user "alice" :secret "p@ss word")) ("/fixture/bin/go pass show -o team\\ vault/alice\\'s\\ smtp\\;\\ echo\\ unsafe"))"#
-    ]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

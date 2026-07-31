@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_angular_snippets_parity;
+use super::assert_angular_snippets_batch;
 
 #[test]
-fn loading_the_package_registers_its_snippet_tree_with_yasnippet() {
-    let elisp_form = r##"
+fn workflows_public_surface_batch() {
+    assert_angular_snippets_batch(&[
+        (
+            "loading_the_package_registers_its_snippet_tree_with_yasnippet",
+            r##"
 (progn
   (yas-global-mode 1)
   (list
@@ -28,18 +31,15 @@ fn loading_the_package_registers_its_snippet_tree_with_yasnippet() {
    :shipped-directories
    (mapcar (lambda (mode) (cons mode (ngs-test-snippet-directory mode)))
            '(js2-mode web-mode))))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:registered-directory t :html-keys ("ng") :html-snippets 42 :js-keys ("$b" "$e" "$f" "$on" "$v" "$va" "$w" "ngc" "ngd" "ngfa" "ngfi" "ngm" "ngro" "ngrw" "ngrwr" "ngs" "ngw") :shipped-directories ((js2-mode :exists t :files nil) (web-mode :exists t :files nil)))"#
-    ]];
-
-    assert_angular_snippets_parity(elisp_form, expect);
-}
-
-#[test]
-fn expanding_a_directive_in_a_real_html_buffer_inserts_it_and_documents_it() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "expanding_a_directive_in_a_real_html_buffer_inserts_it_and_documents_it",
+            r##"
 (progn
   (yas-global-mode 1)
   (with-temp-buffer
@@ -93,18 +93,15 @@ fn expanding_a_directive_in_a_real_html_buffer_inserts_it_and_documents_it() {
                                    (point-min) (point-max))))
                               '("class=\"card\">" ">" "/>" " class=\"card\">"
                                 "")))))))))))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:ng-click (:expanded t :buffer "<div ng-click=\"\"" :point 16 :in-snippet t :echoed ("Eval the given expression when element is clicked.")) :ng-click-filled "<div ng-click=\"save()\"" :before-closing-bracket (:expanded t :buffer "<div ng-show=\"\">" :point 15 :in-snippet t :echoed ("Hides the element if the expression is falsy.")) :before-another-attribute (:expanded t :buffer "<div ng-hide=\"\"class=\"card\">" :point 15 :in-snippet t :echoed ("Hides the element if the expression is truthy.")) :before-a-space (:expanded t :buffer "<div ng-hide=\"\" class=\"card\">" :point 15 :in-snippet t :echoed ("Hides the element if the expression is truthy. [2 times]")) :ng-repeat (:expanded t :buffer "<li ng-repeat=\"thing in things\"" :point 16 :in-snippet t :echoed ("Repeats template for every item in a list.")) :helper-called-directly (" class=\"card\">" ">" "/>" " class=\"card\">" ""))"#
-    ]];
-
-    assert_angular_snippets_parity(elisp_form, expect);
-}
-
-#[test]
-fn expanding_a_scope_snippet_in_a_real_javascript_buffer_needs_no_prompt() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "expanding_a_scope_snippet_in_a_real_javascript_buffer_needs_no_prompt",
+            r##"
 (progn
   (yas-global-mode 1)
   (with-temp-buffer
@@ -137,18 +134,15 @@ fn expanding_a_scope_snippet_in_a_real_javascript_buffer_needs_no_prompt() {
                     :controller controller
                     :route route
                     :route-with-resolve route-with-resolve))))))))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:broadcast (:expanded t :buffer "$scope.$broadcast(\"\", );\n" :point 20 :in-snippet t :echoed nil) :watch (:expanded t :buffer "$scope.$watch(\"\", function (newValue, oldValue) {\n    \n});" :point 16 :in-snippet t :echoed nil) :controller (:expanded t :buffer "controller('', function ($scope, ) {\n    \n});" :point 13 :in-snippet t :echoed nil) :route (:expanded t :buffer "$routeProvider.when(\"\", {\n    templateUrl: \"\",\n    controller: \"\"\n});\n" :point 22 :in-snippet t :echoed nil) :route-with-resolve (:expanded t :buffer "$routeProvider.when(\"\", {\n    templateUrl: \"\",\n    controller: \"\",\n    resolve: {\n    }\n});\n" :point 22 :in-snippet t :echoed nil))"#
-    ]];
-
-    assert_angular_snippets_parity(elisp_form, expect);
-}
-
-#[test]
-fn showing_docs_at_point_echoes_first_and_browses_the_camel_cased_url_second() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "showing_docs_at_point_echoes_first_and_browses_the_camel_cased_url_second",
+            r##"
 (with-temp-buffer
   (html-mode)
   (insert "<div ng-click=\"save()\" ng-options=\"o for o in os\">\n")
@@ -178,34 +172,28 @@ fn showing_docs_at_point_echoes_first_and_browses_the_camel_cased_url_second() {
             ;; own name.
             :indirected indirect
             :browsed-in-total (copy-sequence ngs-test-browsed)))))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:first-press (:echoed ("Eval the given expression when element is clicked.") :signalled nil :remembered "ng-click") :second-press (:echoed nil :signalled nil :remembered "ng-click") :browsed ("http://docs.angularjs.org/api/ng.directive:ngClick") :forget-timers-added 1 :after-forgetting (:echoed ("Eval the given expression when element is clicked. [2 times]") :signalled nil :remembered "ng-click") :indirected (:echoed ("Populates select options from a list or object.") :signalled nil :remembered "ng-options") :browsed-in-total ("http://docs.angularjs.org/api/ng.directive:ngClick"))"#
-    ]];
-
-    assert_angular_snippets_parity(elisp_form, expect);
-}
-
-#[test]
-fn every_directive_has_a_docstring_and_a_url_built_from_its_camel_cased_name() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "every_directive_has_a_docstring_and_a_url_built_from_its_camel_cased_name",
+            r##"
 (list :entries (length ng-docs)
       :root ng-snip/directive-root-url
       :indirections (ngs-test-plain ng-snip/docs-indirection)
       :docs (ngs-test-plain ng-docs))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:entries 43 :root "http://docs.angularjs.org/api/ng.directive:" :indirections (("ng-options" . "select") ("ng-switch-when" . "ng-switch")) :docs (("ng-app" :docstring "Auto-bootstraps an application, with optional module to load." :docurl "http://docs.angularjs.org/api/ng.directive:ngApp") ("ng-bind" :docstring "Replace text content of element with value of given expression." :docurl "http://docs.angularjs.org/api/ng.directive:ngBind") ("ng-bind-html-unsafe" :docstring "Set innerHTML of element to unsanitized value of given expression." :docurl "http://docs.angularjs.org/api/ng.directive:ngBindHtmlUnsafe") ("ng-bind-template" :docstring "Replace text content of element with given template." :docurl "http://docs.angularjs.org/api/ng.directive:ngBindTemplate") ("ng-change" :docstring "Eval the given expression when user changes the input. Requires ng-model." :docurl "http://docs.angularjs.org/api/ng.directive:ngChange") ("ng-checked" :docstring "Uses given expression to determine checked-state of checkbox." :docurl "http://docs.angularjs.org/api/ng.directive:ngChecked") ("ng-class" :docstring "Sets class names on element based on given expression." :docurl "http://docs.angularjs.org/api/ng.directive:ngClass") ("ng-class-even" :docstring "Like ng-class, but only on even rows. Requires ng-repeat." :docurl "http://docs.angularjs.org/api/ng.directive:ngClassEven") ("ng-class-odd" :docstring "Like ng-class, but only on odd rows. Requires ng-repeat." :docurl "http://docs.angularjs.org/api/ng.directive:ngClassOdd") ("ng-click" :docstring "Eval the given expression when element is clicked." :docurl "http://docs.angularjs.org/api/ng.directive:ngClick") ("ng-cloak" :docstring "Hides the element contents until compiled by angular." :docurl "http://docs.angularjs.org/api/ng.directive:ngCloak") ("ng-controller" :docstring "Assign controller to this element, along with a new scope." :docurl "http://docs.angularjs.org/api/ng.directive:ngController") ("ng-csp" :docstring "Enables Content Security Policy support. Should be on same element as ng-app." :docurl "http://docs.angularjs.org/api/ng.directive:ngCsp") ("ng-dblclick" :docstring "Eval the given expression when element is double clicked." :docurl "http://docs.angularjs.org/api/ng.directive:ngDblclick") ("ng-disabled" :docstring "Uses given expression to determine disabled-state of element." :docurl "http://docs.angularjs.org/api/ng.directive:ngDisabled") ("ng-form" :docstring "Nestable alias of the form directive." :docurl "http://docs.angularjs.org/api/ng.directive:ngForm") ("ng-hide" :docstring "Hides the element if the expression is truthy." :docurl "http://docs.angularjs.org/api/ng.directive:ngHide") ("ng-href" :docstring "Avoids bad URLs on links that are clicked before angular compiles them." :docurl "http://docs.angularjs.org/api/ng.directive:ngHref") ("ng-include" :docstring "Fetches, compiles and includes an external HTML fragment." :docurl "http://docs.angularjs.org/api/ng.directive:ngInclude") ("ng-init" :docstring "Evals expression before executing template during bootstrap." :docurl "http://docs.angularjs.org/api/ng.directive:ngInit") ("ng-list" :docstring "Text input that converts between comma-separated string and an array of strings." :docurl "http://docs.angularjs.org/api/ng.directive:ngList") ("ng-model" :docstring "Sets up two-way data binding. Works with input, select and textarea." :docurl "http://docs.angularjs.org/api/ng.directive:ngModel") ("ng-mousedown" :docstring "Eval the given expression on mousedown." :docurl "http://docs.angularjs.org/api/ng.directive:ngMousedown") ("ng-mouseenter" :docstring "Eval the given expression on mouseenter." :docurl "http://docs.angularjs.org/api/ng.directive:ngMouseenter") ("ng-mouseleave" :docstring "Eval the given expression on mouseleave." :docurl "http://docs.angularjs.org/api/ng.directive:ngMouseleave") ("ng-mousemove" :docstring "Eval the given expression on mousemove." :docurl "http://docs.angularjs.org/api/ng.directive:ngMousemove") ("ng-mouseover" :docstring "Eval the given expression on mouseover." :docurl "http://docs.angularjs.org/api/ng.directive:ngMouseover") ("ng-mouseup" :docstring "Eval the given expression on mouseup." :docurl "http://docs.angularjs.org/api/ng.directive:ngMouseup") ("ng-multiple" :docstring "Uses given expression to determine multiple-state of select element." :docurl "http://docs.angularjs.org/api/ng.directive:ngMultiple") ("ng-non-bindable" :docstring "Makes angular ignore {{bindings}} inside element." :docurl "http://docs.angularjs.org/api/ng.directive:ngNonBindable") ("ng-options" :docstring "Populates select options from a list or object." :docurl "http://docs.angularjs.org/api/ng.directive:select") ("ng-pluralize" :docstring "Helps change wording based on a number." :docurl "http://docs.angularjs.org/api/ng.directive:ngPluralize") ("ng-readonly" :docstring "Uses given expression to determine readonly-state of element." :docurl "http://docs.angularjs.org/api/ng.directive:ngReadonly") ("ng-repeat" :docstring "Repeats template for every item in a list." :docurl "http://docs.angularjs.org/api/ng.directive:ngRepeat") ("ng-selected" :docstring "Uses given expression to determine selected-state of option element." :docurl "http://docs.angularjs.org/api/ng.directive:ngSelected") ("ng-show" :docstring "Hides the element if the expression is falsy." :docurl "http://docs.angularjs.org/api/ng.directive:ngShow") ("ng-src" :docstring "Stops browser from fetching images with {{templates}} in the URL." :docurl "http://docs.angularjs.org/api/ng.directive:ngSrc") ("ng-style" :docstring "Sets style attributes from an object of DOM style properties. " :docurl "http://docs.angularjs.org/api/ng.directive:ngStyle") ("ng-submit" :docstring "Eval the given expression when form is submitted, and prevent default." :docurl "http://docs.angularjs.org/api/ng.directive:ngSubmit") ("ng-switch" :docstring "Switch on given expression to conditionally change DOM structure." :docurl "http://docs.angularjs.org/api/ng.directive:ngSwitch") ("ng-switch-when" :docstring "Include this element if value matches ng-switch on expression." :docurl "http://docs.angularjs.org/api/ng.directive:ngSwitch") ("ng-transclude" :docstring "Signifies where to insert transcluded DOM." :docurl "http://docs.angularjs.org/api/ng.directive:ngTransclude") ("ng-view" :docstring "Signifies where route views are shown." :docurl "http://docs.angularjs.org/api/ng.directive:ngView")))"#
-    ]];
-
-    assert_angular_snippets_parity(elisp_form, expect);
-}
-
-#[test]
-fn looking_for_a_directive_where_there_is_none_fails_three_different_ways() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "looking_for_a_directive_where_there_is_none_fails_three_different_ways",
+            r##"
 (list
  ;; Past the last "ng-" in the buffer: `forward-char 3' runs off the end.
  :past-the-end
@@ -248,11 +236,11 @@ fn looking_for_a_directive_where_there_is_none_fails_three_different_ways() {
  (mapcar (lambda (symbol) (list symbol (and (boundp symbol) t)
                                 (special-variable-p symbol)))
          '(ng-docs angular-snippets-root ng-snip/last-docs-message)))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:past-the-end (:echoed nil :signalled (end-of-buffer) :remembered nil) :before-any-directive (:echoed nil :signalled (search-failed "ng-") :remembered nil) :not-a-directive (:echoed nil :signalled (error "No angular identifier at point") :remembered nil) :unknown-directive (:echoed nil :signalled nil :remembered "ng-sparkle") :undeclared-globals ((ng-docs t nil) (angular-snippets-root t nil) (ng-snip/last-docs-message t t)))"#
-    ]];
-
-    assert_angular_snippets_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

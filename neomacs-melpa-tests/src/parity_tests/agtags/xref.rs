@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_agtags_parity;
+use super::assert_agtags_batch;
 
 /// `M-.' on a symbol with exactly one definition jumps straight there and
 /// `M-,' comes back, through the real xref commands and agtags' xref backend.
@@ -9,9 +9,13 @@ use super::assert_agtags_parity;
 /// answer one where GNU GLOBAL answers two.  `parser_reset' shows the other
 /// half of GNU GLOBAL's model — the prototype in the header counts as a
 /// reference, so references outnumber definitions three to one.
+
 #[test]
-fn agtags_xref_jumps_to_a_unique_definition_and_enumerates_every_hit() {
-    let elisp_form = r####"
+fn xref_public_surface_batch() {
+    assert_agtags_batch(&[
+        (
+            "agtags_xref_jumps_to_a_unique_definition_and_enumerates_every_hit",
+            r####"
 (let* ((start (neomacs-agtags-test-start "agtags-xref-workflow"))
        (root (car start))
        (tools (cdr start))
@@ -62,11 +66,11 @@ fn agtags_xref_jumps_to_a_unique_definition_and_enumerates_every_hit() {
                           (neomacs-agtags-test-trace tools)))))))
     (neomacs-agtags-test-cleanup root))
   result)
-"####;
-
-    let expect = expect![[
+"####,
+            true,
+            expect![[
         r#"OK (agtags "parser_reset" ("src/main.c" 11 18 "  return parser_reset(input);") (2 (("static int log_line(int value) {" ("src/main.c" 3 0 "static int log_line(int value) {")) ("static int log_line(int value) {" ("src/parser.c" 3 0 "static int log_line(int value) {")))) (1 (("return log_line(seed);" ("src/parser.c" 8 0 "  return log_line(seed);")))) (1 (("int parser_reset(int state) {" ("src/parser.c" 11 0 "int parser_reset(int state) {")))) (3 (("int parser_reset(int state);" ("include/parser.h" 4 0 "int parser_reset(int state);")) ("return parser_reset(input);" ("src/main.c" 11 0 "  return parser_reset(input);")) ("return parser_reset(state - 1);" ("src/parser.c" 18 0 "  return parser_reset(state - 1);")))) nil ("src/parser.c" 11 0 "int parser_reset(int state) {") ("src/main.c" 11 18 "  return parser_reset(input);") "gtags cwd=[ORACLE-SANDBOX]/agtags-xref-workflow <-i>\nglobal cwd=[ORACLE-SANDBOX]/agtags-xref-workflow <-d> <-x> <-a> <log_line>\nglobal cwd=[ORACLE-SANDBOX]/agtags-xref-workflow <-r> <-x> <-a> <log_line>\nglobal cwd=[ORACLE-SANDBOX]/agtags-xref-workflow <-d> <-x> <-a> <parser_reset>\nglobal cwd=[ORACLE-SANDBOX]/agtags-xref-workflow <-r> <-x> <-a> <parser_reset>\nglobal cwd=[ORACLE-SANDBOX]/agtags-xref-workflow <-d> <-x> <-a> <zzz_absent>\nglobal cwd=[ORACLE-SANDBOX]/agtags-xref-workflow <-d> <-x> <-a> <parser_reset>\n")"#
-    ]];
-
-    assert_agtags_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

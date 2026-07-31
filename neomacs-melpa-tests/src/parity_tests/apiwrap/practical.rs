@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_apiwrap_parity;
+use super::assert_apiwrap_batch;
 
 #[test]
-fn generated_repository_client_runs_a_complete_issue_lifecycle() {
-    let elisp_form = r##"(progn
+fn practical_public_surface_batch() {
+    assert_apiwrap_batch(&[
+        (
+            "generated_repository_client_runs_a_complete_issue_lifecycle",
+            r##"(progn
   (defvar aw-lifecycle-requests nil)
   (defun aw-lifecycle-request (method resource params data)
     (push
@@ -90,16 +93,15 @@ fn generated_repository_client_runs_a_complete_issue_lifecycle() {
             repo issue))))
     (list
      :responses responses
-     :requests (nreverse aw-lifecycle-requests))))"##;
-    let expect = expect![[
+     :requests (nreverse aw-lifecycle-requests))))"##,
+            true,
+            expect![[
         r#"OK (:responses (:list (:status 200 :method get :resource "/repos/GNU%20Project/neomacs%20core/issues") :create (:status 201 :method post :resource "/repos/GNU%20Project/neomacs%20core/issues") :exists (:status 200 :method head :resource "/repos/GNU%20Project/neomacs%20core/issues/163") :update (:status 200 :method patch :resource "/repos/GNU%20Project/neomacs%20core/issues/163") :lock (:status 200 :method put :resource "/repos/GNU%20Project/neomacs%20core/issues/163/lock") :unlock (:status 204 :method delete :resource "/repos/GNU%20Project/neomacs%20core/issues/163/lock")) :requests ((:method get :resource "/repos/GNU%20Project/neomacs%20core/issues" :params (:state "open" :labels ("bug" "help wanted") :page 2) :data nil) (:method post :resource "/repos/GNU%20Project/neomacs%20core/issues" :params (:notify "maintainers") :data ((title . "Parity failure") (body . "Reproduce on GNU and Neomacs") (labels . ["compatibility" "elisp"]))) (:method head :resource "/repos/GNU%20Project/neomacs%20core/issues/163" :params (:cache-control "no-cache") :data nil) (:method patch :resource "/repos/GNU%20Project/neomacs%20core/issues/163" :params nil :data ((state . "closed") (milestone . 7))) (:method put :resource "/repos/GNU%20Project/neomacs%20core/issues/163/lock" :params nil :data ((lock-reason . "resolved"))) (:method delete :resource "/repos/GNU%20Project/neomacs%20core/issues/163/lock" :params nil :data nil)))"#
-    ]];
-    assert_apiwrap_parity(elisp_form, expect);
-}
-
-#[test]
-fn backend_policies_transform_requests_and_allow_endpoint_specific_overrides() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "backend_policies_transform_requests_and_allow_endpoint_specific_overrides",
+            r##"(progn
   (defvar aw-policy-events nil)
   (defun aw-policy-default-params (params)
     (push
@@ -195,16 +197,15 @@ fn backend_policies_transform_requests_and_allow_endpoint_specific_overrides() {
     (list
      :created created
      :retried retried
-     :events (nreverse aw-policy-events))))"##;
-    let expect = expect![[
+     :events (nreverse aw-policy-events))))"##,
+            true,
+            expect![[
         r#"OK (:created (:accepted t :resource "/projects/GNU%20Team/neomacs%20runner/deployments" :params #4=((dry-run) (labels . #1=("compatibility" "nightly"))) :data #5=(#2=(revision . "abc123") #3=(environment . "staging") (client . "parity-suite"))) :retried (:accepted t :resource "/projects/GNU%20Team/neomacs%20runner/deployments/42/retry" :params #6=((retry-count . 3) (priority . "URGENT")) :data #7=((reason . "transient network failure"))) :events ((:phase policy-enter) (:phase default-params :input (:dry-run nil :labels #1#)) (:phase data :input (#2# #3#)) (:phase transport :method post :resource "/projects/GNU%20Team/neomacs%20runner/deployments" :params #4# :data #5#) (:phase policy-leave) (:phase policy-enter) (:phase retry-params :input (:retry-count 3 :priority "urgent")) (:phase transport :method post :resource "/projects/GNU%20Team/neomacs%20runner/deployments/42/retry" :params #6# :data #7#) (:phase policy-leave)))"#
-    ]];
-    assert_apiwrap_parity(elisp_form, expect);
-}
-
-#[test]
-fn endpoint_error_policy_recovers_missing_resources_but_propagates_auth_failures() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "endpoint_error_policy_recovers_missing_resources_but_propagates_auth_failures",
+            r##"(progn
   (define-error 'aw-resource-missing "API resource is missing")
   (define-error 'aw-auth-expired "API authentication expired")
   (defvar aw-errors-behavior 'present)
@@ -280,16 +281,15 @@ fn endpoint_error_policy_recovers_missing_resources_but_propagates_auth_failures
      :missing missing
      :present present
      :unauthorized unauthorized
-     :requests (nreverse aw-errors-requests))))"##;
-    let expect = expect![[
+     :requests (nreverse aw-errors-requests))))"##,
+            true,
+            expect![[
         r#"OK (:missing (:status not-found :details (:status 404 :resource "/repos/GNU%20Project/neomacs%20core" :request-id "request-404")) :present (:status 200 :repository ((owner . "GNU Project") (name . "neomacs core")) :resource "/repos/GNU%20Project/neomacs%20core") :unauthorized (:condition aw-auth-expired :details (:status 401 :scope "repository:read" :request-id "request-401")) :requests ((:method get :resource "/repos/GNU%20Project/neomacs%20core" :params (:include ("owner" "permissions")) :data nil) (:method get :resource "/repos/GNU%20Project/neomacs%20core" :params (:include ("owner" "permissions")) :data nil) (:method get :resource "/repos/GNU%20Project/neomacs%20core" :params (:include ("owner" "permissions")) :data nil)))"#
-    ]];
-    assert_apiwrap_parity(elisp_form, expect);
-}
-
-#[test]
-fn endpoint_catalog_selects_and_runs_a_wrapper_from_each_backend() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "endpoint_catalog_selects_and_runs_a_wrapper_from_each_backend",
+            r##"(progn
   (defvar aw-catalog-requests nil)
   (defun aw-catalog-request (method resource params data)
     (push
@@ -369,9 +369,11 @@ fn endpoint_catalog_selects_and_runs_a_wrapper_from_each_backend() {
      :selected
      (list catalog-selected foreign-selected)
      :responses responses
-     :requests (nreverse aw-catalog-requests))))"##;
-    let expect = expect![[
+     :requests (nreverse aw-catalog-requests))))"##,
+            true,
+            expect![[
         r#"OK (:selected (aw-catalog-get-repos-owner-repo-issues-open aw-foreign-get-repos-owner-repo-issues-open) :responses (:catalog (:source catalog :items #1=(((number . 17) (title . "Fix evaluator parity")) ((number . 42) (title . "Stabilize package tests"))) :resource "/repos/GNU%20Project/neomacs%20core/issues/open") :foreign (:source foreign :items #1# :resource "/mirror/GNU%20Project/neomacs%20core/issues/open")) :requests ((:method get :resource "/repos/GNU%20Project/neomacs%20core/issues/open" :params (:assignee "alice" :labels ("compatibility" "high priority")) :data nil) (:method get :resource "/mirror/GNU%20Project/neomacs%20core/issues/open" :params (:assignee "bob" :labels ("mirror" "triage")) :data nil)))"#
-    ]];
-    assert_apiwrap_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_c_headers_parity;
+use super::assert_auto_complete_c_headers_batch;
 
 #[test]
-fn auto_complete_c_headers_root_scan_returns_real_headers_suffix_free_files_and_directories() {
-    let elisp_form = r##"(let* ((root
+fn candidates_public_surface_batch() {
+    assert_auto_complete_c_headers_batch(&[
+        (
+            "auto_complete_c_headers_root_scan_returns_real_headers_suffix_free_files_and_directories",
+            r##"(let* ((root
                  (expand-file-name
                   "achead-root-scan"
                   default-directory))
@@ -39,17 +42,15 @@ fn auto_complete_c_headers_root_scan_returns_real_headers_suffix_free_files_and_
                (achead-test-relative-results
                 (achead:get-include-file-candidates)
                 root))
-           (delete-directory root t)))"##;
-    let expect = expect![[
+           (delete-directory root t)))"##,
+            true,
+            expect![[
         r#"OK (("README" . "README") ("api.h" . "api.h") ("dir.h/" . "dir.h") ("engine.hpp" . "engine.hpp") ("legacy.hh" . "legacy.hh") ("project/" . "project") ("upper.H" . "upper.H") ("vector" . "vector"))"#
-    ]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_nested_prefix_scans_only_that_directory_and_preserves_candidate_prefix()
-{
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "auto_complete_c_headers_nested_prefix_scans_only_that_directory_and_preserves_candidate_prefix",
+            r##"(let* ((root
                  (expand-file-name
                   "achead-nested-scan"
                   default-directory))
@@ -75,16 +76,15 @@ fn auto_complete_c_headers_nested_prefix_scans_only_that_directory_and_preserves
                 (achead:get-include-file-candidates
                  "pkg/")
                 root))
-           (delete-directory root t)))"##;
-    let expect = expect![[
+           (delete-directory root t)))"##,
+            true,
+            expect![[
         r#"OK (("pkg/deeper/" . "pkg/deeper") ("pkg/detail.h" . "pkg/detail.h") ("pkg/vector" . "pkg/vector"))"#
-    ]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_exact_duplicate_include_directories_are_scanned_once_in_order() {
-    let elisp_form = r##"(let* ((first-root
+    ]],
+        ),
+        (
+            "auto_complete_c_headers_exact_duplicate_include_directories_are_scanned_once_in_order",
+            r##"(let* ((first-root
                  (expand-file-name
                   "achead-dedupe-first"
                   default-directory))
@@ -128,15 +128,13 @@ fn auto_complete_c_headers_exact_duplicate_include_directories_are_scanned_once_
                   (length
                    achead:include-cache))))
            (delete-directory first-root t)
-           (delete-directory second-root t)))"##;
-    let expect = expect![[r#"OK (("second.h" "first.h") (second-root first-root) 2)"#]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_same_candidate_from_multiple_roots_preserves_both_paths_and_first_lookup()
- {
-    let elisp_form = r##"(let* ((first-root
+           (delete-directory second-root t)))"##,
+            true,
+            expect![[r#"OK (("second.h" "first.h") (second-root first-root) 2)"#]],
+        ),
+        (
+            "auto_complete_c_headers_same_candidate_from_multiple_roots_preserves_both_paths_and_first_lookup",
+            r##"(let* ((first-root
                  (expand-file-name
                   "achead-shadow-first"
                   default-directory))
@@ -174,16 +172,15 @@ fn auto_complete_c_headers_same_candidate_from_multiple_roots_preserves_both_pat
                   (achead:documentation-for-candidate
                    "shared.h"))))
            (delete-directory first-root t)
-           (delete-directory second-root t)))"##;
-    let expect = expect![[
+           (delete-directory second-root t)))"##,
+            true,
+            expect![[
         r#"OK (("shared.h" "shared.h") ("first" "second") "[ORACLE-SANDBOX]/achead-shadow-first/shared.h\n--------------------------\nfirst")"#
-    ]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_nil_patterns_still_offer_directories_but_no_files() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "auto_complete_c_headers_nil_patterns_still_offer_directories_but_no_files",
+            r##"(let* ((root
                  (expand-file-name
                   "achead-nil-patterns"
                   default-directory))
@@ -205,14 +202,13 @@ fn auto_complete_c_headers_nil_patterns_still_offer_directories_but_no_files() {
                (achead-test-relative-results
                 (achead:get-include-file-candidates)
                 root))
-           (delete-directory root t)))"##;
-    let expect = expect![[r#"OK (("nested/" . "nested"))"#]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_custom_pattern_can_include_arbitrary_files_without_hiding_directories() {
-    let elisp_form = r##"(let* ((root
+           (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK (("nested/" . "nested"))"#]],
+        ),
+        (
+            "auto_complete_c_headers_custom_pattern_can_include_arbitrary_files_without_hiding_directories",
+            r##"(let* ((root
                  (expand-file-name
                   "achead-custom-pattern"
                   default-directory))
@@ -237,15 +233,13 @@ fn auto_complete_c_headers_custom_pattern_can_include_arbitrary_files_without_hi
                (achead-test-relative-results
                 (achead:get-include-file-candidates)
                 root))
-           (delete-directory root t)))"##;
-    let expect =
-        expect![[r#"OK (("config.inc" . "config.inc") ("directory.txt/" . "directory.txt"))"#]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_remote_inspection_prefixes_only_directory_listing_probe() {
-    let elisp_form = r##"(let ((default-directory
+           (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK (("config.inc" . "config.inc") ("directory.txt/" . "directory.txt"))"#]],
+        ),
+        (
+            "auto_complete_c_headers_remote_inspection_prefixes_only_directory_listing_probe",
+            r##"(let ((default-directory
                 "/ssh:host:/project/")
                (achead:inspect-remote-directories
                 t)
@@ -277,16 +271,15 @@ fn auto_complete_c_headers_remote_inspection_prefixes_only_directory_listing_pro
            (list
             (achead:get-include-file-candidates)
             (nreverse directory-probes)
-            (nreverse directory-checks))))"##;
-    let expect = expect![[
+            (nreverse directory-checks))))"##,
+            true,
+            expect![[
         r#"OK ((("api.h" . "/usr/include/api.h") ("subdir/" . "/usr/include/subdir")) (("/ssh:host:/usr/include/" "^[^.]")) ("/usr/include/api.h" "/usr/include/api.h" "/usr/include/subdir" "/usr/include/subdir"))"#
-    ]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_disabled_remote_inspection_uses_unprefixed_directory() {
-    let elisp_form = r##"(let ((default-directory
+    ]],
+        ),
+        (
+            "auto_complete_c_headers_disabled_remote_inspection_uses_unprefixed_directory",
+            r##"(let ((default-directory
                 "/ssh:host:/project/")
                (achead:inspect-remote-directories
                 nil)
@@ -311,14 +304,13 @@ fn auto_complete_c_headers_disabled_remote_inspection_uses_unprefixed_directory(
                (lambda (_path) nil)))
            (list
             (achead:get-include-file-candidates)
-            probes)))"##;
-    let expect = expect![[r#"OK ((("api.h" . "/usr/include/api.h")) ("/usr/include/"))"#]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_relative_include_roots_resolve_file_checks_against_default_directory() {
-    let elisp_form = r##"(let* ((root
+            probes)))"##,
+            true,
+            expect![[r#"OK ((("api.h" . "/usr/include/api.h")) ("/usr/include/"))"#]],
+        ),
+        (
+            "auto_complete_c_headers_relative_include_roots_resolve_file_checks_against_default_directory",
+            r##"(let* ((root
                  (expand-file-name
                   "achead-relative-root"
                   default-directory))
@@ -345,15 +337,13 @@ fn auto_complete_c_headers_relative_include_roots_resolve_file_checks_against_de
                    (file-exists-p
                     (cdr entry)))
                  (achead:get-include-file-candidates))))
-           (delete-directory root t)))"##;
-    let expect =
-        expect![[r#"OK ((("local.h" . "include/local.h") ("sub/" . "include/sub")) (t t))"#]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_non_directory_basedir_uses_parent_scan_but_concatenates_raw_suffix() {
-    let elisp_form = r##"(let* ((root
+           (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK ((("local.h" . "include/local.h") ("sub/" . "include/sub")) (t t))"#]],
+        ),
+        (
+            "auto_complete_c_headers_non_directory_basedir_uses_parent_scan_but_concatenates_raw_suffix",
+            r##"(let* ((root
                  (expand-file-name
                   "achead-partial-basedir"
                   default-directory))
@@ -372,7 +362,9 @@ fn auto_complete_c_headers_non_directory_basedir_uses_parent_scan_but_concatenat
                 (achead:get-include-file-candidates
                  "pkg/ap")
                 root))
-           (delete-directory root t)))"##;
-    let expect = expect![[r#"OK (("pkg/apapi.h" . "pkg/api.h") ("pkg/apvector" . "pkg/vector"))"#]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
+           (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK (("pkg/apapi.h" . "pkg/api.h") ("pkg/apvector" . "pkg/vector"))"#]],
+        ),
+    ]);
 }

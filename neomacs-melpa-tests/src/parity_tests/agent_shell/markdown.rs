@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_agent_shell_parity;
+use super::assert_agent_shell_batch;
 
 #[test]
-fn streamed_release_report_renders_and_copies_back_as_practical_markdown() {
-    let elisp_form = r##"
+fn markdown_public_surface_batch() {
+    assert_agent_shell_batch(&[
+        (
+            "streamed_release_report_renders_and_copies_back_as_practical_markdown",
+            r##"
 (let ((first-chunk
        (concat
         "# Release review\n\n"
@@ -56,9 +59,11 @@ fn streamed_release_report_renders_and_copies_back_as_practical_markdown() {
          copied-document
          (equal copied-document
                 (concat first-chunk second-chunk)))))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r##"OK ("Release review\n\n> Verify GNU Emacs and Neomacs before shipping.\n\n- inspect Cargo.toml\n- compare CI logs\n\n│ Runtime   │ Result  │ Detail   │\n├───────────┼─────────┼──────────┤\n│ GNU Emacs │ pass    │ oracle   │\n│ Neomacs   │ pending │ map-put! │\n\n```elisp\n(let ((result (mapcar #'1+ '(1 2 3))))\n  (message \"**literal markdown**: %S\" result))\n" "Release review\n\n> Verify GNU Emacs and Neomacs before shipping.\n\n- inspect Cargo.toml\n- compare CI logs\n\n│ Runtime   │ Result  │ Detail   │\n├───────────┼─────────┼──────────┤\n│ GNU Emacs │ pass    │ oracle   │\n│ Neomacs   │ pending │ map-put! │\n\n\nelisp ⧉\n\n(let ((result (mapcar #'1+ '(1 2 3))))\n  (message \"**literal markdown**: %S\" result))\n\n\nSee the old workaround the minimized divergence.\n" "(let ((result (mapcar #'1+ '(1 2 3))))\n  (message \"**literal markdown**: %S\" result))" "https://example.test/runs/42" "# Release review\n\n> Verify **GNU Emacs _and_ Neomacs** before shipping.\n\n- inspect `Cargo.toml`\n- compare [CI logs](https://example.test/runs/42)\n\n| Runtime | Result | Detail |\n|:---|:---:|---:|\n| GNU Emacs | pass | oracle |\n| Neomacs | pending | map-put! |\n\n```elisp\n(let ((result (mapcar #'1+ '(1 2 3))))\n  (message \"**literal markdown**: %S\" result))\n```\n\nSee ~~the old workaround~~ **the minimized divergence**.\n" nil)"##
-    ]];
-    assert_agent_shell_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

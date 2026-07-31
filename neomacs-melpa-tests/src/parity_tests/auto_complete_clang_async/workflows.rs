@@ -1,11 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_clang_async_parity;
+use super::assert_auto_complete_clang_async_batch;
 
 #[test]
-fn auto_complete_clang_async_sources_resolve_to_callable_prefix_candidate_document_and_action_contracts()
- {
-    let elisp_form = r##"(mapcar
+fn workflows_public_surface_batch() {
+    assert_auto_complete_clang_async_batch(&[
+        (
+            "auto_complete_clang_async_sources_resolve_to_callable_prefix_candidate_document_and_action_contracts",
+            r##"(mapcar
                            (lambda (source)
                              (let ((definition
                                     (symbol-value source)))
@@ -41,17 +43,15 @@ fn auto_complete_clang_async_sources_resolve_to_callable_prefix_candidate_docume
                                  'cache
                                  definition))))
                            '(ac-source-clang-template
-                             ac-source-clang-async))"##;
-    let expect = expect![[
+                             ac-source-clang-async))"##,
+            true,
+            expect![[
         r#"OK ((ac-source-clang-template ((candidates . ac-clang-template-candidate) (prefix . ac-clang-template-prefix) (requires . 0) (action . ac-clang-template-action) (document . ac-clang-document) #1=(cache) (symbol . "t")) ((candidates ac-clang-template-candidate t) (prefix ac-clang-template-prefix t) (action ac-clang-template-action t) (document ac-clang-document t)) 0 "t" #1#) (ac-source-clang-async ((candidates . ac-clang-candidate) (candidate-face . ac-clang-candidate-face) (selection-face . ac-clang-selection-face) (prefix . ac-clang-prefix) (requires . 0) (document . ac-clang-document) (action . ac-clang-action) #2=(cache) (symbol . "c")) ((candidates ac-clang-candidate t) (prefix ac-clang-prefix t) (action ac-clang-action t) (document ac-clang-document t)) 0 "c" #2#))"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_launch_wrapper_distinguishes_nil_filename_from_empty_and_real_paths() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_clang_async_launch_wrapper_distinguishes_nil_filename_from_empty_and_real_paths",
+            r##"(mapcar
                            (lambda (filename)
                              (with-temp-buffer
                                (setq
@@ -72,18 +72,15 @@ fn auto_complete_clang_async_launch_wrapper_distinguishes_nil_filename_from_empt
                             nil
                             ""
                             (expand-file-name
-                             "./tmp/auto-complete-clang-async/project/main.cpp")))"##;
-    let expect = expect![[
+                             "./tmp/auto-complete-clang-async/project/main.cpp")))"##,
+            true,
+            expect![[
         r#"OK ((nil nil nil) ("" :launched ("")) ("[ORACLE-TMPDIR]/auto-complete-clang-async/project/main.cpp" :launched ("[ORACLE-TMPDIR]/auto-complete-clang-async/project/main.cpp")))"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_real_cat_callback_delivers_completion_candidates_through_os_process_filter()
- {
-    let elisp_form = r##"(let* ((pair
+    ]],
+        ),
+        (
+            "auto_complete_clang_async_real_cat_callback_delivers_completion_candidates_through_os_process_filter",
+            r##"(let* ((pair
                                  (acclang-test-start-cat
                                   "acclang-real-callback"))
                                 (process
@@ -156,18 +153,15 @@ fn auto_complete_clang_async_real_cat_callback_delivers_completion_candidates_th
                                   (process-live-p process)))
                              (acclang-test-finish-process
                               process
-                              buffer)))"##;
-    let expect = expect![[
+                              buffer)))"##,
+            true,
+            expect![[
         r#"OK (1 (:source-buffer idle (#("fork" 0 4 (ac-clang-help "[#void#]fork()")) #("format" 0 6 (ac-clang-help "[#int#]format(<#const char *fmt#>)")))) (:process-buffer idle nil "COMPLETION: format : [#int#]format(<#const char *fmt#>)\nCOMPLETION: fork : [#void#]fork()\nCOMPLETION: false : [#bool#]false\n$") ((:start :force-init t) (:update)) (run open listen connect stop))"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_practical_cpp_request_response_document_and_template_workflow_matches()
-{
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_clang_async_practical_cpp_request_response_document_and_template_workflow_matches",
+            r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -285,18 +279,15 @@ fn auto_complete_clang_async_practical_cpp_request_response_document_and_templat
                                             (buffer-string))))))
                                  (acclang-test-finish-process
                                   process
-                                  process-buffer)))))"##;
-    let expect = expect![[
+                                  process-buffer)))))"##,
+            true,
+            expect![[
         r#"OK (nil "COMPLETION\nrow:3\ncolumn:10\nsource_length:101\nstruct Formatter { int format(const char *); void fork(); };\nvoid use(Formatter object) {\n  object.fo\n\n" 1 (:source-status idle :process-buffer-status idle) (("fork" "[#void#]fork()" nil) ("format" "[#int#]format(<#const char *text#>)" nil)) "int format(const char *text)" "int format(const char *text)" ((:start :force-init t) (:update) (:template 102 (("(const char *text)" "int" "(<#const char *text#>)")))) "struct Formatter { int format(const char *); void fork(); };\nvoid use(Formatter object) {\n  object.fo")"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_two_live_buffers_keep_candidates_local_while_saved_prefix_remains_global()
- {
-    let elisp_form = r##"(let ((first
+    ]],
+        ),
+        (
+            "auto_complete_clang_async_two_live_buffers_keep_candidates_local_while_saved_prefix_remains_global",
+            r##"(let ((first
                                 (generate-new-buffer
                                  " *acclang-workflow-first*"))
                                (second
@@ -402,10 +393,11 @@ fn auto_complete_clang_async_two_live_buffers_keep_candidates_local_while_saved_
                                 (car pair)
                                 (cadr pair)))
                              (kill-buffer first)
-                             (kill-buffer second)))"##;
-    let expect = expect![[
+                             (kill-buffer second)))"##,
+            true,
+            expect![[
         r#"OK ((" *acclang-workflow-first*" "first.me" idle "ru" (("member" "[#int#]member$" nil)) (idle "ru" nil "COMPLETION: member : [#int#]member$") #1=(run open listen connect stop) t) (" *acclang-workflow-second*" "second.ru" idle "ru" (("run" "[#void#]run()$" nil)) (idle "ru" nil "COMPLETION: run : [#void#]run()$") #1# t))"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_pcmp_parity;
+use super::assert_auto_complete_pcmp_batch;
 
 #[test]
-fn auto_complete_pcmp_custom_command_dispatch_returns_real_pcomplete_choices() {
-    let elisp_form = r##"(progn
+fn workflows_public_surface_batch() {
+    assert_auto_complete_pcmp_batch(&[
+        (
+            "auto_complete_pcmp_custom_command_dispatch_returns_real_pcomplete_choices",
+            r##"(progn
          (fset
           'pcomplete/ac-pcmp-fixture-mode/tool
           (lambda ()
@@ -17,14 +20,13 @@ fn auto_complete_pcmp_custom_command_dispatch_returns_real_pcomplete_choices() {
             (ac-pcmp/get-ac-candidates)
             ac-pcmp--status
             ac-pcmp--point
-            (buffer-string))))"##;
-    let expect = expect![[r#"OK (("build" "check" "clean" "clippy") nil 6 "tool ")"#]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_custom_command_prefix_preserves_full_source_candidates() {
-    let elisp_form = r##"(progn
+            (buffer-string))))"##,
+            true,
+            expect![[r#"OK (("build" "check" "clean" "clippy") nil 6 "tool ")"#]],
+        ),
+        (
+            "auto_complete_pcmp_custom_command_prefix_preserves_full_source_candidates",
+            r##"(progn
          (fset
           'pcomplete/ac-pcmp-fixture-mode/deploy
           (lambda ()
@@ -40,16 +42,15 @@ fn auto_complete_pcmp_custom_command_prefix_preserves_full_source_candidates() {
                (ac-pcmp/get-ac-candidates)
                ac-pcmp--status
                (buffer-string))))
-          '("" "p" "pro" "s" "missing")))"##;
-    let expect = expect![[
+          '("" "p" "pro" "s" "missing")))"##,
+            true,
+            expect![[
         r#"OK (("" #1=("production" "preview" "staging" "sandbox") nil "deploy ") ("p" #1# nil "deploy p") ("pro" #1# sole "deploy pro") ("s" #1# nil "deploy s") ("missing" #1# nil "deploy missing"))"#
-    ]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_candidate_selection_action_completes_command_lifecycle() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "auto_complete_pcmp_candidate_selection_action_completes_command_lifecycle",
+            r##"(progn
          (fset
           'pcomplete/ac-pcmp-fixture-mode/git
           (lambda ()
@@ -71,15 +72,13 @@ fn auto_complete_pcmp_candidate_selection_action_completes_command_lifecycle() {
                 ac-pcmp--status
                 (buffer-string)
                 pcomplete-last-completion-length
-                pcomplete-last-completion-stub)))))"##;
-    let expect =
-        expect![[r#"OK (("checkout" "cherry-pick" "cherry") nil "git chcheckout" 8 "ch")"#]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_real_file_completion_reads_deterministic_workspace_entries() {
-    let elisp_form = r##"(let* ((root
+                pcomplete-last-completion-stub)))))"##,
+            true,
+            expect![[r#"OK (("checkout" "cherry-pick" "cherry") nil "git chcheckout" 8 "ch")"#]],
+        ),
+        (
+            "auto_complete_pcmp_real_file_completion_reads_deterministic_workspace_entries",
+            r##"(let* ((root
                                  (expand-file-name
                                   "auto-complete-pcmp-files"
                                   default-directory))
@@ -112,14 +111,13 @@ fn auto_complete_pcmp_real_file_completion_reads_deterministic_workspace_entries
                     ac-pcmp--status
                     (buffer-string)))))
            (when (file-exists-p root)
-             (delete-directory root t))))"##;
-    let expect = expect![[r#"OK (t ("alpha-dir/" "alpha.txt") nil "open al")"#]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_real_command_failure_is_contained_and_next_request_recovers() {
-    let elisp_form = r##"(progn
+             (delete-directory root t))))"##,
+            true,
+            expect![[r#"OK (t ("alpha-dir/" "alpha.txt") nil "open al")"#]],
+        ),
+        (
+            "auto_complete_pcmp_real_command_failure_is_contained_and_next_request_recovers",
+            r##"(progn
          (fset
           'pcomplete/ac-pcmp-fixture-mode/fail
           (lambda ()
@@ -143,14 +141,13 @@ fn auto_complete_pcmp_real_command_failure_is_contained_and_next_request_recover
                 recovered
                 ac-pcmp--status
                 ac-pcmp--point
-                (buffer-string))))))"##;
-    let expect = expect![[r#"OK (nil nil ("recovered" "ready") nil 4 "ok ")"#]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_repeated_commands_refresh_candidates_status_and_point() {
-    let elisp_form = r##"(progn
+                (buffer-string))))))"##,
+            true,
+            expect![[r#"OK (nil nil ("recovered" "ready") nil 4 "ok ")"#]],
+        ),
+        (
+            "auto_complete_pcmp_repeated_commands_refresh_candidates_status_and_point",
+            r##"(progn
          (fset
           'pcomplete/ac-pcmp-fixture-mode/first
           (lambda ()
@@ -179,14 +176,13 @@ fn auto_complete_pcmp_repeated_commands_refresh_candidates_status_and_point() {
                 second-candidates
                 ac-pcmp--status
                 ac-pcmp--point
-                (buffer-string))))))"##;
-    let expect = expect![[r#"OK (("one" "only") nil 8 ("two" "three" "four") nil 9 "second t")"#]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_unique_candidate_and_action_append_exact_termination() {
-    let elisp_form = r##"(progn
+                (buffer-string))))))"##,
+            true,
+            expect![[r#"OK (("one" "only") nil 8 ("two" "three" "four") nil 9 "second t")"#]],
+        ),
+        (
+            "auto_complete_pcmp_unique_candidate_and_action_append_exact_termination",
+            r##"(progn
          (fset
           'pcomplete/ac-pcmp-fixture-mode/run
           (lambda ()
@@ -207,14 +203,13 @@ fn auto_complete_pcmp_unique_candidate_and_action_append_exact_termination() {
                 ac-pcmp--status
                 (buffer-string)
                 pcomplete-last-completion-length
-                pcomplete-last-completion-stub)))))"##;
-    let expect = expect![[r#"OK (("release") sole "run rel -> " 4 "rel")"#]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_self_insert_source_trigger_then_completion_pipeline() {
-    let elisp_form = r##"(let (events)
+                pcomplete-last-completion-stub)))))"##,
+            true,
+            expect![[r#"OK (("release") sole "run rel -> " 4 "rel")"#]],
+        ),
+        (
+            "auto_complete_pcmp_self_insert_source_trigger_then_completion_pipeline",
+            r##"(let (events)
          (cl-letf (((symbol-function 'self-insert-command)
                     (lambda (count)
                       (insert (make-string count ?-))
@@ -232,9 +227,11 @@ fn auto_complete_pcmp_self_insert_source_trigger_then_completion_pipeline() {
                (list
                 result
                 (buffer-string)
-                (nreverse events))))))"##;
-    let expect = expect![[
+                (nreverse events))))))"##,
+            true,
+            expect![[
         r#"OK (:completion-started "tool--" ((:insert 2 "tool--") (:complete (:triggered trigger-key) "tool--")))"#
-    ]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

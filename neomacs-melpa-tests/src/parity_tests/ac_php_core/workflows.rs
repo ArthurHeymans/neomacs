@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_ac_php_core_parity;
+use super::assert_ac_php_core_batch;
 
 /// Indexing, which everything else depends on.
 ///
@@ -10,9 +10,13 @@ use super::assert_ac_php_core_parity;
 /// index where the package looks for it.  The loaded result is then asserted
 /// in full: the classes, the inheritance edges read from `extends`, the
 /// namespaced function, and the file list the index's positions refer to.
+
 #[test]
-fn indexing_a_project_writes_its_configuration_and_loads_every_class() {
-    let elisp_form = r##"
+fn workflows_public_surface_batch() {
+    assert_ac_php_core_batch(&[
+        (
+            "indexing_a_project_writes_its_configuration_and_loads_every_class",
+            r##"
 (let ((root (ac-php-test-make-project))
       (program (ac-php-test-install-php)))
   (ac-php-test-in-php-buffer
@@ -46,29 +50,15 @@ fn indexing_a_project_writes_its_configuration_and_loads_every_class() {
                         (sort keys #'string<))
            :indexed-files (mapcar (lambda (file) (file-relative-name file root))
                                   (append (ac-php-g--file-list tags-data) nil))))))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r##"OK (:indexer-finished t :calls (("phpctags" ".ac-php-conf.json" "cache" "--rebuild=no" "--realpath_flag=yes")) :config "{\n  \"use-cscope\": null,\n  \"tag-dir\": null,\n  \"filter\": {\n    \"php-file-ext-list\": [\n      \"php\"\n    ],\n    \"php-path-list\": [\n      \".\"\n    ],\n    \"ignore-ruleset\": [\n      \"# like .gitignore file \",\n      \"/vendor/**/[tT]ests/**/*.php\",\n      \"/vendor/**/[Ee]xamples/**/*.php\",\n      \"/vendor/composer/*.php\",\n      \"/vendor/*.php\",\n      \"# not need php_codesniffer\",\n      \"/vendor/squizlabs/php_codesniffer/**/*.php\",\n      \"#  -- end -- \"\n    ]\n  }\n}" :index-files ("tags-vendor.el" "tags.el") :progress 83 :classes ("\\Shop\\Model\\Product" "\\Shop\\Service\\BaseCart" "\\Shop\\Service\\Cart") :inheritance (("\\Shop\\Service\\Cart" "\\Shop\\Service\\BaseCart")) :functions ("\\Shop\\Model\\Product" "\\Shop\\Model\\Product(" "\\Shop\\Model\\formatMoney(" "\\Shop\\Service\\BaseCart" "\\Shop\\Service\\BaseCart(" "\\Shop\\Service\\Cart" "\\Shop\\Service\\Cart(") :indexed-files ("src/Model/Product.php" "src/Service/BaseCart.php" "src/Service/Cart.php"))"##
-    ]];
-    assert_ac_php_core_parity(elisp_form, expect);
-}
-
-/// Finding the project root, which decides what gets indexed and where the
-/// index is written.
-///
-/// The package walks up from the visited file looking for any of three
-/// markers, and each one is given its own tree here so that the resolved root
-/// is visible in the configuration path the indexer was handed.  The fourth
-/// case has no marker at all: the walk reaches the filesystem root, the
-/// command reports that it cannot resolve a project, and then signals rather
-/// than returning -- the nil root is used as a string a moment later.
-///
-/// The argument log is shared across the cases, so each one reads the last
-/// invocation rather than the first.
-#[test]
-fn the_project_root_is_found_by_any_marker_and_the_command_fails_without_one() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "the_project_root_is_found_by_any_marker_and_the_command_fails_without_one",
+            r##"
 (let ((base (expand-file-name "markers" ac-php-test-root))
       (program (ac-php-test-install-php)))
   (mapcar
@@ -109,31 +99,15 @@ fn the_project_root_is_found_by_any_marker_and_the_command_fails_without_one() {
      ("conf" . ".ac-php-conf.json")
      ("composer" . "vendor/autoload.php")
      ("nothing" . nil))))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("projectile" :outcome (:ok t) :indexed-root ("projectile")) ("conf" :outcome (:ok t) :indexed-root ("conf")) ("composer" :outcome (:ok t) :indexed-root ("composer")) ("nothing" :outcome (:error wrong-type-argument (stringp nil)) :indexed-root nil))"#
-    ]];
-    assert_ac_php_core_parity(elisp_form, expect);
-}
-
-/// Jumping from a use of a class to its declaration and back, which is the
-/// package's `M-.` and `M-,`.
-///
-/// The jump is asserted to land on the declaring line of the other file, and
-/// `ac-php-location-stack-back` to return to the exact line it started from.
-///
-/// It is asserted twice, because in a session that has not loaded `xref` it
-/// does not work at all.  `ac-php--location-stack-push` prefers
-/// `xref-push-marker-stack` and falls back to `find-tag-marker-ring` when that
-/// is not a function -- but `xref-push-marker-stack` is not autoloaded, and
-/// the fallback names a variable that only exists once `etags` is loaded, so
-/// the command signals `void-variable` before going anywhere.  Requiring
-/// `xref`, which any session that has used `M-.` for anything else has already
-/// done, makes the same jump work.
-#[test]
-fn jumping_to_a_definition_needs_xref_and_then_the_location_stack_returns() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "jumping_to_a_definition_needs_xref_and_then_the_location_stack_returns",
+            r##"
 (let ((root (ac-php-test-make-project))
       (program (ac-php-test-install-php)))
   (ac-php-test-in-php-buffer
@@ -163,30 +137,15 @@ fn jumping_to_a_definition_needs_xref_and_then_the_location_stack_returns() {
                  :returned (list (file-name-nondirectory (buffer-file-name))
                                  (line-number-at-pos))
                  :stack-depth (length ac-php-location-stack))))))))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:without-xref (:error void-variable (find-tag-marker-ring)) :started ("Cart.php" 10) :arrived ("Product.php" 7 "class Product") :returned ("Cart.php" 10) :stack-depth 1)"#
-    ]];
-    assert_ac_php_core_parity(elisp_form, expect);
-}
-
-/// Working out what an expression at point refers to, which is the step
-/// between "the user typed `->`" and "these are the candidates".
-///
-/// Five contexts in one method of one file, each resolved differently:
-/// `$this` from the enclosing class, `$product` from the `new Product(...)`
-/// that assigned it, `Product::` from the `use` clause at the top of a file in
-/// a different namespace, `self::` from the enclosing class again, and
-/// `parent::` from the `extends` clause, which resolves to a placeholder
-/// rather than to the parent's name.
-///
-/// The results are stripped of text properties before being asserted: the
-/// parent case comes back propertized with buffer positions, which would
-/// otherwise be encoded into the expectation.
-#[test]
-fn the_type_at_point_is_resolved_from_the_buffer_and_the_index() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "the_type_at_point_is_resolved_from_the_buffer_and_the_index",
+            r##"
 (let ((root (ac-php-test-make-project))
       (program (ac-php-test-install-php)))
   (ac-php-test-in-php-buffer
@@ -204,28 +163,15 @@ fn the_type_at_point_is_resolved_from_the_buffer_and_the_index() {
         (delete-region start (point))
         (list text (if (stringp resolved) (substring-no-properties resolved) resolved))))
     '("$this->" "$product->" "Product::" "self::" "parent::"))))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("$this->" "\\Shop\\Service\\Cart.") ("$product->" "\\Shop\\Model\\Product.") ("Product::" "\\Shop\\Model\\Product.") ("self::" "\\Shop\\Service\\Cart.") ("parent::" "\\Shop\\Service\\Cart.__parent__."))"#
-    ]];
-    assert_ac_php_core_parity(elisp_form, expect);
-}
-
-/// What happens when half the index goes missing, which is not a hypothetical
-/// -- the vendor index is a separate file written by the same indexer run, and
-/// anything that clears a cache directory selectively can remove it.
-///
-/// `ac-php-load-data` signals `(wrong-type-argument hash-table-p nil)` instead
-/// of reporting a missing file. The consequence one level up is worse and is
-/// asserted too: `ac-php-get-tags-data` treats the missing file as "no index
-/// yet", starts a rebuild, and returns the rebuild's value -- the symbol
-/// `ac-php-phptags-index-process-filter` -- so every caller that expects tags
-/// data gets a process filter instead and signals `wrong-type-argument listp`
-/// somewhere further away from the cause.
-#[test]
-fn a_missing_vendor_index_turns_every_lookup_into_a_type_error() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "a_missing_vendor_index_turns_every_lookup_into_a_type_error",
+            r##"
 (let ((root (ac-php-test-make-project))
       (program (ac-php-test-install-php)))
   (ac-php-test-in-php-buffer
@@ -251,10 +197,11 @@ fn a_missing_vendor_index_turns_every_lookup_into_a_type_error() {
                    :class-at-point
                    (ac-php-test-outcome
                     (ac-php-get-class-at-point (ac-php-get-tags-data)))))))))
-"##;
-
-    let expect = expect![
+"##,
+            true,
+            expect![
         "OK (:both-present (t t) :loads-with-vendor t :after-deleting-the-vendor-index (:load-data (:error wrong-type-argument (hash-table-p nil)) :tags-data-returns ac-php-phptags-index-process-filter :class-at-point (:ok nil)))"
-    ];
-    assert_ac_php_core_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }

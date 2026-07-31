@@ -5,6 +5,8 @@ use crate::{
 };
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod generation;
 mod parsing;
 mod registry;
@@ -109,4 +111,30 @@ pub(crate) fn assert_auto_complete_rst_parity(elisp_form: &str, expected: Expect
 
 pub(crate) fn assert_auto_complete_rst_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_auto_complete_rst_source_parity("auto-complete-rst-autoloads.el", elisp_form, expected);
+}
+
+
+
+
+
+/// Multi-probe batch for `assert_auto_complete_rst_autoload_parity` cases (2a).
+pub(crate) fn assert_auto_complete_rst_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_complete_rst_oracle("auto-complete-rst-autoloads.el"),
+        &name,
+        "auto_complete_rst_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_auto_complete_rst_parity` cases (2a).
+pub(crate) fn assert_auto_complete_rst_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_complete_rst_oracle("auto-complete-rst.el"),
+        &name,
+        "auto_complete_rst_parity",
+        cases,
+    );
 }

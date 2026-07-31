@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_alchemist_parity;
+use super::assert_alchemist_batch;
 
 #[test]
-fn alchemist_utils_transform_real_commands_modules_paths_versions_and_extensions() {
-    let elisp_form = r##"(list
+fn utils_scope_public_surface_batch() {
+    assert_alchemist_batch(&[
+        (
+            "alchemist_utils_transform_real_commands_modules_paths_versions_and_extensions",
+            r##"(list
                       (mapcar
                        #'alchemist-utils-build-command
                        '(("MIX_ENV=test" "mix" ("test" "--stale") nil "")
@@ -39,16 +42,15 @@ fn alchemist_utils_transform_real_commands_modules_paths_versions_and_extensions
                            1 3 0 version)
                           (alchemist-utils-elixir-version-check-p
                            1 4 2 version)))
-                       '("1.2.9" "1.3.0" "1.4.2" "2.0.0")))"##;
-    let expect = expect![[
+                       '("1.2.9" "1.3.0" "1.4.2" "2.0.0")))"##,
+            true,
+            expect![[
         r#"OK (("MIX_ENV=test mix test --stale" "elixir -e IO.puts(1)" "mix help") "[{MyList, List},{AlreadySentError, Plug.Conn.AlreadySentError}]" "[Mix.Generator,ExUnit,]" ("MyApp/HttpClient" "Alreadycamel" "PrivateName") ("lib/user.ex" "test/user_test.exs" "name.ex.exs") ("MyApp.Accounts.User" "Umbrella.Apps.Web.Lib.Web.Router" "Foo") (("1.2.9" nil nil) ("1.3.0" t nil) ("1.4.2" t t) ("2.0.0" t t)))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_scope_recovers_nested_module_alias_import_and_use_context_from_real_code() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "alchemist_scope_recovers_nested_module_alias_import_and_use_context_from_real_code",
+            r##"(with-temp-buffer
                       (insert
                        "defmodule Outer do\n"
                        "  alias Phoenix.Router.{Resource, Scope}\n"
@@ -74,16 +76,15 @@ fn alchemist_scope_recovers_nested_module_alias_import_and_use_context_from_real
                        (alchemist-scope-all-modules)
                        (alchemist-scope-alias-full-path
                         "Connection.Query")
-                       (alchemist-scope-expression)))"##;
-    let expect = expect![[
+                       (alchemist-scope-expression)))"##,
+            true,
+            expect![[
         r#"OK ("Inner42" (("String.Break" "Break") ("String.Casing" "Casing")) ("Mix.Generator") ("MyApp.Web") ("Mix.Generator" "MyApp.Web" "Inner42") "Connection.Query" "Connection.assign")"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_scope_expression_and_extractors_cover_elixir_erlang_locals_and_punctuation() {
-    let elisp_form = r##"(let ((expressions
+    ]],
+        ),
+        (
+            "alchemist_scope_expression_and_extractors_cover_elixir_erlang_locals_and_punctuation",
+            r##"(let ((expressions
                            '(":gen_tcp.accept"
                              ":erlang"
                              "List.duplicate"
@@ -112,16 +113,15 @@ fn alchemist_scope_expression_and_extractors_cover_elixir_erlang_locals_and_punc
                             (goto-char (point-min))
                             (search-forward needle)
                             (alchemist-scope-expression))
-                          '("Map.get" ":bar" "Enum.map" "call!")))))"##;
-    let expect = expect![[
+                          '("Map.get" ":bar" "Enum.map" "call!")))))"##,
+            true,
+            expect![[
         r#"OK (((":gen_tcp.accept" ":gen_tcp" "accept") (":erlang" ":erlang" nil) ("List.duplicate" "List" "duplicate") ("String.Chars.impl_for" "String.Chars" "impl_for") ("Whatever._duplicate" "Whatever" "_duplicate") ("Enum.take!" "Enum" "take!") ("_local?" nil "_local?") ("Module." "Module" nil) ("to_string" nil "to_string")) ("Map.get" ":bar" "Enum.map" "My.App.call!"))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_scope_syntax_distinguishes_real_module_body_heredoc_and_nested_locations() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "alchemist_scope_syntax_distinguishes_real_module_body_heredoc_and_nested_locations",
+            r##"(with-temp-buffer
                       (insert
                        "defmodule Outer do\n"
                        "  @moduledoc \"\"\"\n"
@@ -141,16 +141,15 @@ fn alchemist_scope_syntax_distinguishes_real_module_body_heredoc_and_nested_loca
                           (alchemist-scope-inside-string-p)
                           (alchemist-scope-inside-module-p)
                           (alchemist-scope-module)))
-                       '("Fake" "Inner" "run" "defmodule Outer")))"##;
-    let expect = expect![[
+                       '("Fake" "Inner" "run" "defmodule Outer")))"##,
+            true,
+            expect![[
         r#"OK (("Fake" 35 t "Outer") ("Inner" nil t "Outer") ("run" nil t "Inner") ("defmodule Outer" nil t ""))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_interact_formats_single_and_multiline_results_and_builds_a_real_popup() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "alchemist_interact_formats_single_and_multiline_results_and_builds_a_real_popup",
+            r##"(list
                       (with-temp-buffer
                         (insert "value = ")
                         (alchemist-interact-insert-as-comment
@@ -176,9 +175,11 @@ fn alchemist_interact_formats_single_and_multiline_results_and_builds_a_real_pop
                                major-mode
                                buffer-read-only
                                (buffer-string)))
-                          (kill-buffer buffer))))"##;
-    let expect = expect![[
+                          (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK ("value = \n# => sum = fn (a, b) ->\n# =>   a + b\n# => end\n# => sum.(21, 33)" "  # => IO.puts 1 + 1" (nil "*alchemist-parity-popup*" fundamental-mode t "line one\nline two"))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

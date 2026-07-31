@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AUDACIOUS_MELPA_PIN, CachedMelpaOracle, HELM_MELPA_PIN};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod commands;
 mod playlists;
 mod registry;
@@ -87,4 +89,30 @@ pub(crate) fn assert_audacious_parity(elisp_form: &str, expected: Expect) {
 
 pub(crate) fn assert_audacious_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_audacious_source_parity("audacious-autoloads.el", elisp_form, expected);
+}
+
+
+
+
+
+/// Multi-probe batch for `assert_audacious_autoload_parity` cases (2a).
+pub(crate) fn assert_audacious_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        audacious_oracle(),
+        &name,
+        "audacious_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_audacious_parity` cases (2a).
+pub(crate) fn assert_audacious_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        audacious_oracle(),
+        &name,
+        "audacious_parity",
+        cases,
+    );
 }

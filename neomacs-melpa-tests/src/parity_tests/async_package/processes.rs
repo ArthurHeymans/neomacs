@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_async_parity;
+use super::assert_async_batch;
 
 #[test]
-fn async_start_process_future_reports_success_and_cleans_its_output_buffer() {
-    let elisp_form = r##"(let* ((process
+fn processes_public_surface_batch() {
+    assert_async_batch(&[
+        (
+            "async_start_process_future_reports_success_and_cleans_its_output_buffer",
+            r##"(let* ((process
                       (async-start-process
                        "neomacs-async-success"
                        "sh"
@@ -17,15 +20,13 @@ fn async_start_process_future_reports_success_and_cleans_its_output_buffer() {
                 (process-status process)
                 (process-exit-status process)
                 (buffer-live-p
-                 (process-buffer process))))"##;
-    let expect = expect![[r#"OK (t exit 0 nil)"#]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_start_process_callback_can_observe_stdout_before_cleanup() {
-    let elisp_form = r##"(let (observed)
+                 (process-buffer process))))"##,
+            true,
+            expect![[r#"OK (t exit 0 nil)"#]],
+        ),
+        (
+            "async_start_process_callback_can_observe_stdout_before_cleanup",
+            r##"(let (observed)
                (let ((process
                       (async-start-process
                        "neomacs-async-callback"
@@ -49,15 +50,13 @@ fn async_start_process_callback_can_observe_stdout_before_cleanup() {
                   observed
                   (async-get process)
                   (buffer-live-p
-                   (process-buffer process)))))"##;
-    let expect = expect![[r#"OK ((0 "callback-output" t) nil nil)"#]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_start_process_future_returns_the_exact_nonzero_exit_failure() {
-    let elisp_form = r##"(let* ((process
+                   (process-buffer process)))))"##,
+            true,
+            expect![[r#"OK ((0 "callback-output" t) nil nil)"#]],
+        ),
+        (
+            "async_start_process_future_returns_the_exact_nonzero_exit_failure",
+            r##"(let* ((process
                       (async-start-process
                        "neomacs-async-failure"
                        "sh"
@@ -70,17 +69,15 @@ fn async_start_process_future_returns_the_exact_nonzero_exit_failure() {
                 (process-status process)
                 (process-exit-status process)
                 (buffer-live-p
-                 (process-buffer process))))"##;
-    let expect = expect![[
+                 (process-buffer process))))"##,
+            true,
+            expect![[
         r#"OK ((error "Async process 'neomacs-async-failure' failed with exit code 7") exit 7 nil)"#
-    ]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_process_noquery_option_controls_the_process_query_flag() {
-    let elisp_form = r##"(let (query noquery)
+    ]],
+        ),
+        (
+            "async_process_noquery_option_controls_the_process_query_flag",
+            r##"(let (query noquery)
                (unwind-protect
                    (progn
                      (let ((async-process-noquery-on-exit
@@ -106,8 +103,9 @@ fn async_process_noquery_option_controls_the_process_query_flag() {
                    (async-get query))
                  (when noquery
                    (async-wait noquery)
-                   (async-get noquery))))"##;
-    let expect = expect![[r#"OK (t nil)"#]];
-
-    assert_async_parity(elisp_form, expect);
+                   (async-get noquery))))"##,
+            true,
+            expect![[r#"OK (t nil)"#]],
+        ),
+    ]);
 }

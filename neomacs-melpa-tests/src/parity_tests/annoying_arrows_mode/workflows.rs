@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_annoying_arrows_mode_parity;
+use super::assert_annoying_arrows_mode_batch;
 
 #[test]
-fn repeated_vertical_navigation_moves_the_window_then_recommends_a_larger_jump() {
-    let elisp_form = r##"(let ((buffer (generate-new-buffer " *annoying-navigation*"))
+fn workflows_public_surface_batch() {
+    assert_annoying_arrows_mode_batch(&[
+        (
+            "repeated_vertical_navigation_moves_the_window_then_recommends_a_larger_jump",
+            r##"(let ((buffer (generate-new-buffer " *annoying-navigation*"))
                (annoying-arrows-too-far-count 2)
                (annoying-arrows--current-count 0)
                (bells 0)
@@ -74,16 +77,15 @@ fn repeated_vertical_navigation_moves_the_window_then_recommends_a_larger_jump()
                                      (car messages)
                                      bells))))))))
            (when (buffer-live-p buffer)
-             (kill-buffer buffer))))"##;
-    let expect = expect![[
+             (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK ((6 32 32 1) (2 7 7 1 previous-line #("Annoying! How about using backward-paragraph (M-{) instead?" 46 49 (face help-key-binding font-lock-face help-key-binding)) 1) (3 13 next-line "" 1) (5 25 25 1 next-line nil "" 1))"#
-    ]];
-    assert_annoying_arrows_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn repeated_deletion_warns_while_a_real_typo_correction_keeps_editing_normally() {
-    let elisp_form = r##"(let ((buffer (generate-new-buffer " *annoying-editing*"))
+    ]],
+        ),
+        (
+            "repeated_deletion_warns_while_a_real_typo_correction_keeps_editing_normally",
+            r##"(let ((buffer (generate-new-buffer " *annoying-editing*"))
                (annoying-arrows-too-far-count 0)
                (annoying-arrows--current-count 0)
                (bells 0)
@@ -147,16 +149,15 @@ fn repeated_deletion_warns_while_a_real_typo_correction_keeps_editing_normally()
                                    annoying-arrows-mode
                                    bells)))))))
            (when (buffer-live-p buffer)
-             (kill-buffer buffer))))"##;
-    let expect = expect![[
+             (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK (("release: readxy" 16 15 backward-delete-char-untabify "Annoying! How about using backward-kill-word (M-DEL) instead?" 1) ("release: ready" 15 14 right-char "" 1) ("release: ready" 13 12 left-char nil 1))"#
-    ]];
-    assert_annoying_arrows_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn global_mode_and_a_public_suggestion_drive_navigation_across_two_buffers() {
-    let elisp_form = r##"(let ((first (generate-new-buffer " *annoying-plan-a*"))
+    ]],
+        ),
+        (
+            "global_mode_and_a_public_suggestion_drive_navigation_across_two_buffers",
+            r##"(let ((first (generate-new-buffer " *annoying-plan-a*"))
                (second (generate-new-buffer " *annoying-plan-b*"))
                (old-alternatives (get 'next-line 'annoying-arrows--alts))
                (annoying-arrows-too-far-count 1)
@@ -240,9 +241,11 @@ fn global_mode_and_a_public_suggestion_drive_navigation_across_two_buffers() {
            (when (buffer-live-p first)
              (kill-buffer first))
            (when (buffer-live-p second)
-             (kill-buffer second))))"##;
-    let expect = expect![[
+             (kill-buffer second))))"##,
+            true,
+            expect![[
         r#"OK ((" *annoying-plan-a*" 4 20 20 next-line "Annoying! How about using beginning-of-buffer (M-<) instead?" 1) (" *annoying-plan-b*" 2 6 6 next-line "" 1) (nil nil nil " *annoying-plan-b*" 4 20 20 next-line "" 1))"#
-    ]];
-    assert_annoying_arrows_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

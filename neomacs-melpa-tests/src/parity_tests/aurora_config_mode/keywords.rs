@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_aurora_config_mode_parity;
+use super::assert_aurora_config_mode_batch;
 
 #[test]
-fn aurora_config_mode_keyword_families_preserve_complete_order_counts_and_uniqueness() {
-    let elisp_form = r##"(list
+fn keywords_public_surface_batch() {
+    assert_aurora_config_mode_batch(&[
+        (
+            "aurora_config_mode_keyword_families_preserve_complete_order_counts_and_uniqueness",
+            r##"(list
           aurora-config-aurora-struct-keywords
           (length
            aurora-config-aurora-struct-keywords)
@@ -21,17 +24,15 @@ fn aurora_config_mode_keyword_families_preserve_complete_order_counts_and_unique
              aurora-config-pystachio-struct-keywords)))
           (append
            aurora-config-aurora-struct-keywords
-           aurora-config-pystachio-struct-keywords))"##;
-    let expect = expect![[
+           aurora-config-pystachio-struct-keywords))"##,
+            true,
+            expect![[
         r#"OK (("HealthCheckConfig" "Job" "Process" "JVMProcess" "Resources" "SequentialTask" "Service" "Task" "UpdateConfig") 9 9 #1=("Enum" "Integer" "List" "Map" "String" "Struct") 6 6 ("HealthCheckConfig" "Job" "Process" "JVMProcess" "Resources" "SequentialTask" "Service" "Task" "UpdateConfig" . #1#))"#
-    ]];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurora_config_mode_font_lock_rules_have_exact_regexps_faces_and_matching_matrix() {
-    let elisp_form = r##"(let ((aurora-regexp
+    ]],
+        ),
+        (
+            "aurora_config_mode_font_lock_rules_have_exact_regexps_faces_and_matching_matrix",
+            r##"(let ((aurora-regexp
                 (caar
                  aurora-config-font-lock-keywords))
                (pystachio-regexp
@@ -74,17 +75,15 @@ fn aurora_config_mode_font_lock_rules_have_exact_regexps_faces_and_matching_matr
                   (match-string 0 sample)
                   (match-beginning 0)
                   (match-end 0)))))
-            samples)))"##;
-    let expect = expect![[
+            samples)))"##,
+            true,
+            expect![[
         r#"OK ((("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) (("Job" ("Job" 0 3) nil) ("xJob" nil nil) ("Job2" nil nil) ("_Job" nil nil) ("HealthCheckConfig" ("HealthCheckConfig" 0 17) nil) ("JVMProcess" ("JVMProcess" 0 10) nil) ("UpdateConfig" ("UpdateConfig" 0 12) nil) ("String" nil ("String" 0 6)) ("string" nil ("string" 0 6)) ("StringMap" nil nil) ("Map" nil ("Map" 0 3)) ("Map.Entry" nil nil) ("Struct" nil ("Struct" 0 6)) ("Enum" nil ("Enum" 0 4))))"#
-    ]];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurora_config_mode_fontifying_every_struct_surfaces_legacy_dotted_rule_failure() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "aurora_config_mode_fontifying_every_struct_surfaces_legacy_dotted_rule_failure",
+            r##"(with-temp-buffer
           (insert
            "job = Job(\n"
            "  task = Task(\n"
@@ -105,17 +104,15 @@ fn aurora_config_mode_fontifying_every_struct_surfaces_legacy_dotted_rule_failur
            (aurora-config-test-error-data
             (lambda ()
               (font-lock-ensure)))
-           (aurora-config-test-face-runs)))"##;
-    let expect = expect![[
+           (aurora-config-test-face-runs)))"##,
+            true,
+            expect![[
         r#"OK ((aurora-config-mode "Aurora" python-mode "job = Job(\n  task = Task(\n    processes = [Process(), JVMProcess()],\n    resources = Resources(),\n    constraints = HealthCheckConfig(),\n    update = UpdateConfig(),\n    service = Service(),\n    sequence = SequentialTask()))\nschema = Struct(\n  enum = Enum,\n  count = Integer,\n  names = List(String),\n  mapping = Map(String, Integer))\n" t nil t 6 aurora-config-inspect aurora-config-diff) (:error wrong-type-argument (listp font-lock-type-face)) nil)"#
-    ]];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurora_config_mode_context_matrix_fails_before_font_lock_applies_any_face() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "aurora_config_mode_context_matrix_fails_before_font_lock_applies_any_face",
+            r##"(with-temp-buffer
           (insert
            "Job = 1\n"
            "job = 2\n"
@@ -154,17 +151,15 @@ fn aurora_config_mode_context_matrix_fails_before_font_lock_applies_any_face() {
               "String ="
               "\"Job"
               "# Job"
-              "'HealthCheckConfig'")))))"##;
-    let expect = expect![[
+              "'HealthCheckConfig'")))))"##,
+            true,
+            expect![[
         r##"OK ((:error wrong-type-argument (listp font-lock-type-face)) nil (("Job =" nil nil) ("job =" nil nil) ("JobFactory" nil nil) ("xJob" nil nil) ("_Job" nil nil) ("String =" nil nil) ("\"Job" nil nil) ("# Job" nil nil) ("'HealthCheckConfig'" nil nil)))"##
-    ]];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurora_config_mode_combined_python_and_aurora_fontification_fails_before_faces() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "aurora_config_mode_combined_python_and_aurora_fontification_fails_before_faces",
+            r##"(with-temp-buffer
           (insert
            "class ServiceFactory(object):\n"
            "    def build(self, name):\n"
@@ -199,17 +194,15 @@ fn aurora_config_mode_combined_python_and_aurora_fontification_fails_before_face
               "Job"
               "'fallback'"
               "Service"
-              "Process")))))"##;
-    let expect = expect![[
+              "Process")))))"##,
+            true,
+            expect![[
         r#"OK ((:error wrong-type-argument (listp font-lock-type-face)) nil (("class" nil) ("ServiceFactory" nil) ("def" nil) ("build" nil) ("if" nil) ("None" nil) ("return" nil) ("Job" nil) ("'fallback'" nil) ("Service" nil) ("Process" nil)))"#
-    ]];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurora_config_mode_mutated_keyword_lists_still_reach_compiled_legacy_rule_failure() {
-    let elisp_form = r##"(let ((original-aurora
+    ]],
+        ),
+        (
+            "aurora_config_mode_mutated_keyword_lists_still_reach_compiled_legacy_rule_failure",
+            r##"(let ((original-aurora
                 aurora-config-aurora-struct-keywords)
                (original-pystachio
                 aurora-config-pystachio-struct-keywords))
@@ -234,17 +227,15 @@ fn aurora_config_mode_mutated_keyword_lists_still_reach_compiled_legacy_rule_fai
              aurora-config-aurora-struct-keywords
              original-aurora
              aurora-config-pystachio-struct-keywords
-             original-pystachio)))"##;
-    let expect = expect![[
+             original-pystachio)))"##,
+            true,
+            expect![[
         r#"OK ((("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) (:error wrong-type-argument (listp font-lock-type-face)) nil)"#
-    ]];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurora_config_mode_unfontify_refontify_repeats_failure_without_mutating_content() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "aurora_config_mode_unfontify_refontify_repeats_failure_without_mutating_content",
+            r##"(with-temp-buffer
           (insert
            "task = Task(processes=[Process(), Service()])\n")
           (set-buffer-modified-p nil)
@@ -275,10 +266,11 @@ fn aurora_config_mode_unfontify_refontify_repeats_failure_without_mutating_conte
              second
              (equal first second)
              (buffer-string)
-             (buffer-modified-p))))"##;
-    let expect = expect![[
+             (buffer-modified-p))))"##,
+            true,
+            expect![[
         r#"OK ((:error wrong-type-argument (listp font-lock-type-face)) nil nil (:error wrong-type-argument (listp font-lock-type-face)) nil t "task = Task(processes=[Process(), Service()])\n" nil)"#
-    ]];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

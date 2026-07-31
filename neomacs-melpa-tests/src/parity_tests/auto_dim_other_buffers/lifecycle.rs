@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_auto_dim_other_buffers_autoload_parity, assert_auto_dim_other_buffers_parity};
+use super::{assert_auto_dim_other_buffers_autoload_batch, assert_auto_dim_other_buffers_batch};
 
 #[test]
-fn auto_dim_other_buffers_mode_enable_installs_exact_hooks_focus_advice_and_initial_state() {
-    let elisp_form = r##"(save-window-excursion
+fn lifecycle_auto_dim_other_buffers_batch() {
+    assert_auto_dim_other_buffers_batch(&[
+        (
+            "auto_dim_other_buffers_mode_enable_installs_exact_hooks_focus_advice_and_initial_state",
+            r##"(save-window-excursion
           (let ((buffer
                  (generate-new-buffer
                   " *adob-mode-enable*")))
@@ -44,17 +47,15 @@ fn auto_dim_other_buffers_mode_enable_installs_exact_hooks_focus_advice_and_init
                       buffer))))
               (auto-dim-other-buffers-mode -1)
               (when (buffer-live-p buffer)
-                (kill-buffer buffer)))))"##;
-    let expect = expect![[
+                (kill-buffer buffer)))))"##,
+            true,
+            expect![[
         r#"OK (t 1 1 t t t t ((t " *adob-mode-enable*" nil)) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
-    ]];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_mode_disable_removes_hooks_advice_state_and_every_owned_remap() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_dim_other_buffers_mode_disable_removes_hooks_advice_state_and_every_owned_remap",
+            r##"(save-window-excursion
           (let ((first
                  (generate-new-buffer
                   " *adob-disable-first*"))
@@ -101,17 +102,15 @@ fn auto_dim_other_buffers_mode_disable_removes_hooks_advice_state_and_every_owne
               (when (buffer-live-p first)
                 (kill-buffer first))
               (when (buffer-live-p second)
-                (kill-buffer second)))))"##;
-    let expect = expect![[
+                (kill-buffer second)))))"##,
+            true,
+            expect![[
         r#"OK (nil 0 0 nil nil nil nil (nil 0 nil nil) (nil 0 nil nil) ((t " *adob-disable-first*" nil) (nil " *adob-disable-second*" t)))"#
-    ]];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_repeated_enable_disable_and_toggle_keep_hooks_and_advice_idempotent() {
-    let elisp_form = r##"(let (states)
+    ]],
+        ),
+        (
+            "auto_dim_other_buffers_repeated_enable_disable_and_toggle_keep_hooks_and_advice_idempotent",
+            r##"(let (states)
           (dolist
               (argument
                '(1 1 -1 -1 toggle toggle))
@@ -135,17 +134,15 @@ fn auto_dim_other_buffers_repeated_enable_disable_and_toggle_keep_hooks_and_advi
                t))
              states))
           (auto-dim-other-buffers-mode -1)
-          (nreverse states))"##;
-    let expect = expect![
+          (nreverse states))"##,
+            true,
+            expect![
         "OK ((1 t 1 1 t t) (1 t 1 1 t t) (-1 nil 0 0 nil nil) (-1 nil 0 0 nil nil) (toggle t 1 1 t t) (toggle nil 0 0 nil nil))"
-    ];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_each_mode_transition_cancels_existing_focus_timer_before_work() {
-    let elisp_form = r##"(let ((adob--focus-change-timer
+    ],
+        ),
+        (
+            "auto_dim_other_buffers_each_mode_transition_cancels_existing_focus_timer_before_work",
+            r##"(let ((adob--focus-change-timer
                                 :enable-timer)
                                events)
           (cl-letf
@@ -172,18 +169,15 @@ fn auto_dim_other_buffers_each_mode_transition_cancels_existing_focus_timer_befo
             (list
              auto-dim-other-buffers-mode
              adob--focus-change-timer
-             (nreverse events))))"##;
-    let expect = expect![
+             (nreverse events))))"##,
+            true,
+            expect![
         "OK (nil nil ((:cancel :enable-timer) :initialize (:cancel :disable-timer) (:cycle nil)))"
-    ];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_never_dim_customize_setter_sets_default_and_reinitializes_only_when_enabled()
- {
-    let elisp_form = r##"(let ((setter
+    ],
+        ),
+        (
+            "auto_dim_other_buffers_never_dim_customize_setter_sets_default_and_reinitializes_only_when_enabled",
+            r##"(let ((setter
                                 (get
                                  'auto-dim-other-buffers-never-dim-buffer-functions
                                  'custom-set))
@@ -222,17 +216,15 @@ fn auto_dim_other_buffers_never_dim_customize_setter_sets_default_and_reinitiali
                 (default-value
                  'auto-dim-other-buffers-never-dim-buffer-functions))
                events))
-            (nreverse events)))"##;
-    let expect = expect![[
+            (nreverse events)))"##,
+            true,
+            expect![[
         r#"OK ((:disabled #1=(ignore) #1#) (:initialize (:buffer "*scratch*")) (:enabled #2=(always) #2#))"#
-    ]];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_affected_faces_customize_setter_rebuilds_only_when_enabled() {
-    let elisp_form = r##"(let ((setter
+    ]],
+        ),
+        (
+            "auto_dim_other_buffers_affected_faces_customize_setter_rebuilds_only_when_enabled",
+            r##"(let ((setter
                                 (get
                                  'auto-dim-other-buffers-affected-faces
                                  'custom-set))
@@ -271,18 +263,15 @@ fn auto_dim_other_buffers_affected_faces_customize_setter_rebuilds_only_when_ena
                 (default-value
                  'auto-dim-other-buffers-affected-faces))
                events))
-            (nreverse events)))"##;
-    let expect = expect![
+            (nreverse events)))"##,
+            true,
+            expect![
         "OK ((:disabled nil ((default . auto-dim-other-buffers))) (:cycle t) (:enabled :cycled ((default nil . bold))))"
-    ];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_mode_enable_failure_leaves_mode_and_installed_hooks_before_initialization()
- {
-    let elisp_form = r##"(let ((auto-dim-other-buffers-mode
+    ],
+        ),
+        (
+            "auto_dim_other_buffers_mode_enable_failure_leaves_mode_and_installed_hooks_before_initialization",
+            r##"(let ((auto-dim-other-buffers-mode
                                 nil))
           (cl-letf
               (((symbol-function
@@ -312,16 +301,19 @@ fn auto_dim_other_buffers_mode_enable_failure_leaves_mode_and_installed_hooks_be
                      'kill-all-local-variables)
                     t))
                 (auto-dim-other-buffers-mode
-                 -1)))))"##;
-    let expect = expect![[r#"OK ((:error error ("fixture initialization failed")) t 1 1 t t)"#]];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
+                 -1)))))"##,
+            true,
+            expect![[r#"OK ((:error error ("fixture initialization failed")) t 1 1 t t)"#]],
+        ),
+    ]);
 }
 
 #[test]
-fn auto_dim_other_buffers_autoload_mode_command_loads_source_and_runs_real_enable_disable_lifecycle()
- {
-    let elisp_form = r##"(save-window-excursion
+fn lifecycle_auto_dim_other_buffers_autoload_batch() {
+    assert_auto_dim_other_buffers_autoload_batch(&[
+        (
+            "auto_dim_other_buffers_autoload_mode_command_loads_source_and_runs_real_enable_disable_lifecycle",
+            r##"(save-window-excursion
           (let ((buffer
                  (generate-new-buffer
                   " *adob-autoload*")))
@@ -362,10 +354,11 @@ fn auto_dim_other_buffers_autoload_mode_command_loads_source_and_runs_real_enabl
                 (auto-dim-other-buffers-mode
                  -1))
               (when (buffer-live-p buffer)
-                (kill-buffer buffer)))))"##;
-    let expect = expect![[
+                (kill-buffer buffer)))))"##,
+            true,
+            expect![[
         r#"OK ((nil t) (t nil t ((t " *adob-autoload*" nil)) (t 4 (default fringe org-block org-hide) ((org-hide ((:filtered (:window adob--dim t) auto-dim-other-buffers-hide))) (org-block ((:filtered (:window adob--dim t) auto-dim-other-buffers))) (fringe ((:filtered (:window adob--dim t) auto-dim-other-buffers))) (default ((:filtered (:window adob--dim t) auto-dim-other-buffers)))))) nil (nil 0 nil nil))"#
-    ]];
-
-    assert_auto_dim_other_buffers_autoload_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

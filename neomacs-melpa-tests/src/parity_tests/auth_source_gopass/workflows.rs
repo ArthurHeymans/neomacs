@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auth_source_gopass_parity;
+use super::assert_auth_source_gopass_batch;
 
 #[test]
-fn auth_source_gopass_enable_prepends_source_and_flushes_cache_once() {
-    let elisp_form = r##"(let ((auth-sources
+fn workflows_public_surface_batch() {
+    assert_auth_source_gopass_batch(&[
+        (
+            "auth_source_gopass_enable_prepends_source_and_flushes_cache_once",
+            r##"(let ((auth-sources
                 '("~/.authinfo" default))
                calls)
          (cl-letf
@@ -16,14 +19,13 @@ fn auth_source_gopass_enable_prepends_source_and_flushes_cache_once() {
            (list
             (auth-source-gopass-enable)
             auth-sources
-            (nreverse calls))))"##;
-    let expect = expect![[r#"OK (:forgotten (gopass "~/.authinfo" default) (:forget))"#]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_enable_deduplicates_existing_source_in_any_position() {
-    let elisp_form = r##"(mapcar
+            (nreverse calls))))"##,
+            true,
+            expect![[r#"OK (:forgotten (gopass "~/.authinfo" default) (:forget))"#]],
+        ),
+        (
+            "auth_source_gopass_enable_deduplicates_existing_source_in_any_position",
+            r##"(mapcar
          (lambda (initial)
            (let ((auth-sources
                   (copy-sequence initial))
@@ -41,16 +43,15 @@ fn auth_source_gopass_enable_deduplicates_existing_source_in_any_position() {
          '(nil
            (gopass)
            ("~/.authinfo" gopass default)
-           (gopass "~/.authinfo" gopass)))"##;
-    let expect = expect![[
+           (gopass "~/.authinfo" gopass)))"##,
+            true,
+            expect![[
         r#"OK (((gopass) (:forget :forget)) ((gopass) (:forget :forget)) (("~/.authinfo" gopass default) (:forget :forget)) ((gopass "~/.authinfo" gopass) (:forget :forget)))"#
-    ]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_real_auth_source_search_resolves_credential() {
-    let elisp_form = r##"(let ((auth-sources
+    ]],
+        ),
+        (
+            "auth_source_gopass_real_auth_source_search_resolves_credential",
+            r##"(let ((auth-sources
                 '(gopass))
                commands)
          (auth-source-forget-all-cached)
@@ -77,16 +78,15 @@ fn auth_source_gopass_real_auth_source_search_resolves_credential() {
                   (plist-get entry :user)
                   (plist-get entry :secret)))
                matches)
-              (nreverse commands)))))"##;
-    let expect = expect![[
+              (nreverse commands)))))"##,
+            true,
+            expect![[
         r#"OK (((:user "alice@example" :secret "integration-secret")) (("alice@example" "integration-secret")) ("gopass show -o accounts/smtp.example/alice\\@example"))"#
-    ]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_real_password_lookup_returns_secret() {
-    let elisp_form = r##"(let ((auth-sources
+    ]],
+        ),
+        (
+            "auth_source_gopass_real_password_lookup_returns_secret",
+            r##"(let ((auth-sources
                 '(gopass))
                commands)
          (auth-source-forget-all-cached)
@@ -103,16 +103,15 @@ fn auth_source_gopass_real_password_lookup_returns_secret() {
              :host "smtp.example"
              :user "alice@example"
              :port "submission")
-            (nreverse commands))))"##;
-    let expect = expect![[
+            (nreverse commands))))"##,
+            true,
+            expect![[
         r#"OK ("smtp-password" ("gopass show -o accounts/smtp.example/alice\\@example"))"#
-    ]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_enable_then_search_models_application_startup() {
-    let elisp_form = r##"(let ((auth-sources
+    ]],
+        ),
+        (
+            "auth_source_gopass_enable_then_search_models_application_startup",
+            r##"(let ((auth-sources
                 '("~/.authinfo"))
                events)
          (cl-letf
@@ -134,16 +133,15 @@ fn auth_source_gopass_enable_then_search_models_application_startup() {
              (list
               auth-sources
               result
-              (nreverse events)))))"##;
-    let expect = expect![[
+              (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK ((gopass "~/.authinfo") ((:user "alice" :secret "startup-secret")) ((:find "gopass") (:shell "gopass show -o accounts/imap.example/alice")))"#
-    ]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_application_can_customize_full_vault_layout() {
-    let elisp_form = r##"(let ((auth-sources
+    ]],
+        ),
+        (
+            "auth_source_gopass_application_can_customize_full_vault_layout",
+            r##"(let ((auth-sources
                 '(gopass))
                (auth-source-gopass-executable
                 "gopass-company")
@@ -172,9 +170,11 @@ fn auth_source_gopass_application_can_customize_full_vault_layout() {
              :host "smtp.internal"
              :user "alice"
              :port 465)
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK ("company-secret" ((:find "gopass-company") (:shell "gopass-company show -o teams/./gopass/alice\\@smtp.internal\\:465")))"#
-    ]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

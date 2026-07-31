@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{A_MELPA_PIN, CachedMelpaOracle, OracleBatchCase};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const A_TEST_TIMEOUT: Duration = Duration::from_secs(120);
@@ -38,29 +40,13 @@ pub(crate) fn assert_a_signal_parity(form: &str, expected: Expect) {
     expected.assert_eq(&report.gnu_emacs.to_string());
 }
 
-/// Multi-probe batch: one process pair, many named cases (2a).
+/// Multi-probe batch for `assert_a_parity` cases (2a).
 pub(crate) fn assert_a_batch(cases: &[(&str, &str, bool, Expect)]) {
     let name = current_test_name();
-    let batch: Vec<OracleBatchCase<'_>> = cases
-        .iter()
-        .map(|(id, probe, expect_value, _)| OracleBatchCase {
-            id,
-            probe,
-            expect_value: *expect_value,
-        })
-        .collect();
-    let reports = a_oracle()
-        .run_batch(&name, &batch)
-        .unwrap_or_else(|error| panic!("a batch `{name}` failed:\n{error}"));
-    assert_eq!(
-        reports.len(),
-        cases.len(),
-        "a batch `{name}` returned {} reports for {} cases",
-        reports.len(),
-        cases.len()
+    assert_oracle_batch(
+        a_oracle(),
+        &name,
+        "a_parity",
+        cases,
     );
-    for (report, (id, _, _, expected)) in reports.iter().zip(cases.iter()) {
-        assert_eq!(report.id, *id);
-        expected.assert_eq(&report.gnu_emacs.to_string());
-    }
 }

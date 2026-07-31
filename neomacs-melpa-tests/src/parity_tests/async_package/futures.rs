@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_async_parity, assert_async_signal_parity};
+use super::{assert_async_batch};
 
 #[test]
-fn async_start_future_returns_structured_unicode_and_transitions_to_ready() {
-    let elisp_form = r##"(let* ((future
+fn futures_public_surface_batch() {
+    assert_async_batch(&[
+        (
+            "async_start_future_returns_structured_unicode_and_transitions_to_ready",
+            r##"(let* ((future
                       (async-start
                        (lambda ()
                          (sleep-for 0.1)
@@ -21,28 +24,24 @@ fn async_start_future_returns_structured_unicode_and_transitions_to_ready() {
                 value
                 (async-ready future)
                 (buffer-live-p
-                 (process-buffer future))))"##;
-    let expect = expect![[r#"OK (nil ("λ雪" [1 two 3] (:nested ((left . right)))) t nil)"#]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_start_future_resignals_the_exact_child_error() {
-    let elisp_form = r##"(async-get
+                 (process-buffer future))))"##,
+            true,
+            expect![[r#"OK (nil ("λ雪" [1 two 3] (:nested ((left . right)))) t nil)"#]],
+        ),
+        (
+            "async_start_future_resignals_the_exact_child_error",
+            r##"(async-get
                (async-start
                 (lambda ()
                   (signal
                    'wrong-type-argument
-                   '(integerp child-value)))))"##;
-    let expect = expect![[r#"ERR (wrong-type-argument integerp child-value)"#]];
-
-    assert_async_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_start_callback_receives_messages_before_the_final_result() {
-    let elisp_form = r##"(let (events)
+                   '(integerp child-value)))))"##,
+            false,
+            expect![[r#"ERR (wrong-type-argument integerp child-value)"#]],
+        ),
+        (
+            "async_start_callback_receives_messages_before_the_final_result",
+            r##"(let (events)
                (let ((future
                       (async-start
                        (lambda ()
@@ -60,17 +59,15 @@ fn async_start_callback_receives_messages_before_the_final_result() {
                   (nreverse events)
                   (async-get future)
                   (buffer-live-p
-                   (process-buffer future)))))"##;
-    let expect = expect![[
+                   (process-buffer future)))))"##,
+            true,
+            expect![[
         r#"OK (((:phase first :payload "����" :async-message t) (:phase second :payload (1 2 3) :async-message t) finished) nil nil)"#
-    ]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_send_and_receive_transport_a_parent_message_into_the_child() {
-    let elisp_form = r##"(let (received)
+    ]],
+        ),
+        (
+            "async_send_and_receive_transport_a_parent_message_into_the_child",
+            r##"(let (received)
                (let ((future
                       (async-start
                        (lambda ()
@@ -95,15 +92,13 @@ fn async_send_and_receive_transport_a_parent_message_into_the_child() {
                  (list
                   received
                   (async-get future)
-                  (async-ready future))))"##;
-    let expect = expect![[r#"OK ((sum 17 t) nil t)"#]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_start_callback_reassembles_a_message_larger_than_a_process_chunk() {
-    let elisp_form = r##"(let (events)
+                  (async-ready future))))"##,
+            true,
+            expect![[r#"OK ((sum 17 t) nil t)"#]],
+        ),
+        (
+            "async_start_callback_reassembles_a_message_larger_than_a_process_chunk",
+            r##"(let (events)
                (let ((future
                       (async-start
                        (lambda ()
@@ -132,15 +127,13 @@ fn async_start_callback_reassembles_a_message_larger_than_a_process_chunk() {
                             value)
                           events)))))
                  (async-wait future)
-                 (nreverse events)))"##;
-    let expect = expect![[r#"OK ((message 65536 "xxx" "xxx") finished)"#]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_inject_variables_recreates_the_selected_parent_environment_in_child() {
-    let elisp_form = r##"(progn
+                 (nreverse events)))"##,
+            true,
+            expect![[r#"OK ((message 65536 "xxx" "xxx") finished)"#]],
+        ),
+        (
+            "async_inject_variables_recreates_the_selected_parent_environment_in_child",
+            r##"(progn
                (defvar
                  neomacs-async-child-string nil)
                (defvar
@@ -164,15 +157,13 @@ fn async_inject_variables_recreates_the_selected_parent_environment_in_child() {
                        (text-properties-at
                         0
                         neomacs-async-child-string)
-                       neomacs-async-child-list))))))"##;
-    let expect = expect![[r#"OK ("from-parent" nil (one (two . three)))"#]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_callback_future_yields_nil_to_async_get_after_delivery() {
-    let elisp_form = r##"(let (received)
+                       neomacs-async-child-list))))))"##,
+            true,
+            expect![[r#"OK ("from-parent" nil (one (two . three)))"#]],
+        ),
+        (
+            "async_callback_future_yields_nil_to_async_get_after_delivery",
+            r##"(let (received)
                (let ((future
                       (async-start
                        (lambda () 42)
@@ -182,15 +173,13 @@ fn async_callback_future_yields_nil_to_async_get_after_delivery() {
                  (list
                   received
                   (async-get future)
-                  (async-ready future))))"##;
-    let expect = expect![[r#"OK (42 nil t)"#]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_let_delivers_all_binding_values_to_its_final_parent_callback() {
-    let elisp_form = r##"(let (received)
+                  (async-ready future))))"##,
+            true,
+            expect![[r#"OK (42 nil t)"#]],
+        ),
+        (
+            "async_let_delivers_all_binding_values_to_its_final_parent_callback",
+            r##"(let (received)
                (let ((outer
                       (async-let
                           ((x (+ 1 2))
@@ -207,15 +196,13 @@ fn async_let_delivers_all_binding_values_to_its_final_parent_callback() {
                            deadline))
                      (accept-process-output
                       nil 0.05)))
-                 received))"##;
-    let expect = expect![[r#"OK (3 7)"#]];
-
-    assert_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_sandbox_returns_the_child_value_synchronously() {
-    let elisp_form = r##"(async-sandbox
+                 received))"##,
+            true,
+            expect![[r#"OK (3 7)"#]],
+        ),
+        (
+            "async_sandbox_returns_the_child_value_synchronously",
+            r##"(async-sandbox
                (lambda ()
                  (let ((values
                         '(1 2 3 4 5)))
@@ -225,8 +212,9 @@ fn async_sandbox_returns_the_child_value_synchronously() {
                      (lambda (value)
                        (* value value))
                      values)
-                    "λ雪"))))"##;
-    let expect = expect![[r#"OK (15 (1 4 9 16 25) "λ雪")"#]];
-
-    assert_async_parity(elisp_form, expect);
+                    "λ雪"))))"##,
+            true,
+            expect![[r#"OK (15 (1 4 9 16 25) "λ雪")"#]],
+        ),
+    ]);
 }

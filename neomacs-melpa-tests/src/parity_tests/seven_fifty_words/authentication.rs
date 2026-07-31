@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_seven_fifty_words_parity;
+use super::assert_seven_fifty_words_batch;
 
 #[test]
-fn seven_fifty_words_public_command_default_and_interactive_specs_match_the_pin() {
-    let elisp_form = r##"(list
+fn authentication_public_surface_batch() {
+    assert_seven_fifty_words_batch(&[
+        (
+            "seven_fifty_words_public_command_default_and_interactive_specs_match_the_pin",
+            r##"(list
               750words-client-command
               (interactive-form
                '750words-credentials-setenv)
@@ -20,17 +23,15 @@ fn seven_fifty_words_public_command_default_and_interactive_specs_match_the_pin(
               (commandp '750words-region)
               (commandp '750words-buffer)
               (commandp
-               '750words-region-or-buffer))"##;
-    let expect = expect![[
+               '750words-region-or-buffer))"##,
+            true,
+            expect![[
         r#"OK ("750words-client.py %s" (interactive "P") (interactive "r") (interactive nil) (interactive nil) t nil t t t)"#
-    ]];
-
-    assert_seven_fifty_words_parity(elisp_form, expect);
-}
-
-#[test]
-fn seven_fifty_words_credentials_searches_exact_host_fields_and_creation_prompts() {
-    let elisp_form = r##"(let (observed)
+    ]],
+        ),
+        (
+            "seven_fifty_words_credentials_searches_exact_host_fields_and_creation_prompts",
+            r##"(let (observed)
                (cl-letf
                    (((symbol-function
                       'auth-source-search)
@@ -47,17 +48,15 @@ fn seven_fifty_words_credentials_searches_exact_host_fields_and_creation_prompts
                          'save-entry)))))
                  (list
                   (750words-credentials t)
-                  observed)))"##;
-    let expect = expect![[
+                  observed)))"##,
+            true,
+            expect![[
         r#"OK (("writer@example.test" "plain-secret" save-entry) ((:max 1 :host "750words.com" :require (:user :secret) :create t) ((user . "750words.com username: ") (secret . "750words.com password for %u: "))))"#
-    ]];
-
-    assert_seven_fifty_words_parity(elisp_form, expect);
-}
-
-#[test]
-fn seven_fifty_words_credentials_calls_secret_thunk_once_and_preserves_save_function() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "seven_fifty_words_credentials_calls_secret_thunk_once_and_preserves_save_function",
+            r##"(let (events)
                (cl-letf
                    (((symbol-function
                       'auth-source-search)
@@ -81,27 +80,23 @@ fn seven_fifty_words_credentials_calls_secret_thunk_once_and_preserves_save_func
                     (nth 1 credentials)
                     (functionp
                      (nth 2 credentials))
-                    (nreverse events)))))"##;
-    let expect = expect![[r#"OK ("writer" "resolved" t (secret save))"#]];
-
-    assert_seven_fifty_words_parity(elisp_form, expect);
-}
-
-#[test]
-fn seven_fifty_words_credentials_returns_nil_when_auth_source_finds_nothing() {
-    let elisp_form = r##"(cl-letf
+                    (nreverse events)))))"##,
+            true,
+            expect![[r#"OK ("writer" "resolved" t (secret save))"#]],
+        ),
+        (
+            "seven_fifty_words_credentials_returns_nil_when_auth_source_finds_nothing",
+            r##"(cl-letf
               (((symbol-function
                  'auth-source-search)
                 (lambda (&rest _) nil)))
-              (750words-credentials))"##;
-    let expect = expect!["OK nil"];
-
-    assert_seven_fifty_words_parity(elisp_form, expect);
-}
-
-#[test]
-fn seven_fifty_words_credentials_setenv_forwards_save_sets_both_values_and_saves_last() {
-    let elisp_form = r##"(let ((process-environment
+              (750words-credentials))"##,
+            true,
+            expect!["OK nil"],
+        ),
+        (
+            "seven_fifty_words_credentials_setenv_forwards_save_sets_both_values_and_saves_last",
+            r##"(let ((process-environment
                     (copy-sequence
                      process-environment))
                    events)
@@ -132,17 +127,15 @@ fn seven_fifty_words_credentials_setenv_forwards_save_sets_both_values_and_saves
                    '(4))
                   (getenv "USER_750WORDS")
                   (getenv "PASS_750WORDS")
-                  (nreverse events))))"##;
-    let expect = expect![[
+                  (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (saved "new-user" "new-pass" ((credentials (4)) (save "new-user" "new-pass")))"#
-    ]];
-
-    assert_seven_fifty_words_parity(elisp_form, expect);
-}
-
-#[test]
-fn seven_fifty_words_credentials_setenv_leaves_environment_unchanged_when_missing() {
-    let elisp_form = r##"(let ((process-environment
+    ]],
+        ),
+        (
+            "seven_fifty_words_credentials_setenv_leaves_environment_unchanged_when_missing",
+            r##"(let ((process-environment
                     (copy-sequence
                      process-environment))
                    observed)
@@ -159,15 +152,13 @@ fn seven_fifty_words_credentials_setenv_leaves_environment_unchanged_when_missin
                   observed
                   (getenv "USER_750WORDS")
                   (getenv
-                   "PASS_750WORDS"))))"##;
-    let expect = expect![[r#"OK (nil nil "kept-user" "kept-pass")"#]];
-
-    assert_seven_fifty_words_parity(elisp_form, expect);
-}
-
-#[test]
-fn seven_fifty_words_credentials_setenv_ignores_a_non_function_save_value() {
-    let elisp_form = r##"(let ((process-environment
+                   "PASS_750WORDS"))))"##,
+            true,
+            expect![[r#"OK (nil nil "kept-user" "kept-pass")"#]],
+        ),
+        (
+            "seven_fifty_words_credentials_setenv_ignores_a_non_function_save_value",
+            r##"(let ((process-environment
                     (copy-sequence
                      process-environment)))
                (cl-letf
@@ -181,8 +172,9 @@ fn seven_fifty_words_credentials_setenv_ignores_a_non_function_save_value() {
                    t)
                   (getenv "USER_750WORDS")
                   (getenv
-                   "PASS_750WORDS"))))"##;
-    let expect = expect![[r#"OK (nil "user" "pass")"#]];
-
-    assert_seven_fifty_words_parity(elisp_form, expect);
+                   "PASS_750WORDS"))))"##,
+            true,
+            expect![[r#"OK (nil "user" "pass")"#]],
+        ),
+    ]);
 }

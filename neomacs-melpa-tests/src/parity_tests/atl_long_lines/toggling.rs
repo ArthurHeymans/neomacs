@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_atl_long_lines_parity;
+use super::assert_atl_long_lines_batch;
 
 #[test]
-fn atl_long_lines_toggle_is_a_true_noop_when_minor_mode_is_disabled() {
-    let elisp_form = r##"(with-temp-buffer
+fn toggling_public_surface_batch() {
+    assert_atl_long_lines_batch(&[
+        (
+            "atl_long_lines_toggle_is_a_true_noop_when_minor_mode_is_disabled",
+            r##"(with-temp-buffer
          (let ((atl-long-lines-mode nil)
                (measurements 0)
                (toggles nil))
@@ -24,14 +27,13 @@ fn atl_long_lines_toggle_is_a_true_noop_when_minor_mode_is_disabled() {
               (atl-long-lines-do-toggle)
               measurements
               toggles
-              truncate-lines))))"##;
-    let expect = expect!["OK (nil 0 nil nil)"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_toggle_chooses_truncation_at_or_below_width_and_wrapping_above_width() {
-    let elisp_form = r##"(mapcar
+              truncate-lines))))"##,
+            true,
+            expect!["OK (nil 0 nil nil)"],
+        ),
+        (
+            "atl_long_lines_toggle_chooses_truncation_at_or_below_width_and_wrapping_above_width",
+            r##"(mapcar
          (lambda (case)
            (pcase-let
                ((`(,width ,column)
@@ -63,16 +65,15 @@ fn atl_long_lines_toggle_chooses_truncation_at_or_below_width_and_wrapping_above
            (80 80)
            (80 81)
            (1 1)
-           (0 1)))"##;
-    let expect = expect![
+           (0 1)))"##,
+            true,
+            expect![
         "OK ((80 0 :toggled (1)) (80 79 :toggled (1)) (80 80 :toggled (1)) (80 81 :toggled (-1)) (1 1 :toggled (1)) (0 1 :toggled (-1)))"
-    ];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_toggle_changes_real_buffer_local_truncation_state() {
-    let elisp_form = r##"(with-temp-buffer
+    ],
+        ),
+        (
+            "atl_long_lines_toggle_changes_real_buffer_local_truncation_state",
+            r##"(with-temp-buffer
          (setq-local
           truncate-lines
           t)
@@ -105,14 +106,13 @@ fn atl_long_lines_toggle_changes_real_buffer_local_truncation_state() {
            (list
             (nreverse results)
             (local-variable-p
-             'truncate-lines))))"##;
-    let expect = expect!["OK ((t nil t) t)"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_toggle_reacts_to_the_line_at_point_in_a_mixed_document() {
-    let elisp_form = r##"(with-temp-buffer
+             'truncate-lines))))"##,
+            true,
+            expect!["OK ((t nil t) t)"],
+        ),
+        (
+            "atl_long_lines_toggle_reacts_to_the_line_at_point_in_a_mixed_document",
+            r##"(with-temp-buffer
          (insert
           "tiny\n"
           "this line is deliberately much longer\n"
@@ -137,14 +137,13 @@ fn atl_long_lines_toggle_reacts_to_the_line_at_point_in_a_mixed_document() {
                  (atl-long-lines--end-line-column)
                  truncate-lines)
                 states)))
-           (nreverse states)))"##;
-    let expect = expect!["OK ((1 4 t) (2 37 nil) (3 6 t) (2 37 nil) (1 4 t))"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_toggle_measures_and_toggles_exactly_once_per_enabled_invocation() {
-    let elisp_form = r##"(with-temp-buffer
+           (nreverse states)))"##,
+            true,
+            expect!["OK ((1 4 t) (2 37 nil) (3 6 t) (2 37 nil) (1 4 t))"],
+        ),
+        (
+            "atl_long_lines_toggle_measures_and_toggles_exactly_once_per_enabled_invocation",
+            r##"(with-temp-buffer
          (let ((atl-long-lines-mode t)
                (measurements 0)
                (width-reads 0)
@@ -176,28 +175,26 @@ fn atl_long_lines_toggle_measures_and_toggles_exactly_once_per_enabled_invocatio
              (list
               width-reads
               measurements
-              toggles))))"##;
-    let expect = expect!["OK (4 4 4)"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_mute_apply_returns_last_value_and_preserves_body_evaluation_order() {
-    let elisp_form = r##"(let (events)
+              toggles))))"##,
+            true,
+            expect!["OK (4 4 4)"],
+        ),
+        (
+            "atl_long_lines_mute_apply_returns_last_value_and_preserves_body_evaluation_order",
+            r##"(let (events)
          (list
           (atl-long-lines--mute-apply
             (push :first events)
             (push :second events)
             (list :result
                   (length events)))
-          (nreverse events)))"##;
-    let expect = expect!["OK ((:result 2) (:first :second))"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_mute_apply_establishes_quiet_bindings_and_restores_outer_message_policy() {
-    let elisp_form = r##"(let ((message-log-max t)
+          (nreverse events)))"##,
+            true,
+            expect!["OK ((:result 2) (:first :second))"],
+        ),
+        (
+            "atl_long_lines_mute_apply_establishes_quiet_bindings_and_restores_outer_message_policy",
+            r##"(let ((message-log-max t)
                (inhibit-message nil)
                (messages nil))
          (cl-letf
@@ -222,14 +219,13 @@ fn atl_long_lines_mute_apply_establishes_quiet_bindings_and_restores_outer_messa
               result
               (nreverse messages)
               message-log-max
-              inhibit-message))))"##;
-    let expect = expect![[r#"OK ((nil t "fixture-message") ("hidden 7") t nil)"#]];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_mute_apply_error_path_preserves_defvar_bool_truthy_canonicalization() {
-    let elisp_form = r##"(let ((message-log-max 321)
+              inhibit-message))))"##,
+            true,
+            expect![[r#"OK ((nil t "fixture-message") ("hidden 7") t nil)"#]],
+        ),
+        (
+            "atl_long_lines_mute_apply_error_path_preserves_defvar_bool_truthy_canonicalization",
+            r##"(let ((message-log-max 321)
                (inhibit-message :outer))
          (let ((before inhibit-message))
            (condition-case error-data
@@ -244,14 +240,13 @@ fn atl_long_lines_mute_apply_error_path_preserves_defvar_bool_truthy_canonicaliz
                (car error-data)
                (cadr error-data)
                message-log-max
-               inhibit-message)))))"##;
-    let expect = expect![[r#"OK (t error "fixture failure nil/t" 321 t)"#]];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_mute_apply_macro_declaration_and_expansion_keep_all_body_forms() {
-    let elisp_form = r##"(let ((expansion
+               inhibit-message)))))"##,
+            true,
+            expect![[r#"OK (t error "fixture failure nil/t" 321 t)"#]],
+        ),
+        (
+            "atl_long_lines_mute_apply_macro_declaration_and_expansion_keep_all_body_forms",
+            r##"(let ((expansion
                 (macroexpand
                  '(atl-long-lines--mute-apply
                     (setq first 1)
@@ -275,7 +270,9 @@ fn atl_long_lines_mute_apply_macro_declaration_and_expansion_keep_all_body_forms
             (prin1-to-string expansion))
            t)
           (let (first)
-            (eval expansion t))))"##;
-    let expect = expect!["OK (0 t let t t 3)"];
-    assert_atl_long_lines_parity(elisp_form, expect);
+            (eval expansion t))))"##,
+            true,
+            expect!["OK (0 t let t t 3)"],
+        ),
+    ]);
 }

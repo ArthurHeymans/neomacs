@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_affe_parity;
+use super::assert_affe_batch;
 
 #[test]
-fn affe_grep_builds_real_consult_pipeline_with_paths_options_history_and_protocol_actions() {
-    let elisp_form = r##"(let ((affe-grep-command
+fn workflows_public_surface_batch() {
+    assert_affe_batch(&[
+        (
+            "affe_grep_builds_real_consult_pipeline_with_paths_options_history_and_protocol_actions",
+            r##"(let ((affe-grep-command
                      "rg --null .")
                     (affe-count 6)
                     (affe-regexp-compiler
@@ -111,16 +114,15 @@ fn affe_grep_builds_real_consult_pipeline_with_paths_options_history_and_protoco
                   (functionp callback)
                   (nreverse directory-calls)
                   read-report
-                  (nreverse writes))))"##;
-    let expect = expect![[
+                  (nreverse writes))))"##,
+            true,
+            expect![[
         r#"OK (selected t (("Fuzzy grep" fixture)) (t "/" "Grep fixture: " nil t "initial" (:input affe--grep-history) consult-grep (thing symbol) identity consult--lookup-member consult--prefix-group t nil nil nil (setup "needle" nil destroy)) ("(start \"\\\\`[^\\0]+\\0[^\\0:]+[\\0:]\\\\(.*\\\\)\\\\'\" \"rg\" \"--null\" \"one\" \"two words\")\n" "(search 6)\n" "(search 6 \"re:needle\")\n" "exit\n"))"#
-    ]];
-    assert_affe_parity(elisp_form, expect);
-}
-
-#[test]
-fn affe_find_pipeline_strips_dot_prefix_and_return_state_opens_only_selected_candidate() {
-    let elisp_form = r##"(let ((affe-find-command
+    ]],
+        ),
+        (
+            "affe_find_pipeline_strips_dot_prefix_and_return_state_opens_only_selected_candidate",
+            r##"(let ((affe-find-command
                      "find . -type f")
                     (affe-count 4)
                     (affe-regexp-compiler
@@ -235,9 +237,11 @@ fn affe_find_pipeline_strips_dot_prefix_and_return_state_opens_only_selected_can
                   (affe-find 'fixture "seed")
                   read-report
                   (nreverse opened)
-                  (nreverse writes))))"##;
-    let expect = expect![[
+                  (nreverse writes))))"##,
+            true,
+            expect![[
         r#"OK (chosen ("Find fixture: " nil t (:input affe--find-history) "seed" file (thing filename) identity #1=("alpha.txt") nil (opened "chosen.txt") nil (setup "alpha" #1# nil destroy)) ("chosen.txt") ("(start nil \"find\" \"src\" \"-type\" \"f\")\n" "(search 4)\n" "(search 4 \"alpha\")\n" "exit\n"))"#
-    ]];
-    assert_affe_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

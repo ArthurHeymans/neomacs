@@ -6,6 +6,8 @@ use crate::{
 };
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod actions;
 mod arguments;
 mod candidates;
@@ -79,4 +81,15 @@ pub(crate) fn assert_auto_complete_auctex_parity(elisp_form: &str, expected: Exp
             panic!("auto-complete-auctex parity case `{name}` failed:\n{error}")
         });
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+/// Multi-probe batch for `assert_auto_complete_auctex_parity` cases (2a).
+pub(crate) fn assert_auto_complete_auctex_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_complete_auctex_oracle(),
+        &name,
+        "auto_complete_auctex_parity",
+        cases,
+    );
 }

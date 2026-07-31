@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_parity;
+use super::assert_auto_complete_batch;
 
 #[test]
-fn auto_complete_prefix_parsers_handle_symbols_files_and_c_family_members_in_real_buffers() {
-    let elisp_form = r##"(mapcar
+fn matching_public_surface_batch() {
+    assert_auto_complete_batch(&[
+        (
+            "auto_complete_prefix_parsers_handle_symbols_files_and_c_family_members_in_real_buffers",
+            r##"(mapcar
                           (lambda (case)
                             (with-temp-buffer
                               (insert (car case))
@@ -26,17 +29,15 @@ fn auto_complete_prefix_parsers_handle_symbols_files_and_c_family_members_in_rea
                             ("\"dir/file")
                             ("alpha-beta")
                             ("12345")
-                            ("0xbeef")))"##;
-    let expect = expect![[
+                            ("0xbeef")))"##,
+            true,
+            expect![[
         r#"OK (("alpha_beta" 11 1 nil nil nil nil) ("obj.member" 11 5 nil 5 nil nil) ("ptr->member" 12 1 6 nil nil nil) ("Type::member" 13 7 nil nil nil 7) ("\"dir/file" 10 2 2 nil nil nil) ("alpha-beta" 11 1 nil nil nil nil) ("12345" 6 1 nil nil nil nil) ("0xbeef" 7 1 nil nil nil nil))"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_default_prefix_rejects_numeric_literals_but_accepts_mixed_symbols() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_default_prefix_rejects_numeric_literals_but_accepts_mixed_symbols",
+            r##"(mapcar
                           (lambda (text)
                             (with-temp-buffer
                               (insert text)
@@ -56,17 +57,15 @@ fn auto_complete_default_prefix_rejects_numeric_literals_but_accepts_mixed_symbo
                             "0o755"
                             "alpha42"
                             "_42"
-                            "λ-value"))"##;
-    let expect = expect![[
+                            "λ-value"))"##,
+            true,
+            expect![[
         r#"OK (("42" 1 nil nil) ("007bond" 1 nil nil) ("0xff" 1 nil nil) ("0b101" 1 nil nil) ("0o755" 1 nil nil) ("alpha42" 1 1 "alpha42") ("_42" 1 1 "_42") ("λ-value" 1 1 "λ-value"))"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_source_compilation_expands_prefix_and_match_shorthands_and_filters_dependencies() {
-    let elisp_form = r##"(let ((ac-prefix-definitions
+    ]],
+        ),
+        (
+            "auto_complete_source_compilation_expands_prefix_and_match_shorthands_and_filters_dependencies",
+            r##"(let ((ac-prefix-definitions
                                 '((word . ac-prefix-symbol))))
                            (setq
                             auto-complete-test-available-calls
@@ -99,17 +98,15 @@ fn auto_complete_source_compilation_expands_prefix_and_match_shorthands_and_filt
                                ((candidates list "delta")
                                 (depends
                                  auto-complete-test-missing-feature))))
-                            auto-complete-test-available-calls))"##;
-    let expect = expect![[
+                            auto-complete-test-available-calls))"##,
+            true,
+            expect![[
         r#"OK ((((prefix . ac-prefix-symbol) (candidates list "alpha") (prefix . word) (match . ac-match-substring)) ((prefix . ac-prefix-default) (candidates list "beta") (available . auto-complete-test-available))) 11)"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_prefix_resolution_groups_only_sources_at_the_winning_start_point() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_prefix_resolution_groups_only_sources_at_the_winning_start_point",
+            r##"(with-temp-buffer
                           (insert "obj.member")
                           (let ((ac-sources
                                  '(((candidates list "one")
@@ -144,17 +141,15 @@ fn auto_complete_prefix_resolution_groups_only_sources_at_the_winning_start_poin
                                (ac-prefix-symbol)
                                (ac-prefix-c-dot)
                                (ac-prefix-c-dot
-                                ac-prefix-symbol)))))"##;
-    let expect = expect![[
+                                ac-prefix-symbol)))))"##,
+            true,
+            expect![[
         r#"OK ((nil ac-prefix-symbol 5 (#3=(list "one") #1=(list "two") #2=(list "four"))) ((ac-prefix-symbol) ac-prefix-c-dot 5 (#1# #2#)) ((ac-prefix-c-dot) ac-prefix-symbol 5 (#3# #2#)) ((ac-prefix-c-dot ac-prefix-symbol) "obj\\.\\(.*\\)" 5 (#2#)))"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_candidate_pipeline_preserves_values_actions_docs_faces_cache_and_limits() {
-    let elisp_form = r##"(let ((ac-prefix "a")
+    ]],
+        ),
+        (
+            "auto_complete_candidate_pipeline_preserves_values_actions_docs_faces_cache_and_limits",
+            r##"(let ((ac-prefix "a")
                                (ac-limit 3)
                                (ac-candidates-cache nil)
                                (source
@@ -208,17 +203,15 @@ fn auto_complete_candidate_pipeline_preserves_values_actions_docs_faces_cache_an
                               (mapcar
                                #'substring-no-properties
                                second)
-                              (length ac-candidates-cache))))"##;
-    let expect = expect![[
+                              (length ac-candidates-cache))))"##,
+            true,
+            expect![[
         r#"OK (1 (("alpha" payload-alpha auto-complete-test-action auto-complete-test-document "x" auto-complete-test-face auto-complete-test-selection) ("alpine" nil auto-complete-test-action auto-complete-test-document "x" auto-complete-test-face auto-complete-test-selection) ("amber" nil auto-complete-test-action auto-complete-test-document "x" auto-complete-test-face auto-complete-test-selection)) ("alpha" "alpine" "amber") 1)"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_case_policy_changes_real_candidate_filtering_for_lower_and_upper_prefixes() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_case_policy_changes_real_candidate_filtering_for_lower_and_upper_prefixes",
+            r##"(mapcar
                           (lambda (case)
                             (let ((ac-ignore-case (car case))
                                   (ac-prefix (cadr case))
@@ -242,17 +235,15 @@ fn auto_complete_case_policy_changes_real_candidate_filtering_for_lower_and_uppe
                             (smart "Al")
                             (smart "AL")
                             (t "Al")
-                            (nil "al")))"##;
-    let expect = expect![[
+                            (nil "al")))"##,
+            true,
+            expect![[
         r#"OK (((smart "al") ("alpha" "Alpha" "ALPINE" "almanac") "al" "al") ((smart "Al") ("Alpha") "Alpha" "Alpha") ((smart "AL") ("ALPINE") "ALPINE" "ALPINE") ((t "Al") ("alpha" "Alpha" "ALPINE" "almanac") "Al" "Al") ((nil "al") ("alpha" "almanac") "al" "al"))"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_duplicate_reduction_distinguishes_actions_and_limits_work_to_front_window() {
-    let elisp_form = r##"(let* ((a1
+    ]],
+        ),
+        (
+            "auto_complete_duplicate_reduction_distinguishes_actions_and_limits_work_to_front_window",
+            r##"(let* ((a1
                                  (propertize
                                   "same"
                                   'action
@@ -291,17 +282,15 @@ fn auto_complete_duplicate_reduction_distinguishes_actions_and_limits_work_to_fr
                              result)
                             (length result)
                             (cl-count 22 result)
-                            (cl-count 23 result)))"##;
-    let expect = expect![[
+                            (cl-count 23 result)))"##,
+            true,
+            expect![[
         r#"OK ((("same" first) ("same" second) ("other" nil) 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 22 23) 30 2 2)"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_completion_history_learns_prefix_positions_sorts_and_round_trips() {
-    let elisp_form = r##"(let ((db (ac-comphist-make)))
+    ]],
+        ),
+        (
+            "auto_complete_completion_history_learns_prefix_positions_sorts_and_round_trips",
+            r##"(let ((db (ac-comphist-make)))
                            (dolist
                                (event
                                 '(("format" 1)
@@ -374,18 +363,15 @@ fn auto_complete_completion_history_learns_prefix_positions_sorts_and_round_trip
                                    1)))
                                '("format"
                                  "forward-char"
-                                 "function")))))"##;
-    let expect = expect![[
+                                 "function")))))"##,
+            true,
+            expect![[
         r#"OK ((("format" "2.26304096" "1.30349980") ("forward-char" "0.22597242" "2.20505475") ("function" "1.22752738" "0.26798621") ("fresh" "0.26000000" "0.28000000")) ("format" "function" "fresh" "forward-char") (("format" (0 2 0 1 0 0)) ("forward-char" (0 0 0 2 0 0 0 0 0 0 0 0)) ("function" (0 1 0 0 0 0 0 0))) ("2.26304096" "0.22597242" "1.22752738"))"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_word_scanner_returns_unique_nearest_candidates_across_both_directions_and_limits()
-{
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_word_scanner_returns_unique_nearest_candidates_across_both_directions_and_limits",
+            r##"(with-temp-buffer
                           (insert
                            "alpha alpine alphabet\n"
                            "zero alpha amber\n"
@@ -408,17 +394,15 @@ fn auto_complete_word_scanner_returns_unique_nearest_candidates_across_both_dire
                                (ac-candidate-words-in-buffer
                                 (point)
                                 "a"
-                                4)))))"##;
-    let expect = expect![[
+                                4)))))"##,
+            true,
+            expect![[
         r#"OK (("alpha" "alphabet" "alpine") ("alpha" "alphabet") ("alphabet" "alpine" "alpha" "amber"))"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_word_index_shares_only_compatible_major_mode_buffers() {
-    let elisp_form = r##"(let ((same
+    ]],
+        ),
+        (
+            "auto_complete_word_index_shares_only_compatible_major_mode_buffers",
+            r##"(let ((same
                                 (generate-new-buffer
                                  " *ac-same*"))
                                (other
@@ -459,15 +443,13 @@ fn auto_complete_word_index_shares_only_compatible_major_mode_buffers() {
                                           buffer))))
                                      #'string<))))
                              (kill-buffer same)
-                             (kill-buffer other)))"##;
-    let expect = expect![[r#"OK (("sharedAlpha" "sharedBeta") ("sharedAlpha" "sharedBeta"))"#]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_symbol_function_and_variable_sources_classify_injected_real_lisp_objects() {
-    let elisp_form = r##"(progn
+                             (kill-buffer other)))"##,
+            true,
+            expect![[r#"OK (("sharedAlpha" "sharedBeta") ("sharedAlpha" "sharedBeta"))"#]],
+        ),
+        (
+            "auto_complete_symbol_function_and_variable_sources_classify_injected_real_lisp_objects",
+            r##"(progn
                           (fset
                            'auto-complete-fixture-function
                            (lambda (value)
@@ -509,10 +491,11 @@ fn auto_complete_symbol_function_and_variable_sources_classify_injected_real_lis
                              (funcall
                               'auto-complete-fixture-function
                               5)
-                             auto-complete-fixture-variable)))"##;
-    let expect = expect![[
+                             auto-complete-fixture-variable)))"##,
+            true,
+            expect![[
         r#"OK ((("auto-complete-fixture-function" t t nil) ("auto-complete-fixture-variable" t nil t) ("auto-complete-fixture-property-only" t nil nil)) 12 fixture-value)"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

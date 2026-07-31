@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_ast_grep_parity;
+use super::assert_ast_grep_batch;
 
 #[test]
-fn ast_grep_sync_search_runs_prompt_stream_completion_and_real_file_jump() {
-    let elisp_form = r##"(let* ((file
+fn sync_public_surface_batch() {
+    assert_ast_grep_batch(&[
+        (
+            "ast_grep_sync_search_runs_prompt_stream_completion_and_real_file_jump",
+            r##"(let* ((file
                 (ast-grep-test-write-file
                  "sync/src/app.js"
                  "zero\n  console.log(value)\nlast\n"))
@@ -49,16 +52,15 @@ fn ast_grep_sync_search_runs_prompt_stream_completion_and_real_file_jump() {
                   (point)
                   (min (+ (point) 11) (point-max)))
                  (hash-table-count ast-grep--candidate-table)))
-            (ast-grep-test-kill-file-buffer file)))"##;
-    let expect = expect![[
+            (ast-grep-test-kill-file-buffer file)))"##,
+            true,
+            expect![[
         r#"OK (((:read "ast-grep pattern: " nil ast-grep-history) (:run "console.log($A)" "/fixture/project/") (:complete "ast-grep [console.log($A)]: " nil t nil ast-grep-history ("[ORACLE-SANDBOX]/sync/src/app.js:2:2:console.log(value)") (metadata (affixation-function . ast-grep--affixation)))) t 2 2 "console.log" 1)"#
-    ]];
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_sync_search_no_matches_reports_pattern_and_never_prompts_for_selection() {
-    let elisp_form = r##"(let (messages completion-called)
+    ]],
+        ),
+        (
+            "ast_grep_sync_search_no_matches_reports_pattern_and_never_prompts_for_selection",
+            r##"(let (messages completion-called)
           (cl-letf (((symbol-function 'read-string)
                      (lambda (&rest _) "$A && $A()"))
                     ((symbol-function 'ast-grep--run-command)
@@ -75,14 +77,13 @@ fn ast_grep_sync_search_no_matches_reports_pattern_and_never_prompts_for_selecti
              (ast-grep--search-sync "/fixture/")
              (nreverse messages)
              completion-called
-             (hash-table-count ast-grep--candidate-table))))"##;
-    let expect = expect![[r#"OK (nil ("No matches found for pattern: $A && $A()") nil 0)"#]];
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_sync_new_session_discards_stale_registry_before_user_selection() {
-    let elisp_form = r##"(let* ((stale
+             (hash-table-count ast-grep--candidate-table))))"##,
+            true,
+            expect![[r#"OK (nil ("No matches found for pattern: $A && $A()") nil 0)"#]],
+        ),
+        (
+            "ast_grep_sync_new_session_discards_stale_registry_before_user_selection",
+            r##"(let* ((stale
                 (ast-grep--format-candidate
                  '(:file "stale.rs" :start-line 9 :start-column 9
                    :text "stale")))
@@ -106,9 +107,11 @@ fn ast_grep_sync_new_session_discards_stale_registry_before_user_selection() {
             (list
              stale-visible
              selected
-             (hash-table-count ast-grep--candidate-table))))"##;
-    let expect = expect![[
+             (hash-table-count ast-grep--candidate-table))))"##,
+            true,
+            expect![[
         r#"OK (("stale.rs" 9 9 nil nil nil nil) ("fresh.rs" 1 2 nil nil "fresh" nil) 1)"#
-    ]];
-    assert_ast_grep_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

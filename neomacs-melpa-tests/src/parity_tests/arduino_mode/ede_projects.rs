@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_ede_arduino_parity, assert_ede_arduino_signal_parity};
+use super::{assert_ede_arduino_batch};
 
 #[test]
-fn project_root_and_primary_file_follow_real_sketchbook_directory_layout() {
-    let elisp_form = r##"(let* ((sketchbook
+fn ede_projects_public_surface_batch() {
+    assert_ede_arduino_batch(&[
+        (
+            "project_root_and_primary_file_follow_real_sketchbook_directory_layout",
+            r##"(let* ((sketchbook
                           (make-temp-file
                            "arduino-sketchbook-" t))
                          (project
@@ -65,14 +68,13 @@ fn project_root_and_primary_file_follow_real_sketchbook_directory_layout() {
                                      pde-buffer)
                                   (kill-buffer
                                    pde-buffer))))))
-                      (delete-directory sketchbook t)))"##;
-    let expect = expect!["OK (t t t t)"];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn project_root_rejects_paths_outside_sketchbook_and_nonexistent_projects() {
-    let elisp_form = r##"(let* ((root
+                      (delete-directory sketchbook t)))"##,
+            true,
+            expect!["OK (t t t t)"],
+        ),
+        (
+            "project_root_rejects_paths_outside_sketchbook_and_nonexistent_projects",
+            r##"(let* ((root
                           (make-temp-file
                            "arduino-root-boundaries-" t))
                          (sketchbook
@@ -103,14 +105,13 @@ fn project_root_rejects_paths_outside_sketchbook_and_nonexistent_projects() {
                              (ede-arduino-root outside)
                              (ede-arduino-root missing)
                              (ede-arduino-file outside))))
-                      (delete-directory root t)))"##;
-    let expect = expect!["OK (nil nil nil)"];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn project_loader_creates_registers_and_populates_a_new_ino_project() {
-    let elisp_form = r##"(let* ((root
+                      (delete-directory root t)))"##,
+            true,
+            expect!["OK (nil nil nil)"],
+        ),
+        (
+            "project_loader_creates_registers_and_populates_a_new_ino_project",
+            r##"(let* ((root
                           (make-temp-file
                            "arduino-project-load-" t))
                          (project-dir
@@ -165,16 +166,15 @@ fn project_loader_creates_registers_and_populates_a_new_ino_project() {
                                 ino)
                                (oref result targets)
                                (nreverse messages)))))
-                      (delete-directory root t)))"##;
-    let expect = expect![[
+                      (delete-directory root t)))"##,
+            true,
+            expect![[
         r#"OK (t t "Robot" t t nil ("Creating new project" "Obsolete name argument \"Robot\" passed to ede-arduino-project constructor"))"#
-    ]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn project_loader_reuses_an_existing_open_project_without_registering_another() {
-    let elisp_form = r##"(let* ((existing
+    ]],
+        ),
+        (
+            "project_loader_reuses_an_existing_open_project_without_registering_another",
+            r##"(let* ((existing
                           (make-instance
                            'ede-arduino-project
                            :name "Existing"
@@ -208,14 +208,13 @@ fn project_loader_reuses_an_existing_open_project_without_registering_another() 
                               "/workspace/Existing/")))
                         (list
                          (eq result existing)
-                         (nreverse events)))))"##;
-    let expect = expect![[r#"OK (t (:sync "Opening existing project"))"#]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn target_lookup_creates_one_directory_target_then_reuses_it() {
-    let elisp_form = r##"(let* ((root
+                         (nreverse events)))))"##,
+            true,
+            expect![[r#"OK (t (:sync "Opening existing project"))"#]],
+        ),
+        (
+            "target_lookup_creates_one_directory_target_then_reuses_it",
+            r##"(let* ((root
                           (make-temp-file
                            "arduino-target-" t))
                          (project
@@ -253,14 +252,13 @@ fn target_lookup_creates_one_directory_target_then_reuses_it() {
                               (oref first path)
                               root)
                              (oref first source))))
-                      (delete-directory root t)))"##;
-    let expect = expect!["OK (t 1 t t nil)"];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn upload_and_target_compile_delegate_to_current_project_with_exact_commands() {
-    let elisp_form = r##"(let* ((project
+                      (delete-directory root t)))"##,
+            true,
+            expect!["OK (t 1 t t nil)"],
+        ),
+        (
+            "upload_and_target_compile_delegate_to_current_project_with_exact_commands",
+            r##"(let* ((project
                           (make-instance
                            'ede-arduino-project
                            :name "CompileDemo"
@@ -299,15 +297,13 @@ fn upload_and_target_compile_delegate_to_current_project_with_exact_commands() {
                             (car event)
                             project)
                            (cadr event)))
-                        (nreverse events)))))"##;
-    let expect =
-        expect![[r#"OK (:compiled :compiled ((t "gmake all upload") (t "gmake verify")))"#]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn project_compile_creates_makefile_before_invoking_requested_or_default_command() {
-    let elisp_form = r##"(let* ((project
+                        (nreverse events)))))"##,
+            true,
+            expect![[r#"OK (:compiled :compiled ((t "gmake all upload") (t "gmake verify")))"#]],
+        ),
+        (
+            "project_compile_creates_makefile_before_invoking_requested_or_default_command",
+            r##"(let* ((project
                           (make-instance
                            'ede-arduino-project
                            :name "CompileDemo"
@@ -347,29 +343,27 @@ fn project_compile_creates_makefile_before_invoking_requested_or_default_command
                                 (cadr event)
                                 project))
                             event))
-                        (nreverse events)))))"##;
-    let expect = expect![[
+                        (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK (:compilation :compilation ((:makefile t) (:compile "gmake all upload") (:makefile t) (:compile "gmake")))"#
-    ]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn project_debug_target_reports_the_explicit_unsupported_contract() {
-    let elisp_form = r##"(let ((target
+    ]],
+        ),
+        (
+            "project_debug_target_reports_the_explicit_unsupported_contract",
+            r##"(let ((target
                          (make-instance
                           'ede-arduino-target
                           :name "Demo"
                           :path "/workspace/Demo/"
                           :source nil)))
-                    (project-debug-target target))"##;
-    let expect = expect![[r#"ERR (error "No Debugger support for Arduino")"#]];
-    assert_ede_arduino_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn serial_monitor_uses_active_preference_port_and_switches_to_line_mode() {
-    let elisp_form = r##"(let ((prefs
+                    (project-debug-target target))"##,
+            false,
+            expect![[r#"ERR (error "No Debugger support for Arduino")"#]],
+        ),
+        (
+            "serial_monitor_uses_active_preference_port_and_switches_to_line_mode",
+            r##"(let ((prefs
                          (make-instance
                           'ede-arduino-prefs))
                         events)
@@ -391,14 +385,13 @@ fn serial_monitor_uses_active_preference_port_and_switches_to_line_mode() {
                             :line)))
                       (list
                        (cedet-arduino-serial-monitor)
-                       (nreverse events))))"##;
-    let expect = expect![[r#"OK (:line (:sync (:serial "/dev/ttyACM7" 9600) :line-mode))"#]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn preprocessor_map_keeps_builtin_levels_and_merges_refreshed_semantic_defines() {
-    let elisp_form = r##"(let ((target
+                       (nreverse events))))"##,
+            true,
+            expect![[r#"OK (:line (:sync (:serial "/dev/ttyACM7" 9600) :line-mode))"#]],
+        ),
+        (
+            "preprocessor_map_keeps_builtin_levels_and_merges_refreshed_semantic_defines",
+            r##"(let ((target
                          (make-instance
                           'ede-arduino-target
                           :name "Demo"
@@ -447,16 +440,15 @@ fn preprocessor_map_keeps_builtin_levels_and_merges_refreshed_semantic_defines()
                                object slot)))))
                       (list
                        (ede-preprocessor-map target)
-                       (nreverse events))))"##;
-    let expect = expect![[
+                       (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK ((("HIGH" . "0x1") ("LOW" . "0x0") ("CUSTOM_PIN" . "42")) ((:table "/opt/arduino/hardware/arduino/cores/arduino/wiring.h") (:needs-refresh fake-table) (:refresh fake-table)))"#
-    ]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn system_include_path_combines_core_and_each_detected_library() {
-    let elisp_form = r##"(let ((target
+    ]],
+        ),
+        (
+            "system_include_path_combines_core_and_each_detected_library",
+            r##"(let ((target
                          (make-instance
                           'ede-arduino-target
                           :name "Demo"
@@ -479,16 +471,15 @@ fn system_include_path_combines_core_and_each_detected_library() {
                               "Ethernet/utility"))))
                       (list
                        (ede-system-include-path target)
-                       (nreverse events))))"##;
-    let expect = expect![[
+                       (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (("/opt/arduino/hardware/arduino/cores/arduino" "/opt/arduino/libraries/Servo" "/opt/arduino/libraries/Ethernet/utility") (:sync))"#
-    ]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn sketch_guessing_prefers_pde_then_ino_and_reports_missing_primary_file() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "sketch_guessing_prefers_pde_then_ino_and_reports_missing_primary_file",
+            r##"(let* ((root
                           (make-temp-file
                            "arduino-guess-sketch-" t))
                          (project
@@ -533,7 +524,9 @@ fn sketch_guessing_prefers_pde_then_ino_and_reports_missing_primary_file() {
                                      "sketch file for project "
                                      "#<ede-arduino-project ")
                                     (cadr error-data)))))))))
-                      (delete-directory root t)))"##;
-    let expect = expect![[r#"OK ("Guess.pde" "Guess.ino" (error 0))"#]];
-    assert_ede_arduino_parity(elisp_form, expect);
+                      (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK ("Guess.pde" "Guess.ino" (error 0))"#]],
+        ),
+    ]);
 }

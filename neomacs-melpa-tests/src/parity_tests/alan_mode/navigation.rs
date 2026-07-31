@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_alan_mode_parity;
+use super::assert_alan_mode_batch;
 
 #[test]
-fn alan_identifiers_paths_parent_navigation_and_clipboard_follow_real_nested_model() {
-    let elisp_form = r##"(with-temp-buffer
+fn navigation_public_surface_batch() {
+    assert_alan_mode_batch(&[
+        (
+            "alan_identifiers_paths_parent_navigation_and_clipboard_follow_real_nested_model",
+            r##"(with-temp-buffer
                       (alan-mode)
                       (insert
                        "'root' -> component {\n"
@@ -32,16 +35,15 @@ fn alan_identifiers_paths_parent_navigation_and_clipboard_follow_real_nested_mod
                          (thing-at-point 'identifier)
                          (line-number-at-pos)
                          (mark)
-                         origin)))"##;
-    let expect = expect![[
+                         origin)))"##,
+            true,
+            expect![[
         r#"OK ("'balance'" "'balance'" #("'root'.'accounts'" 0 6 (face font-lock-variable-name-face) 7 17 (face font-lock-variable-name-face)) #("'root'.'accounts'" 0 6 (face font-lock-variable-name-face) 7 17 (face font-lock-variable-name-face)) nil 2 61 61)"#
-    ]];
-    assert_alan_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn alan_xref_backend_finds_real_definitions_across_open_buffers_and_formats_context() {
-    let elisp_form = r##"(let ((alan-xref-limit-to-project-scope nil)
+    ]],
+        ),
+        (
+            "alan_xref_backend_finds_real_definitions_across_open_buffers_and_formats_context",
+            r##"(let ((alan-xref-limit-to-project-scope nil)
                           (first (generate-new-buffer " *alan-first*"))
                           (second (generate-new-buffer " *alan-second*")))
                       (unwind-protect
@@ -82,24 +84,15 @@ fn alan_xref_backend_finds_real_definitions_across_open_buffers_and_formats_cont
                                         location))))
                                   definitions)))))
                         (kill-buffer first)
-                        (kill-buffer second)))"##;
-    let expect = expect![[
+                        (kill-buffer second)))"##,
+            true,
+            expect![[
         r#"OK (("'orders'" "'Customer'") (("'Customer' component :1" " *alan-second*" 1) ("'Customer' component :1" " *alan-first*" 1)))"#
-    ]];
-    assert_alan_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn alan_documentation_include_links_need_thingatpt_which_alan_mode_never_requires() {
-    // `alan-documentation-include-link-p' calls `thing-at-point-looking-at',
-    // which lives in `thingatpt' and is NOT autoloaded -- and alan-mode.el
-    // never requires the library.  A full session loads it incidentally,
-    // because `thing-at-point' itself is autoloaded and the xref backend uses
-    // it, which is why the defect survives untested in the wild.  Both arms
-    // are asserted: the bare session that a user of `M-x alan-mode' in a
-    // fresh Emacs really gets, and the working command once the library is
-    // present.  Upstream defect, identical in GNU Emacs and Neomacs.
-    let elisp_form = r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    ]],
+        ),
+        (
+            "alan_documentation_include_links_need_thingatpt_which_alan_mode_never_requires",
+            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (target (expand-file-name "included.alan" root))
        visited missing)
   (with-temp-file target
@@ -141,16 +134,15 @@ fn alan_documentation_include_links_need_thingatpt_which_alan_mode_never_require
                      (user-error (list (car error) (cadr error))))))
            (list detected
                  :visited-the-target (equal visited target)
-                 :missing missing)))))))"##;
-    let expect = expect![[
+                 :missing missing)))))))"##,
+            true,
+            expect![[
         r#"OK (:library-loaded-first nil :autoloaded (t nil) :bare-session (:signalled void-function thing-at-point-looking-at) :after-require ((:detected t) :visited-the-target t :missing (user-error "File not found missing-file.alan")))"#
-    ]];
-    assert_alan_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn alan_phrase_addition_updates_phrase_and_translation_files_once_and_runs_hook() {
-    let elisp_form = r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    ]],
+        ),
+        (
+            "alan_phrase_addition_updates_phrase_and_translation_files_once_and_runs_hook",
+            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                            (translations
                             (expand-file-name "translations" root))
                            (phrases
@@ -200,16 +192,15 @@ fn alan_phrase_addition_updates_phrase_and_translation_files_once_and_runs_hook(
                         (dolist (buffer (buffer-list))
                           (when-let ((file (buffer-file-name buffer)))
                             (when (string-prefix-p root file)
-                              (kill-buffer buffer))))))"##;
-    let expect = expect![[
+                              (kill-buffer buffer))))))"##,
+            true,
+            expect![[
         r#"OK ("'Existing'\n'New phrase'\n" "'Existing': \"Existing\"\n'New phrase': \"New phrase\"\n" "'Existing': \"Bestaand\"\n'New phrase': \"New phrase\"\n" (added))"#
-    ]];
-    assert_alan_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn alan_phrase_removal_updates_the_phrase_and_every_translation_then_runs_hook() {
-    let elisp_form = r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    ]],
+        ),
+        (
+            "alan_phrase_removal_updates_the_phrase_and_every_translation_then_runs_hook",
+            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                            (translations
                             (expand-file-name "translations" root))
                            (phrases
@@ -261,9 +252,11 @@ fn alan_phrase_removal_updates_the_phrase_and_every_translation_then_runs_hook()
                         (dolist (buffer (buffer-list))
                           (when-let ((file (buffer-file-name buffer)))
                             (when (string-prefix-p root file)
-                              (kill-buffer buffer))))))"##;
-    let expect = expect![[
+                              (kill-buffer buffer))))))"##,
+            true,
+            expect![[
         r#"OK ("'Existing'\n'After'\n" "'Existing': \"Existing\"\n'After': \"After\"\n" "'Existing': \"Bestaand\"\n'After': \"Na\"\n" (removed))"#
-    ]];
-    assert_alan_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

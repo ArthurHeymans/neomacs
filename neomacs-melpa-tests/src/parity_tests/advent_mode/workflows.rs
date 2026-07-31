@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_advent_mode_parity;
+use super::assert_advent_mode_batch;
 
 /// The everyday loop: store the session cookie, sit in the day's directory,
 /// and pull the puzzle input.  The year and day are never typed -- they are
@@ -10,9 +10,13 @@ use super::assert_advent_mode_parity;
 /// generates from the cookie `advent-login' actually stored.  The input lands
 /// at the configured path with the service's bytes and is opened for the user.
 /// Asking again does not hit the network: the file on disk is used.
+
 #[test]
-fn logs_in_and_fetches_the_puzzle_input_for_the_day_at_point() {
-    let elisp_form = r##"
+fn workflows_public_surface_batch() {
+    assert_advent_mode_batch(&[
+        (
+            "logs_in_and_fetches_the_puzzle_input_for_the_day_at_point",
+            r##"
         (progn
           (adv-test-install-transport)
           (adv-test-project "year2024/day03")
@@ -43,25 +47,15 @@ fn logs_in_and_fetches_the_puzzle_input_for_the_day_at_point() {
                            (list :requests (length (adv-test-requests))
                                  :window-buffer
                                  (buffer-name (window-buffer (selected-window)))))))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:login (:cookie-before nil :message "AoC session cookie stored." :cookie-after t) :context (:year-day (2024 3) :lighter " AoC[Y2024/D3 ✓]") :fetched (:requests ((:url "https://adventofcode.com/2024/day/3/input" :method "GET" :extra-headers nil :data nil :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n")) :tree ("year2024/" "year2024/day03/" "year2024/day03/input.txt") :input "xmul(2,4)%&mul[3,7]!@^do_not_mul(5,5)+\n" :window-buffer "input.txt" :messages ("[ORACLE-SANDBOX]/aoc/year2024/day03/input.txt saved.")) :second-fetch (:requests 1 :window-buffer "input.txt"))"#
-    ]];
-
-    assert_advent_mode_parity(elisp_form, expect);
-}
-
-/// Submitting.  The answer and level go out as an urlencoded POST body to the
-/// day's answer URL with the session cookie attached, and whatever the service
-/// says comes back in `*AoC Submit*'.  All three replies a solver meets --
-/// right, wrong, and "you answered too recently" -- are put through the same
-/// path.  Note what the package does *not* do: it does not interpret the reply
-/// at all.  The buffer holds the service's raw HTML and the echo area says only
-/// that the answer was submitted, whichever of the three came back.
-#[test]
-fn submits_an_answer_and_shows_what_the_service_replied() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "submits_an_answer_and_shows_what_the_service_replied",
+            r##"
         (progn
           (adv-test-install-transport)
           (adv-test-project "year2024/day03")
@@ -93,24 +87,15 @@ fn submits_an_answer_and_shows_what_the_service_replied() {
                   :too-soon (submit "999" "2")
                   :requests (adv-test-requests)
                   :messages (adv-test-messages "Submitted answer"))))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:correct (:returned-equals-shown t :shown (:text "<main><article><p>That's the right answer!  You are one gold star closer to finding the Chief Historian. [Continue to Part Two]</p></article></main>\n" :point 1)) :incorrect (:returned-equals-shown t :shown (:text "<main><article><p>That's not the right answer; your answer is too low.  Please wait one minute before trying again. [Return to Day 3]</p></article></main>\n" :point 1)) :too-soon (:returned-equals-shown t :shown (:text "<main><article><p>You gave an answer too recently; you have to wait after submitting an answer before trying again.  You have 44s left to wait. [Return to Day 3]</p></article></main>\n" :point 1)) :requests ((:url "https://adventofcode.com/2024/day/3/answer" :method "POST" :extra-headers #1=(("Content-Type" . "application/x-www-form-urlencoded")) :data "level=1&answer=161" :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n") (:url "https://adventofcode.com/2024/day/3/answer" :method "POST" :extra-headers #1# :data "level=2&answer=12" :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n") (:url "https://adventofcode.com/2024/day/3/answer" :method "POST" :extra-headers #1# :data "level=2&answer=999" :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n")) :messages ("Submitted answer for 2024 day 3 (level 1)" "Submitted answer for 2024 day 3 (level 2) [2 times]"))"#
-    ]];
-
-    assert_advent_mode_parity(elisp_form, expect);
-}
-
-/// Starting a new day.  `advent-create-day' makes the directory, offers to
-/// copy the configured template files into it, offers the problem page, and
-/// offers to download the input -- so the prompts a user answers are part of
-/// the workflow and are recorded here.  Declining the EWW prompt and accepting
-/// the download leaves a directory holding both templates, byte for byte as
-/// configured, plus the downloaded input.
-#[test]
-fn creates_a_day_directory_with_templates_and_downloads_the_input() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "creates_a_day_directory_with_templates_and_downloads_the_input",
+            r##"
         (progn
           (adv-test-install-transport)
           (adv-test-project)
@@ -135,25 +120,15 @@ fn creates_a_day_directory_with_templates_and_downloads_the_input() {
            :requests (adv-test-requests)
            :window-buffer (buffer-name (window-buffer (selected-window)))
            :messages (adv-test-messages "Created \\|saved\\.\\'")))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r##"OK (:created (:prompts ("Dir created.  Copy template files into it? " "Open the problem page in EWW? " "Download and open the input file? ") :result (:buffer "input.txt")) :tree ("notes.md" "template.py" "year2024/" "year2024/day05/" "year2024/day05/input.txt" "year2024/day05/notes.md" "year2024/day05/template.py") :copied (:template "import sys\n\ndef part1(lines):\n    return 0\n" :notes "# Notes\n") :input "1721\n979\n366\n299\n675\n1456\n" :requests ((:url "https://adventofcode.com/2024/day/5/input" :method "GET" :extra-headers nil :data nil :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n")) :window-buffer "input.txt" :messages ("Created [ORACLE-SANDBOX]/aoc/year2024/day05" "[ORACLE-SANDBOX]/aoc/year2024/day05/input.txt saved."))"##
-    ]];
-
-    assert_advent_mode_parity(elisp_form, expect);
-}
-
-/// The directory layout is configurable, and the same formats are used both to
-/// build paths and to read them back.  With `advent-year-dir-format',
-/// `advent-day-dir-format' and `advent-input-file-name' all changed, a day
-/// created under the new layout is found again by inference from a buffer
-/// inside it, the input is downloaded to the renamed file, and
-/// `advent-open-day' lands on that directory.  The stock `year%04d'/`day%02d'
-/// names are no longer recognised once the formats change.
-#[test]
-fn directory_format_customizations_drive_both_paths_and_inference() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "directory_format_customizations_drive_both_paths_and_inference",
+            r##"
         (progn
           (adv-test-install-transport)
           (adv-test-project)
@@ -191,22 +166,15 @@ fn directory_format_customizations_drive_both_paths_and_inference() {
                   (make-directory (expand-file-name "year2022/day01" adv-test-root) t)
                   (adv-test-in-dir "year2022/day01")
                   (advent--context-year-day))))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:created (:prompts ("Open the problem page in EWW? " "Download and open the input file? ") :result nil) :tree-after-create ("aoc-2023/" "aoc-2023/puzzle-007/") :inference (:year-day (2023 7) :lighter " AoC[Y2023/D7 ✓]") :fetched (:requests ((:url "https://adventofcode.com/2023/day/7/input" :method "GET" :extra-headers nil :data nil :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n")) :input "3   4\n4   3\n" :tree ("aoc-2023/" "aoc-2023/puzzle-007/" "aoc-2023/puzzle-007/puzzle-input.dat")) :opened (:window-buffer "puzzle-007" :major-mode dired-mode) :stock-names-no-longer-match nil)"#
-    ]];
-
-    assert_advent_mode_parity(elisp_form, expect);
-}
-
-/// Nothing may go to the service without a session cookie.  With no cookie
-/// stored the package offers to set one up; declining stops the command with a
-/// `user-error' naming `advent-login', and no request is made.  The same gate
-/// guards submitting.  Storing a cookie afterwards lets the same command run.
-#[test]
-fn refuses_to_reach_the_service_without_a_session_cookie() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "refuses_to_reach_the_service_without_a_session_cookie",
+            r##"
         (progn
           (adv-test-install-transport)
           (adv-test-project "year2024/day03")
@@ -235,25 +203,15 @@ fn refuses_to_reach_the_service_without_a_session_cookie() {
                                 :requests (length (adv-test-requests))
                                 :input (adv-test-file-text
                                         "year2024/day03/input.txt")))))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:cookie-before nil :lighter " AoC[Y2024/D3 ✗]" :fetch-declined (:prompts ("AoC session cookie missing.  Set it now? ") :result (user-error "No AoC session cookie set; run M-x advent-login")) :submit-declined (:prompts ("AoC session cookie missing.  Set it now? ") :result (user-error "No AoC session cookie set; run M-x advent-login")) :requests nil :tree ("year2024/" "year2024/day03/") :after-login (:lighter " AoC[Y2024/D3 ✓]" :requests 1 :input "ok\n"))"#
-    ]];
-
-    assert_advent_mode_parity(elisp_form, expect);
-}
-
-/// Every way the fetch can fail, and the one thing they must have in common:
-/// no half-written input file.  A 404 quotes the start of the body, a 200 with
-/// an empty body is rejected rather than saved as an empty puzzle, a response
-/// with no header/body separator is reported as malformed, and a connection
-/// that never opens is reported against the URL that was attempted.  After all
-/// four the day directory is still empty, and a later good response still
-/// works.
-#[test]
-fn reports_service_failures_and_writes_no_input_file() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "reports_service_failures_and_writes_no_input_file",
+            r##"
         (progn
           (adv-test-install-transport)
           (adv-test-project "year2024/day03")
@@ -282,11 +240,11 @@ fn reports_service_failures_and_writes_no_input_file() {
                                          :tree (adv-test-tree)))
                   :requests (mapcar (lambda (request) (plist-get request :url))
                                     (adv-test-requests)))))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:not-found (:error (error "HTTP 404: <html><head><title>404 Not Found</title></head><body>Not Found</body></html>") :tree ("year2024/" "year2024/day03/")) :empty-body (:error (error "Empty HTTP response body") :tree ("year2024/" "year2024/day03/")) :malformed (:error (error "Malformed HTTP response (no header/body separator)") :tree ("year2024/" "year2024/day03/")) :no-connection (:error (error "Failed to GET https://adventofcode.com/2024/day/3/input") :tree ("year2024/" "year2024/day03/")) :recovers (:input "7\n" :tree ("year2024/" "year2024/day03/" "year2024/day03/input.txt")) :requests ("https://adventofcode.com/2024/day/3/input" "https://adventofcode.com/2024/day/3/input" "https://adventofcode.com/2024/day/3/input" "https://adventofcode.com/2024/day/3/input" "https://adventofcode.com/2024/day/3/input"))"#
-    ]];
-
-    assert_advent_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

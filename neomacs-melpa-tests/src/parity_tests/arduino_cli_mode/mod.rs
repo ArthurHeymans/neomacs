@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ARDUINO_CLI_MODE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const ARDUINO_CLI_MODE_TEST_TIMEOUT: Duration = Duration::from_secs(180);
@@ -31,4 +33,15 @@ fn assert_arduino_cli_mode_source_parity(source_file: &str, elisp_form: &str, ex
 
 pub(crate) fn assert_arduino_cli_mode_parity(elisp_form: &str, expected: Expect) {
     assert_arduino_cli_mode_source_parity("arduino-cli-mode.el", elisp_form, expected);
+}
+
+/// Multi-probe batch for `assert_arduino_cli_mode_parity` cases (2a).
+pub(crate) fn assert_arduino_cli_mode_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        arduino_cli_mode_oracle("arduino-cli-mode.el"),
+        &name,
+        "arduino_cli_mode_parity",
+        cases,
+    );
 }

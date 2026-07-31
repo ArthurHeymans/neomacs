@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_clang_async_parity;
+use super::assert_auto_complete_clang_async_batch;
 
 #[test]
-fn auto_complete_clang_async_language_option_covers_c_cpp_objc_extensions_and_fallback_modes() {
-    let elisp_form = r##"(mapcar
+fn arguments_public_surface_batch() {
+    assert_auto_complete_clang_async_batch(&[
+        (
+            "auto_complete_clang_async_language_option_covers_c_cpp_objc_extensions_and_fallback_modes",
+            r##"(mapcar
                            (lambda (fixture)
                              (with-temp-buffer
                                (funcall
@@ -23,17 +26,15 @@ fn auto_complete_clang_async_language_option_covers_c_cpp_objc_extensions_and_fa
                              (objc-mode "fixture.m")
                              (objc-mode "fixture.mm")
                              (objc-mode nil)
-                             (fundamental-mode "fixture.txt")))"##;
-    let expect = expect![[
+                             (fundamental-mode "fixture.txt")))"##,
+            true,
+            expect![[
         r#"OK ((c-mode "fixture.c" (:value "c")) (c++-mode "fixture.cc" (:value "c++")) (objc-mode "fixture.m" (:value "objective-c")) (objc-mode "fixture.mm" (:value "objective-c++")) (objc-mode nil (:signal wrong-type-argument (stringp nil))) (fundamental-mode "fixture.txt" (:value "c++")))"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_custom_language_function_overrides_mode_and_runs_once_per_query() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_clang_async_custom_language_function_overrides_mode_and_runs_once_per_query",
+            r##"(with-temp-buffer
                            (c-mode)
                            (let* ((calls 0)
                                   (ac-clang-lang-option-function
@@ -45,16 +46,13 @@ fn auto_complete_clang_async_custom_language_function_overrides_mode_and_runs_on
                               (ac-clang-lang-option)
                               calls
                               (ac-clang-build-complete-args)
-                              calls)))"##;
-    let expect = expect![[r#"OK ("cuda" 1 ("-cc1" "-fsyntax-only" "-x" "cuda") 2)"#]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_complete_arguments_preserve_flags_duplicates_spaces_and_prefix_header()
-{
-    let elisp_form = r##"(with-temp-buffer
+                              calls)))"##,
+            true,
+            expect![[r#"OK ("cuda" 1 ("-cc1" "-fsyntax-only" "-x" "cuda") 2)"#]],
+        ),
+        (
+            "auto_complete_clang_async_complete_arguments_preserve_flags_duplicates_spaces_and_prefix_header",
+            r##"(with-temp-buffer
                            (c++-mode)
                            (let ((default-directory
                                   (expand-file-name
@@ -69,18 +67,15 @@ fn auto_complete_clang_async_complete_arguments_preserve_flags_duplicates_spaces
                              (list
                               (ac-clang-build-complete-args)
                               ac-clang-cflags
-                              ac-clang-prefix-header)))"##;
-    let expect = expect![[
+                              ac-clang-prefix-header)))"##,
+            true,
+            expect![[
         r#"OK (("-cc1" "-fsyntax-only" "-x" "c++" "-Iinclude" "-DNAME=value with space" "-Wall" "-Iinclude" "-include-pch" "[ORACLE-TMPDIR]/auto-complete-clang-async/headers/prefix.pch") ("-Iinclude" "-DNAME=value with space" "-Wall" "-Iinclude") "../headers/prefix.pch")"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_complete_arguments_omit_non_string_prefix_header_and_handle_nil_flags()
-{
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_clang_async_complete_arguments_omit_non_string_prefix_header_and_handle_nil_flags",
+            r##"(mapcar
                            (lambda (fixture)
                              (with-temp-buffer
                                (c-mode)
@@ -94,17 +89,15 @@ fn auto_complete_clang_async_complete_arguments_omit_non_string_prefix_header_an
                            '((nil)
                              (nil . 42)
                              (("-pedantic") . nil)
-                             (("-std=c11") . "")))"##;
-    let expect = expect![[
+                             (("-std=c11") . "")))"##,
+            true,
+            expect![[
         r#"OK (((nil) ("-cc1" "-fsyntax-only" "-x" "c")) ((nil . 42) ("-cc1" "-fsyntax-only" "-x" "c")) ((("-pedantic")) ("-cc1" "-fsyntax-only" "-x" "c" "-pedantic")) ((("-std=c11") . "") ("-cc1" "-fsyntax-only" "-x" "c" "-std=c11" "-include-pch" "[ORACLE-SANDBOX]")))"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_prefix_header_setter_distinguishes_empty_whitespace_and_real_paths() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_clang_async_prefix_header_setter_distinguishes_empty_whitespace_and_real_paths",
+            r##"(with-temp-buffer
                            (let ((ac-clang-prefix-header
                                   "before.pch"))
                              (mapcar
@@ -119,17 +112,15 @@ fn auto_complete_clang_async_prefix_header_setter_distinguishes_empty_whitespace
                                 "\t"
                                 "  \t  "
                                 "./prefix.pch"
-                                "with space.pch"))))"##;
-    let expect = expect![[
+                                "with space.pch"))))"##,
+            true,
+            expect![[
         r#"OK (("" nil nil) (" " nil nil) ("\11" nil nil) ("  \11  " nil nil) ("./prefix.pch" "./prefix.pch" "./prefix.pch") ("with space.pch" "with space.pch" "with space.pch"))"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_interactive_cflags_setter_splits_input_and_sends_exact_update_once() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_clang_async_interactive_cflags_setter_splits_input_and_sends_exact_update_once",
+            r##"(with-temp-buffer
                            (let ((ac-clang-cflags
                                   '("-Iold"))
                                  calls)
@@ -156,18 +147,15 @@ fn auto_complete_clang_async_interactive_cflags_setter_splits_input_and_sends_ex
                                 (call-interactively
                                  #'ac-clang-set-cflags)
                                 ac-clang-cflags
-                                (nreverse calls)))))"##;
-    let expect = expect![[
+                                (nreverse calls)))))"##,
+            true,
+            expect![[
         r#"OK (:updated #1=("-Iinclude" "-DDEBUG=1" "-Wall") ((:read "New cflags: ") (:update #1#)))"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_shell_cflags_setter_uses_file_context_splits_output_and_updates_once()
-{
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_clang_async_shell_cflags_setter_uses_file_context_splits_output_and_updates_once",
+            r##"(with-temp-buffer
                            (setq
                             buffer-file-name
                             (expand-file-name
@@ -208,17 +196,15 @@ fn auto_complete_clang_async_shell_cflags_setter_uses_file_context_splits_output
                                 (call-interactively
                                  #'ac-clang-set-cflags-from-shell-command)
                                 ac-clang-cflags
-                                (nreverse calls)))))"##;
-    let expect = expect![[
+                                (nreverse calls)))))"##,
+            true,
+            expect![[
         r#"OK (:updated #1=("-Iinc" "-DVALUE=7" "-Wextra") ((:read "Shell command: " nil nil "source.cpp") (:shell "./flags.sh") (:update #1#)))"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_buffer_local_flags_prefix_header_and_process_state_remain_isolated() {
-    let elisp_form = r##"(let ((first
+    ]],
+        ),
+        (
+            "auto_complete_clang_async_buffer_local_flags_prefix_header_and_process_state_remain_isolated",
+            r##"(let ((first
                                 (generate-new-buffer
                                  " *acclang-config-first*"))
                                (second
@@ -264,10 +250,11 @@ fn auto_complete_clang_async_buffer_local_flags_prefix_header_and_process_state_
                                           ac-clang-completion-process)))))
                                   (list first second)))
                              (kill-buffer first)
-                             (kill-buffer second)))"##;
-    let expect = expect![[
+                             (kill-buffer second)))"##,
+            true,
+            expect![[
         r#"OK ((" *acclang-config-first*" ("-DFIRST") "first.pch" wait ("first") (t t t t nil)) (" *acclang-config-second*" ("-DSECOND") "second.pch" acknowledged ("second") (t t t t nil)))"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

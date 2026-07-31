@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_asx_parity;
+use super::assert_asx_batch;
 
 #[test]
-fn asx_query_string_sites_handles_default_custom_single_and_empty_site_sets() {
-    let elisp_form = r##"(mapcar
+fn query_public_surface_batch() {
+    assert_asx_batch(&[
+        (
+            "asx_query_string_sites_handles_default_custom_single_and_empty_site_sets",
+            r##"(mapcar
          (lambda (sites)
            (let ((asx-sites sites))
              (list
@@ -17,17 +20,15 @@ fn asx_query_string_sites_handles_default_custom_single_and_empty_site_sets() {
           '("emacs.stackexchange.com")
           '("stackoverflow.com"
             "unix.stackexchange.com")
-          nil))"##;
-    let expect = expect![[
+          nil))"##,
+            true,
+            expect![[
         r#"OK ((("stackoverflow.com" "stackexchange.com" "superuser.com" "serverfault.com" "askubuntu.com") "site:stackoverflow.com OR site:stackexchange.com OR site:superuser.com OR site:serverfault.com OR site:askubuntu.com" "mapcar examples site:stackoverflow.com OR site:stackexchange.com OR site:superuser.com OR site:serverfault.com OR site:askubuntu.com") (("emacs.stackexchange.com") "site:emacs.stackexchange.com" "mapcar examples site:emacs.stackexchange.com") (("stackoverflow.com" "unix.stackexchange.com") "site:stackoverflow.com OR site:unix.stackexchange.com" "mapcar examples site:stackoverflow.com OR site:unix.stackexchange.com") (nil "" "mapcar examples "))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_search_engine_lookup_and_query_construction_support_builtin_and_custom_engines() {
-    let elisp_form = r##"(let ((asx-sites
+    ]],
+        ),
+        (
+            "asx_search_engine_lookup_and_query_construction_support_builtin_and_custom_engines",
+            r##"(let ((asx-sites
                 '("emacs.stackexchange.com"))
                (asx-search-engine-alist
                 (append
@@ -47,17 +48,15 @@ fn asx_search_engine_lookup_and_query_construction_support_builtin_and_custom_en
                 "C++ & Elisp"))))
           '(google
             duckduckgo
-            fixture)))"##;
-    let expect = expect![[
+            fixture)))"##,
+            true,
+            expect![[
         r#"OK ((google (:format "https://www.google.com/search?q=%s" :extract-fn #'asx--extract-links-google) "https://www.google.com/search?q=C%2B%2B%20%26%20Elisp%20site%3Aemacs.stackexchange.com") (duckduckgo (:format "https://www.duckduckgo.com/?q=%s" :extract-fn #'asx--extract-links-duckduckgo) "https://www.duckduckgo.com/?q=C%2B%2B%20%26%20Elisp%20site%3Aemacs.stackexchange.com") (fixture (:format "https://search.invalid/?term=%s" :extract-fn identity) "https://search.invalid/?term=C%2B%2B%20%26%20Elisp%20site%3Aemacs.stackexchange.com"))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_query_construction_percent_encodes_unicode_punctuation_and_site_expression() {
-    let elisp_form = r##"(let ((asx-sites
+    ]],
+        ),
+        (
+            "asx_query_construction_percent_encodes_unicode_punctuation_and_site_expression",
+            r##"(let ((asx-sites
                 '("stackoverflow.com"
                   "emacs.stackexchange.com"))
                (asx-search-engine
@@ -71,17 +70,15 @@ fn asx_query_construction_percent_encodes_unicode_punctuation_and_site_expressio
           '("mapcar & seq-filter"
             "naïve café"
             "C# / F#"
-            "quotes \"and spaces\"")))"##;
-    let expect = expect![[
+            "quotes \"and spaces\"")))"##,
+            true,
+            expect![[
         r#"OK (("mapcar & seq-filter" "mapcar & seq-filter site:stackoverflow.com OR site:emacs.stackexchange.com" "https://www.google.com/search?q=mapcar%20%26%20seq-filter%20site%3Astackoverflow.com%20OR%20site%3Aemacs.stackexchange.com") ("naïve café" "naïve café site:stackoverflow.com OR site:emacs.stackexchange.com" "https://www.google.com/search?q=na%C3%AFve%20caf%C3%A9%20site%3Astackoverflow.com%20OR%20site%3Aemacs.stackexchange.com") ("C# / F#" "C# / F# site:stackoverflow.com OR site:emacs.stackexchange.com" "https://www.google.com/search?q=C%23%20%2F%20F%23%20site%3Astackoverflow.com%20OR%20site%3Aemacs.stackexchange.com") ("quotes \"and spaces\"" "quotes \"and spaces\" site:stackoverflow.com OR site:emacs.stackexchange.com" "https://www.google.com/search?q=quotes%20%22and%20spaces%22%20site%3Astackoverflow.com%20OR%20site%3Aemacs.stackexchange.com"))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_primary_command_updates_history_constructs_url_and_dispatches_search_callback() {
-    let elisp_form = r##"(let ((asx--query-history
+    ]],
+        ),
+        (
+            "asx_primary_command_updates_history_constructs_url_and_dispatches_search_callback",
+            r##"(let ((asx--query-history
                 '("older"))
                (asx-sites
                 '("emacs.stackexchange.com"))
@@ -113,17 +110,15 @@ fn asx_primary_command_updates_history_constructs_url_and_dispatches_search_call
              "How to map a list?")
             asx--query-history
             (nreverse messages)
-            (nreverse requests))))"##;
-    let expect = expect![[
+            (nreverse requests))))"##,
+            true,
+            expect![[
         r#"OK (:queued ("How to map a list?" "older") ("Loading: How to map a list?") (("https://www.google.com/search?q=How%20to%20map%20a%20list%3F%20site%3Aemacs.stackexchange.com" asx--handle-search nil)))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_primary_command_rejects_empty_query_without_mutating_history_or_dispatching() {
-    let elisp_form = r##"(let ((asx--query-history
+    ]],
+        ),
+        (
+            "asx_primary_command_rejects_empty_query_without_mutating_history_or_dispatching",
+            r##"(let ((asx--query-history
                 '("kept"))
                requests)
          (cl-letf
@@ -139,15 +134,13 @@ fn asx_primary_command_rejects_empty_query_without_mutating_history_or_dispatchi
                 (car error)
                 (cdr error))))
             asx--query-history
-            requests)))"##;
-    let expect = expect![[r#"OK ((user-error ("No query specified")) ("kept") nil)"#]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_symbol_or_region_prefers_active_region_then_uses_xref_identifier() {
-    let elisp_form = r##"(list
+            requests)))"##,
+            true,
+            expect![[r#"OK ((user-error ("No query specified")) ("kept") nil)"#]],
+        ),
+        (
+            "asx_symbol_or_region_prefers_active_region_then_uses_xref_identifier",
+            r##"(list
          (with-temp-buffer
            (insert
             "alpha beta gamma")
@@ -174,15 +167,13 @@ fn asx_symbol_or_region_prefers_active_region_then_uses_xref_identifier() {
                     (thing-at-point
                      'symbol
                      t)))))
-             (asx--symbol-or-region))))"##;
-    let expect = expect![[r#"OK ("beta" "beta")"#]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_initial_input_only_reads_symbol_or_region_when_prefix_argument_is_active() {
-    let elisp_form = r##"(let (calls)
+             (asx--symbol-or-region))))"##,
+            true,
+            expect![[r#"OK ("beta" "beta")"#]],
+        ),
+        (
+            "asx_initial_input_only_reads_symbol_or_region_when_prefix_argument_is_active",
+            r##"(let (calls)
          (cl-letf
              (((symbol-function
                 'asx--symbol-or-region)
@@ -196,15 +187,13 @@ fn asx_initial_input_only_reads_symbol_or_region_when_prefix_argument_is_active(
               (asx--initial-input))
             (let ((current-prefix-arg 0))
               (asx--initial-input))
-            (nreverse calls))))"##;
-    let expect = expect![[r#"OK (nil "fixture" "fixture" (called called))"#]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_read_query_selects_ivy_helm_or_plain_read_string_in_priority_order() {
-    let elisp_form = r##"(let (events)
+            (nreverse calls))))"##,
+            true,
+            expect![[r#"OK (nil "fixture" "fixture" (called called))"#]],
+        ),
+        (
+            "asx_read_query_selects_ivy_helm_or_plain_read_string_in_priority_order",
+            r##"(let (events)
          (list
           (cl-letf
               (((symbol-function 'require)
@@ -251,17 +240,15 @@ fn asx_read_query_selects_ivy_helm_or_plain_read_string_in_priority_order() {
                 (lambda ()
                   "seed")))
             (asx--read-query))
-          (nreverse events)))"##;
-    let expect = expect![[
+          (nreverse events)))"##,
+            true,
+            expect![[
         r#"OK ("ivy query" "helm query" "plain query" (ivy helm (plain "Query: " "seed" asx--query-history)))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_ivy_search_passes_dynamic_collection_history_initial_input_and_caller() {
-    let elisp_form = r##"(let ((asx--query-history
+    ]],
+        ),
+        (
+            "asx_ivy_search_passes_dynamic_collection_history_initial_input_and_caller",
+            r##"(let ((asx--query-history
                 '("old query")))
          (cl-letf
              (((symbol-function 'ivy-read)
@@ -275,17 +262,15 @@ fn asx_ivy_search_passes_dynamic_collection_history_initial_input_and_caller() {
               ((symbol-function 'asx--initial-input)
                (lambda ()
                  "region seed")))
-           (asx--ivy-search)))"##;
-    let expect = expect![[
+           (asx--ivy-search)))"##,
+            true,
+            expect![[
         r#"OK ("Query: " counsel-search-function (:dynamic-collection t :history asx--query-history :initial-input "region seed" :caller counsel-search))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_helm_search_builds_volatile_three_character_google_source_and_target_buffer() {
-    let elisp_form = r##"(let ((asx--query-history
+    ]],
+        ),
+        (
+            "asx_helm_search_builds_volatile_three_character_google_source_and_target_buffer",
+            r##"(let ((asx--query-history
                 '("old query"))
                (helm-google-suggest-default-function
                 (lambda ()
@@ -315,10 +300,11 @@ fn asx_helm_search_builds_volatile_three_character_google_source_and_target_buff
                  :shown)))
            (list
             (asx--helm-search)
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:shown ((("Query" ("candidate one" "candidate two") asx--query-history t 3) "*Helm Google*")))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

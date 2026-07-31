@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AI_CODE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod backends;
 mod behaviors;
 mod core;
@@ -50,4 +52,15 @@ fn assert_ai_code_source_parity(source_file: &str, elisp_form: &str, expected: E
 
 pub(crate) fn assert_ai_code_parity(elisp_form: &str, expected: Expect) {
     assert_ai_code_source_parity("ai-code.el", elisp_form, expected);
+}
+
+/// Multi-probe batch for `assert_ai_code_parity` cases (2a).
+pub(crate) fn assert_ai_code_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        ai_code_oracle("ai-code.el"),
+        &name,
+        "ai_code_parity",
+        cases,
+    );
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_asyncloop_parity;
+use super::assert_asyncloop_batch;
 
 #[test]
-fn asyncloop_real_idle_timer_event_handler_runs_series_after_current_call_stack() {
-    let elisp_form = r##"(let (events loop timer)
+fn timers_public_surface_batch() {
+    assert_asyncloop_batch(&[
+        (
+            "asyncloop_real_idle_timer_event_handler_runs_series_after_current_call_stack",
+            r##"(let (events loop timer)
          (unwind-protect
              (progn
                (asyncloop-reset-all)
@@ -38,15 +41,13 @@ fn asyncloop_real_idle_timer_event_handler_runs_series_after_current_call_stack(
                   (asyncloop-scheduled loop)
                   (asyncloop-just-launched loop)
                   (asyncloop-remainder loop))))
-           (asyncloop-reset-all)))"##;
-    let expect = expect!["OK ((nil t t t t 3) (:load :transform :save) nil nil nil)"];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_real_idle_timer_pause_then_resume_preserves_remaining_stage_order() {
-    let elisp_form = r##"(let (events loop first-timer second-timer)
+           (asyncloop-reset-all)))"##,
+            true,
+            expect!["OK ((nil t t t t 3) (:load :transform :save) nil nil nil)"],
+        ),
+        (
+            "asyncloop_real_idle_timer_pause_then_resume_preserves_remaining_stage_order",
+            r##"(let (events loop first-timer second-timer)
          (unwind-protect
              (progn
                (asyncloop-reset-all)
@@ -82,15 +83,13 @@ fn asyncloop_real_idle_timer_pause_then_resume_preserves_remaining_stage_order()
                   (asyncloop-paused loop)
                   (asyncloop-scheduled loop)
                   (asyncloop-remainder loop))))
-           (asyncloop-reset-all)))"##;
-    let expect = expect!["OK (((:load) t nil 2) nil (:load :transform :save) nil nil nil)"];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_real_idle_timer_cancel_removes_pending_dispatch_and_worker_side_effects() {
-    let elisp_form = r##"(let (events loop timer before)
+           (asyncloop-reset-all)))"##,
+            true,
+            expect!["OK (((:load) t nil 2) nil (:load :transform :save) nil nil nil)"],
+        ),
+        (
+            "asyncloop_real_idle_timer_cancel_removes_pending_dispatch_and_worker_side_effects",
+            r##"(let (events loop timer before)
          (unwind-protect
              (progn
                (asyncloop-reset-all)
@@ -122,15 +121,13 @@ fn asyncloop_real_idle_timer_cancel_removes_pending_dispatch_and_worker_side_eff
                 (asyncloop-paused loop)
                 (asyncloop-scheduled loop)
                 (asyncloop-just-launched loop)))
-           (asyncloop-reset-all)))"##;
-    let expect = expect!["OK ((t t t t) nil nil nil nil nil nil)"];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_real_idle_timer_handlers_follow_real_queue_order_without_cross_talk() {
-    let elisp_form = r##"(let (events loop-a loop-b timer-a timer-b queued)
+           (asyncloop-reset-all)))"##,
+            true,
+            expect!["OK ((t t t t) nil nil nil nil nil nil)"],
+        ),
+        (
+            "asyncloop_real_idle_timer_handlers_follow_real_queue_order_without_cross_talk",
+            r##"(let (events loop-a loop-b timer-a timer-b queued)
          (unwind-protect
              (progn
                (asyncloop-reset-all)
@@ -180,8 +177,9 @@ fn asyncloop_real_idle_timer_handlers_follow_real_queue_order_without_cross_talk
                 (asyncloop-remainder loop-a)
                 (asyncloop-remainder loop-b)
                 (length asyncloop-objects))))
-           (asyncloop-reset-all)))"##;
-    let expect = expect!["OK ((:b :a) t t nil (:b-load :b-save :a-load :a-save) nil nil 2)"];
-
-    assert_asyncloop_parity(elisp_form, expect);
+           (asyncloop-reset-all)))"##,
+            true,
+            expect!["OK ((:b :a) t t nil (:b-load :b-save :a-load :a-save) nil nil 2)"],
+        ),
+    ]);
 }

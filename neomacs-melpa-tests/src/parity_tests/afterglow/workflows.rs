@@ -1,15 +1,19 @@
 use expect_test::expect;
 
-use super::assert_afterglow_parity;
+use super::assert_afterglow_batch;
 
 /// The package in one sentence: press the key, the line you landed on glows,
 /// and a moment later the glow is gone.  The overlay's bounds are the line's,
 /// it carries the default `hl-line' face at priority 100 so it wins over a
 /// region, it lives in the buffer the command ran in, and the timer the package
 /// scheduled for the configured duration is what removes it.
+
 #[test]
-fn a_trigger_glows_the_line_the_command_moved_to_until_its_timer_fires() {
-    let elisp_form = r##"(unwind-protect
+fn workflows_public_surface_batch() {
+    assert_afterglow_batch(&[
+        (
+            "a_trigger_glows_the_line_the_command_moved_to_until_its_timer_fires",
+            r##"(unwind-protect
     (let ((buffer (afterglow-test-buffer)))
       (global-set-key (kbd "C-c m") #'afterglow-test-move)
       (afterglow-mode 1)
@@ -34,23 +38,15 @@ fn a_trigger_glows_the_line_the_command_moved_to_until_its_timer_fires() {
                                :pending (length (afterglow-test-new-timers known))
                                :buffer (buffer-name buffer)
                                :point (point)))))))
-  (afterglow-test-cleanup))"##;
-
-    let expect = expect![[
+  (afterglow-test-cleanup))"##,
+            true,
+            expect![[
         r#"OK (:armed (:mode t :triggers 1 :advised (afterglow-test-move) :armed ((afterglow-test-move . t))) :glowing (:point 18 :line 2 :overlays ((18 36 hl-line 100 "*afterglow-workflow*")) :delays (2) :timer-count 1) :fired 1 :after (:overlays nil :overlay-live nil :pending 0 :buffer "*afterglow-workflow*" :point 18))"#
-    ]];
-
-    assert_afterglow_parity(elisp_form, expect);
-}
-
-/// `:thing' is the whole configuration language: the word at point, a line
-/// clipped to `:width' columns, the whole window, the active region, or any
-/// function returning a `(BEG . END)' cons -- with `:face' overriding the
-/// default for that trigger alone.  An empty line is the one case that produces
-/// nothing at all, not even a timer.
-#[test]
-fn trigger_properties_choose_what_the_glow_covers() {
-    let elisp_form = r##"(unwind-protect
+    ]],
+        ),
+        (
+            "trigger_properties_choose_what_the_glow_covers",
+            r##"(unwind-protect
     (progn
       (afterglow-test-buffer)
       (global-set-key (kbd "C-c n") #'afterglow-test-command)
@@ -90,22 +86,15 @@ fn trigger_properties_choose_what_the_glow_covers() {
           (deactivate-mark))
         (list :window-bounds (cons (window-start) (window-end nil t))
               :results (nreverse results))))
-  (afterglow-test-cleanup))"##;
-
-    let expect = expect![[
+  (afterglow-test-cleanup))"##,
+            true,
+            expect![[
         r#"OK (:window-bounds (1 . 69) :results ((word :line 1 :overlays ((7 11 hl-line 100 "*afterglow-workflow*")) :timers 1) (line-width :line 1 :overlays ((1 6 hl-line 100 "*afterglow-workflow*")) :timers 1) (custom-function :line 1 :overlays ((7 11 highlight 100 "*afterglow-workflow*")) :timers 1) (window :line 1 :overlays ((1 69 hl-line 100 "*afterglow-workflow*")) :timers 1) (empty-line :line 4 :overlays nil :timers 0) (region :region-active t :bounds ((1 . 6)) :overlays ((1 6 hl-line 100 "*afterglow-workflow*")))))"#
-    ]];
-
-    assert_afterglow_parity(elisp_form, expect);
-}
-
-/// The two documented customizations have to reach the overlay, not just the
-/// variable: `afterglow-default-face' decides what the glow looks like and
-/// `afterglow-default-duration' how long its timer waits, while a trigger's own
-/// `:face' and `:duration' override both for that trigger only.
-#[test]
-fn the_duration_and_face_customizations_change_the_overlay_itself() {
-    let elisp_form = r##"(unwind-protect
+    ]],
+        ),
+        (
+            "the_duration_and_face_customizations_change_the_overlay_itself",
+            r##"(unwind-protect
     (progn
       (afterglow-test-buffer)
       (global-set-key (kbd "C-c n") #'afterglow-test-command)
@@ -130,23 +119,15 @@ fn the_duration_and_face_customizations_change_the_overlay_itself() {
                   results)
             (afterglow-test-run-new-timers known)))
         (nreverse results)))
-  (afterglow-test-cleanup))"##;
-
-    let expect = expect![[
+  (afterglow-test-cleanup))"##,
+            true,
+            expect![[
         r#"OK ((stock-defaults :default-duration 1 :default-face hl-line :overlays ((1 17 hl-line 100 "*afterglow-workflow*")) :delays (10)) (custom-defaults :default-duration 2 :default-face error :overlays ((1 17 error 100 "*afterglow-workflow*")) :delays (20)) (trigger-overrides :default-duration 2 :default-face error :overlays ((1 17 success 100 "*afterglow-workflow*")) :delays (5)))"#
-    ]];
-
-    assert_afterglow_parity(elisp_form, expect);
-}
-
-/// Configuration is what arms the package: `afterglow-add-triggers' advises
-/// every function it is given -- even before `afterglow-mode' is switched on,
-/// which is worth knowing -- and `afterglow-remove-trigger' takes the advice
-/// back off so the command stops glowing.  A second `afterglow-add-trigger' for
-/// the same command replaces its properties rather than adding a trigger.
-#[test]
-fn adding_and_removing_triggers_arms_and_disarms_the_advice() {
-    let elisp_form = r##"(unwind-protect
+    ]],
+        ),
+        (
+            "adding_and_removing_triggers_arms_and_disarms_the_advice",
+            r##"(unwind-protect
     (progn
       (afterglow-test-buffer)
       (global-set-key (kbd "C-c n") #'afterglow-test-command)
@@ -182,25 +163,15 @@ fn adding_and_removing_triggers_arms_and_disarms_the_advice() {
                       :after-removal
                       (list :overlays (afterglow-test-overlays)
                             :timers (length (afterglow-test-new-timers known2))))))))))
-  (afterglow-test-cleanup))"##;
-
-    let expect = expect![[
+  (afterglow-test-cleanup))"##,
+            true,
+            expect![[
         r#"OK (:before (:mode nil :triggers 0 :advised nil :armed ((afterglow-test-command) (afterglow-test-move))) :added (:mode nil :triggers 2 :advised (afterglow-test-command afterglow-test-move) :armed ((afterglow-test-command . t) (afterglow-test-move . t))) :replaced (:mode nil :triggers 2 :advised (afterglow-test-command afterglow-test-move) :armed ((afterglow-test-command . t) (afterglow-test-move . t))) :glowing ((7 11 hl-line 100 "*afterglow-workflow*")) :removed (:mode nil :triggers 0 :advised nil :armed ((afterglow-test-command) (afterglow-test-move))) :after-removal (:overlays nil :timers 0))"#
-    ]];
-
-    assert_afterglow_parity(elisp_form, expect);
-}
-
-/// Switching the mode off stops new glows -- the advice comes off every trigger
-/// -- but the glow that is on screen at that moment stays there.  The mode's
-/// clean-up calls `remove-overlays' filtered on an `afterglow' property, and
-/// `afterglow--apply-overlay' never puts that property on the overlay it
-/// creates, so nothing matches.  Pinned as it behaves: the stale overlay
-/// survives with only `priority' and `face' on it, and it takes the pending
-/// timer to clear it.
-#[test]
-fn switching_the_mode_off_stops_new_glows_but_leaves_the_last_one_on_screen() {
-    let elisp_form = r##"(unwind-protect
+    ]],
+        ),
+        (
+            "switching_the_mode_off_stops_new_glows_but_leaves_the_last_one_on_screen",
+            r##"(unwind-protect
     (progn
       (afterglow-test-buffer)
       (global-set-key (kbd "C-c n") #'afterglow-test-command)
@@ -227,24 +198,15 @@ fn switching_the_mode_off_stops_new_glows_but_leaves_the_last_one_on_screen() {
                     :switched-off switched-off
                     :no-new-glow no-new-glow
                     :after-timer (afterglow-test-overlays)))))))
-  (afterglow-test-cleanup))"##;
-
-    let expect = expect![[
+  (afterglow-test-cleanup))"##,
+            true,
+            expect![[
         r#"OK (:glowing (:overlays ((1 17 hl-line 100 "*afterglow-workflow*")) :properties (priority 100 face hl-line) :state (:mode t :triggers 1 :advised (afterglow-test-command) :armed ((afterglow-test-command . t)))) :switched-off (:overlays ((1 17 hl-line 100 "*afterglow-workflow*")) :state (:mode nil :triggers 1 :advised nil :armed ((afterglow-test-command))) :pending 1) :no-new-glow (:point 25 :overlays ((1 17 hl-line 100 "*afterglow-workflow*")) :timers 1) :after-timer nil)"#
-    ]];
-
-    assert_afterglow_parity(elisp_form, expect);
-}
-
-/// Two glows in quick succession, which is what happens when a user holds down
-/// a movement key.  Each new glow deletes the previous overlay, so only one is
-/// ever on screen -- but every glow also leaves its own timer, and the timer's
-/// body deletes whatever `afterglow--temp-overlay' happens to hold when it
-/// fires rather than the overlay it was scheduled for.  So the *first* timer
-/// removes the *second* glow, well before that glow's own timer is due.
-#[test]
-fn a_second_glow_makes_the_first_timer_cancel_it_early() {
-    let elisp_form = r##"(unwind-protect
+    ]],
+        ),
+        (
+            "a_second_glow_makes_the_first_timer_cancel_it_early",
+            r##"(unwind-protect
     (progn
       (afterglow-test-buffer)
       (global-set-key (kbd "C-c m") #'afterglow-test-move)
@@ -266,11 +228,11 @@ fn a_second_glow_makes_the_first_timer_cancel_it_early() {
                     :second-glow second-glow
                     :after-first-timer after-first-timer
                     :after-both (afterglow-test-overlays)))))))
-  (afterglow-test-cleanup))"##;
-
-    let expect = expect![[
+  (afterglow-test-cleanup))"##,
+            true,
+            expect![[
         r#"OK (:first-glow ((18 36 hl-line 100 "*afterglow-workflow*")) :second-glow (:overlays ((37 51 hl-line 100 "*afterglow-workflow*")) :pending 2) :after-first-timer (:overlays nil :pending 1) :after-both nil)"#
-    ]];
-
-    assert_afterglow_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

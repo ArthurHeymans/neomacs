@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AUTO_AUTO_INDENT_MELPA_PIN, CachedMelpaOracle, ES_LIB_MELPA_PIN};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod editing;
 mod indentation;
 mod lifecycle;
@@ -78,4 +80,28 @@ pub(crate) fn assert_auto_auto_indent_parity(elisp_form: &str, expected: Expect)
 
 pub(crate) fn assert_auto_auto_indent_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_auto_auto_indent_source_parity("auto-auto-indent-autoloads.el", elisp_form, expected);
+}
+
+
+
+/// Multi-probe batch for `assert_auto_auto_indent_autoload_parity` cases (2a).
+pub(crate) fn assert_auto_auto_indent_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_auto_indent_oracle("auto-auto-indent-autoloads.el"),
+        &name,
+        "auto_auto_indent_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_auto_auto_indent_parity` cases (2a).
+pub(crate) fn assert_auto_auto_indent_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_auto_indent_oracle("auto-auto-indent.el"),
+        &name,
+        "auto_auto_indent_parity",
+        cases,
+    );
 }

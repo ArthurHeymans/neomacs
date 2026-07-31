@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_rst_parity;
+use super::assert_auto_complete_rst_batch;
 
 #[test]
-fn auto_complete_rst_sources_expose_exact_auto_complete_contracts() {
-    let elisp_form = r##"(mapcar
+fn sources_public_surface_batch() {
+    assert_auto_complete_rst_batch(&[
+        (
+            "auto_complete_rst_sources_expose_exact_auto_complete_contracts",
+            r##"(mapcar
                            (lambda (symbol)
                              (list
                               symbol
@@ -12,16 +15,15 @@ fn auto_complete_rst_sources_expose_exact_auto_complete_contracts() {
                                (symbol-value symbol))))
                            '(ac-source-rst-directives
                              ac-source-rst-roles
-                             ac-source-rst-options))"##;
-    let expect = expect![[
+                             ac-source-rst-options))"##,
+            true,
+            expect![[
         r####"OK ((ac-source-rst-directives ((candidates . auto-complete-rst-directives-candidates) (available fboundp 'auto-complete-rst-directives-candidates) (prefix . "[[:space:]]\\.\\. \\([[:alnum:]-:]*\\)") (symbol . "D") (requires . 0))) (ac-source-rst-roles ((candidates . auto-complete-rst-roles-candidates) (available fboundp 'auto-complete-rst-roles-candidates) (prefix . "[^[:alnum:]:]:\\([[:alnum:]-:]*\\)") (symbol . "R") (requires . 0) (action . :function))) (ac-source-rst-options ((candidates . :function) (prefix . "[[:space:]]\\{4,\\}:\\([^:]*\\)") (symbol . "O") (requires . 0))))"####
-    ]];
-    assert_auto_complete_rst_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_rst_generated_candidate_availability_changes_after_source_eval() {
-    let elisp_form = r##"(let
+    ]],
+        ),
+        (
+            "auto_complete_rst_generated_candidate_availability_changes_after_source_eval",
+            r##"(let
                              ((auto-complete-rst-directive-options-map
                                (make-hash-table :test 'equal)))
                            (fmakunbound
@@ -54,16 +56,15 @@ fn auto_complete_rst_generated_candidate_availability_changes_after_source_eval(
                                '(ac-source-rst-directives
                                  ac-source-rst-roles))
                               (auto-complete-rst-directives-candidates)
-                              (auto-complete-rst-roles-candidates))))"##;
-    let expect = expect![[
+                              (auto-complete-rst-roles-candidates))))"##,
+            true,
+            expect![[
         r####"OK ((nil nil) (t t) ("note::" "code-block::" "image::" "py:function::") ("ref:" "doc:" "py:class:" "emphasis:"))"####
-    ]];
-    assert_auto_complete_rst_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_rst_source_prefixes_extract_real_partial_directive_role_and_option() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_rst_source_prefixes_extract_real_partial_directive_role_and_option",
+            r##"(mapcar
                            (lambda (case)
                              (let
                                  ((source
@@ -87,16 +88,15 @@ fn auto_complete_rst_source_prefixes_extract_real_partial_directive_role_and_opt
                              (ac-source-rst-roles
                               . "See :py:cla")
                              (ac-source-rst-options
-                              . ".. image:: x.png\n    :hei")))"##;
-    let expect = expect![[
+                              . ".. image:: x.png\n    :hei")))"##,
+            true,
+            expect![[
         r####"OK ((ac-source-rst-directives "Intro\n\n.. code-bl" "code-bl") (ac-source-rst-roles "See :py:cla" "py:cla") (ac-source-rst-options ".. image:: x.png\n    :hei" "hei"))"####
-    ]];
-    assert_auto_complete_rst_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_rst_source_prefixes_reject_non_rst_and_boundary_lookalikes() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_rst_source_prefixes_reject_non_rst_and_boundary_lookalikes",
+            r##"(mapcar
                            (lambda (case)
                              (let
                                  ((regexp
@@ -123,16 +123,15 @@ fn auto_complete_rst_source_prefixes_reject_non_rst_and_boundary_lookalikes() {
                              (ac-source-rst-options
                               . "   :alt")
                              (ac-source-rst-options
-                              . "    :alt:value")))"##;
-    let expect = expect![[
+                              . "    :alt:value")))"##,
+            true,
+            expect![[
         r####"OK ((ac-source-rst-directives ".. note" nil) (ac-source-rst-directives "prefix.. note" nil) (ac-source-rst-roles "scheme::ref" nil) (ac-source-rst-roles "word:ref" nil) (ac-source-rst-options "   :alt" nil) (ac-source-rst-options "    :alt:value" "alt"))"####
-    ]];
-    assert_auto_complete_rst_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_rst_role_action_inserts_balanced_backquotes_with_point_inside() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_rst_role_action_inserts_balanced_backquotes_with_point_inside",
+            r##"(mapcar
                            (lambda (text)
                              (with-temp-buffer
                                (insert text)
@@ -148,16 +147,15 @@ fn auto_complete_rst_role_action_inserts_balanced_backquotes_with_point_inside()
                                 (char-after))))
                            '(":ref:"
                              "See :doc:"
-                             "Use :py:class:"))"##;
-    let expect = expect![[
+                             "Use :py:class:"))"##,
+            true,
+            expect![[
         r####"OK ((":ref:``" 7 96 96) ("See :doc:``" 11 96 96) ("Use :py:class:``" 16 96 96))"####
-    ]];
-    assert_auto_complete_rst_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_rst_add_sources_preserves_order_customization_keys_and_idempotence() {
-    let elisp_form = r##"(let
+    ]],
+        ),
+        (
+            "auto_complete_rst_add_sources_preserves_order_customization_keys_and_idempotence",
+            r##"(let
                              ((auto-complete-rst-other-sources
                                '(ac-source-filename
                                  ac-source-words-in-buffer)))
@@ -179,16 +177,15 @@ fn auto_complete_rst_add_sources_preserves_order_customization_keys_and_idempote
                                 (local-variable-p
                                  'ac-sources)
                                 (keymap-parent
-                                 (current-local-map))))))"##;
-    let expect = expect![[
+                                 (current-local-map))))))"##,
+            true,
+            expect![[
         r####"OK ((ac-source-rst-options ac-source-rst-roles ac-source-rst-directives . #1=(ac-source-filename ac-source-words-in-buffer)) (ac-source-rst-options ac-source-rst-roles ac-source-rst-directives . #1#) auto-complete-rst-complete-colon auto-complete-rst-complete-space t nil)"####
-    ]];
-    assert_auto_complete_rst_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_rst_add_sources_uses_current_sources_when_override_is_nil() {
-    let elisp_form = r##"(let
+    ]],
+        ),
+        (
+            "auto_complete_rst_add_sources_uses_current_sources_when_override_is_nil",
+            r##"(let
                              ((auto-complete-rst-other-sources nil))
                            (with-temp-buffer
                              (use-local-map
@@ -198,16 +195,15 @@ fn auto_complete_rst_add_sources_uses_current_sources_when_override_is_nil() {
                               '(ac-source-filename
                                 ac-source-abbrev))
                              (auto-complete-rst-add-sources)
-                             ac-sources))"##;
-    let expect = expect![[
+                             ac-sources))"##,
+            true,
+            expect![[
         r####"OK (ac-source-rst-options ac-source-rst-roles ac-source-rst-directives ac-source-filename ac-source-abbrev)"####
-    ]];
-    assert_auto_complete_rst_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_rst_completion_keys_insert_text_and_route_exact_source_sets() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_rst_completion_keys_insert_text_and_route_exact_source_sets",
+            r##"(mapcar
                            (lambda (enabled)
                              (let
                                  ((auto-complete-mode enabled)
@@ -227,9 +223,11 @@ fn auto_complete_rst_completion_keys_insert_text_and_route_exact_source_sets() {
                                     (buffer-string)
                                     (nreverse calls)
                                     (point))))))
-                           '(nil t))"##;
-    let expect = expect![[
+                           '(nil t))"##,
+            true,
+            expect![[
         r####"OK ((nil ".. note :ref:" nil 14) (t ".. note :ref:" ((ac-source-rst-directives) (ac-source-rst-directives ac-source-rst-options ac-source-rst-roles)) 14))"####
-    ]];
-    assert_auto_complete_rst_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

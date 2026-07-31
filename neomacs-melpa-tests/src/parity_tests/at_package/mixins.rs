@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_at_parity, assert_at_signal_parity};
+use super::{assert_at_batch};
 
 #[test]
-fn at_soft_get_returns_configured_fallback_while_explicit_default_still_wins() {
-    let elisp_form = r##"(let ((first
+fn mixins_public_surface_batch() {
+    assert_at_batch(&[
+        (
+            "at_soft_get_returns_configured_fallback_while_explicit_default_still_wins",
+            r##"(let ((first
                     (@extend @soft-get))
                    (second
                     (@extend
@@ -15,27 +18,23 @@ fn at_soft_get_returns_configured_fallback_while_explicit_default_still_wins() {
                 (@ second :missing)
                 (@ second :missing
                    :default 'explicit)
-                (@ second :default-get)))"##;
-    let expect = expect!["OK (nil soft explicit soft)"];
-
-    assert_at_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_immutable_rejects_assignment_with_exact_property_error() {
-    let elisp_form = r##"(let ((object
+                (@ second :default-get)))"##,
+            true,
+            expect!["OK (nil soft explicit soft)"],
+        ),
+        (
+            "at_immutable_rejects_assignment_with_exact_property_error",
+            r##"(let ((object
                     (@extend @immutable)))
                (setf
                 (@ object :blocked)
-                10))"##;
-    let expect = expect![[r#"ERR (error "Object is immutable, cannot set :blocked")"#]];
-
-    assert_at_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_immutable_disabled_setter_returns_nil_without_assigning() {
-    let elisp_form = r##"(let ((object
+                10))"##,
+            false,
+            expect![[r#"ERR (error "Object is immutable, cannot set :blocked")"#]],
+        ),
+        (
+            "at_immutable_disabled_setter_returns_nil_without_assigning",
+            r##"(let ((object
                     (@extend
                      @immutable
                      :immutable-error nil)))
@@ -46,15 +45,13 @@ fn at_immutable_disabled_setter_returns_nil_without_assigning() {
                 (@ object :blocked
                    :default 'absent)
                 (@ object
-                   :immutable-error)))"##;
-    let expect = expect!["OK (nil absent nil)"];
-
-    assert_at_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_watchable_notifies_in_order_assigns_after_callbacks_and_unwatches() {
-    let elisp_form = r##"(let (events)
+                   :immutable-error)))"##,
+            true,
+            expect!["OK (nil absent nil)"],
+        ),
+        (
+            "at_watchable_notifies_in_order_assigns_after_callbacks_and_unwatches",
+            r##"(let (events)
                (let* ((first
                        (lambda (object
                                 property new)
@@ -106,10 +103,11 @@ fn at_watchable_notifies_in_order_assigns_after_callbacks_and_unwatches() {
                   (@ object :bar)
                   (length
                    (@ object :watchers))
-                  (nreverse events))))"##;
-    let expect = expect![[
+                  (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (1 2 1 ((first :foo 1 absent) (second :foo 1 absent) (first :watchers 1 2) (second :watchers 1 2) (first :bar 2 absent)))"#
-    ]];
-
-    assert_at_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

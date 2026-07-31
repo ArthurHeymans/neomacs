@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AA_EDIT_MODE_MELPA_PIN, CachedMelpaOracle, OracleBatchCase};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const AA_EDIT_MODE_TEST_TIMEOUT: Duration = Duration::from_secs(120);
@@ -80,29 +82,13 @@ pub(crate) fn assert_aa_edit_mode_parity(form: &str, expected: Expect) {
     expected.assert_eq(&report.gnu_emacs.to_string());
 }
 
-/// Multi-probe batch: one process pair, many named cases (2a).
+/// Multi-probe batch for `assert_aa_edit_mode_parity` cases (2a).
 pub(crate) fn assert_aa_edit_mode_batch(cases: &[(&str, &str, bool, Expect)]) {
     let name = current_test_name();
-    let batch: Vec<OracleBatchCase<'_>> = cases
-        .iter()
-        .map(|(id, probe, expect_value, _)| OracleBatchCase {
-            id,
-            probe,
-            expect_value: *expect_value,
-        })
-        .collect();
-    let reports = aa_edit_mode_oracle()
-        .run_batch(&name, &batch)
-        .unwrap_or_else(|error| panic!("aa-edit-mode batch `{name}` failed:\n{error}"));
-    assert_eq!(
-        reports.len(),
-        cases.len(),
-        "aa-edit-mode batch `{name}` returned {} reports for {} cases",
-        reports.len(),
-        cases.len()
+    assert_oracle_batch(
+        aa_edit_mode_oracle(),
+        &name,
+        "aa_edit_mode_parity",
+        cases,
     );
-    for (report, (id, _, _, expected)) in reports.iter().zip(cases.iter()) {
-        assert_eq!(report.id, *id);
-        expected.assert_eq(&report.gnu_emacs.to_string());
-    }
 }

@@ -1,9 +1,12 @@
-use super::assert_astyle_parity;
+use super::assert_astyle_batch;
 use expect_test::{Expect, expect};
 
 #[test]
-fn region_command_delegates_exact_program_arguments_io_policy_and_success_predicate() {
-    let elisp_form = r##"
+fn commands_public_surface_batch() {
+    assert_astyle_batch(&[
+        (
+            "region_command_delegates_exact_program_arguments_io_policy_and_success_predicate",
+            r##"
 (let* ((input
         (astyle-test-path
          "delegation/input.c"))
@@ -68,16 +71,15 @@ fn region_command_delegates_exact_program_arguments_io_policy_and_success_predic
          captured
          (file-exists-p input)
          (buffer-string))))))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:formatted (:temporary-name astyle :call astyle 8 33 "astyle" ("--style=google" "--indent=spaces=4" "--suffix=none") t t "input.c" t nil t nil) nil "before\nint main(){\nreturn 0;\n}\nafter\n")"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn buffer_command_reports_progress_and_delegates_accessible_bounds_and_prefix() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "buffer_command_reports_progress_and_delegates_accessible_bounds_and_prefix",
+            r##"
 (with-temp-buffer
   (insert
    "hidden\nvisible one\nvisible two\nhidden end")
@@ -106,15 +108,13 @@ fn buffer_command_reports_progress_and_delegates_accessible_bounds_and_prefix() 
          calls
          (point-min)
          (point-max))))))
-"##;
-    let expect: Expect =
-        expect![[r#"OK (:region-result nil ((8 31 9 "visible one\nvisible two")) 8 31)"#]];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn real_buffer_formatting_runs_sandbox_executable_replaces_content_and_records_arguments() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect![[r#"OK (:region-result nil ((8 31 9 "visible one\nvisible two")) 8 31)"#]],
+        ),
+        (
+            "real_buffer_formatting_runs_sandbox_executable_replaces_content_and_records_arguments",
+            r##"
 (let* ((installation
         (astyle-test-install-formatter))
        (argument-log
@@ -151,16 +151,15 @@ fn real_buffer_formatting_runs_sandbox_executable_replaces_content_and_records_a
               major-mode
               (buffer-string))))))
     (astyle-test-kill-error-buffer)))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (nil "int main() {\n    return 0;\n}\n" 11 "--style=google\n--indent=spaces=4\n--suffix=none\n" (special-mode ""))"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn real_region_formatting_changes_only_selected_c_function_and_preserves_surroundings() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "real_region_formatting_changes_only_selected_c_function_and_preserves_surroundings",
+            r##"
 (let* ((installation
         (astyle-test-install-formatter))
        (argument-log
@@ -198,16 +197,15 @@ fn real_region_formatting_changes_only_selected_c_function_and_preserves_surroun
               argument-log)
              (list beg end)))))
     (astyle-test-kill-error-buffer)))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (nil "prefix\nint main() {\n    return 0;\n}\nsuffix\n" "--style=linux\n--indent=spaces=2\n--pad-oper\n--pad-header\n--break-blocks\n--delete-empty-lines\n--align-pointer=type\n--align-reference=name\n" (8 32))"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn project_rc_argument_is_passed_to_real_formatter_without_default_flags() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "project_rc_argument_is_passed_to_real_formatter_without_default_flags",
+            r##"
 (let* ((installation
         (astyle-test-install-formatter))
        (argument-log
@@ -250,16 +248,15 @@ fn project_rc_argument_is_passed_to_real_formatter_without_default_flags() {
          (file-truename
           configuration)))
     (astyle-test-kill-error-buffer)))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (nil "int main() {\n    return 0;\n}\n" "--options=[ORACLE-SANDBOX]/rc-project/.astylerc\n" "[ORACLE-SANDBOX]/rc-project/.astylerc")"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn formatter_failure_preserves_buffer_decodes_ansi_stderr_and_honors_display_errors() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "formatter_failure_preserves_buffer_decodes_ansi_stderr_and_honors_display_errors",
+            r##"
 (let ((installation
        (astyle-test-install-formatter))
       displays)
@@ -314,16 +311,15 @@ fn formatter_failure_preserves_buffer_decodes_ansi_stderr_and_honors_display_err
      "ASTYLE_TEST_FAIL"
      nil)
     (astyle-test-kill-error-buffer)))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (nil "int main(){\nreturn 0;\n}\n" nil (("*astyle errors*" nil)) (special-mode t "fixture formatter failed\n") (t t))"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn missing_formatter_program_preserves_content_and_reports_launch_failure() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "missing_formatter_program_preserves_content_and_reports_launch_failure",
+            r##"
 (unwind-protect
     (with-temp-buffer
       (insert
@@ -360,9 +356,11 @@ fn missing_formatter_program_preserves_content_and_reports_launch_failure() {
                "astyle"
                text)))))))
   (astyle-test-kill-error-buffer))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("astyle failed: see *astyle errors*" "int main(){\nreturn 0;\n}\n" nil (special-mode 0 50))"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

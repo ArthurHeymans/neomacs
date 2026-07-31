@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_rst_parity;
+use super::assert_auto_complete_rst_batch;
 
 #[test]
-fn auto_complete_rst_real_rst_mode_hook_installs_completion_environment() {
-    let elisp_form = r##"(let
+fn workflows_public_surface_batch() {
+    assert_auto_complete_rst_batch(&[
+        (
+            "auto_complete_rst_real_rst_mode_hook_installs_completion_environment",
+            r##"(let
                              ((ac-modes '(text-mode))
                               (rst-mode-hook nil))
                            (cl-letf
@@ -27,16 +30,15 @@ fn auto_complete_rst_real_rst_mode_hook_installs_completion_environment() {
                                 (key-binding (kbd ":"))
                                 (key-binding (kbd "SPC"))
                                 (auto-complete-rst-directives-candidates)
-                                (auto-complete-rst-roles-candidates)))))"##;
-    let expect = expect![[
+                                (auto-complete-rst-roles-candidates)))))"##,
+            true,
+            expect![[
         r####"OK (rst-mode (rst-mode text-mode) (ac-source-rst-options ac-source-rst-roles ac-source-rst-directives ac-source-words-in-same-mode-buffers) auto-complete-rst-complete-colon auto-complete-rst-complete-space ("note::" "code-block::" "image::" "py:function::") ("ref:" "doc:" "py:class:" "emphasis:"))"####
-    ]];
-    assert_auto_complete_rst_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_rst_practical_directive_completion_selects_generated_code_block() {
-    let elisp_form = r##"(let
+    ]],
+        ),
+        (
+            "auto_complete_rst_practical_directive_completion_selects_generated_code_block",
+            r##"(let
                              ((auto-complete-rst-directive-options-map
                                (make-hash-table :test 'equal)))
                            (with-temp-buffer
@@ -81,16 +83,15 @@ fn auto_complete_rst_practical_directive_completion_selects_generated_code_block
                                 candidates
                                 selected
                                 (buffer-string)
-                                (point)))))"##;
-    let expect = expect![[
+                                (point)))))"##,
+            true,
+            expect![[
         r####"OK ("code-bl" ("note::" "code-block::" "image::" "py:function::") ("code-block::") "Example\n=======\n\nThe implementation follows.\n\n.. code-block::" 62)"####
-    ]];
-    assert_auto_complete_rst_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_rst_practical_role_completion_inserts_target_delimiters() {
-    let elisp_form = r##"(let
+    ]],
+        ),
+        (
+            "auto_complete_rst_practical_role_completion_inserts_target_delimiters",
+            r##"(let
                              ((auto-complete-rst-directive-options-map
                                (make-hash-table :test 'equal)))
                            (with-temp-buffer
@@ -134,16 +135,15 @@ fn auto_complete_rst_practical_role_completion_inserts_target_delimiters() {
                                 selected
                                 (buffer-string)
                                 (point)
-                                (char-after)))))"##;
-    let expect = expect![[
+                                (char-after)))))"##,
+            true,
+            expect![[
         r####"OK ("py:cla" "py:class:" "See :py:class:`collections.OrderedDict`" 39 96)"####
-    ]];
-    assert_auto_complete_rst_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_rst_practical_option_completion_uses_enclosing_directive_map() {
-    let elisp_form = r##"(let
+    ]],
+        ),
+        (
+            "auto_complete_rst_practical_option_completion_uses_enclosing_directive_map",
+            r##"(let
                              ((auto-complete-rst-directive-options-map
                                (make-hash-table :test 'equal)))
                            (puthash
@@ -179,16 +179,15 @@ fn auto_complete_rst_practical_option_completion_uses_enclosing_directive_map() 
                                 candidates
                                 selected
                                 (buffer-string)
-                                (point)))))"##;
-    let expect = expect![[
+                                (point)))))"##,
+            true,
+            expect![[
         r####"OK ("image" ("alt:" "height:" "width:") "height:" "Architecture\n============\n\n.. image:: diagram.svg\n    :height: 320px" 69)"####
-    ]];
-    assert_auto_complete_rst_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_rst_bound_keys_drive_real_editing_commands_and_source_routing() {
-    let elisp_form = r##"(let
+    ]],
+        ),
+        (
+            "auto_complete_rst_bound_keys_drive_real_editing_commands_and_source_routing",
+            r##"(let
                              ((auto-complete-rst-other-sources
                                '(ac-source-filename))
                               calls)
@@ -214,16 +213,15 @@ fn auto_complete_rst_bound_keys_drive_real_editing_commands_and_source_routing()
                                 (buffer-string)
                                 (nreverse calls)
                                 ac-sources
-                                (point)))))"##;
-    let expect = expect![[
+                                (point)))))"##,
+            true,
+            expect![[
         r####"OK (".. note:\n    :" ((ac-source-rst-directives) #1=(ac-source-rst-directives ac-source-rst-options ac-source-rst-roles) #1#) (ac-source-rst-options ac-source-rst-roles ac-source-rst-directives ac-source-filename) 15)"####
-    ]];
-    assert_auto_complete_rst_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_rst_buffer_local_setup_does_not_leak_sources_or_keys() {
-    let elisp_form = r##"(let
+    ]],
+        ),
+        (
+            "auto_complete_rst_buffer_local_setup_does_not_leak_sources_or_keys",
+            r##"(let
                              ((auto-complete-rst-other-sources
                                '(ac-source-filename))
                               first)
@@ -246,9 +244,11 @@ fn auto_complete_rst_buffer_local_setup_does_not_leak_sources_or_keys() {
                               (key-binding (kbd ":"))
                               (key-binding (kbd "SPC"))
                               (local-variable-p
-                               'ac-sources))))"##;
-    let expect = expect![[
+                               'ac-sources))))"##,
+            true,
+            expect![[
         r####"OK (((ac-source-rst-options ac-source-rst-roles ac-source-rst-directives ac-source-filename) auto-complete-rst-complete-colon auto-complete-rst-complete-space t) (ac-source-words-in-same-mode-buffers) self-insert-command self-insert-command nil)"####
-    ]];
-    assert_auto_complete_rst_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

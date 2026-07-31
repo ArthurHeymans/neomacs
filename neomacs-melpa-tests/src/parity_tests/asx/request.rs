@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_asx_parity;
+use super::assert_asx_batch;
 
 #[test]
-fn asx_user_agent_selection_passes_complete_configured_pool_to_random_selector() {
-    let elisp_form = r##"(let ((asx--user-agents
+fn request_public_surface_batch() {
+    assert_asx_batch(&[
+        (
+            "asx_user_agent_selection_passes_complete_configured_pool_to_random_selector",
+            r##"(let ((asx--user-agents
                 '("Agent A"
                   "Agent B"
                   "Agent C"))
@@ -19,17 +22,15 @@ fn asx_user_agent_selection_passes_complete_configured_pool_to_random_selector()
            (list
             (asx--get-user-agent)
             observed
-            asx--user-agents)))"##;
-    let expect = expect![[
+            asx--user-agents)))"##,
+            true,
+            expect![[
         r#"OK ("Agent B" ("Agent A" "Agent B" "Agent C") ("Agent A" "Agent B" "Agent C"))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_request_configures_user_agent_parses_html_and_forwards_success_dom() {
-    let elisp_form = r##"(let ((asx--user-agents
+    ]],
+        ),
+        (
+            "asx_request_configures_user_agent_parses_html_and_forwards_success_dom",
+            r##"(let ((asx--user-agents
                 '("Fixture Agent"))
                callback-values
                request-observation)
@@ -78,17 +79,15 @@ fn asx_request_configures_user_agent_parses_html_and_forwards_success_dom() {
              (lambda (data)
                (push data callback-values)))
             request-observation
-            callback-values)))"##;
-    let expect = expect![[
+            callback-values)))"##,
+            true,
+            expect![[
         r#"OK (:request-return ("https://search.invalid/query" ("-A Fixture Agent") t t #1=(html nil (body nil (h1 nil "Result") (p nil "Body")))) (#1#))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_request_custom_error_callback_receives_original_url_and_suppresses_signal() {
-    let elisp_form = r##"(let ((asx--user-agents
+    ]],
+        ),
+        (
+            "asx_request_custom_error_callback_receives_original_url_and_suppresses_signal",
+            r##"(let ((asx--user-agents
                 '("Fixture Agent"))
                events)
          (cl-letf
@@ -120,17 +119,15 @@ fn asx_request_custom_error_callback_receives_original_url_and_suppresses_signal
                  :fallback
                  url)
                 events)))
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:handled ((:requested "https://search.invalid/fail" ("-A Fixture Agent")) (:fallback "https://search.invalid/fail")))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_request_default_error_handler_signals_stringified_request_error() {
-    let elisp_form = r##"(let ((asx--user-agents
+    ]],
+        ),
+        (
+            "asx_request_default_error_handler_signals_stringified_request_error",
+            r##"(let ((asx--user-agents
                 '("Fixture Agent")))
          (cl-letf
          (((symbol-function 'request)
@@ -150,15 +147,13 @@ fn asx_request_default_error_handler_signals_stringified_request_error() {
            (error
             (list
              (car error)
-             (cdr error))))))"##;
-    let expect = expect![[r#"OK (error ("(error network exploded)"))"#]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_request_post_announces_title_and_dispatches_url_insert_and_retry_callbacks() {
-    let elisp_form = r##"(let (messages requests)
+             (cdr error))))))"##,
+            true,
+            expect![[r#"OK (error ("(error network exploded)"))"#]],
+        ),
+        (
+            "asx_request_post_announces_title_and_dispatches_url_insert_and_retry_callbacks",
+            r##"(let (messages requests)
          (cl-letf
              (((symbol-function 'message)
                (lambda
@@ -186,17 +181,15 @@ fn asx_request_post_announces_title_and_dispatches_url_insert_and_retry_callback
                .
                "https://stackoverflow.com/questions/7/useful"))
             (nreverse messages)
-            (nreverse requests))))"##;
-    let expect = expect![[
+            (nreverse requests))))"##,
+            true,
+            expect![[
         r#"OK (:queued ("Loading: A useful answer") (("https://stackoverflow.com/questions/7/useful" asx--insert-post-dom asx--remove-and-next)))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_request_parser_handles_entities_nested_elements_and_malformed_html_practically() {
-    let elisp_form = r##"(let ((asx--user-agents
+    ]],
+        ),
+        (
+            "asx_request_parser_handles_entities_nested_elements_and_malformed_html_practically",
+            r##"(let ((asx--user-agents
                 '("Fixture Agent"))
                parsed)
          (cl-letf
@@ -229,8 +222,9 @@ fn asx_request_parser_handles_entities_nested_elements_and_malformed_html_practi
             (length
              (dom-by-tag
               parsed
-              'strong)))))"##;
-    let expect = expect![[r#"OK ("A & B  bold second" ("A & B  bold second" "second") 1)"#]];
-
-    assert_asx_parity(elisp_form, expect);
+              'strong)))))"##,
+            true,
+            expect![[r#"OK ("A & B  bold second" ("A & B  bold second" "second") 1)"#]],
+        ),
+    ]);
 }

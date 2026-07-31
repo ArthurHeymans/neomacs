@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_projectile_parity, assert_projectile_signal_parity};
+use super::{assert_projectile_batch};
 
 #[test]
-fn projectile_known_project_serialization_and_merge_preserve_disk_and_memory_changes() {
-    let elisp_form = r##"(let* ((root (make-temp-file "projectile-state-" t))
+fn state_public_surface_batch() {
+    assert_projectile_batch(&[
+        (
+            "projectile_known_project_serialization_and_merge_preserve_disk_and_memory_changes",
+            r##"(let* ((root (make-temp-file "projectile-state-" t))
                     (projectile-known-projects-file
                      (expand-file-name "known-projects.eld" root))
                     (projectile-known-projects nil))
@@ -26,17 +29,15 @@ fn projectile_known_project_serialization_and_merge_preserve_disk_and_memory_cha
                         projectile-known-projects
                         (projectile-unserialize
                          projectile-known-projects-file))))
-                 (delete-directory root t)))"##;
-    let expect = expect![[
+                 (delete-directory root t)))"##,
+            true,
+            expect![[
         r#"OK (("a1" "a2" "a3" "a4" "a5") ("a6" "a1" "a3" "b1" "b2") ("a6" "a1" "a3" "b1" "b2"))"#
-    ]];
-
-    assert_projectile_parity(elisp_form, expect);
-}
-
-#[test]
-fn projectile_known_project_cleanup_and_recursive_forget_update_persisted_state() {
-    let elisp_form = r##"(let* ((root (file-name-as-directory
+    ]],
+        ),
+        (
+            "projectile_known_project_cleanup_and_recursive_forget_update_persisted_state",
+            r##"(let* ((root (file-name-as-directory
                               (make-temp-file "projectile-clean-" t)))
                     (child-a (file-name-as-directory
                               (expand-file-name "a" root)))
@@ -84,15 +85,13 @@ fn projectile_known_project_cleanup_and_recursive_forget_update_persisted_state(
                          (projectile-unserialize
                           projectile-known-projects-file)))))
                  (delete-directory root t)
-                 (delete-directory outside t)))"##;
-    let expect = expect![[r#"OK (("a/" "a/nested/" "outside/") 2 ("outside/") ("outside/"))"#]];
-
-    assert_projectile_parity(elisp_form, expect);
-}
-
-#[test]
-fn projectile_buffer_conditions_compose_name_mode_file_and_boolean_operators() {
-    let elisp_form = r##"(let ((buffer (generate-new-buffer
+                 (delete-directory outside t)))"##,
+            true,
+            expect![[r#"OK (("a/" "a/nested/" "outside/") 2 ("outside/") ("outside/"))"#]],
+        ),
+        (
+            "projectile_buffer_conditions_compose_name_mode_file_and_boolean_operators",
+            r##"(let ((buffer (generate-new-buffer
                            "*projectile-condition-test*")))
                (unwind-protect
                    (with-current-buffer buffer
@@ -123,20 +122,19 @@ fn projectile_buffer_conditions_compose_name_mode_file_and_boolean_operators() {
                        '((and buffer-file-name
                               (derived-mode . text-mode))))
                       (projectile--buffer-matches-conditions buffer nil)))
-                 (kill-buffer buffer)))"##;
-    let expect = expect![[r#"OK (t t t t t t t nil nil)"#]];
-
-    assert_projectile_parity(elisp_form, expect);
-}
-
-#[test]
-fn projectile_project_info_outside_a_project_signals_the_friendly_error() {
-    let elisp_form = r##"(let ((default-directory "/virtual/no-project/")
+                 (kill-buffer buffer)))"##,
+            true,
+            expect![[r#"OK (t t t t t t t nil nil)"#]],
+        ),
+        (
+            "projectile_project_info_outside_a_project_signals_the_friendly_error",
+            r##"(let ((default-directory "/virtual/no-project/")
                    (projectile-require-project-root t))
-               (projectile-ensure-project nil))"##;
-    let expect = expect![[
+               (projectile-ensure-project nil))"##,
+            false,
+            expect![[
         r#"ERR (user-error "Projectile cannot find a project definition in /virtual/no-project/")"#
-    ]];
-
-    assert_projectile_signal_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

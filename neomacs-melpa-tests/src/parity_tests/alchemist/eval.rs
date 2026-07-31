@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_alchemist_parity;
+use super::assert_alchemist_batch;
 
 #[test]
-fn alchemist_eval_line_region_buffer_and_print_workflows_write_local_temp_payloads_and_callbacks() {
-    let elisp_form = r##"(with-temp-buffer
+fn eval_public_surface_batch() {
+    assert_alchemist_batch(&[
+        (
+            "alchemist_eval_line_region_buffer_and_print_workflows_write_local_temp_payloads_and_callbacks",
+            r##"(with-temp-buffer
                       (insert
                        "first = 20\n"
                        "second = 22\n"
@@ -53,16 +56,15 @@ fn alchemist_eval_line_region_buffer_and_print_workflows_write_local_temp_payloa
                              line region buffer
                              print-line print-region print-buffer
                              (nreverse requests)
-                             (point))))))"##;
-    let expect = expect![[
+                             (point))))))"##,
+            true,
+            expect![[
         r#"OK (requested requested requested requested requested requested (("alchemist-eval*.exs" t "first = 20\n" alchemist-eval-filter) ("alchemist-eval*.exs" t "second = 22\nfirst + second" alchemist-eval-filter) ("alchemist-eval*.exs" t "first = 20\nsecond = 22\nfirst + second\n" alchemist-eval-filter) ("alchemist-eval*.exs" t "first = 20\n" alchemist-eval-insert-filter) ("alchemist-eval*.exs" t "first = 20\nsecond = 22" alchemist-eval-insert-filter) ("alchemist-eval*.exs" t "first = 20\nsecond = 22\nfirst + second\n" alchemist-eval-insert-filter)) 39)"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_quoted_eval_variants_preserve_payload_region_direction_and_quote_protocol() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "alchemist_quoted_eval_variants_preserve_payload_region_direction_and_quote_protocol",
+            r##"(with-temp-buffer
                       (insert
                        "[4, 2, 1, 3]\n"
                        "|> Enum.sort()\n")
@@ -97,16 +99,15 @@ fn alchemist_quoted_eval_variants_preserve_payload_region_direction_and_quote_pr
                            (alchemist-eval-print-quoted-buffer)
                            (nreverse requests)
                            (point)
-                           (mark t)))))"##;
-    let expect = expect![[
+                           (mark t)))))"##,
+            true,
+            expect![[
         r#"OK (quoted quoted quoted quoted quoted quoted ((t "|> Enum.sort()\n" alchemist-eval-quoted-filter t) (t "[4, 2, 1, 3]\n|> Enum.sort()\n" alchemist-eval-quoted-filter t) (t "[4, 2, 1, 3]\n|> Enum.sort()\n" alchemist-eval-quoted-filter t) (t "|> Enum.sort()\n" alchemist-eval-quoted-insert-filter t) (t "[4, 2, 1, 3]\n|> Enum.sort()\n" alchemist-eval-quoted-insert-filter t) (t "[4, 2, 1, 3]\n|> Enum.sort()\n" alchemist-eval-quoted-insert-filter t)) 29 nil)"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_eval_filters_accumulate_chunked_server_output_into_popup_and_inline_results() {
-    let elisp_form = r##"(let ((alchemist-eval-filter-output nil)
+    ]],
+        ),
+        (
+            "alchemist_eval_filters_accumulate_chunked_server_output_into_popup_and_inline_results",
+            r##"(let ((alchemist-eval-filter-output nil)
                           events)
                       (cl-letf
                           (((symbol-function
@@ -139,17 +140,15 @@ fn alchemist_eval_filters_accumulate_chunked_server_output_into_popup_and_inline
                          (alchemist-eval-quoted-insert-filter
                           'process "{:ok, 1}\nEND-OF-EVAL\n")
                          alchemist-eval-filter-output
-                         (nreverse events))))"##;
-    let expect = expect![[
+                         (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (nil ("first\n") nil nil nil nil nil nil ((popup "*alchemist-eval-mode*" "first\nsecond" :anonymous-mode) (insert "42") (popup "*alchemist-eval-mode*" "{:+, [], [1, 2]}" alchemist-eval-mode) (insert "{:ok, 1}")))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_macroexpand_line_and_region_workflows_write_local_payloads_and_select_exact_protocol()
-{
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "alchemist_macroexpand_line_and_region_workflows_write_local_payloads_and_select_exact_protocol",
+            r##"(with-temp-buffer
                       (insert
                        "unless false do\n"
                        "  IO.puts(\"kept\")\n"
@@ -195,16 +194,15 @@ fn alchemist_macroexpand_line_and_region_workflows_write_local_payloads_and_sele
                             (point-max) (point-min))
                            (nreverse requests)
                            (point)
-                           (mark t)))))"##;
-    let expect = expect![[
+                           (mark t)))))"##,
+            true,
+            expect![[
         r#"OK (expanded expanded expanded expanded expanded expanded expanded expanded ((:expand "unless false do\n" alchemist-macroexpand-filter t) (:expand "unless false do\n" alchemist-macroexpand-insert-filter t) (:expand-once "unless false do\n" alchemist-macroexpand-filter t) (:expand-once "unless false do\n" alchemist-macroexpand-insert-filter t) (:expand "unless false do\n  IO.puts(\"kept\")\nend\n" alchemist-macroexpand-filter t) (:expand "unless false do\n  IO.puts(\"kept\")\nend\n" alchemist-macroexpand-insert-filter t) (:expand-once "unless false do\n  IO.puts(\"kept\")\nend\n" alchemist-macroexpand-filter t) (:expand-once "unless false do\n  IO.puts(\"kept\")\nend\n" alchemist-macroexpand-insert-filter t)) 1 nil)"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_macroexpand_filters_render_chunked_popup_and_inline_expansion_exactly() {
-    let elisp_form = r##"(let ((alchemist-macroexpand-filter-output nil)
+    ]],
+        ),
+        (
+            "alchemist_macroexpand_filters_render_chunked_popup_and_inline_expansion_exactly",
+            r##"(let ((alchemist-macroexpand-filter-output nil)
                           events)
                       (cl-letf
                           (((symbol-function
@@ -233,9 +231,11 @@ fn alchemist_macroexpand_filters_render_chunked_popup_and_inline_expansion_exact
                          (alchemist-macroexpand-insert-filter
                           'process "if(true), do: :ok\nEND-OF-EVAL\n")
                          alchemist-macroexpand-filter-output
-                         (nreverse events))))"##;
-    let expect = expect![[
+                         (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (nil ("case(false) do\n") nil nil nil nil ((popup "*alchemist macroexpand*" "case(false) do\nend" :anonymous-mode) (insert "if(true), do: :ok")))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

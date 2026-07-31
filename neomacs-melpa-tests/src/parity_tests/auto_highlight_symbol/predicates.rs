@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_highlight_symbol_parity;
+use super::assert_auto_highlight_symbol_batch;
 
 #[test]
-fn auto_highlight_symbol_symbol_predicate_handles_default_regexp_case_and_nodefs() {
-    let elisp_form = r##"(mapcar
+fn predicates_public_surface_batch() {
+    assert_auto_highlight_symbol_batch(&[
+        (
+            "auto_highlight_symbol_symbol_predicate_handles_default_regexp_case_and_nodefs",
+            r##"(mapcar
                            (lambda (case)
                              (let ((ahs-case-fold-search
                                     (car case)))
@@ -22,17 +25,15 @@ fn auto_highlight_symbol_symbol_predicate_handles_default_regexp_case_and_nodefs
                              (t . "two words")
                              (nil . "")
                              (t . "λ-value")
-                             (t . "path/to:file")))"##;
-    let expect = expect![[
+                             (t . "path/to:file")))"##,
+            true,
+            expect![[
         r#"OK (((t . "Alpha_42") 0 nil) ((nil . "Alpha_42") 0 nil) ((t . "two words") nil nil) ((nil . "") nil nil) ((t . "λ-value") nil nil) ((t . "path/to:file") 0 nil))"#
-    ]];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_symbol_predicate_supports_regex_function_and_mode_alist() {
-    let elisp_form = r##"(let ((starts-with-user
+    ]],
+        ),
+        (
+            "auto_highlight_symbol_symbol_predicate_supports_regex_function_and_mode_alist",
+            r##"(let ((starts-with-user
                                 (lambda (symbol)
                                   (string-prefix-p
                                    "user-"
@@ -69,17 +70,15 @@ fn auto_highlight_symbol_symbol_predicate_supports_regex_function_and_mode_alist
                               (emacs-lisp-mode
                                ((emacs-lisp-mode
                                   . "^elisp-"))
-                               "other"))))"##;
-    let expect = expect![[
+                               "other"))))"##,
+            true,
+            expect![[
         r#"OK (((emacs-lisp-mode "^user-" "User-name") 0) ((emacs-lisp-mode #[(symbol) ((string-prefix-p "user-" symbol)) (t)] "user-name") t) ((text-mode ((emacs-lisp-mode . "^elisp-") (text-mode . "^text-")) "text-value") 0) ((python-mode ((emacs-lisp-mode . "^elisp-")) "anything") 0) ((emacs-lisp-mode ((emacs-lisp-mode . "^elisp-")) "other") nil))"#
-    ]];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_highlight_predicate_extracts_real_symbol_bounds_and_rules() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_highlight_symbol_highlight_predicate_extracts_real_symbol_bounds_and_rules",
+            r##"(with-temp-buffer
                            (emacs-lisp-mode)
                            (insert
                             "(let ((alpha-value 1))\n  (+ alpha-value 2))")
@@ -102,17 +101,15 @@ fn auto_highlight_symbol_highlight_predicate_extracts_real_symbol_bounds_and_rul
                               (10 nil "^alpha")
                               (1 nil nil)
                               (24 nil nil)
-                              (39 nil nil))))"##;
-    let expect = expect![[
+                              (39 nil nil))))"##,
+            true,
+            expect![[
         r#"OK (((10 nil nil) ("alpha-value" 8 19)) ((10 "^alpha" nil) ("alpha-value" 8 19)) ((10 "^beta" nil) nil) ((10 nil "^alpha") nil) ((1 nil nil) nil) ((24 nil nil) nil) ((39 nil nil) ("alpha-value" 29 40)))"#
-    ]];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_highlight_predicate_rejects_inhibited_text_and_overlay_faces() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_highlight_symbol_highlight_predicate_rejects_inhibited_text_and_overlay_faces",
+            r##"(with-temp-buffer
                            (insert
                             (propertize
                              "commented"
@@ -144,17 +141,15 @@ fn auto_highlight_symbol_highlight_predicate_rejects_inhibited_text_and_overlay_
                               '((1)
                                 (11)
                                 (17)
-                                (17 . t)))))"##;
-    let expect = expect![[
+                                (17 . t)))))"##,
+            true,
+            expect![[
         r#"OK (((1) nil nil) ((11) ("plain" 11 16) nil) ((17) ("overlayed" 17 26) (font-lock-string-face)) ((17 . t) nil (font-lock-string-face)))"#
-    ]];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_dropdown_expansion_suppresses_symbol_detection_only_when_active() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_highlight_symbol_dropdown_expansion_suppresses_symbol_detection_only_when_active",
+            r##"(with-temp-buffer
                            (insert "candidate")
                            (goto-char 3)
                            (mapcar
@@ -178,17 +173,15 @@ fn auto_highlight_symbol_dropdown_expansion_suppresses_symbol_detection_only_whe
                                  (ahs-highlight-p))))
                             '((nil nil)
                               (t nil)
-                              (t (fixture-overlay)))))"##;
-    let expect = expect![[
+                              (t (fixture-overlay)))))"##,
+            true,
+            expect![[
         r#"OK (((nil nil) nil ("candidate" 1 10)) ((t nil) nil ("candidate" 1 10)) ((t #1=(fixture-overlay)) #1# nil))"#
-    ]];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_face_predicate_handles_symbols_lists_and_missing_matches() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "auto_highlight_symbol_face_predicate_handles_symbols_lists_and_missing_matches",
+            r##"(progn
                            (defvar fixture-faces nil)
                            (setq
                             fixture-faces
@@ -207,17 +200,15 @@ fn auto_highlight_symbol_face_predicate_handles_symbols_lists_and_missing_matche
                                font-lock-string-face)
                               (font-lock-comment-face
                                font-lock-string-face)
-                              nil)))"##;
-    let expect = expect![
+                              nil)))"##,
+            true,
+            expect![
         "OK ((font-lock-comment-face (font-lock-comment-face font-lock-string-face)) (font-lock-keyword-face nil) ((font-lock-keyword-face font-lock-string-face) font-lock-string-face) ((font-lock-comment-face font-lock-string-face) font-lock-comment-face) (nil nil))"
-    ];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_prepare_highlight_validates_plugin_boundaries_and_abort() {
-    let elisp_form = r##"(progn
+    ],
+        ),
+        (
+            "auto_highlight_symbol_prepare_highlight_validates_plugin_boundaries_and_abort",
+            r##"(progn
                            (defvar auto-highlight-symbol-test-range-reversed
                              '((name . "reversed")
                                (start . point-max)
@@ -254,17 +245,15 @@ fn auto_highlight_symbol_prepare_highlight_validates_plugin_boundaries_and_abort
                               '(ahs-range-whole-buffer
                                 auto-highlight-symbol-test-range-reversed
                                 auto-highlight-symbol-test-range-nonnumeric
-                                auto-highlight-symbol-test-range-abort))))"##;
-    let expect = expect![
+                                auto-highlight-symbol-test-range-abort))))"##,
+            true,
+            expect![
         "OK ((ahs-range-whole-buffer (1 . 11)) (auto-highlight-symbol-test-range-reversed nil) (auto-highlight-symbol-test-range-nonnumeric nil) (auto-highlight-symbol-test-range-abort nil))"
-    ];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_disabled_modes_commands_and_flags_gate_real_idle_highlighting() {
-    let elisp_form = r##"(save-window-excursion
+    ],
+        ),
+        (
+            "auto_highlight_symbol_disabled_modes_commands_and_flags_gate_real_idle_highlighting",
+            r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -302,17 +291,15 @@ fn auto_highlight_symbol_disabled_modes_commands_and_flags_gate_real_idle_highli
                               '(enabled
                                 command
                                 minor-mode
-                                flag))))"##;
-    let expect = expect![
+                                flag))))"##,
+            true,
+            expect![
         "OK ((enabled t ((1 6 current ahs-plugin-whole-buffer-face 1000 t t) (1 6 others ahs-face-unfocused nil t t) (7 12 others ahs-face-unfocused nil t t))) (command nil nil) (minor-mode nil nil) (flag nil nil))"
-    ];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_case_policy_changes_search_matches_without_changing_bounds() {
-    let elisp_form = r##"(with-temp-buffer
+    ],
+        ),
+        (
+            "auto_highlight_symbol_case_policy_changes_search_matches_without_changing_bounds",
+            r##"(with-temp-buffer
                            (insert
                             "Alpha alpha ALPHA alphabet")
                            (mapcar
@@ -333,8 +320,9 @@ fn auto_highlight_symbol_case_policy_changes_search_matches_without_changing_bou
                                      (nth 0 match)
                                      (nth 1 match)))
                                   ahs-search-work))))
-                            '(nil t)))"##;
-    let expect = expect!["OK ((nil ((7 12))) (t ((1 6) (7 12) (13 18))))"];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
+                            '(nil t)))"##,
+            true,
+            expect!["OK ((nil ((7 12))) (t ((1 6) (7 12) (13 18))))"],
+        ),
+    ]);
 }

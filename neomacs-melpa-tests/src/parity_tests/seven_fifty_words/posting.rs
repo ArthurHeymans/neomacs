@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_seven_fifty_words_parity;
+use super::assert_seven_fifty_words_batch;
 
 #[test]
-fn seven_fifty_words_file_starts_formatted_command_and_installs_live_process_sentinel() {
-    let elisp_form = r##"(let ((750words-client-command
+fn posting_public_surface_batch() {
+    assert_seven_fifty_words_batch(&[
+        (
+            "seven_fifty_words_file_starts_formatted_command_and_installs_live_process_sentinel",
+            r##"(let ((750words-client-command
                     "client --input=%s")
                    events)
                (cl-letf
@@ -57,17 +60,15 @@ fn seven_fifty_words_file_starts_formatted_command_and_installs_live_process_sen
                  (list
                   (750words-file
                    "draft with spaces.txt")
-                  (nreverse events))))"##;
-    let expect = expect![[
+                  (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (installed ((generate "*750words-client-command*") (async "client --input=draft with spaces.txt" output-buffer) (get-process output-buffer) (live client-process) (sentinel client-process t) (callback output-buffer client-process "done")))"#
-    ]];
-
-    assert_seven_fifty_words_parity(elisp_form, expect);
-}
-
-#[test]
-fn seven_fifty_words_file_reports_non_live_process_without_installing_sentinel() {
-    let elisp_form = r##"(let ((750words-client-command
+    ]],
+        ),
+        (
+            "seven_fifty_words_file_reports_non_live_process_without_installing_sentinel",
+            r##"(let ((750words-client-command
                     "post %s")
                    events)
                (cl-letf
@@ -100,17 +101,15 @@ fn seven_fifty_words_file_reports_non_live_process_without_installing_sentinel()
                          text))))
                  (list
                   (750words-file "draft.txt")
-                  (nreverse events))))"##;
-    let expect = expect![[
+                  (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK ("Running 'post draft.txt' failed." ("Running 'post draft.txt' failed."))"#
-    ]];
-
-    assert_seven_fifty_words_parity(elisp_form, expect);
-}
-
-#[test]
-fn seven_fifty_words_post_process_handles_exit_and_signal_in_exact_order() {
-    let elisp_form = r##"(let ((statuses '(exit signal))
+    ]],
+        ),
+        (
+            "seven_fifty_words_post_process_handles_exit_and_signal_in_exact_order",
+            r##"(let ((statuses '(exit signal))
                    events)
                (cl-letf
                    (((symbol-function
@@ -150,17 +149,15 @@ fn seven_fifty_words_post_process_handles_exit_and_signal_in_exact_order() {
                    'second-output
                    'second-process
                    "killed\n")
-                  (nreverse events))))"##;
-    let expect = expect![[
+                  (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (handled handled ((status first-process) (switch first-output) special (shell first-process "finished\n") (status second-process) (switch second-output) special (shell second-process "killed\n")))"#
-    ]];
-
-    assert_seven_fifty_words_parity(elisp_form, expect);
-}
-
-#[test]
-fn seven_fifty_words_post_process_ignores_running_and_stopped_processes() {
-    let elisp_form = r##"(let ((statuses '(run stop))
+    ]],
+        ),
+        (
+            "seven_fifty_words_post_process_ignores_running_and_stopped_processes",
+            r##"(let ((statuses '(run stop))
                    events)
                (cl-letf
                    (((symbol-function
@@ -187,15 +184,13 @@ fn seven_fifty_words_post_process_ignores_running_and_stopped_processes() {
                    'output 'process "running")
                   (750words--post-process-fn
                    'output 'process "stopped")
-                  events)))"##;
-    let expect = expect!["OK (nil nil nil)"];
-
-    assert_seven_fifty_words_parity(elisp_form, expect);
-}
-
-#[test]
-fn seven_fifty_words_region_writes_exact_bounds_then_posts_the_sandbox_file() {
-    let elisp_form = r##"(let ((file
+                  events)))"##,
+            true,
+            expect!["OK (nil nil nil)"],
+        ),
+        (
+            "seven_fifty_words_region_writes_exact_bounds_then_posts_the_sandbox_file",
+            r##"(let ((file
                     (expand-file-name
                      "region.txt"
                      (getenv "TMPDIR")))
@@ -231,16 +226,13 @@ fn seven_fifty_words_region_writes_exact_bounds_then_posts_the_sandbox_file() {
                         observed
                         (file-exists-p file))))
                  (when (file-exists-p file)
-                   (delete-file file))))"##;
-    let expect =
-        expect![[r#"OK ((posted "ONE") (prefix "750words" post "[ORACLE-TMPDIR]/region.txt") t)"#]];
-
-    assert_seven_fifty_words_parity(elisp_form, expect);
-}
-
-#[test]
-fn seven_fifty_words_buffer_forwards_current_minimum_and_maximum() {
-    let elisp_form = r##"(with-temp-buffer
+                   (delete-file file))))"##,
+            true,
+            expect![[r#"OK ((posted "ONE") (prefix "750words" post "[ORACLE-TMPDIR]/region.txt") t)"#]],
+        ),
+        (
+            "seven_fifty_words_buffer_forwards_current_minimum_and_maximum",
+            r##"(with-temp-buffer
                (insert "payload")
                (narrow-to-region 2 7)
                (let (observed)
@@ -255,15 +247,13 @@ fn seven_fifty_words_buffer_forwards_current_minimum_and_maximum() {
                     (750words-buffer)
                     observed
                     (point-min)
-                    (point-max)))))"##;
-    let expect = expect!["OK (posted (2 7) 2 7)"];
-
-    assert_seven_fifty_words_parity(elisp_form, expect);
-}
-
-#[test]
-fn seven_fifty_words_region_or_buffer_dispatches_active_region_bounds_verbatim() {
-    let elisp_form = r##"(let (events)
+                    (point-max)))))"##,
+            true,
+            expect!["OK (posted (2 7) 2 7)"],
+        ),
+        (
+            "seven_fifty_words_region_or_buffer_dispatches_active_region_bounds_verbatim",
+            r##"(let (events)
                (cl-letf
                    (((symbol-function
                       'region-active-p)
@@ -287,15 +277,13 @@ fn seven_fifty_words_region_or_buffer_dispatches_active_region_bounds_verbatim()
                        'buffer-posted)))
                  (list
                   (750words-region-or-buffer)
-                  (nreverse events))))"##;
-    let expect = expect!["OK (region-posted ((region 9 3)))"];
-
-    assert_seven_fifty_words_parity(elisp_form, expect);
-}
-
-#[test]
-fn seven_fifty_words_region_or_buffer_uses_whole_buffer_without_active_region() {
-    let elisp_form = r##"(let (events)
+                  (nreverse events))))"##,
+            true,
+            expect!["OK (region-posted ((region 9 3)))"],
+        ),
+        (
+            "seven_fifty_words_region_or_buffer_uses_whole_buffer_without_active_region",
+            r##"(let (events)
                (cl-letf
                    (((symbol-function
                       'region-active-p)
@@ -311,8 +299,9 @@ fn seven_fifty_words_region_or_buffer_uses_whole_buffer_without_active_region() 
                        'buffer-posted)))
                  (list
                   (750words-region-or-buffer)
-                  (nreverse events))))"##;
-    let expect = expect!["OK (buffer-posted (buffer))"];
-
-    assert_seven_fifty_words_parity(elisp_form, expect);
+                  (nreverse events))))"##,
+            true,
+            expect!["OK (buffer-posted (buffer))"],
+        ),
+    ]);
 }

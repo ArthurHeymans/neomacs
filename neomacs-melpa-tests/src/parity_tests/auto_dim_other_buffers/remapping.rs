@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_dim_other_buffers_parity;
+use super::assert_auto_dim_other_buffers_batch;
 
 #[test]
-fn auto_dim_other_buffers_never_dim_hook_short_circuits_in_order_and_returns_hook_value() {
-    let elisp_form = r##"(let ((buffer
+fn remapping_public_surface_batch() {
+    assert_auto_dim_other_buffers_batch(&[
+        (
+            "auto_dim_other_buffers_never_dim_hook_short_circuits_in_order_and_returns_hook_value",
+            r##"(let ((buffer
                                 (generate-new-buffer
                                  " *adob-hook-target*"))
                                events)
@@ -42,17 +45,15 @@ fn auto_dim_other_buffers_never_dim_hook_short_circuits_in_order_and_returns_hoo
                    (adob--never-dim-p buffer)
                    (nreverse events))))
             (when (buffer-live-p buffer)
-              (kill-buffer buffer))))"##;
-    let expect = expect![[
+              (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK (:keep-lit ((:first " *adob-hook-target*") (:second " *adob-hook-target*")))"#
-    ]];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_fringe_detection_covers_legacy_pair_and_full_pair_shapes() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_dim_other_buffers_fringe_detection_covers_legacy_pair_and_full_pair_shapes",
+            r##"(mapcar
           (lambda (faces)
             (let ((auto-dim-other-buffers-affected-faces
                    faces)
@@ -68,18 +69,15 @@ fn auto_dim_other_buffers_fringe_detection_covers_legacy_pair_and_full_pair_shap
             ((fringe . nil))
             ((fringe . (nil . nil)))
             ((fringe . (auto-dim-other-buffers . nil)))
-            ((fringe . (nil . mode-line-active)))))"##;
-    let expect = expect![
+            ((fringe . (nil . mode-line-active)))))"##,
+            true,
+            expect![
         "OK ((nil nil nil) (((default . auto-dim-other-buffers)) nil nil) (((fringe . auto-dim-other-buffers)) t t) (((fringe)) nil nil) (((fringe nil)) nil nil) (((fringe auto-dim-other-buffers)) t t) (((fringe nil . mode-line-active)) t t))"
-    ];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_positive_frame_parameter_predicate_rejects_missing_non_numeric_and_zero()
-{
-    let elisp_form = r##"(mapcar
+    ],
+        ),
+        (
+            "auto_dim_other_buffers_positive_frame_parameter_predicate_rejects_missing_non_numeric_and_zero",
+            r##"(mapcar
           (lambda (params)
             (list
              params
@@ -96,17 +94,15 @@ fn auto_dim_other_buffers_positive_frame_parameter_predicate_rejects_missing_non
             ((left-fringe . 2.5)
              (right-fringe . 3))
             ((left-fringe . "4")
-             (right-fringe . nil))))"##;
-    let expect = expect![[
+             (right-fringe . nil))))"##,
+            true,
+            expect![[
         r#"OK ((nil nil nil) (((left-fringe . 0)) nil nil) (((left-fringe . -1)) nil nil) (((left-fringe . 1)) t nil) (((left-fringe . 2.5) (right-fringe . 3)) t t) (((left-fringe . "4") (right-fringe)) nil nil))"#
-    ]];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_remap_entry_compiler_forwards_exact_filtered_window_specs() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "auto_dim_other_buffers_remap_entry_compiler_forwards_exact_filtered_window_specs",
+            r##"(let (calls)
           (cl-letf
               (((symbol-function
                  'face-remap-add-relative)
@@ -131,17 +127,15 @@ fn auto_dim_other_buffers_remap_entry_compiler_forwards_exact_filtered_window_sp
                     . auto-dim-other-buffers-hide))
                (mode-line
                  . (nil . nil))))
-            (nreverse calls)))"##;
-    let expect = expect![
+            (nreverse calls)))"##,
+            true,
+            expect![
         "OK ((default (:filtered (:window adob--dim nil) mode-line-active) (:filtered (:window adob--dim t) auto-dim-other-buffers)) (fringe (:filtered (:window adob--dim t) auto-dim-other-buffers)) (org-hide (:filtered (:window adob--dim nil) auto-dim-other-buffers-hide)))"
-    ];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_real_face_remaps_add_remove_and_local_cookie_lifecycle_match() {
-    let elisp_form = r##"(with-temp-buffer
+    ],
+        ),
+        (
+            "auto_dim_other_buffers_real_face_remaps_add_remove_and_local_cookie_lifecycle_match",
+            r##"(with-temp-buffer
           (let ((auto-dim-other-buffers-affected-faces
                  '((default
                      . (auto-dim-other-buffers
@@ -162,17 +156,15 @@ fn auto_dim_other_buffers_real_face_remaps_add_remove_and_local_cookie_lifecycle
                 (list
                  active
                  (adob-test-remap-summary
-                  (current-buffer)))))))"##;
-    let expect = expect![
+                  (current-buffer)))))))"##,
+            true,
+            expect![
         "OK ((2 (t 2 (default mode-line) ((mode-line ((:filtered (:window adob--dim nil) auto-dim-other-buffers))) (default nil)))) (nil 0 nil nil))"
-    ];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_remap_faces_transitions_between_dimmed_never_dim_and_dimmed_again() {
-    let elisp_form = r##"(let ((buffer
+    ],
+        ),
+        (
+            "auto_dim_other_buffers_remap_faces_transitions_between_dimmed_never_dim_and_dimmed_again",
+            r##"(let ((buffer
                                 (generate-new-buffer
                                  " *adob-transition*"))
                                (auto-dim-other-buffers-affected-faces
@@ -228,17 +220,15 @@ fn auto_dim_other_buffers_remap_faces_transitions_between_dimmed_never_dim_and_d
                         buffer)
                        (nreverse updates))))))
             (when (buffer-live-p buffer)
-              (kill-buffer buffer))))"##;
-    let expect = expect![[
+              (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK (t (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) nil (nil 0 nil nil) t (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) (" *adob-transition*" " *adob-transition*" " *adob-transition*"))"#
-    ]];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_remap_cycle_rebuilds_every_owned_buffer_and_skips_newly_exempt_buffer() {
-    let elisp_form = r##"(let ((first
+    ]],
+        ),
+        (
+            "auto_dim_other_buffers_remap_cycle_rebuilds_every_owned_buffer_and_skips_newly_exempt_buffer",
+            r##"(let ((first
                                 (generate-new-buffer
                                  " *adob-cycle-first*"))
                                (second
@@ -281,17 +271,15 @@ fn auto_dim_other_buffers_remap_cycle_rebuilds_every_owned_buffer_and_skips_newl
             (when (buffer-live-p first)
               (kill-buffer first))
             (when (buffer-live-p second)
-              (kill-buffer second))))"##;
-    let expect = expect![
+              (kill-buffer second))))"##,
+            true,
+            expect![
         "OK (((t 1 (default) ((default nil))) (nil 0 nil nil)) (nil 0 nil nil) (nil 0 nil nil))"
-    ];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_force_window_update_calls_basic_refresh_then_optional_fringe_refresh() {
-    let elisp_form = r##"(let (events)
+    ],
+        ),
+        (
+            "auto_dim_other_buffers_force_window_update_calls_basic_refresh_then_optional_fringe_refresh",
+            r##"(let (events)
           (cl-letf
               (((symbol-function
                  'force-window-update)
@@ -320,18 +308,15 @@ fn auto_dim_other_buffers_force_window_update_calls_basic_refresh_then_optional_
                :window-object)
               (adob--force-window-update
                (current-buffer)))
-            (nreverse events)))"##;
-    let expect = expect![[
+            (nreverse events)))"##,
+            true,
+            expect![[
         r#"OK ((:force :plain-object) (:force :window-object) (:lookup (:window-object nil t)) (:fringes #2=(:window-a :window-b)) (:force (:buffer #1="*scratch*")) (:lookup ((:buffer #1#) nil t)) (:fringes #2#))"#
-    ]];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_fringe_refresh_deduplicates_frames_and_toggles_only_positive_fringe_frames()
- {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "auto_dim_other_buffers_fringe_refresh_deduplicates_frames_and_toggles_only_positive_fringe_frames",
+            r##"(let (events)
           (cl-letf
               (((symbol-function 'window-frame)
                 (lambda (window)
@@ -381,18 +366,15 @@ fn auto_dim_other_buffers_fringe_refresh_deduplicates_frames_and_toggles_only_po
                 :window-b
                 :window-c
                 :window-d))
-             (nreverse events))))"##;
-    let expect = expect![
+             (nreverse events))))"##,
+            true,
+            expect![
         "OK (nil ((:read adob--hack :inverse-video :frame-a nil) (:write adob--hack :inverse-video t :frame-a) (:read adob--hack :inverse-video :frame-c nil) (:write adob--hack :inverse-video nil :frame-c)))"
-    ];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dim_other_buffers_kill_all_local_variables_advice_restores_real_remaps_and_kills_other_locals()
- {
-    let elisp_form = r##"(with-temp-buffer
+    ],
+        ),
+        (
+            "auto_dim_other_buffers_kill_all_local_variables_advice_restores_real_remaps_and_kills_other_locals",
+            r##"(with-temp-buffer
           (let ((auto-dim-other-buffers-affected-faces
                  '((default
                     . auto-dim-other-buffers))))
@@ -412,10 +394,11 @@ fn auto_dim_other_buffers_kill_all_local_variables_advice_restores_real_remaps_a
                (local-variable-p
                 'adob-test-unrelated-local)
                (adob-test-remap-summary
-                (current-buffer))))))"##;
-    let expect = expect![
+                (current-buffer))))))"##,
+            true,
+            expect![
         "OK ((t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) nil nil (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"
-    ];
-
-    assert_auto_dim_other_buffers_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }

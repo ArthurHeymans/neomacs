@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_ac_html_csswatcher_parity;
+use super::assert_ac_html_csswatcher_batch;
 
 /// The scan itself: `M-x ac-html-csswatcher-refresh' in an HTML buffer runs
 /// csswatcher over that file and keeps the directory it names.
@@ -18,9 +18,13 @@ use super::assert_ac_html_csswatcher_parity;
 /// directory is what the package announces in the echo area.  The
 /// `*csswatcher-output*' buffer is asserted to be gone, since the sentinel kills
 /// it once it has read it.
+
 #[test]
-fn refreshing_runs_csswatcher_and_keeps_the_directory_it_names() {
-    let elisp_form = r##"(let* ((root (ac-html-csswatcher-test-site))
+fn workflows_public_surface_batch() {
+    assert_ac_html_csswatcher_batch(&[
+        (
+            "refreshing_runs_csswatcher_and_keeps_the_directory_it_names",
+            r##"(let* ((root (ac-html-csswatcher-test-site))
        (log (ac-html-csswatcher-test-install root ac-html-csswatcher-test-answering))
        (buffer (find-file-noselect (expand-file-name "index.html" root))))
   (ac-html-csswatcher-test-answers root (concat root ".cache/completion"))
@@ -66,29 +70,15 @@ fn refreshing_runs_csswatcher_and_keeps_the_directory_it_names() {
                         (ac-html-csswatcher-test-arguments log))
                 :source-dir-after
                 (ac-html-csswatcher-test-relative ac-html-csswatcher-source-dir
-                                                  root)))))))"##;
-    let expect = expect![[
+                                                  root)))))))"##,
+            true,
+            expect![[
         r#"OK ((:arguments ("SITE/index.html") :source-dir "SITE/.cache/completion" :buffer-local t :message "[csswatcher] parsed SITE/\n" :output-buffers nil) :with-command-args ("--debug" "--outputdir" "SITE/cache" "SITE/index.html") :with-another-command ("SITE/index.html") :source-dir-after "SITE/.cache/completion")"#
-    ]];
-
-    assert_ac_html_csswatcher_parity(elisp_form, expect);
-}
-
-/// Turning it on for a buffer.  `ac-html-csswatcher+' - and
-/// `company-web-csswatcher+', which is the same function under the name
-/// company-web users are told to call - puts a `"Project"' entry at the front of
-/// `web-completion-data-sources', pointing at the variable the scan fills in.
-///
-/// The two things worth checking are that it is local and that it is once.  The
-/// function calls `make-local-variable' itself, so the global value keeps the
-/// stock `"html"' source alone, which the workflow compares before and after.
-/// And it guards with `assoc', so a user who has it on several mode hooks - as
-/// `ac-html-csswatcher-setup' arranges - gets one entry however many times it
-/// runs.  Enabling also kicks off a scan, so the source directory is filled in
-/// by the time the command returns.
-#[test]
-fn enabling_it_adds_one_project_source_to_this_buffer_only() {
-    let elisp_form = r##"(let* ((root (ac-html-csswatcher-test-site))
+    ]],
+        ),
+        (
+            "enabling_it_adds_one_project_source_to_this_buffer_only",
+            r##"(let* ((root (ac-html-csswatcher-test-site))
        (log (ac-html-csswatcher-test-install root ac-html-csswatcher-test-answering))
        (global-before (copy-sequence (default-value 'web-completion-data-sources)))
        (buffer (find-file-noselect (expand-file-name "index.html" root))))
@@ -115,35 +105,15 @@ fn enabling_it_adds_one_project_source_to_this_buffer_only() {
               :global-before global-before
               :global-after (copy-tree (default-value 'web-completion-data-sources))
               :global-untouched (equal global-before
-                                       (default-value 'web-completion-data-sources)))))))"##;
-    let expect = expect![[
+                                       (default-value 'web-completion-data-sources)))))))"##,
+            true,
+            expect![[
         r#"OK (:local-before nil :after-enabling (:sources (("Project" . ac-html-csswatcher-source-dir) ("html" . web-completion-data-html-source-dir)) :local t :source-dir "SITE/.cache/completion") :after-the-company-alias (("Project" . ac-html-csswatcher-source-dir) ("html" . web-completion-data-html-source-dir)) :aliases (t t t) :global-before (("html" . web-completion-data-html-source-dir)) :global-after (("html" . web-completion-data-html-source-dir)) :global-untouched t)"#
-    ]];
-
-    assert_ac_html_csswatcher_parity(elisp_form, expect);
-}
-
-/// The three ways a scan produces nothing, which between them decide how much a
-/// user can trust the completions they are being offered.
-///
-/// A non-zero exit is ignored: the sentinel only reads the output when the event
-/// is exactly `"finished\n"' and the status is 0, so a csswatcher that fails
-/// leaves the previous directory in place and the user keeps completing against
-/// the last good scan.
-///
-/// Output the package cannot parse is *not* ignored, and this is the asymmetry
-/// worth knowing about.  A run that exits 0 but prints no `PROJECT:' line sets
-/// the variable to nil, so a successful earlier scan is thrown away and the
-/// completions go silently empty - the opposite of what the failed-run case
-/// does, from a run that failed less obviously.  A run with a `PROJECT:' line
-/// but no `ACSOURCE:' line does the same thing.
-///
-/// A buffer not visiting a file starts nothing at all - the whole body is
-/// wrapped in `(when (buffer-file-name) ...)' - which is why the scratch buffer
-/// never spawns a process.
-#[test]
-fn a_failed_or_unparsable_scan_can_silently_empty_the_completions() {
-    let elisp_form = r##"(let* ((root (ac-html-csswatcher-test-site))
+    ]],
+        ),
+        (
+            "a_failed_or_unparsable_scan_can_silently_empty_the_completions",
+            r##"(let* ((root (ac-html-csswatcher-test-site))
        (log (ac-html-csswatcher-test-install root ac-html-csswatcher-test-answering))
        (buffer (find-file-noselect (expand-file-name "index.html" root))))
   (ac-html-csswatcher-test-answers root (concat root ".cache/completion"))
@@ -178,27 +148,15 @@ fn a_failed_or_unparsable_scan_can_silently_empty_the_completions() {
                                     (lambda (process)
                                       (string-prefix-p "csswatcher-"
                                                        (process-name process)))
-                                    (process-list))))))))))"##;
-    let expect = expect![[
+                                    (process-list))))))))))"##,
+            true,
+            expect![[
         r#"OK (:after-a-good-scan "SITE/.cache/completion" :after-a-failed-scan "SITE/.cache/completion" :kept-the-good-one t :after-unparsable-output nil :after-project-without-acsource nil :not-visiting-a-file (:returned nil :processes 0))"#
-    ]];
-
-    assert_ac_html_csswatcher_parity(elisp_form, expect);
-}
-
-/// `ac-html-csswatcher-setup' is the one line the commentary tells a user to put
-/// in their init file, and it wires the package up in two different ways.
-///
-/// Markup modes get `ac-html-csswatcher+' on their hook, so opening an HTML file
-/// enables the source and scans.  CSS modes get something else: a lambda that
-/// installs `ac-html-csswatcher-setup-html-stuff-async' on a *buffer-local*
-/// `after-save-hook', so editing a stylesheet rescans without touching the
-/// global hook.  The workflow asserts both shapes, and then does the thing they
-/// are for - opens the stylesheet, edits it, saves it, and finds that csswatcher
-/// ran with the stylesheet's own name.
-#[test]
-fn setup_wires_markup_modes_to_scan_and_css_modes_to_rescan_on_save() {
-    let elisp_form = r##"(let* ((root (ac-html-csswatcher-test-site))
+    ]],
+        ),
+        (
+            "setup_wires_markup_modes_to_scan_and_css_modes_to_rescan_on_save",
+            r##"(let* ((root (ac-html-csswatcher-test-site))
        (log (ac-html-csswatcher-test-install root ac-html-csswatcher-test-answering))
        (hooks '(html-mode-hook web-mode-hook slim-mode-hook jade-mode-hook
                 haml-mode-hook css-mode-hook less-mode-hook))
@@ -231,10 +189,11 @@ fn setup_wires_markup_modes_to_scan_and_css_modes_to_rescan_on_save() {
               :scanned-on-save
               (mapcar (lambda (argument)
                         (ac-html-csswatcher-test-relative argument root))
-                      (ac-html-csswatcher-test-arguments log)))))))"##;
-    let expect = expect![[
+                      (ac-html-csswatcher-test-arguments log)))))))"##,
+            true,
+            expect![[
         r#"OK (:before ((html-mode-hook nil) (web-mode-hook nil) (slim-mode-hook nil) (jade-mode-hook nil) (haml-mode-hook nil) (css-mode-hook nil) (less-mode-hook nil)) :after ((html-mode-hook t 1) (web-mode-hook t 1) (slim-mode-hook t 1) (jade-mode-hook t 1) (haml-mode-hook t 1) (css-mode-hook nil 1) (less-mode-hook nil 1)) :css-buffer-has-a-local-after-save-hook t :global-after-save-hook-untouched t :scanned-on-save ("SITE/css/app.css"))"#
-    ]];
-
-    assert_ac_html_csswatcher_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

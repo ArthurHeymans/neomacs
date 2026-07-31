@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_magit_parity;
+use super::assert_magit_batch;
 
 #[test]
-fn magit_blame_addition_populates_commit_details_for_a_visited_file() {
-    let elisp_form = r##"(let* ((root (make-temp-file "magit-blame-" t))
+fn blame_public_surface_batch() {
+    assert_magit_batch(&[
+        (
+            "magit_blame_addition_populates_commit_details_for_a_visited_file",
+            r##"(let* ((root (make-temp-file "magit-blame-" t))
                     (default-directory (file-name-as-directory root))
                     (file (expand-file-name "tracked.txt" root))
                     (processes-before (process-list))
@@ -63,8 +66,9 @@ fn magit_blame_addition_populates_commit_details_for_a_visited_file() {
                  (dolist (process (process-list))
                    (unless (memq process processes-before)
                      (delete-process process)))
-                 (delete-directory root t)))"##;
-    let expect = expect![[r#"OK (t t t "first\nsecond\n" t)"#]];
-
-    assert_magit_parity(elisp_form, expect);
+                 (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK (t t t "first\nsecond\n" t)"#]],
+        ),
+    ]);
 }

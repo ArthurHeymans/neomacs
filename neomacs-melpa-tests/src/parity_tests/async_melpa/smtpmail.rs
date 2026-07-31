@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_async_melpa_smtpmail_parity;
+use super::assert_async_melpa_smtpmail_batch;
 
 #[test]
-fn current_smtpmail_registry_custom_group_and_hook_metadata_match_gnu_emacs() {
-    let elisp_form = r##"
+fn smtpmail_public_surface_batch() {
+    assert_async_melpa_smtpmail_batch(&[
+        (
+            "current_smtpmail_registry_custom_group_and_hook_metadata_match_gnu_emacs",
+            r##"
 (list
  (get 'smtpmail-async 'group-documentation)
  (get 'smtpmail-async 'custom-group)
@@ -13,16 +16,15 @@ fn current_smtpmail_registry_custom_group_and_hook_metadata_match_gnu_emacs() {
   'async-smtpmail-before-send-hook
   'variable-documentation)
  (help-function-arglist 'async-smtpmail-send-it t))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("Send e-mail with smtpmail.el asynchronously" nil nil "Hook running in the child emacs in ‘async-smtpmail-send-it’.\nIt is called just before calling ‘smtpmail-send-it’." nil)"#
-    ]];
-    assert_async_melpa_smtpmail_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_smtpmail_send_captures_complete_message_environment_and_completion() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_smtpmail_send_captures_complete_message_environment_and_completion",
+            r##"
 (with-temp-buffer
   (insert
    "From: sender@example.test\n"
@@ -52,16 +54,15 @@ fn current_smtpmail_send_captures_complete_message_environment_and_completion() 
            (string-match-p "async-smtpmail-before-send-hook" printed)
            (string-match-p "smtpmail-send-it" printed)
            (nreverse messages)))))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (fixture-mail-process lambda 65 90 145 213 3501 9021 ("Delivering message to Alice <alice@example.test>, bob@example.test..." "Delivering message to Alice <alice@example.test>, bob@example.test...done"))"#
-    ]];
-    assert_async_melpa_smtpmail_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_smtpmail_child_recreates_unibyte_buffer_runs_hook_then_sends() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_smtpmail_child_recreates_unibyte_buffer_runs_hook_then_sends",
+            r##"
 (with-temp-buffer
   (insert
    "From: sender@example.test\n"
@@ -101,9 +102,11 @@ fn current_smtpmail_child_recreates_unibyte_buffer_runs_hook_then_sends() {
            (nreverse events)
            (functionp callback)
            (buffer-name)))))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:sent ((hook "From: sender@example.test\nTo: recipient@example.test\nSubject: fixture\n\nASCII wire payload\15\n" nil nil) (send "From: sender@example.test\nTo: recipient@example.test\nSubject: fixture\n\nASCII wire payload\15\n" nil nil)) t " *temp*")"#
-    ]];
-    assert_async_melpa_smtpmail_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

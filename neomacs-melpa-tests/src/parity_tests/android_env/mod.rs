@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ANDROID_ENV_MELPA_PIN, CachedMelpaOracle, S_MELPA_PIN};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const ANDROID_ENV_TEST_TIMEOUT: Duration = Duration::from_secs(180);
@@ -184,4 +186,15 @@ pub(crate) fn assert_android_env_parity(elisp_form: &str, expected: Expect) {
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("android-env parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+/// Multi-probe batch for `assert_android_env_parity` cases (2a).
+pub(crate) fn assert_android_env_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        android_env_oracle(),
+        &name,
+        "android_env_parity",
+        cases,
+    );
 }

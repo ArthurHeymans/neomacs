@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_aurel_parity;
+use super::assert_aurel_batch;
 
 #[test]
-fn aurel_download_clones_missing_repository_and_returns_destination() {
-    let elisp_form = r##"(let (events)
+fn workflows_public_surface_batch() {
+    assert_aurel_batch(&[
+        (
+            "aurel_download_clones_missing_repository_and_returns_destination",
+            r##"(let (events)
          (cl-letf
              (((symbol-function
                 'file-exists-p)
@@ -39,16 +42,15 @@ fn aurel_download_clones_missing_repository_and_returns_destination() {
             (aurel-download
              "https://aur.example/demo.git"
              "/fixture/downloads/")
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK ("/fixture/downloads/demo" ((:message "Cloning https://aur.example/demo.git") (:exists "/fixture/downloads/demo") (:call "/fixture/downloads/" "git" nil (:buffer "*aurel debug*") nil "clone" "https://aur.example/demo.git")))"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_download_existing_repository_skips_clone_and_reports_destination() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "aurel_download_existing_repository_skips_clone_and_reports_destination",
+            r##"(let (events)
          (cl-letf
              (((symbol-function
                 'file-exists-p)
@@ -79,16 +81,15 @@ fn aurel_download_existing_repository_skips_clone_and_reports_destination() {
             (aurel-download
              "ssh://aur.example/existing.git"
              "/fixture/downloads")
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK ("/fixture/downloads/existing" ((:message "Cloning ssh://aur.example/existing.git") (:exists "/fixture/downloads/existing") (:message "Package directory already exists: /fixture/downloads/existing")))"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_download_adapters_open_dired_pkgbuild_and_eshell_destinations() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "aurel_download_adapters_open_dired_pkgbuild_and_eshell_destinations",
+            r##"(let (events)
          (cl-letf
              (((symbol-function
                 'aurel-download)
@@ -139,16 +140,15 @@ fn aurel_download_adapters_open_dired_pkgbuild_and_eshell_destinations() {
             (aurel-download-eshell
              "fixture:demo"
              "/three")
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:dired :file :cd ((:download "fixture:demo" "/one") (:dired "/one/demo") (:download "fixture:demo" "/two/") (:exists "/two/demo/PKGBUILD") (:find-file "/two/demo/PKGBUILD") (:download "fixture:demo" "/three") :eshell (:cd "/three/demo")))"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_pkgbuild_adapter_reports_exact_missing_file_after_download() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "aurel_pkgbuild_adapter_reports_exact_missing_file_after_download",
+            r##"(let (events)
          (cl-letf
              (((symbol-function
                 'aurel-download)
@@ -175,16 +175,15 @@ fn aurel_pkgbuild_adapter_reports_exact_missing_file_after_download() {
                (aurel-download-pkgbuild
                 "fixture:demo"
                 "/fixture")))
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK ((:error error ("File ‘/fixture/demo/PKGBUILD’ does not exist")) ((:download "fixture:demo" "/fixture") (:exists "/fixture/demo/PKGBUILD")))"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_download_directory_reader_prompts_only_with_prefix() {
-    let elisp_form = r##"(let ((aurel-download-directory
+    ]],
+        ),
+        (
+            "aurel_download_directory_reader_prompts_only_with_prefix",
+            r##"(let ((aurel-download-directory
                 "/configured/")
                (aurel-directory-prompt
                 "Destination: ")
@@ -202,14 +201,13 @@ fn aurel_download_directory_reader_prompts_only_with_prefix() {
             (let ((current-prefix-arg
                    '(4)))
               (aurel-read-download-directory))
-            (nreverse calls))))"##;
-    let expect = expect![[r#"OK ("/configured/" "/chosen/" (("Destination: " "/configured/")))"#]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_list_download_handles_single_cancelled_and_confirmed_multi_selection() {
-    let elisp_form = r##"(let ((entries
+            (nreverse calls))))"##,
+            true,
+            expect![[r#"OK ("/configured/" "/chosen/" (("Destination: " "/configured/")))"#]],
+        ),
+        (
+            "aurel_list_download_handles_single_cancelled_and_confirmed_multi_selection",
+            r##"(let ((entries
                 '((1
                    (git-url
                     . "fixture:one"))
@@ -294,16 +292,15 @@ fn aurel_list_download_handles_single_cancelled_and_confirmed_multi_selection() 
               (let ((aurel-list-multi-download-no-confirm
                      t))
                 (aurel-list-download-package))
-              (nreverse events)))))"##;
-    let expect = expect![[
+              (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK (:single nil ((:multi "fixture:two") (:multi "fixture:three")) ((:single "fixture:one" "/fixture/out/") (:confirm "Download 2 marked packages? ") (:multi "fixture:two" "/fixture/out/") (:multi "fixture:three" "/fixture/out/")))"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_user_action_honors_confirmation_then_posts_cookie_token() {
-    let elisp_form = r##"(let ((answers
+    ]],
+        ),
+        (
+            "aurel_user_action_honors_confirmation_then_posts_cookie_token",
+            r##"(let ((answers
                 '(nil t))
                events)
          (cl-letf
@@ -344,16 +341,15 @@ fn aurel_user_action_honors_confirmation_then_posts_cookie_token() {
             (aurel-aur-user-action
              'subscribe
              "demo-base")
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (nil t ((:confirm "Vote for `demo-base' package?") (:confirm "Enable notifications for `demo-base' package?") (:login) (:post "https://aur.archlinux.org/pkgbase/demo-base/notify" (("token" . "TOKEN-42") ("do_Notify" . "")) nil)))"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_login_maybe_prefers_cookie_then_auth_secret_then_forced_prompts() {
-    let elisp_form = r##"(let ((cookie-cases
+    ]],
+        ),
+        (
+            "aurel_login_maybe_prefers_cookie_then_auth_secret_then_forced_prompts",
+            r##"(let ((cookie-cases
                 '(:cookie nil nil))
                events)
          (cl-letf
@@ -404,16 +400,15 @@ fn aurel_login_maybe_prefers_cookie_then_auth_secret_then_forced_prompts() {
             (aurel-aur-login-maybe
              :force
              :forced-noerror)
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (t :logged-in :logged-in ((:auth :host "aur.archlinux.org") (:login "auth-user" "auth-secret" t :noerror) (:auth :host "aur.archlinux.org") (:read-user "AUR user name: " "") (:read-password "Password: ") (:login "prompt-user" "prompt-secret" t :forced-noerror)))"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_user_package_info_fetches_html_and_adds_nested_account_state() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "aurel_user_package_info_fetches_html_and_adds_nested_account_state",
+            r##"(let (events)
          (cl-letf
              (((symbol-function
                 'aurel-aur-login-maybe)
@@ -444,16 +439,15 @@ fn aurel_user_package_info_fetches_html_and_adds_nested_account_state() {
                "fixture:demo")
               (aurel-add-aur-user-package-info
                info)
-              (nreverse events)))))"##;
-    let expect = expect![[
+              (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK (((voted . t) (subscribed)) ((user-info (voted . t) (subscribed)) (name . "demo") (id . 42)) ((:login nil t) (:retrieve "fixture:demo") (:login nil t) (:retrieve "https://aur.archlinux.org/packages/demo")))"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_info_user_action_reverts_only_after_success_without_norevert() {
-    let elisp_form = r##"(let ((results
+    ]],
+        ),
+        (
+            "aurel_info_user_action_reverts_only_after_success_without_norevert",
+            r##"(let ((results
                 '(nil t t))
                events)
          (cl-letf
@@ -485,16 +479,15 @@ fn aurel_info_user_action_reverts_only_after_success_without_norevert() {
              'unsubscribe
              "demo"
              :norevert)
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (nil :reverted nil ((:action vote "demo") (:action subscribe "demo") (:revert nil t) (:action unsubscribe "demo")))"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurel_debug_writes_only_enabled_levels_with_deterministic_timestamp() {
-    let elisp_form = r##"(let ((aurel-debug-buffer
+    ]],
+        ),
+        (
+            "aurel_debug_writes_only_enabled_levels_with_deterministic_timestamp",
+            r##"(let ((aurel-debug-buffer
                 "*aurel-test-debug*")
                (aurel-debug-level
                 3))
@@ -523,9 +516,11 @@ fn aurel_debug_writes_only_enabled_levels_with_deterministic_timestamp() {
              "hidden")
             (with-current-buffer
                 aurel-debug-buffer
-              (buffer-string)))))"##;
-    let expect = expect![[
+              (buffer-string)))))"##,
+            true,
+            expect![[
         r#"OK (nil nil nil "12:34:56.789 received 2 packages\n12:34:56.789 url=fixture\n")"#
-    ]];
-    assert_aurel_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

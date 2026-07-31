@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_distel_parity;
+use super::assert_auto_complete_distel_batch;
 
 #[test]
-fn auto_complete_distel_candidate_expression_forwards_prefix_and_current_buffer_exactly() {
-    let elisp_form = r##"(with-temp-buffer
+fn candidates_public_surface_batch() {
+    assert_auto_complete_distel_batch(&[
+        (
+            "auto_complete_distel_candidate_expression_forwards_prefix_and_current_buffer_exactly",
+            r##"(with-temp-buffer
           (rename-buffer
            " *distel-candidate-buffer*")
           (insert "lists:ma")
@@ -29,17 +32,15 @@ fn auto_complete_distel_candidate_expression_forwards_prefix_and_current_buffer_
                 (cdr
                  (assq 'candidates
                        auto-complete-distel)))
-               calls))))"##;
-    let expect = expect![[
+               calls))))"##,
+            true,
+            expect![[
         r#"OK (("lists:map" "lists:mapfoldl") ("lists:ma" t " *distel-candidate-buffer*" "lists:ma"))"#
-    ]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
-}
-
-#[test]
-fn distel_completion_bridge_routes_module_and_function_queries_and_prefixes_results() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "distel_completion_bridge_routes_module_and_function_queries_and_prefixes_results",
+            r##"(let (events)
           (cl-letf
               (((symbol-function
                  'distel-completion-complete-module)
@@ -84,17 +85,15 @@ fn distel_completion_bridge_routes_module_and_function_queries_and_prefixes_resu
              '("li"
                "lists:ma"
                ":ma"
-               "lists:map:extra"))))"##;
-    let expect = expect![[
+               "lists:map:extra"))))"##,
+            true,
+            expect![[
         r#"OK (("li" ("lists" "lib" "lists") ((:module "li") (:sleep 0.1))) ("lists:ma" ("lists:map" "lists:mapfoldl") ((:function "lists" "ma") (:sleep 0.1))) (":ma" (":map" ":mapfoldl") ((:function "" "ma") (:sleep 0.1))) ("lists:map:extra" ("lists:map" "lists:mapfoldl") ((:function "lists" "map:extra") (:sleep 0.1))))"#
-    ]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
-}
-
-#[test]
-fn distel_completion_bridge_preserves_candidate_order_duplicates_and_text_properties() {
-    let elisp_form = r##"(let* ((first
+    ]],
+        ),
+        (
+            "distel_completion_bridge_preserves_candidate_order_duplicates_and_text_properties",
+            r##"(let* ((first
                                  (propertize
                                   "map"
                                   'arity 2))
@@ -131,17 +130,15 @@ fn distel_completion_bridge_preserves_candidate_order_duplicates_and_text_proper
                    (eq candidate first)
                    (eq candidate second)))
                 result)
-               (list first second first)))))"##;
-    let expect = expect![[
+               (list first second first)))))"##,
+            true,
+            expect![[
         r#"OK ((#("lists:map" 6 9 (arity 2)) #("lists:mapfoldl" 6 14 (arity 3)) #("lists:map" 6 9 (arity 2))) ((2 nil nil) (3 nil nil) (2 nil nil)) (#("map" 0 3 (arity 2)) #("mapfoldl" 0 8 (arity 3)) #("map" 0 3 (arity 2))))"#
-    ]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
-}
-
-#[test]
-fn distel_completion_bridge_uses_the_latest_async_cache_after_each_wait() {
-    let elisp_form = r##"(let ((distel-completion-try-erl-complete-cache
+    ]],
+        ),
+        (
+            "distel_completion_bridge_uses_the_latest_async_cache_after_each_wait",
+            r##"(let ((distel-completion-try-erl-complete-cache
                                '("stale"))
                               pending)
           (cl-letf
@@ -163,15 +160,13 @@ fn distel_completion_bridge_uses_the_latest_async_cache_after_each_wait() {
               "li"
               (current-buffer))
              distel-completion-try-erl-complete-cache
-             pending)))"##;
-    let expect = expect![[r#"OK (("lists" "lib") #1=("lists" "lib") #1#)"#]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_distel_document_entry_delegates_the_selected_erlang_candidate() {
-    let elisp_form = r##"(let (calls)
+             pending)))"##,
+            true,
+            expect![[r#"OK (("lists" "lib") #1=("lists" "lib") #1#)"#]],
+        ),
+        (
+            "auto_complete_distel_document_entry_delegates_the_selected_erlang_candidate",
+            r##"(let (calls)
           (cl-letf
               (((symbol-function
                  'distel-completion-get-doc-string)
@@ -191,18 +186,15 @@ fn auto_complete_distel_document_entry_delegates_the_selected_erlang_candidate()
                (funcall
                 document
                 "maps:find")
-               (nreverse calls)))))"##;
-    let expect = expect![[
+               (nreverse calls)))))"##,
+            true,
+            expect![[
         r#"OK ("lists:map/2 maps a function over a list" "maps:find/2 maps a function over a list" ("lists:map" "maps:find"))"#
-    ]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_distel_real_source_resolution_produces_candidates_with_symbol_and_document_metadata()
- {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_distel_real_source_resolution_produces_candidates_with_symbol_and_document_metadata",
+            r##"(with-temp-buffer
           (insert "lists:ma")
           (let ((ac-sources
                  '(auto-complete-distel))
@@ -238,17 +230,15 @@ fn auto_complete_distel_real_source_resolution_produces_candidates_with_symbol_a
                      (popup-item-property
                       candidate
                       'document)))
-                  candidates))))))"##;
-    let expect = expect![[
+                  candidates))))))"##,
+            true,
+            expect![[
         r#"OK ((auto-complete-distel-get-start 1 (((prefix . auto-complete-distel-get-start) (candidates distel-completion-complete ac-prefix (current-buffer)) (document . distel-completion-get-doc-string) (requires . 0) (symbol . "m")))) "lists:ma" (("lists:map" "m" distel-completion-get-doc-string) ("lists:mapfoldl" "m" distel-completion-get-doc-string)))"#
-    ]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_distel_source_resolution_rejects_punctuation_and_accepts_configured_suffixes() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_distel_source_resolution_rejects_punctuation_and_accepts_configured_suffixes",
+            r##"(mapcar
           (lambda (fixture)
             (with-temp-buffer
               (insert
@@ -272,10 +262,11 @@ fn auto_complete_distel_source_resolution_rejects_punctuation_and_accepts_config
             ("lists:ma" . "a-zA-Z:_-")
             ("module2" . "a-zA-Z:_-")
             ("module2" . "a-zA-Z0-9:_-")
-            ("app.module:run" . "a-zA-Z:_.-")))"##;
-    let expect = expect![[
+            ("app.module:run" . "a-zA-Z:_.-")))"##,
+            true,
+            expect![[
         r#"OK ((("." . "a-zA-Z:_-") nil nil) (("lists:ma" . "a-zA-Z:_-") (auto-complete-distel-get-start 1 (#1=((prefix . auto-complete-distel-get-start) (candidates distel-completion-complete ac-prefix (current-buffer)) (document . distel-completion-get-doc-string) (requires . 0) (symbol . "m")))) "lists:ma") (("module2" . "a-zA-Z:_-") nil nil) (("module2" . "a-zA-Z0-9:_-") (auto-complete-distel-get-start 1 (#1#)) "module2") (("app.module:run" . "a-zA-Z:_.-") (auto-complete-distel-get-start 1 (#1#)) "app.module:run"))"#
-    ]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_org_md_parity;
+use super::assert_auto_org_md_batch;
 
 #[test]
-fn auto_org_md_practical_save_hook_exports_org_buffer_once() {
-    let elisp_form = r##"(let* ((root
+fn workflows_public_surface_batch() {
+    assert_auto_org_md_batch(&[
+        (
+            "auto_org_md_practical_save_hook_exports_org_buffer_once",
+            r##"(let* ((root
                                  (auto-org-md-test-root
                                   "save-hook"))
          (org-file (expand-file-name "notes.org" root))
@@ -41,16 +44,15 @@ fn auto_org_md_practical_save_hook_exports_org_buffer_once() {
                           after-save-hook)
                     (auto-org-md-test-read-file
                      org-file))))
-             (kill-buffer buffer))))"##;
-    let expect = expect![[
+             (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK ((("notes.org" #("* Initial\nBody\n" 0 10 (fontified nil) 10 15 (fontified nil)) nil)) nil (auto-org-md-export t) "* Initial\nBody\n")"#
-    ]];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_save_hook_in_non_org_buffer_is_a_noop() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "auto_org_md_save_hook_in_non_org_buffer_is_a_noop",
+            r##"(let* ((root
                                  (auto-org-md-test-root
                                   "text-save"))
          (text-file
@@ -78,14 +80,13 @@ fn auto_org_md_save_hook_in_non_org_buffer_is_a_noop() {
                     (buffer-modified-p)
                     (auto-org-md-test-read-file
                      text-file))))
-             (kill-buffer buffer))))"##;
-    let expect = expect![[r#"OK (nil nil "Initial\nBody\n")"#]];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_disabling_mode_stops_future_save_exports() {
-    let elisp_form = r##"(let* ((root
+             (kill-buffer buffer))))"##,
+            true,
+            expect![[r#"OK (nil nil "Initial\nBody\n")"#]],
+        ),
+        (
+            "auto_org_md_disabling_mode_stops_future_save_exports",
+            r##"(let* ((root
                                  (auto-org-md-test-root
                                   "disable-save"))
          (org-file (expand-file-name "notes.org" root))
@@ -118,16 +119,15 @@ fn auto_org_md_disabling_mode_stops_future_save_exports() {
                           after-save-hook)
                     (auto-org-md-test-read-file
                      org-file))))
-             (kill-buffer buffer))))"##;
-    let expect = expect![[
+             (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK ((#("* Initial\nFirst\n" 0 10 (fontified nil) 10 16 (fontified nil))) nil "* Initial\nFirst\nSecond\n")"#
-    ]];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_real_export_writes_simple_markdown_document() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "auto_org_md_real_export_writes_simple_markdown_document",
+            r##"(let* ((root
                                  (auto-org-md-test-root
                                   "real-simple"))
          (org-file (expand-file-name "guide.org" root))
@@ -157,16 +157,15 @@ fn auto_org_md_real_export_writes_simple_markdown_document() {
                   (auto-org-md-test-read-file
                    md-file)
                   (buffer-modified-p)))
-             (kill-buffer buffer))))"##;
-    let expect = expect![[
+             (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK ("guide.md" t "\n# Table of Contents\n\n1.  [Overview](#overview)\n    1.  [Tasks](#tasks)\n\n\n\n<a id=\"overview\"></a>\n\n# Overview\n\nPlain body with **bold** and *italic* text.\n\n\n<a id=\"tasks\"></a>\n\n## Tasks\n\n-   [X] Export the document\n-   [ ] Review the result\n\n" nil)"#
-    ]];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_real_export_handles_links_source_blocks_and_tables() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "auto_org_md_real_export_handles_links_source_blocks_and_tables",
+            r##"(let* ((root
                                  (auto-org-md-test-root
                                   "real-complex"))
          (org-file (expand-file-name "project.org" root))
@@ -194,16 +193,15 @@ fn auto_org_md_real_export_handles_links_source_blocks_and_tables() {
                   (file-exists-p md-file)
                   (auto-org-md-test-read-file
                    md-file)))
-             (kill-buffer buffer))))"##;
-    let expect = expect![[
+             (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK (t "\n\n# Release\n\nSee [the specification](https://example.invalid/spec).\n\n<table border=\"2\" cellspacing=\"0\" cellpadding=\"6\" rules=\"groups\" frame=\"hsides\">\n\n\n<colgroup>\n<col  class=\"org-left\" />\n\n<col  class=\"org-left\" />\n</colgroup>\n<thead>\n<tr>\n<th scope=\"col\" class=\"org-left\">Item</th>\n<th scope=\"col\" class=\"org-left\">State</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td class=\"org-left\">API</td>\n<td class=\"org-left\">ready</td>\n</tr>\n</tbody>\n</table>\n\n    (message \"ready\")\n\n")"#
-    ]];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_real_save_replaces_markdown_with_latest_org_content() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "auto_org_md_real_save_replaces_markdown_with_latest_org_content",
+            r##"(let* ((root
                                  (auto-org-md-test-root
                                   "real-update"))
          (org-file (expand-file-name "status.org" root))
@@ -251,16 +249,15 @@ fn auto_org_md_real_save_replaces_markdown_with_latest_org_content() {
                       (auto-org-md-test-read-file
                        md-file)
                       (buffer-modified-p)))))
-             (kill-buffer buffer))))"##;
-    let expect = expect![[
+             (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK ("\n# Table of Contents\n\n1.  [Status](#status)\n    1.  [Detail](#detail)\n\n\n<a id=\"status\"></a>\n\n# Status\n\nVersion one.\n\n\n<a id=\"detail\"></a>\n\n## Detail\n\nFirst export.\n\n" "\n# Table of Contents\n\n1.  [Status](#status)\n\n\n<a id=\"status\"></a>\n\n# Status\n\nVersion two.\n\n-   stable\n-   published\n\n" nil)"#
-    ]];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_two_local_hooks_export_independent_org_files() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "auto_org_md_two_local_hooks_export_independent_org_files",
+            r##"(let* ((root
                                  (auto-org-md-test-root
                                   "two-files"))
          (first-org
@@ -316,16 +313,15 @@ fn auto_org_md_two_local_hooks_export_independent_org_files() {
                     (memq 'auto-org-md-export
                           after-save-hook))))
              (kill-buffer first-buffer)
-             (kill-buffer second-buffer))))"##;
-    let expect = expect![[
+             (kill-buffer second-buffer))))"##,
+            true,
+            expect![[
         r#"OK ("\n# Table of Contents\n\n1.  [First](#first)\n\n\n<a id=\"first\"></a>\n\n# First\n\nAlpha.\nSaved.\n\n" "\n# Table of Contents\n\n1.  [Second](#second)\n\n\n<a id=\"second\"></a>\n\n# Second\n\nBeta.\nSaved.\n\n" (auto-org-md-export t) (auto-org-md-export t))"#
-    ]];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_export_follows_renamed_visited_file() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "auto_org_md_export_follows_renamed_visited_file",
+            r##"(let* ((root
                                  (auto-org-md-test-root
                                   "rename"))
          (draft-org
@@ -361,16 +357,15 @@ fn auto_org_md_export_follows_renamed_visited_file() {
                    draft-md)
                   (auto-org-md-test-read-file
                    final-md)))
-             (kill-buffer buffer))))"##;
-    let expect = expect![[
+             (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK (t t t "\n# Table of Contents\n\n1.  [Draft](#draft)\n\n\n<a id=\"draft\"></a>\n\n# Draft\n\nOriginal path.\n\n" "\n# Table of Contents\n\n1.  [Draft](#draft)\n\n\n<a id=\"draft\"></a>\n\n# Draft\n\nOriginal path.\nFinal path.\n\n")"#
-    ]];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_unsaved_org_buffer_surfaces_export_filename_contract() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_org_md_unsaved_org_buffer_surfaces_export_filename_contract",
+            r##"(with-temp-buffer
          (org-mode)
          (insert "* Unsaved\nNo visited file.\n")
          (list
@@ -378,16 +373,15 @@ fn auto_org_md_unsaved_org_buffer_surfaces_export_filename_contract() {
           (auto-org-md-test-error
            #'auto-org-md-export)
           (buffer-string)
-          (buffer-modified-p)))"##;
-    let expect = expect![[
+          (buffer-modified-p)))"##,
+            true,
+            expect![[
         r#"OK (nil (:signal end-of-file ("Error reading from stdin")) "* Unsaved\nNo visited file.\n" t)"#
-    ]];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_after_save_export_error_preserves_saved_org_content() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "auto_org_md_after_save_export_error_preserves_saved_org_content",
+            r##"(let* ((root
                                  (auto-org-md-test-root
                                   "save-error"))
          (org-file (expand-file-name "broken.org" root)))
@@ -415,9 +409,11 @@ fn auto_org_md_after_save_export_error_preserves_saved_org_content() {
                     (buffer-modified-p)
                     (auto-org-md-test-read-file
                      org-file))))
-             (kill-buffer buffer))))"##;
-    let expect = expect![[
+             (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK ((:signal error ("fixture export failed")) nil "* Before\nSaved before export failure.\n")"#
-    ]];
-    assert_auto_org_md_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

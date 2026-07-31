@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_arch_packer_parity;
+use super::assert_arch_packer_batch;
 
 #[test]
-fn lists_installed_packages_refreshes_the_database_and_opens_detailed_kernel_info() {
-    let elisp_form = r##"(let* ((fixture
+fn workflows_public_surface_batch() {
+    assert_arch_packer_batch(&[
+        (
+            "lists_installed_packages_refreshes_the_database_and_opens_detailed_kernel_info",
+            r##"(let* ((fixture
                          (neomacs-arch-packer-test-prepare
                           "arch-packer-list-workflow"))
                         (root (plist-get fixture :root))
@@ -94,16 +97,15 @@ fn lists_installed_packages_refreshes_the_database_and_opens_detailed_kernel_inf
                                     (neomacs-arch-packer-test-file-string
                                      trace))))))
                      (neomacs-arch-packer-test-cleanup root))
-                   result)"##;
-    let expect = expect![[
+                   result)"##,
+            true,
+            expect![[
         r##"OK (:mode arch-packer-package-menu-mode :rows ("local-helper" "linux" "ripgrep" "old-theme" "neovim") :menu "  local-helper       2.4-1                N/A                  Locally installed AUR helper\n  linux              6.9.1-1              6.9.1-1              The Linux kernel\n  ripgrep            14.1.0-1             14.1.0-1             Search recursively for a regex pattern\n  old-theme          1.0-2                1.0-2                Retired desktop theme\n  neovim             0.9.5-1              0.9.5-1              Installed modal editor awaiting a manual update\n" :selected ("linux" ("linux" "6.9.1-1" "6.9.1-1" "The Linux kernel") "https://archlinux.org/packages/core/x86_64/linux/") :info (special-mode t "Name            : linux\nVersion         : 6.9.1-1\nDepends On      : coreutils  kmod  mkinitcpio\nDescription     : The Linux kernel\nURL             : https://archlinux.org/packages/core/x86_64/linux/\nValidated By    : Signature\n" (("Name" :foreground "#6e8b3d") ("coreutils" :foreground "#b0e0e6"))) :trace "pacman <-Sy>\npacman <-Qu>\npacman <-Qe> <--info>\npacman <linux> <-Qe> <--info>\n")"##
-    ]];
-    assert_arch_packer_parity(elisp_form, expect);
-}
-
-#[test]
-fn searches_for_a_newer_editor_then_upgrades_the_installed_neovim_package() {
-    let elisp_form = r##"(let* ((fixture
+    ]],
+        ),
+        (
+            "searches_for_a_newer_editor_then_upgrades_the_installed_neovim_package",
+            r##"(let* ((fixture
                          (neomacs-arch-packer-test-prepare
                           "arch-packer-search-install-workflow"))
                         (root (plist-get fixture :root))
@@ -209,16 +211,15 @@ fn searches_for_a_newer_editor_then_upgrades_the_installed_neovim_package() {
                                     (neomacs-arch-packer-test-file-string
                                      trace))))))
                      (neomacs-arch-packer-test-cleanup root))
-                   result)"##;
-    let expect = expect![[
+                   result)"##,
+            true,
+            expect![[
         r#"OK (:installed-before ("neovim" "0.9.5-1" "0.9.5-1" "Installed modal editor awaiting a manual update") :search-menu "  neovim             0.10.0-2             extra           Fork of Vim focused on extensibility and usability\n  helix              24.3-1               extra           A post-modern modal text editor\n  emacs-git          30.0.50.r12345-1     aur             Development branch of the extensible editor\n" :selected ("neovim" "extra") :output (:resolved t :installed t) :trace "pacaur <-Sy>\npacman <-Qu>\npacman <-Qe> <--info>\npacaur <-Ss> <editor>\npacaur <-S> <--noconfirm> <neovim>\n")"#
-    ]];
-    assert_arch_packer_parity(elisp_form, expect);
-}
-
-#[test]
-fn marks_an_obsolete_package_confirms_the_plan_and_executes_its_removal() {
-    let elisp_form = r##"(let* ((fixture
+    ]],
+        ),
+        (
+            "marks_an_obsolete_package_confirms_the_plan_and_executes_its_removal",
+            r##"(let* ((fixture
                          (neomacs-arch-packer-test-prepare
                           "arch-packer-action-workflow"))
                         (root (plist-get fixture :root))
@@ -287,16 +288,15 @@ fn marks_an_obsolete_package_confirms_the_plan_and_executes_its_removal() {
                                     (neomacs-arch-packer-test-file-string
                                      trace))))))
                      (neomacs-arch-packer-test-cleanup root))
-                   result)"##;
-    let expect = expect![[
+                   result)"##,
+            true,
+            expect![[
         r#"OK (:marked-menu "  local-helper       2.4-1                N/A                  Locally installed AUR helper\n  linux              6.9.1-1              6.9.1-1              The Linux kernel\n  ripgrep            14.1.0-1             14.1.0-1             Search recursively for a regex pattern\nD old-theme          1.0-2                1.0-2                Retired desktop theme\n  neovim             0.9.5-1              0.9.5-1              Installed modal editor awaiting a manual update\n" :progress-hook nil :output (:removed t) :trace "pacman <-Sy>\npacman <-Qu>\npacman <-Qe> <--info>\npacman <-Rsn> <--noconfirm> <old-theme>\n")"#
-    ]];
-    assert_arch_packer_parity(elisp_form, expect);
-}
-
-#[test]
-fn refreshes_an_open_package_menu_after_the_repository_state_changes() {
-    let elisp_form = r##"(let* ((fixture
+    ]],
+        ),
+        (
+            "refreshes_an_open_package_menu_after_the_repository_state_changes",
+            r##"(let* ((fixture
                          (neomacs-arch-packer-test-prepare
                           "arch-packer-refresh-workflow"))
                         (root (plist-get fixture :root))
@@ -357,9 +357,11 @@ fn refreshes_an_open_package_menu_after_the_repository_state_changes() {
                                   (neomacs-arch-packer-test-file-string
                                    trace)))))
                      (neomacs-arch-packer-test-cleanup root))
-                   result)"##;
-    let expect = expect![[
+                   result)"##,
+            true,
+            expect![[
         r#"OK (:linux-row ("linux" "6.9.2-1" "6.9.2-1" "Kernel after repository refresh") :menu "  local-helper       2.4-1                N/A                  Locally installed AUR helper\n  linux              6.9.2-1              6.9.2-1              Kernel after repository refresh\n  ripgrep            14.1.0-1             14.1.0-1             Search recursively for a regex pattern\n  old-theme          1.0-2                1.0-2                Retired desktop theme\n  neovim             0.9.5-1              0.9.5-1              Installed modal editor awaiting a manual update\n" :trace "pacman <-Sy>\npacman <-Qu>\npacman <-Qe> <--info>\npacman <-Qu>\npacman <-Qe> <--info>\n")"#
-    ]];
-    assert_arch_packer_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

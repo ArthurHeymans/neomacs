@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_at_parity, assert_at_signal_parity};
+use super::{assert_at_batch};
 
 #[test]
-fn at_root_object_core_methods_features_and_help_binding_match_the_pin() {
-    let elisp_form = r##"(list
+fn core_public_surface_batch() {
+    assert_at_batch(&[
+        (
+            "at_root_object_core_methods_features_and_help_binding_match_the_pin",
+            r##"(list
               (@p @)
               (aref @ 0)
               (plist-get
@@ -21,17 +24,15 @@ fn at_root_object_core_methods_features_and_help_binding_match_the_pin() {
               (featurep '@-mixins)
               (lookup-key
                global-map
-               (kbd "C-h @")))"##;
-    let expect = expect![[
+               (kbd "C-h @")))"##,
+            true,
+            expect![[
         r#"OK (t @ nil (:proto :set :get :init :new :is :keys) (t t t t t t) t t describe-@)"#
-    ]];
-
-    assert_at_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_predicate_and_extend_cover_root_default_multiple_prototypes_and_properties() {
-    let elisp_form = r##"(let* ((left
+    ]],
+        ),
+        (
+            "at_predicate_and_extend_cover_root_default_multiple_prototypes_and_properties",
+            r##"(let* ((left
                       (@extend :side 'left))
                      (right
                       (@extend :side 'right))
@@ -66,23 +67,19 @@ fn at_predicate_and_extend_cover_root_default_multiple_prototypes_and_properties
                   :proto))
                 (@ child :name)
                 (@ child :nil-value)
-                (@ child :side)))"##;
-    let expect = expect!["OK ((t t t nil t nil nil) t (left right) \"child\" nil left)"];
-
-    assert_at_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_predicate_on_an_empty_vector_signals_the_exact_slot_error() {
-    let elisp_form = r##"(@p [])"##;
-    let expect = expect!["ERR (args-out-of-range [] 0)"];
-
-    assert_at_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_precedence_flattens_diamond_inheritance_and_removes_first_duplicate() {
-    let elisp_form = r##"(let* ((root
+                (@ child :side)))"##,
+            true,
+            expect!["OK ((t t t nil t nil nil) t (left right) \"child\" nil left)"],
+        ),
+        (
+            "at_predicate_on_an_empty_vector_signals_the_exact_slot_error",
+            r##"(@p [])"##,
+            false,
+            expect!["ERR (args-out-of-range [] 0)"],
+        ),
+        (
+            "at_precedence_flattens_diamond_inheritance_and_removes_first_duplicate",
+            r##"(let* ((root
                       (@extend :id 'root))
                      (left
                       (@extend root :id 'left))
@@ -101,15 +98,13 @@ fn at_precedence_flattens_diamond_inheritance_and_removes_first_duplicate() {
                     'root)
                    ((eq object @) '@)
                    (t 'unknown)))
-                (@precedence top)))"##;
-    let expect = expect!["OK (left right root @)"];
-
-    assert_at_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_instance_checks_cover_identity_ancestors_unrelated_and_non_objects() {
-    let elisp_form = r##"(let* ((parent (@extend))
+                (@precedence top)))"##,
+            true,
+            expect!["OK (left right root @)"],
+        ),
+        (
+            "at_instance_checks_cover_identity_ancestors_unrelated_and_non_objects",
+            r##"(let* ((parent (@extend))
                      (child (@extend parent))
                      (unrelated (@extend)))
                (list
@@ -121,15 +116,13 @@ fn at_instance_checks_cover_identity_ancestors_unrelated_and_non_objects() {
                 (@is t @)
                 (@is @ t)
                 (@! child :is parent)
-                (@! parent :is child)))"##;
-    let expect = expect!["OK (t t t nil nil nil nil t nil)"];
-
-    assert_at_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_internal_queue_preserves_fifo_head_and_empty_reset_contract() {
-    let elisp_form = r##"(let ((queue
+                (@! parent :is child)))"##,
+            true,
+            expect!["OK (t t t nil nil nil nil t nil)"],
+        ),
+        (
+            "at_internal_queue_preserves_fifo_head_and_empty_reset_contract",
+            r##"(let ((queue
                     (@--queue-create)))
                (list
                 (@--queue-head queue)
@@ -146,17 +139,15 @@ fn at_internal_queue_preserves_fifo_head_and_empty_reset_contract() {
                  (@--queue-head queue))
                 (@--queue-dequeue queue)
                 (@--queue-head queue)
-                queue))"##;
-    let expect = expect![[
+                queue))"##,
+            true,
+            expect![[
         r#"OK (nil first (first) second (first second) first (second) second nil (nil))"#
-    ]];
-
-    assert_at_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_lookup_uses_breadth_first_inheritance_and_counts_super_matches() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "at_lookup_uses_breadth_first_inheritance_and_counts_super_matches",
+            r##"(let* ((root
                       (@extend :name 'root))
                      (left
                       (@extend root :name 'left))
@@ -174,15 +165,13 @@ fn at_lookup_uses_breadth_first_inheritance_and_counts_super_matches() {
                 (@ top :name :super 1)
                 (@ top :name :super 2)
                 (@ top :name :super 3)
-                (@ right-only :name)))"##;
-    let expect = expect!["OK (top left right root right)"];
-
-    assert_at_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_lookup_distinguishes_implicit_error_explicit_nil_and_non_nil_defaults() {
-    let elisp_form = r##"(let ((object (@extend)))
+                (@ right-only :name)))"##,
+            true,
+            expect!["OK (top left right root right)"],
+        ),
+        (
+            "at_lookup_distinguishes_implicit_error_explicit_nil_and_non_nil_defaults",
+            r##"(let ((object (@extend)))
                (list
                 (@ object :missing
                    :default nil)
@@ -190,23 +179,19 @@ fn at_lookup_distinguishes_implicit_error_explicit_nil_and_non_nil_defaults() {
                    :default 'fallback)
                 (@ object :missing
                    :super 10
-                   :default 'past-end)))"##;
-    let expect = expect!["OK (nil fallback past-end)"];
-
-    assert_at_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_lookup_without_property_or_default_signals_exact_dynamic_getter_error() {
-    let elisp_form = r##"(@ (@extend) :missing)"##;
-    let expect = expect![[r#"ERR (error "Property unbound: :missing")"#]];
-
-    assert_at_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_setf_assigns_only_the_immediate_object_and_returns_the_new_value() {
-    let elisp_form = r##"(let* ((parent
+                   :default 'past-end)))"##,
+            true,
+            expect!["OK (nil fallback past-end)"],
+        ),
+        (
+            "at_lookup_without_property_or_default_signals_exact_dynamic_getter_error",
+            r##"(@ (@extend) :missing)"##,
+            false,
+            expect![[r#"ERR (error "Property unbound: :missing")"#]],
+        ),
+        (
+            "at_setf_assigns_only_the_immediate_object_and_returns_the_new_value",
+            r##"(let* ((parent
                       (@extend :value 'parent))
                      (child (@extend parent)))
                (list
@@ -217,15 +202,13 @@ fn at_setf_assigns_only_the_immediate_object_and_returns_the_new_value() {
                 (@ child :value)
                 (@ parent :value)
                 (@! child :keys)
-                (@! parent :keys)))"##;
-    let expect = expect![[r#"OK (parent child child parent (:proto :value) (:proto :value))"#]];
-
-    assert_at_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_method_calls_and_super_method_dsl_chain_through_each_matching_prototype() {
-    let elisp_form = r##"(let* ((a (@extend))
+                (@! parent :keys)))"##,
+            true,
+            expect![[r#"OK (parent child child parent (:proto :value) (:proto :value))"#]],
+        ),
+        (
+            "at_method_calls_and_super_method_dsl_chain_through_each_matching_prototype",
+            r##"(let* ((a (@extend))
                      (b (@extend a))
                      (c (@extend b)))
                (def@ a :chain (value)
@@ -240,15 +223,13 @@ fn at_method_calls_and_super_method_dsl_chain_through_each_matching_prototype() 
                 (@! c :chain 7)
                 (@--super! c :chain 8)
                 (with-@@ c
-                  (@^:chain 9))))"##;
-    let expect = expect!["OK ((c b a 7) (b a 8) (b a 9))"];
-
-    assert_at_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_property_super_dsl_reads_each_next_matching_value() {
-    let elisp_form = r##"(let* ((a
+                  (@^:chain 9))))"##,
+            true,
+            expect!["OK ((c b a 7) (b a 8) (b a 9))"],
+        ),
+        (
+            "at_property_super_dsl_reads_each_next_matching_value",
+            r##"(let* ((a
                       (@extend :value 'a))
                      (b
                       (@extend a :value 'b))
@@ -257,15 +238,13 @@ fn at_property_super_dsl_reads_each_next_matching_value() {
                (list
                 (with-@@ c @:value)
                 (with-@@ c @^:value)
-                (@ c :value :super 2)))"##;
-    let expect = expect!["OK (c b a)"];
-
-    assert_at_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_new_calls_initializer_and_core_keys_and_is_methods_observe_the_child() {
-    let elisp_form = r##"(let ((rectangle
+                (@ c :value :super 2)))"##,
+            true,
+            expect!["OK (c b a)"],
+        ),
+        (
+            "at_new_calls_initializer_and_core_keys_and_is_methods_observe_the_child",
+            r##"(let ((rectangle
                     (@extend
                      :width nil
                      :height nil)))
@@ -287,16 +266,13 @@ fn at_new_calls_initializer_and_core_keys_and_is_methods_observe_the_child() {
                       rectangle)
                   (@! instance :is @)
                   (@! instance :keys)
-                  (@! rectangle :keys))))"##;
-    let expect =
-        expect![[r#"OK (42 6 7 t t (:proto :width :height) (:proto :width :height :init :area))"#]];
-
-    assert_at_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_dynamic_getter_receives_missing_property_but_explicit_default_bypasses_it() {
-    let elisp_form = r##"(let ((object
+                  (@! rectangle :keys))))"##,
+            true,
+            expect![[r#"OK (42 6 7 t t (:proto :width :height) (:proto :width :height :init :area))"#]],
+        ),
+        (
+            "at_dynamic_getter_receives_missing_property_but_explicit_default_bypasses_it",
+            r##"(let ((object
                     (@extend
                      :prefix "got")))
                (def@ object :get (property)
@@ -305,15 +281,13 @@ fn at_dynamic_getter_receives_missing_property_but_explicit_default_bypasses_it(
                (list
                 (@ object :missing)
                 (@ object :other
-                   :default 'explicit)))"##;
-    let expect = expect!["OK ((\"got\" :missing) explicit)"];
-
-    assert_at_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_walk_replace_and_with_object_preserve_quote_and_expand_property_positions() {
-    let elisp_form = r##"(list
+                   :default 'explicit)))"##,
+            true,
+            expect!["OK ((\"got\" :missing) explicit)"],
+        ),
+        (
+            "at_walk_replace_and_with_object_preserve_quote_and_expand_property_positions",
+            r##"(list
               (@--walk
                '(setf @:name 10)
                '(quote)
@@ -333,17 +307,15 @@ fn at_walk_replace_and_with_object_preserve_quote_and_expand_property_positions(
                         @^:parent)))
               (with-@@
                   (@extend :value 'ok)
-                @:value))"##;
-    let expect = expect![[
+                @:value))"##,
+            true,
+            expect![[
         r#"OK ((setf (@ @@ :name) 10) (setf '@:name 10) (@! @@ :method (@ @@ :argument)) (let ((@@ object)) (list (@ @@ :value) (@! @@ :method 1) (@--super @@ :parent))) ok)"#
-    ]];
-
-    assert_at_parity(elisp_form, expect);
-}
-
-#[test]
-fn at_definer_returns_property_preserves_docstring_and_binds_self_before_arguments() {
-    let elisp_form = r##"(let ((object
+    ]],
+        ),
+        (
+            "at_definer_returns_property_preserves_docstring_and_binds_self_before_arguments",
+            r##"(let ((object
                     (@extend :base 10)))
                (list
                 (def@ object :sum (left
@@ -357,10 +329,11 @@ fn at_definer_returns_property_preserves_docstring_and_binds_self_before_argumen
                  (@ object :sum))
                 (help-function-arglist
                  (@ object :sum)
-                 t)))"##;
-    let expect = expect![[
+                 t)))"##,
+            true,
+            expect![[
         r#"OK (:sum 15 17 "Add values to the base.\n\n(fn @@ LEFT &optional (RIGHT 2))" (@@ left &rest --cl-rest--))"#
-    ]];
-
-    assert_at_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

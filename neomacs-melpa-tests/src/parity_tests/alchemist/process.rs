@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_alchemist_parity;
+use super::assert_alchemist_batch;
 
 #[test]
-fn alchemist_server_codes_requests_markers_and_chunk_reassembly_match_wire_protocol() {
-    let elisp_form = r##"(list
+fn process_public_surface_batch() {
+    assert_alchemist_batch(&[
+        (
+            "alchemist_server_codes_requests_markers_and_chunk_reassembly_match_wire_protocol",
+            r##"(list
                       alchemist-server-codes
                       (mapcar
                        #'alchemist-server-api-code
@@ -30,16 +33,15 @@ fn alchemist_server_codes_requests_markers_and_chunk_reassembly_match_wire_proto
                       (alchemist-server-prepare-filter-output
                        '("third\nEND-OF-INFO\n"
                          "second\n"
-                         "first\n")))"##;
-    let expect = expect![[
+                         "first\n")))"##,
+            true,
+            expect![[
         r#"OK (((server-eval "EVAL") (server-defl "DEFL") (server-info "INFO") (server-docl "DOCL") (server-comp "COMP")) ("EVAL" "DEFL" "INFO" "DOCL" "COMP" nil) ("EVAL { :eval, '/x.exs' }\n" "DEFL { \"List,flatten\", [ context: Elixir ] }\n" "INFO\n" "DOCL { \"Enum.map\", [] }\n" "COMP { \"Str\", [] }\n") (nil nil 0 8 nil 0) "first\nsecond\nthird")"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_server_high_level_api_starts_filters_and_sends_every_exact_request() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "alchemist_server_high_level_api_starts_filters_and_sends_every_exact_request",
+            r##"(let (events)
                       (cl-letf
                           (((symbol-function
                              'alchemist-server-start-if-not-running)
@@ -78,17 +80,15 @@ fn alchemist_server_high_level_api_starts_filters_and_sends_every_exact_request(
                          (alchemist-server-complete-candidates
                           "{ \"Str\", [] }"
                           #'alchemist-company-filter)
-                         (nreverse events))))"##;
-    let expect = expect![[
+                         (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (sent sent sent sent sent sent (#1=(start) #1# (filter server-process alchemist-goto-filter) (send server-process "DEFL { \"List,flatten\", [] }\n") #1# #1# (filter server-process alchemist-help-modules-filter) (send server-process "INFO { :type, :modules }\n") #1# #1# (filter server-process alchemist-help-modules-filter) (send server-process "INFO\n") #1# #1# (filter server-process alchemist-help-filter-output) (send server-process "DOCL { \"Enum.map\", [] }\n") #1# #1# (filter server-process alchemist-eval-filter) (send server-process "EVAL { :eval, 'code.exs' }\n") #1# #1# (filter server-process alchemist-company-filter) (send server-process "COMP { \"Str\", [] }\n")))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_server_process_names_follow_project_elixir_and_global_contexts_and_replace_cache_entries()
- {
-    let elisp_form = r##"(let* ((sandbox
+    ]],
+        ),
+        (
+            "alchemist_server_process_names_follow_project_elixir_and_global_contexts_and_replace_cache_entries",
+            r##"(let* ((sandbox
                            (file-name-as-directory
                             (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                           (project
@@ -120,16 +120,15 @@ fn alchemist_server_process_names_follow_project_elixir_and_global_contexts_and_
                            (alchemist-server-process-name))
                          (let ((default-directory sandbox)
                                (alchemist-project-root-path-cache nil))
-                           (alchemist-server-process-name)))))"##;
-    let expect = expect![[
+                           (alchemist-server-process-name)))))"##,
+            true,
+            expect![[
         r#"OK ("project/" new-process (("[ORACLE-SANDBOX]/project/" . new-process)) "alchemist-server" "alchemist-server")"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_server_start_in_environment_uses_project_cwd_quoted_command_and_nonquerying_cache() {
-    let elisp_form = r##"(let* ((sandbox
+    ]],
+        ),
+        (
+            "alchemist_server_start_in_environment_uses_project_cwd_quoted_command_and_nonquerying_cache",
+            r##"(let* ((sandbox
                            (file-name-as-directory
                             (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                           (project
@@ -188,16 +187,15 @@ fn alchemist_server_start_in_environment_uses_project_cwd_quoted_command_and_non
                               'stored)))
                         (list
                          (alchemist-server-start-in-env "shared env")
-                         (nreverse events))))"##;
-    let expect = expect![[
+                         (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (stored ((start "server app/" "[ORACLE-SANDBOX]/server app/" "*alchemist-server*" "/tools/elixir runtime [PACKAGE]/alchemist-server/run.exs shared\\ env") (query server-process nil) (store server-process)))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_iex_command_line_region_compile_reload_and_project_workflows_send_real_user_intent() {
-    let elisp_form = r##"(let* ((sandbox
+    ]],
+        ),
+        (
+            "alchemist_iex_command_line_region_compile_reload_and_project_workflows_send_real_user_intent",
+            r##"(let* ((sandbox
                            (file-name-as-directory
                             (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                           (project
@@ -254,16 +252,15 @@ fn alchemist_iex_command_line_region_compile_reload_and_project_workflows_send_r
                            (alchemist-iex-compile-this-buffer)
                            (alchemist-iex-reload-module)
                            (alchemist-iex-project-run)
-                           (nreverse events)))))"##;
-    let expect = expect![[
+                           (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK (("iex" "--erl" "+S 2") ("iex" "--sname" "parity") sent sent sent sent popped ((process nil) (send iex-process "  def total, do: 42\n") (process nil) (send iex-process "defmodule Shop.Cart do\n  def total, do: 42\nend\n") (process nil) (send iex-process "c(\"[ORACLE-SANDBOX]/shop/lib/shop/cart.ex\", \"[ORACLE-SANDBOX]/shop//_build/dev/\")") (process nil) (send iex-process "r(Shop.Cart)") (process " -S mix") (pop iex-buffer)))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_iex_send_command_preserves_multiline_input_process_mark_and_comint_history() {
-    let elisp_form = r##"(let* ((buffer
+    ]],
+        ),
+        (
+            "alchemist_iex_send_command_preserves_multiline_input_process_mark_and_comint_history",
+            r##"(let* ((buffer
                            (generate-new-buffer
                             " *alchemist-iex-parity*"))
                           (process
@@ -291,16 +288,15 @@ fn alchemist_iex_send_command_preserves_multiline_input_process_mark_and_comint_
                           (set-process-query-on-exit-flag process nil)
                           (delete-process process))
                         (when (buffer-live-p buffer)
-                          (kill-buffer buffer))))"##;
-    let expect = expect![[
+                          (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK ("first = 20\nsecond = 22\nfirst + second\nfirst = 20\nsecond = 22\nfirst + second\n" 77 77 (run open listen connect stop))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_hex_dependency_parser_reads_real_mix_file_ignores_comments_and_renders_popup() {
-    let elisp_form = r##"(let* ((sandbox
+    ]],
+        ),
+        (
+            "alchemist_hex_dependency_parser_reads_real_mix_file_ignores_comments_and_renders_popup",
+            r##"(let* ((sandbox
                            (file-name-as-directory
                             (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                           (project
@@ -342,16 +338,15 @@ fn alchemist_hex_dependency_parser_reads_real_mix_file_ignores_comments_and_rend
                             "{:phoenix_html, \"~> 2.6\"}, {:ecto_sql, \"~> 3.0\"}")
                            (search-backward "ecto_sql")
                            (forward-char 4)
-                           (alchemist-hex--deps-name-at-point)))))"##;
-    let expect = expect![[
+                           (alchemist-hex--deps-name-at-point)))))"##,
+            true,
+            expect![[
         r#"OK (popup ("*alchemist-hex*" ":ecto\11\11 github: \"elixir-ecto/ecto\"\n:phoenix\11 \"~> 1.2\"\n:plug\11\11 \">= 0.0.0\"\n" :anonymous-mode) "ecto_sql")"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_hex_offline_package_info_renders_description_config_links_releases_and_button_urls() {
-    let elisp_form = r##"(let ((information
+    ]],
+        ),
+        (
+            "alchemist_hex_offline_package_info_renders_description_config_links_releases_and_button_urls",
+            r##"(let ((information
                            '((meta
                               (description . "Composable web middleware")
                               (maintainers . ["José Valim" "Community"])
@@ -403,16 +398,15 @@ fn alchemist_hex_offline_package_info_renders_description_config_links_releases_
                                    (nreverse buttons)))))
                           (when (get-buffer alchemist-hex-buffer-name)
                             (kill-buffer
-                             alchemist-hex-buffer-name)))))"##;
-    let expect = expect![[
+                             alchemist-hex-buffer-name)))))"##,
+            true,
+            expect![[
         r#"OK ("*alchemist-hex*" #("Composable web middleware\n\nConfig: {:plug, => \"~> 1.12.1\"}\nLatest release: 1.12.1\n\nMaintainers: \n  - José Valim\n  - Community\nLicenses: Apache-2.0\nLinks: \n  GitHub: https://github.com/elixir-plug/plug\n  Docs: https://hexdocs.pm/plug\nReleases: \n  - 1.12.1\11     (docs)\n  - 1.11.0\11     (docs)\n" 27 35 (face font-lock-string-face) 59 75 (face font-lock-string-face) 83 96 (face font-lock-string-face) 126 136 (face font-lock-string-face) 147 154 (face font-lock-string-face) 233 244 (face font-lock-string-face)) t t (("1.12.1" "https://hex.pm/packages/plug/1.12.1") ("https://github.com/elixir-plug/plug" "https://github.com/elixir-plug/plug") ("https://hexdocs.pm/plug" "https://hexdocs.pm/plug") ("1.12.1" "https://hex.pm/packages/plug/1.12.1") ("docs" "https://hexdocs.pm/plug/1.12.1") ("1.11.0" "https://hex.pm/packages/plug/1.11.0") ("docs" "https://hexdocs.pm/plug/1.11.0")))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_hex_offline_release_and_search_views_render_dates_docs_and_filtered_results() {
-    let elisp_form = r##"(let* ((plug
+    ]],
+        ),
+        (
+            "alchemist_hex_offline_release_and_search_views_render_dates_docs_and_filtered_results",
+            r##"(let* ((plug
                            '((name . "plug")
                              (inserted_at . "2017-03-01T12:00:00Z")
                              (url . "https://hex.pm/packages/plug")
@@ -491,9 +485,11 @@ fn alchemist_hex_offline_release_and_search_views_render_dates_docs_and_filtered
                               (list popped release-view search-view))
                           (when (get-buffer alchemist-hex-buffer-name)
                             (kill-buffer
-                             alchemist-hex-buffer-name)))))"##;
-    let expect = expect![[
+                             alchemist-hex-buffer-name)))))"##,
+            true,
+            expect![[
         r#"OK ("*alchemist-hex*" (#("plug versions  (latest version 1.4.0)\n\n1.4.0\11    (released on 2017-03-01)   (docs)\n1.3.0\11    (released on 2016-10-01)   (docs)\n" 0 31 (face font-lock-variable-name-face) 50 61 (face font-lock-string-face) 94 105 (face font-lock-string-face)) (("1.4.0" "https://hex.pm/packages/plug/1.4.0") ("1.4.0" "https://hex.pm/packages/plug/1.4.0") ("docs" "https://hexdocs.pm/plug/1.4.0") ("1.3.0" "https://hex.pm/packages/plug/1.3.0") ("docs" "https://hexdocs.pm/plug/1.3.0"))) (#("search results for: plug \n\nplug\11  1.4.0   (released on 2017-03-01)\11  (docs)\n" 0 20 (face font-lock-variable-name-face) 20 27 (face font-lock-builtin-face) 43 54 (face font-lock-string-face)) (("plug" "https://hex.pm/packages/plug") ("1.4.0" "https://hex.pm/packages/plug/1.4.0") ("docs" "https://hexdocs.pm/plug/1.4.0"))))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

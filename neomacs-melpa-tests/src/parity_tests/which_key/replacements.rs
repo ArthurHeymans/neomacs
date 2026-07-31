@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_which_key_parity, assert_which_key_signal_parity};
+use super::{assert_which_key_batch};
 
 #[test]
-fn which_key_keymap_based_replacements_cover_cons_string_and_created_prefixes() {
-    let elisp_form = r##"(let ((map (make-sparse-keymap))
+fn replacements_public_surface_batch() {
+    assert_which_key_batch(&[
+        (
+            "which_key_keymap_based_replacements_cover_cons_string_and_created_prefixes",
+            r##"(let ((map (make-sparse-keymap))
                     (prefix-map (make-sparse-keymap)))
                (define-key prefix-map "x" #'ignore)
                (define-key map "\C-a" 'complete)
@@ -18,32 +21,28 @@ fn which_key_keymap_based_replacements_cover_cons_string_and_created_prefixes() 
                 (which-key--get-keymap-bindings map)
                 (lookup-key map (kbd "C-a"))
                 (keymapp (lookup-key map (kbd "C-b")))
-                (keymapp (lookup-key map (kbd "C-c")))))"##;
-    let expect = expect![[
+                (keymapp (lookup-key map (kbd "C-c")))))"##,
+            true,
+            expect![[
         r#"OK ((("C-a" . "mycomplete") ("C-b" . "group:mymap") ("C-c" . "group:mymap2")) complete t t)"#
-    ]];
-
-    assert_which_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn which_key_named_prefix_commands_retain_their_symbolic_description() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "which_key_named_prefix_commands_retain_their_symbolic_description",
+            r##"(progn
                (define-prefix-command 'neomacs-which-key-named-map)
                (let ((map (make-sparse-keymap)))
                  (define-key map "\C-a" 'neomacs-which-key-named-map)
                  (list
                   (which-key--get-keymap-bindings map)
                   (keymapp neomacs-which-key-named-map)
-                  (commandp 'neomacs-which-key-named-map))))"##;
-    let expect = expect![[r#"OK ((("C-a" . "neomacs-which-key-named-map")) t nil)"#]];
-
-    assert_which_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn which_key_global_and_major_mode_prefix_declarations_are_applied_separately() {
-    let elisp_form = r##"(let* ((major-mode 'neomacs-which-key-test-mode)
+                  (commandp 'neomacs-which-key-named-map))))"##,
+            true,
+            expect![[r#"OK ((("C-a" . "neomacs-which-key-named-map")) t nil)"#]],
+        ),
+        (
+            "which_key_global_and_major_mode_prefix_declarations_are_applied_separately",
+            r##"(let* ((major-mode 'neomacs-which-key-test-mode)
                     which-key-replacement-alist
                     which-key--prefix-title-alist)
                (which-key-add-key-based-replacements
@@ -59,17 +58,15 @@ fn which_key_global_and_major_mode_prefix_declarations_are_applied_separately() 
                 (which-key--maybe-get-prefix-title "SPC C-c")
                 (which-key--maybe-get-prefix-title "C-c C-c")
                 which-key-replacement-alist
-                which-key--prefix-title-alist))"##;
-    let expect = expect![[
+                which-key--prefix-title-alist))"##,
+            true,
+            expect![[
         r#"OK (("SPC C-k" . "cancel") ("C-c C-c" . "complete") "complete title" "complete" ((neomacs-which-key-test-mode (("\\`C-c C-k\\'") nil . "cancel") (("\\`C-c C-c\\'") nil . "complete")) (("\\`SPC C-k\\'") nil . "cancel") (("\\`SPC C-c\\'") nil . "complete")) ((neomacs-which-key-test-mode ("C-c C-c" . "complete title")) ("SPC C-c" . "complete title")))"#
-    ]];
-
-    assert_which_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn which_key_replacement_matching_handles_regex_quoting_lambdas_and_bad_regex_text() {
-    let elisp_form = r##"(let ((which-key-replacement-alist
+    ]],
+        ),
+        (
+            "which_key_replacement_matching_handles_regex_quoting_lambdas_and_bad_regex_text",
+            r##"(let ((which-key-replacement-alist
                      '((("C-c [a-d]" . nil) . ("C-c a" . "c-c a"))
                        (("C-c .+" . nil) . ("C-c *" . "c-c *"))))
                     (test-mode-1 t)
@@ -100,17 +97,15 @@ fn which_key_replacement_matching_handles_regex_quoting_lambdas_and_bad_regex_te
                   ("C-c \\" . "pre quoting")
                   ("SPC . ." . "don't replace")
                   ("SPC t 1" . "test mode")
-                  ("SPC t 2" . "test mode"))))"##;
-    let expect = expect![[
+                  ("SPC t 2" . "test mode"))))"##,
+            true,
+            expect![[
         r#"OK (("C-c *" . "c-c *") ("C-c a" . "c-c a") ("C-c ." . "test .") ("C-c *" . "c-c *") ("C-c [" . "bad regexp") ("C-c \\" . "regexp quoting") ("SPC . ." . "don't replace") ("SPC t 1" . "[x] test mode") ("SPC t 2" . "[ ] test mode"))"#
-    ]];
-
-    assert_which_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn which_key_multiple_replacements_chain_in_declaration_order() {
-    let elisp_form = r##"(let ((which-key-replacement-alist
+    ]],
+        ),
+        (
+            "which_key_multiple_replacements_chain_in_declaration_order",
+            r##"(let ((which-key-replacement-alist
                      '(((nil . "helm") . (nil . "HLM"))
                        ((nil . "projectile") . (nil . "PRJTL"))))
                     (which-key-allow-multiple-replacements t))
@@ -119,17 +114,15 @@ fn which_key_multiple_replacements_chain_in_declaration_order() {
                 '(("C-c C-c" . "helm-x")
                   ("C-c C-c" . "projectile-x")
                   ("C-c C-c" . "helm-projectile-x")
-                  ("C-c C-c" . "unrelated"))))"##;
-    let expect = expect![[
+                  ("C-c C-c" . "unrelated"))))"##,
+            true,
+            expect![[
         r#"OK (("C-c C-c" . "HLM-x") ("C-c C-c" . "PRJTL-x") ("C-c C-c" . "HLM-PRJTL-x") ("C-c C-c" . "unrelated"))"#
-    ]];
-
-    assert_which_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn which_key_nil_replacement_suppresses_matching_bindings_only() {
-    let elisp_form = r##"(let ((which-key-replacement-alist
+    ]],
+        ),
+        (
+            "which_key_nil_replacement_suppresses_matching_bindings_only",
+            r##"(let ((which-key-replacement-alist
                      '(((nil . "winum-select-window-[1-9]") . t))))
                (list
                 (which-key--maybe-replace
@@ -137,17 +130,15 @@ fn which_key_nil_replacement_suppresses_matching_bindings_only() {
                 (which-key--maybe-replace
                  '("C-c C-c" . "winum-select-window-0"))
                 (which-key--maybe-replace
-                 '("C-c C-c" . "other-command"))))"##;
-    let expect = expect![[
+                 '("C-c C-c" . "other-command"))))"##,
+            true,
+            expect![[
         r#"OK (nil ("C-c C-c" . "winum-select-window-0") ("C-c C-c" . "other-command"))"#
-    ]];
-
-    assert_which_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn which_key_extract_key_preserves_ranges_and_returns_the_final_key() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "which_key_extract_key_preserves_ranges_and_returns_the_final_key",
+            r##"(mapcar
                #'which-key--extract-key
                '("SPC a"
                  "C-x a"
@@ -155,32 +146,29 @@ fn which_key_extract_key_preserves_ranges_and_returns_the_final_key() {
                  "<left> a .. c"
                  "M-a a .. c"
                  ""
-                 "C-x <f12>"))"##;
-    let expect = expect![[r#"OK ("a" "a" "a" "a .. c" "a .. c" "" "<f12>")"#]];
-
-    assert_which_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn which_key_keymap_replacement_rejects_non_string_non_cons_values() {
-    let elisp_form = r##"(which-key-add-keymap-based-replacements
+                 "C-x <f12>"))"##,
+            true,
+            expect![[r#"OK ("a" "a" "a" "a .. c" "a .. c" "" "<f12>")"#]],
+        ),
+        (
+            "which_key_keymap_replacement_rejects_non_string_non_cons_values",
+            r##"(which-key-add-keymap-based-replacements
                (make-sparse-keymap)
                "C-a"
-               42)"##;
-    let expect = expect![[r#"ERR (user-error "Replacement is neither a cons cell or a string")"#]];
-
-    assert_which_key_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn which_key_major_mode_replacement_rejects_non_symbol_modes() {
-    let elisp_form = r##"(which-key-add-major-mode-key-based-replacements
+               42)"##,
+            false,
+            expect![[r#"ERR (user-error "Replacement is neither a cons cell or a string")"#]],
+        ),
+        (
+            "which_key_major_mode_replacement_rejects_non_symbol_modes",
+            r##"(which-key-add-major-mode-key-based-replacements
                "not-a-mode"
                "C-a"
-               "alpha")"##;
-    let expect = expect![[
+               "alpha")"##,
+            false,
+            expect![[
         r#"ERR (error "‘\"not-a-mode\"’ should be a symbol corresponding to a value of major-mode")"#
-    ]];
-
-    assert_which_key_signal_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

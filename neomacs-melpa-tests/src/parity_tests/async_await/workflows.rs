@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_async_await_parity;
+use super::assert_async_await_batch;
 
 #[test]
-fn delayed_promises_resume_sequential_work_in_exact_source_order() {
-    let elisp_form = r##"(let (events)
+fn workflows_public_surface_batch() {
+    assert_async_await_batch(&[
+        (
+            "delayed_promises_resume_sequential_work_in_exact_source_order",
+            r##"(let (events)
           (async-defun parity-sequential-delays ()
             (dolist
                 (entry
@@ -19,14 +22,13 @@ fn delayed_promises_resume_sequential_work_in_exact_source_order() {
                events))
             (nreverse events))
           (async-await-test-settle
-           (parity-sequential-delays)))"##;
-    let expect = expect!["OK (fulfilled (:fullfilled (:first :second :third)))"];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn concurrent_invocations_complete_by_delay_without_cross_contaminating_results() {
-    let elisp_form = r##"(let (completion-order)
+           (parity-sequential-delays)))"##,
+            true,
+            expect!["OK (fulfilled (:fullfilled (:first :second :third)))"],
+        ),
+        (
+            "concurrent_invocations_complete_by_delay_without_cross_contaminating_results",
+            r##"(let (completion-order)
           (async-defun parity-concurrent-task
               (label delay multiplier)
             (let ((value
@@ -52,16 +54,15 @@ fn concurrent_invocations_complete_by_delay_without_cross_contaminating_results(
             (list
              outcomes
              (nreverse
-              completion-order))))"##;
-    let expect = expect![
+              completion-order))))"##,
+            true,
+            expect![
         "OK (((fulfilled (:fullfilled (:slow 10))) (fulfilled (:fullfilled (:fast 20))) (fulfilled (:fullfilled (:middle 30)))) (:fast :middle :slow))"
-    ];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_function_awaits_real_subprocess_stdout_and_preserves_newlines() {
-    let elisp_form = r##"(progn
+    ],
+        ),
+        (
+            "async_function_awaits_real_subprocess_stdout_and_preserves_newlines",
+            r##"(progn
           (async-defun parity-process-output ()
             (let ((output
                    (await
@@ -75,16 +76,15 @@ fn async_function_awaits_real_subprocess_stdout_and_preserves_newlines() {
                 output "\n" t)
                (length output))))
           (async-await-test-settle
-           (parity-process-output)))"##;
-    let expect = expect![[
+           (parity-process-output)))"##,
+            true,
+            expect![[
         r#"OK (fulfilled (:fullfilled ("alpha\nbeta gamma\n" ("alpha" "beta gamma") 17)))"#
-    ]];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_function_sends_real_multiline_input_to_subprocess_and_uses_result() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "async_function_sends_real_multiline_input_to_subprocess_and_uses_result",
+            r##"(progn
           (async-defun parity-process-input (input)
             (let ((result
                    (await
@@ -99,16 +99,15 @@ fn async_function_sends_real_multiline_input_to_subprocess_and_uses_result() {
                (cadr result))))
           (async-await-test-settle
            (parity-process-input
-            "one two\nthree\n")))"##;
-    let expect = expect![[
+            "one two\nthree\n")))"##,
+            true,
+            expect![[
         r#"OK (fulfilled (:fullfilled (("ONE TWO\nTHREE\n" "") "ONE TWO\nTHREE\n" "")))"#
-    ]];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn failed_real_subprocess_is_caught_and_normalized_inside_async_function() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "failed_real_subprocess_is_caught_and_normalized_inside_async_function",
+            r##"(progn
           (async-defun parity-process-failure ()
             (condition-case reason
                 (await
@@ -130,14 +129,13 @@ fn failed_real_subprocess_is_caught_and_normalized_inside_async_function() {
                      (string-match-p
                       "code 7" event)))))))))
           (async-await-test-settle
-           (parity-process-failure)))"##;
-    let expect = expect!["OK (fulfilled (:fullfilled (:caught error t t)))"];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn delayed_filesystem_producer_is_awaited_before_exact_consumer_transform() {
-    let elisp_form = r##"(let ((path
+           (parity-process-failure)))"##,
+            true,
+            expect!["OK (fulfilled (:fullfilled (:caught error t t)))"],
+        ),
+        (
+            "delayed_filesystem_producer_is_awaited_before_exact_consumer_transform",
+            r##"(let ((path
                  (async-await-test-path
                   "async-await-records.txt")))
           (async-defun parity-file-pipeline ()
@@ -187,15 +185,13 @@ fn delayed_filesystem_producer_is_awaited_before_exact_consumer_transform() {
              outcome
              (file-exists-p path)
              (file-attribute-size
-              (file-attributes path)))))"##;
-    let expect =
-        expect![[r#"OK ((fulfilled (:fullfilled (("bob" 8) ("carol" 5) ("alice" 3)))) t 22)"#]];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn awaited_resume_can_mutate_captured_buffer_then_return_exact_text_properties() {
-    let elisp_form = r##"(let ((buffer
+              (file-attributes path)))))"##,
+            true,
+            expect![[r#"OK ((fulfilled (:fullfilled (("bob" 8) ("carol" 5) ("alice" 3)))) t 22)"#]],
+        ),
+        (
+            "awaited_resume_can_mutate_captured_buffer_then_return_exact_text_properties",
+            r##"(let ((buffer
                  (generate-new-buffer
                   " *async-await-parity*")))
           (unwind-protect
@@ -221,16 +217,15 @@ fn awaited_resume_can_mutate_captured_buffer_then_return_exact_text_properties()
                      (buffer-modified-p))))
                 (async-await-test-settle
                  (parity-buffer-edit)))
-            (kill-buffer buffer)))"##;
-    let expect = expect![[
+            (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK (fulfilled (:fullfilled (#("start -> finished" 9 17 (category parity face bold)) bold parity t)))"#
-    ]];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn promise_all_composes_multiple_async_functions_and_preserves_input_order() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "promise_all_composes_multiple_async_functions_and_preserves_input_order",
+            r##"(progn
           (async-defun parity-map-one
               (value delay)
             (let ((resolved
@@ -248,14 +243,13 @@ fn promise_all_composes_multiple_async_functions_and_preserves_input_order() {
                (parity-map-one 3 0.01)
                (parity-map-one 4 0.02)))))
           (async-await-test-settle
-           (parity-map-all)))"##;
-    let expect = expect!["OK (fulfilled (:fullfilled [(2 4) (3 9) (4 16)]))"];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_lambda_forms_a_real_parse_filter_aggregate_pipeline() {
-    let elisp_form = r##"(let* ((parse
+           (parity-map-all)))"##,
+            true,
+            expect!["OK (fulfilled (:fullfilled [(2 4) (3 9) (4 16)]))"],
+        ),
+        (
+            "async_lambda_forms_a_real_parse_filter_aggregate_pipeline",
+            r##"(let* ((parse
                   (async-lambda (line)
                     (pcase-let
                         ((`(,name ,amount)
@@ -294,14 +288,13 @@ fn async_lambda_forms_a_real_parse_filter_aggregate_pipeline() {
             '("alpha:3"
               "beta:8"
               "gamma:5"
-              "delta:2"))))"##;
-    let expect = expect![[r#"OK (fulfilled (:fullfilled ((("beta" 8) ("gamma" 5)) 13)))"#]];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_await_and_empty_iteration_remain_pending_while_nonempty_iteration_resumes() {
-    let elisp_form = r##"(progn
+              "delta:2"))))"##,
+            true,
+            expect![[r#"OK (fulfilled (:fullfilled ((("beta" 8) ("gamma" 5)) 13)))"#]],
+        ),
+        (
+            "zero_await_and_empty_iteration_remain_pending_while_nonempty_iteration_resumes",
+            r##"(progn
           (async-defun parity-zero-await
               (value)
             (list :sync value))
@@ -320,15 +313,13 @@ fn zero_await_and_empty_iteration_remain_pending_while_nonempty_iteration_resume
             (parity-empty-loop nil))
            (async-await-test-settle
             (parity-empty-loop
-             '(1 2 3)))))"##;
-    let expect =
-        expect!["OK ((rejected #1=(:timeouted)) (rejected #1#) (fulfilled (:fullfilled (1 2 3))))"];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn two_stateful_async_workers_keep_independent_lexical_accumulators() {
-    let elisp_form = r##"(cl-labels
+             '(1 2 3)))))"##,
+            true,
+            expect!["OK ((rejected #1=(:timeouted)) (rejected #1#) (fulfilled (:fullfilled (1 2 3))))"],
+        ),
+        (
+            "two_stateful_async_workers_keep_independent_lexical_accumulators",
+            r##"(cl-labels
           ((make-worker
             (label)
             (let ((total 0))
@@ -358,9 +349,11 @@ fn two_stateful_async_workers_keep_independent_lexical_accumulators() {
              (async-await-test-settle
               (funcall left '(3)))
              (async-await-test-settle
-              (funcall right '(5 5))))))"##;
-    let expect = expect![
+              (funcall right '(5 5))))))"##,
+            true,
+            expect![
         "OK ((fulfilled (:fullfilled ((:left 1) (:left 3)))) (fulfilled (:fullfilled ((:right 10)))) (fulfilled (:fullfilled ((:left 6)))) (fulfilled (:fullfilled ((:right 15) (:right 20)))))"
-    ];
-    assert_async_await_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }

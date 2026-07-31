@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_zero_b_layout_parity, assert_zero_b_layout_signal_parity};
+use super::{assert_zero_b_layout_batch};
 
 #[test]
-fn zero_b_layout_save_replaces_the_current_entry_and_preserves_others() {
-    let elisp_form = r##"(let ((0blayout-alist
+fn layouts_public_surface_batch() {
+    assert_zero_b_layout_batch(&[
+        (
+            "zero_b_layout_save_replaces_the_current_entry_and_preserves_others",
+            r##"(let ((0blayout-alist
                       '((other . old-other)
                         (work . old-work)))
                      messages)
@@ -25,17 +28,15 @@ fn zero_b_layout_save_replaces_the_current_entry_and_preserves_others() {
                    (list
                     result
                     0blayout-alist
-                    (nreverse messages)))))"##;
-    let expect = expect![[
+                    (nreverse messages)))))"##,
+            true,
+            expect![[
         r#"OK ("Saved the currently active layout: work" ((work . new-work) (other . old-other)) ("Saved the currently active layout: work"))"#
-    ]];
-
-    assert_zero_b_layout_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_b_layout_save_records_a_real_window_configuration() {
-    let elisp_form = r##"(let ((0blayout-alist nil))
+    ]],
+        ),
+        (
+            "zero_b_layout_save_records_a_real_window_configuration",
+            r##"(let ((0blayout-alist nil))
                (set-frame-parameter nil '0blayout-current "real")
                (0blayout-save)
                (list
@@ -44,15 +45,13 @@ fn zero_b_layout_save_records_a_real_window_configuration() {
                  (cdr (assq 'real 0blayout-alist)))
                 (equal
                  (cdr (assq 'real 0blayout-alist))
-                 (current-window-configuration))))"##;
-    let expect = expect!["OK ((real) t nil)"];
-
-    assert_zero_b_layout_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_b_layout_new_runs_save_reset_and_rename_in_order() {
-    let elisp_form = r##"(let (events)
+                 (current-window-configuration))))"##,
+            true,
+            expect!["OK ((real) t nil)"],
+        ),
+        (
+            "zero_b_layout_new_runs_save_reset_and_rename_in_order",
+            r##"(let (events)
                (cl-letf (((symbol-function '0blayout-save)
                           (lambda () (push 'save events)))
                          ((symbol-function 'delete-other-windows)
@@ -71,17 +70,15 @@ fn zero_b_layout_new_runs_save_reset_and_rename_in_order() {
                              events)
                             name)))
                  (let ((result (0blayout-new "focus")))
-                   (list result (nreverse events)))))"##;
-    let expect = expect![[
+                   (list result (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK ("focus" (save delete-other-windows (switch-to-buffer "*scratch*") (set-current-name "focus")))"#
-    ]];
-
-    assert_zero_b_layout_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_b_layout_new_saves_the_old_layout_and_resets_real_windows() {
-    let elisp_form = r##"(let ((0blayout-alist nil)
+    ]],
+        ),
+        (
+            "zero_b_layout_new_saves_the_old_layout_and_resets_real_windows",
+            r##"(let ((0blayout-alist nil)
                      (left (generate-new-buffer " *0blayout-left*"))
                      (right (generate-new-buffer " *0blayout-right*")))
                (unwind-protect
@@ -103,15 +100,13 @@ fn zero_b_layout_new_saves_the_old_layout_and_resets_real_windows() {
                  (when (buffer-live-p left)
                    (kill-buffer left))
                  (when (buffer-live-p right)
-                   (kill-buffer right))))"##;
-    let expect = expect![[r#"OK (t "*scratch*" "after" (before) t)"#]];
-
-    assert_zero_b_layout_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_b_layout_switch_saves_then_restores_a_known_layout() {
-    let elisp_form = r##"(let ((0blayout-alist
+                   (kill-buffer right))))"##,
+            true,
+            expect![[r#"OK (t "*scratch*" "after" (before) t)"#]],
+        ),
+        (
+            "zero_b_layout_switch_saves_then_restores_a_known_layout",
+            r##"(let ((0blayout-alist
                       '((target . target-configuration)))
                      events)
                (set-frame-parameter nil '0blayout-current "source")
@@ -142,17 +137,15 @@ fn zero_b_layout_switch_saves_then_restores_a_known_layout() {
                               (push (list 'message text) events)
                               text))))
                  (let ((result (0blayout-switch "target")))
-                   (list result (nreverse events)))))"##;
-    let expect = expect![[
+                   (list result (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK ("Switch to layout: 'target'" (save (set-window-configuration target-configuration) (set-current-name "target") (message "Switch to layout: 'target'")))"#
-    ]];
-
-    assert_zero_b_layout_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_b_layout_switch_saves_before_reporting_an_unknown_layout() {
-    let elisp_form = r##"(let ((0blayout-alist nil)
+    ]],
+        ),
+        (
+            "zero_b_layout_switch_saves_before_reporting_an_unknown_layout",
+            r##"(let ((0blayout-alist nil)
                      events)
                (cl-letf (((symbol-function '0blayout-save)
                           (lambda () (push 'save events)))
@@ -166,17 +159,15 @@ fn zero_b_layout_switch_saves_before_reporting_an_unknown_layout() {
                               (push (list 'message text) events)
                               text))))
                  (let ((result (0blayout-switch "missing")))
-                   (list result (nreverse events)))))"##;
-    let expect = expect![[
+                   (list result (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK ("No layout with name: 'missing' is defined" (save (message "No layout with name: 'missing' is defined")))"#
-    ]];
-
-    assert_zero_b_layout_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_b_layout_switch_restores_a_real_saved_window_configuration() {
-    let elisp_form = r##"(let ((0blayout-alist nil)
+    ]],
+        ),
+        (
+            "zero_b_layout_switch_restores_a_real_saved_window_configuration",
+            r##"(let ((0blayout-alist nil)
                      (source
                       (generate-new-buffer
                        " *0blayout-source*"))
@@ -200,15 +191,13 @@ fn zero_b_layout_switch_restores_a_real_saved_window_configuration() {
                  (when (buffer-live-p source)
                    (kill-buffer source))
                  (when (buffer-live-p target)
-                   (kill-buffer target))))"##;
-    let expect = expect![[r#"OK (" *0blayout-target*" "target" (source target))"#]];
-
-    assert_zero_b_layout_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_b_layout_kill_removes_current_and_selects_the_first_survivor() {
-    let elisp_form = r##"(let ((0blayout-alist
+                   (kill-buffer target))))"##,
+            true,
+            expect![[r#"OK (" *0blayout-target*" "target" (source target))"#]],
+        ),
+        (
+            "zero_b_layout_kill_removes_current_and_selects_the_first_survivor",
+            r##"(let ((0blayout-alist
                       '((current . current-configuration)
                         (next . next-configuration)
                         (later . later-configuration)))
@@ -244,17 +233,15 @@ fn zero_b_layout_kill_removes_current_and_selects_the_first_survivor() {
                    (list
                     result
                     0blayout-alist
-                    (nreverse events)))))"##;
-    let expect = expect![[
+                    (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK ("next" ((next . next-configuration) (later . later-configuration)) ((message "Killing layout: 'current'") (set-window-configuration next-configuration) (set-current-name "next")))"#
-    ]];
-
-    assert_zero_b_layout_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_b_layout_kill_recreates_the_default_when_none_survive() {
-    let elisp_form = r##"(let ((0blayout-alist
+    ]],
+        ),
+        (
+            "zero_b_layout_kill_recreates_the_default_when_none_survive",
+            r##"(let ((0blayout-alist
                       '((only . only-configuration)))
                      (0blayout-default "fallback")
                      events)
@@ -287,21 +274,20 @@ fn zero_b_layout_kill_recreates_the_default_when_none_survive() {
                    (list
                     result
                     0blayout-alist
-                    (nreverse events)))))"##;
-    let expect = expect![[
+                    (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK ("fallback" nil ((message "Killing layout: 'only'") (set-current-name "fallback") (new "fallback")))"#
-    ]];
-
-    assert_zero_b_layout_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_b_layout_switch_requires_a_string_layout_name() {
-    let elisp_form = r##"(let ((0blayout-alist nil))
+    ]],
+        ),
+        (
+            "zero_b_layout_switch_requires_a_string_layout_name",
+            r##"(let ((0blayout-alist nil))
                (cl-letf (((symbol-function '0blayout-save)
                           #'ignore))
-                 (0blayout-switch 'target)))"##;
-    let expect = expect![r#"ERR (wrong-type-argument stringp target)"#];
-
-    assert_zero_b_layout_signal_parity(elisp_form, expect);
+                 (0blayout-switch 'target)))"##,
+            false,
+            expect![r#"ERR (wrong-type-argument stringp target)"#],
+        ),
+    ]);
 }

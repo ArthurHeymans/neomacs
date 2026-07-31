@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_c_headers_parity;
+use super::assert_auto_complete_c_headers_batch;
 
 #[test]
-fn auto_complete_c_headers_default_directory_provider_returns_configured_value_by_identity() {
-    let elisp_form = r##"(let ((achead:include-directories
+fn options_public_surface_batch() {
+    assert_auto_complete_c_headers_batch(&[
+        (
+            "auto_complete_c_headers_default_directory_provider_returns_configured_value_by_identity",
+            r##"(let ((achead:include-directories
                 '("project" "/sdk/include"
                   "/opt/vendor/include")))
          (let ((result
@@ -15,14 +18,13 @@ fn auto_complete_c_headers_default_directory_provider_returns_configured_value_b
                 achead:include-directories)
             (progn
               (setcar result "changed")
-              achead:include-directories))))"##;
-    let expect = expect![[r#"OK (#1=("changed" "/sdk/include" "/opt/vendor/include") t #1#)"#]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_custom_directory_provider_is_called_once_per_candidate_scan() {
-    let elisp_form = r##"(let* ((calls 0)
+              achead:include-directories))))"##,
+            true,
+            expect![[r#"OK (#1=("changed" "/sdk/include" "/opt/vendor/include") t #1#)"#]],
+        ),
+        (
+            "auto_complete_c_headers_custom_directory_provider_is_called_once_per_candidate_scan",
+            r##"(let* ((calls 0)
                (achead:include-patterns
                 '("\\.h\\'"))
                (achead:get-include-directories-function
@@ -34,14 +36,13 @@ fn auto_complete_c_headers_custom_directory_provider_is_called_once_per_candidat
           calls
           (achead:get-include-file-candidates
            "nested/")
-          calls))"##;
-    let expect = expect!["OK (nil 1 nil 2)"];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_extracts_include_options_in_order_with_empty_and_duplicate_values() {
-    let elisp_form = r##"(achead:get-include-directories-from-options
+          calls))"##,
+            true,
+            expect!["OK (nil 1 nil 2)"],
+        ),
+        (
+            "auto_complete_c_headers_extracts_include_options_in_order_with_empty_and_duplicate_values",
+            r##"(achead:get-include-directories-from-options
          '("-Wall"
            "-I/usr/include"
            "-I"
@@ -50,15 +51,13 @@ fn auto_complete_c_headers_extracts_include_options_in_order_with_empty_and_dupl
            "-I../relative"
            "-I/usr/include"
            "-DNAME=-Iinside"
-           "-Ipath with spaces"))"##;
-    let expect =
-        expect![[r#"OK ("/usr/include" "" "../relative" "/usr/include" "path with spaces")"#]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_include_option_matching_is_strictly_case_sensitive() {
-    let elisp_form = r##"(let ((case-fold-search t))
+           "-Ipath with spaces"))"##,
+            true,
+            expect![[r#"OK ("/usr/include" "" "../relative" "/usr/include" "path with spaces")"#]],
+        ),
+        (
+            "auto_complete_c_headers_include_option_matching_is_strictly_case_sensitive",
+            r##"(let ((case-fold-search t))
          (list
           (achead:get-include-directories-from-options
            '("-i/lower"
@@ -66,14 +65,13 @@ fn auto_complete_c_headers_include_option_matching_is_strictly_case_sensitive() 
              "-IÜnicode"
              "-include"
              "-I./local"))
-          case-fold-search))"##;
-    let expect = expect![[r#"OK (("/upper" "Ünicode" "./local") t)"#]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_option_parser_signals_on_non_string_members_after_prior_matches() {
-    let elisp_form = r##"(list
+          case-fold-search))"##,
+            true,
+            expect![[r#"OK (("/upper" "Ünicode" "./local") t)"#]],
+        ),
+        (
+            "auto_complete_c_headers_option_parser_signals_on_non_string_members_after_prior_matches",
+            r##"(list
          (achead-test-error
           (lambda ()
             (achead:get-include-directories-from-options
@@ -81,14 +79,13 @@ fn auto_complete_c_headers_option_parser_signals_on_non_string_members_after_pri
          (achead-test-error
           (lambda ()
             (achead:get-include-directories-from-options
-             nil))))"##;
-    let expect = expect!["OK ((:signal wrong-type-argument (stringp 17)) (:value nil))"];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_default_patterns_cover_supported_extensions_and_suffix_free_cpp_names() {
-    let elisp_form = r##"(mapcar
+             nil))))"##,
+            true,
+            expect!["OK ((:signal wrong-type-argument (stringp 17)) (:value nil))"],
+        ),
+        (
+            "auto_complete_c_headers_default_patterns_cover_supported_extensions_and_suffix_free_cpp_names",
+            r##"(mapcar
          (lambda (path)
            (list
             path
@@ -106,16 +103,15 @@ fn auto_complete_c_headers_default_patterns_cover_supported_extensions_and_suffi
            "vector"
            "/sdk/vector2"
            "/sdk/.hidden.h"
-           "/sdk/space name"))"##;
-    let expect = expect![[
+           "/sdk/space name"))"##,
+            true,
+            expect![[
         r#"OK (("/sdk/vector" t) ("/sdk/unordered_map" t) ("/sdk/x86-vector" nil) ("/sdk/foo.h" t) ("/sdk/foo.hpp" t) ("/sdk/foo.hh" t) ("/sdk/foo.H" t) ("/sdk/foo.hxx" nil) ("/sdk/foo.h.in" nil) ("vector" nil) ("/sdk/vector2" nil) ("/sdk/.hidden.h" t) ("/sdk/space name" nil))"#
-    ]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_custom_pattern_order_nil_and_empty_patterns_have_exact_semantics() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "auto_complete_c_headers_custom_pattern_order_nil_and_empty_patterns_have_exact_semantics",
+            r##"(list
          (let ((achead:include-patterns
                 '("\\.inc\\'" "^special/")))
            (mapcar
@@ -132,14 +128,13 @@ fn auto_complete_c_headers_custom_pattern_order_nil_and_empty_patterns_have_exac
          (let ((achead:include-patterns
                 '("never" "\\.h\\'")))
            (achead:path-should-be-displayed
-            "yes.h")))"##;
-    let expect = expect!["OK ((t t nil nil) nil t t)"];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_prefix_regexp_extracts_real_include_and_import_fragments() {
-    let elisp_form = r##"(mapcar
+            "yes.h")))"##,
+            true,
+            expect!["OK ((t t nil nil) nil t t)"],
+        ),
+        (
+            "auto_complete_c_headers_prefix_regexp_extracts_real_include_and_import_fragments",
+            r##"(mapcar
          (lambda (line)
            (with-temp-buffer
              (insert line)
@@ -159,9 +154,11 @@ fn auto_complete_c_headers_prefix_regexp_extracts_real_include_and_import_fragme
            "#include <>"
            "#include <two words"
            "#include 'single"
-           "#include <nested/file.hpp>"))"##;
-    let expect = expect![[
+           "#include <nested/file.hpp>"))"##,
+            true,
+            expect![[
         r##"OK (("#include <vector" "vector" 11 17) ("#include \"project/api" "project/api" 11 22) nil ("#include <ignored" "ignored" 13 20) nil ("#include <two" "two" 11 14) nil ("#include <nested/file.hpp" "nested/file.hpp" 11 26))"##
-    ]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

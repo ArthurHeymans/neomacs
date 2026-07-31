@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_use_package_parity;
+use super::assert_use_package_batch;
 
 #[test]
-fn use_package_bind_registers_global_and_map_bindings_through_bind_key() {
-    let elisp_form = r##"(progn
+fn integrations_public_surface_batch() {
+    assert_use_package_batch(&[
+        (
+            "use_package_bind_registers_global_and_map_bindings_through_bind_key",
+            r##"(progn
                (defvar neomacs-use-package-bind-map
                  (make-sparse-keymap))
                (let ((personal-keybindings nil))
@@ -22,17 +25,15 @@ fn use_package_bind_registers_global_and_map_bindings_through_bind_key() {
                   (autoloadp
                    (symbol-function
                     'neomacs-use-package-map-command))
-                  personal-keybindings)))"##;
-    let expect = expect![[
+                  personal-keybindings)))"##,
+            true,
+            expect![[
         r#"OK (neomacs-use-package-global-command neomacs-use-package-map-command t t ((("x" . neomacs-use-package-bind-map) neomacs-use-package-map-command nil) (("C-c u") neomacs-use-package-global-command nil)))"#
-    ]];
-
-    assert_use_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn use_package_bind_keymap_loads_a_real_library_and_then_dispatches_its_prefix() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "use_package_bind_keymap_loads_a_real_library_and_then_dispatches_its_prefix",
+            r##"(let* ((root
                     (make-temp-file "use-package-keymap-" t))
                    (load-path (cons root load-path)))
                (unwind-protect
@@ -67,15 +68,13 @@ fn use_package_bind_keymap_loads_a_real_library_and_then_dispatches_its_prefix()
                         (lookup-key
                          neomacs-use-package-prefix-map "x")
                         (key-binding (kbd "C-c k x")))))
-                 (delete-directory root t)))"##;
-    let expect = expect![[r#"OK (nil t forward-char forward-char)"#]];
-
-    assert_use_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn use_package_custom_sets_the_value_and_exact_customization_metadata() {
-    let elisp_form = r##"(progn
+                 (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK (nil t forward-char forward-char)"#]],
+        ),
+        (
+            "use_package_custom_sets_the_value_and_exact_customization_metadata",
+            r##"(progn
                (defcustom neomacs-use-package-custom-variable
                  'initial "Test variable.")
                (use-package neomacs-use-package-custom-library
@@ -97,15 +96,13 @@ fn use_package_custom_sets_the_value_and_exact_customization_metadata() {
                  'customized-variable-comment)
                 (get
                  'neomacs-use-package-custom-variable
-                 'custom-requests)))"##;
-    let expect = expect![[r#"OK (#1=(one two) ('#1#) nil nil nil)"#]];
-
-    assert_use_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn use_package_custom_face_records_exact_face_spec_and_modified_state() {
-    let elisp_form = r##"(progn
+                 'custom-requests)))"##,
+            true,
+            expect![[r#"OK (#1=(one two) ('#1#) nil nil nil)"#]],
+        ),
+        (
+            "use_package_custom_face_records_exact_face_spec_and_modified_state",
+            r##"(progn
                (defface neomacs-use-package-face
                  '((t :foreground "black"))
                  "Parity face.")
@@ -121,15 +118,13 @@ fn use_package_custom_face_records_exact_face_spec_and_modified_state() {
                 (face-attribute
                  'neomacs-use-package-face :foreground nil t)
                 (face-attribute
-                 'neomacs-use-package-face :weight nil t)))"##;
-    let expect = expect![[r#"OK (t nil "blue" bold)"#]];
-
-    assert_use_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn use_package_ensure_calls_the_selected_install_boundary_with_normalized_arguments() {
-    let elisp_form = r##"(let (calls)
+                 'neomacs-use-package-face :weight nil t)))"##,
+            true,
+            expect![[r#"OK (t nil "blue" bold)"#]],
+        ),
+        (
+            "use_package_ensure_calls_the_selected_install_boundary_with_normalized_arguments",
+            r##"(let (calls)
                (cl-letf
                    (((symbol-function
                       'neomacs-use-package-ensure-function)
@@ -147,17 +142,15 @@ fn use_package_ensure_calls_the_selected_install_boundary_with_normalized_argume
                        :ensure
                        (dependency-b :pin "gnu")
                        :no-require t)))
-                 (nreverse calls)))"##;
-    let expect = expect![[
+                 (nreverse calls)))"##,
+            true,
+            expect![[
         r#"OK ((neomacs-use-package-ensure-target (dependency-a (dependency-b . "gnu")) nil nil))"#
-    ]];
-
-    assert_use_package_parity(elisp_form, expect);
-}
-
-#[test]
-fn use_package_load_path_expands_static_and_computed_paths_below_user_emacs_directory() {
-    let elisp_form = r##"(let* ((user-emacs-directory
+    ]],
+        ),
+        (
+            "use_package_load_path_expands_static_and_computed_paths_below_user_emacs_directory",
+            r##"(let* ((user-emacs-directory
                     (file-name-as-directory
                      (make-temp-file
                       "use-package-load-path-" t)))
@@ -181,8 +174,9 @@ fn use_package_load_path_expands_static_and_computed_paths_below_user_emacs_dire
                        load-path)))
                  (delete-directory
                   user-emacs-directory t)
-                 (setq load-path original-load-path)))"##;
-    let expect = expect![[r#"OK ("two" "one")"#]];
-
-    assert_use_package_parity(elisp_form, expect);
+                 (setq load-path original-load-path)))"##,
+            true,
+            expect![[r#"OK ("two" "one")"#]],
+        ),
+    ]);
 }

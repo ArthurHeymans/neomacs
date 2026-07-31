@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_alchemist_parity;
+use super::assert_alchemist_batch;
 
 #[test]
-fn alchemist_project_discovers_nested_mix_root_skips_hex_boundaries_and_reuses_cache() {
-    let elisp_form = r##"(let* ((sandbox
+fn project_public_surface_batch() {
+    assert_alchemist_batch(&[
+        (
+            "alchemist_project_discovers_nested_mix_root_skips_hex_boundaries_and_reuses_cache",
+            r##"(let* ((sandbox
                            (file-name-as-directory
                             (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                           (project (expand-file-name "umbrella" sandbox))
@@ -41,14 +44,13 @@ fn alchemist_project_discovers_nested_mix_root_skips_hex_boundaries_and_reuses_c
                             sandbox))
                          (file-relative-name
                           alchemist-project-root-path-cache
-                          sandbox))))"##;
-    let expect = expect![[r#"OK ("umbrella/" t "umbrella" "umbrella/" "umbrella/" "umbrella/")"#]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_project_maps_library_web_and_umbrella_files_to_real_tests_and_back() {
-    let elisp_form = r##"(let* ((sandbox
+                          sandbox))))"##,
+            true,
+            expect![[r#"OK ("umbrella/" t "umbrella" "umbrella/" "umbrella/" "umbrella/")"#]],
+        ),
+        (
+            "alchemist_project_maps_library_web_and_umbrella_files_to_real_tests_and_back",
+            r##"(let* ((sandbox
                            (file-name-as-directory
                             (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                           (project (file-name-as-directory
@@ -95,16 +97,15 @@ fn alchemist_project_maps_library_web_and_umbrella_files_to_real_tests_and_back(
                            "apps/admin/lib/admin/audit.ex"
                            "apps/admin/test/admin/audit_test.exs"
                            "apps/site/web/views/layout_view.ex"
-                           "apps/site/test/views/layout_view_test.exs"))))"##;
-    let expect = expect![[
+                           "apps/site/test/views/layout_view_test.exs"))))"##,
+            true,
+            expect![[
         r#"OK (("lib/accounts/user.ex" "test/accounts/user_test.exs") ("test/accounts/user_test.exs" "lib/accounts/user.ex") ("web/controllers/page_controller.ex" "test/controllers/page_controller_test.exs") ("test/controllers/page_controller_test.exs" "web/controllers/page_controller.ex") ("apps/admin/lib/admin/audit.ex" "apps/admin/test/admin/audit_test.exs") ("apps/admin/test/admin/audit_test.exs" "apps/admin/test/admin/audit.ex") ("apps/site/web/views/layout_view.ex" "apps/site/test/views/layout_view_test.exs") ("apps/site/test/views/layout_view_test.exs" "apps/site/test/views/layout_view.ex"))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_project_creates_missing_test_with_real_module_boilerplate_and_cursor_position() {
-    let elisp_form = r##"(let* ((sandbox
+    ]],
+        ),
+        (
+            "alchemist_project_creates_missing_test_with_real_module_boilerplate_and_cursor_position",
+            r##"(let* ((sandbox
                            (file-name-as-directory
                             (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                           (project (file-name-as-directory
@@ -149,16 +150,15 @@ fn alchemist_project_creates_missing_test_with_real_module_boilerplate_and_curso
                             (kill-buffer source-buffer))
                           (when (buffer-live-p created)
                             (set-buffer-modified-p nil)
-                            (kill-buffer created)))))"##;
-    let expect = expect![[
+                            (kill-buffer created)))))"##,
+            true,
+            expect![[
         r#"OK ("test/billing/invoice_test.exs" "defmodule Billing.InvoiceTest do\n  use ExUnit.Case\n\n  \nend\n" 55 4 2 t)"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_project_create_file_turns_nested_user_path_into_real_module_and_editing_position() {
-    let elisp_form = r##"(let* ((sandbox
+    ]],
+        ),
+        (
+            "alchemist_project_create_file_turns_nested_user_path_into_real_module_and_editing_position",
+            r##"(let* ((sandbox
                            (file-name-as-directory
                             (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                           (project
@@ -192,16 +192,15 @@ fn alchemist_project_create_file_turns_nested_user_path_into_real_module_and_edi
                                     (file-name-directory target))))
                               (when (buffer-live-p buffer)
                                 (set-buffer-modified-p nil)
-                                (kill-buffer buffer)))))))"##;
-    let expect = expect![[
+                                (kill-buffer buffer)))))))"##,
+            true,
+            expect![[
         r#"OK ("lib/inventory/stock_item.ex" "defmodule Inventory.StockItem do\n  \nend\n" 36 2 2 t)"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_file_recursively_lists_real_project_files_and_prompt_opens_selection() {
-    let elisp_form = r##"(let* ((sandbox
+    ]],
+        ),
+        (
+            "alchemist_file_recursively_lists_real_project_files_and_prompt_opens_selection",
+            r##"(let* ((sandbox
                            (file-name-as-directory
                             (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                           (project (file-name-as-directory
@@ -232,16 +231,15 @@ fn alchemist_file_recursively_lists_real_project_files_and_prompt_opens_selectio
                          (alchemist-file-find-files project "lib")
                          prompt
                          candidates
-                         opened)))"##;
-    let expect = expect![[
+                         opened)))"##,
+            true,
+            expect![[
         r#"OK (("lib/.hidden.ex" "lib/a.ex" "lib/nested/b.ex" "lib/nested/deep/c.ex") "lib/nested/deep/c.ex" "[catalog] lib: " ("lib/.hidden.ex" "lib/a.ex" "lib/nested/b.ex" "lib/nested/deep/c.ex") "lib/nested/deep/c.ex")"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_phoenix_discovers_real_web_tree_router_routes_and_mode_activation() {
-    let elisp_form = r##"(let* ((sandbox
+    ]],
+        ),
+        (
+            "alchemist_phoenix_discovers_real_web_tree_router_routes_and_mode_activation",
+            r##"(let* ((sandbox
                            (file-name-as-directory
                             (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                           (project (file-name-as-directory
@@ -294,9 +292,11 @@ fn alchemist_phoenix_discovers_real_web_tree_router_routes_and_mode_activation()
                          (with-temp-buffer
                            (alchemist-phoenix-enable-mode)
                            alchemist-phoenix-mode)
-                         (nreverse events))))"##;
-    let expect = expect![[
+                         (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (t "web" "web/controllers" "web/templates" router routes t ((find "phoenix_app/" "web") (find "phoenix_app/" "web/controllers") (find "phoenix_app/" "web/templates") (router "web/router.ex") (routes ("phoenix.routes") (4))))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

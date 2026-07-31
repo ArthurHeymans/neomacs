@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_ace_link_parity;
+use super::assert_ace_link_batch;
 
 /// The package's headline workflow.  A user reads a manual in `Info-mode',
 /// runs `ace-link-setup-default' so that "o" is bound, presses "o" to label the
@@ -14,9 +14,13 @@ use super::assert_ace_link_parity;
 /// `Info-follow-reference' calls it that way with an uninitialised loop
 /// variable, so no `*note' cross reference can be followed at all -- with or
 /// without ace-link.
+
 #[test]
-fn ace_link_info_labels_visible_references_and_follows_the_chosen_one() {
-    let elisp_form = r##"(ace-link-test-session
+fn workflows_public_surface_batch() {
+    assert_ace_link_batch(&[
+        (
+            "ace_link_info_labels_visible_references_and_follows_the_chosen_one",
+            r##"(ace-link-test-session
  (ace-link-setup-default)
  (ace-link-test-open-manual)
  (let ((top (list :node Info-current-node
@@ -33,22 +37,15 @@ fn ace_link_info_labels_visible_references_and_follows_the_chosen_one() {
            :followed followed
            :single-candidate (list :node Info-current-node
                                    :where (ace-link-test-where))
-           :keys (ace-link-test-pressed)))))"##;
-
-    let expect = expect![[
+           :keys (ace-link-test-pressed)))))"##,
+            true,
+            expect![[
         r#"OK (:top (:node "Top" :key ace-link-info :style (ace-link-info . at) :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 58 :line 2 :column 0 :line-text "")) :followed (:node "Advanced" :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 61 :line 2 :column 0 :line-text "") :text "File: sandbox.info,  Node: Advanced,  Prev: Basics,  Up: Top\n\n2 Advanced\n==========\n\nBack to *note Basics::.\n") :single-candidate (:node "Basics" :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 73 :line 2 :column 0 :line-text "")) :keys (("s" ((101 "a" "Basics::      How to begin.") (131 "s" "Advanced::    Deeper water.")))))"#
-    ]];
-
-    assert_ace_link_parity(elisp_form, expect);
-}
-
-/// The two ways a user backs out: `C-g' while the labels are up, and a key that
-/// labels nothing.  Neither may move point, change the node or leave label
-/// overlays behind, and an unknown key must keep the same labels on screen and
-/// read another key rather than following anything.
-#[test]
-fn ace_link_info_aborts_on_c_g_and_reports_an_unknown_label_key() {
-    let elisp_form = r##"(ace-link-test-session
+    ]],
+        ),
+        (
+            "ace_link_info_aborts_on_c_g_and_reports_an_unknown_label_key",
+            r##"(ace-link-test-session
  (ace-link-setup-default)
  (ace-link-test-open-manual)
  (let ((before (ace-link-test-where)))
@@ -62,22 +59,15 @@ fn ace_link_info_aborts_on_c_g_and_reports_an_unknown_label_key() {
            :after-unknown-key (list :node Info-current-node
                                     :where (ace-link-test-where)
                                     :labels (ace-link-test-labels))
-           :keys (ace-link-test-pressed)))))"##;
-
-    let expect = expect![[
+           :keys (ace-link-test-pressed)))))"##,
+            true,
+            expect![[
         r#"OK (:before (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 58 :line 2 :column 0 :line-text "") :aborted (:node "Top" :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 58 :line 2 :column 0 :line-text "") :labels nil) :after-unknown-key (:node "Top" :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 58 :line 2 :column 0 :line-text "") :labels nil) :keys (("C-g" ((101 "a" "Basics::      How to begin.") (131 "s" "Advanced::    Deeper water."))) ("z" ((101 "a" "Basics::      How to begin.") (131 "s" "Advanced::    Deeper water."))) ("C-g" ((101 "a" "Basics::      How to begin.") (131 "s" "Advanced::    Deeper water.")))))"#
-    ]];
-
-    assert_ace_link_parity(elisp_form, expect);
-}
-
-/// A user looks up a function they just wrote, then jumps from the `*Help*'
-/// buffer to its definition.  Every button in the help buffer is labelled --
-/// the type link, the source-file link and both symbols quoted in the
-/// docstring -- and following the source link visits the real sandbox file.
-#[test]
-fn ace_link_help_follows_the_source_button_to_the_defining_file() {
-    let elisp_form = r##"(ace-link-test-session
+    ]],
+        ),
+        (
+            "ace_link_help_follows_the_source_button_to_the_defining_file",
+            r##"(ace-link-test-session
  (ace-link-setup-default)
  (load (ace-link-test-write
         "lib/notes-util.el"
@@ -98,26 +88,15 @@ fn ace_link_help_follows_the_source_button_to_the_defining_file() {
            :where (ace-link-test-where)
            :help-text (with-current-buffer "*Help*"
                         (buffer-substring-no-properties
-                         (point-min) (point-max)))))))"##;
-
-    let expect = expect![[
+                         (point-min) (point-max)))))))"##,
+            true,
+            expect![[
         r#"OK (:help (:mode help-mode :key ace-link-help :style (ace-link-help . post) :text "notes-util-render is an interpreted-function in\n‘[ORACLE-SANDBOX]/lib/notes-util.el’.\n\n(notes-util-render ENTRY)\n\nRender ENTRY for the notebook.\nSee ‘notes-util-format’ and ‘describe-function’ for details.\n") :keys (("s" ((24 "ai" "interpreted-function in") (49 "s/" "[ORACLE-SANDBOX]/lib/notes-util.el’.") (303 "dn" "notes-util-format’ and ‘describe-function’ for details.") (327 "fd" "describe-function’ for details.")))) :where (:buffer "notes-util.el" :window-buffer "notes-util.el" :mode emacs-lisp-mode :point 59 :line 2 :column 0 :line-text "(defun notes-util-render (entry)") :help-text "notes-util-render is an interpreted-function in\n‘[ORACLE-SANDBOX]/lib/notes-util.el’.\n\n(notes-util-render ENTRY)\n\nRender ENTRY for the notebook.\nSee ‘notes-util-format’ and ‘describe-function’ for details.\n")"#
-    ]];
-
-    assert_ace_link_parity(elisp_form, expect);
-}
-
-/// An org plan with four kinds of link in the visible subtree -- an https link,
-/// a `file:' link, an internal `*heading' link and a bare angle link -- plus a
-/// fifth link inside a subtree the user folds with TAB.  ace-link filters
-/// invisible links with `outline-invisible-p', which only knows the legacy
-/// `outline' invisibility spec, so with modern `org-fold' the folded link is
-/// still offered; that upstream behaviour is pinned here.  All three follow
-/// kinds are exercised: moving inside the buffer, opening another file, and
-/// handing a URL to the browser.
-#[test]
-fn ace_link_org_offers_every_visible_link_type_and_follows_each_kind() {
-    let elisp_form = r##"(ace-link-test-session
+    ]],
+        ),
+        (
+            "ace_link_org_offers_every_visible_link_type_and_follows_each_kind",
+            r##"(ace-link-test-session
  (ace-link-setup-default)
  (ace-link-test-capture-browsers)
  (ace-link-test-write "notes/appendix.org"
@@ -154,22 +133,15 @@ fn ace_link_org_offers_every_visible_link_type_and_follows_each_kind() {
                :remote remote
                :file (ace-link-test-where)
                :keys (ace-link-test-pressed)
-               :browsed (ace-link-test-browsed)))))))"##;
-
-    let expect = expect![[
+               :browsed (ace-link-test-browsed)))))))"##,
+            true,
+            expect![[
         r##"OK (:folded (:mode org-mode :style (ace-link-org . pre) :archive-invisible org-fold-outline) :internal (:buffer "plan.org" :window-buffer "plan.org" :mode org-mode :point 202 :line 8 :column 0 :line-text "* Milestones") :remote (:where (:buffer "plan.org" :window-buffer "plan.org" :mode org-mode :point 35 :line 4 :column 9 :line-text "Read the [[https://example.org/manual][project manual]] and") :browsed (#1=(browse "https://example.org/manual"))) :file (:buffer "appendix.org" :window-buffer "appendix.org" :mode org-mode :point 0 :line 1 :column 0 :line-text "#+title: Appendix") :keys (("d" ((35 "a[" "[[https://example.org/manual][project manual]] and") (90 "s[" "[[file:appendix.org][appendix]].  Jump to [[*Milestones][milestones]].") (132 "d[" "[[*Milestones][milestones]].") (174 "f<" "<https://example.org/bare>") (219 "g[" "[[https://example.org/tracker][tracker]].") (279 "h[" "[[https://example.org/hidden][hidden link]]."))) ("a" ((35 "a[" "[[https://example.org/manual][project manual]] and") (90 "s[" "[[file:appendix.org][appendix]].  Jump to [[*Milestones][milestones]].") (132 "d[" "[[*Milestones][milestones]].") (174 "f<" "<https://example.org/bare>") (219 "g[" "[[https://example.org/tracker][tracker]].") (279 "h[" "[[https://example.org/hidden][hidden link]]."))) ("s" ((35 "a[" "[[https://example.org/manual][project manual]] and") (90 "s[" "[[file:appendix.org][appendix]].  Jump to [[*Milestones][milestones]].") (132 "d[" "[[*Milestones][milestones]].") (174 "f<" "<https://example.org/bare>") (219 "g[" "[[https://example.org/tracker][tracker]].") (279 "h[" "[[https://example.org/hidden][hidden link]].")))) :browsed (#1#))"##
-    ]];
-
-    assert_ace_link_parity(elisp_form, expect);
-}
-
-/// A real `compilation-start' run over a real sandbox project: the shell prints
-/// a warning and an error, ace-link labels both locations from their
-/// `help-echo' property, and the chosen label runs `compile-goto-error', which
-/// visits the offending file at the reported line and column.
-#[test]
-fn ace_link_compilation_jumps_from_a_real_compile_run_to_the_error_site() {
-    let elisp_form = r##"(ace-link-test-session
+    ]],
+        ),
+        (
+            "ace_link_compilation_jumps_from_a_real_compile_run_to_the_error_site",
+            r##"(ace-link-test-session
  (ace-link-setup-default)
  (ace-link-test-write "src/parser.c" "int main(void) {\n  return 0;\n}\n")
  (ace-link-test-write "src/lexer.c" "/* lexer */\nint lex(void) { return 1; }\n")
@@ -195,22 +167,15 @@ fn ace_link_compilation_jumps_from_a_real_compile_run_to_the_error_site() {
              :keys (ace-link-test-pressed)
              :where (ace-link-test-where)
              :file-text (buffer-substring-no-properties
-                         (point-min) (point-max)))))))"##;
-
-    let expect = expect![[
+                         (point-min) (point-max)))))))"##,
+            true,
+            expect![[
         r#"OK (:compilation (:mode compilation-mode :running nil :key ace-link-compilation :style (ace-link-compilation . post) :dispatch (ace-link-compilation compilation-mode grep-mode)) :keys (("s" ((358 "as" "src/parser.c:2:3: warning: unused value") (398 "ss" "src/lexer.c:2:17: error: bad token")))) :where (:buffer "lexer.c" :window-buffer "lexer.c" :mode c-mode :point 28 :line 2 :column 16 :line-text "int lex(void) { return 1; }") :file-text "/* lexer */\nint lex(void) { return 1; }\n")"#
-    ]];
-
-    assert_ace_link_parity(elisp_form, expect);
-}
-
-/// A small local site rendered by eww: three links, one of whose labels spans a
-/// rendered line break.  Following the first label renders the next local page,
-/// `l' goes back, and a prefix argument sends the external URL to the secondary
-/// browser instead of eww.
-#[test]
-fn ace_link_eww_follows_a_local_page_and_a_prefix_opens_the_external_browser() {
-    let elisp_form = r##"(ace-link-test-session
+    ]],
+        ),
+        (
+            "ace_link_eww_follows_a_local_page_and_a_prefix_opens_the_external_browser",
+            r##"(ace-link-test-session
  (require 'eww)
  (ace-link-test-capture-browsers)
  (ace-link-setup-default)
@@ -243,25 +208,15 @@ fn ace_link_eww_follows_a_local_page_and_a_prefix_opens_the_external_browser() {
              :external (list :title (plist-get eww-data :title)
                              :where (ace-link-test-where))
              :browsed (ace-link-test-browsed)
-             :keys (ace-link-test-pressed))))))"##;
-
-    let expect = expect![[
+             :keys (ace-link-test-pressed))))))"##,
+            true,
+            expect![[
         r#"OK (:index (:mode eww-mode :title "Field notes" :key ace-link-eww :style (ace-link-eww . post) :text "Field\nnotes\n\n\nStart\nwith\nthe\nintroduction,\nthen\nread\nthe\nAPI\nreference.\n\n\nExternal:\nupstream.\n") :followed (:title "Introduction" :url "file://[ORACLE-SANDBOX]/site/intro.html" :where (:buffer "*eww*" :window-buffer "*eww*" :mode eww-mode :point 0 :line 1 :column 0 :line-text "Introduction")) :external (:title "Field notes" :where (:buffer "*eww*" :window-buffer "*eww*" :mode eww-mode :point 84 :line 17 :column 0 :line-text "upstream.")) :browsed ((browse-external "https://example.org/upstream")) :keys (("a" ((29 "ai" "introduction,") (57 "sA" "API") (84 "du" "upstream."))) ("d" ((29 "ai" "introduction,") (57 "sA" "API") (84 "du" "upstream.")))))"#
-    ]];
-
-    assert_ace_link_parity(elisp_form, expect);
-}
-
-/// The mode-dispatching entry point.  In an unsupported buffer `ace-link'
-/// signals, unless the user installed an `ace-link-fallback-function'.  The
-/// minor-mode table promises that `compilation-shell-minor-mode' dispatches to
-/// `ace-link-compilation', but upstream tests it with `bound-and-true-p' applied
-/// to the loop variable's own name, so the lookup never succeeds and the same
-/// buffer errors -- while `ace-link-compilation' bound to a key works there, so
-/// the links themselves are real.
-#[test]
-fn ace_link_dispatches_on_major_mode_and_falls_back_when_unsupported() {
-    let elisp_form = r##"(ace-link-test-session
+    ]],
+        ),
+        (
+            "ace_link_dispatches_on_major_mode_and_falls_back_when_unsupported",
+            r##"(ace-link-test-session
  (ace-link-test-write "src/parser.c" "int main(void) {\n  return 0;\n}\n")
  (global-set-key (kbd "M-o") #'ace-link)
  (global-set-key (kbd "C-c o") #'ace-link-compilation)
@@ -291,11 +246,11 @@ fn ace_link_dispatches_on_major_mode_and_falls_back_when_unsupported() {
        (list :plain plain
              :minor minor
              :keys (ace-link-test-pressed)
-             :where (ace-link-test-where))))))"##;
-
-    let expect = expect![[
+             :where (ace-link-test-where))))))"##,
+            true,
+            expect![[
         r#"OK (:plain (:mode fundamental-mode :unsupported (error "fundamental-mode isn’t supported") :fallback (fallback fundamental-mode 1)) :minor (:minor-mode t :table ((ace-link-compilation compilation-shell-minor-mode)) :dispatch (error "fundamental-mode isn’t supported")) :keys (("s" ((7 "a" "src/parser.c:2:3: warning: unused value") (47 "s" "src/parser.c:3:1: error: stray brace")))) :where (:buffer "parser.c" :window-buffer "parser.c" :mode c-mode :point 29 :line 3 :column 0 :line-text "}"))"#
-    ]];
-
-    assert_ace_link_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

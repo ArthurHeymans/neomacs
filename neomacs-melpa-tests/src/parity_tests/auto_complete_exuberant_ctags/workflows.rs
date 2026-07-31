@@ -1,25 +1,26 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_exuberant_ctags_parity;
+use super::assert_auto_complete_exuberant_ctags_batch;
 
 #[test]
-fn auto_complete_exuberant_ctags_setup_installs_one_global_save_hook() {
-    let elisp_form = r##"(let ((after-save-hook nil))
+fn workflows_public_surface_batch() {
+    assert_auto_complete_exuberant_ctags_batch(&[
+        (
+            "auto_complete_exuberant_ctags_setup_installs_one_global_save_hook",
+            r##"(let ((after-save-hook nil))
                            (ac-exuberant-ctags-setup)
                            (ac-exuberant-ctags-setup)
                            (list
                             after-save-hook
                             (memq
                              'ac-exuberant-ctags-build-index
-                             after-save-hook)))"##;
-    let expect = expect!["OK (#1=(ac-exuberant-ctags-build-index) #1#)"];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_source_init_builds_only_when_index_is_nil() {
-    let elisp_form = r##"(let ((calls 0)
+                             after-save-hook)))"##,
+            true,
+            expect!["OK (#1=(ac-exuberant-ctags-build-index) #1#)"],
+        ),
+        (
+            "auto_complete_exuberant_ctags_source_init_builds_only_when_index_is_nil",
+            r##"(let ((calls 0)
                                 (initializer
                                  (cdr
                                   (assq
@@ -46,15 +47,13 @@ fn auto_complete_exuberant_ctags_source_init_builds_only_when_index_is_nil() {
                                (list
                                 first
                                 calls
-                                ac-exuberant-ctags-index))))"##;
-    let expect = expect![[r#"OK ((1 #1=("built f C")) 2 #1#)"#]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_real_project_build_and_candidate_workflow_matches() {
-    let elisp_form = r##"(let* ((root
+                                ac-exuberant-ctags-index))))"##,
+            true,
+            expect![[r#"OK ((1 #1=("built f C")) 2 #1#)"#]],
+        ),
+        (
+            "auto_complete_exuberant_ctags_real_project_build_and_candidate_workflow_matches",
+            r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "real-project"))
                                 (source
@@ -83,17 +82,15 @@ fn auto_complete_exuberant_ctags_real_project_build_and_candidate_workflow_match
                                    candidates)
                                   (auto-complete-exuberant-ctags-test-relative
                                    ac-exuberant-ctags-tag-file-dir
-                                   root))))))"##;
-    let expect = expect![[
+                                   root))))))"##,
+            true,
+            expect![[
         r#"OK (("reset_state f C" "render_model f C" "render_frame f C") ("render_model" "render_frame") "./")"#
-    ]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_after_save_hook_rebuilds_real_project_index() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "auto_complete_exuberant_ctags_after_save_hook_rebuilds_real_project_index",
+            r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "save-hook-project"))
                                 (source
@@ -126,15 +123,13 @@ fn auto_complete_exuberant_ctags_after_save_hook_rebuilds_real_project_index() {
                                     (buffer-modified-p)))
                                (set-buffer-modified-p nil)
                                (kill-buffer
-                                (current-buffer)))))"##;
-    let expect = expect![[r#"OK (("new_name f C") t nil)"#]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_switching_projects_replaces_index_and_directory() {
-    let elisp_form = r##"(let* ((sandbox
+                                (current-buffer)))))"##,
+            true,
+            expect![[r#"OK (("new_name f C") t nil)"#]],
+        ),
+        (
+            "auto_complete_exuberant_ctags_switching_projects_replaces_index_and_directory",
+            r##"(let* ((sandbox
                                  (auto-complete-exuberant-ctags-test-root
                                   "switch-projects"))
                                 (first
@@ -164,15 +159,13 @@ fn auto_complete_exuberant_ctags_switching_projects_replaces_index_and_directory
                               ac-exuberant-ctags-index
                               (auto-complete-exuberant-ctags-test-relative
                                ac-exuberant-ctags-tag-file-dir
-                               sandbox))))"##;
-    let expect = expect![[r#"OK ((("first_api f C") "first/") ("second_api m Ruby") "second/")"#]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_real_auto_complete_source_requires_three_characters() {
-    let elisp_form = r##"(save-window-excursion
+                               sandbox))))"##,
+            true,
+            expect![[r#"OK ((("first_api f C") "first/") ("second_api m Ruby") "second/")"#]],
+        ),
+        (
+            "auto_complete_exuberant_ctags_real_auto_complete_source_requires_three_characters",
+            r##"(save-window-excursion
                            (let ((ac-exuberant-ctags-index
                                   '("render f C"
                                     "rename m Rust"))
@@ -216,17 +209,15 @@ fn auto_complete_exuberant_ctags_real_auto_complete_source_requires_three_charac
                                                (popup-live-p ac-menu)
                                                ac-completing)))
                                         (auto-complete-mode -1))))))
-                              '("x = re" "x = ren"))))"##;
-    let expect = expect![[
+                              '("x = re" "x = ren"))))"##,
+            true,
+            expect![[
         r#"OK (("x = re" nil nil nil nil nil nil nil) ("x = ren" t ("ren") "ren" "ren" ("render" "rename") t t))"#
-    ]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_real_auto_complete_project_session_matches() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_exuberant_ctags_real_auto_complete_project_session_matches",
+            r##"(save-window-excursion
                            (let* ((root
                                    (auto-complete-exuberant-ctags-test-root
                                     "auto-complete-session"))
@@ -282,10 +273,11 @@ fn auto_complete_exuberant_ctags_real_auto_complete_project_session_matches() {
                                             (auto-complete-exuberant-ctags-test-relative
                                              ac-exuberant-ctags-tag-file-dir
                                              root)))))
-                                   (auto-complete-mode -1))))))"##;
-    let expect = expect![[
+                                   (auto-complete-mode -1))))))"##,
+            true,
+            expect![[
         r#"OK ((("reset_state f C" "render_model f C" "render_frame f C") "render" "render" ("render_model" "render_frame") t "render_model") "render_frame" "result = render_frame" nil nil "./")"#
-    ]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,26 +1,27 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_distel_parity;
+use super::assert_auto_complete_distel_batch;
 
 #[test]
-fn distel_completion_html_normalization_handles_paragraphs_breaks_entities_and_tags() {
-    let elisp_form = r##"(mapcar
+fn documentation_public_surface_batch() {
+    assert_auto_complete_distel_batch(&[
+        (
+            "distel_completion_html_normalization_handles_paragraphs_breaks_entities_and_tags",
+            r##"(mapcar
           #'distel-completion-html-to-string
           '("<p>map(Fun, List) -&gt; List</p>"
             "<div><b>Types</b><br>Fun = fun()</div>"
             "   <p>alpha</p>\n\n<p>beta &lt; gamma</p>   "
             "<code>lists:map/2</code>"
-            ""))"##;
-    let expect = expect![[
+            ""))"##,
+            true,
+            expect![[
         r#"OK ("\nmap(Fun, List) -> List" "Types\nFun = fun()" "\nalpha\nbeta < gamma\n" "lists:map/2" "")"#
-    ]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
-}
-
-#[test]
-fn distel_completion_document_prefers_nonempty_local_distel_docs_but_still_collects_metadata() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "distel_completion_document_prefers_nonempty_local_distel_docs_but_still_collects_metadata",
+            r##"(let (calls)
           (cl-letf
               (((symbol-function
                  'distel-completion-local-docs)
@@ -50,17 +51,15 @@ fn distel_completion_document_prefers_nonempty_local_distel_docs_but_still_colle
             (list
              (distel-completion-get-doc-string
               "lists:map")
-             (nreverse calls))))"##;
-    let expect = expect![[
+             (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ("lists:map/2\nMap Fun over List." ((:local "lists" "map") (:metadata "lists" "map")))"#
-    ]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
-}
-
-#[test]
-fn distel_completion_document_uses_internet_docs_when_local_distel_docs_are_empty() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "distel_completion_document_uses_internet_docs_when_local_distel_docs_are_empty",
+            r##"(let (calls)
           (cl-letf
               (((symbol-function
                  'distel-completion-local-docs)
@@ -90,17 +89,15 @@ fn distel_completion_document_uses_internet_docs_when_local_distel_docs_are_empt
             (list
              (distel-completion-get-doc-string
               "lists:map")
-             (nreverse calls))))"##;
-    let expect = expect![[
+             (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ("Erlang online documentation" ((:local "lists" "map") (:internet "lists" "map") (:metadata "lists" "map")))"#
-    ]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
-}
-
-#[test]
-fn distel_completion_document_falls_back_to_formatted_metadata_then_explicit_no_help() {
-    let elisp_form = r##"(cl-letf
+    ]],
+        ),
+        (
+            "distel_completion_document_falls_back_to_formatted_metadata_then_explicit_no_help",
+            r##"(cl-letf
           (((symbol-function
              'distel-completion-local-docs)
             (lambda (_module function)
@@ -126,16 +123,13 @@ fn distel_completion_document_falls_back_to_formatted_metadata_then_explicit_no_
           (mapcar
            #'distel-completion-get-doc-string
            '("lists:map"
-             "lists:missing")))"##;
-    let expect =
-        expect![[r#"OK ("lists:map(Fun, List)" "Couldn't find any help for lists:missing.")"#]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
-}
-
-#[test]
-fn distel_completion_document_without_function_obeys_internet_option_and_exact_fallback_text() {
-    let elisp_form = r##"(mapcar
+             "lists:missing")))"##,
+            true,
+            expect![[r#"OK ("lists:map(Fun, List)" "Couldn't find any help for lists:missing.")"#]],
+        ),
+        (
+            "distel_completion_document_without_function_obeys_internet_option_and_exact_fallback_text",
+            r##"(mapcar
           (lambda (internet)
             (let ((distel-completion-get-doc-from-internet
                    internet)
@@ -158,17 +152,15 @@ fn distel_completion_document_without_function_obeys_internet_option_and_exact_f
                  (distel-completion-get-doc-string
                   "lists")
                  (nreverse calls)))))
-          '(nil t))"##;
-    let expect = expect![[
+          '(nil t))"##,
+            true,
+            expect![[
         r#"OK ((nil "Couldn't find any help for lists." nil) (t "module documentation" (("lists" nil))))"#
-    ]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
-}
-
-#[test]
-fn distel_completion_internet_parser_requests_module_page_and_extracts_function_body() {
-    let elisp_form = r##"(let ((buffer
+    ]],
+        ),
+        (
+            "distel_completion_internet_parser_requests_module_page_and_extracts_function_body",
+            r##"(let ((buffer
                                (generate-new-buffer
                                 " *distel-http-response*"))
                               requested)
@@ -192,10 +184,11 @@ fn distel_completion_internet_parser_requests_module_page_and_extracts_function_
                   "lists"
                   "map")
                  requested))
-            (kill-buffer buffer)))"##;
-    let expect = expect![[
+            (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK ("map(Fun, List)\nMaps <Fun> over List.\nReturns a new list." "http://www.erlang.org/doc/man/lists.html")"#
-    ]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

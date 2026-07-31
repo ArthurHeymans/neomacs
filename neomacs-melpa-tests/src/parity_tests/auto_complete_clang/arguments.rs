@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_clang_parity;
+use super::assert_auto_complete_clang_batch;
 
 #[test]
-fn auto_complete_clang_prefix_header_setter_clears_whitespace_and_preserves_nonblank_input() {
-    let elisp_form = r##"(let ((ac-clang-prefix-header
+fn arguments_public_surface_batch() {
+    assert_auto_complete_clang_batch(&[
+        (
+            "auto_complete_clang_prefix_header_setter_clears_whitespace_and_preserves_nonblank_input",
+            r##"(let ((ac-clang-prefix-header
                 "old.pch"))
          (list
           (progn
@@ -21,14 +24,13 @@ fn auto_complete_clang_prefix_header_setter_clears_whitespace_and_preserves_nonb
           (progn
             (ac-clang-set-prefix-header
              "  named.pch  ")
-            ac-clang-prefix-header)))"##;
-    let expect = expect![[r#"OK (nil nil "prefix.pch" "  named.pch  ")"#]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_cflags_command_splits_interactive_input_using_emacs_word_rules() {
-    let elisp_form = r##"(let ((ac-clang-flags
+            ac-clang-prefix-header)))"##,
+            true,
+            expect![[r#"OK (nil nil "prefix.pch" "  named.pch  ")"#]],
+        ),
+        (
+            "auto_complete_clang_cflags_command_splits_interactive_input_using_emacs_word_rules",
+            r##"(let ((ac-clang-flags
                 '("-DOLD"))
                (prompts nil))
          (cl-letf
@@ -41,15 +43,13 @@ fn auto_complete_clang_cflags_command_splits_interactive_input_using_emacs_word_
            (call-interactively
             #'ac-clang-set-cflags)
            (list ac-clang-flags
-                 (nreverse prompts))))"##;
-    let expect =
-        expect![[r#"OK (("-Iinclude" "-DNAME=hello\\" "world" "-std=c++20") ("New cflags: "))"#]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_shell_cflags_command_passes_current_file_default_and_splits_output() {
-    let elisp_form = r##"(let ((buffer-file-name
+                 (nreverse prompts))))"##,
+            true,
+            expect![[r#"OK (("-Iinclude" "-DNAME=hello\\" "world" "-std=c++20") ("New cflags: "))"#]],
+        ),
+        (
+            "auto_complete_clang_shell_cflags_command_passes_current_file_default_and_splits_output",
+            r##"(let ((buffer-file-name
                 (expand-file-name
                  "src/main.cpp"
                  default-directory))
@@ -78,16 +78,15 @@ fn auto_complete_clang_shell_cflags_command_passes_current_file_default_and_spli
            (list
             ac-clang-flags
             (nreverse reads)
-            (nreverse commands))))"##;
-    let expect = expect![[
+            (nreverse commands))))"##,
+            true,
+            expect![[
         r#"OK (("-I/opt/demo" "-DDEMO=1" "-pthread") (("Shell command: " nil nil "src/main.cpp")) ("pkg-config --cflags demo"))"#
-    ]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_build_location_tracks_stdin_or_saved_file_line_and_column() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_clang_build_location_tracks_stdin_or_saved_file_line_and_column",
+            r##"(with-temp-buffer
          (insert "one\n  alpha beta\nlast")
          (setq buffer-file-name
                (expand-file-name
@@ -101,16 +100,15 @@ fn auto_complete_clang_build_location_tracks_stdin_or_saved_file_line_and_column
           (let ((ac-clang-auto-save t))
             (mapcar
              #'ac-clang-build-location
-             '(1 5 7 15 24)))))"##;
-    let expect = expect![[
+             '(1 5 7 15 24)))))"##,
+            true,
+            expect![[
         r#"OK (("-:1:1" "-:2:1" "-:2:3" "-:2:11" "-:3:5") ("[ORACLE-SANDBOX]/source.cpp:1:1" "[ORACLE-SANDBOX]/source.cpp:2:1" "[ORACLE-SANDBOX]/source.cpp:2:3" "[ORACLE-SANDBOX]/source.cpp:2:11" "[ORACLE-SANDBOX]/source.cpp:3:5"))"#
-    ]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_language_option_covers_c_cpp_objc_extensions_and_fallback() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_clang_language_option_covers_c_cpp_objc_extensions_and_fallback",
+            r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (setq major-mode (car case))
@@ -129,16 +127,15 @@ fn auto_complete_clang_language_option_covers_c_cpp_objc_extensions_and_fallback
            (objc-mode "/work/object.mm")
            (objc-mode nil)
            (rust-mode "/work/main.rs")
-           (fundamental-mode nil)))"##;
-    let expect = expect![[
+           (fundamental-mode nil)))"##,
+            true,
+            expect![[
         r#"OK ((c-mode "/work/main.c" (:value "c")) (c++-mode "/work/main.cc" (:value "c++")) (objc-mode "/work/object.m" (:value "objective-c")) (objc-mode "/work/object.mm" (:value "objective-c++")) (objc-mode nil (:signal wrong-type-argument (stringp nil))) (rust-mode "/work/main.rs" (:value "c++")) (fundamental-mode nil (:value "c++")))"#
-    ]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_custom_language_option_has_priority_and_is_called_each_time() {
-    let elisp_form = r##"(let* ((calls 0)
+    ]],
+        ),
+        (
+            "auto_complete_clang_custom_language_option_has_priority_and_is_called_each_time",
+            r##"(let* ((calls 0)
                (major-mode 'c-mode)
                (ac-clang-lang-option-function
                 (lambda ()
@@ -149,15 +146,13 @@ fn auto_complete_clang_custom_language_option_has_priority_and_is_called_each_ti
          (list
           (ac-clang-lang-option)
           (ac-clang-lang-option)
-          calls))"##;
-    let expect = expect![[r#"OK ("cuda" "c" 2)"#]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_unsaved_complete_args_include_language_flags_prefix_header_location_and_stdin()
- {
-    let elisp_form = r##"(with-temp-buffer
+          calls))"##,
+            true,
+            expect![[r#"OK ("cuda" "c" 2)"#]],
+        ),
+        (
+            "auto_complete_clang_unsaved_complete_args_include_language_flags_prefix_header_location_and_stdin",
+            r##"(with-temp-buffer
          (let ((default-directory
                  (file-name-as-directory
                   (expand-file-name
@@ -172,16 +167,15 @@ fn auto_complete_clang_unsaved_complete_args_include_language_flags_prefix_heade
                 "precompiled.pch"))
            (insert "int main() {\n  ret")
            (ac-clang-build-complete-args
-            (point))))"##;
-    let expect = expect![[
+            (point))))"##,
+            true,
+            expect![[
         r#"OK ("-cc1" "-fsyntax-only" "-x" "c++" "-Iinclude" "-DNAME=two words" "-include-pch" "[ORACLE-SANDBOX]/clang-args/precompiled.pch" "-code-completion-at" "-:2:6" "-")"#
-    ]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_saved_complete_args_omit_language_and_use_file_for_location_and_input() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_clang_saved_complete_args_omit_language_and_use_file_for_location_and_input",
+            r##"(with-temp-buffer
          (let ((buffer-file-name
                  (expand-file-name
                   "saved.c"
@@ -193,32 +187,30 @@ fn auto_complete_clang_saved_complete_args_omit_language_and_use_file_for_locati
                (ac-clang-prefix-header nil))
            (insert "int value;\nval")
            (ac-clang-build-complete-args
-            (- (point) 3))))"##;
-    let expect = expect![[
+            (- (point) 3))))"##,
+            true,
+            expect![[
         r#"OK ("-cc1" "-fsyntax-only" "-Wall" "-code-completion-at" "[ORACLE-SANDBOX]/saved.c:2:1" "[ORACLE-SANDBOX]/saved.c")"#
-    ]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_document_cleanup_removes_placeholders_and_normalizes_optional_markers() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_clang_document_cleanup_removes_placeholders_and_normalizes_optional_markers",
+            r##"(mapcar
          #'ac-clang-clean-document
          '(nil
            ""
            "int fn(<#int x#>, <#const char *name#>)"
            "void log([#int level#], <#const char *fmt#>, ...)"
            "[#only#]"
-           "nested <#std::vector<int>#> [#tail#]"))"##;
-    let expect = expect![[
+           "nested <#std::vector<int>#> [#tail#]"))"##,
+            true,
+            expect![[
         r#"OK (nil "" "int fn(int x, const char *name)" "void log(int level , const char *fmt, ...)" "only " "nested std::vector<int> tail ")"#
-    ]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_document_reads_help_property_only_from_string_candidates() {
-    let elisp_form = r##"(let ((candidate
+    ]],
+        ),
+        (
+            "auto_complete_clang_document_reads_help_property_only_from_string_candidates",
+            r##"(let ((candidate
                 (propertize
                  "function"
                  'ac-clang-help
@@ -230,14 +222,13 @@ fn auto_complete_clang_document_reads_help_property_only_from_string_candidates(
             candidate))
           (ac-clang-document nil)
           (ac-clang-document
-           '(not a string))))"##;
-    let expect = expect![[r#"OK ("int function(int value)" nil nil nil)"#]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_balance_counter_and_argument_splitter_handle_nested_types() {
-    let elisp_form = r##"(list
+           '(not a string))))"##,
+            true,
+            expect![[r#"OK ("int function(int value)" nil nil nil)"#]],
+        ),
+        (
+            "auto_complete_clang_balance_counter_and_argument_splitter_handle_nested_types",
+            r##"(list
          (mapcar
           (lambda (string)
             (list
@@ -256,9 +247,11 @@ fn auto_complete_clang_balance_counter_and_argument_splitter_handle_nested_types
             "void (*callback)(int, char), int flags"
             "map<string, vector<pair<int, int>>> data, bool ok"
             ""
-            "single")))"##;
-    let expect = expect![[
+            "single")))"##,
+            true,
+            expect![[
         r#"OK ((("" t t) ("(x)" t t) ("(x" nil t) ("std::vector<int>" t t) ("map<string, vector<int>>" t t) ("fn(a, pair<int, int>)" t t)) (("int a" "char b") ("std::pair<int, int> value" "double scale") ("void (*callback)(int, char)" "int flags") ("map<string, vector<pair<int, int>>> data" "bool ok") ("") ("single")))"#
-    ]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

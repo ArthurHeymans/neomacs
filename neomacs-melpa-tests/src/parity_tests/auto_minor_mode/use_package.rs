@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_minor_mode_parity;
+use super::assert_auto_minor_mode_batch;
 
 #[test]
-fn auto_minor_mode_use_package_integration_is_deferred_until_feature_load() {
-    let elisp_form = r##"(let
+fn use_package_public_surface_batch() {
+    assert_auto_minor_mode_batch(&[
+        (
+            "auto_minor_mode_use_package_integration_is_deferred_until_feature_load",
+            r##"(let
                              ((deferred
                                (assq
                                 'use-package
@@ -37,15 +40,13 @@ fn auto_minor_mode_use_package_integration_is_deferred_until_feature_load() {
                                 (memq
                                  :magic-minor
                                  use-package-keywords)
-                                t)))))"##;
-    let expect = expect!["OK (nil nil nil t (t t t t t t t))"];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_use_package_aliases_and_handlers_have_exact_contracts() {
-    let elisp_form = r##"(progn
+                                t)))))"##,
+            true,
+            expect!["OK (nil nil nil t (t t t t t t t))"],
+        ),
+        (
+            "auto_minor_mode_use_package_aliases_and_handlers_have_exact_contracts",
+            r##"(progn
                            (require 'use-package)
                            (mapcar
                             (lambda (symbol)
@@ -70,17 +71,15 @@ fn auto_minor_mode_use_package_aliases_and_handlers_have_exact_contracts() {
                             '(use-package-normalize/:minor
                               use-package-normalize/:magic-minor
                               use-package-handler/:minor
-                              use-package-handler/:magic-minor)))"##;
-    let expect = expect![[
+                              use-package-handler/:magic-minor)))"##,
+            true,
+            expect![[
         r#"OK ((use-package-normalize/:minor #1=(name keyword args) "Normalize arguments for keywords which add regexp/mode pairs to an alist." t "") (use-package-normalize/:magic-minor #1# "Normalize arguments for keywords which add regexp/mode pairs to an alist." t "") (use-package-handler/:minor (name _ arg rest state) nil t "") (use-package-handler/:magic-minor (name _ arg rest state) nil t ""))"#
-    ]];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_use_package_keywords_are_adjacent_before_commands_and_idempotent() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "auto_minor_mode_use_package_keywords_are_adjacent_before_commands_and_idempotent",
+            r##"(progn
                            (require 'use-package)
                            (let*
                                ((first-minor
@@ -126,15 +125,13 @@ fn auto_minor_mode_use_package_keywords_are_adjacent_before_commands_and_idempot
                                (max 0 (1- first-minor))
                                (min
                                 (length use-package-keywords)
-                                (+ first-minor 4))))))"##;
-    let expect = expect!["OK (26 27 28 t t t 1 1 (:hook :minor :magic-minor :commands :autoload))"];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_use_package_handlers_delegate_to_the_correct_alists() {
-    let elisp_form = r##"(progn
+                                (+ first-minor 4))))))"##,
+            true,
+            expect!["OK (26 27 28 t t t 1 1 (:hook :minor :magic-minor :commands :autoload))"],
+        ),
+        (
+            "auto_minor_mode_use_package_handlers_delegate_to_the_correct_alists",
+            r##"(progn
                            (require 'use-package)
                            (let (calls)
                              (cl-letf
@@ -166,17 +163,15 @@ fn auto_minor_mode_use_package_handlers_delegate_to_the_correct_alists() {
                                     . demo-mode))
                                  '(:commands demo-command)
                                  '(:state enabled))
-                                (nreverse calls)))))"##;
-    let expect = expect![[
+                                (nreverse calls)))))"##,
+            true,
+            expect![[
         r#"OK ((:handled auto-minor-mode-alist) (:handled auto-minor-mode-magic-alist) ((demo auto-minor-mode-alist (("\\.demo\\'" . demo-mode)) (:commands demo-command) (:state enabled)) (demo auto-minor-mode-magic-alist (("\\`#!demo" . demo-mode)) (:commands demo-command) (:state enabled))))"#
-    ]];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_real_use_package_declaration_configures_and_runs_both_rule_kinds() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "auto_minor_mode_real_use_package_declaration_configures_and_runs_both_rule_kinds",
+            r##"(progn
                            (require 'use-package)
                            (let
                                ((auto-minor-mode-alist nil)
@@ -203,10 +198,11 @@ fn auto_minor_mode_real_use_package_declaration_configures_and_runs_both_rule_ki
                                 auto-minor-mode-test-alpha-mode
                                 (nreverse
                                  auto-minor-mode-test-events)
-                                major-mode))))"##;
-    let expect = expect![[
+                                major-mode))))"##,
+            true,
+            expect![[
         r#"OK ((("\\.alpha\\'" . auto-minor-mode-test-alpha-mode)) (("\\`#!alpha" . auto-minor-mode-test-alpha-mode)) t ((:alpha 1 t 25 fundamental-mode) (:alpha 1 t 1 fundamental-mode)) fundamental-mode)"#
-    ]];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

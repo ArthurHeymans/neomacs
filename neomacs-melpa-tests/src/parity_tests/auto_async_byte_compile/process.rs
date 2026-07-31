@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_async_byte_compile_parity;
+use super::assert_auto_async_byte_compile_batch;
 
 #[test]
-fn auto_async_byte_compile_process_args_without_init_file_preserve_exact_load_path() {
-    let elisp_form = r##"(let ((load-path
+fn process_public_surface_batch() {
+    assert_auto_async_byte_compile_batch(&[
+        (
+            "auto_async_byte_compile_process_args_without_init_file_preserve_exact_load_path",
+            r##"(let ((load-path
                                 '("/fixture/first"
                                   "/fixture/with space"
                                   "/fixture/密钥"))
@@ -15,17 +18,15 @@ fn auto_async_byte_compile_process_args_without_init_file_preserve_exact_load_pa
                 (lambda ()
                   "/fixture/emacs")))
             (aabc/byte-compile-start-process-args
-             "/workspace/source file.el")))"##;
-    let expect = expect![[
+             "/workspace/source file.el")))"##,
+            true,
+            expect![[
         r#"OK ("/fixture/emacs" "-Q" "-batch" "--eval" "(setq load-path (cons \".\" '(\"/fixture/first\" \"/fixture/with space\" \"/fixture/密钥\")))" "-f" "batch-byte-compile" "/workspace/source file.el")"#
-    ]];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_process_args_include_existing_init_file_in_exact_order() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "auto_async_byte_compile_process_args_include_existing_init_file_in_exact_order",
+            r##"(let* ((root
                                  (getenv
                                   "NEOMACS_TEST_SANDBOX_ROOT"))
                                 (init
@@ -59,17 +60,15 @@ fn auto_async_byte_compile_process_args_include_existing_init_file_in_exact_orde
                       init)))))
             (when
                 (file-exists-p init)
-              (delete-file init))))"##;
-    let expect = expect![[
+              (delete-file init))))"##,
+            true,
+            expect![[
         r#"OK (("/fixture/editor" "-Q" "-batch" "--eval" "(setq load-path (cons \".\" '(\"/one\" \"/two\")))" "-l" "[ORACLE-SANDBOX]/fixture init.el" "-f" "batch-byte-compile" "/project/module.el") t t)"#
-    ]];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_emacs_command_returns_first_command_line_argument_verbatim() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_async_byte_compile_emacs_command_returns_first_command_line_argument_verbatim",
+            r##"(mapcar
           (lambda (arguments)
             (let ((command-line-args
                    arguments))
@@ -79,17 +78,15 @@ fn auto_async_byte_compile_emacs_command_returns_first_command_line_argument_ver
           '(nil
             ("emacs")
             ("/path/with spaces/emacs" "-Q")
-            (neomacs-symbol "--batch")))"##;
-    let expect = expect![[
+            (neomacs-symbol "--batch")))"##,
+            true,
+            expect![[
         r#"OK ((nil nil) (("emacs") "emacs") (("/path/with spaces/emacs" "-Q") "/path/with spaces/emacs") ((neomacs-symbol "--batch") neomacs-symbol))"#
-    ]];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_doit_clears_result_and_forwards_exact_process_contract() {
-    let elisp_form = r##"(let ((buffer-file-name
+    ]],
+        ),
+        (
+            "auto_async_byte_compile_doit_clears_result_and_forwards_exact_process_contract",
+            r##"(let ((buffer-file-name
                                 "/project/nested/fixture module.el")
                                start-calls
                                sentinel-calls)
@@ -123,17 +120,15 @@ fn auto_async_byte_compile_doit_clears_result_and_forwards_exact_process_contrac
              (nreverse sentinel-calls)
              (with-current-buffer
                  aabc/result-buffer
-               (buffer-string)))))"##;
-    let expect = expect![[
+               (buffer-string)))))"##,
+            true,
+            expect![[
         r#"OK (:sentinel-installed (("auto-async-byte-compile fixture module.el" " *auto-async-byte-compile*" "/fixture/editor" "--fixture" "/project/nested/fixture module.el")) ((fixture-process aabc/process-sentinel)) "")"#
-    ]];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_doit_start_failure_leaves_existing_result_buffer_empty() {
-    let elisp_form = r##"(let ((buffer-file-name
+    ]],
+        ),
+        (
+            "auto_async_byte_compile_doit_start_failure_leaves_existing_result_buffer_empty",
+            r##"(let ((buffer-file-name
                                 "/project/failing.el"))
           (with-current-buffer
               (get-buffer-create
@@ -155,15 +150,13 @@ fn auto_async_byte_compile_doit_start_failure_leaves_existing_result_buffer_empt
               #'aabc/doit)
              (with-current-buffer
                  aabc/result-buffer
-               (buffer-string)))))"##;
-    let expect = expect![[r#"OK ((:error error ("fixture process start failed")) "")"#]];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_real_save_launches_batch_compiler_and_creates_loadable_elc() {
-    let elisp_form = r##"(let* ((root
+               (buffer-string)))))"##,
+            true,
+            expect![[r#"OK ((:error error ("fixture process start failed")) "")"#]],
+        ),
+        (
+            "auto_async_byte_compile_real_save_launches_batch_compiler_and_creates_loadable_elc",
+            r##"(let* ((root
                                  (getenv
                                   "NEOMACS_TEST_SANDBOX_ROOT"))
                                 (file
@@ -241,8 +234,9 @@ fn auto_async_byte_compile_real_save_launches_batch_compiler_and_creates_loadabl
                 (fboundp
                  'aabc-real-compiled-value)
               (fmakunbound
-               'aabc-real-compiled-value))))"##;
-    let expect = expect![[r#"OK (t (t exit 0) t t (:compiled 42 "密钥") "")"#]];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
+               'aabc-real-compiled-value))))"##,
+            true,
+            expect![[r#"OK (t (t exit 0) t t (:compiled 42 "密钥") "")"#]],
+        ),
+    ]);
 }

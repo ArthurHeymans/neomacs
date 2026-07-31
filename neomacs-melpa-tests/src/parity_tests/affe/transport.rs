@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_affe_parity;
+use super::assert_affe_batch;
 
 #[test]
-fn affe_send_serializes_symbols_lists_unicode_and_embedded_newlines() {
-    let elisp_form = r##"(let (calls)
+fn transport_public_surface_batch() {
+    assert_affe_batch(&[
+        (
+            "affe_send_serializes_symbols_lists_unicode_and_embedded_newlines",
+            r##"(let (calls)
                (cl-letf
                    (((symbol-function
                       'process-send-string)
@@ -16,15 +19,13 @@ fn affe_send_serializes_symbols_lists_unicode_and_embedded_newlines() {
                   (affe--send 'client
                               '(search 20 "α" "a\nb"))
                   (affe--send 'client 'exit)
-                  (nreverse calls))))"##;
-    let expect =
-        expect![[r#"OK (sent sent ((client "(search 20 \"α\" \"a\\nb\")\n") (client "exit\n")))"#]];
-    assert_affe_parity(elisp_form, expect);
-}
-
-#[test]
-fn affe_connect_frames_fragmented_lines_flushes_tail_and_builds_local_socket_process() {
-    let elisp_form = r##"(let (arguments callbacks)
+                  (nreverse calls))))"##,
+            true,
+            expect![[r#"OK (sent sent ((client "(search 20 \"α\" \"a\\nb\")\n") (client "exit\n")))"#]],
+        ),
+        (
+            "affe_connect_frames_fragmented_lines_flushes_tail_and_builds_local_socket_process",
+            r##"(let (arguments callbacks)
                (cl-letf
                    (((symbol-function
                       'make-network-process)
@@ -57,16 +58,15 @@ fn affe_connect_frames_fragmented_lines_flushes_tail_and_builds_local_socket_pro
                       (file-name-nondirectory
                        (plist-get arguments
                                   :service))
-                      (nreverse callbacks))))))"##;
-    let expect = expect![[
+                      (nreverse callbacks))))))"##,
+            true,
+            expect![[
         r#"OK (network-client "affe-socket" t utf-8 local "affe-socket" (("one two" "three") ("four" "five") ("tail")))"#
-    ]];
-    assert_affe_parity(elisp_form, expect);
-}
-
-#[test]
-fn affe_connect_keeps_independent_fragment_state_per_connection() {
-    let elisp_form = r##"(let (processes first second)
+    ]],
+        ),
+        (
+            "affe_connect_keeps_independent_fragment_state_per_connection",
+            r##"(let (processes first second)
                (cl-letf
                    (((symbol-function
                       'make-network-process)
@@ -100,7 +100,9 @@ fn affe_connect_keeps_independent_fragment_state_per_connection() {
                      (funcall second-sentinel nil "closed")
                      (list
                       (nreverse first)
-                      (nreverse second))))))"##;
-    let expect = expect![[r#"OK ((("a")) (("b") ("c")))"#]];
-    assert_affe_parity(elisp_form, expect);
+                      (nreverse second))))))"##,
+            true,
+            expect![[r#"OK ((("a")) (("b") ("c")))"#]],
+        ),
+    ]);
 }

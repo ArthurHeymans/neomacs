@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_apples_mode_parity;
+use super::assert_apples_mode_batch;
 
 #[test]
-fn author_completes_indents_navigates_and_saves_a_mail_automation_script() {
-    let elisp_form = r##"(progn
+fn workflows_public_surface_batch() {
+    assert_apples_mode_batch(&[
+        (
+            "author_completes_indents_navigates_and_saves_a_mail_automation_script",
+            r##"(progn
                   (require 'imenu)
                   (let* ((script-file
                           (expand-file-name
@@ -78,16 +81,15 @@ fn author_completes_indents_navigates_and_saves_a_mail_automation_script() {
                                          (line-end-position)))
                                        (nreverse faces))))))
                         (kill-buffer (current-buffer))))
-                    result))"##;
-    let expect = expect![[
+                    result))"##,
+            true,
+            expect![[
         r#"OK (apples-mode "property projectName : \"Release\"\n-- Build one message for the current recipient.\non publishReport(recipientName)\n    tell application \"Mail\"\n        if recipientName is not \"\" then\n            repeat with attachmentName in {\"report.pdf\", \"chart.png\"}\n                set reportMessage to \"Ready for \" & recipientName & \": \" & attachmentName\n            end repeat\n        end if\n    end tell\nend publishReport\n" t (3 "on publishReport(recipientName)") (("publishReport" . font-lock-function-name-face) ("tell" . apples-statements) ("repeat" . apples-statements) ("reportMessage" . font-lock-variable-name-face) ("is not" . apples-operators)))"#
-    ]];
-    assert_apples_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn runs_a_selected_report_delivery_and_displays_the_external_result() {
-    let elisp_form = r##"(let* ((bin-dir
+    ]],
+        ),
+        (
+            "runs_a_selected_report_delivery_and_displays_the_external_result",
+            r##"(let* ((bin-dir
                           (expand-file-name
                            "fake-apples-runtime"
                            temporary-file-directory))
@@ -152,16 +154,15 @@ fn runs_a_selected_report_delivery_and_displays_the_external_result() {
                           (region-beginning) (region-end))
                          (with-temp-buffer
                            (insert-file-contents calls)
-                           (buffer-string))))))"##;
-    let expect = expect![[
+                           (buffer-string))))))"##,
+            true,
+            expect![[
         r#"OK (apples-run-region/buffer "Result: Delivered 2 reports" t "repeat with recipientName in recipients\ndisplay dialog \"Delivering to \" & recipientName\nend repeat\nreturn \"Delivered 2 reports\"\n" "-ss\n-e\nrepeat with recipientName in recipients\ndisplay dialog \"Delivering to \" & recipientName\nend repeat\nreturn \"Delivered 2 reports\"\n\n")"#
-    ]];
-    assert_apples_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn failed_region_execution_highlights_the_broken_reference_and_moves_to_it() {
-    let elisp_form = r##"(let* ((bin-dir
+    ]],
+        ),
+        (
+            "failed_region_execution_highlights_the_broken_reference_and_moves_to_it",
+            r##"(let* ((bin-dir
                           (expand-file-name
                            "fake-apples-error-runtime"
                            temporary-file-directory))
@@ -245,16 +246,15 @@ fn failed_region_execution_highlights_the_broken_reference_and_moves_to_it() {
                            (overlays-in (point-min) (point-max))))
                          (with-temp-buffer
                            (insert-file-contents calls)
-                           (buffer-string))))))"##;
-    let expect = expect![[
+                           (buffer-string))))))"##,
+            true,
+            expect![[
         r#"OK (("execution error: The variable missingValue is not defined. [-2753]" 2 18 "missingValue") "property reportName : \"Q2\"\nset reportPath to reportName\nreturn reportPath\n" t "-ss\n-e\nset reportPath to missingValue\nreturn reportPath\n\n")"#
-    ]];
-    assert_apples_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn compiles_then_decompiles_a_script_through_the_documented_toolchain() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "compiles_then_decompiles_a_script_through_the_documented_toolchain",
+            r##"(let* ((root
                           (expand-file-name
                            "apples-toolchain"
                            temporary-file-directory))
@@ -309,16 +309,15 @@ fn compiles_then_decompiles_a_script_through_the_documented_toolchain() {
                      compiled-artifact
                      (with-temp-buffer
                        (insert-file-contents compiled)
-                       (buffer-string))))"##;
-    let expect = expect![[
+                       (buffer-string))))"##,
+            true,
+            expect![[
         r#"OK (t "FAKE-COMPILED\non reportTitle(projectName)\n    return \"Status: \" & projectName\nend reportTitle\n" "on reportTitle(projectName)\n    return \"Status: \" & projectName\nend reportTitle")"#
-    ]];
-    assert_apples_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn expands_and_edits_the_installed_tell_application_snippet_in_a_real_script() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "expands_and_edits_the_installed_tell_application_snippet_in_a_real_script",
+            r##"(progn
                   (require 'yasnippet)
                   (let* ((package-root
                           (file-name-directory
@@ -346,16 +345,15 @@ fn expands_and_edits_the_installed_tell_application_snippet_in_a_real_script() {
                          expanded
                          (buffer-substring-no-properties
                           (point-min) (point-max))
-                         (null (yas-active-snippets)))))))"##;
-    let expect = expect![[
+                         (null (yas-active-snippets)))))))"##,
+            true,
+            expect![[
         r#"OK (t "tell application \"Mail\"\n    display dialog \"Release ready\" default answer \"Ship\"\nend tell" t)"#
-    ]];
-    assert_apples_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn scratch_buffer_persists_an_edit_when_killed_and_restores_it_when_reopened() {
-    let elisp_form = r##"(let* ((apples-tmp-dir
+    ]],
+        ),
+        (
+            "scratch_buffer_persists_an_edit_when_killed_and_restores_it_when_reopened",
+            r##"(let* ((apples-tmp-dir
                           (expand-file-name
                            "apples-scratch-workflow"
                            temporary-file-directory))
@@ -383,9 +381,11 @@ fn scratch_buffer_persists_an_edit_when_killed_and_restores_it_when_reopened() {
                       (apples-open-scratch)
                       (setq reopened (buffer-string))
                       (kill-buffer (current-buffer)))
-                    (list restored persisted reopened))"##;
-    let expect = expect![[
+                    (list restored persisted reopened))"##,
+            true,
+            expect![[
         r#"OK ("set reportCount to 1\n" "set reportCount to 1\nset reportCount to reportCount + 1\nreturn reportCount\n" "set reportCount to 1\nset reportCount to reportCount + 1\nreturn reportCount\n")"#
-    ]];
-    assert_apples_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

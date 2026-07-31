@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_agent_recall_parity;
+use super::assert_agent_recall_batch;
 
 #[test]
-fn agent_recall_matches_a_real_claude_session_by_timestamp_and_message_then_backfills_it() {
-    let elisp_form = r####"(let* ((workspace-tmp
+fn matching_public_surface_batch() {
+    assert_agent_recall_batch(&[
+        (
+            "agent_recall_matches_a_real_claude_session_by_timestamp_and_message_then_backfills_it",
+            r####"(let* ((workspace-tmp
                                  (expand-file-name
                                   "tmp"
                                   (getenv
@@ -184,10 +187,11 @@ fn agent_recall_matches_a_real_claude_session_by_timestamp_and_message_then_back
                                (kill-buffer buffer))
                              (delete-directory
                               root
-                              t)))"####;
-    let expect = expect![[
+                              t)))"####,
+            true,
+            expect![[
         r#"OK ("22222222-2222-2222-2222-222222222222" "22222222-2222-2222-2222-222222222222" "**Started:** 2026-07-10 17:07:00\n**Agent:** Claude Code\n**Working Directory:** [ROOT]/projects/parser-service\n\n**Session:** 22222222-2222-2222-2222-222222222222\n\n---\n\n## User\n> Please   explain the failing parser thoroughly.\n\n## Agent\nI will reproduce the state transition.\n" "Agent Recall -- Backfill (WRITING)\n══════════════════════════════════════════════════\n\n  MATCH:    [parser-service] 2026-07-10-17-07-00.md → 22222222\n\n──────────────────────────────────────────────────\nSummary:\n  Total:      1\n  Matched:    1\n  Skipped:    0 (already have session ID)\n  No match:   0\n\n  Wrote session IDs to 1 files.\n  Undo log: [ROOT]/state/backfill-log.el\n" ";; agent-recall backfill undo log\n;; Written: <timestamp>\n;; Files modified: 1\n\n;; To undo, evaluate this buffer (removes **Session:** lines):\n(dolist (file '(\n  \"[ROOT]/projects/parser-service/.agent-shell/transcripts/2026-07-10-17-07-00.md\"\n))\n  (when (file-exists-p file)\n    (with-temp-buffer\n      (insert-file-contents file)\n      (goto-char (point-min))\n      (when (re-search-forward \"^\\\\*\\\\*Session:\\\\*\\\\*.*\\n\\n?\" nil t)\n        (replace-match \"\")\n        (write-region (point-min) (point-max) file nil 'no-message)))))\n" "Agent Recall -- Backfill (DRY RUN)\n══════════════════════════════════════════════════\n\n  SKIP:     [parser-service] 2026-07-10-17-07-00.md (has 22222222)\n\n──────────────────────────────────────────────────\nSummary:\n  Total:      1\n  Matched:    0\n  Skipped:    1 (already have session ID)\n  No match:   0\n\n  To write, run: C-u C-u M-x agent-recall-backfill\n")"#
-    ]];
-
-    assert_agent_recall_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

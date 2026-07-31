@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_anju_parity;
+use super::assert_anju_batch;
 
 /// `(anju-init)' -- the single line the package's INSTALLATION section tells a
 /// user to put in their init file -- run for real, with nothing redefined, and
@@ -20,9 +20,13 @@ use super::assert_anju_parity;
 /// anju never touches, and recorded "nothing changed" as a pass.  Every key
 /// here is mode-line or scroll-bar prefixed, which is exactly what makes them
 /// the legacy gestures anju exists to remove.
+
 #[test]
-fn the_documented_init_line_switches_on_context_menus_and_unbinds_legacy_mouse_keys() {
-    let elisp_form = r##"(let* ((legacy '("<mode-line> C-<mouse-2>"
+fn workflows_public_surface_batch() {
+    assert_anju_batch(&[
+        (
+            "the_documented_init_line_switches_on_context_menus_and_unbinds_legacy_mouse_keys",
+            r##"(let* ((legacy '("<mode-line> C-<mouse-2>"
                  "<vertical-scroll-bar> C-<mouse-2>"
                  "<vertical-line> C-<mouse-2>"
                  "<mode-line> <mouse-2>"
@@ -59,44 +63,15 @@ fn the_documented_init_line_switches_on_context_menus_and_unbinds_legacy_mouse_k
           (seq-every-p #'null (mapcar #'cdr (plist-get after :legacy)))
           :context-menu-functions-changed
           (not (equal (plist-get before :context-menu-functions)
-                      (plist-get after :context-menu-functions))))))"##;
-
-    let expect = expect![[
+                      (plist-get after :context-menu-functions))))))"##,
+            true,
+            expect![[
         r#"OK (:before (:context-menu-mode nil :context-menu-functions (t prog-context-menu elisp-context-menu) :legacy (("<mode-line> C-<mouse-2>" . mouse-split-window-horizontally) ("<vertical-scroll-bar> C-<mouse-2>" . mouse-split-window-vertically) ("<vertical-line> C-<mouse-2>" . mouse-split-window-vertically) ("<mode-line> <mouse-2>" . mouse-delete-other-windows) ("<mode-line> <mouse-3>" . mouse-delete-window) ("<mode-line> <double-mouse-1>")) :buffer-identification (("<mode-line> <mouse-1>" . mode-line-previous-buffer) ("<mode-line> <mouse-3>" . mode-line-next-buffer))) :after (:context-menu-mode t :context-menu-functions (t prog-context-menu elisp-context-menu) :legacy (("<mode-line> C-<mouse-2>") ("<vertical-scroll-bar> C-<mouse-2>") ("<vertical-line> C-<mouse-2>") ("<mode-line> <mouse-2>") ("<mode-line> <mouse-3>") ("<mode-line> <double-mouse-1>" . anju-toggle-one-window)) :buffer-identification (("<mode-line> <mouse-1>" . anju-popup-buffer-menu) ("<mode-line> <mouse-3>"))) :context-menus-turned-on t :legacy-keys-were-bound-before t :every-legacy-key-now-unbound nil :context-menu-functions-changed nil)"#
-    ]];
-
-    assert_anju_parity(elisp_form, expect);
-}
-
-/// The documented per-area switches.  `anju-init' guards each of its four
-/// stages with its own customizable variable, all `t' by default, and its
-/// docstring names them one by one.
-///
-/// Turning one off has to remove exactly that area's effect and leave the
-/// others alone -- which a call-order test cannot show.  With
-/// `anju-unset-legacy-mouse-bindings-enable' nil, the legacy mouse keys must
-/// come out exactly as they went in, while `context-menu-mode' is still
-/// switched on by the stage that is still enabled.
-///
-/// The result is sharper than a simple on/off, and the field names say so.
-/// Two of the three keys are cleared by the legacy-unset stage and come back
-/// untouched when it is gated off; the third, `<mode-line> <double-mouse-1>',
-/// still ends up bound to `anju-toggle-one-window', because that binding is
-/// installed by the *mode-line* stage, which is a different gate and still
-/// enabled.  So the three keys divide cleanly by which stage owns them, and a
-/// gate that leaked into its neighbour would show up as the wrong key moving.
-///
-/// The gate under test is deliberately the legacy-bindings one rather than the
-/// context-menu one.  An earlier version disabled
-/// `anju-reconfigure-context-menu-functions-enable' and asserted that
-/// `context-menu-functions' was untouched -- which is true, but is *equally*
-/// true when that stage runs, because in a batch fundamental-mode buffer it
-/// changes nothing observable.  The assertion held for a reason unrelated to
-/// the gate, so it could not have failed if the gate were ignored.  The legacy
-/// bindings do demonstrably change, so gating them discriminates.
-#[test]
-fn disabling_one_area_leaves_that_area_untouched_and_the_others_applied() {
-    let elisp_form = r##"(let* ((anju-unset-legacy-mouse-bindings-enable nil)
+    ]],
+        ),
+        (
+            "disabling_one_area_leaves_that_area_untouched_and_the_others_applied",
+            r##"(let* ((anju-unset-legacy-mouse-bindings-enable nil)
        (legacy '("<mode-line> C-<mouse-2>"
                  "<mode-line> <mouse-2>"
                  "<mode-line> <double-mouse-1>"))
@@ -115,11 +90,11 @@ fn disabling_one_area_leaves_that_area_untouched_and_the_others_applied() {
           :context-menus-still-enabled (and context-menu-mode t)
           :legacy-before legacy-before
           :legacy-after legacy-after
-          :context-menu-mode context-menu-mode)))"##;
-
-    let expect = expect![[
+          :context-menu-mode context-menu-mode)))"##,
+            true,
+            expect![[
         r#"OK (:unset-stage-skipped t :mode-line-stage-still-applied t :context-menus-still-enabled t :legacy-before (("<mode-line> C-<mouse-2>" . mouse-split-window-horizontally) ("<mode-line> <mouse-2>" . mouse-delete-other-windows) ("<mode-line> <double-mouse-1>")) :legacy-after (("<mode-line> C-<mouse-2>" . mouse-split-window-horizontally) ("<mode-line> <mouse-2>" . mouse-delete-other-windows) ("<mode-line> <double-mouse-1>" . anju-toggle-one-window)) :context-menu-mode t)"#
-    ]];
-
-    assert_anju_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

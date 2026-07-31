@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_apiwrap_parity;
+use super::assert_apiwrap_batch;
 
 // These cases sit beside `practical.rs`, which already drives generated
 // clients end to end.  They cover what that file does not: the documentation
@@ -8,9 +8,13 @@ use super::assert_apiwrap_parity;
 // what the package's own documentation promises.
 
 /// one, which is what a reader of `C-h f` or `apropos-api-endpoint` sees.
+
 #[test]
-fn the_documented_resource_and_the_internal_one_are_kept_apart() {
-    let elisp_form = r##"
+fn documentation_public_surface_batch() {
+    assert_apiwrap_batch(&[
+        (
+            "the_documented_resource_and_the_internal_one_are_kept_apart",
+            r##"
 (progn
   (apiwrap-new-backend
    "MyForge" "mf" '((repo . "A repository object"))
@@ -25,18 +29,15 @@ fn the_documented_resource_and_the_internal_one_are_kept_apart() {
           :advertised-endpoint (alist-get 'endpoint
                                           (get 'mf-get-repos-owner-repo-issues 'apiwrap))
           :docstring (apiwrap-test-doc 'mf-get-repos-owner-repo-issues))))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:requested-resource "/repos/octocat/Hallo%20Welt/issues" :advertised-endpoint "/repos/:owner/:repo/issues" :docstring "List issues for a repository.\n\nDATA is a data structure to be sent with this request.  If it’s\nnot required, it can simply be omitted.\n\nPARAMS is a plist of parameters appended to the method call.\n\n--------------------\n\nThis generated function wraps the MyForge API endpoint\n\n    GET /repos/:owner/:repo/issues\n\nwhich is documented at\n\n    URL ‘issues/#list-issues-for-a-repository’")"#
-    ]];
-    assert_apiwrap_parity(elisp_form, expect);
-}
-
-/// missing.
-#[test]
-fn the_generated_docstring_never_documents_the_object_parameter() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "the_generated_docstring_never_documents_the_object_parameter",
+            r##"
 (progn
   (apiwrap-new-backend
    "KeyProbe" "kp"
@@ -49,18 +50,15 @@ fn the_generated_docstring_never_documents_the_object_parameter() {
         (and (string-match-p "keyed by the symbol" (apiwrap-test-doc 'kp-get-a-name)) t)
         :mentions-list-keyed-doc
         (and (string-match-p "keyed by the list" (apiwrap-test-doc 'kp-get-a-name)) t)))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:docstring "Symbol key.\n\nDATA is a data structure to be sent with this request.  If it’s\nnot required, it can simply be omitted.\n\nPARAMS is a plist of parameters appended to the method call.\n\n--------------------\n\nThis generated function wraps the KeyProbe API endpoint\n\n    GET /a/:name\n\nwhich is documented at\n\n    URL ‘link/a’" :mentions-symbol-keyed-doc nil :mentions-list-keyed-doc nil)"#
-    ]];
-    assert_apiwrap_parity(elisp_form, expect);
-}
-
-/// and the `:around` result shows the wrapper sits outside the handler.
-#[test]
-fn configuring_a_condition_case_needs_bytecomp_before_the_hooks_work() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "configuring_a_condition_case_needs_bytecomp_before_the_hooks_work",
+            r##"
 (list
  :without-bytecomp
  (progn
@@ -87,10 +85,11 @@ fn configuring_a_condition_case_needs_bytecomp_before_the_hooks_work() {
            :handled (ap-get-c-name repo)
            :around-ran apiwrap-test-around-log
            :calls (apiwrap-test-log)))))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:without-bytecomp (:error void-function (byte-compile-warn)) :with-bytecomp (:wrapped (:wrapped (:status 200 :body ((echo . "/b/Hallo%20Welt")))) :handled (:handled wrong-type-argument stringp) :around-ran (:around-ran :around-ran) :calls ((:method get :resource "/b/Hallo%20Welt" :params nil :data nil) (:method get :resource "/c/Hallo%20Welt" :params nil :data nil))))"#
-    ]];
-    assert_apiwrap_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

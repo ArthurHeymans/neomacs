@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_highlight_symbol_parity;
+use super::assert_auto_highlight_symbol_batch;
 
 #[test]
-fn auto_highlight_symbol_whole_buffer_highlight_builds_current_other_and_definition_overlays() {
-    let elisp_form = r##"(save-window-excursion
+fn highlighting_public_surface_batch() {
+    assert_auto_highlight_symbol_batch(&[
+        (
+            "auto_highlight_symbol_whole_buffer_highlight_builds_current_other_and_definition_overlays",
+            r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -28,17 +31,15 @@ fn auto_highlight_symbol_whole_buffer_highlight_builds_current_other_and_definit
                               (auto-highlight-symbol-test-overlays)
                               ahs-start-point
                               (length ahs-current-overlay)
-                              (length ahs-overlay-list))))"##;
-    let expect = expect![[
+                              (length ahs-overlay-list))))"##,
+            true,
+            expect![[
         r#"OK ((#("alpha" 0 5 (face font-lock-function-name-face)) 8 13) t ((8 13 current ahs-plugin-whole-buffer-face 1000 t t) (8 13 others ahs-definition-face nil t t) (15 20 others ahs-face nil t t) (31 36 others ahs-face nil t t) (48 53 others ahs-face nil t t) (54 59 others ahs-face nil t t)) 8 1 5)"#
-    ]];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_unfocused_window_uses_unfocused_faces_but_same_match_ranges() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_highlight_symbol_unfocused_window_uses_unfocused_faces_but_same_match_ranges",
+            r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -55,17 +56,15 @@ fn auto_highlight_symbol_unfocused_window_uses_unfocused_faces_but_same_match_ra
                               "alpha"
                               1
                               6)
-                             (auto-highlight-symbol-test-overlays)))"##;
-    let expect = expect![
+                             (auto-highlight-symbol-test-overlays)))"##,
+            true,
+            expect![
         "OK ((1 6 current ahs-plugin-whole-buffer-face 1000 t t) (1 6 others ahs-face-unfocused nil t t) (12 17 others ahs-face-unfocused nil t t))"
-    ];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_search_and_light_up_preserve_definition_face_classification() {
-    let elisp_form = r##"(save-window-excursion
+    ],
+        ),
+        (
+            "auto_highlight_symbol_search_and_light_up_preserve_definition_face_classification",
+            r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -106,17 +105,15 @@ fn auto_highlight_symbol_search_and_light_up_preserve_definition_face_classifica
                                (ahs-light-up t)
                                (list
                                 work
-                                (auto-highlight-symbol-test-overlays)))))"##;
-    let expect = expect![
+                                (auto-highlight-symbol-test-overlays)))))"##,
+            true,
+            expect![
         "OK (((1 6 font-lock-variable-name-face nil) (7 12 nil nil) (13 18 font-lock-comment-face nil) (19 24 nil nil)) ((1 6 others ahs-definition-face nil t t) (7 12 others ahs-face nil t t) (19 24 others ahs-face nil t t)))"
-    ];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_unhighlight_keeps_same_symbol_for_allowed_or_matching_commands() {
-    let elisp_form = r##"(save-window-excursion
+    ],
+        ),
+        (
+            "auto_highlight_symbol_unhighlight_keeps_same_symbol_for_allowed_or_matching_commands",
+            r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -155,17 +152,15 @@ fn auto_highlight_symbol_unhighlight_keeps_same_symbol_for_allowed_or_matching_c
                                     (auto-highlight-symbol-test-overlays)))))
                               '((ahs-forward . 2)
                                 (fixture-command . 2)
-                                (fixture-command . 14)))))"##;
-    let expect = expect![
+                                (fixture-command . 14)))))"##,
+            true,
+            expect![
         "OK (((ahs-forward . 2) 3 3) ((fixture-command . 2) 3 3) ((fixture-command . 14) 3 0))"
-    ];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_remove_overlay_force_and_window_scope_preserve_other_window_entries() {
-    let elisp_form = r##"(save-window-excursion
+    ],
+        ),
+        (
+            "auto_highlight_symbol_remove_overlay_force_and_window_scope_preserve_other_window_entries",
+            r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -205,15 +200,13 @@ fn auto_highlight_symbol_remove_overlay_force_and_window_scope_preserve_other_wi
                                   overlays
                                   t))
                                 (overlay-start
-                                 foreign-overlay)))))"##;
-    let expect = expect!["OK ((7) nil 7 nil nil)"];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_statistics_count_before_after_displayed_and_hidden_matches() {
-    let elisp_form = r##"(save-window-excursion
+                                 foreign-overlay)))))"##,
+            true,
+            expect!["OK ((7) nil 7 nil nil)"],
+        ),
+        (
+            "auto_highlight_symbol_statistics_count_before_after_displayed_and_hidden_matches",
+            r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -242,17 +235,15 @@ fn auto_highlight_symbol_statistics_count_before_after_displayed_and_hidden_matc
                                 (ahs-stat)
                                 (ahs-stat-string)
                                 (ahs-stat-alert-p
-                                 (ahs-stat))))))"##;
-    let expect = expect![[
+                                 (ahs-stat))))))"##,
+            true,
+            expect![[
         r#"OK ((#("whole buffer" 0 12 (face ahs-plugin-whole-buffer-face)) 5 2 2 4 1) #("Current plugin `whole buffer' matched 5  displayed 4  hidden 1  before 2  after 2." 16 28 (face ahs-plugin-whole-buffer-face)) nil)"#
-    ]];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_fontify_coalesces_unfontified_search_regions_at_boundaries() {
-    let elisp_form = r##"(let ((ahs-search-work
+    ]],
+        ),
+        (
+            "auto_highlight_symbol_fontify_coalesces_unfontified_search_regions_at_boundaries",
+            r##"(let ((ahs-search-work
                                 '((1 3 nil nil)
                                   (5 7 nil nil)
                                   (9 11 font-lock-keyword-face t)
@@ -267,15 +258,13 @@ fn auto_highlight_symbol_fontify_coalesces_unfontified_search_regions_at_boundar
                                     (list beg end)
                                     calls))))
                              (ahs-fontify)
-                             (nreverse calls)))"##;
-    let expect = expect!["OK ((1 7) (13 19))"];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_current_overlay_has_exact_edit_hooks_priority_help_and_evaporation() {
-    let elisp_form = r##"(save-window-excursion
+                             (nreverse calls)))"##,
+            true,
+            expect!["OK ((1 7) (13 19))"],
+        ),
+        (
+            "auto_highlight_symbol_current_overlay_has_exact_edit_hooks_priority_help_and_evaporation",
+            r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -308,17 +297,15 @@ fn auto_highlight_symbol_current_overlay_has_exact_edit_hooks_priority_help_and_
                                   help-echo
                                   modification-hooks
                                   insert-in-front-hooks
-                                  insert-behind-hooks)))))"##;
-    let expect = expect![[
+                                  insert-behind-hooks)))))"##,
+            true,
+            expect![[
         r#"OK ((ahs-symbol current) (face ahs-plugin-whole-buffer-face) (priority 4321) (evaporate t) (help-echo (or (ignore-errors (ahs-stat-string)) "")) (modification-hooks (ahs-modification-hook)) (insert-in-front-hooks (ahs-modification-hook)) (insert-behind-hooks (ahs-modification-hook)))"#
-    ]];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_two_windows_keep_separate_current_overlays_and_window_map_entries() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_highlight_symbol_two_windows_keep_separate_current_overlays_and_window_map_entries",
+            r##"(save-window-excursion
                            (let ((buffer
                                   (generate-new-buffer
                                    " *ahs-two-window*")))
@@ -356,10 +343,11 @@ fn auto_highlight_symbol_two_windows_keep_separate_current_overlays_and_window_m
                                           window))
                                        (list first second))
                                       (auto-highlight-symbol-test-overlays))))
-                               (kill-buffer buffer))))"##;
-    let expect = expect![[
+                               (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK (2 4 (("alpha" 1 6) (#("alpha" 0 5 (fontified t)) 7 12)) ((1 6 current ahs-plugin-whole-buffer-face 1000 t nil) (1 6 others ahs-face-unfocused nil t t) (1 6 others ahs-face-unfocused nil t nil) (7 12 current ahs-plugin-whole-buffer-face 1000 t t) (7 12 others ahs-face-unfocused nil t t) (7 12 others ahs-face-unfocused nil t nil)))"#
-    ]];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

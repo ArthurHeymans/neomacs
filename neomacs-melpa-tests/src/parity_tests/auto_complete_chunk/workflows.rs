@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_chunk_parity;
+use super::assert_auto_complete_chunk_batch;
 
 #[test]
-fn auto_complete_chunk_real_menu_navigates_and_completes_a_python_attribute() {
-    let elisp_form = r##"(save-window-excursion
+fn workflows_public_surface_batch() {
+    assert_auto_complete_chunk_batch(&[
+        (
+            "auto_complete_chunk_real_menu_navigates_and_completes_a_python_attribute",
+            r##"(save-window-excursion
                           (with-temp-buffer
                             (switch-to-buffer
                              (current-buffer))
@@ -59,17 +62,15 @@ fn auto_complete_chunk_real_menu_navigates_and_completes_a_python_attribute() {
                                          ac-menu
                                          ac-completing
                                          ac-prefix))))
-                                (auto-complete-mode -1)))))"##;
-    let expect = expect![[
+                                (auto-complete-mode -1)))))"##,
+            true,
+            expect![[
         r#"OK (("resolved = os.path.a" "os.path.a" (("os.path.abspath" "c") ("os.path.altsep" "c")) t "os.path.abspath") "os.path.altsep" "os.path.altsep" "resolved = os.path.altsep" nil nil nil)"#
-    ]];
-
-    assert_auto_complete_chunk_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_chunk_real_menu_incrementally_recomputes_after_attribute_typing() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_chunk_real_menu_incrementally_recomputes_after_attribute_typing",
+            r##"(save-window-excursion
                           (with-temp-buffer
                             (switch-to-buffer
                              (current-buffer))
@@ -130,17 +131,15 @@ fn auto_complete_chunk_real_menu_incrementally_recomputes_after_attribute_typing
                                             (line-end-position))
                                            ac-menu
                                            ac-completing)))))
-                                (auto-complete-mode -1)))))"##;
-    let expect = expect![[
+                                (auto-complete-mode -1)))))"##,
+            true,
+            expect![[
         r#"OK (("request.h" ("request.headers.accept" "request.headers.authorization" "request.host")) ("request.he" ("request.headers.accept" "request.headers.authorization")) ("request.headers.a" ("request.headers.accept" "request.headers.authorization")) "request.headers.accept" nil nil)"#
-    ]];
-
-    assert_auto_complete_chunk_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_chunk_real_command_completes_from_its_declared_source_only() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_chunk_real_command_completes_from_its_declared_source_only",
+            r##"(save-window-excursion
                           (with-temp-buffer
                             (switch-to-buffer
                              (current-buffer))
@@ -176,17 +175,15 @@ fn auto_complete_chunk_real_command_completes_from_its_declared_source_only() {
                                               source
                                             :anonymous))
                                         ac-sources))))
-                                (auto-complete-mode -1)))))"##;
-    let expect = expect![[
+                                (auto-complete-mode -1)))))"##,
+            true,
+            expect![[
         r#"OK (t "database.connection.c" ("database.connection.close" "database.connection.commit") "database.connection.close" (ac-source-filename))"#
-    ]];
-
-    assert_auto_complete_chunk_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_chunk_dictionary_swap_drives_a_real_completion_session() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_chunk_dictionary_swap_drives_a_real_completion_session",
+            r##"(save-window-excursion
                           (with-temp-buffer
                             (switch-to-buffer
                              (current-buffer))
@@ -233,17 +230,15 @@ fn auto_complete_chunk_dictionary_swap_drives_a_real_completion_session() {
                                         (line-end-position))
                                        ac-menu
                                        ac-completing)))
-                                (auto-complete-mode -1)))))"##;
-    let expect = expect![[
+                                (auto-complete-mode -1)))))"##,
+            true,
+            expect![[
         r#"OK (((ac-source-dictionary-chunk ac-source-filename) "service.cache.c" (("service.cache.clear" "c") ("service.cache.close" "c"))) "service.cache.close" nil nil)"#
-    ]];
-
-    assert_auto_complete_chunk_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_chunk_two_live_buffers_keep_independent_dictionaries_and_completion_results() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_chunk_two_live_buffers_keep_independent_dictionaries_and_completion_results",
+            r##"(save-window-excursion
                           (let ((first
                                  (generate-new-buffer " *chunk-session-first*"))
                                 (second
@@ -298,17 +293,15 @@ fn auto_complete_chunk_two_live_buffers_keep_independent_dictionaries_and_comple
                                      "api.orders.fulfill"
                                      "api.users.fetch"))))
                               (kill-buffer first)
-                              (kill-buffer second))))"##;
-    let expect = expect![[
+                              (kill-buffer second))))"##,
+            true,
+            expect![[
         r#"OK ((" *chunk-session-first*" "api.users.f" ("api.users.fetch" "api.users.find") ("api.users.fetch" "api.users.find" "api.groups.fetch") "api.users.fetch") (" *chunk-session-second*" "api.orders.f" ("api.orders.fetch" "api.orders.fulfill") ("api.orders.fetch" "api.orders.fulfill" "api.users.fetch") "api.orders.fetch"))"#
-    ]];
-
-    assert_auto_complete_chunk_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_chunk_real_completion_respects_active_major_mode_punctuation_syntax() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_chunk_real_completion_respects_active_major_mode_punctuation_syntax",
+            r##"(save-window-excursion
                           (mapcar
                            (lambda (mode)
                              (with-temp-buffer
@@ -345,10 +338,11 @@ fn auto_complete_chunk_real_completion_respects_active_major_mode_punctuation_sy
                                    (auto-complete-mode -1)))))
                            '(fundamental-mode
                              emacs-lisp-mode
-                             python-mode)))"##;
-    let expect = expect![[
+                             python-mode)))"##,
+            true,
+            expect![[
         r#"OK ((fundamental-mode nil nil nil "namespace..a") (emacs-lisp-mode t nil nil "namespace..alpha") (python-mode nil nil nil "namespace..a"))"#
-    ]];
-
-    assert_auto_complete_chunk_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

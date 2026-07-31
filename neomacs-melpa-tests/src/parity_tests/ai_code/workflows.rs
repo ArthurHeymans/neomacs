@@ -1,22 +1,13 @@
 use expect_test::expect;
 
-use super::assert_ai_code_parity;
+use super::assert_ai_code_batch;
 
 #[test]
-fn the_editor_helper_the_package_installs_emits_frames_its_own_parser_decodes() {
-    // ai-code makes itself an external CLI's `$EDITOR`: it writes a helper
-    // shell script, exports a frame prefix, and the CLI runs the helper when
-    // it wants a file opened.  The helper writes an OSC-framed payload to
-    // /dev/tty and blocks until the editor answers.
-    //
-    // Nothing is stood in for here.  The script under test is the one
-    // `ai-code-editor-viewport--helper-content' generates, run as a real
-    // process on a real pty -- which is what makes /dev/tty resolve -- and
-    // the payload it produces is handed to the package's own
-    // `ai-code-editor-viewport--parse-output'.  The base64/NUL decoding in
-    // the assertion reads the wire format; it does not reimplement the
-    // parser, which is called for real and whose payload count is pinned.
-    let elisp_form = r##"(progn
+fn workflows_public_surface_batch() {
+    assert_ai_code_batch(&[
+        (
+            "the_editor_helper_the_package_installs_emits_frames_its_own_parser_decodes",
+            r##"(progn
   (require 'ai-code-editor-viewport-transport)
   (let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
          (root (file-name-as-directory (expand-file-name "repo" sandbox)))
@@ -93,11 +84,11 @@ fn the_editor_helper_the_package_installs_emits_frames_its_own_parser_decodes() 
          ;; rather than emit an unaddressed frame.
          :without-frame-prefix (invoke '("api.el") nil)
          ;; And with no file arguments at all.
-         :without-files (invoke '() prefix-entry))))))"##;
-
-    let expect = expect![[
+         :without-files (invoke '() prefix-entry))))))"##,
+            true,
+            expect![[
         r#"OK (:regular (:payloads 1 :fields ("[STATUS-FILE]" "[SANDBOX]/repo" "0" "ai-code-editor-viewport-v1" "regular" "+2:3" "api.el" "")) :staging (:payloads 1 :fields ("[STATUS-FILE]" "[SANDBOX]/repo" "0" "ai-code-editor-viewport-v1" "staging" "api.el" "")) :submit (:payloads 1 :fields ("[STATUS-FILE]" "[SANDBOX]/repo" "1" "ai-code-editor-viewport-v1" "regular" "api.el" "")) :without-frame-prefix (:payloads 0 :fields nil) :without-files (:payloads 0 :fields nil))"#
-    ]];
-
-    assert_ai_code_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

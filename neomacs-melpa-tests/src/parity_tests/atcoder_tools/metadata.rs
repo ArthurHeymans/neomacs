@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_atcoder_tools_parity;
+use super::assert_atcoder_tools_batch;
 
 #[test]
-fn atcoder_tools_open_problem_parses_realistic_nested_metadata_and_browses_exact_url() {
-    let elisp_form = r##"(let* ((root
+fn metadata_public_surface_batch() {
+    assert_atcoder_tools_batch(&[
+        (
+            "atcoder_tools_open_problem_parses_realistic_nested_metadata_and_browses_exact_url",
+            r##"(let* ((root
                 (atcoder-tools-test-root))
                (metadata
                 (atcoder-tools-test-write-file
@@ -40,16 +43,15 @@ fn atcoder_tools_open_problem_parses_realistic_nested_metadata_and_browses_exact
              (secure-hash
               'sha256
               (atcoder-tools-test-read-file
-               metadata)))))"##;
-    let expect = expect![[
+               metadata)))))"##,
+            true,
+            expect![[
         r#"OK (:opened ("https://atcoder.jp/contests/abc133/tasks/abc133_a" nil) "abc133/A/metadata.json" "c06bc8bc02204bf1743d3a4ad0fc93f6619b47c4e02a7f5076631ce56ae580a9")"#
-    ]];
-    assert_atcoder_tools_parity(elisp_form, expect);
-}
-
-#[test]
-fn atcoder_tools_open_problem_interpolates_unicode_spaces_and_reserved_ids_without_encoding() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "atcoder_tools_open_problem_interpolates_unicode_spaces_and_reserved_ids_without_encoding",
+            r##"(let* ((root
                 (atcoder-tools-test-root))
                (metadata
                 (atcoder-tools-test-write-file
@@ -69,15 +71,13 @@ fn atcoder_tools_open_problem_interpolates_unicode_spaces_and_reserved_ids_witho
             (list
              (atcoder-tools--open-problem
               metadata)
-             (nreverse urls))))"##;
-    let expect =
-        expect![[r#"OK (:opened ("https://atcoder.jp/contests/春 2026/x?y/tasks/task #1/β"))"#]];
-    assert_atcoder_tools_parity(elisp_form, expect);
-}
-
-#[test]
-fn atcoder_tools_missing_unreadable_metadata_has_exact_early_error_contract() {
-    let elisp_form = r##"(let* ((root
+             (nreverse urls))))"##,
+            true,
+            expect![[r#"OK (:opened ("https://atcoder.jp/contests/春 2026/x?y/tasks/task #1/β"))"#]],
+        ),
+        (
+            "atcoder_tools_missing_unreadable_metadata_has_exact_early_error_contract",
+            r##"(let* ((root
                 (atcoder-tools-test-root))
                (missing
                 (expand-file-name
@@ -94,16 +94,15 @@ fn atcoder_tools_missing_unreadable_metadata_has_exact_early_error_contract() {
               (lambda ()
                 (atcoder-tools--open-problem
                  missing)))
-             browse-calls)))"##;
-    let expect = expect![[
+             browse-calls)))"##,
+            true,
+            expect![[
         r#"OK (nil (:error error ("Could not retrieve information from metadata.json")) nil)"#
-    ]];
-    assert_atcoder_tools_parity(elisp_form, expect);
-}
-
-#[test]
-fn atcoder_tools_malformed_metadata_json_matrix_records_parser_outcomes_and_browser_calls() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "atcoder_tools_malformed_metadata_json_matrix_records_parser_outcomes_and_browser_calls",
+            r##"(let* ((root
                 (atcoder-tools-test-root))
                (cases
                 '(("empty" . "")
@@ -136,16 +135,15 @@ fn atcoder_tools_malformed_metadata_json_matrix_records_parser_outcomes_and_brow
                  observations))))
           (list
            (nreverse observations)
-           (nreverse browse-calls)))"##;
-    let expect = expect![[
+           (nreverse browse-calls)))"##,
+            true,
+            expect![[
         r#"OK ((("empty" (:error json-end-of-file nil)) ("truncated" (:error json-end-of-file nil)) ("trailing" (:ok :opened)) ("scalar" (:error wrong-type-argument (listp 42))) ("array" (:error wrong-type-argument (listp [])))) (("https://atcoder.jp/contests/nil/tasks/nil")))"#
-    ]];
-    assert_atcoder_tools_parity(elisp_form, expect);
-}
-
-#[test]
-fn atcoder_tools_partial_metadata_interpolates_missing_fields_as_nil() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "atcoder_tools_partial_metadata_interpolates_missing_fields_as_nil",
+            r##"(let* ((root
                 (atcoder-tools-test-root))
                (documents
                 '(("{}" . "empty-object")
@@ -176,16 +174,15 @@ fn atcoder_tools_partial_metadata_interpolates_missing_fields_as_nil() {
                      (atcoder-tools--open-problem
                       file))))
                  observations))))
-          (nreverse observations))"##;
-    let expect = expect![[
+          (nreverse observations))"##,
+            true,
+            expect![[
         r#"OK (("empty-object" (:ok "https://atcoder.jp/contests/nil/tasks/nil")) ("empty-problem" (:ok "https://atcoder.jp/contests/nil/tasks/nil")) ("contest-only" (:ok "https://atcoder.jp/contests/abc/tasks/nil")) ("problem-only" (:ok "https://atcoder.jp/contests/nil/tasks/task")))"#
-    ]];
-    assert_atcoder_tools_parity(elisp_form, expect);
-}
-
-#[test]
-fn atcoder_tools_metadata_value_types_follow_format_string_coercion_exactly() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "atcoder_tools_metadata_value_types_follow_format_string_coercion_exactly",
+            r##"(let* ((root
                 (atcoder-tools-test-root))
                (documents
                 '(("{\"problem\":{\"contest\":{\"contest_id\":123},\"problem_id\":false}}"
@@ -215,16 +212,15 @@ fn atcoder_tools_metadata_value_types_follow_format_string_coercion_exactly() {
                      (atcoder-tools--open-problem
                       file))))
                  observations))))
-          (nreverse observations))"##;
-    let expect = expect![[
+          (nreverse observations))"##,
+            true,
+            expect![[
         r#"OK (("number-bool" (:ok "https://atcoder.jp/contests/123/tasks/:json-false")) ("array-object" (:ok "https://atcoder.jp/contests/[a b]/tasks/((x . 1))")) ("null-number" (:ok "https://atcoder.jp/contests/nil/tasks/0")))"#
-    ]];
-    assert_atcoder_tools_parity(elisp_form, expect);
-}
-
-#[test]
-fn atcoder_tools_public_open_problem_uses_metadata_sibling_of_buffer_file() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "atcoder_tools_public_open_problem_uses_metadata_sibling_of_buffer_file",
+            r##"(let* ((root
                 (atcoder-tools-test-root))
                (source
                 (atcoder-tools-test-write-file
@@ -246,14 +242,13 @@ fn atcoder_tools_public_open_problem_uses_metadata_sibling_of_buffer_file() {
                (atcoder-tools-open-problem)
                (call-interactively
                 #'atcoder-tools-open-problem)
-               observed))))"##;
-    let expect = expect![[r#"OK (:delegated :delegated "[ROOT]/contest 100/A/metadata.json")"#]];
-    assert_atcoder_tools_parity(elisp_form, expect);
-}
-
-#[test]
-fn atcoder_tools_public_open_problem_unsaved_buffer_preserves_exact_path_error() {
-    let elisp_form = r##"(with-temp-buffer
+               observed))))"##,
+            true,
+            expect![[r#"OK (:delegated :delegated "[ROOT]/contest 100/A/metadata.json")"#]],
+        ),
+        (
+            "atcoder_tools_public_open_problem_unsaved_buffer_preserves_exact_path_error",
+            r##"(with-temp-buffer
           (setq buffer-file-name nil)
           (list
            (atcoder-tools-test-error-data
@@ -262,16 +257,15 @@ fn atcoder_tools_public_open_problem_unsaved_buffer_preserves_exact_path_error()
            (atcoder-tools-test-error-data
             (lambda ()
               (call-interactively
-               #'atcoder-tools-open-problem)))))"##;
-    let expect = expect![
+               #'atcoder-tools-open-problem)))))"##,
+            true,
+            expect![
         "OK ((:error wrong-type-argument (stringp nil)) (:error wrong-type-argument (stringp nil)))"
-    ];
-    assert_atcoder_tools_parity(elisp_form, expect);
-}
-
-#[test]
-fn atcoder_tools_browser_failure_propagates_after_successful_metadata_parse() {
-    let elisp_form = r##"(let* ((root
+    ],
+        ),
+        (
+            "atcoder_tools_browser_failure_propagates_after_successful_metadata_parse",
+            r##"(let* ((root
                 (atcoder-tools-test-root))
                (metadata
                 (atcoder-tools-test-write-file
@@ -290,9 +284,11 @@ fn atcoder_tools_browser_failure_propagates_after_successful_metadata_parse() {
                 (atcoder-tools--open-problem
                  metadata)))
              (nreverse calls)
-             (file-readable-p metadata))))"##;
-    let expect = expect![[
+             (file-readable-p metadata))))"##,
+            true,
+            expect![[
         r#"OK ((:error error ("browser unavailable")) ("https://atcoder.jp/contests/abc500/tasks/abc500_c") t)"#
-    ]];
-    assert_atcoder_tools_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

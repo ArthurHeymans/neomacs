@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AUTH_SOURCE_GOPASS_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod backend;
 mod paths;
 mod registry;
@@ -57,5 +59,29 @@ pub(crate) fn assert_auth_source_gopass_autoload_parity(elisp_form: &str, expect
         "auth-source-gopass-autoloads.el",
         elisp_form,
         expected,
+    );
+}
+
+
+
+/// Multi-probe batch for `assert_auth_source_gopass_autoload_parity` cases (2a).
+pub(crate) fn assert_auth_source_gopass_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auth_source_gopass_oracle("auth-source-gopass-autoloads.el"),
+        &name,
+        "auth_source_gopass_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_auth_source_gopass_parity` cases (2a).
+pub(crate) fn assert_auth_source_gopass_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auth_source_gopass_oracle("auth-source-gopass.el"),
+        &name,
+        "auth_source_gopass_parity",
+        cases,
     );
 }

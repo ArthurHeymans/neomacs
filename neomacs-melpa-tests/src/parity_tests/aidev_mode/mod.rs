@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AIDEV_MODE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const AIDEV_MODE_TEST_TIMEOUT: Duration = Duration::from_secs(120);
@@ -36,4 +38,15 @@ fn assert_aidev_mode_source_parity(source_file: &str, elisp_form: &str, expected
 
 pub(crate) fn assert_aidev_mode_parity(elisp_form: &str, expected: Expect) {
     assert_aidev_mode_source_parity("aidev-mode.el", elisp_form, expected);
+}
+
+/// Multi-probe batch for `assert_aidev_mode_parity` cases (2a).
+pub(crate) fn assert_aidev_mode_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        aidev_mode_oracle("aidev-mode.el"),
+        &name,
+        "aidev_mode_parity",
+        cases,
+    );
 }

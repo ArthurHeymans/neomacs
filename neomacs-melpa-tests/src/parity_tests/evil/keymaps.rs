@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_evil_parity;
+use super::assert_evil_batch;
 
 #[test]
-fn evil_define_key_creates_and_reuses_state_auxiliary_keymaps() {
-    let elisp_form = r##"(progn
+fn keymaps_public_surface_batch() {
+    assert_evil_batch(&[
+        (
+            "evil_define_key_creates_and_reuses_state_auxiliary_keymaps",
+            r##"(progn
                (defvar neomacs-evil-aux-map)
                (setq neomacs-evil-aux-map (make-sparse-keymap))
                (evil-define-key 'normal neomacs-evil-aux-map
@@ -19,15 +22,13 @@ fn evil_define_key_creates_and_reuses_state_auxiliary_keymaps() {
                   (lookup-key aux "b")
                   (eq aux
                       (evil-get-auxiliary-keymap
-                       neomacs-evil-aux-map 'normal)))))"##;
-    let expect = expect!["OK (t forward-char backward-char t)"];
-
-    assert_evil_parity(elisp_form, expect);
-}
-
-#[test]
-fn evil_define_key_supports_global_local_and_multiple_state_targets() {
-    let elisp_form = r##"(with-temp-buffer
+                       neomacs-evil-aux-map 'normal)))))"##,
+            true,
+            expect!["OK (t forward-char backward-char t)"],
+        ),
+        (
+            "evil_define_key_supports_global_local_and_multiple_state_targets",
+            r##"(with-temp-buffer
                (let ((evil-normal-state-map
                       (copy-keymap evil-normal-state-map))
                      (evil-insert-state-map
@@ -47,32 +48,28 @@ fn evil_define_key_supports_global_local_and_multiple_state_targets() {
                   (lookup-key global-map "n")
                   (lookup-key (current-local-map) "p")
                   (lookup-key evil-normal-state-map "x")
-                  (lookup-key evil-insert-state-map "x"))))"##;
-    let expect = expect!["OK (forward-char backward-char next-line previous-line ignore ignore)"];
-
-    assert_evil_parity(elisp_form, expect);
-}
-
-#[test]
-fn evil_define_key_star_updates_existing_maps_without_auxiliary_indirection() {
-    let elisp_form = r##"(let ((map (make-sparse-keymap)))
+                  (lookup-key evil-insert-state-map "x"))))"##,
+            true,
+            expect!["OK (forward-char backward-char next-line previous-line ignore ignore)"],
+        ),
+        (
+            "evil_define_key_star_updates_existing_maps_without_auxiliary_indirection",
+            r##"(let ((map (make-sparse-keymap)))
                (evil-define-key* 'normal map
                  "a" #'forward-char
                  "b" #'backward-char)
                (list
                 (lookup-key map [normal-state ?a])
                 (lookup-key map [normal-state ?b])
-                (evil-get-auxiliary-keymap map 'normal)))"##;
-    let expect = expect![[
+                (evil-get-auxiliary-keymap map 'normal)))"##,
+            true,
+            expect![[
         r#"OK (forward-char backward-char (keymap "Auxiliary keymap for Normal state" (98 . backward-char) (97 . forward-char)))"#
-    ]];
-
-    assert_evil_parity(elisp_form, expect);
-}
-
-#[test]
-fn evil_overriding_and_intercept_maps_record_requested_state_and_precedence() {
-    let elisp_form = r##"(let ((override (make-sparse-keymap))
+    ]],
+        ),
+        (
+            "evil_overriding_and_intercept_maps_record_requested_state_and_precedence",
+            r##"(let ((override (make-sparse-keymap))
                     (intercept (make-sparse-keymap))
                     (evil-overriding-maps nil)
                     (evil-intercept-maps nil))
@@ -90,15 +87,13 @@ fn evil_overriding_and_intercept_maps_record_requested_state_and_precedence() {
                 (eq override
                     (caar evil-overriding-maps))
                 (eq intercept
-                    (caar evil-intercept-maps))))"##;
-    let expect = expect!["OK (nil nil nil nil nil nil)"];
-
-    assert_evil_parity(elisp_form, expect);
-}
-
-#[test]
-fn evil_define_minor_mode_key_builds_state_specific_mode_bindings() {
-    let elisp_form = r##"(progn
+                    (caar evil-intercept-maps))))"##,
+            true,
+            expect!["OK (nil nil nil nil nil nil)"],
+        ),
+        (
+            "evil_define_minor_mode_key_builds_state_specific_mode_bindings",
+            r##"(progn
                (defvar neomacs-evil-minor-mode nil)
                (defvar neomacs-evil-minor-mode-map
                  (make-sparse-keymap))
@@ -116,15 +111,13 @@ fn evil_define_minor_mode_key_builds_state_specific_mode_bindings() {
                   (lookup-key aux "a")
                   (lookup-key aux "b")
                   (assq 'neomacs-evil-minor-mode
-                        evil-minor-mode-keymaps-alist))))"##;
-    let expect = expect!["OK (nil nil nil nil)"];
-
-    assert_evil_parity(elisp_form, expect);
-}
-
-#[test]
-fn evil_keymap_for_mode_resolves_direct_parent_and_missing_mode_maps() {
-    let elisp_form = r##"(progn
+                        evil-minor-mode-keymaps-alist))))"##,
+            true,
+            expect!["OK (nil nil nil nil)"],
+        ),
+        (
+            "evil_keymap_for_mode_resolves_direct_parent_and_missing_mode_maps",
+            r##"(progn
                (defvar neomacs-evil-parent-mode-map
                  (make-sparse-keymap))
                (defvar neomacs-evil-child-mode-map nil)
@@ -138,8 +131,9 @@ fn evil_keymap_for_mode_resolves_direct_parent_and_missing_mode_maps() {
                     neomacs-evil-parent-mode-map)
                 (evil-keymap-for-mode 'neomacs-evil-missing-mode)
                 (evil-keymap-for-mode
-                 'neomacs-evil-child-mode t)))"##;
-    let expect = expect!["OK (nil nil nil nil)"];
-
-    assert_evil_parity(elisp_form, expect);
+                 'neomacs-evil-child-mode t)))"##,
+            true,
+            expect!["OK (nil nil nil nil)"],
+        ),
+    ]);
 }

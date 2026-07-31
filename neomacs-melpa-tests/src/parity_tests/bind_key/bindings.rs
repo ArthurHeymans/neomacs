@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_bind_key_parity;
+use super::assert_bind_key_batch;
 
 #[test]
-fn bind_key_binds_string_vector_and_remap_events_and_records_original_bindings() {
-    let elisp_form = r##"(let ((personal-keybindings nil)
+fn bindings_public_surface_batch() {
+    assert_bind_key_batch(&[
+        (
+            "bind_key_binds_string_vector_and_remap_events_and_records_original_bindings",
+            r##"(let ((personal-keybindings nil)
                     (map (make-sparse-keymap)))
                (define-key map (kbd "C-c a") #'beginning-of-line)
                (bind-key "C-c a" #'forward-line map)
@@ -14,17 +17,15 @@ fn bind_key_binds_string_vector_and_remap_events_and_records_original_bindings()
                 (lookup-key map (kbd "C-c a"))
                 (lookup-key map [f8])
                 (lookup-key map [remap forward-char])
-                personal-keybindings))"##;
-    let expect = expect![[
+                personal-keybindings))"##,
+            true,
+            expect![[
         r#"OK (forward-line ignore backward-char ((("<remap> <forward-char>" . map) backward-char nil) (("<f8>" . map) ignore nil) (("C-c a" . map) forward-line beginning-of-line)))"#
-    ]];
-
-    assert_bind_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn bind_key_accepts_a_quoted_keymap_symbol_and_updates_an_existing_registry_entry() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "bind_key_accepts_a_quoted_keymap_symbol_and_updates_an_existing_registry_entry",
+            r##"(progn
                (defvar neomacs-bind-key-test-map (make-sparse-keymap))
                (let ((personal-keybindings nil))
                  (bind-key "C-c q" #'forward-char
@@ -34,17 +35,15 @@ fn bind_key_accepts_a_quoted_keymap_symbol_and_updates_an_existing_registry_entr
                  (list
                   (lookup-key neomacs-bind-key-test-map
                               (kbd "C-c q"))
-                  personal-keybindings)))"##;
-    let expect = expect![[
+                  personal-keybindings)))"##,
+            true,
+            expect![[
         r#"OK (backward-char ((("C-c q" . neomacs-bind-key-test-map) backward-char forward-char)))"#
-    ]];
-
-    assert_bind_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn bind_key_predicate_filter_tracks_live_state_and_preserves_registry_metadata() {
-    let elisp_form = r##"(let ((personal-keybindings nil)
+    ]],
+        ),
+        (
+            "bind_key_predicate_filter_tracks_live_state_and_preserves_registry_metadata",
+            r##"(let ((personal-keybindings nil)
                     (map (make-sparse-keymap)))
                (defvar neomacs-bind-key-enabled nil)
                (setq neomacs-bind-key-enabled nil)
@@ -57,15 +56,13 @@ fn bind_key_predicate_filter_tracks_live_state_and_preserves_registry_metadata()
                    (list
                     disabled
                     (key-binding (kbd "C-c p"))
-                    personal-keybindings))))"##;
-    let expect = expect![[r#"OK (nil forward-char ((("C-c p" . map) forward-char nil)))"#]];
-
-    assert_bind_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn unbind_key_removes_nested_empty_prefixes_and_its_personal_registry_entry() {
-    let elisp_form = r##"(let ((personal-keybindings nil)
+                    personal-keybindings))))"##,
+            true,
+            expect![[r#"OK (nil forward-char ((("C-c p" . map) forward-char nil)))"#]],
+        ),
+        (
+            "unbind_key_removes_nested_empty_prefixes_and_its_personal_registry_entry",
+            r##"(let ((personal-keybindings nil)
                     (map (make-sparse-keymap)))
                (bind-key "C-c x" #'ignore map)
                (let ((before
@@ -81,15 +78,13 @@ fn unbind_key_removes_nested_empty_prefixes_and_its_personal_registry_entry() {
                    (length (nth 2 before)))
                   (lookup-key map (kbd "C-c"))
                   (lookup-key map (kbd "C-c x"))
-                  personal-keybindings)))"##;
-    let expect = expect![[r#"OK ((t ignore 1) nil 1 nil)"#]];
-
-    assert_bind_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn unbind_key_removes_meta_bindings_stored_through_the_escape_prefix() {
-    let elisp_form = r##"(let ((personal-keybindings nil)
+                  personal-keybindings)))"##,
+            true,
+            expect![[r#"OK ((t ignore 1) nil 1 nil)"#]],
+        ),
+        (
+            "unbind_key_removes_meta_bindings_stored_through_the_escape_prefix",
+            r##"(let ((personal-keybindings nil)
                     (map (make-sparse-keymap)))
                (bind-key "M-z" #'zap-to-char map)
                (let ((before
@@ -101,15 +96,13 @@ fn unbind_key_removes_meta_bindings_stored_through_the_escape_prefix() {
                   before
                   (lookup-key map (kbd "M-z"))
                   (lookup-key map (kbd "ESC z"))
-                  personal-keybindings)))"##;
-    let expect = expect![[r#"OK ((zap-to-char zap-to-char) nil 1 nil)"#]];
-
-    assert_bind_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn bind_key_star_wins_over_a_local_map_through_the_emulation_map() {
-    let elisp_form = r##"(let ((personal-keybindings nil)
+                  personal-keybindings)))"##,
+            true,
+            expect![[r#"OK ((zap-to-char zap-to-char) nil 1 nil)"#]],
+        ),
+        (
+            "bind_key_star_wins_over_a_local_map_through_the_emulation_map",
+            r##"(let ((personal-keybindings nil)
                     (local (make-sparse-keymap)))
                (define-key local (kbd "<f8>") #'backward-char)
                (bind-key* "<f8>" #'forward-char)
@@ -120,17 +113,15 @@ fn bind_key_star_wins_over_a_local_map_through_the_emulation_map() {
                   (lookup-key override-global-map (kbd "<f8>"))
                   (lookup-key local (kbd "<f8>"))
                   (key-binding (kbd "<f8>"))
-                  personal-keybindings)))"##;
-    let expect = expect![[
+                  personal-keybindings)))"##,
+            true,
+            expect![[
         r#"OK (t forward-char backward-char forward-char ((("<f8>" . override-global-map) forward-char nil)))"#
-    ]];
-
-    assert_bind_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn bind_keys_and_bind_keys_star_bind_multiple_commands_in_the_requested_maps() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "bind_keys_and_bind_keys_star_bind_multiple_commands_in_the_requested_maps",
+            r##"(progn
                (defvar neomacs-bind-keys-map (make-sparse-keymap))
                (let ((personal-keybindings nil))
                  (bind-keys
@@ -145,10 +136,11 @@ fn bind_keys_and_bind_keys_star_bind_multiple_commands_in_the_requested_maps() {
                   (lookup-key neomacs-bind-keys-map "e")
                   (lookup-key override-global-map (kbd "C-c n"))
                   (lookup-key override-global-map (kbd "C-c p"))
-                  (mapcar #'car personal-keybindings))))"##;
-    let expect = expect![[
+                  (mapcar #'car personal-keybindings))))"##,
+            true,
+            expect![[
         r#"OK (beginning-of-line end-of-line next-line previous-line (("C-c p" . override-global-map) ("C-c n" . override-global-map) ("e" . neomacs-bind-keys-map) ("a" . neomacs-bind-keys-map)))"#
-    ]];
-
-    assert_bind_key_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

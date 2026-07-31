@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_read_only_parity;
+use super::assert_auto_read_only_batch;
 
 #[test]
-fn auto_read_only_global_find_file_workflow_protects_selected_compiled_buffer_with_view_mode() {
-    let elisp_form = r##"(save-window-excursion
+fn workflows_public_surface_batch() {
+    assert_auto_read_only_batch(&[
+        (
+            "auto_read_only_global_find_file_workflow_protects_selected_compiled_buffer_with_view_mode",
+            r##"(save-window-excursion
          (let ((buffer
                 (generate-new-buffer
                  " *auto-read-only-compiled-workflow*"))
@@ -39,16 +42,15 @@ fn auto_read_only_global_find_file_workflow_protects_selected_compiled_buffer_wi
                          'find-file-hook))))))
              (auto-read-only-mode -1)
              (when (buffer-live-p buffer)
-               (kill-buffer buffer)))))"##;
-    let expect = expect![[
+               (kill-buffer buffer)))))"##,
+            true,
+            expect![[
         r#"OK ((" *auto-read-only-compiled-workflow*" "/workspace/build/library.elc" "compiled library" 17 nil nil nil) (" *auto-read-only-compiled-workflow*" "/workspace/build/library.elc" "compiled library" 17 t t nil) t 1)"#
-    ]];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_global_find_file_workflow_leaves_unmatched_source_editable() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_read_only_global_find_file_workflow_leaves_unmatched_source_editable",
+            r##"(save-window-excursion
          (let ((buffer
                 (generate-new-buffer
                  " *auto-read-only-source-workflow*"))
@@ -77,16 +79,15 @@ fn auto_read_only_global_find_file_workflow_leaves_unmatched_source_editable() {
                      (auto-read-only-test-buffer-state))))
              (auto-read-only-mode -1)
              (when (buffer-live-p buffer)
-               (kill-buffer buffer)))))"##;
-    let expect = expect![[
+               (kill-buffer buffer)))))"##,
+            true,
+            expect![[
         r#"OK (" *auto-read-only-source-workflow*" "/workspace/src/library.el" "editable source!" 17 nil nil t)"#
-    ]];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_default_user_emacs_directory_pattern_protects_installed_package_source() {
-    let elisp_form = r##"(let* ((source
+    ]],
+        ),
+        (
+            "auto_read_only_default_user_emacs_directory_pattern_protects_installed_package_source",
+            r##"(let* ((source
                  (locate-library "auto-read-only"))
                 (installed-source
                  (expand-file-name
@@ -114,14 +115,13 @@ fn auto_read_only_default_user_emacs_directory_pattern_protects_installed_packag
             (auto-read-only)
             buffer-read-only
             (bound-and-true-p view-mode)
-            (buffer-modified-p))))"##;
-    let expect = expect![[r#"OK ("auto-read-only.el" t (nil nil t nil) t t t nil)"#]];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_project_suppression_defers_protection_until_buffer_is_outside_project() {
-    let elisp_form = r##"(save-window-excursion
+            (buffer-modified-p))))"##,
+            true,
+            expect![[r#"OK ("auto-read-only.el" t (nil nil t nil) t t t nil)"#]],
+        ),
+        (
+            "auto_read_only_project_suppression_defers_protection_until_buffer_is_outside_project",
+            r##"(save-window-excursion
          (let ((buffer
                 (generate-new-buffer
                  " *auto-read-only-project-workflow*"))
@@ -168,14 +168,13 @@ fn auto_read_only_project_suppression_defers_protection_until_buffer_is_outside_
                           buffer-read-only
                           (nreverse events)))))))
              (when (buffer-live-p buffer)
-               (kill-buffer buffer)))))"##;
-    let expect = expect![[r#"OK (nil t t ((:protected "/workspace/project/vendor/pkg.el")))"#]];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_custom_read_only_mode_blocks_edits_then_allows_them_after_manual_unlock() {
-    let elisp_form = r##"(with-temp-buffer
+               (kill-buffer buffer)))))"##,
+            true,
+            expect![[r#"OK (nil t t ((:protected "/workspace/project/vendor/pkg.el")))"#]],
+        ),
+        (
+            "auto_read_only_custom_read_only_mode_blocks_edits_then_allows_them_after_manual_unlock",
+            r##"(with-temp-buffer
          (insert "vendor payload")
          (set-buffer-modified-p nil)
          (setq buffer-file-name
@@ -198,16 +197,15 @@ fn auto_read_only_custom_read_only_mode_blocks_edits_then_allows_them_after_manu
              (list
               result
               blocked
-              (auto-read-only-test-buffer-state)))))"##;
-    let expect = expect![[
+              (auto-read-only-test-buffer-state)))))"##,
+            true,
+            expect![[
         r#"OK (t (:error buffer-read-only ((:buffer nil))) (" *temp*" "/workspace/vendor/pkg.el" "vendor payload?" 16 nil nil t))"#
-    ]];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_disabling_global_mode_stops_subsequent_find_file_hook_protection() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_read_only_disabling_global_mode_stops_subsequent_find_file_hook_protection",
+            r##"(save-window-excursion
          (let ((buffer
                 (generate-new-buffer
                  " *auto-read-only-disabled-workflow*"))
@@ -245,7 +243,9 @@ fn auto_read_only_disabling_global_mode_stops_subsequent_find_file_hook_protecti
                       buffer-read-only))))
              (auto-read-only-mode -1)
              (when (buffer-live-p buffer)
-               (kill-buffer buffer)))))"##;
-    let expect = expect!["OK (nil nil nil nil)"];
-    assert_auto_read_only_parity(elisp_form, expect);
+               (kill-buffer buffer)))))"##,
+            true,
+            expect!["OK (nil nil nil nil)"],
+        ),
+    ]);
 }

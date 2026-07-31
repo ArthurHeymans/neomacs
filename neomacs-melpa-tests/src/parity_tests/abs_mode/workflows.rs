@@ -1,14 +1,18 @@
 use expect_test::expect;
 
-use super::assert_abs_mode_parity;
+use super::assert_abs_mode_batch;
 
 /// A modeler opens a badly formatted Abs class, gets the Abs editing
 /// environment set up by `auto-mode-alist', reindents the whole file with the
 /// bundled "abs" cc-mode style, comments a line out with the Abs comment
 /// syntax, and expands one of the snippets shipped inside the package.
+
 #[test]
-fn visiting_an_abs_model_gives_the_abs_editing_environment() {
-    let elisp_form = r##"(let ((buffer (abs-test-open "editing/counter.abs" abs-test-counter-model)))
+fn workflows_public_surface_batch() {
+    assert_abs_mode_batch(&[
+        (
+            "visiting_an_abs_model_gives_the_abs_editing_environment",
+            r##"(let ((buffer (abs-test-open "editing/counter.abs" abs-test-counter-model)))
   (unwind-protect
       (with-current-buffer buffer
         (let ((environment
@@ -51,21 +55,15 @@ fn visiting_an_abs_model_gives_the_abs_editing_environment() {
                       (point)
                       (length (yas-active-snippets))
                       (and (member abs--yas-snippets-dir yas-snippet-dirs) t)))))))
-    (kill-buffer buffer)))"##;
-    let expect = expect![[
+    (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK ((abs-mode "Abs//l" t abs-mode "abs" 4 "//" "" "//+\\s-*" c-indent-line abs-beginning-of-definition abs-end-of-definition "^\\(?:class\\|d\\(?:ata\\|e\\(?:f\\|lta\\)\\)\\|exception\\|\\(?:interfac\\|modul\\|typ\\)e\\)" t t t abs-next-action c-indent-line-or-region nil) "module Counter;\n[HTTPName: \"counter\"]\nclass Counter(Int start) implements Countable {\n    Int count = start;\n    Unit inc() {\n\11count = count + 1;\n\11if (count > 10) {\n\11    count = 0;\n\11}\n    }\n    Int classify(Int n) {\n\11case n {\n\11    0 => return 0;\n\11    _ => return 1;\n\11}\n    }\n}\n" "    // Int count = start;\n" yas-expand "module Counter;\n[HTTPName: \"counter\"]\nclass Counter(Int start) implements Countable {\n    Int count = start;\n    Unit inc() {\n\11count = count + 1;\n\11if (count > 10) {\n\11    count = 0;\n\11}\n    }\n    Int classify(Int n) {\n\11case n {\n\11    0 => return 0;\n\11    _ => return 1;\n\11}\n    }\n}\n\ninterface InterfaceName extends OtherInterface {\n    \n}\n" 289 1 t)"#
-    ]];
-
-    assert_abs_mode_parity(elisp_form, expect);
-}
-
-/// The Abs faces are the reason a modeler installs the mode: keywords,
-/// constructor constants, type names, function names and variable names each
-/// get their own face, and a German comment and a Unicode string literal are
-/// fontified as one comment and one string rather than being cut apart.
-#[test]
-fn font_lock_separates_abs_keywords_types_functions_and_unicode_literals() {
-    let elisp_form = r##"(let ((buffer (abs-test-open "editing/faces.abs" abs-test-bank-model)))
+    ]],
+        ),
+        (
+            "font_lock_separates_abs_keywords_types_functions_and_unicode_literals",
+            r##"(let ((buffer (abs-test-open "editing/faces.abs" abs-test-bank-model)))
   (unwind-protect
       (with-current-buffer buffer
         (goto-char (point-min))
@@ -75,21 +73,15 @@ fn font_lock_separates_abs_keywords_types_functions_and_unicode_literals() {
               (abs-test-face-runs (line-beginning-position 34)
                                   (line-beginning-position 39))
               (buffer-modified-p)))
-    (kill-buffer buffer)))"##;
-    let expect = expect![[
+    (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK ((("module" . abs-keyword-face) ("Bank" . abs-type-face) ("export" . abs-keyword-face) ("Account" . abs-type-face) ("SavingsAccount" . abs-type-face) ("import" . abs-keyword-face) ("from" . abs-keyword-face) ("Util" . abs-type-face) ("// " . font-lock-comment-delimiter-face) ("Zinsen: 3 % pro Jahr — für Sparkonten\n" . font-lock-comment-face) ("data" . abs-keyword-face) ("AccountId" . abs-type-face) ("AccountId" . abs-type-face) ("String" . abs-type-face) ("label" . abs-variable-name-face) ("type" . abs-keyword-face) ("Balance" . abs-type-face) ("Rat" . abs-type-face) ("exception" . abs-keyword-face) ("InsufficientFunds" . abs-type-face) ("Rat" . abs-type-face) ("requested" . abs-variable-name-face) ("interface" . abs-keyword-face) ("Account" . abs-type-face)) (("println" . abs-function-name-face) ("\"Überweisung €50 ✓\"" . font-lock-string-face) ("return" . abs-keyword-face) ("balance" . abs-variable-name-face)) (("Nil" . abs-constant-face) ("Cons" . abs-constant-face) ("x" . abs-variable-name-face) ("rest" . abs-variable-name-face) ("x" . abs-variable-name-face) ("total" . abs-function-name-face) ("rest" . abs-variable-name-face) ("delta" . abs-keyword-face) ("DFee" . abs-type-face)) nil)"#
-    ]];
-
-    assert_abs_mode_parity(elisp_form, expect);
-}
-
-/// Navigating a model by declaration: the imenu index built from
-/// `abs-imenu-generic-expression' groups every declaration kind of a real
-/// model, and selecting the class entry pushes the mark and moves point to the
-/// class, with positions counted in characters across the Unicode comment.
-#[test]
-fn imenu_indexes_every_abs_declaration_kind_and_jumps_to_a_class() {
-    let elisp_form = r##"(let ((buffer (abs-test-open "editing/index.abs" abs-test-bank-model)))
+    ]],
+        ),
+        (
+            "imenu_indexes_every_abs_declaration_kind_and_jumps_to_a_class",
+            r##"(let ((buffer (abs-test-open "editing/index.abs" abs-test-bank-model)))
   (unwind-protect
       (with-current-buffer buffer
         (let* ((index (imenu--make-index-alist))
@@ -103,23 +95,15 @@ fn imenu_indexes_every_abs_declaration_kind_and_jumps_to_a_class() {
                 (buffer-substring-no-properties (point) (line-end-position))
                 (marker-position (mark-marker))
                 (buffer-modified-p))))
-    (kill-buffer buffer)))"##;
-    let expect = expect![[
+    (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK ((("*Rescan*" . -99) ("Modules" ("Bank" . 1)) ("Interfaces" ("Account" . 216)) ("Classes" ("SavingsAccount" . 298)) ("Exceptions" ("InsufficientFunds" . 171)) ("Datatypes" ("AccountId" . 109) ("Balance" . 151)) ("Functions" ("total" . 683)) ("Deltas" ("DFee" . 805))) (("." . "_")) 298 "class SavingsAccount(Rat initial) implements Account {" 964 nil)"#
-    ]];
-
-    assert_abs_mode_parity(elisp_form, expect);
-}
-
-/// Walking definitions with `C-M-a'/`C-M-e'.  `abs-beginning-of-definition'
-/// steps over the interface, class and function definitions and refuses to
-/// stop on the `class' inside a comment or the `class'/`data' inside a string
-/// literal.  `abs-end-of-definition' reaches the end of the interface, but its
-/// own FIXME shows up as soon as a method body prints a message mentioning
-/// those keywords: the unbounded backward search then signals `search-failed'.
-#[test]
-fn defun_motion_walks_definitions_and_ignores_comment_and_string_lookalikes() {
-    let elisp_form = r##"(let ((buffer (abs-test-open "editing/ledger.abs" abs-test-ledger-model)))
+    ]],
+        ),
+        (
+            "defun_motion_walks_definitions_and_ignores_comment_and_string_lookalikes",
+            r##"(let ((buffer (abs-test-open "editing/ledger.abs" abs-test-ledger-model)))
   (unwind-protect
       (with-current-buffer buffer
         (goto-char (point-max))
@@ -147,23 +131,15 @@ fn defun_motion_walks_definitions_and_ignores_comment_and_string_lookalikes() {
                   (line-number-at-pos)
                   (point)
                   (buffer-modified-p)))))
-    (kill-buffer buffer)))"##;
-    let expect = expect![[
+    (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK (((14 243 "def Int one() = 1;") (8 114 "class FileLedger implements Ledger {") (4 62 "interface Ledger {") (1 1 "module Nav;") (1 1 "module Nav;")) (7 113) (search-failed "[;}]") 10 218 nil)"#
-    ]];
-
-    assert_abs_mode_parity(elisp_form, expect);
-}
-
-/// The documented `C-c C-c' cycle on a model that spans two files: the first
-/// invocation collects the imported module's file, compiles with the default
-/// Erlang backend and leaves the generated Erlang tree behind; because the
-/// model is now newer than its source, the second invocation runs it, starting
-/// the generated `run' script under `inferior-erlang' with the clock limit and
-/// Model API port the user configured.
-#[test]
-fn c_c_c_c_compiles_a_multi_file_model_and_then_runs_it_on_the_erlang_backend() {
-    let elisp_form = r##"(let ((buffer nil))
+    ]],
+        ),
+        (
+            "c_c_c_c_compiles_a_multi_file_model_and_then_runs_it_on_the_erlang_backend",
+            r##"(let ((buffer nil))
   (abs-test-setup-compiler)
   (abs-test-write "model/util.abs" abs-test-util-model)
   (setq buffer (abs-test-open "model/bank.abs" abs-test-bank-model))
@@ -199,24 +175,15 @@ fn c_c_c_c_compiles_a_multi_file_model_and_then_runs_it_on_the_erlang_backend() 
     (dolist (name '("*compilation*" "*erlang*"))
       (when (get-buffer name)
         (let ((kill-buffer-query-functions nil))
-          (kill-buffer name))))))"##;
-    let expect = expect![[
+          (kill-buffer name))))))"##,
+            true,
+            expect![[
         r#"OK (("bank.abs" "util.abs") ("*compilation*" "finished") "-*- mode: compilation; default-directory: \"[ORACLE-SANDBOX]/model/\" -*-\nCompilation started at <TIME>\n\nabsc --erlang \"bank.abs\" \"util.abs\" \nCompiled erlang model.\n\nCompilation finished at <TIME>\n" ("bank.abs" "gen/erl/absmodel/Emakefile" "gen/erl/run" "util.abs") nil "Bank.Main terminated.\n\nProcess inferior-erlang finished\n" erlang-shell-mode "*erlang*" ("absc --erlang bank.abs util.abs" "run -l 25 -p 8080") (nil "[ORACLE-SANDBOX]/model/bank.abs" "[ORACLE-SANDBOX]/model/"))"#
-    ]];
-
-    assert_abs_mode_parity(elisp_form, expect);
-}
-
-/// The file-local variables block documented in `abs-input-files': the model
-/// selects the Maude backend, its input files, its generated Maude file, a
-/// product from the product line, a clock limit and a resource cost, and
-/// `C-c C-c' turns exactly those into the timed `absc' invocation.  The block
-/// also tries to redirect the compiler and the output directory outside the
-/// model directory; both are refused, so the recorded command line is the one
-/// the safe settings describe.
-#[test]
-fn file_local_variables_drive_a_timed_maude_compilation_and_reject_unsafe_settings() {
-    let elisp_form = r##"(let ((buffer nil))
+    ]],
+        ),
+        (
+            "file_local_variables_drive_a_timed_maude_compilation_and_reject_unsafe_settings",
+            r##"(let ((buffer nil))
   (abs-test-setup-compiler)
   (abs-test-write "timed/helper.abs" abs-test-util-model)
   (setq buffer (let ((enable-local-variables :safe))
@@ -255,22 +222,15 @@ fn file_local_variables_drive_a_timed_maude_compilation_and_reject_unsafe_settin
            (buffer-modified-p))))
     (kill-buffer buffer)
     (when (get-buffer "*compilation*")
-      (kill-buffer "*compilation*"))))"##;
-    let expect = expect![[
+      (kill-buffer "*compilation*"))))"##,
+            true,
+            expect![[
         r#"OK ((maude 42 7 #1=("timed.abs" "helper.abs") "timed.maude" "Deluxe" "absc" nil) (t t t t t t nil nil) ((abs-backend . maude) (abs-clock-limit . 42) (abs-default-resourcecost . 7) (abs-input-files . #1#) (abs-maude-output-file . "timed.maude") (abs-product-name . "Deluxe")) ("*compilation*" "finished") "-*- mode: compilation; default-directory: \"[ORACLE-SANDBOX]/timed/\" -*-\nCompilation started at <TIME>\n\nabsc --maude \"timed.abs\" \"helper.abs\" -o \"timed.maude\" --product Deluxe --timed --limit=42 --defaultcost 7 \nCompiled maude model.\n\nCompilation finished at <TIME>\n" ("absc --maude timed.abs helper.abs -o timed.maude --product Deluxe --timed --limit=42 --defaultcost 7") ("helper.abs" "timed.abs" "timed.maude") "load abs-interpreter .\n" nil)"#
-    ]];
-
-    assert_abs_mode_parity(elisp_form, expect);
-}
-
-/// The compiler rejects the model.  abs-mode relies on `compilation-mode'
-/// recognising the Abs diagnostic format, so the failing run has to classify
-/// one warning and two errors and let `next-error' walk them: twice inside the
-/// model being edited and once into the imported file, which is visited on
-/// demand, before reporting that the last error was passed.
-#[test]
-fn a_failing_compilation_reports_abs_diagnostics_that_next_error_can_visit() {
-    let elisp_form = r##"(let ((buffer nil))
+    ]],
+        ),
+        (
+            "a_failing_compilation_reports_abs_diagnostics_that_next_error_can_visit",
+            r##"(let ((buffer nil))
   (abs-test-setup-compiler)
   (abs-test-write "broken/util.abs" abs-test-util-model)
   (setq buffer (abs-test-open "broken/bank.abs" abs-test-bank-model))
@@ -311,23 +271,15 @@ fn a_failing_compilation_reports_abs_diagnostics_that_next_error_can_visit() {
     (setenv "ABS_COMPILER_ERROR" nil)
     (dolist (name '("*compilation*" "bank.abs" "util.abs"))
       (when (get-buffer name)
-        (kill-buffer name)))))"##;
-    let expect = expect![[
+        (kill-buffer name)))))"##,
+            true,
+            expect![[
         r#"OK (("*compilation*" "exited abnormally with code 1") "-*- mode: compilation; default-directory: \"[ORACLE-SANDBOX]/broken/\" -*-\nCompilation started at <TIME>\n\nabsc --erlang \"bank.abs\" \"util.abs\" \nbank.abs:17:9: warning: unused variable initial\nbank.abs:21:9: error: Cannot resolve name Uberweisung\nutil.abs:5:22: error: Type mismatch: expected Rat, found Int\n\nCompilation exited abnormally with code 1 at <TIME>\n" (("bank.abs" 17 361 "    Rat balance = initial;") ("bank.abs" 21 455 "        println(\"Überweisung €50 ✓\");") ("util.abs" 5 55 "def Rat toBalance(Int cents) = cents / 100;")) (user-error "Past last error") (2 1 7) ("absc --erlang bank.abs util.abs") ("bank.abs" "util.abs"))"#
-    ]];
-
-    assert_abs_mode_parity(elisp_form, expect);
-}
-
-/// `abs-flymake-mode-on' is one of the default `abs-mode-hook' entries, so a
-/// modeler gets on-the-fly checking of the *unsaved* buffer: flymake copies the
-/// edited text next to the model, hands the copy plus the other input files to
-/// `absc', maps the reported lines back onto the live buffer, and drops the
-/// diagnostic that belongs to the imported file.  The temporary copy is gone
-/// afterwards.
-#[test]
-fn flymake_checks_the_unsaved_abs_buffer_with_the_abs_compiler() {
-    let elisp_form = r##"(let ((buffer nil))
+    ]],
+        ),
+        (
+            "flymake_checks_the_unsaved_abs_buffer_with_the_abs_compiler",
+            r##"(let ((buffer nil))
   (abs-test-setup-compiler)
   (abs-test-write "check/util.abs" abs-test-util-model)
   (setq buffer (abs-test-open "check/bank.abs" abs-test-bank-model))
@@ -350,10 +302,11 @@ fn flymake_checks_the_unsaved_abs_buffer_with_the_abs_compiler() {
               (buffer-modified-p)))
     (setenv "ABS_COMPILER_ERROR" nil)
     (set-buffer-modified-p nil)
-    (kill-buffer buffer)))"##;
-    let expect = expect![[
+    (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK (t (flymake-proc-legacy-flymake) ((:warning 361 368 17 "balance" "warning: unused variable initial") (:error 459 466 21 "println" "error: Cannot resolve name Uberweisung")) ("absc [ORACLE-SANDBOX]/check/bank_<TEMP>_flymake.abs util.abs") ("bank.abs" "util.abs") nil t)"#
-    ]];
-
-    assert_abs_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

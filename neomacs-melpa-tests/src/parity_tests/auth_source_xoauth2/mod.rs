@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AUTH_SOURCE_XOAUTH2_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod backend;
 mod credentials;
 mod enable;
@@ -67,5 +69,29 @@ pub(crate) fn assert_auth_source_xoauth2_autoload_parity(elisp_form: &str, expec
         "auth-source-xoauth2-autoloads.el",
         elisp_form,
         expected,
+    );
+}
+
+
+
+/// Multi-probe batch for `assert_auth_source_xoauth2_autoload_parity` cases (2a).
+pub(crate) fn assert_auth_source_xoauth2_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auth_source_xoauth2_oracle("auth-source-xoauth2-autoloads.el"),
+        &name,
+        "auth_source_xoauth2_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_auth_source_xoauth2_parity` cases (2a).
+pub(crate) fn assert_auth_source_xoauth2_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auth_source_xoauth2_oracle("auth-source-xoauth2.el"),
+        &name,
+        "auth_source_xoauth2_parity",
+        cases,
     );
 }

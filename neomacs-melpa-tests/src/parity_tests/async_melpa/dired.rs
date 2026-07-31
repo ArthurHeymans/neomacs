@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_async_melpa_dired_parity;
+use super::assert_async_melpa_dired_batch;
 
 #[test]
-fn current_dired_defaults_and_customization_metadata_match_gnu_emacs() {
-    let elisp_form = r##"
+fn dired_public_surface_batch() {
+    assert_async_melpa_dired_batch(&[
+        (
+            "current_dired_defaults_and_customization_metadata_match_gnu_emacs",
+            r##"
 (list
  dired-async-env-variables-regexp
  dired-async-message-function
@@ -30,16 +33,15 @@ fn current_dired_defaults_and_customization_metadata_match_gnu_emacs() {
     dired-async-failures
     dired-async-mode-message))
  (help-function-arglist 'dired-async-create-files t))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("\\`\\(tramp-\\(default\\|connection\\|remote\\)\\|ange-ftp\\)-.*" dired-async-mode-line-message (:eval (when (eq major-mode 'dired-mode) " Async")) nil 5000000 10000000 "dired-async.log" t string boolean nil t ((dired-async-message [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t (:foreground "yellow")))) (dired-async-failures [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t (:foreground "red")))) (dired-async-mode-message [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t (:foreground "Gold"))))) (file-creator operation fn-list name-constructor &optional _marker-char))"#
-    ]];
-    assert_async_melpa_dired_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_dired_file_classification_uses_real_sizes_directories_and_devices() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_dired_file_classification_uses_real_sizes_directories_and_devices",
+            r##"
 (let* ((root (file-name-as-directory
               (async-melpa-test-path "dired/classify/")))
        (small (expand-file-name "small.txt" root))
@@ -89,16 +91,15 @@ fn current_dired_file_classification_uses_real_sizes_directories_and_devices() {
        (dired-async--skip-async-p
         'dired-rename-file large
         (lambda (_) (expand-file-name "renamed" root))))))))
-"##;
-    let expect = expect![
+"##,
+            true,
+            expect![
         "OK ((directory (:value t)) (small (:value t)) (threshold (:value nil)) (nested (:value nil)) (device (:value t)) (copy (:value t)) (rename (:value t)))"
-    ];
-    assert_async_melpa_dired_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_smart_create_files_splits_fast_work_and_promotes_large_aggregate() {
-    let elisp_form = r##"
+    ],
+        ),
+        (
+            "current_smart_create_files_splits_fast_work_and_promotes_large_aggregate",
+            r##"
 (let* ((root (file-name-as-directory
               (async-melpa-test-path "dired/smart/")))
        (small-a (expand-file-name "small-a" root))
@@ -127,16 +128,15 @@ fn current_smart_create_files_splits_fast_work_and_promotes_large_aggregate() {
            (expand-file-name (file-name-nondirectory file) "dest/"))
          ?+)
         (list split (nreverse async-calls) (nreverse sync-calls))))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ((((dired-copy-file "Copy" ("[ORACLE-SANDBOX]/dired/smart/large") #1=#[(file) ((expand-file-name (file-name-nondirectory file) "dest/")) #2=(t)] 42)) ((dired-copy-file "Copy" ("[ORACLE-SANDBOX]/dired/smart/small-a" "[ORACLE-SANDBOX]/dired/smart/small-b") #1# 42))) ((dired-copy-file "Copy" ("[ORACLE-SANDBOX]/dired/smart/small-a" "[ORACLE-SANDBOX]/dired/smart/small-b") #[(file) ((expand-file-name (file-name-nondirectory file) "dest/")) #2#] 43)) nil)"#
-    ]];
-    assert_async_melpa_dired_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_large_file_guard_has_exact_threshold_and_abort_semantics() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_large_file_guard_has_exact_threshold_and_abort_semantics",
+            r##"
 (let ((dired-async-large-file-warning-threshold 100)
       asked)
   (cl-letf (((symbol-function 'files--ask-user-about-large-file)
@@ -150,14 +150,13 @@ fn current_large_file_guard_has_exact_threshold_and_abort_semantics() {
        (setq dired-async-large-file-warning-threshold nil)
        (dired-async--abort-if-file-too-large 1000 "rename" "disabled"))
      (nreverse asked))))
-"##;
-    let expect = expect![[r#"OK (nil abort nil ((101 "copy" "over" nil)))"#]];
-    assert_async_melpa_dired_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_process_registry_filters_properties_and_kills_latest_job() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect![[r#"OK (nil abort nil ((101 "copy" "over" nil)))"#]],
+        ),
+        (
+            "current_process_registry_filters_properties_and_kills_latest_job",
+            r##"
 (let ((p1 (make-process :name "async-dired-one"
                         :command '("sh" "-c" "sleep 20")
                         :noquery t))
@@ -182,16 +181,15 @@ fn current_process_registry_filters_properties_and_kills_latest_job() {
                   modeline))))
     (when (process-live-p p1) (delete-process p1))
     (when (process-live-p p2) (delete-process p2))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("async-dired-one") ("async-dired-two") nil (run open listen connect stop) (-1))"#
-    ]];
-    assert_async_melpa_dired_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_mode_line_message_formats_face_and_restores_outer_mode_line() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_mode_line_message_formats_face_and_restores_outer_mode_line",
+            r##"
 (let ((mode-line-format '("outer"))
       updates
       observed)
@@ -207,14 +205,13 @@ fn current_mode_line_message_formats_face_and_restores_outer_mode_line() {
           (get-text-property 1 'face observed)
           mode-line-format
           (length updates))))
-"##;
-    let expect = expect![[r#"OK (" Copied 3 files" success ("outer") 2)"#]];
-    assert_async_melpa_dired_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_after_file_create_imports_error_log_and_reports_success_and_failures() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect![[r#"OK (" Copied 3 files" success ("outer") 2)"#]],
+        ),
+        (
+            "current_after_file_create_imports_error_log_and_reports_success_and_failures",
+            r##"
 (let* ((dired-async-log-file
         (async-melpa-test-path "dired/callback/errors.log"))
        (dired-log-buffer "*async-dired-log*")
@@ -249,16 +246,15 @@ fn current_after_file_create_imports_error_log_and_reports_success_and_failures(
              3 '("Copy" 2) '("failed.txt") '("skipped.txt"))
             (list error-result (nreverse notices) modeline))))
     (async-melpa-test-kill-buffers dired-log-buffer)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("Error: Copy failed: permission denied\n" special-mode nil) (("%s failed for %d of %d file%s -- See *Dired log* buffer" dired-async-failures "Copy" 1 3 "s") ("Asynchronous %s of %s on %s file%s done" dired-async-message "Copy" 2 3 "s")) (-1 -1))"#
-    ]];
-    assert_async_melpa_dired_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_maybe_kill_ftp_form_kills_only_first_matching_buffer() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_maybe_kill_ftp_form_kills_only_first_matching_buffer",
+            r##"
 (let ((ftp-one (get-buffer-create "*ftp fixture one*"))
       (ftp-two (get-buffer-create "*ftp fixture two*"))
       (ordinary (get-buffer-create "*fixture ordinary*")))
@@ -273,14 +269,13 @@ fn current_maybe_kill_ftp_form_kills_only_first_matching_buffer() {
     (mapc (lambda (buffer)
             (when (buffer-live-p buffer) (kill-buffer buffer)))
           (list ftp-one ftp-two ordinary))))
-"##;
-    let expect = expect!["OK (nil t t progn)"];
-    assert_async_melpa_dired_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_create_files_same_destination_reports_skip_without_starting_process() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect!["OK (nil t t progn)"],
+        ),
+        (
+            "current_create_files_same_destination_reports_skip_without_starting_process",
+            r##"
 (let* ((root (file-name-as-directory
               (async-melpa-test-path "dired/no-job/")))
        (file (expand-file-name "same.txt" root))
@@ -301,16 +296,15 @@ fn current_create_files_same_destination_reports_skip_without_starting_process()
                  'dired-copy-file "Copy" (list file) #'identity)))))
         (list outcome started (nreverse logs)
               (nreverse notices) overwrite-query)))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ((:signal (wrong-type-argument stringp nil)) nil (("Cannot %s to same file: %s\n" "copy" "[ORACLE-SANDBOX]/dired/no-job/same.txt") (t)) (("%s: %d of %d file%s skipped -- See *Dired log* buffer" dired-async-failures "Copy" 1 1 "")) nil)"#
-    ]];
-    assert_async_melpa_dired_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_create_files_async_branch_constructs_job_callback_and_process_metadata() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_create_files_async_branch_constructs_job_callback_and_process_metadata",
+            r##"
 (let* ((root (file-name-as-directory
               (async-melpa-test-path "dired/job/")))
        (source (expand-file-name "source.txt" root))
@@ -343,16 +337,15 @@ fn current_create_files_async_branch_constructs_job_callback_and_process_metadat
       t)
      (functionp callback)
      process-properties modeline (nreverse messages))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (lambda t t t ((fixture-process dired-async-process t)) (1) ("Copy proceeding asynchronously..."))"#
-    ]];
-    assert_async_melpa_dired_parity(elisp_form, expect);
-}
-
-#[test]
-fn current_wdired_advice_modes_and_four_command_wrappers_preserve_arguments() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "current_wdired_advice_modes_and_four_command_wrappers_preserve_arguments",
+            r##"
 (let (wdired-observation command-observations)
   (cl-letf (((symbol-function 'fixture-wdired)
              (lambda (&rest args)
@@ -418,9 +411,11 @@ fn current_wdired_advice_modes_and_four_command_wrappers_preserve_arguments() {
                     before enabled
                     dired-async-mode))))
       (dired-async-mode -1))))
-"##;
-    let expect = expect![
+"##,
+            true,
+            expect![
         "OK ((nil (:one :two)) ((copy (4) t) (symlink - t) (hardlink nil t) (rename 7 t)) (nil nil) (t t) nil)"
-    ];
-    assert_async_melpa_dired_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }

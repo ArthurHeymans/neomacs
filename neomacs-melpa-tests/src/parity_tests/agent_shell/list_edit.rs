@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_agent_shell_parity;
+use super::assert_agent_shell_batch;
 
 #[test]
-fn user_edits_nested_bullets_multi_digit_steps_and_breaks_out_for_notes() {
-    let elisp_form = r##"
+fn list_edit_public_surface_batch() {
+    assert_agent_shell_batch(&[
+        (
+            "user_edits_nested_bullets_multi_digit_steps_and_breaks_out_for_notes",
+            r##"
 (with-temp-buffer
   (insert
    "- prepare release\n"
@@ -42,9 +45,11 @@ fn user_edits_nested_bullets_multi_digit_steps_and_breaks_out_for_notes() {
    (current-column)
    (agent-shell-list-edit--at-item)
    agent-shell-list-edit-mode))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("- prepare release\n  - run cargo nextest\n  98. audit GNU Emacs\n  99. audit Neomacs\n  100. record every divergence\n  101. attach minimized reproductions\n\nNotes: failures remain actionable.\n- publish\n- tag candidate\n" 10 15 ((:type . bullet) (:indent . "") (:marker . "-") (:content . "tag candidate")) t)"#
-    ]];
-    assert_agent_shell_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

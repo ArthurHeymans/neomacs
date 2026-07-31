@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_asciidoc_mode_parity;
+use super::assert_asciidoc_mode_batch;
 
 #[test]
-fn context_completion_returns_exact_bounds_candidates_and_exclusivity_for_real_inputs() {
-    let elisp_form = r##"(cl-labels
+fn completion_public_surface_batch() {
+    assert_asciidoc_mode_batch(&[
+        (
+            "context_completion_returns_exact_bounds_candidates_and_exclusivity_for_real_inputs",
+            r##"(cl-labels
     ((probe
       (content)
       (with-temp-buffer
@@ -37,16 +40,15 @@ fn context_completion_returns_exact_bounds_candidates_and_exclusivity_for_real_i
    (probe "[source,ru")
    (probe "See <<id,the te")
    (probe "See <<id>> and ")
-   (probe "ordinary prose")))"##;
-    let expect = expect![[
+   (probe "ordinary prose")))"##,
+            true,
+            expect![[
         r#"OK ((38 40 "ex" no ("explicit")) (26 28 "ex" no ("explicit")) (27 29 "cu" no ("custom-attr")) (9 11 "ru" no ("ruby" "rust")) nil nil nil)"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn include_completion_preserves_gnu_behavior_with_a_real_document_and_filesystem_entries() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "include_completion_preserves_gnu_behavior_with_a_real_document_and_filesystem_entries",
+            r##"(let* ((root
          (expand-file-name
           "asciidoc-mode-completion-contract"
           (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
@@ -90,14 +92,13 @@ fn include_completion_preserves_gnu_behavior_with_a_real_document_and_filesystem
            (try-completion fragment table)
            (plist-get (nthcdr 3 capf)
                       :exclusive))))
-    (delete-directory root t)))"##;
-    let expect = expect![[r#"OK ("gu" nil nil no)"#]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn attribute_and_source_language_collections_merge_buffer_local_and_builtin_values_stably() {
-    let elisp_form = r##"(with-temp-buffer
+    (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK ("gu" nil nil no)"#]],
+        ),
+        (
+            "attribute_and_source_language_collections_merge_buffer_local_and_builtin_values_stably",
+            r##"(with-temp-buffer
   (insert
    ":custom-one: first\n"
    ":custom-two: second\n"
@@ -129,16 +130,15 @@ fn attribute_and_source_language_collections_merge_buffer_local_and_builtin_valu
                 (member name languages)))
         '("Practical" "ruby" "bash"
           "rust" "emacs-lisp"
-          "asciidoc"))))))"##;
-    let expect = expect![[
+          "asciidoc"))))))"##,
+            true,
+            expect![[
         r#"OK (("custom-one" "custom-two" "toc" "doctitle" "author" "authorinitials" "firstname" "lastname") 58 (("custom-one" "custom-one" . #1=("custom-two" . #2=("toc" . #3=("doctitle" "author" "authorinitials" "firstname" "lastname" "email" "revnumber" "revdate" "revremark" "version" "doctype" "backend" "sectnums" "sectanchors" "toclevels" "icons" "imagesdir" "source-highlighter" "experimental" "idprefix" "idseparator" "nofooter" "stem" "tabsize" "leveloffset" "sp" "nbsp" "zwsp" "wj" "apos" "quot" "lsquo" "rsquo" "ldquo" "rdquo" "deg" "plus" "brvbar" "vbar" "amp" "lt" "gt" "startsb" "endsb" "caret" "asterisk" "tilde" "backslash" "backtick" "two-colons" . #5=("two-semicolons" . #4=("cpp" "pp" "blank" "empty")))))) ("custom-two" . #1#) ("toc" . #2#) ("doctitle" . #3#) ("cpp" . #4#) ("two-semicolons" . #5#)) ("Practical" "ruby" "bash" "asciidoc" "c" "clojure" "cpp" "csharp" "css" "diff") 41 (("Practical" "Practical" . #6=("ruby" . #7=("bash" . #10=("asciidoc" "c" "clojure" "cpp" "csharp" "css" "diff" "dockerfile" "elixir" . #9=("emacs-lisp" "erlang" "go" "groovy" "haskell" "html" "java" "javascript" "json" "kotlin" "lisp" "lua" "make" "markdown" "ocaml" "perl" "php" "python" . #8=("rust" "scala" "scheme" "sh" "shell" "sql" "swift" "toml" "typescript" "xml" "yaml")))))) ("ruby" . #6#) ("bash" . #7#) ("rust" . #8#) ("emacs-lisp" . #9#) ("asciidoc" . #10#)))"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn flyspell_predicate_checks_prose_but_skips_links_references_anchors_macros_and_code() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "flyspell_predicate_checks_prose_but_skips_links_references_anchors_macros_and_code",
+            r##"(with-temp-buffer
   (insert
    "Ordinary proseword remains checkable.\n"
    "Visit https://zzqqzz.example/path.\n"
@@ -158,9 +158,11 @@ fn flyspell_predicate_checks_prose_but_skips_links_references_anchors_macros_and
       "some-section"
       "anchor-id"
       "somefn"
-      "C-c"))))"##;
-    let expect = expect![[
+      "C-c"))))"##,
+            true,
+            expect![[
         r#"OK "((\"proseword\" . t) (\"zzqqzz\") (\"some-section\") (\"anchor-id\") (\"somefn\") (\"C-c\"))""#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

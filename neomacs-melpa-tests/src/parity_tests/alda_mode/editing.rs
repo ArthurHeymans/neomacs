@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_alda_mode_parity;
+use super::assert_alda_mode_batch;
 
 #[test]
-fn alda_font_lock_practical_score_assigns_faces_to_language_constructs() {
-    let elisp_form = r##"(with-temp-buffer
+fn editing_public_surface_batch() {
+    assert_alda_mode_batch(&[
+        (
+            "alda_font_lock_practical_score_assigns_faces_to_language_constructs",
+            r##"(with-temp-buffer
          (insert
           "piano \"lead\":\n"
           "V1: o4 c+8~2 *3 { d e } [f g] | @start\n"
@@ -20,16 +23,15 @@ fn alda_font_lock_practical_score_assigns_faces_to_language_constructs() {
                   (get-text-property
                    (1- (point)) 'face)))
           '("piano" "V1" "o4" "c+" "*3" "{" "[" "|"
-            "@start" "tempo" "# comment")))"##;
-    let expect = expect![[
+            "@start" "tempo" "# comment")))"##,
+            true,
+            expect![[
         r##"OK (("piano" font-lock-type-face) ("V1" font-lock-function-name-face) ("o4" font-lock-constant-face) ("c+" font-lock-preprocessor-face) ("*3" font-lock-builtin-face) ("{" font-lock-builtin-face) ("[" font-lock-builtin-face) ("|" font-lock-comment-face) ("@start" font-lock-builtin-face) ("tempo" font-lock-variable-name-face) ("# comment" font-lock-comment-face))"##
-    ]];
-    assert_alda_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn alda_calculate_indentation_handles_labels_comments_and_regular_notes() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "alda_calculate_indentation_handles_labels_comments_and_regular_notes",
+            r##"(with-temp-buffer
          (insert
           "piano:\n"
           "    c d e\n"
@@ -47,14 +49,13 @@ fn alda_calculate_indentation_handles_labels_comments_and_regular_notes() {
                     (current-indentation)
                     (alda-calculate-indentation))
               results))
-           (nreverse results)))"##;
-    let expect = expect!["OK ((1 0 0) (2 4 8) (4 6 4) (5 0 8))"];
-    assert_alda_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn alda_indent_previous_level_skips_blank_lines_and_finds_prior_score_indent() {
-    let elisp_form = r##"(with-temp-buffer
+           (nreverse results)))"##,
+            true,
+            expect!["OK ((1 0 0) (2 4 8) (4 6 4) (5 0 8))"],
+        ),
+        (
+            "alda_indent_previous_level_skips_blank_lines_and_finds_prior_score_indent",
+            r##"(with-temp-buffer
          (insert
           "piano:\n"
           "      c d e\n"
@@ -68,14 +69,13 @@ fn alda_indent_previous_level_skips_blank_lines_and_finds_prior_score_indent() {
          (list
           (alda-indent-prev-level)
           (current-indentation)
-          (line-number-at-pos)))"##;
-    let expect = expect!["OK (3 0 5)"];
-    assert_alda_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn alda_indent_line_reindents_labels_notes_and_comments_preserving_point_semantics() {
-    let elisp_form = r##"(with-temp-buffer
+          (line-number-at-pos)))"##,
+            true,
+            expect!["OK (3 0 5)"],
+        ),
+        (
+            "alda_indent_line_reindents_labels_notes_and_comments_preserving_point_semantics",
+            r##"(with-temp-buffer
          (insert
           "    piano:\n"
           "c d e\n"
@@ -98,14 +98,13 @@ fn alda_indent_line_reindents_labels_notes_and_comments_preserving_point_semanti
                 label-result
                 note-indent
                 (current-indentation)
-                (buffer-string))))))"##;
-    let expect = expect![[r#"OK ((0 7 3) 8 8 "piano:\n\11c d e\n\11# comment\n")"#]];
-    assert_alda_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn alda_colon_flushes_instrument_labels_but_preserves_inline_note_spacing() {
-    let elisp_form = r##"(let (results)
+                (buffer-string))))))"##,
+            true,
+            expect![[r#"OK ((0 7 3) 8 8 "piano:\n\11c d e\n\11# comment\n")"#]],
+        ),
+        (
+            "alda_colon_flushes_instrument_labels_but_preserves_inline_note_spacing",
+            r##"(let (results)
          (dolist (initial '("    piano" "c d e "))
            (with-temp-buffer
              (insert initial)
@@ -123,7 +122,9 @@ fn alda_colon_flushes_instrument_labels_but_preserves_inline_note_spacing() {
                (push
                 (list initial (buffer-string) (point))
                 results))))
-         (nreverse results))"##;
-    let expect = expect![[r#"OK (("    piano" "piano:<TAB>" 12) ("c d e " "c d e :<TAB>" 13))"#]];
-    assert_alda_mode_parity(elisp_form, expect);
+         (nreverse results))"##,
+            true,
+            expect![[r#"OK (("    piano" "piano:<TAB>" 12) ("c d e " "c d e :<TAB>" 13))"#]],
+        ),
+    ]);
 }

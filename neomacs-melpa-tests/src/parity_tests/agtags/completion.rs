@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_agtags_parity;
+use super::assert_agtags_batch;
 
 /// Mid-edit completion: the user is typing a call, asks for the tags starting
 /// with `parser_', and agtags answers from GNU GLOBAL with a " Gtags"
@@ -8,9 +8,13 @@ use super::assert_agtags_parity;
 /// second time — agtags caches one query — while a different prefix must.  The
 /// trace is the witness: it holds one `-c parser_' line and one `-c parse'
 /// line, so a broken cache shows up as an extra invocation.
+
 #[test]
-fn agtags_completion_at_point_offers_global_tags_and_runs_global_once_per_prefix() {
-    let elisp_form = r####"
+fn completion_public_surface_batch() {
+    assert_agtags_batch(&[
+        (
+            "agtags_completion_at_point_offers_global_tags_and_runs_global_once_per_prefix",
+            r####"
 (let* ((start (neomacs-agtags-test-start "agtags-completion-workflow"))
        (root (car start))
        (tools (cdr start))
@@ -48,25 +52,15 @@ fn agtags_completion_at_point_offers_global_tags_and_runs_global_once_per_prefix
                         (neomacs-agtags-test-trace tools))))))
     (neomacs-agtags-test-cleanup root))
   result)
-"####;
-
-    let expect = expect![[
+"####,
+            true,
+            expect![[
         r#"OK ("parser_" (("parser_init" "parser_reset") (" Gtags" " Gtags")) no ("[ORACLE-SANDBOX]/agtags-completion-workflow/$-c$parser_" "parser_init" "parser_reset") ("parser_init" "parser_reset") t ("parse_request" "parser_init" "parser_reset") ("[ORACLE-SANDBOX]/agtags-completion-workflow/$-c$parse" "parse_request" "parser_init" "parser_reset") nil "gtags cwd=[ORACLE-SANDBOX]/agtags-completion-workflow <-i>\nglobal cwd=[ORACLE-SANDBOX]/agtags-completion-workflow <-c> <parser_>\nglobal cwd=[ORACLE-SANDBOX]/agtags-completion-workflow <-c> <parse>\nglobal cwd=[ORACLE-SANDBOX]/agtags-completion-workflow <-c> <parser_f>\n")"#
-    ]];
-
-    assert_agtags_parity(elisp_form, expect);
-}
-
-/// `agtags-open-file' completes over GNU GLOBAL's file index and opens what the
-/// user picked, relative to the project root.  Completing a leading path
-/// component works.  Completing a bare base name does not: real GNU GLOBAL
-/// 6.6.14 answers `global -c -P main' with `main.c', agtags expands that
-/// against the project root, and the user lands in an empty buffer visiting a
-/// file that does not exist.  That is upstream behaviour, identical in both
-/// editors, and it is pinned here rather than designed around.
-#[test]
-fn agtags_open_file_follows_a_path_candidate_but_not_a_bare_base_name() {
-    let elisp_form = r####"
+    ]],
+        ),
+        (
+            "agtags_open_file_follows_a_path_candidate_but_not_a_bare_base_name",
+            r####"
 (let* ((start (neomacs-agtags-test-start "agtags-open-file-workflow"))
        (root (car start))
        (tools (cdr start))
@@ -103,11 +97,11 @@ fn agtags_open_file_follows_a_path_candidate_but_not_a_bare_base_name() {
                         (neomacs-agtags-test-trace tools))))))
     (neomacs-agtags-test-cleanup root))
   result)
-"####;
-
-    let expect = expect![[
+"####,
+            true,
+            expect![[
         r##"OK ((("include/parser.h") "include/parser.h" t 100 "#pragma once\n\nint parser_init(int seed);\nint parser_reset(int state);\nint parse_request(int state);\n") (("main.c") "main.c" nil 0 "") ("Open file: " "Open file: ") "gtags cwd=[ORACLE-SANDBOX]/agtags-open-file-workflow <-i>\nglobal cwd=[ORACLE-SANDBOX]/agtags-open-file-workflow <-c> <-P> <inc>\nglobal cwd=[ORACLE-SANDBOX]/agtags-open-file-workflow <-c> <-P> <main>\n")"##
-    ]];
-
-    assert_agtags_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

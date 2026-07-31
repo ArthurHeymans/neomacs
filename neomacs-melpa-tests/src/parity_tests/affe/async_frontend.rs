@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_affe_parity;
+use super::assert_affe_batch;
 
 #[test]
-fn affe_async_setup_launches_daemon_connects_and_sends_start_then_initial_search() {
-    let elisp_form = r##"(let (launches connection-name
+fn async_frontend_public_surface_batch() {
+    assert_affe_batch(&[
+        (
+            "affe_async_setup_launches_daemon_connects_and_sends_start_then_initial_search",
+            r##"(let (launches connection-name
                     connection-callback writes
                     overlay-ranges downstream)
                (cl-letf
@@ -66,16 +69,15 @@ fn affe_async_setup_launches_daemon_connects_and_sends_start_then_initial_search
                     (functionp
                      connection-callback)
                     (nreverse overlay-ranges)
-                    (nreverse writes)))))"##;
-    let expect = expect![[
+                    (nreverse writes)))))"##,
+            true,
+            expect![[
         r#"OK ((handled setup) (setup) ((t nil nil nil "-Q" "--daemon=affe-fixture" t "-l" "affe-backend.el")) "affe-fixture" t ((7 8)) ((backend-client "(start \"restricted\" \"rg\" \"--files\")\n") (backend-client "(search 20)\n")))"#
-    ]];
-    assert_affe_parity(elisp_form, expect);
-}
-
-#[test]
-fn affe_async_string_actions_compile_filter_deduplicate_and_send_only_changed_regexps() {
-    let elisp_form = r##"(let ((affe-count 7)
+    ]],
+        ),
+        (
+            "affe_async_string_actions_compile_filter_deduplicate_and_send_only_changed_regexps",
+            r##"(let ((affe-count 7)
                     compiler-calls
                     downstream
                     writes)
@@ -117,16 +119,15 @@ fn affe_async_string_actions_compile_filter_deduplicate_and_send_only_changed_re
                     (funcall runner 'refresh)
                     (nreverse compiler-calls)
                     (nreverse downstream)
-                    (nreverse writes)))))"##;
-    let expect = expect![[
+                    (nreverse writes)))))"##,
+            true,
+            expect![[
         r#"OK ((downstream "alpha") (downstream "same") (downstream "invalid") (downstream "empty") (downstream refresh) (("alpha" emacs ignore-case) ("same" emacs ignore-case) ("invalid" emacs ignore-case) ("empty" emacs ignore-case)) ("alpha" "same" "invalid" "empty" refresh) ((nil "(search 7 \"a\")\n")))"#
-    ]];
-    assert_affe_parity(elisp_form, expect);
-}
-
-#[test]
-fn affe_async_callback_routes_protocol_messages_highlights_matches_and_formats_indicators() {
-    let elisp_form = r##"(let (callback displays events writes)
+    ]],
+        ),
+        (
+            "affe_async_callback_routes_protocol_messages_highlights_matches_and_formats_indicators",
+            r##"(let (callback displays events writes)
                (cl-letf
                    (((symbol-function 'make-temp-name)
                      (lambda (_) "affe-callback"))
@@ -190,16 +191,15 @@ fn affe_async_callback_routes_protocol_messages_highlights_matches_and_formats_i
                     (with-current-buffer
                         (get-buffer " *affe*")
                       (buffer-string))
-                    (nreverse writes)))))"##;
-    let expect = expect![[
+                    (nreverse writes)))))"##,
+            true,
+            expect![[
         r#"OK (((display " (total=0+):") (display " (total=999+):") (display " (total=999+):") (display " (total=1.2K):") (display " (total=1.2M+):") (display " (total=1.2M+):")) ((sink setup) (sink ("plain")) (sink "body") (highlight "body") (sink ("prebodysuffix")) (sink flush)) "backend-log\n" ("(start nil \"producer\")\n" "(search 20)\n" "(search 20 \"body\")\n"))"#
-    ]];
-    assert_affe_parity(elisp_form, expect);
-}
-
-#[test]
-fn affe_async_destroy_sends_exit_deletes_indicator_and_preserves_sink_return() {
-    let elisp_form = r##"(let (callback deleted writes actions)
+    ]],
+        ),
+        (
+            "affe_async_destroy_sends_exit_deletes_indicator_and_preserves_sink_return",
+            r##"(let (callback deleted writes actions)
                (cl-letf
                    (((symbol-function 'make-temp-name)
                      (lambda (_) "affe-destroy"))
@@ -235,16 +235,15 @@ fn affe_async_destroy_sends_exit_deletes_indicator_and_preserves_sink_return() {
                     (functionp callback)
                     (nreverse actions)
                     (nreverse writes)
-                    (nreverse deleted)))))"##;
-    let expect = expect![[
+                    (nreverse deleted)))))"##,
+            true,
+            expect![[
         r#"OK ((sink-result destroy) t (setup destroy) ((backend-client "(start nil \"producer\")\n") (backend-client "(search 20)\n") (backend-client "exit\n")) (indicator))"#
-    ]];
-    assert_affe_parity(elisp_form, expect);
-}
-
-#[test]
-fn affe_async_reports_missing_backend_before_constructing_action_runner() {
-    let elisp_form = r##"(cl-letf
+    ]],
+        ),
+        (
+            "affe_async_reports_missing_backend_before_constructing_action_runner",
+            r##"(cl-letf
                (((symbol-function 'locate-library)
                  (lambda (&rest _) nil)))
                (condition-case error-data
@@ -254,8 +253,9 @@ fn affe_async_reports_missing_backend_before_constructing_action_runner() {
                  (error
                   (list 'signal
                         (car error-data)
-                        (cdr error-data)))))"##;
-    let expect =
-        expect![[r#"OK (signal error ("Could not locate the library ‘affe-backend.el’"))"#]];
-    assert_affe_parity(elisp_form, expect);
+                        (cdr error-data)))))"##,
+            true,
+            expect![[r#"OK (signal error ("Could not locate the library ‘affe-backend.el’"))"#]],
+        ),
+    ]);
 }

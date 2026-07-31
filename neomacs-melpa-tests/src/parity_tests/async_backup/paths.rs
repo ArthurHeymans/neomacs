@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_async_backup_parity;
+use super::assert_async_backup_batch;
 
 #[test]
-fn async_backup_explicit_file_builds_exact_timestamped_output_tree_and_child_command() {
-    let elisp_form = r##"(let* ((file
+fn paths_public_surface_batch() {
+    assert_async_backup_batch(&[
+        (
+            "async_backup_explicit_file_builds_exact_timestamped_output_tree_and_child_command",
+            r##"(let* ((file
                 (async-backup-test-write-file
                  "project/src/report.txt"
                  "version one\n"))
@@ -31,16 +34,15 @@ fn async_backup_explicit_file_builds_exact_timestamped_output_tree_and_child_com
               (concat
                (directory-file-name async-backup-location)
                (file-name-directory file)))
-             (file-exists-p file))))"##;
-    let expect = expect![[
+             (file-exists-p file))))"##,
+            true,
+            expect![[
         r#"OK (:child ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//project/src/report.txt\" \"$ROOT//backups$ROOT//project/src/report-2026-07-27T13-20-45.txt\")") t t)"#
-    ]];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_file_without_extension_keeps_complete_base_name() {
-    let elisp_form = r##"(let* ((file
+    ]],
+        ),
+        (
+            "async_backup_file_without_extension_keeps_complete_base_name",
+            r##"(let* ((file
                 (async-backup-test-write-file
                  "project/bin/LICENSE"
                  "license body\n"))
@@ -58,16 +60,15 @@ fn async_backup_file_without_extension_keeps_complete_base_name() {
              (async-backup-test-normalize-command captured)
              (file-directory-p
               (async-backup-test-path
-               "backup-root")))))"##;
-    let expect = expect![[
+               "backup-root")))))"##,
+            true,
+            expect![[
         r#"OK (:started ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//project/bin/LICENSE\" \"$ROOT//backup-root$ROOT//project/bin/LICENSE-STAMP\")") t)"#
-    ]];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_multi_extension_dotfile_unicode_and_quoted_names_are_escaped_exactly() {
-    let elisp_form = r##"(let ((async-backup-location
+    ]],
+        ),
+        (
+            "async_backup_multi_extension_dotfile_unicode_and_quoted_names_are_escaped_exactly",
+            r##"(let ((async-backup-location
                 (async-backup-test-path "backups"))
                commands)
           (dolist (entry
@@ -89,16 +90,15 @@ fn async_backup_multi_extension_dotfile_unicode_and_quoted_names_are_escaped_exa
                             commands)
                            :started)))
                 (async-backup file))))
-          (nreverse commands))"##;
-    let expect = expect![[
+          (nreverse commands))"##,
+            true,
+            expect![[
         r#"OK (("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//names/archive.tar.gz\" \"$ROOT//backups$ROOT//names/archive.tar-T.gz\")") ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//names/.env\" \"$ROOT//backups$ROOT//names/.env-T\")") ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//names/β界 file.el\" \"$ROOT//backups$ROOT//names/β界 file-T.el\")") ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//names/quote\\\"and\\\\\\\\slash.org\" \"$ROOT//backups$ROOT//names/quote\\\"and\\\\\\\\slash-T.org\")"))"#
-    ]];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_without_argument_uses_current_buffer_visited_file() {
-    let elisp_form = r##"(let* ((file
+    ]],
+        ),
+        (
+            "async_backup_without_argument_uses_current_buffer_visited_file",
+            r##"(let* ((file
                 (async-backup-test-write-file
                  "buffers/current.org"
                  "* saved\n"))
@@ -119,16 +119,15 @@ fn async_backup_without_argument_uses_current_buffer_visited_file() {
                    (equal (buffer-file-name) file)
                    (async-backup-test-normalize-command
                     captured))))
-            (async-backup-test-kill-file-buffer file)))"##;
-    let expect = expect![[
+            (async-backup-test-kill-file-buffer file)))"##,
+            true,
+            expect![[
         r#"OK (:buffer-child t ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//buffers/current.org\" \"$ROOT//buffer-backups$ROOT//buffers/current-CURRENT.org\")"))"#
-    ]];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_relative_file_is_expanded_against_current_default_directory() {
-    let elisp_form = r##"(let* ((work
+    ]],
+        ),
+        (
+            "async_backup_relative_file_is_expanded_against_current_default_directory",
+            r##"(let* ((work
                 (async-backup-test-path
                  "relative/project/"))
                (default-directory work)
@@ -152,16 +151,15 @@ fn async_backup_relative_file_is_expanded_against_current_default_directory() {
                     (expand-file-name
                      "src/code.rs"
                      default-directory))
-             (async-backup-test-normalize-command captured))))"##;
-    let expect = expect![[
+             (async-backup-test-normalize-command captured))))"##,
+            true,
+            expect![[
         r#"OK (:started t ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//relative/project/src/code.rs\" \"$ROOT//relative/backups$ROOT//relative/project/src/code-REL.rs\")"))"#
-    ]];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_relative_location_is_expanded_before_appending_source_directory() {
-    let elisp_form = r##"(let* ((work
+    ]],
+        ),
+        (
+            "async_backup_relative_location_is_expanded_before_appending_source_directory",
+            r##"(let* ((work
                 (async-backup-test-path "location-work/"))
                (default-directory work)
                (file
@@ -182,16 +180,15 @@ fn async_backup_relative_location_is_expanded_before_appending_source_directory(
              (async-backup-test-normalize-command captured)
              (file-directory-p
               (async-backup-test-path
-               "relative-backups")))))"##;
-    let expect = expect![[
+               "relative-backups")))))"##,
+            true,
+            expect![[
         r#"OK (:started ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//location-work/input/a.md\" \"$ROOT//relative-backups$ROOT//location-work/input/a-LOC.md\")") t)"#
-    ]];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_location_with_or_without_trailing_separator_produces_same_target() {
-    let elisp_form = r##"(let* ((file
+    ]],
+        ),
+        (
+            "async_backup_location_with_or_without_trailing_separator_produces_same_target",
+            r##"(let* ((file
                 (async-backup-test-write-file
                  "slash/input.data"
                  "data\n"))
@@ -216,16 +213,15 @@ fn async_backup_location_with_or_without_trailing_separator_produces_same_target
             (list
              ordered
              (equal (car ordered)
-                    (cadr ordered)))))"##;
-    let expect = expect![[
+                    (cadr ordered)))))"##,
+            true,
+            expect![[
         r#"OK ((("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//slash/input.data\" \"$ROOT//slash/backups$ROOT//slash/input-SAME.data\")") ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//slash/input.data\" \"$ROOT//slash/backups$ROOT//slash/input-SAME.data\")")) t)"#
-    ]];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_non_file_buffer_signals_before_creating_backup_tree_or_process() {
-    let elisp_form = r##"(let ((async-backup-location
+    ]],
+        ),
+        (
+            "async_backup_non_file_buffer_signals_before_creating_backup_tree_or_process",
+            r##"(let ((async-backup-location
                 (async-backup-test-path "nil-buffer/backups"))
                started)
           (with-temp-buffer
@@ -238,14 +234,13 @@ fn async_backup_non_file_buffer_signals_before_creating_backup_tree_or_process()
                 #'async-backup)
                (file-exists-p
                 async-backup-location)
-               started))))"##;
-    let expect = expect!["OK ((:error wrong-type-argument (stringp nil)) nil nil)"];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_output_parent_collision_signals_before_predicates_or_process() {
-    let elisp_form = r##"(let* ((file
+               started))))"##,
+            true,
+            expect!["OK ((:error wrong-type-argument (stringp nil)) nil nil)"],
+        ),
+        (
+            "async_backup_output_parent_collision_signals_before_predicates_or_process",
+            r##"(let* ((file
                 (async-backup-test-write-file
                  "blocked/input.txt"
                  "input\n"))
@@ -271,16 +266,15 @@ fn async_backup_output_parent_collision_signals_before_predicates_or_process() {
                   (async-backup file)))
                predicate-called
                started
-               (file-regular-p root)))))"##;
-    let expect = expect![[
+               (file-regular-p root)))))"##,
+            true,
+            expect![[
         r#"OK ((:error file-already-exists ("File exists" "[ORACLE-SANDBOX]/blocked/root-as-file")) nil nil t)"#
-    ]];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_directory_input_still_builds_a_child_copy_command() {
-    let elisp_form = r##"(let* ((directory
+    ]],
+        ),
+        (
+            "async_backup_directory_input_still_builds_a_child_copy_command",
+            r##"(let* ((directory
                 (async-backup-test-path "directory-input/source/"))
                (async-backup-location
                 (async-backup-test-path "directory-input/backups"))
@@ -296,16 +290,15 @@ fn async_backup_directory_input_still_builds_a_child_copy_command() {
              (async-backup-test-error-data
               (lambda ()
                 (async-backup directory)))
-             (async-backup-test-normalize-command captured))))"##;
-    let expect = expect![[
+             (async-backup-test-normalize-command captured))))"##,
+            true,
+            expect![[
         r#"OK ((:ok :started) ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//directory-input/source/\" \"$ROOT//directory-input/backups$ROOT//directory-input/source/-DIR\")"))"#
-    ]];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_missing_input_still_constructs_target_and_launches_child() {
-    let elisp_form = r##"(let* ((file
+    ]],
+        ),
+        (
+            "async_backup_missing_input_still_constructs_target_and_launches_child",
+            r##"(let* ((file
                 (async-backup-test-path "missing/source.txt"))
                (async-backup-location
                 (async-backup-test-path "missing/backups"))
@@ -323,16 +316,15 @@ fn async_backup_missing_input_still_constructs_target_and_launches_child() {
              (file-directory-p
               (concat
                (directory-file-name async-backup-location)
-               (file-name-directory file))))))"##;
-    let expect = expect![[
+               (file-name-directory file))))))"##,
+            true,
+            expect![[
         r#"OK (nil :started ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//missing/source.txt\" \"$ROOT//missing/backups$ROOT//missing/source-MISS.txt\")") t)"#
-    ]];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_symlink_path_is_preserved_in_predicate_and_child_command() {
-    let elisp_form = r##"(let* ((target
+    ]],
+        ),
+        (
+            "async_backup_symlink_path_is_preserved_in_predicate_and_child_command",
+            r##"(let* ((target
                 (async-backup-test-write-file
                  "symlink/real/source.txt"
                  "linked\n"))
@@ -361,9 +353,11 @@ fn async_backup_symlink_path_is_preserved_in_predicate_and_child_command() {
                (equal seen link)
                (file-symlink-p link)
                (async-backup-test-normalize-command
-                captured)))))"##;
-    let expect = expect![[
+                captured)))))"##,
+            true,
+            expect![[
         r#"OK (:started t "[ORACLE-SANDBOX]/symlink/real/source.txt" ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//symlink/alias/source-link.txt\" \"$ROOT//symlink/backups$ROOT//symlink/alias/source-link-LINK.txt\")"))"#
-    ]];
-    assert_async_backup_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

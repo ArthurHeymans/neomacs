@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_projectile_parity;
+use super::assert_projectile_batch;
 
 #[test]
-fn projectile_nested_extensions_and_associations_match_upstream_contract() {
-    let elisp_form = r##"(let ((projectile-other-file-alist
+fn relations_public_surface_batch() {
+    assert_projectile_batch(&[
+        (
+            "projectile_nested_extensions_and_associations_match_upstream_contract",
+            r##"(let ((projectile-other-file-alist
                     '(("cpp" "h" "hpp" "ipp")
                       ("gz" "zip")
                       ("js" "js"))))
@@ -21,16 +24,13 @@ fn projectile_nested_extensions_and_associations_match_upstream_contract() {
                 (projectile-associated-file-name-extensions
                  "archive.tar.gz")
                 (projectile-associated-file-name-extensions
-                 "foo.unknown")))"##;
-    let expect =
-        expect![[r#"OK ("el" "tar.gz" "" "" "foo" "bar" ".emacs" ("h" "hpp" "ipp") ("zip") nil)"#]];
-
-    assert_projectile_parity(elisp_form, expect);
-}
-
-#[test]
-fn projectile_related_file_function_merging_flattens_without_mutation() {
-    let elisp_form = r##"(let* ((shared '("first-test.el"))
+                 "foo.unknown")))"##,
+            true,
+            expect![[r#"OK ("el" "tar.gz" "" "" "foo" "bar" ".emacs" ("h" "hpp" "ipp") ("zip") nil)"#]],
+        ),
+        (
+            "projectile_related_file_function_merging_flattens_without_mutation",
+            r##"(let* ((shared '("first-test.el"))
                     (first
                      (lambda (_path)
                        (list :test shared :doc "README")))
@@ -42,17 +42,15 @@ fn projectile_related_file_function_merging_flattens_without_mutation() {
                      (projectile--merge-related-files-fns
                       (list first second)))
                     (result (funcall merged "src.el")))
-               (list result shared))"##;
-    let expect = expect![[
+               (list result shared))"##,
+            true,
+            expect![[
         r#"OK ((:test ("first-test.el" "second-test.el") :doc ("README") :impl ("impl.el")) ("first-test.el"))"#
-    ]];
-
-    assert_projectile_parity(elisp_form, expect);
-}
-
-#[test]
-fn projectile_related_file_generators_transform_groups_extensions_and_tests() {
-    let elisp_form = r##"(let* ((groups
+    ]],
+        ),
+        (
+            "projectile_related_file_generators_transform_groups_extensions_and_tests",
+            r##"(let* ((groups
                     (projectile-related-files-fn-groups
                      :peer
                      '(("a.el" "b.el" "c.el")
@@ -99,17 +97,15 @@ fn projectile_related_file_generators_transform_groups_extensions_and_tests() {
                           "spec/user_spec.rb"
                           "other_spec.rb"))
                 (mapcar suffix-impl-predicate
-                        '("user.rb" "app/user.rb" "user_spec.rb"))))"##;
-    let expect = expect![[
+                        '("user.rb" "app/user.rb" "user_spec.rb"))))"##,
+            true,
+            expect![[
         r#"OK ((:peer ("a.el" "c.el")) nil (t t nil nil) (t t nil) (t t nil) (t t nil) (t t nil))"#
-    ]];
-
-    assert_projectile_parity(elisp_form, expect);
-}
-
-#[test]
-fn projectile_candidate_grouping_prefers_shared_parent_segments() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "projectile_candidate_grouping_prefers_shared_parent_segments",
+            r##"(list
               (projectile-dirname-matching-count
                "src/food/sea.c" "src/food/cat.c")
               (projectile-dirname-matching-count
@@ -118,15 +114,13 @@ fn projectile_candidate_grouping_prefers_shared_parent_segments() {
                "src/foo/test.el"
                '("src/foo/impl.el" "other/x.el" "src/bar.el"))
               (projectile-group-file-candidates
-               "src/foo/test.el" nil))"##;
-    let expect = expect![[r#"OK (2 0 ((2 "src/foo/impl.el") (0 "other/x.el" "src/bar.el")) nil)"#]];
-
-    assert_projectile_parity(elisp_form, expect);
-}
-
-#[test]
-fn projectile_name_inflection_and_test_name_transforms_cover_boundaries() {
-    let elisp_form = r##"(let ((projectile-project-types
+               "src/foo/test.el" nil))"##,
+            true,
+            expect![[r#"OK (2 0 ((2 "src/foo/impl.el") (0 "other/x.el" "src/bar.el")) nil)"#]],
+        ),
+        (
+            "projectile_name_inflection_and_test_name_transforms_cover_boundaries",
+            r##"(let ((projectile-project-types
                     '((demo marker-files ("Demo")
                             test-prefix "test_"
                             test-suffix "_spec"))))
@@ -143,10 +137,11 @@ fn projectile_name_inflection_and_test_name_transforms_cover_boundaries() {
                   (file-relative-name
                    (projectile-complementary-dir
                     "src/domain/user/" "src/" "test/")
-                   default-directory))))"##;
-    let expect = expect![[
+                   default-directory))))"##,
+            true,
+            expect![[
         r#"OK ("category" "bus" "categories" "boxes" "test_user.rb" "user_spec.rb" "test/domain/user/")"#
-    ]];
-
-    assert_projectile_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_atl_markup_parity;
+use super::assert_atl_markup_batch;
 
 #[test]
-fn atl_markup_mute_apply_forwards_values_and_binds_message_controls_only_inside_call() {
-    let elisp_form = r##"(let ((message-log-max
+fn utilities_public_surface_batch() {
+    assert_atl_markup_batch(&[
+        (
+            "atl_markup_mute_apply_forwards_values_and_binds_message_controls_only_inside_call",
+            r##"(let ((message-log-max
                 77)
                (inhibit-message nil)
                observed)
@@ -24,14 +27,13 @@ fn atl_markup_mute_apply_forwards_values_and_binds_message_controls_only_inside_
             8)
            observed
            inhibit-message
-           message-log-max))"##;
-    let expect = expect!["OK ((:result 16) ((3 5 8) t nil) nil 77)"];
-    assert_atl_markup_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_markup_mute_apply_suppresses_practical_message_log_output_and_restores_status() {
-    let elisp_form = r##"(let* ((messages-buffer
+           message-log-max))"##,
+            true,
+            expect!["OK ((:result 16) ((3 5 8) t nil) nil 77)"],
+        ),
+        (
+            "atl_markup_mute_apply_suppresses_practical_message_log_output_and_restores_status",
+            r##"(let* ((messages-buffer
                 (get-buffer-create
                  "*Messages*"))
                (message-log-max t)
@@ -71,14 +73,13 @@ fn atl_markup_mute_apply_suppresses_practical_message_log_output_and_restores_st
                "atl-markup-visible-sentinel"
                nil
                t)
-              t))))"##;
-    let expect = expect!["OK (:completed t nil t)"];
-    assert_atl_markup_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_markup_mute_apply_records_error_propagation_and_message_state_after_unwind() {
-    let elisp_form = r##"(let ((message-log-max
+              t))))"##,
+            true,
+            expect!["OK (:completed t nil t)"],
+        ),
+        (
+            "atl_markup_mute_apply_records_error_propagation_and_message_state_after_unwind",
+            r##"(let ((message-log-max
                 12)
                (inhibit-message
                 nil)
@@ -97,14 +98,13 @@ fn atl_markup_mute_apply_records_error_propagation_and_message_state_after_unwin
                   42)))))
            inside
            message-log-max
-           inhibit-message))"##;
-    let expect = expect![[r#"OK ((:error error ("mute failure 42")) (nil t) 12 nil)"#]];
-    assert_atl_markup_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_markup_mute_apply_supports_symbols_zero_arguments_and_non_local_exit() {
-    let elisp_form = r##"(let ((message-log-max
+           inhibit-message))"##,
+            true,
+            expect![[r#"OK ((:error error ("mute failure 42")) (nil t) 12 nil)"#]],
+        ),
+        (
+            "atl_markup_mute_apply_supports_symbols_zero_arguments_and_non_local_exit",
+            r##"(let ((message-log-max
                 9)
                (inhibit-message nil)
                inside-throw)
@@ -132,7 +132,9 @@ fn atl_markup_mute_apply_supports_symbols_zero_arguments_and_non_local_exit() {
               17))
            inside-throw
            message-log-max
-           inhibit-message))"##;
-    let expect = expect![[r#"OK (nil "markup-value" [:escaped 17] (17 nil t) 9 nil)"#]];
-    assert_atl_markup_parity(elisp_form, expect);
+           inhibit-message))"##,
+            true,
+            expect![[r#"OK (nil "markup-value" [:escaped 17] (17 nil t) 9 nil)"#]],
+        ),
+    ]);
 }

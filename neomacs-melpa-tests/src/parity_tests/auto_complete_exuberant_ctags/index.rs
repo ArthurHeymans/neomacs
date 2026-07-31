@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_exuberant_ctags_parity;
+use super::assert_auto_complete_exuberant_ctags_batch;
 
 #[test]
-fn auto_complete_exuberant_ctags_builds_practical_multilanguage_index() {
-    let elisp_form = r##"(let* ((root
+fn index_public_surface_batch() {
+    assert_auto_complete_exuberant_ctags_batch(&[
+        (
+            "auto_complete_exuberant_ctags_builds_practical_multilanguage_index",
+            r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "multilanguage-index"))
                                 (default-directory root))
@@ -15,15 +18,13 @@ fn auto_complete_exuberant_ctags_builds_practical_multilanguage_index() {
                              "render_frame\tui.rs\t/^fn render_frame/;\"\tkind:f\tline:42\tlanguage:Rust\n"
                              "Widget\twidget.hpp\t/^class Widget/;\"\tkind:c\tlanguage:C++\n"
                              "save!\tmodel.rb\t/^  def save!/;\"\tkind:m\tlanguage:Ruby\n"))
-                           (ac-exuberant-ctags-build-index))"##;
-    let expect = expect![[r#"OK ("save! m Ruby" "Widget c C++" "render_frame f Rust")"#]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_missing_database_clears_stale_index() {
-    let elisp_form = r##"(let* ((root
+                           (ac-exuberant-ctags-build-index))"##,
+            true,
+            expect![[r#"OK ("save! m Ruby" "Widget c C++" "render_frame f Rust")"#]],
+        ),
+        (
+            "auto_complete_exuberant_ctags_missing_database_clears_stale_index",
+            r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "missing-index"))
                                 (default-directory root)
@@ -33,15 +34,13 @@ fn auto_complete_exuberant_ctags_missing_database_clears_stale_index() {
                                  '("stale f C")))
                            (list
                             (ac-exuberant-ctags-build-index)
-                            ac-exuberant-ctags-index))"##;
-    let expect = expect!["OK (nil nil)"];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_empty_database_clears_stale_index() {
-    let elisp_form = r##"(let* ((root
+                            ac-exuberant-ctags-index))"##,
+            true,
+            expect!["OK (nil nil)"],
+        ),
+        (
+            "auto_complete_exuberant_ctags_empty_database_clears_stale_index",
+            r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "empty-index"))
                                 (default-directory root)
@@ -52,15 +51,13 @@ fn auto_complete_exuberant_ctags_empty_database_clears_stale_index() {
                             "")
                            (list
                             (ac-exuberant-ctags-build-index)
-                            ac-exuberant-ctags-index))"##;
-    let expect = expect!["OK (nil nil)"];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_parser_filters_blank_header_and_malformed_rows() {
-    let elisp_form = r##"(let* ((root
+                            ac-exuberant-ctags-index))"##,
+            true,
+            expect!["OK (nil nil)"],
+        ),
+        (
+            "auto_complete_exuberant_ctags_parser_filters_blank_header_and_malformed_rows",
+            r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "filtered-index"))
                                 (default-directory root))
@@ -73,15 +70,13 @@ fn auto_complete_exuberant_ctags_parser_filters_blank_header_and_malformed_rows(
                              "missing-language\tfile.c\t/^x$/;\"\tkind:f\n"
                              "good\tfile.c\t/^x$/;\"\tkind:f\tlanguage:C\n"
                              "language-before-kind\tfile.c\t/^x$/;\"\tlanguage:C\tkind:f\n"))
-                           (ac-exuberant-ctags-build-index))"##;
-    let expect = expect![[r#"OK ("good f C")"#]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_parser_preserves_duplicates_and_reverse_file_order() {
-    let elisp_form = r##"(let* ((root
+                           (ac-exuberant-ctags-build-index))"##,
+            true,
+            expect![[r#"OK ("good f C")"#]],
+        ),
+        (
+            "auto_complete_exuberant_ctags_parser_preserves_duplicates_and_reverse_file_order",
+            r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "duplicate-index"))
                                 (default-directory root))
@@ -91,15 +86,13 @@ fn auto_complete_exuberant_ctags_parser_preserves_duplicates_and_reverse_file_or
                              "same\ta.c\t/^x$/;\"\tkind:f\tlanguage:C\n"
                              "middle\tb.rs\t/^x$/;\"\tkind:m\tlanguage:Rust\n"
                              "same\tc.cpp\t/^x$/;\"\tkind:p\tlanguage:C++\n"))
-                           (ac-exuberant-ctags-build-index))"##;
-    let expect = expect![[r#"OK ("same p C++" "middle m Rust" "same f C")"#]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_parser_observes_line_length_limit() {
-    let elisp_form = r##"(let* ((root
+                           (ac-exuberant-ctags-build-index))"##,
+            true,
+            expect![[r#"OK ("same p C++" "middle m Rust" "same f C")"#]],
+        ),
+        (
+            "auto_complete_exuberant_ctags_parser_observes_line_length_limit",
+            r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "line-limit-index"))
                                 (default-directory root)
@@ -115,15 +108,13 @@ fn auto_complete_exuberant_ctags_parser_observes_line_length_limit() {
                            (list
                             (length short)
                             (length long)
-                            (ac-exuberant-ctags-build-index)))"##;
-    let expect = expect![[r#"OK (22 28 ("ok f C"))"#]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_build_index_queries_tag_path_twice() {
-    let elisp_form = r##"(let* ((root
+                            (ac-exuberant-ctags-build-index)))"##,
+            true,
+            expect![[r#"OK (22 28 ("ok f C"))"#]],
+        ),
+        (
+            "auto_complete_exuberant_ctags_build_index_queries_tag_path_twice",
+            r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "query-count"))
                                 (tags
@@ -141,15 +132,13 @@ fn auto_complete_exuberant_ctags_build_index_queries_tag_path_twice() {
                                    tags)))
                              (list
                               (ac-exuberant-ctags-build-index)
-                              calls)))"##;
-    let expect = expect![[r#"OK (("entry v C") 2)"#]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_exuberant_ctags_custom_database_name_builds_same_index() {
-    let elisp_form = r##"(let* ((root
+                              calls)))"##,
+            true,
+            expect![[r#"OK (("entry v C") 2)"#]],
+        ),
+        (
+            "auto_complete_exuberant_ctags_custom_database_name_builds_same_index",
+            r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "custom-index"))
                                 (default-directory root)
@@ -161,8 +150,9 @@ fn auto_complete_exuberant_ctags_custom_database_name_builds_same_index() {
                            (list
                             (ac-exuberant-ctags-build-index)
                             (file-name-nondirectory
-                             (ac-exuberant-ctags-get-tag-file))))"##;
-    let expect = expect![[r#"OK (("dispatch f C") ".ctags-index")"#]];
-
-    assert_auto_complete_exuberant_ctags_parity(elisp_form, expect);
+                             (ac-exuberant-ctags-get-tag-file))))"##,
+            true,
+            expect![[r#"OK (("dispatch f C") ".ctags-index")"#]],
+        ),
+    ]);
 }

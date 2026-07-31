@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_ac_rtags_parity;
+use super::assert_ac_rtags_batch;
 
 /// The workflow the back end exists for: open a C++ translation unit, type a
 /// member access, and complete it against the rtags index.  The recorded
@@ -12,9 +12,13 @@ use super::assert_ac_rtags_parity;
 /// their common part inline; picking the second one runs `ac-rtags-action',
 /// which parses the rtags signature and drops the user inside a freshly
 /// inserted parameter list.
+
 #[test]
-fn completes_a_member_function_and_expands_its_parameter_list() {
-    let elisp_form = r##"
+fn workflows_public_surface_batch() {
+    assert_ac_rtags_batch(&[
+        (
+            "completes_a_member_function_and_expands_its_parameter_list",
+            r##"
         (progn
           (ac-rtags-test-write
            (expand-file-name "src/widget.h" ac-rtags-test-root)
@@ -71,24 +75,15 @@ fn completes_a_member_function_and_expands_its_parameter_list() {
                               :buffer (buffer-substring-no-properties
                                        (point-min) (point-max))))
            :recorded (ac-rtags-test-recorded)))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r##"OK (:typed (:line "    widget.ins" :point 72 :modified t :ac-sources (ac-source-rtags) :invocations 0) :offered (:line "    widget.insert" :point 75 :ac-point 69 :ac-prefix "insert" :candidates (("insert" "CXXMethod" "void insert(int idx, char ch)" "void insert(int idx, char ch)") ("insertAll" "CXXMethod" "void insertAll(const std::string &text, int idx)" "void insertAll(const std::string &text, int idx)")) :first-properties (action ac-rtags-action symbol "r" document ac-rtags-document ac-rtags-full "void insert(int idx, char ch)" ac-rtags-type "CXXMethod") :menu-live t :menu ("insert" "insertAll") :invocations 1) :completed (:line "    widget.insertAll(const std::string &text, int idx)" :point 79 :menu-live nil :last-completion ("insertAll" "CXXMethod" "void insertAll(const std::string &text, int idx)" 69) :buffer "#include \"widget.h\"\n\nint main() {\n    ui::Widget widget;\n    widget.insertAll(const std::string &text, int idx)\n    return 0;\n}\n") :recorded (("01-request" . "argv:\n  --current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp\n  --unsaved-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp:<TEMPFILE>\n  -z\n  -t128\n  --code-complete-at\n  [ORACLE-SANDBOX]/cpp/src/widget.cpp:5:15:\n  --synchronous-completions\n  --elisp\ncwd: [ORACLE-SANDBOX]/cpp/src\nstdin: \nunsaved-file([ORACLE-SANDBOX]/cpp/src/widget.cpp):\n#include \"widget.h\"\n\nint main() {\n    ui::Widget widget;\n    widget.ins\n    return 0;\n}\n")))"##
-    ]];
-
-    assert_ac_rtags_parity(elisp_form, expect);
-}
-
-/// `ac-rtags-action' dispatches on the rtags kind, so the same completion
-/// command behaves differently depending on what was completed.  Finishing a
-/// field leaves the buffer with just the name; finishing a namespace appends
-/// the `::' the user was going to type anyway.  Each completion re-queries rc
-/// at the new point, and the second query carries the edit the first one made
-/// through `--unsaved-file'.
-#[test]
-fn appends_the_scope_operator_for_a_namespace_but_not_for_a_field() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "appends_the_scope_operator_for_a_namespace_but_not_for_a_field",
+            r##"
         (progn
           (ac-rtags-test-write
            (expand-file-name "src/widget.h" ac-rtags-test-root)
@@ -134,22 +129,15 @@ fn appends_the_scope_operator_for_a_namespace_but_not_for_a_field() {
            :buffer (buffer-substring-no-properties (point-min) (point-max))
            :invocations (ac-rtags-test-invocations)
            :recorded (ac-rtags-test-recorded-argv)))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r##"OK (:field (:line "    widget.label" :point 74 :last-completion ("label" "FieldDecl" "std::string label" 69)) :namespace (:line "    ui::" :point 83 :last-completion ("ui" "Namespace" "namespace ui" 79)) :buffer "#include \"widget.h\"\n\nint main() {\n    ui::Widget widget;\n    widget.label\n    ui::\n    return 0;\n}\n" :invocations 2 :recorded (("01-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:5:15:" "--synchronous-completions" "--elisp") ("02-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "--unsaved-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp:<TEMPFILE>" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:6:6:" "--synchronous-completions" "--elisp")))"##
-    ]];
-
-    assert_ac_rtags_parity(elisp_form, expect);
-}
-
-/// The package's one option.  A user who does not want a synthetic parameter
-/// list in the buffer sets `ac-rtags-expand-functions' to nil; completing a
-/// method then inserts only its name.  The option is scoped to functions, so
-/// the namespace action still appends `::' — the same run proves both halves.
-#[test]
-fn keeps_the_bare_name_when_parameter_expansion_is_disabled() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "keeps_the_bare_name_when_parameter_expansion_is_disabled",
+            r##"
         (progn
           (ac-rtags-test-write
            (expand-file-name "src/widget.h" ac-rtags-test-root)
@@ -195,24 +183,15 @@ fn keeps_the_bare_name_when_parameter_expansion_is_disabled() {
                               :point (point)))
            :buffer (buffer-substring-no-properties (point-min) (point-max))
            :recorded (ac-rtags-test-recorded-argv)))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r##"OK (:option nil :method (:line "    widget.insert" :point 75 :last-completion ("insert" "CXXMethod" "void insert(int idx, char ch)" 69)) :namespace (:line "    ui::" :point 84) :buffer "#include \"widget.h\"\n\nint main() {\n    ui::Widget widget;\n    widget.insert\n    ui::\n    return 0;\n}\n" :recorded (("01-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:5:15:" "--synchronous-completions" "--elisp") ("02-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "--unsaved-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp:<TEMPFILE>" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:6:6:" "--synchronous-completions" "--elisp")))"##
-    ]];
-
-    assert_ac_rtags_parity(elisp_form, expect);
-}
-
-/// Three ways rc answers without usable completions: it exits 35 because the
-/// translation unit was never indexed, it succeeds but prints nothing, and it
-/// prints elisp the client cannot evaluate.  None of them may signal, produce
-/// candidates, or edit the buffer — but each has its own visible trace, and
-/// rtags' `rtags-last-request-not-indexed' flag has to be set for the first
-/// and cleared again afterwards.
-#[test]
-fn offers_nothing_when_rc_is_unindexed_silent_or_unparsable() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "offers_nothing_when_rc_is_unindexed_silent_or_unparsable",
+            r##"
         (progn
           (ac-rtags-test-reply "" 1 35)
           (ac-rtags-test-reply "" 2)
@@ -238,24 +217,15 @@ fn offers_nothing_when_rc_is_unindexed_silent_or_unparsable() {
                            "\\(not indexed\\|Completion Error\\)")
                 :buffer (buffer-substring-no-properties (point-min) (point-max))
                 :recorded (ac-rtags-test-recorded-argv)))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r##"OK (:not-indexed (:error completed :line "    widget.ins" :point 72 :candidates nil :not-indexed t :not-connected nil :invocations 1) :silent (:error completed :line "    widget.ins" :point 72 :candidates nil :not-indexed nil :not-connected nil :invocations 2) :unparsable (:error completed :line "    widget.ins" :point 72 :candidates nil :not-indexed nil :not-connected nil :invocations 3) :messages ("RTags: [ORACLE-SANDBOX]/cpp/src/widget.cpp is not indexed" "****** Got Completion Error ******") :buffer "#include \"widget.h\"\n\nint main() {\n    ui::Widget widget;\n    widget.ins\n    return 0;\n}\n" :recorded (("01-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:5:15:" "--synchronous-completions" "--elisp") ("02-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:5:15:" "--synchronous-completions" "--elisp") ("03-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:5:15:" "--synchronous-completions" "--elisp")))"##
-    ]];
-
-    assert_ac_rtags_parity(elisp_form, expect);
-}
-
-/// The two ways the rtags installation itself is broken.  When rc is there but
-/// rdm is not, rc exits 36 and rtags.el raises its own connection error and
-/// records `rtags-last-request-not-connected'; when rc is not installed at all
-/// nothing is run and rtags.el raises a different error.  Both reach the user
-/// as a signal out of the completion command rather than an empty menu, and
-/// the buffer is left alone.  Completion works again once rc is back.
-#[test]
-fn signals_when_rdm_is_down_or_rc_is_not_installed() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "signals_when_rdm_is_down_or_rc_is_not_installed",
+            r##"
         (progn
           (ac-rtags-test-reply "" 1 36)
           (ac-rtags-test-reply
@@ -284,11 +254,11 @@ fn signals_when_rdm_is_down_or_rc_is_not_installed() {
                 :line (ac-rtags-test-line)
                 :buffer (buffer-substring-no-properties (point-min) (point-max))
                 :recorded (ac-rtags-test-recorded-argv)))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r##"OK (:rdm-down (:error (error "RTags: Can’t seem to connect to server. Is rdm running?") :line "    widget.ins" :point 72 :candidates nil :not-indexed nil :not-connected t :invocations 1) :rc-missing (:error (error "RTags: Can’t find rc") :line "    widget.ins" :point 72 :candidates nil :not-indexed nil :not-connected t :invocations 1) :recovered (:error completed :line "    widget.insert(int idx, char ch)" :point 76 :candidates nil :not-indexed nil :not-connected nil :invocations 2) :line "    widget.insert(int idx, char ch)" :buffer "#include \"widget.h\"\n\nint main() {\n    ui::Widget widget;\n    widget.insert(int idx, char ch)\n    return 0;\n}\n" :recorded (("01-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:5:15:" "--synchronous-completions" "--elisp") ("02-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:5:15:" "--synchronous-completions" "--elisp")))"##
-    ]];
-
-    assert_ac_rtags_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

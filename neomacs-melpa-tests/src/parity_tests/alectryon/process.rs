@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_alectryon_parity;
+use super::assert_alectryon_batch;
 
 #[test]
-fn alectryon_run_converter_sends_widened_input_and_exact_cli_arguments_to_a_real_executable() {
-    let elisp_form = r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+fn process_public_surface_batch() {
+    assert_alectryon_batch(&[
+        (
+            "alectryon_run_converter_sends_widened_input_and_exact_cli_arguments_to_a_real_executable",
+            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (script (expand-file-name "record-converter.sh" root))
        (arguments (expand-file-name "arguments.txt" root))
        (standard-input (expand-file-name "standard-input.txt" root))
@@ -30,16 +33,15 @@ fn alectryon_run_converter_sends_widened_input_and_exact_cli_arguments_to_a_real
                   (with-temp-buffer
                     (insert-file-contents standard-input)
                     (buffer-string))))))
-    (kill-buffer input)))"##;
-    let expect = expect![[
+    (kill-buffer input)))"##,
+            true,
+            expect![[
         r#"OK ("converted document\n" "--frontend\ncoq+rst\n--backend\nrst\n--traceback\n-\n" "hidden prefix\nselected proof\nhidden suffix")"#
-    ]];
-    assert_alectryon_parity(elisp_form, expect);
-}
-
-#[test]
-fn alectryon_run_converter_surfaces_real_nonzero_status_command_and_stderr_payload() {
-    let elisp_form = r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    ]],
+        ),
+        (
+            "alectryon_run_converter_surfaces_real_nonzero_status_command_and_stderr_payload",
+            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (script (expand-file-name "failing converter with spaces.sh" root))
        (input (generate-new-buffer " *invalid proof*")))
   (with-temp-file script
@@ -61,16 +63,15 @@ fn alectryon_run_converter_surfaces_real_nonzero_status_command_and_stderr_paylo
               (error
                (list (car err) (error-message-string err)
                      (buffer-string)))))))
-    (kill-buffer input)))"##;
-    let expect = expect![[
+    (kill-buffer input)))"##,
+            true,
+            expect![[
         r#"OK (error "Conversion error (23) when running ‘[ORACLE-SANDBOX]/failing\\ converter\\ with\\ spaces.sh --frontend coq\\+rst --backend rst --traceback -’:\nline 7: malformed literate directive\n" "line 7: malformed literate directive\n")"#
-    ]];
-    assert_alectryon_parity(elisp_form, expect);
-}
-
-#[test]
-fn alectryon_run_converter_reports_a_practical_install_hint_for_missing_executables() {
-    let elisp_form = r##"(let ((alectryon-executable
+    ]],
+        ),
+        (
+            "alectryon_run_converter_reports_a_practical_install_hint_for_missing_executables",
+            r##"(let ((alectryon-executable
        (expand-file-name "not-installed/alectryon"
                          (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
       (input (generate-new-buffer " *missing alectryon*")))
@@ -80,15 +81,13 @@ fn alectryon_run_converter_reports_a_practical_install_hint_for_missing_executab
             (progn (alectryon--run-converter input nil) 'unexpected-success)
           (error
            (list (car err) (error-message-string err)))))
-    (kill-buffer input)))"##;
-    let expect =
-        expect![[r#"OK (user-error "Alectryon binary not found; try ‘pip install alectryon’")"#]];
-    assert_alectryon_parity(elisp_form, expect);
-}
-
-#[test]
-fn alectryon_convert_from_uses_a_real_point_marker_restores_editability_and_widens_input() {
-    let elisp_form = r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    (kill-buffer input)))"##,
+            true,
+            expect![[r#"OK (user-error "Alectryon binary not found; try ‘pip install alectryon’")"#]],
+        ),
+        (
+            "alectryon_convert_from_uses_a_real_point_marker_restores_editability_and_widens_input",
+            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (script (expand-file-name "point-converter.sh" root))
        (captured (expand-file-name "point-args.txt" root)))
   (with-temp-file script
@@ -116,16 +115,15 @@ fn alectryon_convert_from_uses_a_real_point_marker_restores_editability_and_wide
           (buffer-narrowed-p)
           (with-temp-buffer
             (insert-file-contents captured)
-            (buffer-string)))))"##;
-    let expect = expect![[
+            (buffer-string)))))"##,
+            true,
+            expect![[
         r#"OK ("Converted: ABCD\n" 14 nil nil "--mark-point\n11\n￼127919￼\n--frontend\ncoq+rst\n--backend\nrst\n--traceback\n-\n")"#
-    ]];
-    assert_alectryon_parity(elisp_form, expect);
-}
-
-#[test]
-fn alectryon_toggle_performs_a_real_code_to_markup_to_code_workflow_and_preserves_modified_state() {
-    let elisp_form = r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    ]],
+        ),
+        (
+            "alectryon_toggle_performs_a_real_code_to_markup_to_code_workflow_and_preserves_modified_state",
+            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (script (expand-file-name "roundtrip-converter.sh" root)))
   (with-temp-file script
     (insert "#!/bin/sh\n"
@@ -164,16 +162,15 @@ fn alectryon_toggle_performs_a_real_code_to_markup_to_code_workflow_and_preserve
               major-mode (buffer-string) (point)
               alectryon-mode alectryon--original-mode
               (buffer-modified-p)
-              (consp buffer-undo-list))))))"##;
-    let expect = expect![[
+              (consp buffer-undo-list))))))"##,
+            true,
+            expect![[
         r#"OK ((rst-mode "A practical proof\n=================\n\n.. coq::\n\n   Check nat.\n" 57 t coq-mode nil) coq-mode "(*|\nA practical proof\n=================\n|*)\n\nCheck nat.\n" 52 t coq-mode nil nil)"#
-    ]];
-    assert_alectryon_parity(elisp_form, expect);
-}
-
-#[test]
-fn alectryon_save_writes_the_code_representation_while_preserving_the_markup_buffer() {
-    let elisp_form = r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    ]],
+        ),
+        (
+            "alectryon_save_writes_the_code_representation_while_preserving_the_markup_buffer",
+            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (script (expand-file-name "save-converter.sh" root))
        (document (expand-file-name "chapter_rst.v" root)))
   (with-temp-file script
@@ -200,16 +197,15 @@ fn alectryon_save_writes_the_code_representation_while_preserving_the_markup_buf
        (buffer-modified-p)
        (with-temp-buffer
          (insert-file-contents document)
-         (buffer-string))))))"##;
-    let expect = expect![[
+         (buffer-string))))))"##,
+            true,
+            expect![[
         r#"OK (t rst-mode "Saved from markup\n=================\n" nil "(*|Saved from markup.|*)\nCheck saved.\n")"#
-    ]];
-    assert_alectryon_parity(elisp_form, expect);
-}
-
-#[test]
-fn alectryon_preview_builds_a_real_sandboxed_webpage_and_opens_the_generated_file() {
-    let elisp_form = r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    ]],
+        ),
+        (
+            "alectryon_preview_builds_a_real_sandboxed_webpage_and_opens_the_generated_file",
+            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (script (expand-file-name "preview-converter.sh" root))
        browsed)
   (with-temp-file script
@@ -238,9 +234,11 @@ fn alectryon_preview_builds_a_real_sandboxed_webpage_and_opens_the_generated_fil
           (with-temp-buffer
             (insert-file-contents browsed)
             (buffer-string))
-          (current-message))))"##;
-    let expect = expect![[
+          (current-message))))"##,
+            true,
+            expect![[
         r#"OK ("[ORACLE-TMPDIR]/" "html" t "<html><body><h1>Rendered proof</h1></body></html>\n" nil)"#
-    ]];
-    assert_alectryon_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

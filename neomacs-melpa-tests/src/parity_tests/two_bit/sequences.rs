@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_two_bit_parity, assert_two_bit_signal_parity};
+use super::{assert_two_bit_batch};
 
 #[test]
-fn two_bit_sequence_loading_preserves_offsets_blocks_and_masking_policy() {
-    let elisp_form = r##"(let ((file
+fn sequences_public_surface_batch() {
+    assert_two_bit_batch(&[
+        (
+            "two_bit_sequence_loading_preserves_offsets_blocks_and_masking_policy",
+            r##"(let ((file
                     (expand-file-name
                      "sequences.2bit"
                      (getenv "TMPDIR"))))
@@ -68,15 +71,13 @@ fn two_bit_sequence_loading_preserves_offsets_blocks_and_masking_policy() {
                            masked)
                           masked-data)))))
                  (when (file-exists-p file)
-                   (delete-file file))))"##;
-    let expect = expect!["OK ((\"alpha\" 12 67 1 (2) (3) nil t) (\"alpha\" 12 67 1 (6) (4) t))"];
-
-    assert_two_bit_parity(elisp_form, expect);
-}
-
-#[test]
-fn two_bit_bases_decode_full_and_partial_ranges_across_byte_boundaries() {
-    let elisp_form = r##"(let ((file
+                   (delete-file file))))"##,
+            true,
+            expect!["OK ((\"alpha\" 12 67 1 (2) (3) nil t) (\"alpha\" 12 67 1 (6) (4) t))"],
+        ),
+        (
+            "two_bit_bases_decode_full_and_partial_ranges_across_byte_boundaries",
+            r##"(let ((file
                     (expand-file-name
                      "bases.2bit"
                      (getenv "TMPDIR"))))
@@ -100,15 +101,13 @@ fn two_bit_bases_decode_full_and_partial_ranges_across_byte_boundaries() {
                         (2bit-bases beta 3 6)
                         (2bit-bases beta 7 8))))
                  (when (file-exists-p file)
-                   (delete-file file))))"##;
-    let expect = expect![[r#"OK ("TCNNNCAGTCAG" "CNNNCAGTCA" "CAGT" "GGGGAAAA" "GAA" "A")"#]];
-
-    assert_two_bit_parity(elisp_form, expect);
-}
-
-#[test]
-fn two_bit_bases_apply_mask_blocks_only_when_requested_at_open_time() {
-    let elisp_form = r##"(let ((file
+                   (delete-file file))))"##,
+            true,
+            expect![[r#"OK ("TCNNNCAGTCAG" "CNNNCAGTCA" "CAGT" "GGGGAAAA" "GAA" "A")"#]],
+        ),
+        (
+            "two_bit_bases_apply_mask_blocks_only_when_requested_at_open_time",
+            r##"(let ((file
                     (expand-file-name
                      "masking.2bit"
                      (getenv "TMPDIR"))))
@@ -129,15 +128,13 @@ fn two_bit_bases_apply_mask_blocks_only_when_requested_at_open_time() {
                         (2bit-bases masked 0 12)
                         (2bit-bases masked 5 11))))
                  (when (file-exists-p file)
-                   (delete-file file))))"##;
-    let expect = expect![[r#"OK ("TCNNNCAGTCAG" "TCNNNCagtcAG" "CagtcA")"#]];
-
-    assert_two_bit_parity(elisp_form, expect);
-}
-
-#[test]
-fn two_bit_sequence_rejects_an_unknown_name_with_exact_signal_data() {
-    let elisp_form = r##"(let ((file
+                   (delete-file file))))"##,
+            true,
+            expect![[r#"OK ("TCNNNCAGTCAG" "TCNNNCagtcAG" "CagtcA")"#]],
+        ),
+        (
+            "two_bit_sequence_rejects_an_unknown_name_with_exact_signal_data",
+            r##"(let ((file
                     (expand-file-name
                      "unknown.2bit"
                      (getenv "TMPDIR"))))
@@ -148,60 +145,49 @@ fn two_bit_sequence_rejects_an_unknown_name_with_exact_signal_data() {
                      (2bit-sequence
                       file "gamma"))
                  (when (file-exists-p file)
-                   (delete-file file))))"##;
-    let expect = expect![[r#"ERR (error "Unknown sequence \"gamma\"")"#]];
-
-    assert_two_bit_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn two_bit_bases_reject_equal_or_reversed_bounds() {
-    let elisp_form = r##"(let ((sequence
+                   (delete-file file))))"##,
+            false,
+            expect![[r#"ERR (error "Unknown sequence \"gamma\"")"#]],
+        ),
+        (
+            "two_bit_bases_reject_equal_or_reversed_bounds",
+            r##"(let ((sequence
                     (make-2bit-sequence
                      :dna-size 12)))
-               (2bit-bases sequence 5 5))"##;
-    let expect =
-        expect![[r#"ERR (error "Start location is greater or equal to the end location")"#]];
-
-    assert_two_bit_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn two_bit_bases_reject_a_negative_start() {
-    let elisp_form = r##"(let ((sequence
+               (2bit-bases sequence 5 5))"##,
+            false,
+            expect![[r#"ERR (error "Start location is greater or equal to the end location")"#]],
+        ),
+        (
+            "two_bit_bases_reject_a_negative_start",
+            r##"(let ((sequence
                     (make-2bit-sequence
                      :dna-size 12)))
-               (2bit-bases sequence -1 2))"##;
-    let expect = expect![[r#"ERR (error "Start location is less than 0")"#]];
-
-    assert_two_bit_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn two_bit_bases_reject_a_start_at_the_sequence_end() {
-    let elisp_form = r##"(let ((sequence
+               (2bit-bases sequence -1 2))"##,
+            false,
+            expect![[r#"ERR (error "Start location is less than 0")"#]],
+        ),
+        (
+            "two_bit_bases_reject_a_start_at_the_sequence_end",
+            r##"(let ((sequence
                     (make-2bit-sequence
                      :dna-size 12)))
-               (2bit-bases sequence 12 13))"##;
-    let expect = expect![[r#"ERR (error "Start location is beyond the end of the sequence")"#]];
-
-    assert_two_bit_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn two_bit_bases_reject_an_end_beyond_the_sequence() {
-    let elisp_form = r##"(let ((sequence
+               (2bit-bases sequence 12 13))"##,
+            false,
+            expect![[r#"ERR (error "Start location is beyond the end of the sequence")"#]],
+        ),
+        (
+            "two_bit_bases_reject_an_end_beyond_the_sequence",
+            r##"(let ((sequence
                     (make-2bit-sequence
                      :dna-size 12)))
-               (2bit-bases sequence 11 13))"##;
-    let expect = expect![[r#"ERR (error "End location is beyond the end of the sequence")"#]];
-
-    assert_two_bit_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn two_bit_with_file_and_sequence_macros_bind_fresh_readers_for_the_body() {
-    let elisp_form = r##"(let ((file
+               (2bit-bases sequence 11 13))"##,
+            false,
+            expect![[r#"ERR (error "End location is beyond the end of the sequence")"#]],
+        ),
+        (
+            "two_bit_with_file_and_sequence_macros_bind_fresh_readers_for_the_body",
+            r##"(let ((file
                     (expand-file-name
                      "macros.2bit"
                      (getenv "TMPDIR"))))
@@ -229,15 +215,13 @@ fn two_bit_with_file_and_sequence_macros_bind_fresh_readers_for_the_body() {
                          (2bit-bases
                           sequence 0 8)))))
                  (when (file-exists-p file)
-                   (delete-file file))))"##;
-    let expect = expect![[r#"OK ((t t 2) (t "beta" 8 "GGGGAAAA"))"#]];
-
-    assert_two_bit_parity(elisp_form, expect);
-}
-
-#[test]
-fn two_bit_macroexpansions_evaluate_file_and_sequence_forms_once() {
-    let elisp_form = r##"(list
+                   (delete-file file))))"##,
+            true,
+            expect![[r#"OK ((t t 2) (t "beta" 8 "GGGGAAAA"))"#]],
+        ),
+        (
+            "two_bit_macroexpansions_evaluate_file_and_sequence_forms_once",
+            r##"(list
               (macroexpand-1
                '(2bit-with-file
                     (data (progn
@@ -255,10 +239,11 @@ fn two_bit_macroexpansions_evaluate_file_and_sequence_forms_once() {
                        (push 'file events)
                        path))
                   (2bit-sequence-dna-size
-                   sequence))))"##;
-    let expect = expect![[
+                   sequence))))"##,
+            true,
+            expect![[
         r#"OK ((let ((data (2bit-open (progn (push 'file events) path) t))) (2bit-sequence-count data)) (let ((sequence (2bit-sequence (2bit-open (progn (push 'file events) path)) (progn (push 'name events) "alpha")))) (2bit-sequence-dna-size sequence)))"#
-    ]];
-
-    assert_two_bit_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

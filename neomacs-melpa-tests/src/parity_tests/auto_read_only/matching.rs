@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_read_only_parity;
+use super::assert_auto_read_only_batch;
 
 #[test]
-fn auto_read_only_default_regexps_match_exact_extension_and_directory_boundaries() {
-    let elisp_form = r##"(let ((quoted-user-directory
+fn matching_public_surface_batch() {
+    assert_auto_read_only_batch(&[
+        (
+            "auto_read_only_default_regexps_match_exact_extension_and_directory_boundaries",
+            r##"(let ((quoted-user-directory
                 (regexp-quote
                  (file-name-as-directory
                   (expand-file-name
@@ -49,16 +52,15 @@ fn auto_read_only_default_regexps_match_exact_extension_and_directory_boundaries
             "/workspace/.bundle/ruby/tool.rb"
             "/workspace/.cask/29.1/elpa/pkg.el"
             "/workspace/.casket/pkg.el"
-            "/workspace/vendor/pkg.el"))))"##;
-    let expect = expect![[
+            "/workspace/vendor/pkg.el"))))"##,
+            true,
+            expect![[
         r#"OK (("\\(?:\\.\\(?:\\(?:el\\|py\\)c\\)\\)\\'" "/share/.+/site-lisp/" "[USER-EMACS-DIRECTORY]/\\(?:el\\(?:-get\\|pa\\)\\)/" "/\\(?:\\.\\(?:bundle\\|cask\\)\\)/") (("/workspace/cache/module.elc" t) ("/workspace/cache/module.pyc" t) ("/workspace/cache/module.elc.gz" nil) ("/workspace/cache/MODULE.ELC" t) ("/opt/share/emacs/site-lisp/library.el" t) ("/opt/share/site-lisp/library.el" nil) ("[ORACLE-HOME]/.emacs.d/elpa/pkg/pkg.el" t) ("[ORACLE-HOME]/.emacs.d/el-get/pkg/pkg.el" t) ("[ORACLE-HOME]/.emacs.d/packages/pkg.el" nil) ("/workspace/.bundle/ruby/tool.rb" t) ("/workspace/.cask/29.1/elpa/pkg.el" t) ("/workspace/.casket/pkg.el" nil) ("/workspace/vendor/pkg.el" nil)))"#
-    ]];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_without_filename_or_without_match_is_a_strict_noop() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_read_only_without_filename_or_without_match_is_a_strict_noop",
+            r##"(mapcar
          (lambda (file)
            (with-temp-buffer
              (insert "editable")
@@ -77,16 +79,15 @@ fn auto_read_only_without_filename_or_without_match_is_a_strict_noop() {
          '(nil
            "/workspace/src/main.el"
            "/workspace/vendorish/main.el"
-           "/workspace/output.elc.gz"))"##;
-    let expect = expect![[
+           "/workspace/output.elc.gz"))"##,
+            true,
+            expect![[
         r#"OK ((nil nil (" *temp*" nil "editable" 9 nil nil nil)) ("/workspace/src/main.el" nil (" *temp*" "/workspace/src/main.el" "editable" 9 nil nil nil)) ("/workspace/vendorish/main.el" nil (" *temp*" "/workspace/vendorish/main.el" "editable" 9 nil nil nil)) ("/workspace/output.elc.gz" nil (" *temp*" "/workspace/output.elc.gz" "editable" 9 nil nil nil)))"#
-    ]];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_default_action_enters_real_view_mode_and_returns_its_value() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_read_only_default_action_enters_real_view_mode_and_returns_its_value",
+            r##"(with-temp-buffer
          (insert "compiled payload")
          (set-buffer-modified-p nil)
          (setq buffer-file-name
@@ -105,16 +106,15 @@ fn auto_read_only_default_action_enters_real_view_mode_and_returns_its_value() {
                (list
                 (car error-data)
                 (cdr error-data))))
-            (buffer-string))))"##;
-    let expect = expect![[
+            (buffer-string))))"##,
+            true,
+            expect![[
         r#"OK (t (" *temp*" "/workspace/build/module.elc" "compiled payload" 17 t t nil) (buffer-read-only ((:buffer nil))) "compiled payload")"#
-    ]];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_custom_action_runs_once_in_original_buffer_with_exact_state() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_read_only_custom_action_runs_once_in_original_buffer_with_exact_state",
+            r##"(with-temp-buffer
          (rename-buffer
           " *auto-read-only-action*")
          (insert "third-party source")
@@ -134,16 +134,15 @@ fn auto_read_only_custom_action_runs_once_in_original_buffer_with_exact_state() 
            (list
             (auto-read-only)
             (nreverse calls)
-            (auto-read-only-test-buffer-state))))"##;
-    let expect = expect![[
+            (auto-read-only-test-buffer-state))))"##,
+            true,
+            expect![[
         r#"OK (:protected ((" *auto-read-only-action*" "/workspace/vendor/library.el" "third-party source" 7 nil nil nil)) (" *auto-read-only-action*" "/workspace/vendor/library.el" "third-party source" 7 nil nil nil))"#
-    ]];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_stops_at_first_match_and_never_evaluates_later_invalid_regexp() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_read_only_stops_at_first_match_and_never_evaluates_later_invalid_regexp",
+            r##"(with-temp-buffer
          (setq buffer-file-name
                "/workspace/vendor/library.el")
          (let* ((auto-read-only-file-regexps
@@ -156,14 +155,13 @@ fn auto_read_only_stops_at_first_match_and_never_evaluates_later_invalid_regexp(
            (list
             (auto-read-only-test-error-data
              #'auto-read-only)
-            (nreverse calls))))"##;
-    let expect = expect!["OK ((:ok :done) (:action))"];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_reaches_and_propagates_invalid_later_regexp_after_misses() {
-    let elisp_form = r##"(with-temp-buffer
+            (nreverse calls))))"##,
+            true,
+            expect!["OK ((:ok :done) (:action))"],
+        ),
+        (
+            "auto_read_only_reaches_and_propagates_invalid_later_regexp_after_misses",
+            r##"(with-temp-buffer
          (setq buffer-file-name
                "/workspace/src/library.el")
          (let ((auto-read-only-file-regexps
@@ -175,14 +173,13 @@ fn auto_read_only_reaches_and_propagates_invalid_later_regexp_after_misses() {
             (auto-read-only-test-error-data
              #'auto-read-only)
             buffer-read-only
-            (bound-and-true-p view-mode))))"##;
-    let expect = expect![[r#"OK ((:error invalid-regexp ("Unmatched [ or [^")) nil nil)"#]];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_preserves_preexisting_match_data_for_match_and_miss_paths() {
-    let elisp_form = r##"(progn
+            (bound-and-true-p view-mode))))"##,
+            true,
+            expect![[r#"OK ((:error invalid-regexp ("Unmatched [ or [^")) nil nil)"#]],
+        ),
+        (
+            "auto_read_only_preserves_preexisting_match_data_for_match_and_miss_paths",
+            r##"(progn
          (string-match
           "\\(seed\\)-\\([0-9]+\\)"
           "seed-42")
@@ -209,16 +206,15 @@ fn auto_read_only_preserves_preexisting_match_data_for_match_and_miss_paths() {
                     (match-data)))
                   outcomes))))
            (list before
-                 (nreverse outcomes))))"##;
-    let expect = expect![[
+                 (nreverse outcomes))))"##,
+            true,
+            expect![[
         r#"OK ((0 7 0 4 5 7) (("/workspace/vendor/pkg.el" nil (0 7 0 4 5 7) t) ("/workspace/src/pkg.el" nil (0 7 0 4 5 7) t)))"#
-    ]];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_matcher_uses_one_filename_and_stops_calling_after_success() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_read_only_matcher_uses_one_filename_and_stops_calling_after_success",
+            r##"(with-temp-buffer
          (setq buffer-file-name
                "/workspace/vendor/pkg.el")
          (let ((auto-read-only-file-regexps
@@ -237,16 +233,15 @@ fn auto_read_only_matcher_uses_one_filename_and_stops_calling_after_success() {
                    (equal regexp "second"))))
              (list
               (auto-read-only)
-              (nreverse calls)))))"##;
-    let expect = expect![[
+              (nreverse calls)))))"##,
+            true,
+            expect![[
         r#"OK (:applied (("first" "/workspace/vendor/pkg.el") ("second" "/workspace/vendor/pkg.el")))"#
-    ]];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_buffer_local_patterns_and_actions_are_isolated_in_practical_use() {
-    let elisp_form = r##"(let ((first
+    ]],
+        ),
+        (
+            "auto_read_only_buffer_local_patterns_and_actions_are_isolated_in_practical_use",
+            r##"(let ((first
                 (generate-new-buffer
                  " *auto-read-only-first*"))
                (second
@@ -302,16 +297,15 @@ fn auto_read_only_buffer_local_patterns_and_actions_are_isolated_in_practical_us
            (when (buffer-live-p first)
              (kill-buffer first))
            (when (buffer-live-p second)
-             (kill-buffer second))))"##;
-    let expect = expect![[
+             (kill-buffer second))))"##,
+            true,
+            expect![[
         r#"OK (:first-result :second-result ((:first " *auto-read-only-first*") (:second " *auto-read-only-second*")) ("/vendor/") ("/generated/"))"#
-    ]];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_custom_function_arity_and_errors_propagate_without_fallback() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_read_only_custom_function_arity_and_errors_propagate_without_fallback",
+            r##"(mapcar
          (lambda (function)
            (with-temp-buffer
              (setq buffer-file-name
@@ -341,9 +335,11 @@ fn auto_read_only_custom_function_arity_and_errors_propagate_without_fallback() 
           (lambda (_argument)
             :wrong-arity)
           (lambda ()
-            (error "custom failure"))))"##;
-    let expect = expect![[
+            (error "custom failure"))))"##,
+            true,
+            expect![[
         r#"OK (((:error wrong-number-of-arguments 0) nil nil) ((:error error ("custom failure")) nil nil))"#
-    ]];
-    assert_auto_read_only_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

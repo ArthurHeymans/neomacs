@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_clang_parity;
+use super::assert_auto_complete_clang_batch;
 
 #[test]
-fn auto_complete_clang_parse_output_filters_prefix_and_returns_reverse_clang_order_with_help() {
-    let elisp_form = r##"(with-temp-buffer
+fn parsing_public_surface_batch() {
+    assert_auto_complete_clang_batch(&[
+        (
+            "auto_complete_clang_parse_output_filters_prefix_and_returns_reverse_clang_order_with_help",
+            r##"(with-temp-buffer
          (insert
           "noise\n"
           "COMPLETION: alpha : int alpha\n"
@@ -14,16 +17,15 @@ fn auto_complete_clang_parse_output_filters_prefix_and_returns_reverse_clang_ord
          (mapcar
           #'ac-clang-test-candidate-state
           (ac-clang-parse-output
-           "alpha")))"##;
-    let expect = expect![[
+           "alpha")))"##,
+            true,
+            expect![[
         r#"OK (("alpha_value" "long alpha_value" nil) ("alphabet" "void alphabet(<#int n#>)" nil) ("alpha" "int alpha" nil))"#
-    ]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_parse_output_merges_adjacent_duplicate_overloads_into_one_candidate() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_clang_parse_output_merges_adjacent_duplicate_overloads_into_one_candidate",
+            r##"(with-temp-buffer
          (insert
           "COMPLETION: draw : void draw(<#int x#>)\n"
           "COMPLETION: draw : void draw(<#double x#>)\n"
@@ -32,16 +34,15 @@ fn auto_complete_clang_parse_output_merges_adjacent_duplicate_overloads_into_one
          (mapcar
           #'ac-clang-test-candidate-state
           (ac-clang-parse-output
-           "dr")))"##;
-    let expect = expect![[
+           "dr")))"##,
+            true,
+            expect![[
         r#"OK (("drop" "void drop()" nil) ("draw" "void draw(<#int x#>)\nvoid draw(<#double x#>)\nvoid draw(<#const char *x#>)" nil))"#
-    ]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_parse_output_nonadjacent_duplicates_remain_separate() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_clang_parse_output_nonadjacent_duplicates_remain_separate",
+            r##"(with-temp-buffer
          (insert
           "COMPLETION: same : int same(int)\n"
           "COMPLETION: middle : int middle\n"
@@ -49,16 +50,15 @@ fn auto_complete_clang_parse_output_nonadjacent_duplicates_remain_separate() {
          (mapcar
           #'ac-clang-test-candidate-state
           (ac-clang-parse-output
-           "")))"##;
-    let expect = expect![[
+           "")))"##,
+            true,
+            expect![[
         r#"OK (("same" "int same(double)" nil) ("middle" "int middle" nil) ("same" "int same(int)" nil))"#
-    ]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_parse_output_excludes_pattern_pseudo_candidate_only_by_exact_name() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_clang_parse_output_excludes_pattern_pseudo_candidate_only_by_exact_name",
+            r##"(with-temp-buffer
          (insert
           "COMPLETION: Pattern : placeholder\n"
           "COMPLETION: PatternValue : real value\n"
@@ -66,14 +66,13 @@ fn auto_complete_clang_parse_output_excludes_pattern_pseudo_candidate_only_by_ex
          (mapcar
           #'ac-clang-test-candidate-state
           (ac-clang-parse-output
-           "")))"##;
-    let expect = expect![[r#"OK (("pattern" "lowercase" nil) ("PatternValue" "real value" nil))"#]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_parse_output_quotes_regexp_metacharacters_in_prefix() {
-    let elisp_form = r##"(with-temp-buffer
+           "")))"##,
+            true,
+            expect![[r#"OK (("pattern" "lowercase" nil) ("PatternValue" "real value" nil))"#]],
+        ),
+        (
+            "auto_complete_clang_parse_output_quotes_regexp_metacharacters_in_prefix",
+            r##"(with-temp-buffer
          (insert
           "COMPLETION: operator[] : index\n"
           "COMPLETION: operator() : call\n"
@@ -89,14 +88,13 @@ fn auto_complete_clang_parse_output_quotes_regexp_metacharacters_in_prefix() {
             (mapcar
              #'ac-clang-test-candidate-state
              (ac-clang-parse-output
-              "foo.")))))"##;
-    let expect = expect![[r#"OK ((("operator[]" "index" nil)) (("foo.bar" "member" nil)))"#]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_parse_output_ignores_malformed_and_colonless_lines() {
-    let elisp_form = r##"(with-temp-buffer
+              "foo.")))))"##,
+            true,
+            expect![[r#"OK ((("operator[]" "index" nil)) (("foo.bar" "member" nil)))"#]],
+        ),
+        (
+            "auto_complete_clang_parse_output_ignores_malformed_and_colonless_lines",
+            r##"(with-temp-buffer
          (insert
           "COMPLETION alpha : missing marker\n"
           "COMPLETION: alpha\n"
@@ -107,14 +105,13 @@ fn auto_complete_clang_parse_output_ignores_malformed_and_colonless_lines() {
          (mapcar
           #'ac-clang-test-candidate-state
           (ac-clang-parse-output
-           "alpha")))"##;
-    let expect = expect![[r#"OK (("alpha_more" "" nil) ("alpha" "\n: compact\nspaced" nil))"#]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_handle_error_keeps_only_diagnostics_before_first_completion() {
-    let elisp_form = r##"(let ((ac-clang-executable
+           "alpha")))"##,
+            true,
+            expect![[r#"OK (("alpha_more" "" nil) ("alpha" "\n: compact\nspaced" nil))"#]],
+        ),
+        (
+            "auto_complete_clang_handle_error_keeps_only_diagnostics_before_first_completion",
+            r##"(let ((ac-clang-executable
                 "/tool/clang")
                (messages nil))
          (with-temp-buffer
@@ -146,16 +143,15 @@ fn auto_complete_clang_handle_error_keeps_only_diagnostics_before_first_completi
                 (buffer-string)
                 buffer-read-only
                 (point)
-                messages)))))"##;
-    let expect = expect![[
+                messages)))))"##,
+            true,
+            expect![[
         r#"OK ("FIXED-TIME\nclang failed with error 2:\n/tool/clang -cc1 -DNAME=two words\n\nsource.cpp:3:4: error: expected expression\nnote: prior diagnostic" t 1 nil)"#
-    ]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_handle_error_without_completion_messages_and_keeps_full_output() {
-    let elisp_form = r##"(let ((ac-clang-executable "clang")
+    ]],
+        ),
+        (
+            "auto_complete_clang_handle_error_without_completion_messages_and_keeps_full_output",
+            r##"(let ((ac-clang-executable "clang")
                (messages nil))
          (with-temp-buffer
            (insert
@@ -181,16 +177,15 @@ fn auto_complete_clang_handle_error_without_completion_messages_and_keeps_full_o
                (list
                 (buffer-string)
                 buffer-read-only
-                (nreverse messages))))))"##;
-    let expect = expect![[
+                (nreverse messages))))))"##,
+            true,
+            expect![[
         r#"OK ("FIXED-TIME\nclang failed with error 9:\nclang -cc1 -bad\n\nfatal error: input file missing\nsecond line\n" t ("clang failed with error 9:\nclang -cc1 -bad"))"#
-    ]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_handle_error_reuses_and_replaces_existing_error_buffer() {
-    let elisp_form = r##"(let ((ac-clang-executable "clang"))
+    ]],
+        ),
+        (
+            "auto_complete_clang_handle_error_reuses_and_replaces_existing_error_buffer",
+            r##"(let ((ac-clang-executable "clang"))
          (with-current-buffer
              (get-buffer-create
               ac-clang-error-buffer-name)
@@ -215,8 +210,9 @@ fn auto_complete_clang_handle_error_reuses_and_replaces_existing_error_buffer() 
                (list
                 (buffer-string)
                 (= (point) (point-min))
-                buffer-read-only)))))"##;
-    let expect =
-        expect![[r#"OK ("NOW\nclang failed with error 1:\nclang -cc1\n\nnew diagnostic\n" t t)"#]];
-    assert_auto_complete_clang_parity(elisp_form, expect);
+                buffer-read-only)))))"##,
+            true,
+            expect![[r#"OK ("NOW\nclang failed with error 1:\nclang -cc1\n\nnew diagnostic\n" t t)"#]],
+        ),
+    ]);
 }

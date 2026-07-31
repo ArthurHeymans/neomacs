@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_angry_police_captain_parity;
+use super::assert_angry_police_captain_batch;
 
 #[test]
-fn fetching_a_quote_sends_a_real_request_and_echoes_the_line_it_scrapes() {
-    let elisp_form = r##"
+fn workflows_public_surface_batch() {
+    assert_angry_police_captain_batch(&[
+        (
+            "fetching_a_quote_sends_a_real_request_and_echoes_the_line_it_scrapes",
+            r##"
 (progn
   (apc-test-listen)
   (let ((result
@@ -23,18 +26,15 @@ fn fetching_a_quote_sends_a_real_request_and_echoes_the_line_it_scrapes() {
           ;; is the whole of what the user gets to control.
           :request (apc-test-request)
           :autoloaded (and (commandp 'angry-police-captain) t))))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:result (:echoed ("You have 24 hours, Sanchez") :requests-served 1 :leftover-buffers nil) :request ("GET http://theangrypolicecaptain.com HTTP/1.1\15\nMIME-Version: 1.0\15\nConnection: close\15\nHost: theangrypolicecaptain.com\15\nAccept-encoding: gzip\15\nAccept: */*\15\nUser-Agent: URL/Emacs Emacs/<VERSION> (TTY; x86_64-pc-linux-gnu)\15\n\15\n") :autoloaded t)"#
-    ]];
-
-    assert_angry_police_captain_parity(elisp_form, expect);
-}
-
-#[test]
-fn the_scraper_takes_the_first_marked_link_and_drops_its_last_character() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "the_scraper_takes_the_first_marked_link_and_drops_its_last_character",
+            r##"
 (progn
   (apc-test-listen)
   (list
@@ -68,18 +68,15 @@ fn the_scraper_takes_the_first_marked_link_and_drops_its_last_character() {
    (apc-test-quote
     (concat "<a href=\"http://theangrypolicecaptain.com\">"
             "Sánchez &mdash; hand it over!</a>\n"))))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:trailing-period ("You have 24 hours, Sanchez." . "You have 24 hours, Sanchez") :trailing-exclamation ("Give me the badge!" . "Give me the badge") :empty-link ">" :two-links "First, and the only one" :entities-and-accents "S\303\241nchez &mdash; hand it over")"#
-    ]];
-
-    assert_angry_police_captain_parity(elisp_form, expect);
-}
-
-#[test]
-fn the_command_can_only_finish_when_it_is_invoked_the_way_the_menu_invokes_it() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "the_command_can_only_finish_when_it_is_invoked_the_way_the_menu_invokes_it",
+            r##"
 (list
  ;; The callback ends by calling `kill-this-buffer', which since Emacs 30
  ;; refuses to run unless `last-command-event' is the menu item's own
@@ -98,18 +95,15 @@ fn the_command_can_only_finish_when_it_is_invoked_the_way_the_menu_invokes_it() 
    (let ((last-command-event 'kill-buffer))
      (list :killed (progn (kill-this-buffer)
                           (not (buffer-live-p (get-buffer "*apc-doomed*"))))))))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:invoked-from-m-x (error "This command must be called from a menu or a tool bar") :invoked-from-a-key (error "This command must be called from a menu or a tool bar") :invoked-from-the-menu (:killed t))"#
-    ]];
-
-    assert_angry_police_captain_parity(elisp_form, expect);
-}
-
-#[test]
-fn the_response_status_is_ignored_and_a_redirect_leaves_its_first_buffer_behind() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "the_response_status_is_ignored_and_a_redirect_leaves_its_first_buffer_behind",
+            r##"
 (progn
   (apc-test-listen)
   (list
@@ -136,11 +130,11 @@ fn the_response_status_is_ignored_and_a_redirect_leaves_its_first_buffer_behind(
          "" "301 Moved Permanently"
          "Location: http://theangrypolicecaptain.com/moved\r\n"))))
    :requests (apc-test-request)))
-"##;
-
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (:not-found (:echoed ("Gone, but still quotable") :requests-served 1 :leftover-buffers nil) :redirected (:echoed ("Found me after all") :requests-served 2 :leftover-buffers (" *http theangrypolicecaptain.com:80*")) :requests ("GET http://theangrypolicecaptain.com HTTP/1.1\15\nMIME-Version: 1.0\15\nConnection: close\15\nHost: theangrypolicecaptain.com\15\nAccept-encoding: gzip\15\nAccept: */*\15\nUser-Agent: URL/Emacs Emacs/<VERSION> (TTY; x86_64-pc-linux-gnu)\15\n\15\n" "GET http://theangrypolicecaptain.com/moved HTTP/1.1\15\nMIME-Version: 1.0\15\nConnection: close\15\nHost: theangrypolicecaptain.com\15\nAccept-encoding: gzip\15\nAccept: */*\15\nUser-Agent: URL/Emacs Emacs/<VERSION> (TTY; x86_64-pc-linux-gnu)\15\n\15\n"))"#
-    ]];
-
-    assert_angry_police_captain_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

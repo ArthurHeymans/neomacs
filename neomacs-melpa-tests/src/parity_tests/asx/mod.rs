@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ASX_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod dom;
 mod query;
 mod registry;
@@ -167,4 +169,30 @@ pub(crate) fn assert_asx_parity(elisp_form: &str, expected: Expect) {
 
 pub(crate) fn assert_asx_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_asx_source_parity("asx-autoloads.el", elisp_form, expected);
+}
+
+
+
+
+
+/// Multi-probe batch for `assert_asx_autoload_parity` cases (2a).
+pub(crate) fn assert_asx_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        asx_oracle("asx-autoloads.el"),
+        &name,
+        "asx_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_asx_parity` cases (2a).
+pub(crate) fn assert_asx_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        asx_oracle("asx.el"),
+        &name,
+        "asx_parity",
+        cases,
+    );
 }

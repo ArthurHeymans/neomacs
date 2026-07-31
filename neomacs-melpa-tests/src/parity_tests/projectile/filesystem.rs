@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_projectile_parity;
+use super::assert_projectile_batch;
 
 #[test]
-fn projectile_root_strategies_find_expected_marker_levels() {
-    let elisp_form = r##"(let* ((root (make-temp-file "projectile-root-" t))
+fn filesystem_public_surface_batch() {
+    assert_projectile_batch(&[
+        (
+            "projectile_root_strategies_find_expected_marker_levels",
+            r##"(let* ((root (make-temp-file "projectile-root-" t))
                     (default-directory (file-name-as-directory root))
                     (project (expand-file-name "project/" root))
                     (nested (expand-file-name "src/lib/" project))
@@ -37,15 +40,13 @@ fn projectile_root_strategies_find_expected_marker_levels() {
                       (equal
                        (projectile-root-top-down-recurring nested '(".git"))
                        project)))
-                 (delete-directory root t)))"##;
-    let expect = expect![[r#"OK (t t t nil t)"#]];
-
-    assert_projectile_parity(elisp_form, expect);
-}
-
-#[test]
-fn projectile_project_root_contract_handles_marked_project_and_nil_directory() {
-    let elisp_form = r##"(let* ((root (make-temp-file "projectile-project-" t))
+                 (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK (t t t nil t)"#]],
+        ),
+        (
+            "projectile_project_root_contract_handles_marked_project_and_nil_directory",
+            r##"(let* ((root (make-temp-file "projectile-project-" t))
                     (project (file-name-as-directory root))
                     (nested (expand-file-name "src/lib/" project))
                     (projectile-project-root-cache
@@ -61,15 +62,13 @@ fn projectile_project_root_contract_handles_marked_project_and_nil_directory() {
                        (projectile-project-root nested))
                       (let ((default-directory nil))
                         (projectile-project-root))))
-                 (delete-directory root t)))"##;
-    let expect = expect![[r#"OK (t t nil)"#]];
-
-    assert_projectile_parity(elisp_form, expect);
-}
-
-#[test]
-fn projectile_native_directory_indexing_filters_ignored_paths() {
-    let elisp_form = r##"(let* ((root (make-temp-file "projectile-index-" t))
+                 (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK (t t nil)"#]],
+        ),
+        (
+            "projectile_native_directory_indexing_filters_ignored_paths",
+            r##"(let* ((root (make-temp-file "projectile-index-" t))
                     (project (file-name-as-directory root))
                     (projectile-globally-ignored-directories
                      '(".git" "build"))
@@ -90,15 +89,13 @@ fn projectile_native_directory_indexing_filters_ignored_paths() {
                      (let ((default-directory project))
                        (sort (projectile-dir-files-native project)
                              #'string<)))
-                 (delete-directory root t)))"##;
-    let expect = expect![[r#"OK ("keep.el" "src/nested.el")"#]];
-
-    assert_projectile_parity(elisp_form, expect);
-}
-
-#[test]
-fn projectile_task_manifest_parsers_read_controlled_project_files() {
-    let elisp_form = r##"(let* ((root (make-temp-file "projectile-tasks-" t))
+                 (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK ("keep.el" "src/nested.el")"#]],
+        ),
+        (
+            "projectile_task_manifest_parsers_read_controlled_project_files",
+            r##"(let* ((root (make-temp-file "projectile-tasks-" t))
                     (project (file-name-as-directory root)))
                (unwind-protect
                    (progn
@@ -115,17 +112,15 @@ fn projectile_task_manifest_parsers_read_controlled_project_files() {
                       (projectile-tasks-from-npm project)
                       (projectile-tasks-from-deno project)
                       (projectile-tasks-from-composer project)))
-                 (delete-directory root t)))"##;
-    let expect = expect![[
+                 (delete-directory root t)))"##,
+            true,
+            expect![[
         r#"OK ((("npm:build" . "npm run build") ("npm:test" . "npm run test")) (("deno:dev" . "deno task dev")) (("composer:lint" . "composer run-script lint")))"#
-    ]];
-
-    assert_projectile_parity(elisp_form, expect);
-}
-
-#[test]
-fn projectile_text_task_parsers_ignore_assignments_and_nested_keys() {
-    let elisp_form = r##"(let* ((root (make-temp-file "projectile-text-tasks-" t))
+    ]],
+        ),
+        (
+            "projectile_text_task_parsers_ignore_assignments_and_nested_keys",
+            r##"(let* ((root (make-temp-file "projectile-text-tasks-" t))
                     (project (file-name-as-directory root)))
                (unwind-protect
                    (progn
@@ -142,10 +137,11 @@ fn projectile_text_task_parsers_ignore_assignments_and_nested_keys() {
                       (projectile-tasks-from-just project)
                       (projectile-tasks-from-taskfile project)
                       (projectile-tasks-from-make project)))
-                 (delete-directory root t)))"##;
-    let expect = expect![[
+                 (delete-directory root t)))"##,
+            true,
+            expect![[
         r#"OK ((("just:build" . "just build") ("just:fmt" . "just fmt") ("just:test" . "just test")) (("task:build" . "task build") ("task:test" . "task test")) (("make:all" . "make all") ("make:test" . "make test")))"#
-    ]];
-
-    assert_projectile_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

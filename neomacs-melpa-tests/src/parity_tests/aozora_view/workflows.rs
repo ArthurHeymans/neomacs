@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_aozora_view_parity, assert_aozora_view_signal_parity};
+use super::{assert_aozora_view_batch};
 
 #[test]
-fn reading_an_annotated_aozora_book_builds_a_linked_read_only_view() {
-    let elisp_form = r####"
+fn workflows_public_surface_batch() {
+    assert_aozora_view_batch(&[
+        (
+            "reading_an_annotated_aozora_book_builds_a_linked_read_only_view",
+            r####"
 (let* ((root
         (file-name-as-directory
          (expand-file-name
@@ -88,17 +91,15 @@ fn reading_an_annotated_aozora_book_builds_a_linked_read_only_view() {
                  view)))))
     (neomacs-aozora-test-cleanup root))
   result)
-"####;
-    let expect = expect![[
+"####,
+            true,
+            expect![[
         r#"OK (:source (:file "wagahai.txt" :mode text-mode :content "吾輩は猫である\n夏目漱石\n\n｜吾輩《わがはい》は猫である。名前はまだ無い。\n空を見上げる※［＃雪だるま、UCS-2603、1-1］。\n強調［＃「強調」に傍線］と注意［＃「注意」に白丸傍点］。\n漢［＃レ］文と［＃（小さな注）］を読む。\n前［＃ここから割り注］補足説明［＃ここで割り注終わり］後。\n" :modified nil) :view (:name "wagahai" :mode aozora-view-mode :mode-name "青空文庫" :read-only t :view-mode t :line-spacing 0 :content "\n吾輩は猫である\n\n夏目漱石\n\n\nわがはい\n吾輩は猫である。名前はまだ無い。\n\n空を見上げる☃。\n　　　　　　  ○   ○\n強調と注意。\n\n漢レ文と小さな注を読む。\n\n前補足説明後。\n" :tokens ((:text "吾輩は猫である" :position 2 :line-number 1 :display nil :face nil :read-only nil) (:text "わがはい" :position 18 :line-number nil :display ((height 0.5)) :face nil :read-only nil) (:text "☃" :position 47 :line-number nil :display nil :face nil :read-only nil) (:text "強調" :position 64 :line-number 6 :display nil :face underline :read-only nil) (:text "注意" :position 67 :line-number nil :display nil :face nil :read-only nil) (:text "レ" :position 73 :line-number nil :display ((height 0.5)) :face nil :read-only nil) (:text "小さな注" :position 76 :line-number nil :display ((height 0.5) (raise 1)) :face nil :read-only nil) (:text "補足説明" :position 87 :line-number nil :display ((height 0.5) (raise 0.5)) :face nil :read-only nil)) :linked-source t :linked-file "wagahai.txt" :source-links-back t))"#
-    ]];
-
-    assert_aozora_view_parity(elisp_form, expect);
-}
-
-#[test]
-fn bookmarking_redrawing_and_reopening_resumes_from_the_real_gzip_cache() {
-    let elisp_form = r####"
+    ]],
+        ),
+        (
+            "bookmarking_redrawing_and_reopening_resumes_from_the_real_gzip_cache",
+            r####"
 (let* ((root
         (file-name-as-directory
          (expand-file-name
@@ -219,17 +220,15 @@ fn bookmarking_redrawing_and_reopening_resumes_from_the_real_gzip_cache() {
                       (eq aozora-view-text-buffer source))))))))
     (neomacs-aozora-test-cleanup root))
   result)
-"####;
-    let expect = expect![[
+"####,
+            true,
+            expect![[
         r#"OK (:bookmark-message "Bookmarked!" :after-redraw (:content "\n第一章\nたびびと\n旅人は朝に出発した。\n\n\n\n第二章\n\n旅人は青空の下で手紙を読んだ。\n\n\n\n第三章\n\n旅人は夕暮れに町へ戻った。\n\n追記\n\n旅人は翌朝の予定を書き留めた。\n" :point 25 :line 8 :line-text "第二章" :bookmark 4 :cache-magic (:gzip-header-valid t :has-payload t)) :reopened (:mode aozora-view-mode :read-only t :content "\n第一章\nたびびと\n旅人は朝に出発した。\n\n\n\n第二章\n\n旅人は青空の下で手紙を読んだ。\n\n\n\n第三章\n\n旅人は夕暮れに町へ戻った。\n\n追記\n\n旅人は翌朝の予定を書き留めた。\n" :point 25 :line 8 :line-text "第二章" :same-rendering t :linked-source t))"#
-    ]];
-
-    assert_aozora_view_parity(elisp_form, expect);
-}
-
-#[test]
-fn redrawing_after_closing_a_cp932_source_buffer_recovers_the_japanese_book() {
-    let elisp_form = r####"
+    ]],
+        ),
+        (
+            "redrawing_after_closing_a_cp932_source_buffer_recovers_the_japanese_book",
+            r####"
 (let* ((root
         (file-name-as-directory
          (expand-file-name
@@ -329,17 +328,15 @@ fn redrawing_after_closing_a_cp932_source_buffer_recovers_the_japanese_book() {
                     (buffer-modified-p)))))))
     (neomacs-aozora-test-cleanup root))
   result)
-"####;
-    let expect = expect![[
+"####,
+            true,
+            expect![[
         r#"OK (:source (:content "吾輩は猫である\n名前はまだ無い。\n" :coding japanese-shift-jis-dos) :initial-view (:mode aozora-view-mode :read-only t :content "\n吾輩は猫である\n\n名前はまだ無い。\n" :decoded-correctly t :linked-source t) :redrawn-view (:mode aozora-view-mode :read-only t :content "\n吾輩は猫である\n\n名前はまだ無い。\n" :decoded-correctly t :source-buffer-live nil :source-file "classic.txt" :modified nil))"#
-    ]];
-
-    assert_aozora_view_parity(elisp_form, expect);
-}
-
-#[test]
-fn reading_a_book_with_decomposed_western_accents_reports_the_missing_normalizer() {
-    let elisp_form = r####"
+    ]],
+        ),
+        (
+            "reading_a_book_with_decomposed_western_accents_reports_the_missing_normalizer",
+            r####"
 (let* ((root
         (file-name-as-directory
          (expand-file-name
@@ -366,8 +363,9 @@ fn reading_a_book_with_decomposed_western_accents_reports_the_missing_normalizer
           (call-interactively #'aozora-view)))
     (neomacs-aozora-test-cleanup root))
   'unexpected-success)
-"####;
-    let expect = expect!["ERR (void-function ucs-normalize-NFC-region)"];
-
-    assert_aozora_view_signal_parity(elisp_form, expect);
+"####,
+            false,
+            expect!["ERR (void-function ucs-normalize-NFC-region)"],
+        ),
+    ]);
 }

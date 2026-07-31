@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_alsamixer_parity;
+use super::assert_alsamixer_batch;
 
 /// What the package is bound to a volume key for.  `alsamixer-up-volume' reads
 /// the current level out of amixer's output, adds the configured step and
@@ -9,9 +9,13 @@ use super::assert_alsamixer_parity;
 /// The mixer really moves: 40 up to 45, then back down to 40.  The text the
 /// user sees is the command's return value, and it deliberately never reaches
 /// *Messages*, because `alsamixer-set-volume' binds `message-log-max' to nil.
+
 #[test]
-fn raises_and_lowers_the_volume_through_amixer() {
-    let elisp_form = r##"
+fn workflows_public_surface_batch() {
+    assert_alsamixer_batch(&[
+        (
+            "raises_and_lowers_the_volume_through_amixer",
+            r##"
         (progn
           (als-test-install-amixer 40 "on")
           (list
@@ -26,24 +30,15 @@ fn raises_and_lowers_the_volume_through_amixer() {
            :after-down (list :reported (alsamixer-get-volume)
                              :mixer (als-test-state))
            :commands (als-test-commands)))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:defaults (:command "amixer" :control "Master" :step 5) :starting-volume 40 :up (:shown "Volume set to 45%" :logged-to-messages nil) :after-up (:reported 45 :mixer (45 "on")) :down (:shown "Volume set to 40%" :logged-to-messages nil) :after-down (:reported 40 :mixer (40 "on")) :commands ("amixer sget Master playback" "amixer sget Master playback" "amixer sset Master playback 45%" "amixer sget Master playback" "amixer sget Master playback" "amixer sset Master playback 40%" "amixer sget Master playback"))"#
-    ]];
-
-    assert_alsamixer_parity(elisp_form, expect);
-}
-
-/// Muting, and the limit of what this package can tell you.
-/// `alsamixer-toggle-mute' sends `set Master toggle' and returns amixer's
-/// output verbatim, so the mixer really switches off.  But the only thing the
-/// package ever parses is the bracketed percentage: after muting,
-/// `alsamixer-get-volume' still answers 40, because the `[off]' beside it is
-/// not read at all.  There is no command that reports mute state.
-#[test]
-fn toggles_mute_but_can_only_ever_report_the_volume() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "toggles_mute_but_can_only_ever_report_the_volume",
+            r##"
         (progn
           (als-test-install-amixer 40 "on")
           (list
@@ -55,25 +50,15 @@ fn toggles_mute_but_can_only_ever_report_the_volume() {
                           :mixer (als-test-state)
                           :volume-still-reported (alsamixer-get-volume))
            :commands (als-test-commands)))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:before (40 "on") :muted (:returned "Simple mixer control 'Master',0\n  Capabilities: pvolume pswitch pswitch-joined\n  Playback channels: Front Left - Front Right\n  Limits: Playback 0 - 65536\n  Mono:\n  Front Left: Playback 26214 [40%] [-20.00dB] [off]\n  Front Right: Playback 26214 [40%] [-20.00dB] [off]\n" :mixer (40 "off") :volume-still-reported 40) :unmuted (:returned "Simple mixer control 'Master',0\n  Capabilities: pvolume pswitch pswitch-joined\n  Playback channels: Front Left - Front Right\n  Limits: Playback 0 - 65536\n  Mono:\n  Front Left: Playback 26214 [40%] [-20.00dB] [on]\n  Front Right: Playback 26214 [40%] [-20.00dB] [on]\n" :mixer (40 "on") :volume-still-reported 40) :commands ("amixer set Master toggle" "amixer sget Master playback" "amixer set Master toggle" "amixer sget Master playback"))"#
-    ]];
-
-    assert_alsamixer_parity(elisp_form, expect);
-}
-
-/// The arithmetic around the edges.  `alsamixer-set-volume' clamps to 0 and
-/// 100 before building the command, so amixer is never asked for a level it
-/// cannot take, and the message reports the clamped figure rather than what
-/// was asked for.  A prefix argument overrides the configured step in both
-/// directions -- and `alsamixer-down-volume' is implemented by calling
-/// `alsamixer-up-volume' with a negative step, which is why a downward prefix
-/// still reads the level first.
-#[test]
-fn clamps_out_of_range_percentages_and_honours_a_prefix_step() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "clamps_out_of_range_percentages_and_honours_a_prefix_step",
+            r##"
         (progn
           (als-test-install-amixer 50 "on")
           (list
@@ -87,25 +72,15 @@ fn clamps_out_of_range_percentages_and_honours_a_prefix_step() {
            :final (list :reported (alsamixer-get-volume)
                         :mixer (als-test-state))
            :commands (als-test-commands)))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:below-zero (:shown "Volume set to 0%" :logged-to-messages nil) :after-below (0 "on") :above-hundred (:shown "Volume set to 100%" :logged-to-messages nil) :after-above (100 "on") :prefix-up (:shown "Volume set to 70%" :logged-to-messages nil) :prefix-down (:shown "Volume set to 40%" :logged-to-messages nil) :final (:reported 40 :mixer (40 "on")) :commands ("amixer sset Master playback 0%" "amixer sset Master playback 100%" "amixer sset Master playback 50%" "amixer sget Master playback" "amixer sset Master playback 70%" "amixer sget Master playback" "amixer sset Master playback 40%" "amixer sget Master playback"))"#
-    ]];
-
-    assert_alsamixer_parity(elisp_form, expect);
-}
-
-/// The customizations, which are the whole configuration surface.  The control
-/// name is substituted for `%C' wherever it appears, the card and device are
-/// prepended as `-c' and `-D' options, and the step size changes how far one
-/// press moves.  One quirk is pinned rather than papered over:
-/// `alsamixer-card' is declared `:type 'string' but formatted with `%d', so
-/// the documented type is the one value that cannot work -- a string card
-/// signals before any command is run.
-#[test]
-fn control_card_device_and_step_customizations_change_the_command_line() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "control_card_device_and_step_customizations_change_the_command_line",
+            r##"
         (progn
           (als-test-install-amixer 40 "on")
           (list
@@ -126,25 +101,15 @@ fn control_card_device_and_step_customizations_change_the_command_line() {
            (let ((alsamixer-card "1"))
              (als-test-attempt (lambda () (alsamixer-command "sget %C playback"))))
            :declared-card-type (get 'alsamixer-card 'custom-type)))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:stock "amixer sget Master playback" :control-only "amixer sget PCM playback" :card-and-device "amixer -c 1 -D hw:0 sget Master playback" :all (:built "amixer -c 1 -D hw:0 sget PCM playback" :up (:shown "Volume set to 50%" :logged-to-messages nil) :commands ("amixer -c 1 -D hw:0 sget PCM playback" "amixer -c 1 -D hw:0 sset PCM playback 50%")) :string-card-signals (:signal error :message "Format specifier doesn’t match argument type") :declared-card-type string)"#
-    ]];
-
-    assert_alsamixer_parity(elisp_form, expect);
-}
-
-/// Every way reading the volume can fail, and the asymmetry that goes with it.
-/// `alsamixer-get-volume' is the only function that looks at amixer's output,
-/// so it is the only one that can complain: a non-zero exit, output with no
-/// bracketed percentage, and no amixer on PATH at all each signal with the
-/// output quoted back.  Setting the volume and toggling mute discard the
-/// output entirely, so they report success in exactly the same situations --
-/// including when the binary does not exist.
-#[test]
-fn signals_when_amixer_cannot_be_read_but_never_when_setting() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "signals_when_amixer_cannot_be_read_but_never_when_setting",
+            r##"
         (progn
           (als-test-install-amixer 40 "on")
           (list
@@ -169,11 +134,11 @@ fn signals_when_amixer_cannot_be_read_but_never_when_setting() {
                    :set (als-test-attempt (lambda () (alsamixer-set-volume 55)))
                    :toggle (als-test-attempt (lambda () (alsamixer-toggle-mute)))
                    :commands (als-test-commands)))))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:non-zero-exit (:get (:signal error :message "Unexpected output from amixer: amixer: Unable to find simple control 'Master',0\n") :up (:signal error :message "Unexpected output from amixer: amixer: Unable to find simple control 'Master',0\n") :set (:returned "Volume set to 55%")) :no-percentage-in-output (:signal error :message "Unexpected output from amixer: Simple mixer control 'Master',0\n  Capabilities: pvolume\n") :binary-missing (:found nil :get (:signal error :message "Unexpected output from amixer: [SHELL]: line 1: amixer: command not found\n") :set (:returned "Volume set to 55%") :toggle (:returned "[SHELL]: line 1: amixer: command not found\n") :commands nil))"#
-    ]];
-
-    assert_alsamixer_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

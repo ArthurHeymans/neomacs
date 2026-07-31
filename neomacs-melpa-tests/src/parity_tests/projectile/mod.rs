@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{CachedMelpaOracle, PROJECTILE_MELPA_PIN};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod async_process;
 mod core;
 mod filesystem;
@@ -40,4 +42,15 @@ pub(crate) fn assert_projectile_signal_parity(form: &str, expected: Expect) {
         .run_signal(&name, form)
         .unwrap_or_else(|error| panic!("Projectile signal parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+/// Multi-probe batch for `assert_projectile_parity` cases (2a).
+pub(crate) fn assert_projectile_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        projectile_oracle(),
+        &name,
+        "projectile_parity",
+        cases,
+    );
 }

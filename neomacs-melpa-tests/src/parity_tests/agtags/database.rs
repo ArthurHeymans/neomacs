@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_agtags_parity;
+use super::assert_agtags_batch;
 
 /// A user opens a C project, binds agtags to their own prefix key, and builds
 /// the tag database over a stale one left by an earlier checkout.  In an
@@ -10,9 +10,13 @@ use super::assert_agtags_parity;
 /// three files GNU GLOBAL owns — the neighbouring `GSYMS' survives — runs
 /// `gtags -i' in the directory the user chose, and drops the tag history and
 /// the completion cache so nothing from the old database can be offered.
+
 #[test]
-fn agtags_update_tags_replaces_a_stale_database_and_activates_the_backend() {
-    let elisp_form = r####"
+fn database_public_surface_batch() {
+    assert_agtags_batch(&[
+        (
+            "agtags_update_tags_replaces_a_stale_database_and_activates_the_backend",
+            r####"
 (let* ((start (neomacs-agtags-test-start "agtags-database-workflow"))
        (root (car start))
        (tools (cdr start))
@@ -85,21 +89,15 @@ fn agtags_update_tags_replaces_a_stale_database_and_activates_the_backend() {
                       (neomacs-agtags-test-trace tools)))))
     (neomacs-agtags-test-cleanup root))
   result)
-"####;
-
-    let expect = expect![[
+"####,
+            true,
+            expect![[
         r#"OK (("[ORACLE-SANDBOX]/agtags-database-workflow/" nil (("GPATH" nil nil) ("GTAGS" nil nil) ("GRTAGS" nil nil))) ("[ORACLE-SANDBOX]/agtags-database-workflow/" agtags (("GPATH" t t) ("GTAGS" t t) ("GRTAGS" t t))) "Tags create successed: [ORACLE-SANDBOX]/agtags-database-workflow/\n" (("GPATH" t nil) ("GTAGS" t nil) ("GRTAGS" t nil)) t (nil nil) (agtags t t t) (("q" agtags-switch-dwim) ("b" agtags-update-tags) ("f" agtags-open-file) ("F" agtags-find-file) ("t" agtags-find-tag) ("r" agtags-find-rtag) ("p" agtags-find-with-string) ("g" agtags-find-with-pattern)) "gtags cwd=[ORACLE-SANDBOX]/agtags-database-workflow <-i>\n")"#
-    ]];
-
-    assert_agtags_parity(elisp_form, expect);
-}
-
-/// The same user on a machine where GNU GLOBAL was never installed.  agtags
-/// reports the failure, creates nothing, and every feature that depends on a
-/// database stays switched off — a search runs no process and opens no buffer.
-#[test]
-fn agtags_reports_failure_and_stays_inert_when_gnu_global_is_not_installed() {
-    let elisp_form = r####"
+    ]],
+        ),
+        (
+            "agtags_reports_failure_and_stays_inert_when_gnu_global_is_not_installed",
+            r####"
 (let* ((root (file-name-as-directory
               (expand-file-name "agtags-missing-global"
                                 (getenv "NEOMACS_TEST_SANDBOX_ROOT"))))
@@ -143,11 +141,11 @@ fn agtags_reports_failure_and_stays_inert_when_gnu_global_is_not_installed() {
                                   '("*agtags-grep*" "*agtags-path*"))))))))
     (neomacs-agtags-test-cleanup root))
   result)
-"####;
-
-    let expect = expect![[
+"####,
+            true,
+            expect![[
         r#"OK ((nil nil) "Tags create failed: [ORACLE-SANDBOX]/agtags-missing-global/\n" ("." ".." ".git" "docs" "include" "src") ("[ORACLE-SANDBOX]/agtags-missing-global/" nil nil "parser_init" nil nil) (nil nil))"#
-    ]];
-
-    assert_agtags_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

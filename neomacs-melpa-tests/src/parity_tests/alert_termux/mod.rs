@@ -6,6 +6,8 @@ use crate::{
 };
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod registry;
 mod workflow;
 
@@ -51,4 +53,30 @@ pub(crate) fn assert_alert_termux_parity(elisp_form: &str, expected: Expect) {
 
 pub(crate) fn assert_alert_termux_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_alert_termux_source_parity("alert-termux-autoloads.el", elisp_form, expected);
+}
+
+
+
+
+
+/// Multi-probe batch for `assert_alert_termux_autoload_parity` cases (2a).
+pub(crate) fn assert_alert_termux_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        alert_termux_oracle("alert-termux-autoloads.el"),
+        &name,
+        "alert_termux_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_alert_termux_parity` cases (2a).
+pub(crate) fn assert_alert_termux_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        alert_termux_oracle("alert-termux.el"),
+        &name,
+        "alert_termux_parity",
+        cases,
+    );
 }

@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AUTO_HIGHLIGHT_SYMBOL_MELPA_PIN, CachedMelpaOracle, DASH_MELPA_PIN, HT_MELPA_PIN};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod editing;
 mod highlighting;
 mod lifecycle;
@@ -116,5 +118,31 @@ pub(crate) fn assert_auto_highlight_symbol_autoload_parity(elisp_form: &str, exp
         "auto-highlight-symbol-autoloads.el",
         elisp_form,
         expected,
+    );
+}
+
+
+
+
+
+/// Multi-probe batch for `assert_auto_highlight_symbol_autoload_parity` cases (2a).
+pub(crate) fn assert_auto_highlight_symbol_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_highlight_symbol_oracle("auto-highlight-symbol-autoloads.el"),
+        &name,
+        "auto_highlight_symbol_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_auto_highlight_symbol_parity` cases (2a).
+pub(crate) fn assert_auto_highlight_symbol_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_highlight_symbol_oracle("auto-highlight-symbol.el"),
+        &name,
+        "auto_highlight_symbol_parity",
+        cases,
     );
 }

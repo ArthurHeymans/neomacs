@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_sage_parity;
+use super::assert_auto_complete_sage_batch;
 
 #[test]
-fn auto_complete_sage_cache_clear_commands_mutate_only_the_live_process_buffer() {
-    let elisp_form = r##"(let ((process-buffer
+fn cache_docs_public_surface_batch() {
+    assert_auto_complete_sage_batch(&[
+        (
+            "auto_complete_sage_cache_clear_commands_mutate_only_the_live_process_buffer",
+            r##"(let ((process-buffer
                                 (generate-new-buffer
                                  " *acsage-cache-process*"))
                                (other-buffer
@@ -46,17 +49,15 @@ fn auto_complete_sage_cache_clear_commands_mutate_only_the_live_process_buffer()
                                      (ac-sage--sage-commands-doc-clear-cache)
                                      (ac-sage--doc-clear-cache)))))
                              (kill-buffer process-buffer)
-                             (kill-buffer other-buffer)))"##;
-    let expect = expect![[
+                             (kill-buffer other-buffer)))"##,
+            true,
+            expect![[
         r#"OK ((nil nil) ((("keep" . "other command")) (("keep.method" . "other method"))) (nil nil))"#
-    ]];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_cache_macro_distinguishes_hits_misses_length_and_top_level_state() {
-    let elisp_form = r##"(let ((process-buffer
+    ]],
+        ),
+        (
+            "auto_complete_sage_cache_macro_distinguishes_hits_misses_length_and_top_level_state",
+            r##"(let ((process-buffer
                                 (generate-new-buffer
                                  " *acsage-cache-matrix*"))
                                calls
@@ -117,17 +118,15 @@ fn auto_complete_sage_cache_macro_distinguishes_hits_misses_length_and_top_level
                                          ac-sage--repl-methods-cached)
                                         (nreverse calls)
                                         ac-sage--repl-methods-cached)))))
-                             (kill-buffer process-buffer)))"##;
-    let expect = expect![[
+                             (kill-buffer process-buffer)))"##,
+            true,
+            expect![[
         r#"OK (("cached doc" "doc:new.name:new" "doc:new.name:new" "doc:abcd:nil") nil (("new.name" "new") ("abcd" nil)) (("abcd" . "doc:abcd:nil") ("new.name" . "doc:new.name:new") ("cached.name" . "cached doc")))"#
-    ]];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_command_documentation_obeys_quick_help_and_short_name_policy() {
-    let elisp_form = r##"(let ((process-buffer
+    ]],
+        ),
+        (
+            "auto_complete_sage_command_documentation_obeys_quick_help_and_short_name_policy",
+            r##"(let ((process-buffer
                                 (generate-new-buffer
                                  " *acsage-command-doc*"))
                                calls)
@@ -161,17 +160,15 @@ fn auto_complete_sage_command_documentation_obeys_quick_help_and_short_name_poli
                                         (ac-sage-doc "factor")
                                         (nreverse calls)
                                         ac-sage--sage-commands-doc-cached)))))
-                             (kill-buffer process-buffer)))"##;
-    let expect = expect![[
+                             (kill-buffer process-buffer)))"##,
+            true,
+            expect![[
         r#"OK ("DOC:plot" "DOC:factor" "DOC:factor" (("plot" nil) ("factor" nil)) (("factor" . "DOC:factor") ("plot" . "DOC:plot")))"#
-    ]];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_repl_base_name_and_name_cover_variables_other_interfaces_and_sage_commands() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_sage_repl_base_name_and_name_cover_variables_other_interfaces_and_sage_commands",
+            r##"(mapcar
                            (lambda (fixture)
                              (let ((sage-shell-cpl:current-state
                                     fixture))
@@ -190,17 +187,15 @@ fn auto_complete_sage_repl_base_name_and_name_cover_variables_other_interfaces_a
                               (types . ("interface")))
                              ((interface . "magma")
                               (var-base-name . "group")
-                              (types . ("attributes")))))"##;
-    let expect = expect![[
+                              (types . ("attributes")))))"##,
+            true,
+            expect![[
         r#"OK ((((interface . "sage") (var-base-name . "matrix") (types "attributes")) ("matrix" . "matrix.rank")) (((interface . "gap") (var-base-name) (types "interface")) ("gap" . "gap.rank")) (((interface . "sage") (var-base-name) (types "interface")) (nil . "rank")) (((interface . "magma") (var-base-name . "group") (types "attributes")) ("group" . "group.rank")))"#
-    ]];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_method_documentation_qualifies_names_and_uses_process_buffer_cache() {
-    let elisp_form = r##"(let ((process-buffer
+    ]],
+        ),
+        (
+            "auto_complete_sage_method_documentation_qualifies_names_and_uses_process_buffer_cache",
+            r##"(let ((process-buffer
                                 (generate-new-buffer
                                  " *acsage-method-doc*"))
                                calls)
@@ -237,17 +232,15 @@ fn auto_complete_sage_method_documentation_qualifies_names_and_uses_process_buff
                                        "rank")
                                       (nreverse calls)
                                       ac-sage--repl-methods-cached))))
-                             (kill-buffer process-buffer)))"##;
-    let expect = expect![[
+                             (kill-buffer process-buffer)))"##,
+            true,
+            expect![[
         r#"OK ("matrix=>matrix.rank" "matrix=>matrix.rank" (("matrix.rank" "matrix")) (("matrix.rank" . "matrix=>matrix.rank")))"#
-    ]];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_document_transport_builds_exact_python_command_and_trims_output() {
-    let elisp_form = r##"(let ((process-buffer
+    ]],
+        ),
+        (
+            "auto_complete_sage_document_transport_builds_exact_python_command_and_trims_output",
+            r##"(let ((process-buffer
                                 (generate-new-buffer
                                  " *acsage-doc-transport*"))
                                responses
@@ -286,17 +279,15 @@ fn auto_complete_sage_document_transport_builds_exact_python_command_and_trims_o
                                        "factor"
                                        nil)
                                       (nreverse commands)))))
-                             (kill-buffer process-buffer)))"##;
-    let expect = expect![[
+                             (kill-buffer process-buffer)))"##,
+            true,
+            expect![[
         r#"OK ("Rank documentation" nil ("sage_mod.print_short_doc_and_def('matrix.rank', base_name='matrix')" "sage_mod.print_short_doc_and_def('factor')"))"#
-    ]];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_document_transport_short_circuits_each_unfinished_protocol_phase() {
-    let elisp_form = r##"(let ((process-buffer
+    ]],
+        ),
+        (
+            "auto_complete_sage_document_transport_short_circuits_each_unfinished_protocol_phase",
+            r##"(let ((process-buffer
                                 (generate-new-buffer
                                  " *acsage-doc-gates*"))
                                output-finished
@@ -343,15 +334,13 @@ fn auto_complete_sage_document_transport_short_circuits_each_unfinished_protocol
                                          (nreverse calls))
                                         results)
                                        (nreverse results)))))
-                             (kill-buffer process-buffer)))"##;
-    let expect = expect!["OK ((nil (:output)) (nil (:output :redirect)))"];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_nil_document_results_are_recorded_but_retried_on_the_next_lookup() {
-    let elisp_form = r##"(let ((process-buffer
+                             (kill-buffer process-buffer)))"##,
+            true,
+            expect!["OK ((nil (:output)) (nil (:output :redirect)))"],
+        ),
+        (
+            "auto_complete_sage_nil_document_results_are_recorded_but_retried_on_the_next_lookup",
+            r##"(let ((process-buffer
                                 (generate-new-buffer
                                  " *acsage-nil-doc-cache*"))
                                calls)
@@ -379,9 +368,9 @@ fn auto_complete_sage_nil_document_results_are_recorded_but_retried_on_the_next_
                                       (ac-sage-doc "factor")
                                       (nreverse calls)
                                       ac-sage--sage-commands-doc-cached))))
-                             (kill-buffer process-buffer)))"##;
-    let expect =
-        expect![[r#"OK (nil nil (("factor" nil) ("factor" nil)) (("factor") ("factor")))"#]];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
+                             (kill-buffer process-buffer)))"##,
+            true,
+            expect![[r#"OK (nil nil (("factor" nil) ("factor" nil)) (("factor") ("factor")))"#]],
+        ),
+    ]);
 }

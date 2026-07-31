@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_minor_mode_parity;
+use super::assert_auto_minor_mode_batch;
 
 #[test]
-fn auto_minor_mode_set_auto_mode_advice_is_installed_exactly_once() {
-    let elisp_form = r##"(let ((count 0)
+fn advice_public_surface_batch() {
+    assert_auto_minor_mode_batch(&[
+        (
+            "auto_minor_mode_set_auto_mode_advice_is_installed_exactly_once",
+            r##"(let ((count 0)
                                 members)
                            (advice-mapc
                             (lambda (advice properties)
@@ -26,15 +29,13 @@ fn auto_minor_mode_set_auto_mode_advice_is_installed_exactly_once() {
                               #'set-auto-mode)
                              t)
                             count
-                            members))"##;
-    let expect = expect!["OK (t 1 ((auto-minor-mode-set nil)))"];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_real_set_auto_mode_selects_major_then_filename_minor_modes() {
-    let elisp_form = r##"(with-temp-buffer
+                            members))"##,
+            true,
+            expect!["OK (t 1 ((auto-minor-mode-set nil)))"],
+        ),
+        (
+            "auto_minor_mode_real_set_auto_mode_selects_major_then_filename_minor_modes",
+            r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (insert "(message \"hello\")\n")
                            (setq
@@ -53,17 +54,15 @@ fn auto_minor_mode_real_set_auto_mode_selects_major_then_filename_minor_modes() 
                             auto-minor-mode-test-alpha-mode
                             auto-minor-mode-test-beta-mode
                             (nreverse
-                             auto-minor-mode-test-events)))"##;
-    let expect = expect![
+                             auto-minor-mode-test-events)))"##,
+            true,
+            expect![
         "OK (emacs-lisp-mode t t ((:alpha 1 t 19 emacs-lisp-mode) (:beta 1 t 19 emacs-lisp-mode)))"
-    ];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_real_set_auto_mode_reactivation_obeys_keep_flag() {
-    let elisp_form = r##"(with-temp-buffer
+    ],
+        ),
+        (
+            "auto_minor_mode_real_set_auto_mode_reactivation_obeys_keep_flag",
+            r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (setq
                             buffer-file-name
@@ -94,17 +93,15 @@ fn auto_minor_mode_real_set_auto_mode_reactivation_obeys_keep_flag() {
                                   (length
                                    auto-minor-mode-test-events)
                                   (nreverse
-                                   auto-minor-mode-test-events))))))"##;
-    let expect = expect![
+                                   auto-minor-mode-test-events))))))"##,
+            true,
+            expect![
         "OK (1 2 2 3 ((:alpha 1 t 1 emacs-lisp-mode) (:alpha 1 t 1 emacs-lisp-mode) (:alpha 1 t 1 emacs-lisp-mode)))"
-    ];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_same_mode_matching_filename_and_magic_runs_twice_unless_kept() {
-    let elisp_form = r##"(with-temp-buffer
+    ],
+        ),
+        (
+            "auto_minor_mode_same_mode_matching_filename_and_magic_runs_twice_unless_kept",
+            r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (insert "MAGIC service\n")
                            (setq
@@ -128,16 +125,13 @@ fn auto_minor_mode_same_mode_matching_filename_and_magic_runs_twice_unless_kept(
                               ordinary
                               (nreverse
                                auto-minor-mode-test-events)
-                              auto-minor-mode-test-alpha-mode)))"##;
-    let expect =
-        expect!["OK (((:alpha 1 t 15 fundamental-mode) (:alpha 1 t 1 fundamental-mode)) nil t)"];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_filename_rules_run_before_magic_rules() {
-    let elisp_form = r##"(with-temp-buffer
+                              auto-minor-mode-test-alpha-mode)))"##,
+            true,
+            expect!["OK (((:alpha 1 t 15 fundamental-mode) (:alpha 1 t 1 fundamental-mode)) nil t)"],
+        ),
+        (
+            "auto_minor_mode_filename_rules_run_before_magic_rules",
+            r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (insert "HEADER\n")
                            (setq
@@ -159,16 +153,13 @@ fn auto_minor_mode_filename_rules_run_before_magic_rules() {
                             auto-minor-mode-test-alpha-mode
                             auto-minor-mode-test-beta-mode
                             (nreverse
-                             auto-minor-mode-test-events)))"##;
-    let expect =
-        expect!["OK (t t ((:alpha 1 t 8 fundamental-mode) (:beta 1 t 1 fundamental-mode)))"];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_advice_can_be_removed_and_restored_without_leaking_state() {
-    let elisp_form = r##"(with-temp-buffer
+                             auto-minor-mode-test-events)))"##,
+            true,
+            expect!["OK (t t ((:alpha 1 t 8 fundamental-mode) (:beta 1 t 1 fundamental-mode)))"],
+        ),
+        (
+            "auto_minor_mode_advice_can_be_removed_and_restored_without_leaking_state",
+            r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (setq
                             buffer-file-name
@@ -211,15 +202,13 @@ fn auto_minor_mode_advice_can_be_removed_and_restored_without_leaking_state() {
                                (advice-add
                                 #'set-auto-mode
                                 :after
-                                #'auto-minor-mode-set))))"##;
-    let expect = expect!["OK ((nil nil) t ((:alpha 1 t 1 fundamental-mode)) t)"];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_minor_mode_reloading_source_keeps_single_advice_and_deferred_integration() {
-    let elisp_form = r##"(let ((count-advice
+                                #'auto-minor-mode-set))))"##,
+            true,
+            expect!["OK ((nil nil) t ((:alpha 1 t 1 fundamental-mode)) t)"],
+        ),
+        (
+            "auto_minor_mode_reloading_source_keeps_single_advice_and_deferred_integration",
+            r##"(let ((count-advice
                                 (lambda ()
                                   (let ((count 0))
                                     (advice-mapc
@@ -249,8 +238,9 @@ fn auto_minor_mode_reloading_source_keeps_single_advice_and_deferred_integration
                                (assq
                                 'use-package
                                 after-load-alist)
-                               t))))"##;
-    let expect = expect!["OK (1 1 t t)"];
-
-    assert_auto_minor_mode_parity(elisp_form, expect);
+                               t))))"##,
+            true,
+            expect!["OK (1 1 t t)"],
+        ),
+    ]);
 }

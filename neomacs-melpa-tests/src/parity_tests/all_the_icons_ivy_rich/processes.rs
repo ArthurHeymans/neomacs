@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_all_the_icons_ivy_rich_parity;
+use super::assert_all_the_icons_ivy_rich_batch;
 
 #[test]
-fn live_subprocess_annotations_report_status_buffer_thread_command_and_identifier_shapes() {
-    let elisp_form = r##"(let* ((buffer
+fn processes_public_surface_batch() {
+    assert_all_the_icons_ivy_rich_batch(&[
+        (
+            "live_subprocess_annotations_report_status_buffer_thread_command_and_identifier_shapes",
+            r##"(let* ((buffer
                      (generate-new-buffer
                       " *all-the-icons-ivy-rich-process*"))
                     (process
@@ -58,17 +61,15 @@ fn live_subprocess_annotations_report_status_buffer_thread_command_and_identifie
                    (delete-process process))
                  (when (buffer-live-p buffer)
                    (kill-buffer buffer)))
-               result)"##;
-    let expect = expect![[
+               result)"##,
+            true,
+            expect![[
         r#"OK (t ("run" all-the-icons-ivy-rich-process-status-face) " *all-the-icons-ivy-rich-process*" t #("Main        " 0 12 (face all-the-icons-ivy-rich-process-thread-face)) "sh -c sleep 30")"#
-    ]];
-
-    assert_all_the_icons_ivy_rich_parity(elisp_form, expect);
-}
-
-#[test]
-fn pipe_and_missing_process_annotations_cover_non_child_and_absent_candidates() {
-    let elisp_form = r##"(let* ((buffer
+    ]],
+        ),
+        (
+            "pipe_and_missing_process_annotations_cover_non_child_and_absent_candidates",
+            r##"(let* ((buffer
                      (generate-new-buffer
                       " *all-the-icons-ivy-rich-pipe*"))
                     (process
@@ -106,10 +107,11 @@ fn pipe_and_missing_process_annotations_cover_non_child_and_absent_candidates() 
                    (delete-process process))
                  (when (buffer-live-p buffer)
                    (kill-buffer buffer)))
-               result)"##;
-    let expect = expect![[
+               result)"##,
+            true,
+            expect![[
         r#"OK (("--" #("open" 0 4 (face all-the-icons-ivy-rich-process-status-face)) " *all-the-icons-ivy-rich-pipe*" "--" "(serial port ?)") (nil nil nil nil nil))"#
-    ]];
-
-    assert_all_the_icons_ivy_rich_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

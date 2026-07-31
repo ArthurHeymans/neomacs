@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_agent_recall_parity;
+use super::assert_agent_recall_batch;
 
 #[test]
-fn agent_recall_reindexes_then_searches_real_transcript_files_with_builtin_grep() {
-    let elisp_form = r####"(let* ((root
+fn search_public_surface_batch() {
+    assert_agent_recall_batch(&[
+        (
+            "agent_recall_reindexes_then_searches_real_transcript_files_with_builtin_grep",
+            r####"(let* ((root
                                  (expand-file-name
                                   "search"
                                   (getenv
@@ -124,10 +127,11 @@ fn agent_recall_reindexes_then_searches_real_transcript_files_with_builtin_grep(
                                (kill-buffer buffer))
                              (delete-directory
                               root
-                              t)))"####;
-    let expect = expect![[
+                              t)))"####,
+            true,
+            expect![[
         r#"OK (2 grep-mode t exit 0 ("[ROOT]/alpha/.agent-shell/transcripts/alpha-session.md:2:> Trace needle-token through the parser." "[ROOT]/beta/.agent-shell/transcripts/beta-session.org:2:Document the needle-token deployment fix."))"#
-    ]];
-
-    assert_agent_recall_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_aidermacs_parity;
+use super::assert_aidermacs_batch;
 
 #[test]
-fn aidermacs_backend_dispatch_preserves_environment_isolation_and_routes_commands() {
-    let elisp_form = r##"(let (calls)
+fn backends_public_surface_batch() {
+    assert_aidermacs_batch(&[
+        (
+            "aidermacs_backend_dispatch_preserves_environment_isolation_and_routes_commands",
+            r##"(let (calls)
                       (cl-letf (((symbol-function 'aidermacs-run-comint)
                                 (lambda (&rest args)
                                   (push (cons 'comint args) calls)))
@@ -31,16 +34,15 @@ fn aidermacs_backend_dispatch_preserves_environment_isolation_and_routes_command
                         (let ((aidermacs-backend 'vterm))
                           (aidermacs-run-backend "aider-ce" nil "*v*")
                           (aidermacs--send-command-backend "*v*" "/ask hi" t))
-                        (nreverse calls)))"##;
-    let expect = expect![[
+                        (nreverse calls)))"##,
+            true,
+            expect![[
         r#"OK ((comint "aider" ("--model" "x") "*a*") "scoped" (send-comint "*a*" "/ls") (redirect "*a*" "/models") (vterm "aider-ce" nil "*v*") (send-vterm "*v*" "/ask hi"))"#
-    ]];
-    assert_aidermacs_parity(elisp_form, expect);
-}
-
-#[test]
-fn aidermacs_vterm_text_filter_and_theme_argument_builder_cover_color_modes() {
-    let elisp_form = r##"(let ((aidermacs-vterm-theme-foreground-colors-plist
+    ]],
+        ),
+        (
+            "aidermacs_vterm_text_filter_and_theme_argument_builder_cover_color_modes",
+            r##"(let ((aidermacs-vterm-theme-foreground-colors-plist
                            '("--user-input-color" "#112233"
                              "--tool-error-color" "#AABBCC"))
                           (aidermacs-vterm-theme-background-colors-plist
@@ -65,16 +67,15 @@ fn aidermacs_vterm_text_filter_and_theme_argument_builder_cover_color_modes() {
                        (condition-case err
                            (aidermacs--vterm-convert-color-arg
                             :foreground 42)
-                         (error (error-message-string err)))))"##;
-    let expect = expect![[
+                         (error (error-message-string err)))))"##,
+            true,
+            expect![[
         r#"OK ("one\ntwo\n\nthree\nfour" ("--user-input-color" "\\#112233" "--tool-error-color" "\\#AABBCC" "--completion-menu-bg-color" "\\#010203") ("--dark-mode") ("--light-mode") "Invalid face or colour value: 42")"#
-    ]];
-    assert_aidermacs_parity(elisp_form, expect);
-}
-
-#[test]
-fn aidermacs_comint_major_mode_guessing_handles_fences_aliases_files_and_fallbacks() {
-    let elisp_form = r##"(let ((auto-mode-alist
+    ]],
+        ),
+        (
+            "aidermacs_comint_major_mode_guessing_handles_fences_aliases_files_and_fallbacks",
+            r##"(let ((auto-mode-alist
                            '(("\\.py\\'" . python-mode)
                              ("\\.el\\'" . emacs-lisp-mode))))
                       (mapcar
@@ -87,15 +88,13 @@ fn aidermacs_comint_major_mode_guessing_handles_fences_aliases_files_and_fallbac
                          "```bash\necho ok\n"
                          "File: src/tool.py\n```\nprint(1)\n"
                          "lib/setup.el\n```\n(message \"x\")\n"
-                         "```\nplain text\n")))"##;
-    let expect =
-        expect!["OK (emacs-lisp-mode sh-mode python-mode emacs-lisp-mode fundamental-mode)"];
-    assert_aidermacs_parity(elisp_form, expect);
-}
-
-#[test]
-fn aidermacs_comint_output_filter_accumulates_chunks_stores_history_and_runs_callback() {
-    let elisp_form = r##"(with-temp-buffer
+                         "```\nplain text\n")))"##,
+            true,
+            expect!["OK (emacs-lisp-mode sh-mode python-mode emacs-lisp-mode fundamental-mode)"],
+        ),
+        (
+            "aidermacs_comint_output_filter_accumulates_chunks_stores_history_and_runs_callback",
+            r##"(with-temp-buffer
                       (rename-buffer (aidermacs-get-buffer-name) t)
                       (aidermacs-comint-mode)
                       (let ((aidermacs-enable-notifications nil)
@@ -125,16 +124,15 @@ fn aidermacs_comint_output_filter_accumulates_chunks_stores_history_and_runs_cal
                            callback-output
                            aidermacs--tracked-files
                            (mapcar #'cdr aidermacs--output-history)
-                           aidermacs--current-callback))))"##;
-    let expect = expect![[
+                           aidermacs--current-callback))))"##,
+            true,
+            expect![[
         r#"OK ((nil "Added ./src/main.el" nil) t "Added ./src/main.el to the chat.\nfixture> " "Added ./src/main.el to the chat.\nfixture> " nil ("Added ./src/main.el to the chat.\nfixture> ") nil)"#
-    ]];
-    assert_aidermacs_parity(elisp_form, expect);
-}
-
-#[test]
-fn aidermacs_real_comint_process_runs_a_multistep_fake_aider_session() {
-    let elisp_form = r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    ]],
+        ),
+        (
+            "aidermacs_real_comint_process_runs_a_multistep_fake_aider_session",
+            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                           (default-directory
                            (file-name-as-directory sandbox))
                           (program
@@ -193,9 +191,11 @@ fn aidermacs_real_comint_process_runs_a_multistep_fake_aider_session() {
                         (when-let ((buffer (get-buffer buffer-name)))
                           (when-let ((process (get-buffer-process buffer)))
                             (delete-process process))
-                          (kill-buffer buffer))))"##;
-    let expect = expect![[
+                          (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK ((t aidermacs-comint-mode (run open listen connect stop)) t "explain src/main.el" 28 (0 nil))"#
-    ]];
-    assert_aidermacs_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

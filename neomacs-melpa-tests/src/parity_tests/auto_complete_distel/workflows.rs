@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_distel_parity;
+use super::assert_auto_complete_distel_batch;
 
 #[test]
-fn auto_complete_distel_real_module_menu_navigates_and_completes_erlang_module() {
-    let elisp_form = r##"(save-window-excursion
+fn workflows_public_surface_batch() {
+    assert_auto_complete_distel_batch(&[
+        (
+            "auto_complete_distel_real_module_menu_navigates_and_completes_erlang_module",
+            r##"(save-window-excursion
           (with-temp-buffer
             (switch-to-buffer
              (current-buffer))
@@ -71,17 +74,15 @@ fn auto_complete_distel_real_module_menu_navigates_and_completes_erlang_module()
                            ac-menu
                            ac-completing
                            ac-prefix))))
-                  (auto-complete-mode -1))))))"##;
-    let expect = expect![[
+                  (auto-complete-mode -1))))))"##,
+            true,
+            expect![[
         r#"OK (("li" (("lists" "m") ("lib" "m") ("linux" "m")) t "lists") "lib" "handle(Items) -> lib" ((:module "li" " *temp*") (:sleep 0.1)) nil nil nil)"#
-    ]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_distel_real_function_menu_prefixes_distel_results_with_module() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_distel_real_function_menu_prefixes_distel_results_with_module",
+            r##"(save-window-excursion
           (with-temp-buffer
             (switch-to-buffer
              (current-buffer))
@@ -142,17 +143,15 @@ fn auto_complete_distel_real_function_menu_prefixes_distel_results_with_module()
                            (nreverse events)
                            ac-menu
                            ac-completing))))
-                  (auto-complete-mode -1))))))"##;
-    let expect = expect![[
+                  (auto-complete-mode -1))))))"##,
+            true,
+            expect![[
         r#"OK (("lists:ma" ("lists:map" "lists:mapfoldl" "lists:mapfoldr") "lists:map") "lists:mapfoldr" "Result = lists:mapfoldr" ((:function "lists" "ma") (:sleep 0.1)) nil nil)"#
-    ]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_distel_incremental_erlang_function_typing_requeries_and_narrows_menu() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_distel_incremental_erlang_function_typing_requeries_and_narrows_menu",
+            r##"(save-window-excursion
           (with-temp-buffer
             (switch-to-buffer
              (current-buffer))
@@ -231,17 +230,15 @@ fn auto_complete_distel_incremental_erlang_function_typing_requeries_and_narrows
                               (line-beginning-position)
                               (line-end-position))
                              (nreverse events))))))
-                  (auto-complete-mode -1))))))"##;
-    let expect = expect![[
+                  (auto-complete-mode -1))))))"##,
+            true,
+            expect![[
         r#"OK (("lists:m" ("lists:map" "lists:mapfoldl" "lists:mapfoldr" "lists:member")) ("lists:ma" ("lists:map" "lists:mapfoldl" "lists:mapfoldr")) ("lists:mapf" ("lists:mapfoldl" "lists:mapfoldr")) "lists:mapfoldr" (("lists" "m") ("lists" "ma") ("lists" "mapf")))"#
-    ]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_distel_real_candidates_retain_document_function_for_selected_item() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_distel_real_candidates_retain_document_function_for_selected_item",
+            r##"(save-window-excursion
           (with-temp-buffer
             (switch-to-buffer
              (current-buffer))
@@ -291,17 +288,15 @@ fn auto_complete_distel_real_candidates_retain_document_function_for_selected_it
                           (substring-no-properties
                            selected))
                          document-calls)))
-                  (auto-complete-mode -1))))))"##;
-    let expect = expect![[
+                  (auto-complete-mode -1))))))"##,
+            true,
+            expect![[
         r#"OK ("lists:map" distel-completion-get-doc-string "DOC[lists:map]" ("lists:map"))"#
-    ]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_distel_punctuation_or_digit_suffix_does_not_start_remote_completion() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_distel_punctuation_or_digit_suffix_does_not_start_remote_completion",
+            r##"(save-window-excursion
           (mapcar
            (lambda (text)
              (with-temp-buffer
@@ -334,17 +329,15 @@ fn auto_complete_distel_punctuation_or_digit_suffix_does_not_start_remote_comple
                             ac-menu
                             ac-completing)))
                      (auto-complete-mode -1))))))
-           '("." "module2" "lists:map(")))"##;
-    let expect = expect![[
+           '("." "module2" "lists:map(")))"##,
+            true,
+            expect![[
         r#"OK (("." nil nil nil nil nil nil) ("module2" nil nil nil nil nil nil) ("lists:map(" nil nil nil nil nil nil))"#
-    ]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_distel_two_erlang_buffers_keep_prefix_remote_query_and_result_isolated() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_distel_two_erlang_buffers_keep_prefix_remote_query_and_result_isolated",
+            r##"(save-window-excursion
           (let ((first
                  (generate-new-buffer
                   " *distel-orders*"))
@@ -414,10 +407,11 @@ fn auto_complete_distel_two_erlang_buffers_keep_prefix_remote_query_and_result_i
               (kill-buffer second))
             (list
              results
-             (nreverse events))))"##;
-    let expect = expect![[
+             (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (((" *distel-orders*" "orders:f" ("orders:fetch" "orders:find") "orders:fetch") (" *distel-users*" "users:f" ("users:fetch" "users:filter") "users:fetch")) ((" *distel-orders*" "orders" "f") (" *distel-users*" "users" "f")))"#
-    ]];
-
-    assert_auto_complete_distel_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

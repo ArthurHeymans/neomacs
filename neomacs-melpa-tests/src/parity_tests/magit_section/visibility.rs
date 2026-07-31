@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_magit_section_parity, assert_magit_section_signal_parity};
+use super::{assert_magit_section_batch};
 
 #[test]
-fn magit_section_hide_show_and_toggle_preserve_body_and_hidden_state() {
-    let elisp_form = r##"(with-temp-buffer
+fn visibility_public_surface_batch() {
+    assert_magit_section_batch(&[
+        (
+            "magit_section_hide_show_and_toggle_preserve_body_and_hidden_state",
+            r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root nil)
@@ -32,17 +35,15 @@ fn magit_section_hide_show_and_toggle_preserve_body_and_hidden_state() {
                              (list (oref item hidden)
                                    (invisible-p content)
                                    (buffer-substring-no-properties
-                                    (point-min) (point-max)))))))))"##;
-    let expect = expect![[
+                                    (point-min) (point-max)))))))))"##,
+            true,
+            expect![[
         r#"OK ((t t "Root\nOne\nbody\n") (nil nil "Root\nOne\nbody\n") (t t "Root\nOne\nbody\n"))"#
-    ]];
-
-    assert_magit_section_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_section_show_and_hide_children_recurse_with_exact_depth() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "magit_section_show_and_hide_children_recurse_with_exact_depth",
+            r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root nil)
@@ -77,15 +78,13 @@ fn magit_section_show_and_hide_children_recurse_with_exact_depth() {
                         (mapcar
                          (lambda (section)
                            (and (oref section hidden) t))
-                         (list group one two))))))))"##;
-    let expect = expect![[r#"OK ((t nil nil) (t nil nil) (nil nil nil))"#]];
-
-    assert_magit_section_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_section_lazy_body_is_inserted_only_when_first_shown() {
-    let elisp_form = r##"(with-temp-buffer
+                         (list group one two))))))))"##,
+            true,
+            expect![[r#"OK ((t nil nil) (t nil nil) (nil nil nil))"#]],
+        ),
+        (
+            "magit_section_lazy_body_is_inserted_only_when_first_shown",
+            r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t)
                      (calls 0))
@@ -113,23 +112,22 @@ fn magit_section_lazy_body_is_inserted_only_when_first_shown() {
                              (list calls
                                    (buffer-substring-no-properties
                                     (point-min) (point-max))
-                                   (oref item washer))))))))"##;
-    let expect = expect![[
+                                   (oref item washer))))))))"##,
+            true,
+            expect![[
         r#"OK ((0 "Root\nLazy\n" t) (1 "Root\nLazy\ndeferred body\n" nil) (1 "Root\nLazy\ndeferred body\n" nil))"#
-    ]];
-
-    assert_magit_section_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_section_root_cannot_be_hidden() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "magit_section_root_cannot_be_hidden",
+            r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root nil)
                    (magit-insert-heading "Root"))
-                 (magit-section-hide magit-root-section)))"##;
-    let expect = expect![[r#"ERR (user-error "Cannot hide root section")"#]];
-
-    assert_magit_section_signal_parity(elisp_form, expect);
+                 (magit-section-hide magit-root-section)))"##,
+            false,
+            expect![[r#"ERR (user-error "Cannot hide root section")"#]],
+        ),
+    ]);
 }

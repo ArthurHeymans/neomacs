@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_alan_mode_parity;
+use super::assert_alan_mode_batch;
 
 #[test]
-fn alan_project_root_discovers_markers_in_documented_precedence_and_caches_the_result() {
-    let elisp_form = r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+fn project_public_surface_batch() {
+    assert_alan_mode_batch(&[
+        (
+            "alan_project_root_discovers_markers_in_documented_precedence_and_caches_the_result",
+            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                            (project (expand-file-name "project" root))
                            (nested (expand-file-name "src/deep" project))
                            (default-directory
@@ -32,14 +35,13 @@ fn alan_project_root_discovers_markers_in_documented_precedence_and_caches_the_r
                            (file-relative-name with-language root)
                            (file-relative-name
                             (alan-project-root) root)
-                           (equal with-language alan-project-root)))))"##;
-    let expect = expect![[r#"OK ("project/" "project/src/" "project/src/" t)"#]];
-    assert_alan_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn alan_script_discovery_walks_up_to_the_first_real_executable_project_script() {
-    let elisp_form = r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+                           (equal with-language alan-project-root)))))"##,
+            true,
+            expect![[r#"OK ("project/" "project/src/" "project/src/" t)"#]],
+        ),
+        (
+            "alan_script_discovery_walks_up_to_the_first_real_executable_project_script",
+            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                            (project (expand-file-name "project" root))
                            (nested (expand-file-name "src/deep" project))
                            (script (expand-file-name "alan" project))
@@ -59,14 +61,13 @@ fn alan_script_discovery_walks_up_to_the_first_real_executable_project_script() 
                        (alan-file-executable script)
                        (progn
                          (set-file-modes script #o644)
-                         (alan-find-alan-script))))"##;
-    let expect = expect![[r#"OK ("project/alan" "[ORACLE-SANDBOX]/project/alan" nil)"#]];
-    assert_alan_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn alan_build_setup_constructs_real_compiler_pretty_printer_and_flycheck_boundaries() {
-    let elisp_form = r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+                         (alan-find-alan-script))))"##,
+            true,
+            expect![[r#"OK ("project/alan" "[ORACLE-SANDBOX]/project/alan" nil)"#]],
+        ),
+        (
+            "alan_build_setup_constructs_real_compiler_pretty_printer_and_flycheck_boundaries",
+            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                            (project (file-name-as-directory
                                      (expand-file-name "project" root)))
                            (source (expand-file-name
@@ -103,29 +104,27 @@ fn alan_build_setup_constructs_real_compiler_pretty_printer_and_flycheck_boundar
                          (list flycheck-alan-executable
                                alan--flycheck-language-definition
                                compile-command
-                               alan-pretty-printer))))"##;
-    let expect = expect![[
+                               alan-pretty-printer))))"##,
+            true,
+            expect![[
         r#"OK ("[ROOT]/project/dependencies/dev/internals/alan/tools/compiler-project" "[ROOT]/project/dependencies/dev/internals/alan/language" "[ROOT]/project/dependencies/dev/internals/alan/tools/compiler-project [ROOT]/project/dependencies/dev/internals/alan/language -C ../.. /dev/null " "[ROOT]/project/dependencies/dev/internals/alan/tools/pretty-printer [ROOT]/project/dependencies/dev/internals/alan/language  --allow-unresolved -C ../.. --file '[ROOT]/project/models/accounts/main.alan' -- 'models' 'accounts' 'main.alan'")"#
-    ]];
-    assert_alan_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn alan_relative_project_path_quotes_each_real_path_component_for_the_compiler() {
-    let elisp_form = r##"(let ((alan-compiler-project-root
+    ]],
+        ),
+        (
+            "alan_relative_project_path_quotes_each_real_path_component_for_the_compiler",
+            r##"(let ((alan-compiler-project-root
                            "/workspace/customer project"))
                       (list
                        (alan--file-path-to-relative-project-path
                         "/workspace/customer project/models/sales order/main.alan")
                        (alan--file-path-to-relative-project-path
-                        "/workspace/customer project/root.alan")))"##;
-    let expect = expect![[r#"OK ("'models' 'sales order' 'main.alan'" "'root.alan'")"#]];
-    assert_alan_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn alan_lsp_discovery_and_server_command_use_real_project_layout_and_capture_path() {
-    let elisp_form = r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+                        "/workspace/customer project/root.alan")))"##,
+            true,
+            expect![[r#"OK ("'models' 'sales order' 'main.alan'" "'root.alan'")"#]],
+        ),
+        (
+            "alan_lsp_discovery_and_server_command_use_real_project_layout_and_capture_path",
+            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                            (project (file-name-as-directory
                                      (expand-file-name "project" root)))
                            (build (expand-file-name "build.alan" project))
@@ -149,16 +148,15 @@ fn alan_lsp_discovery_and_server_command_use_real_project_layout_and_capture_pat
                           (cdr command))
                          (alan-eglot--server-command)
                          (alan-lsp-activate-alan-mode
-                          build 'alan-schema-mode))))"##;
-    let expect = expect![[
+                          build 'alan-schema-mode))))"##,
+            true,
+            expect![[
         r#"OK ("project/dependencies/dev/internals/alan/tools/alan" ("project/dependencies/dev/internals/alan/tools/alan" "--lsp" "--capture" "trace.log") ("[ORACLE-SANDBOX]/project/dependencies/dev/internals/alan/tools/alan" "--lsp" "--capture" "trace.log") "[ORACLE-SANDBOX]/project/dependencies/dev/internals/alan/tools/alan")"#
-    ]];
-    assert_alan_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn alan_lsp_and_eglot_registration_emit_the_exact_client_protocol_contract() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "alan_lsp_and_eglot_registration_emit_the_exact_client_protocol_contract",
+            r##"(progn
                       (defvar lsp-language-id-configuration)
                       (defvar eglot-server-programs)
                       (defvar alan-parity-registered)
@@ -184,9 +182,11 @@ fn alan_lsp_and_eglot_registration_emit_the_exact_client_protocol_contract() {
                            alan-parity-connection
                            alan-parity-registered
                            (alan-setup-eglot)
-                           eglot-server-programs))))"##;
-    let expect = expect![[
+                           eglot-server-programs))))"##,
+            true,
+            expect![[
         r#"OK (registered (("\\.alan$" . "alan")) alan-lsp--server-command (:new-connection (:stdio alan-lsp--server-command) :activation-fn alan-lsp-activate-alan-mode :server-id alan-ls) #1=((alan-mode . alan-eglot--server-command)) #1#)"#
-    ]];
-    assert_alan_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

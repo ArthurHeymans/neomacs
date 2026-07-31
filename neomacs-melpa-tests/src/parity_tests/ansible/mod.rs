@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ANSIBLE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const ANSIBLE_TEST_TIMEOUT: Duration = Duration::from_secs(180);
@@ -137,4 +139,15 @@ fn assert_ansible_source_parity(source_file: &str, elisp_form: &str, expected: E
 
 pub(crate) fn assert_ansible_parity(elisp_form: &str, expected: Expect) {
     assert_ansible_source_parity("ansible.el", elisp_form, expected);
+}
+
+/// Multi-probe batch for `assert_ansible_parity` cases (2a).
+pub(crate) fn assert_ansible_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        ansible_oracle("ansible.el"),
+        &name,
+        "ansible_parity",
+        cases,
+    );
 }

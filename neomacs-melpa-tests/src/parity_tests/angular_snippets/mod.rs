@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ANGULAR_SNIPPETS_MELPA_PIN, CachedMelpaOracle, YASNIPPET_MELPA_PIN};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const ANGULAR_SNIPPETS_TEST_TIMEOUT: Duration = Duration::from_secs(180);
@@ -140,4 +142,15 @@ pub(crate) fn assert_angular_snippets_parity(elisp_form: &str, expected: Expect)
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("angular-snippets parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+/// Multi-probe batch for `assert_angular_snippets_parity` cases (2a).
+pub(crate) fn assert_angular_snippets_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        angular_snippets_oracle(),
+        &name,
+        "angular_snippets_parity",
+        cases,
+    );
 }

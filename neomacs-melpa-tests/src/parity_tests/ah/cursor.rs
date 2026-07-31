@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_ah_parity;
+use super::assert_ah_batch;
 
 #[test]
-fn enabled_mode_observes_real_navigation_but_not_programmatic_or_disabled_motion() {
-    let elisp_form = r##"
+fn cursor_public_surface_batch() {
+    assert_ah_batch(&[
+        (
+            "enabled_mode_observes_real_navigation_but_not_programmatic_or_disabled_motion",
+            r##"
 (with-temp-buffer
   (emacs-lisp-mode)
   (insert "alphaBeta gamma\nsecond line\nthird")
@@ -77,9 +80,11 @@ fn enabled_mode_observes_real_navigation_but_not_programmatic_or_disabled_motion
            (nreverse events)
            ah-mode))
       (ah-mode -1))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("alphaBeta gamma\nsecond line\nthird" 2 (end-of-buffer nil) ((before forward-char 1 1 0) (after forward-char 2 1 1) (before backward-char 2 1 1) (after backward-char 1 1 0) (before next-line 1 1 0) (after next-line 17 2 0) (before end-of-line 17 2 0) (after end-of-line 28 2 11) (before previous-line 28 2 11) (after previous-line 12 1 11) (before beginning-of-line 12 1 11) (after beginning-of-line 1 1 0) (before end-of-buffer 1 1 0) (after end-of-buffer 34 3 5) (before beginning-of-buffer 34 3 5) (after beginning-of-buffer 1 1 0) (before failed-forward 34 3 5)) nil nil)"#
-    ]];
-    assert_ah_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_magit_section_parity;
+use super::assert_magit_section_batch;
 
 #[test]
-fn magit_section_lineage_and_match_conditions_cover_exact_and_recursive_forms() {
-    let elisp_form = r##"(with-temp-buffer
+fn matching_public_surface_batch() {
+    assert_magit_section_batch(&[
+        (
+            "magit_section_lineage_and_match_conditions_cover_exact_and_recursive_forms",
+            r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root nil)
@@ -30,15 +33,13 @@ fn magit_section_lineage_and_match_conditions_cover_exact_and_recursive_forms() 
                     (magit-section-value-if
                      [item group root] item)
                     (magit-section-value-if
-                     [item root] item)))))"##;
-    let expect = expect![[r#"OK ((item group root) (t t nil t t t nil) 42 nil)"#]];
-
-    assert_magit_section_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_section_case_and_match_assoc_choose_first_matching_clause() {
-    let elisp_form = r##"(with-temp-buffer
+                     [item root] item)))))"##,
+            true,
+            expect![[r#"OK ((item group root) (t t nil t t t nil) 42 nil)"#]],
+        ),
+        (
+            "magit_section_case_and_match_assoc_choose_first_matching_clause",
+            r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root nil)
@@ -65,15 +66,13 @@ fn magit_section_case_and_match_assoc_choose_first_matching_clause() {
                     (magit-section-match-assoc
                      item
                      '((missing . no)
-                       ([* group] . recursive)))))))"##;
-    let expect = expect![[r#"OK ((matched 42) exact recursive)"#]];
-
-    assert_magit_section_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_section_cancel_removes_partial_section_without_corrupting_siblings() {
-    let elisp_form = r##"(with-temp-buffer
+                       ([* group] . recursive)))))))"##,
+            true,
+            expect![[r#"OK ((matched 42) exact recursive)"#]],
+        ),
+        (
+            "magit_section_cancel_removes_partial_section_without_corrupting_siblings",
+            r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root nil)
@@ -91,8 +90,9 @@ fn magit_section_cancel_removes_partial_section_without_corrupting_siblings() {
                   (mapcar (lambda (section) (oref section value))
                           (oref magit-root-section children))
                   (magit-get-section
-                   '((item . canceled) (root))))))"##;
-    let expect = expect![[r#"OK ("Root\nKept\nAlso kept\n" (kept also-kept) nil)"#]];
-
-    assert_magit_section_parity(elisp_form, expect);
+                   '((item . canceled) (root))))))"##,
+            true,
+            expect![[r#"OK ("Root\nKept\nAlso kept\n" (kept also-kept) nil)"#]],
+        ),
+    ]);
 }

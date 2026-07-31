@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_asyncloop_parity;
+use super::assert_asyncloop_batch;
 
 #[test]
-fn asyncloop_schedule_replaces_prior_timer_and_only_latest_activation_runs() {
-    let elisp_form = r##"(let ((loop
+fn scheduling_public_surface_batch() {
+    assert_asyncloop_batch(&[
+        (
+            "asyncloop_schedule_replaces_prior_timer_and_only_latest_activation_runs",
+            r##"(let ((loop
                 (asyncloop-create))
                logged)
          (asyncloop-test-reset)
@@ -36,17 +39,15 @@ fn asyncloop_schedule_replaces_prior_timer_and_only_latest_activation_runs() {
                  #'<)
                 (asyncloop-test-drain)
                 (asyncloop-scheduled loop)
-                logged)))))"##;
-    let expect = expect![[
+                logged)))))"##,
+            true,
+            expect![[
         r#"OK ((:asyncloop-test-timer 1) (:asyncloop-test-timer 2) t (1) ((:ran :at 2 :id 2 :repeat nil :function asyncloop-eat) (:skipped :at 5 :id 1)) nil ("Scheduled loop found cleared, doing nothing"))"#
-    ]];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_chomp_executes_real_stateful_pipeline_in_exact_order() {
-    let elisp_form = r##"(let* ((state
+    ]],
+        ),
+        (
+            "asyncloop_chomp_executes_real_stateful_pipeline_in_exact_order",
+            r##"(let* ((state
                  '(:value 2))
                 events
                 (loop
@@ -99,15 +100,13 @@ fn asyncloop_chomp_executes_real_stateful_pipeline_in_exact_order() {
             state
             (nreverse events)
             (asyncloop-remainder loop)
-            asyncloop-recursion-ctr)))"##;
-    let expect = expect!["OK (t (:value 10 :saved t) ((:multiply 6) (:add 10) (:save 10)) nil 2)"];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_chomp_return_contract_distinguishes_immediate_and_protected_modes() {
-    let elisp_form = r##"(let (events)
+            asyncloop-recursion-ctr)))"##,
+            true,
+            expect!["OK (t (:value 10 :saved t) ((:multiply 6) (:add 10) (:save 10)) nil 2)"],
+        ),
+        (
+            "asyncloop_chomp_return_contract_distinguishes_immediate_and_protected_modes",
+            r##"(let (events)
          (cl-labels
              ((make-loop
                (immediate label)
@@ -142,15 +141,13 @@ fn asyncloop_chomp_return_contract_distinguishes_immediate_and_protected_modes()
                 immediate-return
                 (nreverse events)
                 (asyncloop-remainder protected)
-                (asyncloop-remainder immediate))))))"##;
-    let expect = expect!["OK (t nil (:protected :immediate) nil nil)"];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_immediate_mode_preserves_interrupted_stage_then_retries_after_one_second() {
-    let elisp_form = r##"(let (events loop pending-input)
+                (asyncloop-remainder immediate))))))"##,
+            true,
+            expect!["OK (t nil (:protected :immediate) nil nil)"],
+        ),
+        (
+            "asyncloop_immediate_mode_preserves_interrupted_stage_then_retries_after_one_second",
+            r##"(let (events loop pending-input)
          (asyncloop-test-reset)
          (asyncloop-test-with-scheduler
            (setq loop
@@ -205,17 +202,15 @@ fn asyncloop_immediate_mode_preserves_interrupted_stage_then_retries_after_one_s
                 (nreverse events)
                 (asyncloop-remainder loop)
                 (asyncloop-scheduled loop)
-                asyncloop-test-now)))))"##;
-    let expect = expect![
+                asyncloop-test-now)))))"##,
+            true,
+            expect![
         "OK ((:asyncloop-test-timer 1) (nil 1 t 0 ((1 1 asyncloop-eat))) ((:ran :at 1 :id 1 :repeat nil :function asyncloop-eat)) (:worker-completed) nil nil 1)"
-    ];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_chomp_repeat_marker_supports_bounded_real_queue_consumption() {
-    let elisp_form = r##"(let ((pending
+    ],
+        ),
+        (
+            "asyncloop_chomp_repeat_marker_supports_bounded_real_queue_consumption",
+            r##"(let ((pending
                 '("alpha" "beta" "gamma" "delta"))
                processed
                loop)
@@ -256,15 +251,13 @@ fn asyncloop_chomp_repeat_marker_supports_bounded_real_queue_consumption() {
             pending
             (nreverse processed)
             (asyncloop-remainder loop)
-            asyncloop-recursion-ctr)))"##;
-    let expect = expect![[r#"OK (t nil ("ALPHA" "BETA" "GAMMA" "DELTA" "summary:4") nil 4)"#]];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_chomp_defers_remaining_work_one_second_when_input_is_pending() {
-    let elisp_form = r##"(let (events)
+            asyncloop-recursion-ctr)))"##,
+            true,
+            expect![[r#"OK (t nil ("ALPHA" "BETA" "GAMMA" "DELTA" "summary:4") nil 4)"#]],
+        ),
+        (
+            "asyncloop_chomp_defers_remaining_work_one_second_when_input_is_pending",
+            r##"(let (events)
          (asyncloop-test-reset)
          (asyncloop-test-with-scheduler
            (let ((loop
@@ -302,17 +295,15 @@ fn asyncloop_chomp_defers_remaining_work_one_second_when_input_is_pending() {
                       (asyncloop-test-event-function event)
                       :timer-handle
                       (asyncloop-test-event-timer event)))
-                   asyncloop-test-timer-queue)))))))"##;
-    let expect = expect![
+                   asyncloop-test-timer-queue)))))))"##,
+            true,
+            expect![
         "OK (t (:first) 1 t ((1 1 nil asyncloop-eat :timer-handle (:asyncloop-test-timer 1))))"
-    ];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_chomp_prunes_deep_call_stack_after_one_hundred_workers() {
-    let elisp_form = r##"(let (executed)
+    ],
+        ),
+        (
+            "asyncloop_chomp_prunes_deep_call_stack_after_one_hundred_workers",
+            r##"(let (executed)
          (asyncloop-test-reset)
          (asyncloop-test-with-scheduler
            (let* ((worker
@@ -347,15 +338,13 @@ fn asyncloop_chomp_prunes_deep_call_stack_after_one_hundred_workers() {
                   (length trace)
                   (length executed)
                   (asyncloop-remainder loop)
-                  asyncloop-recursion-ctr))))))"##;
-    let expect = expect!["OK (t 100 1 2 205 nil 4)"];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_eat_rejects_ghost_activation_without_mutating_queued_work() {
-    let elisp_form = r##"(let* ((worker
+                  asyncloop-recursion-ctr))))))"##,
+            true,
+            expect!["OK (t 100 1 2 205 nil 4)"],
+        ),
+        (
+            "asyncloop_eat_rejects_ghost_activation_without_mutating_queued_work",
+            r##"(let* ((worker
                  (lambda (_loop)
                    :should-not-run))
                 (loop
@@ -382,17 +371,15 @@ fn asyncloop_eat_rejects_ghost_activation_without_mutating_queued_work() {
              (car
               (asyncloop-remainder loop))
              worker)
-            logged)))"##;
-    let expect = expect![[
+            logged)))"##,
+            true,
+            expect![[
         r#"OK (#1=("Unscheduled timer activation. Hands off the wheel, ghost!") nil nil t #1#)"#
-    ]];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_eat_handles_scheduled_loop_cleared_before_timer_fires() {
-    let elisp_form = r##"(let ((loop
+    ]],
+        ),
+        (
+            "asyncloop_eat_handles_scheduled_loop_cleared_before_timer_fires",
+            r##"(let ((loop
                 (asyncloop-create
                  :scheduled t
                  :just-launched t
@@ -416,9 +403,9 @@ fn asyncloop_eat_handles_scheduled_loop_cleared_before_timer_fires() {
             (asyncloop-just-launched loop)
             (asyncloop-scheduled loop)
             (asyncloop-remainder loop)
-            logged)))"##;
-    let expect =
-        expect![[r#"OK (#1=("Scheduled loop found cleared, doing nothing") nil nil nil #1#)"#]];
-
-    assert_asyncloop_parity(elisp_form, expect);
+            logged)))"##,
+            true,
+            expect![[r#"OK (#1=("Scheduled loop found cleared, doing nothing") nil nil nil #1#)"#]],
+        ),
+    ]);
 }

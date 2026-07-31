@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_agtags_parity;
+use super::assert_agtags_batch;
 
 /// The user adds `parser_flush' to parser.c and saves.  `agtags-mode' puts
 /// `agtags--auto-update' on `before-save-hook' so GNU GLOBAL re-indexes the
@@ -21,9 +21,13 @@ use super::assert_agtags_parity;
 /// `parser_reset'.  Without that contrast "nothing was found" would read as
 /// simply how the package works.  This is upstream behaviour and identical in
 /// both editors.
+
 #[test]
-fn saving_an_edited_source_clears_the_cache_but_never_updates_the_database() {
-    let elisp_form = r####"
+fn editing_public_surface_batch() {
+    assert_agtags_batch(&[
+        (
+            "saving_an_edited_source_clears_the_cache_but_never_updates_the_database",
+            r####"
 (let* ((start (neomacs-agtags-test-start "agtags-editing-workflow"))
        (root (car start))
        (tools (cdr start))
@@ -103,11 +107,11 @@ fn saving_an_edited_source_clears_the_cache_but_never_updates_the_database() {
                             (neomacs-agtags-test-trace tools))))))))
     (neomacs-agtags-test-cleanup root))
   result)
-"####;
-
-    let expect = expect![[
+"####,
+            true,
+            expect![[
         r##"OK (("parser_init" "parser_reset") (("parser_reset") ("[ORACLE-SANDBOX]/agtags-editing-workflow/$-c$parser_" "parser_init" "parser_reset")) (nil nil nil nil) "-*- mode: agtags-grep; default-directory: \"[ORACLE-SANDBOX]/agtags-editing-workflow/\" -*-\nGlobal Grep started at TIME\n\nglobal --result=grep parser_flush\n\nGlobal Grep finished with no matches found at TIME\n" nil "-*- mode: agtags-grep; default-directory: \"[ORACLE-SANDBOX]/agtags-editing-workflow/\" -*-\nGlobal Grep started at TIME\n\nglobal --result=grep parser_flush\n\nGlobal Grep finished with no matches found at TIME\n" (3 (("include/parser.h" 4 0 "int parser_reset(int state);") ("src/main.c" 11 0 "  return parser_reset(input);") ("src/parser.c" 18 0 "  return parser_reset(state - 1);"))) 0 ("parser_flush") ("parse_request" "parser_flush" "parser_init" "parser_reset") "-*- mode: agtags-grep; default-directory: \"[ORACLE-SANDBOX]/agtags-editing-workflow/\" -*-\nGlobal Grep started at TIME\n\nglobal --result=grep parser_flush\nsrc/parser.c:21:int parser_flush(int state) {\n\nGlobal Grep finished with matches found at TIME\n" (4 (("include/parser.h" 4 0 "int parser_reset(int state);") ("src/main.c" 11 0 "  return parser_reset(input);") ("src/parser.c" 18 0 "  return parser_reset(state - 1);") ("src/parser.c" 22 0 "  return parser_reset(state);"))) "#include \"parser.h\"\n\nstatic int log_line(int value) {\n  return value;\n}\n\nint parser_init(int seed) {\n  return log_line(seed);\n}\n\nint parser_reset(int state) {\n  /* 状態をリセットする */\n  if (state < 0) return 0;\n  return state + 1;\n}\n\nint parse_request(int state) {\n  return parser_reset(state - 1);\n}\n\nint parser_flush(int state) {\n  return parser_reset(state);\n}\n\n/* TODO: audit the flush path. */\n" "gtags cwd=[ORACLE-SANDBOX]/agtags-editing-workflow <-i>\nglobal cwd=[ORACLE-SANDBOX]/agtags-editing-workflow <-c> <parser_>\nglobal cwd=[ORACLE-SANDBOX]/agtags-editing-workflow <-u> <--single-update=>\nglobal cwd=[ORACLE-SANDBOX]/agtags-editing-workflow <-c> <parser_f>\nglobal cwd=[ORACLE-SANDBOX]/agtags-editing-workflow <--result=grep> <parser_flush>\nglobal cwd=[ORACLE-SANDBOX]/agtags-editing-workflow <-u> <--single-update=>\nglobal cwd=[ORACLE-SANDBOX]/agtags-editing-workflow <-c> <parser_f>\nglobal cwd=[ORACLE-SANDBOX]/agtags-editing-workflow <--result=grep> <parser_flush>\nglobal cwd=[ORACLE-SANDBOX]/agtags-editing-workflow <-r> <-x> <-a> <parser_reset>\nglobal cwd=[ORACLE-SANDBOX]/agtags-editing-workflow <-u> <--single-update=[ORACLE-SANDBOX]/agtags-editing-workflow/src/parser.c>\nglobal cwd=[ORACLE-SANDBOX]/agtags-editing-workflow <-c> <parser_f>\nglobal cwd=[ORACLE-SANDBOX]/agtags-editing-workflow <--result=grep> <parser_flush>\nglobal cwd=[ORACLE-SANDBOX]/agtags-editing-workflow <-r> <-x> <-a> <parser_reset>\nglobal cwd=[ORACLE-SANDBOX]/agtags-editing-workflow <-c> <parse>\n")"##
-    ]];
-
-    assert_agtags_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

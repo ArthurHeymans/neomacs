@@ -6,6 +6,8 @@ use crate::{
 };
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod activation;
 mod completion;
 mod diagnostics;
@@ -69,4 +71,30 @@ pub(crate) fn assert_asciidoc_mode_parity(elisp_form: &str, expected: Expect) {
 
 pub(crate) fn assert_asciidoc_mode_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_asciidoc_mode_source_parity("asciidoc-mode-autoloads.el", elisp_form, expected);
+}
+
+
+
+
+
+/// Multi-probe batch for `assert_asciidoc_mode_autoload_parity` cases (2a).
+pub(crate) fn assert_asciidoc_mode_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        asciidoc_mode_oracle("asciidoc-mode-autoloads.el"),
+        &name,
+        "asciidoc_mode_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_asciidoc_mode_parity` cases (2a).
+pub(crate) fn assert_asciidoc_mode_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        asciidoc_mode_oracle("asciidoc-mode.el"),
+        &name,
+        "asciidoc_mode_parity",
+        cases,
+    );
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_package_update_parity;
+use super::assert_auto_package_update_batch;
 
 #[test]
-fn auto_package_update_visible_write_creates_real_read_only_results_buffer_and_mode() {
-    let elisp_form = r##"(let ((name
+fn buffers_public_surface_batch() {
+    assert_auto_package_update_batch(&[
+        (
+            "auto_package_update_visible_write_creates_real_read_only_results_buffer_and_mode",
+            r##"(let ((name
                                 " *apu-visible-results*"))
                            (unwind-protect
                                (save-window-excursion
@@ -26,17 +29,15 @@ fn auto_package_update_visible_write_creates_real_read_only_results_buffer_and_m
                                        (current-buffer)
                                        (get-buffer name))))))
                              (auto-package-update-test-kill-buffers
-                              name)))"##;
-    let expect = expect![[
+                              name)))"##,
+            true,
+            expect![[
         r#"OK (t " *apu-visible-results*" "alpha up to date.\nbeta failed" t t quit-window t t)"#
-    ]];
-
-    assert_auto_package_update_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_package_update_write_replaces_existing_read_only_contents_without_duplicate_state() {
-    let elisp_form = r##"(let ((name
+    ]],
+        ),
+        (
+            "auto_package_update_write_replaces_existing_read_only_contents_without_duplicate_state",
+            r##"(let ((name
                                 " *apu-overwrite-results*"))
                            (unwind-protect
                                (progn
@@ -59,15 +60,13 @@ fn auto_package_update_write_replaces_existing_read_only_contents_without_duplic
                                     (local-variable-p
                                      'auto-package-update-minor-mode))))
                              (auto-package-update-test-kill-buffers
-                              name)))"##;
-    let expect = expect![[r#"OK ("fresh\nreport" t t quit-window 12 t)"#]];
-
-    assert_auto_package_update_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_package_update_hidden_write_avoids_popup_and_buries_named_buffer() {
-    let elisp_form = r##"(let
+                              name)))"##,
+            true,
+            expect![[r#"OK ("fresh\nreport" t t quit-window 12 t)"#]],
+        ),
+        (
+            "auto_package_update_hidden_write_avoids_popup_and_buries_named_buffer",
+            r##"(let
                              ((name
                                " *apu-hidden-results*")
                               events)
@@ -106,15 +105,13 @@ fn auto_package_update_hidden_write_avoids_popup_and_buries_named_buffer() {
                                       buffer-read-only
                                       auto-package-update-minor-mode))))
                              (auto-package-update-test-kill-buffers
-                              name)))"##;
-    let expect = expect![[r#"OK (t ((:bury " *apu-hidden-results*")) "quiet report" t t)"#]];
-
-    assert_auto_package_update_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_package_update_hide_preview_selects_and_kills_existing_preview_window_buffer() {
-    let elisp_form = r##"(let
+                              name)))"##,
+            true,
+            expect![[r#"OK (t ((:bury " *apu-hidden-results*")) "quiet report" t t)"#]],
+        ),
+        (
+            "auto_package_update_hide_preview_selects_and_kills_existing_preview_window_buffer",
+            r##"(let
                              ((auto-package-preview-buffer-name
                                " *apu-hide-preview*")
                               events)
@@ -140,8 +137,9 @@ fn auto_package_update_hide_preview_selects_and_kills_existing_preview_window_bu
                               (apu--hide-preview)
                               (nreverse events)
                               (get-buffer
-                               auto-package-preview-buffer-name))))"##;
-    let expect = expect![[r#"OK (:killed ((:kill " *apu-hide-preview*" t)) nil)"#]];
-
-    assert_auto_package_update_parity(elisp_form, expect);
+                               auto-package-preview-buffer-name))))"##,
+            true,
+            expect![[r#"OK (:killed ((:kill " *apu-hide-preview*" t)) nil)"#]],
+        ),
+    ]);
 }

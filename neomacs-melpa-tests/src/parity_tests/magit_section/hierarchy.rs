@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_magit_section_parity;
+use super::assert_magit_section_batch;
 
 #[test]
-fn magit_section_builds_exact_parent_child_tree_and_ranges() {
-    let elisp_form = r##"(with-temp-buffer
+fn hierarchy_public_surface_batch() {
+    assert_magit_section_batch(&[
+        (
+            "magit_section_builds_exact_parent_child_tree_and_ranges",
+            r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root "root")
@@ -33,17 +36,15 @@ fn magit_section_builds_exact_parent_child_tree_and_ranges() {
                     (eq (oref one parent) group)
                     (eq (oref two parent) group)
                     (buffer-substring-no-properties
-                     (point-min) (point-max))))))"##;
-    let expect = expect![[
+                     (point-min) (point-max))))))"##,
+            true,
+            expect![[
         r#"OK (((root "root" 1 6 38) (group "group" 6 12 38) (item 1 12 16 25) (item 2 25 29 38)) t t t "Root\nGroup\nOne\nbody one\nTwo\nbody two\n")"#
-    ]];
-
-    assert_magit_section_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_section_ident_lookup_and_equality_are_structural() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "magit_section_ident_lookup_and_equality_are_structural",
+            r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root 'repository)
@@ -64,17 +65,15 @@ fn magit_section_ident_lookup_and_equality_are_structural() {
                          (magit-get-section
                           '((missing . "abc123")
                             (branch . "main")
-                            (root . repository)))))))"##;
-    let expect = expect![[
+                            (root . repository)))))))"##,
+            true,
+            expect![[
         r#"OK (((commit . "abc123") (branch . "main") (root . repository)) t t nil nil)"#
-    ]];
-
-    assert_magit_section_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_section_at_and_current_section_follow_text_properties() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "magit_section_at_and_current_section_follow_text_properties",
+            r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root nil)
@@ -98,15 +97,13 @@ fn magit_section_at_and_current_section_follow_text_properties() {
                                  (oref at-first value))
                            (eq at-first current-first)
                            (eq (magit-current-section)
-                               magit-root-section))))))"##;
-    let expect = expect![[r#"OK (nil root (item first) t t)"#]];
-
-    assert_magit_section_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_section_siblings_parent_values_and_depth_first_mapping_are_exact() {
-    let elisp_form = r##"(with-temp-buffer
+                               magit-root-section))))))"##,
+            true,
+            expect![[r#"OK (nil root (item first) t t)"#]],
+        ),
+        (
+            "magit_section_siblings_parent_values_and_depth_first_mapping_are_exact",
+            r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root 'repo)
@@ -136,17 +133,15 @@ fn magit_section_siblings_parent_values_and_depth_first_mapping_are_exact() {
                             (magit-section-siblings middle 'next))
                     (mapcar (lambda (section) (oref section value))
                             (magit-section-siblings middle))
-                    (nreverse order)))))"##;
-    let expect = expect![[
+                    (nreverse order)))))"##,
+            true,
+            expect![[
         r#"OK (repo (a) (c) (a c) ((item a) (leaf inside) (item b) (item c) (root repo)))"#
-    ]];
-
-    assert_magit_section_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_section_text_property_runs_cover_root_headings_bodies_and_end_boundary() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "magit_section_text_property_runs_cover_root_headings_bodies_and_end_boundary",
+            r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root nil)
@@ -202,10 +197,11 @@ fn magit_section_text_property_runs_cover_root_headings_bodies_and_end_boundary(
                       (1- (oref two end)) 'magit-section)
                      two)
                     (get-text-property
-                     (point-max) 'magit-section)))))"##;
-    let expect = expect![[
+                     (point-max) 'magit-section)))))"##,
+            true,
+            expect![[
         r#"OK ("Root\nOne\nbody\nTwo\n" ((1 6 nil nil no-section) (6 15 item one one-object) (15 19 item two two-object)) nil t t nil)"#
-    ]];
-
-    assert_magit_section_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

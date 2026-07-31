@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AFFE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod async_frontend;
 mod autoloads;
 mod backend_producer;
@@ -45,4 +47,43 @@ pub(crate) fn assert_affe_backend_parity(elisp_form: &str, expected: Expect) {
 
 pub(crate) fn assert_affe_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_affe_source_parity("affe-autoloads.el", elisp_form, expected);
+}
+
+
+
+
+
+
+
+/// Multi-probe batch for `assert_affe_autoload_parity` cases (2a).
+pub(crate) fn assert_affe_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        affe_oracle("affe-autoloads.el"),
+        &name,
+        "affe_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_affe_backend_parity` cases (2a).
+pub(crate) fn assert_affe_backend_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        affe_oracle("affe-backend.el"),
+        &name,
+        "affe_backend_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_affe_parity` cases (2a).
+pub(crate) fn assert_affe_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        affe_oracle("affe.el"),
+        &name,
+        "affe_parity",
+        cases,
+    );
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_async_http_queue_autoload_parity, assert_async_http_queue_parity};
+use super::{assert_async_http_queue_autoload_batch, assert_async_http_queue_batch};
 
 #[test]
-fn async_http_queue_descriptor_and_installed_sources_pin_exact_melpa_payload() {
-    let elisp_form = r##"(let* ((descriptor
+fn registry_async_http_queue_batch() {
+    assert_async_http_queue_batch(&[
+        (
+            "async_http_queue_descriptor_and_installed_sources_pin_exact_melpa_payload",
+            r##"(let* ((descriptor
                 (cadr
                  (assq
                   'async-http-queue
@@ -37,16 +40,15 @@ fn async_http_queue_descriptor_and_installed_sources_pin_exact_melpa_payload() {
                  (secure-hash
                   'sha256
                   (current-buffer)))))
-            sources)))"##;
-    let expect = expect![[
+            sources)))"##,
+            true,
+            expect![[
         r#"OK ((async-http-queue "20260316.755" "Async HTTP queue with parallel fetching." ((emacs (28 1))) ((:maintainers ("Andros Fenollosa" . "hi@andros.dev")) (:authors ("Andros Fenollosa" . "hi@andros.dev")) (:keywords "comm" "processes" "http") (:revdesc . "bd37342372a0") (:commit . "bd37342372a0b24ce0d54e9dad8070af997b0a0b") (:url . "https://git.andros.dev/andros/async-http-queue-el"))) (("async-http-queue-autoloads.el" 1987 "5e5172bc7345da202e7b23724ad57d2e265b612200788849e6a5640f92db5a70") ("async-http-queue-pkg.el" 457 "013411f667af9e43faf9ef293fdeb3616c1032fcbed3928bfc8aab73fac573a0") ("async-http-queue.el" 13719 "78039e8eada8d6d6957f5fc95a14f2b74fbf9b3bbca70d792ee19e35e96d7502")))"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_complete_prefixed_symbol_inventory_records_generated_surface() {
-    let elisp_form = r##"(let (symbols)
+    ]],
+        ),
+        (
+            "async_http_queue_complete_prefixed_symbol_inventory_records_generated_surface",
+            r##"(let (symbols)
           (mapatoms
            (lambda (symbol)
              (let ((name (symbol-name symbol)))
@@ -76,16 +78,15 @@ fn async_http_queue_complete_prefixed_symbol_inventory_records_generated_surface
            (lambda (left right)
              (string<
               (symbol-name (car left))
-              (symbol-name (car right))))))"##;
-    let expect = expect![
+              (symbol-name (car right))))))"##,
+            true,
+            expect![
         "OK ((async-http-queue t nil nil (urls &rest --cl-rest--)) (async-http-queue--check-completion t nil nil (state)) (async-http-queue--fetch-url t nil nil (state url success-callback error-callback)) (async-http-queue--process t nil nil (state)) (async-http-queue--process-next-pending t nil nil (state)) (async-http-queue--state nil nil nil nil) (async-http-queue--state-active-workers t nil nil (x)) (async-http-queue--state-active-workers--inliner t nil nil (inline--form x)) (async-http-queue--state-completion-callback t nil nil (x)) (async-http-queue--state-completion-callback--inliner t nil nil (inline--form x)) (async-http-queue--state-create t nil nil (&rest --cl-rest--)) (async-http-queue--state-create--cmacro t nil nil (cl-whole &rest --cl-rest--)) (async-http-queue--state-error-callback t nil nil (x)) (async-http-queue--state-error-callback--inliner t nil nil (inline--form x)) (async-http-queue--state-max-concurrent t nil nil (x)) (async-http-queue--state-max-concurrent--inliner t nil nil (inline--form x)) (async-http-queue--state-p t nil nil (x)) (async-http-queue--state-p--inliner t nil nil (inline--form x)) (async-http-queue--state-parser t nil nil (x)) (async-http-queue--state-parser--inliner t nil nil (inline--form x)) (async-http-queue--state-queue t nil nil (x)) (async-http-queue--state-queue--inliner t nil nil (inline--form x)) (async-http-queue--state-timeout t nil nil (x)) (async-http-queue--state-timeout--inliner t nil nil (inline--form x)) (async-http-queue--update-data t nil nil (state url data)) (async-http-queue--update-status t nil nil (state url status)) (async-http-queue-autoloads nil nil nil nil))"
-    ];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_all_declared_and_generated_functions_have_exact_contracts() {
-    let elisp_form = r##"(mapcar
+    ],
+        ),
+        (
+            "async_http_queue_all_declared_and_generated_functions_have_exact_contracts",
+            r##"(mapcar
           (lambda (symbol)
             (list
              symbol
@@ -118,16 +119,15 @@ fn async_http_queue_all_declared_and_generated_functions_have_exact_contracts() 
             async-http-queue--process-next-pending
             async-http-queue--process
             async-http-queue--check-completion
-            copy-async-http-queue--state))"##;
-    let expect = expect![[
+            copy-async-http-queue--state))"##,
+            true,
+            expect![[
         r#"OK ((async-http-queue t nil nil (urls &rest --cl-rest--) "4177827ba6a66738ab74eaa12483222dd5979c9c920d1f6e9c8372c367f5d930") (async-http-queue--state-create t nil nil (&rest --cl-rest--) "b5a490856fa67c9981fe927ce8f669e8c593850a1974e6455e99961f9ff815b7") (async-http-queue--state-p t nil nil (x) nil) (async-http-queue--state-queue t nil nil (x) "e44ef9fe17d7041be8f256aa376531f7b40d3d5f0faeaac8e58bed17d406420a") (async-http-queue--state-active-workers t nil nil (x) "663b18acbe3d864e1441c13771e49b32fc5830b9f93e6d96d1368c0d2b3e945f") (async-http-queue--state-max-concurrent t nil nil (x) "012903dd38d771255032e73be90e9eb8d03c769caf64ec1e1c8805ffa6ee674d") (async-http-queue--state-timeout t nil nil (x) "7d748ed04931426a16ffba8f7124c6cfff0205ca37970d2d5f86fc455d41e018") (async-http-queue--state-parser t nil nil (x) "ea5bc8dd935d053143318482293ed9bb0034ac332c635daf635cf7dda13a1952") (async-http-queue--state-completion-callback t nil nil (x) "5570bf7ee4c77f2a175cdae5d938d5778ba80739091cf6dcdddc4d52b1cc4db7") (async-http-queue--state-error-callback t nil nil (x) "cb4534a805d09d361ead1f4a717deed8528b1167470c6f8b09a10dd372edbcb2") (async-http-queue--update-status t nil nil (state url status) "8dc8db383e68974b1d05876286c904f717d287963cab92c118dd0d31637695ee") (async-http-queue--update-data t nil nil (state url data) "967c79168c10b0729a5eab14233571b7b53e05e1736f97ccc04e50c4b5da69ed") (async-http-queue--fetch-url t nil nil (state url success-callback error-callback) "d4eb33bda69ac857088ef79219fb65bb473092d7100cf9018508f189bca68c7a") (async-http-queue--process-next-pending t nil nil (state) "5c2ca9a114917c4885a6c3e5d1821029cb972edccc6d388d61cd838aa73be1f7") (async-http-queue--process t nil nil (state) "5f2c450305cee418acc9e51f19eccf8191daf770fe0bd985bb27596ed0ca5ad3") (async-http-queue--check-completion t nil nil (state) "d54f90e711bbca4528487a5c02a1a2accd113301405d08cd4f051df74afa0893") (copy-async-http-queue--state nil nil nil nil nil))"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_public_defaults_and_custom_keyword_arguments_build_exact_state() {
-    let elisp_form = r##"(let (states messages)
+    ]],
+        ),
+        (
+            "async_http_queue_public_defaults_and_custom_keyword_arguments_build_exact_state",
+            r##"(let (states messages)
           (cl-letf
               (((symbol-function
                  'async-http-queue--process)
@@ -157,16 +157,15 @@ fn async_http_queue_public_defaults_and_custom_keyword_arguments_build_exact_sta
              (lambda () :custom)))
           (list
            (nreverse states)
-           (nreverse messages)))"##;
-    let expect = expect![[
+           (nreverse messages)))"##,
+            true,
+            expect![[
         r#"OK (((:queue (("https://api.test/default" pending nil)) :active 0 :limit 5 :timeout 10 :parser json-parse-buffer :completion nil :error nil) (:queue (("https://api.test/a" pending nil) ("https://api.test/b" pending nil)) :active 0 :limit 2 :timeout 37 :parser :custom :completion t :error t)) ("Fetching 1 URL..." "Fetching 2 URLs..."))"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_empty_input_and_invalid_keyword_contracts_are_synchronous() {
-    let elisp_form = r##"(let (callbacks messages processed)
+    ]],
+        ),
+        (
+            "async_http_queue_empty_input_and_invalid_keyword_contracts_are_synchronous",
+            r##"(let (callbacks messages processed)
           (cl-letf
               (((symbol-function
                  'async-http-queue--process)
@@ -199,16 +198,21 @@ fn async_http_queue_empty_input_and_invalid_keyword_contracts_are_synchronous() 
                  :unknown-option 9)))
              (nreverse callbacks)
              (nreverse messages)
-             processed)))"##;
-    let expect = expect![[
+             processed)))"##,
+            true,
+            expect![[
         r#"OK (#1=((t 0 nil)) nil (:error error ("Keyword argument :unknown-option not one of (:callback :error-callback :max-concurrent :timeout :parser)")) #1# ("No URLs provided" "No URLs provided") nil)"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }
 
 #[test]
-fn async_http_queue_generated_autoload_exposes_only_the_public_entry_point() {
-    let elisp_form = r##"(let ((definition
+fn registry_async_http_queue_autoload_batch() {
+    assert_async_http_queue_autoload_batch(&[
+        (
+            "async_http_queue_generated_autoload_exposes_only_the_public_entry_point",
+            r##"(let ((definition
                 (symbol-function
                  'async-http-queue)))
           (list
@@ -230,9 +234,11 @@ fn async_http_queue_generated_autoload_exposes_only_the_public_entry_point() {
             'async-http-queue--process)
            (get
             'async-http-queue
-            'function-documentation)))"##;
-    let expect = expect![[
+            'function-documentation)))"##,
+            true,
+            expect![[
         r#"OK (nil t "async-http-queue" nil nil "[Arg list not available until function definition is loaded.]" nil nil nil)"#
-    ]];
-    assert_async_http_queue_autoload_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

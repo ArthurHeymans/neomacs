@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_all_the_icons_nerd_fonts_parity;
+use super::assert_all_the_icons_nerd_fonts_batch;
 
 #[test]
-fn readme_preference_routes_specific_overrides_family_conversions_and_real_fallbacks() {
-    let elisp_form = r##"(let* ((override-map
+fn overrides_public_surface_batch() {
+    assert_all_the_icons_nerd_fonts_batch(&[
+        (
+            "readme_preference_routes_specific_overrides_family_conversions_and_real_fallbacks",
+            r##"(let* ((override-map
                       (all-the-icons-nerd-fonts--build-override-map))
                      (nerd-material
                       (all-the-icons-nerd-fonts--get-nerd-data-alist
@@ -75,17 +78,15 @@ fn readme_preference_routes_specific_overrides_family_conversions_and_real_fallb
                          fallback
                          :face 'warning))))
                      (list fallback before preferred))
-                 (all-the-icons-nerd-fonts-unprefer)))"##;
-    let expect = expect![[
+                 (all-the-icons-nerd-fonts-unprefer)))"##,
+            true,
+            expect![[
         r#"OK ("3d_rotation" (("" (61595) "FontAwesome" (:family "FontAwesome" :height 1.2 :inherit font-lock-constant-face) (raise -0.24)) ("" (57910) "Material Icons" (:family "Material Icons" :height 1.2 :inherit font-lock-keyword-face) (raise -0.24)) ("" (59469) "Material Icons" (:family "Material Icons" :height 1.2 :inherit warning) (raise -0.24))) (("" (60036) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-constant-face) (raise -0.24)) ("󰉢" (983650) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-keyword-face) (raise -0.24)) ("" (59469) "Material Icons" (:family "Material Icons" :height 1.2 :inherit warning) (raise -0.24))))"#
-    ]];
-
-    assert_all_the_icons_nerd_fonts_parity(elisp_form, expect);
-}
-
-#[test]
-fn user_override_customization_redirects_a_real_direct_call_with_arguments_intact() {
-    let elisp_form = r##"(let
+    ]],
+        ),
+        (
+            "user_override_customization_redirects_a_real_direct_call_with_arguments_intact",
+            r##"(let
                ((all-the-icons-nerd-fonts-overrides
                  '((all-the-icons-faicon
                     "github"
@@ -118,17 +119,15 @@ fn user_override_customization_redirects_a_real_direct_call_with_arguments_intac
                         (advice-member-p
                          'all-the-icons-nerd-fonts
                          'all-the-icons-faicon)))))
-                 (all-the-icons-nerd-fonts-unprefer)))"##;
-    let expect = expect![[
+                 (all-the-icons-nerd-fonts-unprefer)))"##,
+            true,
+            expect![[
         r#"OK ("" (59304) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.7999999999999998 :inherit font-lock-type-face) (raise 0.12) t t)"#
-    ]];
-
-    assert_all_the_icons_nerd_fonts_parity(elisp_form, expect);
-}
-
-#[test]
-fn unprefer_restores_original_direct_rendering_after_a_real_preference_session() {
-    let elisp_form = r##"(let* ((describe
+    ]],
+        ),
+        (
+            "unprefer_restores_original_direct_rendering_after_a_real_preference_session",
+            r##"(let* ((describe
                       (lambda (icon)
                         (list
                          (substring-no-properties icon)
@@ -171,10 +170,11 @@ fn unprefer_restores_original_direct_rendering_after_a_real_preference_session()
                       (advice-member-p
                        'all-the-icons-nerd-fonts
                        'all-the-icons-faicon)))
-                 (all-the-icons-nerd-fonts-unprefer)))"##;
-    let expect = expect![[
+                 (all-the-icons-nerd-fonts-unprefer)))"##,
+            true,
+            expect![[
         r#"OK (("" (61595) "FontAwesome" (:family "FontAwesome" :height 1.2 :inherit success)) ("" (60036) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit success)) ("" (61595) "FontAwesome" (:family "FontAwesome" :height 1.2 :inherit success)) t nil nil)"#
-    ]];
-
-    assert_all_the_icons_nerd_fonts_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

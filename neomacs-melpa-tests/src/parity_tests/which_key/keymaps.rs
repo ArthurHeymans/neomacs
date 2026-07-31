@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_which_key_parity, assert_which_key_signal_parity};
+use super::{assert_which_key_batch};
 
 #[test]
-fn which_key_keymap_binding_extraction_covers_binding_definition_shapes() {
-    let elisp_form = r##"(let ((map (make-sparse-keymap)))
+fn keymaps_public_surface_batch() {
+    assert_which_key_batch(&[
+        (
+            "which_key_keymap_binding_extraction_covers_binding_definition_shapes",
+            r##"(let ((map (make-sparse-keymap)))
                (define-key map "a" #'forward-char)
                (define-key map "b" "literal")
                (define-key map "c" [123 45 6])
@@ -16,17 +19,15 @@ fn which_key_keymap_binding_extraction_covers_binding_definition_shapes() {
                (define-key map "i" #'ignore)
                (sort
                 (which-key--get-keymap-bindings map)
-                (lambda (a b) (string-lessp (car a) (car b)))))"##;
-    let expect = expect![[
+                (lambda (a b) (string-lessp (car a) (car b)))))"##,
+            true,
+            expect![[
         r#"OK (("a" . "forward-char") ("b" . "literal") ("c" . "{ - C-f") ("d" . "function") ("e" . "Named") ("f" . "group:Group") ("g" . "next-line"))"#
-    ]];
-
-    assert_which_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn which_key_recursive_binding_extraction_distinguishes_top_level_and_all() {
-    let elisp_form = r##"(let ((map (make-sparse-keymap)))
+    ]],
+        ),
+        (
+            "which_key_recursive_binding_extraction_distinguishes_top_level_and_all",
+            r##"(let ((map (make-sparse-keymap)))
                (define-key map "c" "c")
                (define-key map "dd" "dd")
                (define-key map "eee" "eee")
@@ -37,17 +38,15 @@ fn which_key_recursive_binding_extraction_distinguishes_top_level_and_all() {
                  (lambda (a b) (string-lessp (car a) (car b))))
                 (sort
                  (which-key--get-keymap-bindings map nil nil nil t)
-                 (lambda (a b) (string-lessp (car a) (car b))))))"##;
-    let expect = expect![[
+                 (lambda (a b) (string-lessp (car a) (car b))))))"##,
+            true,
+            expect![[
         r#"OK ((("M-g" . "prefix") ("c" . "c") ("d" . "prefix") ("e" . "prefix")) (("M-g g" . "M-gg") ("c" . "c") ("d d" . "dd") ("e e e" . "eee")))"#
-    ]];
-
-    assert_which_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn which_key_keymap_binding_extraction_applies_prefix_start_and_filter_arguments() {
-    let elisp_form = r##"(let ((map (make-sparse-keymap)))
+    ]],
+        ),
+        (
+            "which_key_keymap_binding_extraction_applies_prefix_start_and_filter_arguments",
+            r##"(let ((map (make-sparse-keymap)))
                (define-key map (kbd "C-c a") #'forward-char)
                (define-key map (kbd "C-c b") #'backward-char)
                (define-key map (kbd "C-c c") #'next-line)
@@ -62,17 +61,15 @@ fn which_key_keymap_binding_extraction_applies_prefix_start_and_filter_arguments
                   t)
                  (lambda (a b) (string-lessp (car a) (car b))))
                 (which-key--get-keymap-bindings
-                 map nil (kbd "C-x") nil t)))"##;
-    let expect = expect![[
+                 map nil (kbd "C-x") nil t)))"##,
+            true,
+            expect![[
         r#"OK ((("C-c a" . "forward-char") ("C-c b" . "backward-char") ("existing" . "value")) nil)"#
-    ]];
-
-    assert_which_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn which_key_recursive_definition_reaches_every_nested_map_and_optional_root() {
-    let elisp_form = r##"(let ((root (make-sparse-keymap))
+    ]],
+        ),
+        (
+            "which_key_recursive_definition_reaches_every_nested_map_and_optional_root",
+            r##"(let ((root (make-sparse-keymap))
                     (first (make-sparse-keymap))
                     (second (make-sparse-keymap)))
                (define-key first "n" second)
@@ -89,16 +86,13 @@ fn which_key_recursive_definition_reaches_every_nested_map_and_optional_root() {
                   without-root
                   (lookup-key root (kbd "y"))
                   (lookup-key first (kbd "y"))
-                  (lookup-key second (kbd "y")))))"##;
-    let expect =
-        expect!["OK ((nil forward-char forward-char) backward-char backward-char backward-char)"];
-
-    assert_which_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn which_key_map_binding_predicate_matches_commands_prefixes_and_absences() {
-    let elisp_form = r##"(let ((map (make-sparse-keymap))
+                  (lookup-key second (kbd "y")))))"##,
+            true,
+            expect!["OK ((nil forward-char forward-char) backward-char backward-char backward-char)"],
+        ),
+        (
+            "which_key_map_binding_predicate_matches_commands_prefixes_and_absences",
+            r##"(let ((map (make-sparse-keymap))
                     (which-key--pages-obj
                      (make-which-key--pages :prefix [])))
                (define-key map "a" #'forward-char)
@@ -107,23 +101,19 @@ fn which_key_map_binding_predicate_matches_commands_prefixes_and_absences() {
                 (which-key--map-binding-p map '("a" . "forward-char"))
                 (which-key--map-binding-p map '("a" . "backward-char"))
                 (which-key--map-binding-p map '("p" . "Prefix Command"))
-                (which-key--map-binding-p map '("z" . "nil"))))"##;
-    let expect = expect!["OK (t nil t t)"];
-
-    assert_which_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn which_key_get_bindings_rejects_a_non_keymap_object() {
-    let elisp_form = r##"(which-key--get-bindings nil 'not-a-keymap)"##;
-    let expect = expect![[r#"ERR (error "not-a-keymap is not a keymap")"#]];
-
-    assert_which_key_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn which_key_public_show_commands_forward_exact_arguments_to_the_display_boundary() {
-    let elisp_form = r##"(progn
+                (which-key--map-binding-p map '("z" . "nil"))))"##,
+            true,
+            expect!["OK (t nil t t)"],
+        ),
+        (
+            "which_key_get_bindings_rejects_a_non_keymap_object",
+            r##"(which-key--get-bindings nil 'not-a-keymap)"##,
+            false,
+            expect![[r#"ERR (error "not-a-keymap is not a keymap")"#]],
+        ),
+        (
+            "which_key_public_show_commands_forward_exact_arguments_to_the_display_boundary",
+            r##"(progn
                (defvar neomacs-which-key-map)
                (setq neomacs-which-key-map (make-sparse-keymap))
                (let (calls)
@@ -135,17 +125,15 @@ fn which_key_public_show_commands_forward_exact_arguments_to_the_display_boundar
                  (which-key-show-full-keymap 'neomacs-which-key-map)
                  (list
                   (nreverse calls)
-                  (keymapp neomacs-which-key-map)))))"##;
-    let expect = expect![[
+                  (keymapp neomacs-which-key-map)))))"##,
+            true,
+            expect![[
         r#"OK ((("neomacs-which-key-map" #1=(keymap (97 . forward-char)) nil nil t) ("neomacs-which-key-map" #1# nil t)) t)"#
-    ]];
-
-    assert_which_key_parity(elisp_form, expect);
-}
-
-#[test]
-fn which_key_major_mode_show_handles_present_and_missing_maps() {
-    let elisp_form = r##"(let ((neomacs-which-key-mode-map
+    ]],
+        ),
+        (
+            "which_key_major_mode_show_handles_present_and_missing_maps",
+            r##"(let ((neomacs-which-key-mode-map
                      (make-sparse-keymap))
                     (major-mode 'neomacs-which-key-mode)
                     calls messages)
@@ -160,10 +148,11 @@ fn which_key_major_mode_show_handles_present_and_missing_maps() {
                  (which-key-show-major-mode t)
                  (setq major-mode 'neomacs-which-key-missing-mode)
                  (which-key-show-major-mode)
-                 (list (nreverse calls) (nreverse messages))))"##;
-    let expect = expect![[
+                 (list (nreverse calls) (nreverse messages))))"##,
+            true,
+            expect![[
         r#"OK (nil ("which-key: No map named neomacs-which-key-mode-map" "which-key: No map named neomacs-which-key-mode-map" "which-key: No map named neomacs-which-key-missing-mode-map"))"#
-    ]];
-
-    assert_which_key_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

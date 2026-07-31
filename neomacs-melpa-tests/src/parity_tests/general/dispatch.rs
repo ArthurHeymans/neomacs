@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_general_parity;
+use super::assert_general_batch;
 
 #[test]
-fn general_predicate_dispatch_selects_the_first_true_definition_then_fallback() {
-    let elisp_form = r##"(progn
+fn dispatch_public_surface_batch() {
+    assert_general_batch(&[
+        (
+            "general_predicate_dispatch_selects_the_first_true_definition_then_fallback",
+            r##"(progn
                (defvar
                  neomacs-general-predicate-map
                  (make-sparse-keymap))
@@ -42,15 +45,13 @@ fn general_predicate_dispatch_selects_the_first_true_definition_then_fallback() 
                      (list
                       fallback
                       second
-                      (key-binding (kbd "x")))))))"##;
-    let expect = expect![[r#"OK (beginning-of-line backward-char forward-char)"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_key_dynamically_resolves_a_binding_and_runs_setup_and_teardown() {
-    let elisp_form = r##"(progn
+                      (key-binding (kbd "x")))))))"##,
+            true,
+            expect![[r#"OK (beginning-of-line backward-char forward-char)"#]],
+        ),
+        (
+            "general_key_dynamically_resolves_a_binding_and_runs_setup_and_teardown",
+            r##"(progn
                (defvar
                  neomacs-general-key-map
                  (make-sparse-keymap))
@@ -85,15 +86,13 @@ fn general_key_dynamically_resolves_a_binding_and_runs_setup_and_teardown() {
                    (list
                     resolved
                     (nreverse
-                     neomacs-general-key-events)))))"##;
-    let expect = expect![[r#"OK (forward-char (setup teardown))"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_translate_key_uses_the_original_backup_across_separate_calls() {
-    let elisp_form = r##"(progn
+                     neomacs-general-key-events)))))"##,
+            true,
+            expect![[r#"OK (forward-char (setup teardown))"#]],
+        ),
+        (
+            "general_translate_key_uses_the_original_backup_across_separate_calls",
+            r##"(progn
                (defvar
                  neomacs-general-translate-map
                  (make-sparse-keymap))
@@ -140,15 +139,13 @@ fn general_translate_key_uses_the_original_backup_across_separate_calls() {
                  'general-neomacs-general-translate-map-backup-map)
                 (lookup-key
                  general-neomacs-general-translate-map-backup-map
-                 (kbd "a"))))"##;
-    let expect = expect![[r#"OK (backward-char next-line forward-char t forward-char)"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_translate_key_destructive_calls_observe_prior_mutations() {
-    let elisp_form = r##"(progn
+                 (kbd "a"))))"##,
+            true,
+            expect![[r#"OK (backward-char next-line forward-char t forward-char)"#]],
+        ),
+        (
+            "general_translate_key_destructive_calls_observe_prior_mutations",
+            r##"(progn
                (defvar
                  neomacs-general-destructive-map
                  (make-sparse-keymap))
@@ -188,15 +185,13 @@ fn general_translate_key_destructive_calls_observe_prior_mutations() {
                  (kbd "b"))
                 (lookup-key
                  neomacs-general-destructive-map
-                 (kbd "c"))))"##;
-    let expect = expect![[r#"OK (backward-char next-line backward-char)"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_swap_key_exchanges_both_definitions_in_one_operation() {
-    let elisp_form = r##"(progn
+                 (kbd "c"))))"##,
+            true,
+            expect![[r#"OK (backward-char next-line backward-char)"#]],
+        ),
+        (
+            "general_swap_key_exchanges_both_definitions_in_one_operation",
+            r##"(progn
                (defvar
                  neomacs-general-swap-map
                  (make-sparse-keymap))
@@ -220,15 +215,13 @@ fn general_swap_key_exchanges_both_definitions_in_one_operation() {
                  (kbd "a"))
                 (lookup-key
                  neomacs-general-swap-map
-                 (kbd "b"))))"##;
-    let expect = expect![[r#"OK (backward-char forward-char)"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_auto_unbind_replaces_a_non_prefix_before_installing_nested_keys() {
-    let elisp_form = r##"(progn
+                 (kbd "b"))))"##,
+            true,
+            expect![[r#"OK (backward-char forward-char)"#]],
+        ),
+        (
+            "general_auto_unbind_replaces_a_non_prefix_before_installing_nested_keys",
+            r##"(progn
                (defvar
                  neomacs-general-auto-map
                  (make-sparse-keymap))
@@ -268,15 +261,13 @@ fn general_auto_unbind_replaces_a_non_prefix_before_installing_nested_keys() {
                         (lookup-key
                          neomacs-general-auto-map
                          (kbd "a b c"))))
-                   (general-auto-unbind-keys t))))"##;
-    let expect = expect![[r#"OK (error t (keymap (99 . next-line)) next-line)"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_simulate_key_generates_a_named_command_and_executes_the_target_binding() {
-    let elisp_form = r##"(progn
+                   (general-auto-unbind-keys t))))"##,
+            true,
+            expect![[r#"OK (error t (keymap (99 . next-line)) next-line)"#]],
+        ),
+        (
+            "general_simulate_key_generates_a_named_command_and_executes_the_target_binding",
+            r##"(progn
                (defvar
                  neomacs-general-simulate-map
                  (make-sparse-keymap))
@@ -304,16 +295,13 @@ fn general_simulate_key_generates_a_named_command_and_executes_the_target_bindin
                     (commandp command)
                     (documentation command)
                     (point)
-                    general--last-simulated-command))))"##;
-    let expect =
-        expect![[r#"OK (neomacs-general-simulate-a t "Simulate general a." 2 forward-char)"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_key_dispatch_runs_a_matching_command_and_tracks_it() {
-    let elisp_form = r##"(progn
+                    general--last-simulated-command))))"##,
+            true,
+            expect![[r#"OK (neomacs-general-simulate-a t "Simulate general a." 2 forward-char)"#]],
+        ),
+        (
+            "general_key_dispatch_runs_a_matching_command_and_tracks_it",
+            r##"(progn
                (defvar
                  neomacs-general-dispatch-events nil)
                (setq
@@ -343,10 +331,11 @@ fn general_key_dispatch_runs_a_matching_command_and_tracks_it() {
                   (documentation command)
                   (nreverse
                    neomacs-general-dispatch-events)
-                  general--last-dispatch-command)))"##;
-    let expect = expect![[
+                  general--last-dispatch-command)))"##,
+            true,
+            expect![[
         r#"OK (neomacs-general-dispatch "General dispatch command." (alternate) neomacs-general-alternate)"#
-    ]];
-
-    assert_general_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

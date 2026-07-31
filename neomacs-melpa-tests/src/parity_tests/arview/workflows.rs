@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_arview_autoload_parity, assert_arview_parity};
+use super::{assert_arview_autoload_batch, assert_arview_batch};
 
 #[test]
-fn installed_autoload_opens_a_renamed_release_archive_and_preserves_exported_bytes() {
-    let elisp_form = r##"(save-window-excursion
+fn workflows_arview_autoload_batch() {
+    assert_arview_autoload_batch(&[
+        (
+            "installed_autoload_opens_a_renamed_release_archive_and_preserves_exported_bytes",
+            r##"(save-window-excursion
   (let* ((archive
           (arview-test-create-project-tar
            "widget release.download"
@@ -63,16 +66,21 @@ fn installed_autoload_opens_a_renamed_release_archive_and_preserves_exported_byt
            (file-exists-p exported-file)
            (file-exists-p archive)))
       (when (buffer-live-p view-buffer)
-        (kill-buffer view-buffer)))))"##;
-    let expect = expect![[
+        (kill-buffer view-buffer)))))"##,
+            true,
+            expect![[
         r#"OK (((nil t t) t dired-mode t t (("README.md" 48 "b77f148882de4ba1e7070d6654dcb6e52f24513d5e7fc027306ebcd5179b16b8") ("build/widget.bin" 14 "78b23e4f97b8c75fecf06fddfb5c83b14e802f6918a71c27c244c8531782cf05") ("config/release.conf" 47 "72330968a1047b1c2b1fd7ca30824c996829290e710f2b1cdf9d2b05d35c9c8f")) 14 "78b23e4f97b8c75fecf06fddfb5c83b14e802f6918a71c27c244c8531782cf05" t) nil nil t t)"#
-    ]];
-    assert_arview_autoload_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }
 
 #[test]
-fn dired_key_binding_opens_a_release_tree_and_cleans_it_when_the_view_is_closed() {
-    let elisp_form = r##"(save-window-excursion
+fn workflows_arview_batch() {
+    assert_arview_batch(&[
+        (
+            "dired_key_binding_opens_a_release_tree_and_cleans_it_when_the_view_is_closed",
+            r##"(save-window-excursion
   (let* ((archive
           (arview-test-create-project-tar
            "nightly build.tar"
@@ -123,16 +131,15 @@ fn dired_key_binding_opens_a_release_tree_and_cleans_it_when_the_view_is_closed(
       (when (buffer-live-p view-buffer)
         (kill-buffer view-buffer))
       (when (buffer-live-p source-buffer)
-        (kill-buffer source-buffer)))))"##;
-    let expect = expect![[
+        (kill-buffer source-buffer)))))"##,
+            true,
+            expect![[
         r#"OK ((arview-dired dired-mode t t (("README.md" 48 "b77f148882de4ba1e7070d6654dcb6e52f24513d5e7fc027306ebcd5179b16b8") ("build/widget.bin" 14 "78b23e4f97b8c75fecf06fddfb5c83b14e802f6918a71c27c244c8531782cf05") ("config/release.conf" 47 "72330968a1047b1c2b1fd7ca30824c996829290e710f2b1cdf9d2b05d35c9c8f")) t) t nil nil t)"#
-    ]];
-    assert_arview_parity(elisp_form, expect);
-}
-
-#[test]
-fn single_prefix_prompt_places_the_extracted_project_in_the_chosen_workspace() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "single_prefix_prompt_places_the_extracted_project_in_the_chosen_workspace",
+            r##"(save-window-excursion
   (let* ((archive
           (arview-test-create-project-tar
            "custom destination.tar"
@@ -189,16 +196,15 @@ fn single_prefix_prompt_places_the_extracted_project_in_the_chosen_workspace() {
            (file-exists-p view-directory)
            (file-exists-p archive)))
       (when (buffer-live-p view-buffer)
-        (kill-buffer view-buffer)))))"##;
-    let expect = expect![[
+        (kill-buffer view-buffer)))))"##,
+            true,
+            expect![[
         r#"OK ((("Temporary directory: " "[ORACLE-TMPDIR]/" nil t nil nil) dired-mode t t (("README.md" 48 "b77f148882de4ba1e7070d6654dcb6e52f24513d5e7fc027306ebcd5179b16b8") ("build/widget.bin" 14 "78b23e4f97b8c75fecf06fddfb5c83b14e802f6918a71c27c244c8531782cf05") ("config/release.conf" 47 "72330968a1047b1c2b1fd7ca30824c996829290e710f2b1cdf9d2b05d35c9c8f")) t) nil t)"#
-    ]];
-    assert_arview_parity(elisp_form, expect);
-}
-
-#[test]
-fn remote_release_is_copied_locally_then_both_copy_and_view_are_removed_on_close() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "remote_release_is_copied_locally_then_both_copy_and_view_are_removed_on_close",
+            r##"(save-window-excursion
   (let* ((local-fixture
           (arview-test-create-project-tar
            "remote release.tar"
@@ -277,16 +283,15 @@ fn remote_release_is_copied_locally_then_both_copy_and_view_are_removed_on_close
            (file-exists-p copied-archive)
            (file-exists-p local-fixture)))
       (when (buffer-live-p view-buffer)
-        (kill-buffer view-buffer)))))"##;
-    let expect = expect![[
+        (kill-buffer view-buffer)))))"##,
+            true,
+            expect![[
         r#"OK (((("/ssh:release@build.example:/incoming/remote release.tar" "[ORACLE-SANDBOX]/remote-extract-root/" nil)) dired-mode t t 10240 t (("README.md" 48 "b77f148882de4ba1e7070d6654dcb6e52f24513d5e7fc027306ebcd5179b16b8") ("build/widget.bin" 14 "78b23e4f97b8c75fecf06fddfb5c83b14e802f6918a71c27c244c8531782cf05") ("config/release.conf" 47 "72330968a1047b1c2b1fd7ca30824c996829290e710f2b1cdf9d2b05d35c9c8f")) t) nil nil nil t)"#
-    ]];
-    assert_arview_parity(elisp_form, expect);
-}
-
-#[test]
-fn unicode_archive_and_member_names_survive_extract_inspect_and_cleanup() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "unicode_archive_and_member_names_survive_extract_inspect_and_cleanup",
+            r##"(save-window-excursion
   (let* ((archive
           (arview-test-create-project-tar
            "資料 release λ.tar"
@@ -328,16 +333,15 @@ fn unicode_archive_and_member_names_survive_extract_inspect_and_cleanup() {
            (file-exists-p view-directory)
            (file-exists-p archive)))
       (when (buffer-live-p view-buffer)
-        (kill-buffer view-buffer)))))"##;
-    let expect = expect![[
+        (kill-buffer view-buffer)))))"##,
+            true,
+            expect![[
         r#"OK (("資料 release λ.tar" dired-mode t t (("README.md" 48 "b77f148882de4ba1e7070d6654dcb6e52f24513d5e7fc027306ebcd5179b16b8") ("build/widget.bin" 14 "78b23e4f97b8c75fecf06fddfb5c83b14e802f6918a71c27c244c8531782cf05") ("config/βeta λ.conf" 47 "72330968a1047b1c2b1fd7ca30824c996829290e710f2b1cdf9d2b05d35c9c8f")) "72330968a1047b1c2b1fd7ca30824c996829290e710f2b1cdf9d2b05d35c9c8f") nil t)"#
-    ]];
-    assert_arview_parity(elisp_form, expect);
-}
-
-#[test]
-fn corrupt_download_opens_an_empty_view_with_actionable_tar_diagnostics_then_cleans_up() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "corrupt_download_opens_an_empty_view_with_actionable_tar_diagnostics_then_cleans_up",
+            r##"(save-window-excursion
   (let* ((archive
           (arview-test-write-bytes
            (arview-test-path
@@ -391,7 +395,9 @@ fn corrupt_download_opens_an_empty_view_with_actionable_tar_diagnostics_then_cle
            (file-exists-p view-directory)
            (file-exists-p archive)))
       (when (buffer-live-p view-buffer)
-        (kill-buffer view-buffer)))))"##;
-    let expect = expect!["OK ((dired-mode t nil t t t t) nil t)"];
-    assert_arview_parity(elisp_form, expect);
+        (kill-buffer view-buffer)))))"##,
+            true,
+            expect!["OK ((dired-mode t nil t t t t) nil t)"],
+        ),
+    ]);
 }

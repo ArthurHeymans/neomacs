@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_async_http_queue_parity;
+use super::assert_async_http_queue_batch;
 
 #[test]
-fn async_http_queue_state_constructor_predicate_accessors_and_no_copier_contract() {
-    let elisp_form = r##"(let* ((completion
+fn state_public_surface_batch() {
+    assert_async_http_queue_batch(&[
+        (
+            "async_http_queue_state_constructor_predicate_accessors_and_no_copier_contract",
+            r##"(let* ((completion
                 (lambda (_) :complete))
                (failure
                 (lambda (_) :failed))
@@ -47,14 +50,13 @@ fn async_http_queue_state_constructor_predicate_accessors_and_no_copier_contract
             failure)
            (fboundp
             'copy-async-http-queue--state)
-           (type-of state)))"##;
-    let expect = expect!["OK (t nil t 2 7 19 t t t nil async-http-queue--state)"];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_every_generated_accessor_supports_setf_mutation() {
-    let elisp_form = r##"(let* ((state
+           (type-of state)))"##,
+            true,
+            expect!["OK (t nil t 2 7 19 t t t nil async-http-queue--state)"],
+        ),
+        (
+            "async_http_queue_every_generated_accessor_supports_setf_mutation",
+            r##"(let* ((state
                 (async-http-queue-test-state
                  '("https://api.test/old")
                  1
@@ -100,16 +102,15 @@ fn async_http_queue_every_generated_accessor_supports_setf_mutation() {
            (eq
             (async-http-queue--state-error-callback
              state)
-            failure)))"##;
-    let expect = expect![[
+            failure)))"##,
+            true,
+            expect![[
         r#"OK ((:queue (("https://api.test/new" processing "seed")) :active 4 :limit 9 :timeout 31 :parser :custom :completion t :error t) t t t)"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_update_status_copy_on_write_preserves_input_and_other_fields() {
-    let elisp_form = r##"(let* ((state
+    ]],
+        ),
+        (
+            "async_http_queue_update_status_copy_on_write_preserves_input_and_other_fields",
+            r##"(let* ((state
                 (async-http-queue-test-state
                  '("https://api.test/a"
                    "https://api.test/b")))
@@ -142,16 +143,15 @@ fn async_http_queue_update_status_copy_on_write_preserves_input_and_other_fields
              (eq first-before first-after)
              (eq second-before second-after)
              (alist-get 'status second-before)
-             (alist-get 'data second-after))))"##;
-    let expect = expect![[
+             (alist-get 'data second-after))))"##,
+            true,
+            expect![[
         r#"OK ((("https://api.test/a" pending (:existing payload)) ("https://api.test/b" processing #1=(:existing payload))) nil t nil pending #1#)"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_update_data_copies_matching_item_and_preserves_status_and_neighbors() {
-    let elisp_form = r##"(let* ((payload
+    ]],
+        ),
+        (
+            "async_http_queue_update_data_copies_matching_item_and_preserves_status_and_neighbors",
+            r##"(let* ((payload
                 '((id . 42)
                   (nested . [a b c])))
                (state
@@ -184,16 +184,15 @@ fn async_http_queue_update_data_copies_matching_item_and_preserves_status_and_ne
               payload)
              (eq
               (alist-get 'data middle-after)
-              payload))))"##;
-    let expect = expect![[
+              payload))))"##,
+            true,
+            expect![[
         r#"OK ((("https://api.test/a" pending nil) ("https://api.test/b" processing ((id . 42) (nested . [a b c]))) ("https://api.test/c" pending nil)) nil t t)"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_updates_for_unknown_url_rebuild_queue_without_changing_values() {
-    let elisp_form = r##"(let* ((state
+    ]],
+        ),
+        (
+            "async_http_queue_updates_for_unknown_url_rebuild_queue_without_changing_values",
+            r##"(let* ((state
                 (async-http-queue-test-state
                  '("https://api.test/a"
                    "https://api.test/b")))
@@ -219,16 +218,15 @@ fn async_http_queue_updates_for_unknown_url_rebuild_queue_without_changing_value
              (cl-mapcar
               #'eq
               items-before
-              queue-after))))"##;
-    let expect = expect![[
+              queue-after))))"##,
+            true,
+            expect![[
         r#"OK ((("https://api.test/a" pending nil) ("https://api.test/b" pending nil)) nil (t t))"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_duplicate_urls_are_all_updated_by_each_url_keyed_mutation() {
-    let elisp_form = r##"(let ((state
+    ]],
+        ),
+        (
+            "async_http_queue_duplicate_urls_are_all_updated_by_each_url_keyed_mutation",
+            r##"(let ((state
                (async-http-queue-test-state
                 '("https://api.test/same"
                   "https://api.test/other"
@@ -242,16 +240,15 @@ fn async_http_queue_duplicate_urls_are_all_updated_by_each_url_keyed_mutation() 
            "https://api.test/same"
            'shared-result)
           (async-http-queue-test-queue-snapshot
-           state))"##;
-    let expect = expect![[
+           state))"##,
+            true,
+            expect![[
         r#"OK (("https://api.test/same" processing shared-result) ("https://api.test/other" pending nil) ("https://api.test/same" processing shared-result))"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_malformed_matching_item_signals_during_missing_slot_mutation() {
-    let elisp_form = r##"(let ((status-state
+    ]],
+        ),
+        (
+            "async_http_queue_malformed_matching_item_signals_during_missing_slot_mutation",
+            r##"(let ((status-state
                (async-http-queue--state-create
                 :queue
                 '(((url . "https://api.test/a")
@@ -277,16 +274,15 @@ fn async_http_queue_malformed_matching_item_signals_during_missing_slot_mutation
            (async-http-queue--state-queue
             status-state)
            (async-http-queue--state-queue
-            data-state)))"##;
-    let expect = expect![[
+            data-state)))"##,
+            true,
+            expect![[
         r#"OK ((:error wrong-type-argument (consp nil)) (:error wrong-type-argument (consp nil)) (((url . "https://api.test/a") (data))) (((url . "https://api.test/a") (status . pending))))"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_completion_preserves_input_order_across_mixed_terminal_states() {
-    let elisp_form = r##"(let* ((results)
+    ]],
+        ),
+        (
+            "async_http_queue_completion_preserves_input_order_across_mixed_terminal_states",
+            r##"(let* ((results)
                (messages)
                (state
                 (async-http-queue-test-state
@@ -338,16 +334,15 @@ fn async_http_queue_completion_preserves_input_order_across_mixed_terminal_state
             (nreverse results))
            (nreverse messages)
            (async-http-queue-test-queue-snapshot
-            state)))"##;
-    let expect = expect![[
+            state)))"##,
+            true,
+            expect![[
         r#"OK (((t (#1=(:id 1) nil #2=(:id 3)))) ("Loaded 2 URLs (1 failed)") (("https://api.test/first" done #1#) ("https://api.test/second" error nil) ("https://api.test/third" done #2#)))"#
-    ]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_completion_waits_for_pending_and_processing_items_with_progress() {
-    let elisp_form = r##"(let* ((urls
+    ]],
+        ),
+        (
+            "async_http_queue_completion_waits_for_pending_and_processing_items_with_progress",
+            r##"(let* ((urls
                 (cl-loop
                  for index from 1 to 12
                  collect
@@ -402,14 +397,13 @@ fn async_http_queue_completion_waits_for_pending_and_processing_items_with_progr
             (async-http-queue--state-queue
              state))
            (async-http-queue--state-active-workers
-            state)))"##;
-    let expect = expect![[r#"OK (0 ("Loading URLs... 1/12 completed (1 failed)") 9 0)"#]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_empty_state_completes_with_empty_vector_and_nil_callback_is_safe() {
-    let elisp_form = r##"(let* (results
+            state)))"##,
+            true,
+            expect![[r#"OK (0 ("Loading URLs... 1/12 completed (1 failed)") 9 0)"#]],
+        ),
+        (
+            "async_http_queue_empty_state_completes_with_empty_vector_and_nil_callback_is_safe",
+            r##"(let* (results
                messages
                (state
                 (async-http-queue-test-state
@@ -443,14 +437,13 @@ fn async_http_queue_empty_state_completes_with_empty_vector_and_nil_callback_is_
                (vectorp value)
                (length value)))
             results)
-           (nreverse messages)))"##;
-    let expect = expect![[r#"OK (((t 0)) ("Loaded 0 URLs" "Loaded 0 URLs"))"#]];
-    assert_async_http_queue_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_http_queue_check_completion_is_not_idempotent_after_terminal_state() {
-    let elisp_form = r##"(let* (results
+           (nreverse messages)))"##,
+            true,
+            expect![[r#"OK (((t 0)) ("Loaded 0 URLs" "Loaded 0 URLs"))"#]],
+        ),
+        (
+            "async_http_queue_check_completion_is_not_idempotent_after_terminal_state",
+            r##"(let* (results
                messages
                (state
                 (async-http-queue-test-state
@@ -485,7 +478,9 @@ fn async_http_queue_check_completion_is_not_idempotent_after_terminal_state() {
              state))
           (list
            (nreverse results)
-           (nreverse messages)))"##;
-    let expect = expect![[r#"OK (((:payload) (:payload)) ("Loaded 1 URLs" "Loaded 1 URLs"))"#]];
-    assert_async_http_queue_parity(elisp_form, expect);
+           (nreverse messages)))"##,
+            true,
+            expect![[r#"OK (((:payload) (:payload)) ("Loaded 1 URLs" "Loaded 1 URLs"))"#]],
+        ),
+    ]);
 }

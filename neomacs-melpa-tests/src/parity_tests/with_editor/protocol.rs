@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_with_editor_parity;
+use super::assert_with_editor_batch;
 
 #[test]
-fn with_editor_sleeping_filter_opens_relative_file_at_line_and_column() {
-    let elisp_form = r##"(let* ((root (make-temp-file
+fn protocol_public_surface_batch() {
+    assert_with_editor_batch(&[
+        (
+            "with_editor_sleeping_filter_opens_relative_file_at_line_and_column",
+            r##"(let* ((root (make-temp-file
                            "with-editor-protocol-" t))
                     (file (expand-file-name "message.txt" root))
                     visited
@@ -38,15 +41,13 @@ fn with_editor_sleeping_filter_opens_relative_file_at_line_and_column() {
                      (setq-local kill-buffer-query-functions nil)
                      (set-buffer-modified-p nil)
                      (kill-buffer buffer)))
-                 (delete-directory root t)))"##;
-    let expect = expect![[r#"OK (t t "4312" 2 4 "zero\none abc\ntwo\n")"#]];
-
-    assert_with_editor_parity(elisp_form, expect);
-}
-
-#[test]
-fn with_editor_sleeping_filter_supports_absolute_file_without_position() {
-    let elisp_form = r##"(let* ((file (make-temp-file
+                 (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK (t t "4312" 2 4 "zero\none abc\ntwo\n")"#]],
+        ),
+        (
+            "with_editor_sleeping_filter_supports_absolute_file_without_position",
+            r##"(let* ((file (make-temp-file
                            "with-editor-absolute-"
                            nil ".txt" "payload"))
                     visited
@@ -75,20 +76,19 @@ fn with_editor_sleeping_filter_supports_absolute_file_without_position() {
                      (setq-local kill-buffer-query-functions nil)
                      (set-buffer-modified-p nil)
                      (kill-buffer buffer)))
-                 (delete-file file)))"##;
-    let expect = expect![[r#"OK (t t "99" 1 "payload")"#]];
-
-    assert_with_editor_parity(elisp_form, expect);
-}
-
-#[test]
-fn with_editor_sleeping_filter_returns_non_protocol_output_unchanged() {
-    let elisp_form = r##"(list
+                 (delete-file file)))"##,
+            true,
+            expect![[r#"OK (t t "99" 1 "payload")"#]],
+        ),
+        (
+            "with_editor_sleeping_filter_returns_non_protocol_output_unchanged",
+            r##"(list
                (with-editor-sleeping-editor-filter
                 nil "ordinary output\n")
                (with-editor-output-filter
-                "partial ordinary output"))"##;
-    let expect = expect![[r#"OK ("ordinary output\n" "partial ordinary output")"#]];
-
-    assert_with_editor_parity(elisp_form, expect);
+                "partial ordinary output"))"##,
+            true,
+            expect![[r#"OK ("ordinary output\n" "partial ordinary output")"#]],
+        ),
+    ]);
 }

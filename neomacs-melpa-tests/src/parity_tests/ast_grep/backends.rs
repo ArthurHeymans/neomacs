@@ -1,13 +1,13 @@
 use expect_test::expect;
 
-use super::{
-    assert_ast_grep_consult_parity, assert_ast_grep_helm_parity, assert_ast_grep_ivy_parity,
-    assert_ast_grep_parity,
-};
+use super::{assert_ast_grep_consult_batch, assert_ast_grep_helm_batch, assert_ast_grep_ivy_batch, assert_ast_grep_batch};
 
 #[test]
-fn ast_grep_backend_selection_covers_forced_fallbacks_and_auto_ui_priority() {
-    let elisp_form = r##"(let (consult ivy helm)
+fn backends_ast_grep_batch() {
+    assert_ast_grep_batch(&[
+        (
+            "ast_grep_backend_selection_covers_forced_fallbacks_and_auto_ui_priority",
+            r##"(let (consult ivy helm)
           (cl-letf (((symbol-function 'ast-grep--consult-backend-available-p)
                      (lambda () consult))
                     ((symbol-function 'ast-grep--ivy-backend-available-p)
@@ -37,16 +37,15 @@ fn ast_grep_backend_selection_covers_forced_fallbacks_and_auto_ui_priority() {
                (auto nil t t t t)
                (auto nil t t t nil)
                (auto nil nil t t t)
-               (auto nil nil nil t t)))))"##;
-    let expect = expect![[
+               (auto nil nil nil t t)))))"##,
+            true,
+            expect![[
         r#"OK (((sync nil nil t t t) sync "ast-grep backend: sync") ((consult nil nil t nil nil) consult "ast-grep backend: consult") ((consult nil nil nil t t) sync "ast-grep backend: consult -> sync") ((ivy nil nil t t nil) ivy "ast-grep backend: ivy") ((ivy nil nil t nil t) sync "ast-grep backend: ivy -> sync") ((helm nil nil t nil t) helm "ast-grep backend: helm") ((helm nil nil t t nil) sync "ast-grep backend: helm -> sync") ((auto t nil t t t) ivy "ast-grep backend: auto -> ivy") ((auto t nil t nil t) sync "ast-grep backend: auto -> sync") ((auto nil t t t t) helm "ast-grep backend: auto -> helm") ((auto nil t t t nil) sync "ast-grep backend: auto -> sync") ((auto nil nil t t t) consult "ast-grep backend: auto -> consult") ((auto nil nil nil t t) sync "ast-grep backend: auto -> sync"))"#
-    ]];
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_backend_runner_dispatches_exact_adapter_and_directory() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "ast_grep_backend_runner_dispatches_exact_adapter_and_directory",
+            r##"(let (calls)
           (cl-letf (((symbol-function 'require)
                      (lambda (feature &rest _)
                        (push (list :require feature) calls)
@@ -73,16 +72,15 @@ fn ast_grep_backend_runner_dispatches_exact_adapter_and_directory() {
                 (ast-grep--run-search-backend
                  backend "/fixture/project/"))
               '(consult ivy helm sync unknown))
-             (nreverse calls))))"##;
-    let expect = expect![[
+             (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ((:consult-result :ivy-result :helm-result :sync-result nil) ((:require ast-grep-consult) (:consult "/fixture/project/") (:require ast-grep-ivy) (:ivy "/fixture/project/") (:require ast-grep-helm) (:helm "/fixture/project/") (:sync "/fixture/project/")))"#
-    ]];
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_describe_backend_returns_and_messages_the_same_resolution() {
-    let elisp_form = r##"(let ((ast-grep-search-backend 'consult)
+    ]],
+        ),
+        (
+            "ast_grep_describe_backend_returns_and_messages_the_same_resolution",
+            r##"(let ((ast-grep-search-backend 'consult)
                messages)
           (cl-letf (((symbol-function 'ast-grep--select-backend)
                      (lambda () 'sync))
@@ -93,16 +91,15 @@ fn ast_grep_describe_backend_returns_and_messages_the_same_resolution() {
                         messages))))
             (list
              (ast-grep-describe-backend)
-             (nreverse messages))))"##;
-    let expect = expect![[
+             (nreverse messages))))"##,
+            true,
+            expect![[
         r#"OK ("ast-grep backend: consult -> sync" ("ast-grep backend: consult -> sync"))"#
-    ]];
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_main_backend_availability_adapters_require_modules_and_forward_results() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "ast_grep_main_backend_availability_adapters_require_modules_and_forward_results",
+            r##"(let (calls)
           (cl-letf (((symbol-function 'require)
                      (lambda (feature &rest _)
                        (push (list :require feature) calls)
@@ -123,16 +120,21 @@ fn ast_grep_main_backend_availability_adapters_require_modules_and_forward_resul
              (ast-grep--consult-backend-available-p)
              (ast-grep--ivy-backend-available-p)
              (ast-grep--helm-backend-available-p)
-             (nreverse calls))))"##;
-    let expect = expect![
+             (nreverse calls))))"##,
+            true,
+            expect![
         "OK (:consult-ready nil :helm-ready ((:require ast-grep-consult) :consult-probe (:require ast-grep-ivy) (:require ast-grep-helm) :helm-probe))"
-    ];
-    assert_ast_grep_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }
 
 #[test]
-fn ast_grep_consult_availability_probe_returns_exact_require_result() {
-    let elisp_form = r##"(let (calls)
+fn backends_ast_grep_consult_batch() {
+    assert_ast_grep_consult_batch(&[
+        (
+            "ast_grep_consult_availability_probe_returns_exact_require_result",
+            r##"(let (calls)
           (cl-letf (((symbol-function 'require)
                      (lambda (feature filename noerror)
                        (push
@@ -141,28 +143,26 @@ fn ast_grep_consult_availability_probe_returns_exact_require_result() {
                        (eq feature 'consult))))
             (list
              (ast-grep--consult-available-p)
-             (nreverse calls))))"##;
-    let expect = expect!["OK (t ((consult nil t)))"];
-    assert_ast_grep_consult_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_consult_async_builder_enforces_minimum_and_builds_exact_argv() {
-    let elisp_form = r##"(let ((ast-grep-async-min-input 3)
+             (nreverse calls))))"##,
+            true,
+            expect!["OK (t ((consult nil t)))"],
+        ),
+        (
+            "ast_grep_consult_async_builder_enforces_minimum_and_builds_exact_argv",
+            r##"(let ((ast-grep-async-min-input 3)
                (ast-grep-executable "sg"))
           (mapcar
            (lambda (input)
              (ast-grep--async-builder input "/fixture/root"))
-           '(nil "" "a" "ab" "abc" "αβγ" "console.log($A)")))"##;
-    let expect = expect![[
+           '(nil "" "a" "ab" "abc" "αβγ" "console.log($A)")))"##,
+            true,
+            expect![[
         r#"OK (nil nil nil nil ("sg" "run" "--pattern=abc" "--json=stream" "/fixture/root") ("sg" "run" "--pattern=αβγ" "--json=stream" "/fixture/root") ("sg" "run" "--pattern=console.log($A)" "--json=stream" "/fixture/root"))"#
-    ]];
-    assert_ast_grep_consult_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_consult_async_source_builds_real_pipeline_and_transforms_json_items() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "ast_grep_consult_async_source_builds_real_pipeline_and_transforms_json_items",
+            r##"(let (calls)
           (cl-letf (((symbol-function 'consult--async-throttle)
                      (lambda ()
                        (push :throttle calls)
@@ -196,16 +196,15 @@ fn ast_grep_consult_async_source_builds_real_pipeline_and_transforms_json_items(
             (list
              (ast-grep--async-source "/fixture/")
              (nreverse calls)
-             (hash-table-count ast-grep--candidate-table))))"##;
-    let expect = expect![[
+             (hash-table-count ast-grep--candidate-table))))"##,
+            true,
+            expect![[
         r#"OK ((:source #1=(throttle-stage process-stage transform-stage)) (:throttle (:process nil ("ast-grep" "run" "--pattern=abc" "--json=stream" "/fixture/")) (:transform ("a.rs:2:2:one" "b.rs:4:4:two")) (:pipeline #1#)) 2)"#
-    ]];
-    assert_ast_grep_consult_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_consult_state_previews_structured_match_at_character_column_and_cleans_up() {
-    let elisp_form = r##"(let* ((file
+    ]],
+        ),
+        (
+            "ast_grep_consult_state_previews_structured_match_at_character_column_and_cleans_up",
+            r##"(let* ((file
                 (ast-grep-test-write-file
                  "consult/preview.rs"
                  "zero\n\tα界target()\n"))
@@ -239,15 +238,13 @@ fn ast_grep_consult_state_previews_structured_match_at_character_column_and_clea
                    (funcall state 'return candidate)
                    (funcall state 'exit nil)
                    (nreverse calls))))
-            (ast-grep-test-kill-file-buffer file)))"##;
-    let expect =
-        expect!["OK (9 (2 3 116) nil nil ((preview :file) (:pulse 9) (return :file) (exit nil)))"];
-    assert_ast_grep_consult_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_consult_search_wires_source_options_annotation_and_selected_jump() {
-    let elisp_form = r##"(let* ((candidate
+            (ast-grep-test-kill-file-buffer file)))"##,
+            true,
+            expect!["OK (9 (2 3 116) nil nil ((preview :file) (:pulse 9) (return :file) (exit nil)))"],
+        ),
+        (
+            "ast_grep_consult_search_wires_source_options_annotation_and_selected_jump",
+            r##"(let* ((candidate
                 (ast-grep--format-candidate
                  '(:file "src/a.rs" :start-line 2 :start-column 4
                    :text "target")))
@@ -283,16 +280,21 @@ fn ast_grep_consult_search_wires_source_options_annotation_and_selected_jump() {
              (ast-grep--search-consult "/fixture/")
              (nreverse calls)
              jumped
-             (gethash "stale" ast-grep--candidate-table))))"##;
-    let expect = expect![[
+             (gethash "stale" ast-grep--candidate-table))))"##,
+            true,
+            expect![[
         r#"OK (#1=("src/a.rs" 2 4 nil nil "target" nil) ((:source "/fixture/") (:read fixture-source (:prompt "ast-grep: " :lookup consult--lookup-member :state fixture-state :annotate #[(cand) ((list cand (ast-grep--candidate-icon-prefix cand) "")) (t)] :category ast-grep :history ast-grep-history :require-match t) :annotation (#("src/a.rs:3:4:target" 0 19 (ast-grep-match (:file "src/a.rs" :start-line 2 :start-column 4 :text "target"))) "" ""))) #1# nil)"#
-    ]];
-    assert_ast_grep_consult_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }
 
 #[test]
-fn ast_grep_ivy_threshold_generation_and_shell_quoting_match_real_input_rules() {
-    let elisp_form = r##"(let ((ast-grep-async-min-input 4)
+fn backends_ast_grep_ivy_batch() {
+    assert_ast_grep_ivy_batch(&[
+        (
+            "ast_grep_ivy_threshold_generation_and_shell_quoting_match_real_input_rules",
+            r##"(let ((ast-grep-async-min-input 4)
                (ast-grep--ivy-generation 40))
           (list
            (mapcar
@@ -301,16 +303,15 @@ fn ast_grep_ivy_threshold_generation_and_shell_quoting_match_real_input_rules() 
            (ast-grep--ivy-next-generation)
            (ast-grep--ivy-next-generation)
            (ast-grep--command-shell-string
-            '("sg tool" "run" "--pattern=a b;nope" "/a dir"))))"##;
-    let expect = expect![[
+            '("sg tool" "run" "--pattern=a b;nope" "/a dir"))))"##,
+            true,
+            expect![[
         r#"OK ((("" "4 chars more") ("" "3 chars more") ("" "1 chars more") nil ("" "2 chars more")) 41 42 "sg\\ tool run --pattern\\=a\\ b\\;nope /a\\ dir")"#
-    ]];
-    assert_ast_grep_ivy_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_ivy_availability_probe_requires_both_packages_with_short_circuiting() {
-    let elisp_form = r##"(let (available calls)
+    ]],
+        ),
+        (
+            "ast_grep_ivy_availability_probe_requires_both_packages_with_short_circuiting",
+            r##"(let (available calls)
           (cl-letf (((symbol-function 'require)
                      (lambda (feature filename noerror)
                        (push
@@ -335,16 +336,15 @@ fn ast_grep_ivy_availability_probe_requires_both_packages_with_short_circuiting(
                  counsel-missing
                  (list
                   (ast-grep--ivy-available-p)
-                  (nreverse calls)))))))"##;
-    let expect = expect![
+                  (nreverse calls)))))))"##,
+            true,
+            expect![
         "OK ((nil ((ivy nil t))) (nil ((ivy nil t) (counsel nil t))) (ready ((ivy nil t) (counsel nil t))))"
-    ];
-    assert_ast_grep_ivy_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_ivy_timer_and_process_lifecycle_cancels_work_and_rejects_stale_owners() {
-    let elisp_form = r##"(let* ((ast-grep--ivy-generation 7)
+    ],
+        ),
+        (
+            "ast_grep_ivy_timer_and_process_lifecycle_cancels_work_and_rejects_stale_owners",
+            r##"(let* ((ast-grep--ivy-generation 7)
                (process
                 (start-process
                  ast-grep--ivy-process-name
@@ -381,14 +381,13 @@ fn ast_grep_ivy_timer_and_process_lifecycle_cancels_work_and_rejects_stale_owner
             (when (process-live-p process)
               (delete-process process))
             (when (process-live-p other)
-              (delete-process other))))"##;
-    let expect = expect!["OK ((t nil nil) nil t t)"];
-    assert_ast_grep_ivy_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_ivy_async_filter_buffers_partial_json_and_forwards_complete_candidates() {
-    let elisp_form = r##"(let* ((process
+              (delete-process other))))"##,
+            true,
+            expect!["OK ((t nil nil) nil t t)"],
+        ),
+        (
+            "ast_grep_ivy_async_filter_buffers_partial_json_and_forwards_complete_candidates",
+            r##"(let* ((process
                 (start-process
                  "ast-grep-ivy-filter-fixture"
                  nil
@@ -416,16 +415,15 @@ fn ast_grep_ivy_async_filter_buffers_partial_json_and_forwards_complete_candidat
                  (ast-grep-test-match-summary "a.rs:2:2:one")
                  (ast-grep-test-match-summary "b.rs:4:4:two")))
             (when (process-live-p process)
-              (delete-process process))))"##;
-    let expect = expect![[
+              (delete-process process))))"##,
+            true,
+            expect![[
         r#"OK (((t "a.rs:2:2:one\nb.rs:4:4:two\n")) "partial" 2 ("a.rs" 1 2 nil nil "one" nil) ("b.rs" 3 4 nil nil "two" nil))"#
-    ]];
-    assert_ast_grep_ivy_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_ivy_collection_cancels_stale_work_and_starts_exact_async_command() {
-    let elisp_form = r##"(let ((ast-grep-async-min-input 3)
+    ]],
+        ),
+        (
+            "ast_grep_ivy_collection_cancels_stale_work_and_starts_exact_async_command",
+            r##"(let ((ast-grep-async-min-input 3)
                (ast-grep-executable "sg")
                (ast-grep--ivy-generation 0)
                calls)
@@ -447,16 +445,15 @@ fn ast_grep_ivy_collection_cancels_stale_work_and_starts_exact_async_command() {
                (hash-table-count ast-grep--candidate-table)
                (funcall collection "abc")
                ast-grep--ivy-generation
-               (nreverse calls)))))"##;
-    let expect = expect![[
+               (nreverse calls)))))"##,
+            true,
+            expect![[
         r#"OK (("" "2 chars more") 0 nil 2 (:stop :stop (:async "sg run --pattern\\=abc --json\\=stream /fixture/root" nil t)))"#
-    ]];
-    assert_ast_grep_ivy_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_ivy_action_transformer_and_search_wire_real_candidate_contract() {
-    let elisp_form = r##"(let* ((candidate
+    ]],
+        ),
+        (
+            "ast_grep_ivy_action_transformer_and_search_wire_real_candidate_contract",
+            r##"(let* ((candidate
                 (ast-grep--format-candidate
                  '(:file "src/a.rs" :start-line 2 :start-column 4
                    :text "target")))
@@ -496,16 +493,21 @@ fn ast_grep_ivy_action_transformer_and_search_wire_real_candidate_contract() {
                (substring-no-properties display)
                (ast-grep--search-ivy "/fixture/")
                (gethash "stale" ast-grep--candidate-table)
-               (nreverse calls)))))"##;
-    let expect = expect![[
+               (nreverse calls)))))"##,
+            true,
+            expect![[
         r#"OK (#1=((:pulse 77) (:transformer ast-grep-search ast-grep--ivy-display-transformer) (:read "ast-grep: " t (:dynamic-collection t :action ast-grep--ivy-action :update-fn auto :unwind #[nil ((ast-grep--ivy-next-generation) (ast-grep--ivy-stop-process)) (t)] :history ast-grep-history :require-match t :caller ast-grep-search))) "src/a.rs:3:4:target" :ivy-result nil ((:goto ("src/a.rs" 2 4 nil nil "target" nil)) . #1#))"#
-    ]];
-    assert_ast_grep_ivy_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }
 
 #[test]
-fn ast_grep_helm_command_uses_display_width_so_cjk_matches_helm_gate() {
-    let elisp_form = r##"(let ((ast-grep-async-min-input 3)
+fn backends_ast_grep_helm_batch() {
+    assert_ast_grep_helm_batch(&[
+        (
+            "ast_grep_helm_command_uses_display_width_so_cjk_matches_helm_gate",
+            r##"(let ((ast-grep-async-min-input 3)
                (ast-grep-executable "sg"))
           (mapcar
            (lambda (input)
@@ -516,16 +518,15 @@ fn ast_grep_helm_command_uses_display_width_so_cjk_matches_helm_gate() {
               (ast-grep-test-error-data
                (lambda ()
                  (ast-grep--helm-command input "/fixture/")))))
-           '(nil "" "ab" "abc" "界" "界a" "αβγ")))"##;
-    let expect = expect![[
+           '(nil "" "ab" "abc" "界" "界a" "αβγ")))"##,
+            true,
+            expect![[
         r#"OK ((nil nil nil (:ok nil)) ("" 0 0 (:ok nil)) ("ab" 2 2 (:ok nil)) ("abc" 3 3 (:ok ("sg" "run" "--pattern=abc" "--json=stream" "/fixture/"))) ("界" 1 2 (:ok nil)) ("界a" 2 3 (:ok ("sg" "run" "--pattern=界a" "--json=stream" "/fixture/"))) ("αβγ" 3 3 (:ok ("sg" "run" "--pattern=αβγ" "--json=stream" "/fixture/"))))"#
-    ]];
-    assert_ast_grep_helm_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_helm_availability_probe_requires_module_and_checks_both_entry_points() {
-    let elisp_form = r##"(let (load-result definitions calls)
+    ]],
+        ),
+        (
+            "ast_grep_helm_availability_probe_requires_module_and_checks_both_entry_points",
+            r##"(let (load-result definitions calls)
           (cl-letf (((symbol-function 'require)
                      (lambda (feature filename noerror)
                        (push
@@ -547,16 +548,15 @@ fn ast_grep_helm_availability_probe_requires_module_and_checks_both_entry_points
              '((nil (helm helm-make-source))
                (t (helm))
                (t (helm-make-source))
-               (t (helm helm-make-source))))))"##;
-    let expect = expect![
+               (t (helm helm-make-source))))))"##,
+            true,
+            expect![
         "OK (((nil (helm helm-make-source)) nil ((helm nil t))) ((t (helm)) nil ((helm nil t))) ((t (helm-make-source)) nil ((helm nil t))) ((t (helm . #1=(helm-make-source))) #1# ((helm nil t))))"
-    ];
-    assert_ast_grep_helm_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_helm_candidates_process_runs_real_program_with_exact_argv() {
-    let elisp_form = r##"(let* ((log (ast-grep-test-path "helm-argv.log"))
+    ],
+        ),
+        (
+            "ast_grep_helm_candidates_process_runs_real_program_with_exact_argv",
+            r##"(let* ((log (ast-grep-test-path "helm-argv.log"))
                (program
                 (ast-grep-test-make-executable
                  "sg-helm"
@@ -580,16 +580,15 @@ fn ast_grep_helm_candidates_process_runs_real_program_with_exact_argv() {
                  (process-status process)
                  (ast-grep-test-read-file log)
                  (hash-table-count ast-grep--candidate-table)))
-            (makunbound 'helm-pattern)))"##;
-    let expect = expect![[
+            (makunbound 'helm-pattern)))"##,
+            true,
+            expect![[
         r#"OK (t "ast-grep-helm" exit "run\n--pattern=console.log($A)\n--json=stream\n/fixture/project\n" 0)"#
-    ]];
-    assert_ast_grep_helm_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_helm_filter_display_preview_and_cleanup_manage_real_file_buffers() {
-    let elisp_form = r##"(let* ((file
+    ]],
+        ),
+        (
+            "ast_grep_helm_filter_display_preview_and_cleanup_manage_real_file_buffers",
+            r##"(let* ((file
                 (ast-grep-test-write-file
                  "helm/preview.rs"
                  "zero\n  target()\n"))
@@ -626,16 +625,15 @@ fn ast_grep_helm_filter_display_preview_and_cleanup_manage_real_file_buffers() {
                       (line-number-at-pos)
                       (- (point) (line-beginning-position))
                       (nreverse pulses))))))
-            (ast-grep-test-kill-file-buffer file)))"##;
-    let expect = expect![[
+            (ast-grep-test-kill-file-buffer file)))"##,
+            true,
+            expect![[
         r#"OK ("[ORACLE-SANDBOX]/helm/preview.rs:2:2:target()" "[ORACLE-SANDBOX]/helm/preview.rs:2:2:target()" (t 2 2 1 #1=(8 8)) nil nil (t 2 2 #1#))"#
-    ]];
-    assert_ast_grep_helm_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_helm_source_and_search_wire_all_async_preview_contract_slots() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "ast_grep_helm_source_and_search_wire_all_async_preview_contract_slots",
+            r##"(let (calls)
           (cl-letf (((symbol-function 'ast-grep--helm-ensure-function)
                      (lambda (function)
                        (push (list :ensure function) calls)))
@@ -660,16 +658,15 @@ fn ast_grep_helm_source_and_search_wire_all_async_preview_contract_slots() {
                 '(:follow :requires-pattern :nohighlight :nomark))
                (ast-grep--search-helm "/fixture/project/")
                (gethash "stale" ast-grep--candidate-table)
-               (nreverse calls)))))"##;
-    let expect = expect![[
+               (nreverse calls)))))"##,
+            true,
+            expect![[
         r#"OK (((:follow nil) (:requires-pattern nil) (:nohighlight nil) (:nomark nil)) :helm-result nil ((:ensure helm-make-source) (:make "ast-grep" helm-source-async (:candidates-process #[nil #1=((ast-grep--helm-candidates-process directory)) ((directory . "/fixture/project/"))] :filter-one-by-one ast-grep--helm-filter-one-by-one :action ast-grep--helm-action :persistent-action ast-grep--helm-preview :persistent-help "Preview match" :cleanup ast-grep--helm-cleanup :follow 1 :requires-pattern 3 :nohighlight t :nomark t)) (:ensure helm) (:ensure helm-make-source) (:make "ast-grep" helm-source-async #2=(:candidates-process #[nil #1# ((directory . "/fixture/project/"))] :filter-one-by-one ast-grep--helm-filter-one-by-one :action ast-grep--helm-action :persistent-action ast-grep--helm-preview :persistent-help "Preview match" :cleanup ast-grep--helm-cleanup :follow 1 :requires-pattern 3 :nohighlight t :nomark t)) (:helm (:sources (:source "ast-grep" helm-source-async #2#) :prompt "ast-grep: " :buffer "*helm ast-grep*" :history ast-grep-history))))"#
-    ]];
-    assert_ast_grep_helm_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_helm_short_pattern_and_missing_function_fail_with_precise_contract() {
-    let elisp_form = r##"(let ((ast-grep-async-min-input 3))
+    ]],
+        ),
+        (
+            "ast_grep_helm_short_pattern_and_missing_function_fail_with_precise_contract",
+            r##"(let ((ast-grep-async-min-input 3))
           (setq helm-pattern "ab")
           (unwind-protect
               (list
@@ -682,9 +679,11 @@ fn ast_grep_helm_short_pattern_and_missing_function_fail_with_precise_contract()
                   (lambda ()
                     (ast-grep--helm-ensure-function
                      'ast-grep-certainly-missing)))))
-            (makunbound 'helm-pattern)))"##;
-    let expect = expect![[
+            (makunbound 'helm-pattern)))"##,
+            true,
+            expect![[
         r#"OK ((:error error ("Helm pattern is shorter than ‘ast-grep-async-min-input’")) (:error error ("Helm function ‘ast-grep-certainly-missing’ is not available")))"#
-    ]];
-    assert_ast_grep_helm_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

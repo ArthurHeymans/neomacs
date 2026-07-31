@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_parity;
+use super::assert_auto_complete_batch;
 
 #[test]
-fn auto_complete_real_menu_filters_candidates_and_completes_selected_item() {
-    let elisp_form = r##"(save-window-excursion
+fn completion_public_surface_batch() {
+    assert_auto_complete_batch(&[
+        (
+            "auto_complete_real_menu_filters_candidates_and_completes_selected_item",
+            r##"(save-window-excursion
                           (with-temp-buffer
                             (switch-to-buffer (current-buffer))
                             (let ((ac-use-comphist nil)
@@ -45,17 +48,15 @@ fn auto_complete_real_menu_filters_candidates_and_completes_selected_item() {
                                          ac-completing
                                          ac-menu
                                          ac-prefix))))
-                                (auto-complete-mode -1)))))"##;
-    let expect = expect![[
+                                (auto-complete-mode -1)))))"##,
+            true,
+            expect![[
         r#"OK (("fo\n\n\n\n\n\n\n\n\n\n\n" "fo" ("format" "forward-char") t "format") "forward-char" "forward-char" nil nil nil)"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_single_candidate_expands_immediately_without_leaving_menu_or_session() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_single_candidate_expands_immediately_without_leaving_menu_or_session",
+            r##"(save-window-excursion
                           (with-temp-buffer
                             (switch-to-buffer
                              (current-buffer))
@@ -81,15 +82,13 @@ fn auto_complete_single_candidate_expands_immediately_without_leaving_menu_or_se
                                        ac-completing
                                        ac-prefix
                                        ac-last-completion)))
-                                (auto-complete-mode -1)))))"##;
-    let expect = expect![[r#"OK (t "production" nil nil nil ((:marker nil nil) . "production"))"#]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_common_part_expands_then_stop_keeps_edit_and_removes_transient_popup_state() {
-    let elisp_form = r##"(save-window-excursion
+                                (auto-complete-mode -1)))))"##,
+            true,
+            expect![[r#"OK (t "production" nil nil nil ((:marker nil nil) . "production"))"#]],
+        ),
+        (
+            "auto_complete_common_part_expands_then_stop_keeps_edit_and_removes_transient_popup_state",
+            r##"(save-window-excursion
                           (with-temp-buffer
                             (switch-to-buffer
                              (current-buffer))
@@ -125,17 +124,15 @@ fn auto_complete_common_part_expands_then_stop_keeps_edit_and_removes_transient_
                                        ac-menu
                                        ac-completing
                                        ac-prefix)))
-                                (auto-complete-mode -1)))))"##;
-    let expect = expect![[
+                                (auto-complete-mode -1)))))"##,
+            true,
+            expect![[
         r#"OK (("de" "de" "de" "de" ("deploy-prod" "deploy-preview" "delete")) "de" nil nil nil)"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_incremental_update_narrows_candidates_then_no_match_aborts_cleanly() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_incremental_update_narrows_candidates_then_no_match_aborts_cleanly",
+            r##"(save-window-excursion
                           (with-temp-buffer
                             (switch-to-buffer
                              (current-buffer))
@@ -191,16 +188,13 @@ fn auto_complete_incremental_update_narrows_candidates_then_no_match_aborts_clea
                                           ac-candidates
                                           ac-completing
                                           ac-menu)))))
-                                (auto-complete-mode -1)))))"##;
-    let expect =
-        expect![[r#"OK (("forr" nil nil) ("forrz" "forrz" nil nil t) (nil nil nil nil))"#]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_ret_executes_candidate_action_after_inserting_associated_display_name() {
-    let elisp_form = r##"(save-window-excursion
+                                (auto-complete-mode -1)))))"##,
+            true,
+            expect![[r#"OK (("forr" nil nil) ("forrz" "forrz" nil nil t) (nil nil nil nil))"#]],
+        ),
+        (
+            "auto_complete_ret_executes_candidate_action_after_inserting_associated_display_name",
+            r##"(save-window-excursion
                           (with-temp-buffer
                             (switch-to-buffer
                              (current-buffer))
@@ -252,18 +246,15 @@ fn auto_complete_ret_executes_candidate_action_after_inserting_associated_displa
                                          (buffer-string)
                                          auto-complete-test-actions
                                          ac-menu))))
-                                (auto-complete-mode -1)))))"##;
-    let expect = expect![[
+                                (auto-complete-mode -1)))))"##,
+            true,
+            expect![[
         r#"OK ((("deploy-production" production-id #1=(lambda nil (push (list (buffer-string) ac-selected-candidate) auto-complete-test-actions))) ("deploy-preview" preview-id #1#)) "deploy-preview" "deploy-preview" (("deploy-preview" nil)) nil)"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_expansion_replaces_matching_right_hand_symbol_tail_but_preserves_unrelated_suffix()
-{
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_expansion_replaces_matching_right_hand_symbol_tail_but_preserves_unrelated_suffix",
+            r##"(mapcar
                           (lambda (case)
                             (with-temp-buffer
                               (insert (car case))
@@ -303,18 +294,15 @@ fn auto_complete_expansion_replaces_matching_right_hand_symbol_tail_but_preserve
                             ("λambd"
                              4
                              1
-                             "λambda")))"##;
-    let expect = expect![[
+                             "λambda")))"##,
+            true,
+            expect![[
         r#"OK ((("forard-char" 4 1 "forward-char") 12 "forward-char" 13 "forward-char" "forward-char") (("for-other" 4 1 "forward-char") 4 "forward-char-other" 13 "forward-char" "forward-char") (("prefix prod suffix" 12 8 "production") 12 "prefix production suffix" 18 "production" "production") (("λambd" 4 1 "λambda") 4 "λambdabd" 7 "λambda" "λambda"))"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_expansion_is_one_undoable_edit_and_repeated_expansion_removes_internal_boundaries()
-{
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_expansion_is_one_undoable_edit_and_repeated_expansion_removes_internal_boundaries",
+            r##"(with-temp-buffer
                           (buffer-enable-undo)
                           (insert "fo")
                           (setq
@@ -345,17 +333,15 @@ fn auto_complete_expansion_is_one_undoable_edit_and_repeated_expansion_removes_i
                                after-second
                                (buffer-string)
                                (copy-tree
-                                buffer-undo-list)))))"##;
-    let expect = expect![[
+                                buffer-undo-list)))))"##,
+            true,
+            expect![[
         r#"OK (("format" "format" (nil (1 . 7) ("fo" . -1) 3)) ("forward-char" "forward-char" (nil (1 . 13) ("fo" . -1) 3)) "fo" ((1 . 3) ("forward-char" . 1) nil (1 . 13) ("fo" . -1) 3))"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_menu_navigation_wraps_pages_and_completes_the_visible_selection() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_menu_navigation_wraps_pages_and_completes_the_visible_selection",
+            r##"(save-window-excursion
                           (with-temp-buffer
                             (switch-to-buffer
                              (current-buffer))
@@ -421,17 +407,15 @@ fn auto_complete_menu_navigation_wraps_pages_and_completes_the_visible_selection
                                        (nreverse states)
                                        (buffer-string)
                                        ac-menu)))
-                                (auto-complete-mode -1)))))"##;
-    let expect = expect![[
+                                (auto-complete-mode -1)))))"##,
+            true,
+            expect![[
         r#"OK ((("item-1" 0 0) ("item-3" 2 0) ("item-2" 1 0) ("item-6" 5 3)) "item-6" nil)"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_numbered_selection_command_chooses_requested_candidate_and_finishes() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_numbered_selection_command_chooses_requested_candidate_and_finishes",
+            r##"(save-window-excursion
                           (with-temp-buffer
                             (switch-to-buffer
                              (current-buffer))
@@ -460,16 +444,13 @@ fn auto_complete_numbered_selection_command_chooses_requested_candidate_and_fini
                                        (buffer-string)
                                        ac-menu
                                        ac-completing)))
-                                (auto-complete-mode -1)))))"##;
-    let expect =
-        expect![[r#"OK (("choice-a" "choice-b" "choice-c" "choice-d") "choice-c" nil nil)"#]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_inline_overlay_shows_common_suffix_without_mutating_buffer_and_hides_cleanly() {
-    let elisp_form = r##"(with-temp-buffer
+                                (auto-complete-mode -1)))))"##,
+            true,
+            expect![[r#"OK (("choice-a" "choice-b" "choice-c" "choice-d") "choice-c" nil nil)"#]],
+        ),
+        (
+            "auto_complete_inline_overlay_shows_common_suffix_without_mutating_buffer_and_hides_cleanly",
+            r##"(with-temp-buffer
                           (insert "format following")
                           (goto-char 4)
                           (setq
@@ -522,17 +503,15 @@ fn auto_complete_inline_overlay_shows_common_suffix_without_mutating_buffer_and_
                                (buffer-string)
                                ac-inline
                                (overlay-buffer
-                                overlay)))))"##;
-    let expect = expect![[
+                                overlay)))))"##,
+            true,
+            expect![[
         r#"OK (("format following" 4 8 "ward" #("w" 0 1 (face ac-completion-face)) #("ard" 0 3 (face ac-completion-face)) nil) (1 1 nil nil t) "format following" nil nil)"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_candidate_documentation_flows_through_real_popup_menu_and_last_completion() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_complete_candidate_documentation_flows_through_real_popup_menu_and_last_completion",
+            r##"(save-window-excursion
                           (with-temp-buffer
                             (switch-to-buffer
                              (current-buffer))
@@ -578,18 +557,15 @@ fn auto_complete_candidate_documentation_flows_through_real_popup_menu_and_last_
                                         (cdr
                                          ac-last-completion))
                                        (buffer-string))))
-                                (auto-complete-mode -1)))))"##;
-    let expect = expect![[
+                                (auto-complete-mode -1)))))"##,
+            true,
+            expect![[
         r#"OK ("Documentation for render-payload" "Documentation for render-payload" 1 (:buffer nil) "render-page" "render-page")"#
-    ]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_source_initialization_runs_once_per_prefix_start_and_restarts_after_point_changes()
-{
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_source_initialization_runs_once_per_prefix_start_and_restarts_after_point_changes",
+            r##"(with-temp-buffer
                           (insert "al")
                           (setq
                            auto-complete-test-init-calls
@@ -640,15 +616,13 @@ fn auto_complete_source_initialization_runs_once_per_prefix_start_and_restarts_a
                                          forced
                                          auto-complete-test-init-calls
                                          ac-prefix)))))
-                              (ac-abort))))"##;
-    let expect = expect![[r#"OK (1 1 2 2 "alp")"#]];
-
-    assert_auto_complete_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_prefix_overlay_adds_temporary_end_newlines_and_cleanup_restores_exact_buffer() {
-    let elisp_form = r##"(with-temp-buffer
+                              (ac-abort))))"##,
+            true,
+            expect![[r#"OK (1 1 2 2 "alp")"#]],
+        ),
+        (
+            "auto_complete_prefix_overlay_adds_temporary_end_newlines_and_cleanup_restores_exact_buffer",
+            r##"(with-temp-buffer
                           (insert "end")
                           (setq
                            ac-point (point-min)
@@ -678,8 +652,9 @@ fn auto_complete_prefix_overlay_adds_temporary_end_newlines_and_cleanup_restores
                                (buffer-string)
                                (overlays-in
                                 (point-min)
-                                (point-max))))))"##;
-    let expect = expect![[r#"OK ("end" ("end\n" 1 5 t t) "end" nil)"#]];
-
-    assert_auto_complete_parity(elisp_form, expect);
+                                (point-max))))))"##,
+            true,
+            expect![[r#"OK ("end" ("end\n" 1 5 t t) "end" nil)"#]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_sage_parity;
+use super::assert_auto_complete_sage_batch;
 
 #[test]
-fn auto_complete_sage_edit_generated_prefixes_use_cached_and_fresh_completion_states() {
-    let elisp_form = r##"(with-temp-buffer
+fn edit_public_surface_batch() {
+    assert_auto_complete_sage_batch(&[
+        (
+            "auto_complete_sage_edit_generated_prefixes_use_cached_and_fresh_completion_states",
+            r##"(with-temp-buffer
                            (insert "module.na")
                            (goto-char (point-max))
                            (let ((states
@@ -37,17 +40,15 @@ fn auto_complete_sage_edit_generated_prefixes_use_cached_and_fresh_completion_st
                                   (ac-sage-edit--vars-in-module-prefix
                                     ,(nth 2 states))
                                   (ac-sage-edit--sage-commands-prefix
-                                    ,(nth 1 states)))))))"##;
-    let expect = expect![[
+                                    ,(nth 1 states)))))))"##,
+            true,
+            expect![[
         r#"OK ((ac-sage-edit--sage-commands-prefix 8 ((interface . "sage") (types "interface")) 0) (ac-sage-edit--modules-prefix 8 #1=((interface . "sage") (types "modules")) 1) (ac-sage-edit--vars-in-module-prefix 8 ((interface . "sage") (types "vars-in-module")) 1) (ac-sage-edit--sage-commands-prefix nil #1# 1))"#
-    ]];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_edit_source_initializers_select_process_buffer_once_and_forward_state() {
-    let elisp_form = r##"(let ((ac-sage-edit:-state-cached
+    ]],
+        ),
+        (
+            "auto_complete_sage_edit_source_initializers_select_process_buffer_once_and_forward_state",
+            r##"(let ((ac-sage-edit:-state-cached
                                 '((interface . "sage")
                                   (prefix . 1)
                                   (types . ("interface"))))
@@ -85,17 +86,15 @@ fn auto_complete_sage_edit_source_initializers_select_process_buffer_once_and_fo
                                    (assq
                                     'init
                                     ac-source-sage-commands)))))
-                             (nreverse calls)))"##;
-    let expect = expect![[
+                             (nreverse calls)))"##,
+            true,
+            expect![[
         r#"OK ((:select nil nil) (:init t #1=((interface . "sage") (prefix . 1) (types "interface")) " *chosen-sage*") (:init nil #1# " *chosen-sage*"))"#
-    ]];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_edit_candidates_gate_missing_dead_and_unfinished_process_buffers() {
-    let elisp_form = r##"(let ((live-buffer
+    ]],
+        ),
+        (
+            "auto_complete_sage_edit_candidates_gate_missing_dead_and_unfinished_process_buffers",
+            r##"(let ((live-buffer
                                 (generate-new-buffer
                                  " *acsage-edit-live*"))
                                calls)
@@ -157,17 +156,15 @@ fn auto_complete_sage_edit_candidates_gate_missing_dead_and_unfinished_process_b
                                    (nreverse results)))
                              (when
                                  (buffer-live-p live-buffer)
-                               (kill-buffer live-buffer))))"##;
-    let expect = expect![[
+                               (kill-buffer live-buffer))))"##,
+            true,
+            expect![[
         r#"OK (((nil nil) nil nil) ((nil nil) nil nil) ((nil t) nil (:redirect)) ((t nil) nil (:redirect :output)) ((t t) ("factor" "find_root") (:redirect :output (:candidate :state ((interface . "sage") (types "interface"))))))"#
-    ]];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_edit_candidates_forward_exact_cached_state_on_success() {
-    let elisp_form = r##"(let ((process-buffer
+    ]],
+        ),
+        (
+            "auto_complete_sage_edit_candidates_forward_exact_cached_state_on_success",
+            r##"(let ((process-buffer
                                 (generate-new-buffer
                                  " *acsage-edit-success*"))
                                (state
@@ -202,17 +199,15 @@ fn auto_complete_sage_edit_candidates_forward_exact_cached_state_on_success() {
                                         (car calls)
                                         :state)
                                        state)))))
-                             (kill-buffer process-buffer)))"##;
-    let expect = expect![[
+                             (kill-buffer process-buffer)))"##,
+            true,
+            expect![[
         r#"OK (("matrix" "matrix_space" "matrix_modn_dense") ((:state ((interface . "sage") (prefix . 7) (module-name . "sage.matrix") (types "modules" "vars-in-module")))) t)"#
-    ]];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_complete_on_dot_prefix_covers_words_whitespace_dots_and_bob() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_sage_complete_on_dot_prefix_covers_words_whitespace_dots_and_bob",
+            r##"(mapcar
                            (lambda (fixture)
                              (with-temp-buffer
                                (insert (car fixture))
@@ -233,17 +228,15 @@ fn auto_complete_sage_complete_on_dot_prefix_covers_words_whitespace_dots_and_bo
                              ("matrix. " t)
                              ("alpha beta" t)
                              ("" nil)
-                             ("" t)))"##;
-    let expect = expect![[
+                             ("" t)))"##,
+            true,
+            expect![[
         r#"OK ((("matrix.rank" nil) 12 (:value 8)) (("matrix." nil) 8 (:value nil)) (("matrix." t) 8 (:value 8)) (("matrix. " t) 9 (:value nil)) (("alpha beta" t) 11 (:value 7)) (("" nil) 1 (:value nil)) (("" t) 1 (:signal wrong-type-argument (number-or-marker-p nil))))"#
-    ]];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_edit_add_sources_appends_exact_order_and_preserves_duplicates() {
-    let elisp_form = r##"(let ((ac-sources
+    ]],
+        ),
+        (
+            "auto_complete_sage_edit_add_sources_appends_exact_order_and_preserves_duplicates",
+            r##"(let ((ac-sources
                                 '(ac-source-filename
                                   ac-source-sage-modules)))
                            (ac-sage:add-sources)
@@ -262,17 +255,15 @@ fn auto_complete_sage_edit_add_sources_appends_exact_order_and_preserves_duplica
                                '(ac-source-filename
                                  ac-source-sage-modules
                                  ac-source-sage-commands
-                                 ac-source-sage-words-in-buffers)))))"##;
-    let expect = expect![
+                                 ac-source-sage-words-in-buffers)))))"##,
+            true,
+            expect![
         "OK ((ac-source-filename ac-source-sage-modules . #1=(ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers)) (ac-source-filename ac-source-sage-modules ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers . #1#) ((ac-source-filename 1) (ac-source-sage-modules 3) (ac-source-sage-commands 2) (ac-source-sage-words-in-buffers 2)))"
-    ];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_words_source_filters_real_buffers_by_sage_major_modes() {
-    let elisp_form = r##"(let ((sage-buffer
+    ],
+        ),
+        (
+            "auto_complete_sage_words_source_filters_real_buffers_by_sage_major_modes",
+            r##"(let ((sage-buffer
                                 (generate-new-buffer
                                  " *acsage-words-sage*"))
                                (edit-buffer
@@ -334,17 +325,15 @@ fn auto_complete_sage_words_source_filters_real_buffers_by_sage_major_modes() {
                               (list
                                sage-buffer
                                edit-buffer
-                               text-buffer))))"##;
-    let expect = expect![[
+                               text-buffer))))"##,
+            true,
+            expect![[
         r#"OK ((" *acsage-words-sage*" " *acsage-words-edit*" nil) ((" *acsage-words-sage*" sage-shell-mode sage-shell-mode) (" *acsage-words-edit*" sage-shell:sage-mode sage-shell:sage-mode) (" *acsage-words-text*" text-mode nil)))"#
-    ]];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_sage_real_edit_menu_completes_a_sage_command_through_target_source() {
-    let elisp_form = r##"(let ((process-buffer
+    ]],
+        ),
+        (
+            "auto_complete_sage_real_edit_menu_completes_a_sage_command_through_target_source",
+            r##"(let ((process-buffer
                                 (generate-new-buffer
                                  " *acsage-edit-menu-process*")))
                            (unwind-protect
@@ -424,10 +413,11 @@ fn auto_complete_sage_real_edit_menu_completes_a_sage_command_through_target_sou
                                                 ac-prefix)))
                                          (auto-complete-mode
                                           -1))))))
-                             (kill-buffer process-buffer)))"##;
-    let expect = expect![[
+                             (kill-buffer process-buffer)))"##,
+            true,
+            expect![[
         r#"OK (("fac" ("factor" "factorial" "factor_integer") t "factor") "result = factorial" ((:init nil #1=((interface . "sage") (prefix . 1) (types "interface"))) (:candidates :state #1#)) nil nil nil)"#
-    ]];
-
-    assert_auto_complete_sage_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

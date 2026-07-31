@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_atomic_chrome_parity;
+use super::assert_atomic_chrome_batch;
 
 #[test]
-fn atomic_chrome_on_message_decodes_atomic_register_payload_into_exact_create_call() {
-    let elisp_form = r##"(let ((atomic-chrome-server-ghost-text
+fn protocol_public_surface_batch() {
+    assert_atomic_chrome_batch(&[
+        (
+            "atomic_chrome_on_message_decodes_atomic_register_payload_into_exact_create_call",
+            r##"(let ((atomic-chrome-server-ghost-text
                 :ghost-server)
                events
                (payload
@@ -39,16 +42,15 @@ fn atomic_chrome_on_message_decodes_atomic_register_payload_into_exact_create_ca
               socket
               (atomic-chrome-test-frame
                payload))
-             (nreverse events))))"##;
-    let expect = expect![[
+             (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:created ((create atomic-socket "https://example.test/edit" "Résumé 😀" "first\nsecond λ")))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_on_message_applies_atomic_updates_only_when_bidirectional_edit_is_enabled() {
-    let elisp_form = r##"(let ((atomic-chrome-server-ghost-text
+    ]],
+        ),
+        (
+            "atomic_chrome_on_message_applies_atomic_updates_only_when_bidirectional_edit_is_enabled",
+            r##"(let ((atomic-chrome-server-ghost-text
                 :ghost-server)
                (socket
                 (atomic-chrome-test-socket
@@ -102,16 +104,15 @@ fn atomic_chrome_on_message_applies_atomic_updates_only_when_bidirectional_edit_
                (atomic-chrome-test-frame
                 "{\"type\":\"cursorMoved\",\"payload\":{\"text\":\"ignored\"}}")))
              events)
-            (nreverse events)))"##;
-    let expect = expect![[
+            (nreverse events)))"##,
+            true,
+            expect![[
         r#"OK ((update atomic-socket "from browser") (:enabled :updated) (:disabled nil) (:unknown nil))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_on_message_ghost_text_creates_first_buffer_then_updates_existing_buffer() {
-    let elisp_form = r##"(let ((atomic-chrome-server-ghost-text
+    ]],
+        ),
+        (
+            "atomic_chrome_on_message_ghost_text_creates_first_buffer_then_updates_existing_buffer",
+            r##"(let ((atomic-chrome-server-ghost-text
                 :ghost-server)
                (existing-buffer
                 (generate-new-buffer
@@ -172,16 +173,15 @@ fn atomic_chrome_on_message_ghost_text_creates_first_buffer_then_updates_existin
                    "{\"url\":\"ghost.example\",\"title\":\"Ghost field\",\"text\":\"replacement\"}"))
                  (nreverse events)))
             (atomic-chrome-test-kill-buffer
-             existing-buffer)))"##;
-    let expect = expect![[
+             existing-buffer)))"##,
+            true,
+            expect![[
         r#"OK (:created :updated ((lookup ghost-socket nil) (create ghost-socket "ghost.example" "Ghost field" "initial") (lookup ghost-socket t) (update ghost-socket "replacement")))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_on_message_records_malformed_missing_and_wrong_type_json_failures() {
-    let elisp_form = r##"(let ((atomic-chrome-server-ghost-text
+    ]],
+        ),
+        (
+            "atomic_chrome_on_message_records_malformed_missing_and_wrong_type_json_failures",
+            r##"(let ((atomic-chrome-server-ghost-text
                 :ghost-server)
                (socket
                 (atomic-chrome-test-socket
@@ -211,16 +211,15 @@ fn atomic_chrome_on_message_records_malformed_missing_and_wrong_type_json_failur
                "{}"
                "{\"type\":17}"
                "{\"type\":\"register\"}"
-               "{\"type\":\"updateText\",\"payload\":null}"))))"##;
-    let expect = expect![[
+               "{\"type\":\"updateText\",\"payload\":null}"))))"##,
+            true,
+            expect![[
         r#"OK (("{" (:error end-of-buffer nil)) ("null" (:ok nil)) ("{}" (:ok nil)) ("{\"type\":17}" (:error wrong-type-argument (stringp 17))) ("{\"type\":\"register\"}" (:ok :created)) ("{\"type\":\"updateText\",\"payload\":null}" (:ok :updated)))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_on_message_utf8_round_trip_preserves_multibyte_payload_content() {
-    let elisp_form = r##"(let ((atomic-chrome-server-ghost-text
+    ]],
+        ),
+        (
+            "atomic_chrome_on_message_utf8_round_trip_preserves_multibyte_payload_content",
+            r##"(let ((atomic-chrome-server-ghost-text
                 :ghost-server)
                (socket
                 (atomic-chrome-test-socket
@@ -249,15 +248,13 @@ fn atomic_chrome_on_message_utf8_round_trip_preserves_multibyte_payload_content(
               socket
               (atomic-chrome-test-frame
                payload))
-             observed)))"##;
-    let expect =
-        expect![[r#"OK (:created ("https://例.example/λ" "日本語 😀" "café\nκαλημέρα" t t t))"#]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_on_close_delegates_only_for_associated_buffer_and_propagates_close_error() {
-    let elisp_form = r##"(let ((buffer
+             observed)))"##,
+            true,
+            expect![[r#"OK (:created ("https://例.example/λ" "日本語 😀" "café\nκαλημέρα" t t t))"#]],
+        ),
+        (
+            "atomic_chrome_on_close_delegates_only_for_associated_buffer_and_propagates_close_error",
+            r##"(let ((buffer
                 (generate-new-buffer
                  " *atomic-on-close*"))
                events
@@ -296,9 +293,11 @@ fn atomic_chrome_on_close_delegates_only_for_associated_buffer_and_propagates_cl
                        :present)))
                    (nreverse events))))
             (atomic-chrome-test-kill-buffer
-             buffer)))"##;
-    let expect = expect![[
+             buffer)))"##,
+            true,
+            expect![[
         r#"OK (nil (:error error ("close callback failed")) ((lookup :missing nil) (lookup :present t) (close " *atomic-on-close*")))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

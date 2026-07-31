@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ARJEN_GREY_THEME_MELPA_PIN, CachedMelpaOracle, HELM_MELPA_PIN};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const ARJEN_GREY_THEME_TEST_TIMEOUT: Duration = Duration::from_secs(120);
@@ -68,4 +70,43 @@ pub(crate) fn assert_arjen_grey_theme_with_helm_parity(elisp_form: &str, expecte
             panic!("arjen-grey-theme Helm parity case `{name}` failed:\n{error}")
         });
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+
+
+/// Multi-probe batch for `assert_arjen_grey_theme_autoload_parity` cases (2a).
+pub(crate) fn assert_arjen_grey_theme_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        arjen_grey_theme_oracle("arjen-grey-theme-autoloads.el", ""),
+        &name,
+        "arjen_grey_theme_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_arjen_grey_theme_parity` cases (2a).
+pub(crate) fn assert_arjen_grey_theme_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        arjen_grey_theme_oracle("arjen-grey-theme.el", ""),
+        &name,
+        "arjen_grey_theme_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_arjen_grey_theme_with_helm_parity` cases (2a).
+pub(crate) fn assert_arjen_grey_theme_with_helm_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        CachedMelpaOracle::new(ARJEN_GREY_THEME_MELPA_PIN, "arjen-grey-theme.el")
+        .expect("prepare pinned arjen-grey-theme source below ./tmp")
+        .with_melpa_dependency(HELM_MELPA_PIN)
+        .expect("prepare pinned Helm dependency below ./tmp")
+        .with_timeout(ARJEN_GREY_THEME_TEST_TIMEOUT),
+        &name,
+        "arjen_grey_theme_with_helm_parity",
+        cases,
+    );
 }

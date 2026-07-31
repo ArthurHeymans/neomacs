@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_ai_code_parity;
+use super::assert_ai_code_batch;
 
 #[test]
-fn mcp_initialize_and_builtin_tools_expose_stable_protocol_contract() {
-    let elisp_form = r##"
+fn mcp_public_surface_batch() {
+    assert_ai_code_batch(&[
+        (
+            "mcp_initialize_and_builtin_tools_expose_stable_protocol_contract",
+            r##"
 (let ((ai-code-mcp-server-tools nil)
       (ai-code-mcp-server-tool-setup-functions nil))
   (let* ((initialize (ai-code-mcp-dispatch "initialize"))
@@ -22,16 +25,15 @@ fn mcp_initialize_and_builtin_tools_expose_stable_protocol_contract() {
                 (alist-get 'type schema)
                 (append (alist-get 'required schema) nil))))
       entries))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("2024-11-05" ((name . "ai-code-mcp-tools") (version . "0.1.0")) ("buffer_query" "diagnostics_baseline" "editor_state" "get_diagnostics" "get_project_buffers" "get_project_files" "imenu_list_symbols" "notify_user" "project_info" "treesit_info" "visible_buffers" "xref_find_definitions_at_point" "xref_find_references") (("project_info" "object" nil) ("editor_state" "object" nil) ("visible_buffers" "object" nil) ("buffer_query" "object" ("buffer_name")) ("get_diagnostics" "object" nil) ("diagnostics_baseline" "object" nil) ("get_project_files" "object" nil) ("get_project_buffers" "object" nil) ("notify_user" "object" ("message_text")) ("imenu_list_symbols" "object" ("file_path")) ("xref_find_references" "object" ("identifier" "file_path")) ("xref_find_definitions_at_point" "object" ("file_path" "line" "column")) ("treesit_info" "object" ("file_path"))))"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn mcp_custom_tool_schema_and_call_roundtrip_required_and_optional_arguments() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "mcp_custom_tool_schema_and_call_roundtrip_required_and_optional_arguments",
+            r##"
 (let ((ai-code-mcp-server-tools nil)
       (ai-code-mcp-server-tool-setup-functions nil))
   (ai-code-mcp-make-tool
@@ -57,16 +59,15 @@ fn mcp_custom_tool_schema_and_call_roundtrip_required_and_optional_arguments() {
     (list tool
           (append (alist-get 'required schema) nil)
           (alist-get 'text (car (alist-get 'content result))))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (((name . "prepare_deploy") (description . "Prepare a deterministic deployment plan.") (inputSchema (type . "object") (properties (service (type . "string") (description . "Service name.")) (retries (type . "number") (description . "Retry budget.")) (dry-run (type . "boolean"))) (required . ["service" "retries"]))) ("service" "retries") "deploy:billing retries=3 dry-run=t")"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn mcp_validation_reports_missing_argument_and_unknown_method_precisely() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "mcp_validation_reports_missing_argument_and_unknown_method_precisely",
+            r##"
 (let ((ai-code-mcp-server-tools nil))
   (ai-code-mcp-make-tool
    :function #'identity
@@ -85,16 +86,15 @@ fn mcp_validation_reports_missing_argument_and_unknown_method_precisely() {
     (lambda () (ai-code-mcp-dispatch "resources/list"))
     (lambda () (ai-code-mcp-make-tool :name "broken"
                                        :description "No function")))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ((error "Missing required argument: text") (error "Unknown MCP method: resources/list") (error "Tool :function is required"))"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn mcp_session_context_drives_project_directory_and_active_buffer() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "mcp_session_context_drives_project_directory_and_active_buffer",
+            r##"
 (let ((ai-code-mcp--sessions (make-hash-table :test 'equal))
       (root (make-temp-file "ai-code-mcp-session-" t))
       (buffer (generate-new-buffer "*ai-code-mcp-work*")))
@@ -117,14 +117,13 @@ fn mcp_session_context_drives_project_directory_and_active_buffer() {
               root)))))
     (when (buffer-live-p buffer) (kill-buffer buffer))
     (delete-directory root t)))
-"##;
-    let expect = expect![[r#"OK (t t "alpha\nbeta\ngamma\n" t)"#]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn mcp_buffer_query_preserves_ranges_and_trailing_whitespace() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect![[r#"OK (t t "alpha\nbeta\ngamma\n" t)"#]],
+        ),
+        (
+            "mcp_buffer_query_preserves_ranges_and_trailing_whitespace",
+            r##"
 (let ((buffer (generate-new-buffer "ai-code-mcp-query.txt")))
   (unwind-protect
       (progn
@@ -140,16 +139,15 @@ fn mcp_buffer_query_preserves_ranges_and_trailing_whitespace() {
              (ai-code-mcp-buffer-query (buffer-name buffer) 2 0)
            (error (error-message-string err)))))
     (kill-buffer buffer)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("first  \nsecond\11\nthird\nfourth" "second\11\nthird" "Arguments start_line and num_lines must be positive integers" "Arguments start_line and num_lines must be positive integers")"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn mcp_project_files_skip_hidden_metadata_and_return_relative_paths() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "mcp_project_files_skip_hidden_metadata_and_return_relative_paths",
+            r##"
 (let ((root (make-temp-file "ai-code-mcp-files-" t))
       (ai-code-mcp--sessions (make-hash-table :test 'equal))
       (buffer (generate-new-buffer "*ai-code-mcp-project*")))
@@ -166,14 +164,13 @@ fn mcp_project_files_skip_hidden_metadata_and_return_relative_paths() {
           (sort (ai-code-mcp-get-project-files) #'string<)))
     (when (buffer-live-p buffer) (kill-buffer buffer))
     (delete-directory root t)))
-"##;
-    let expect = expect![[r#"OK ("README.md" "src/api.rs" "src/lib.rs")"#]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn mcp_uri_helpers_canonicalize_spaces_localhost_and_external_paths() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect![[r#"OK ("README.md" "src/api.rs" "src/lib.rs")"#]],
+        ),
+        (
+            "mcp_uri_helpers_canonicalize_spaces_localhost_and_external_paths",
+            r##"
 (let* ((path "/workspace/payment service/src/api.el")
        (uri (ai-code-mcp--file-path-to-uri path)))
   (list
@@ -184,9 +181,11 @@ fn mcp_uri_helpers_canonicalize_spaces_localhost_and_external_paths() {
    (ai-code-mcp--local-file-uri-path
     "file:///workspace/payment%20service/src/api.el")
    (ai-code-mcp--display-path "/external/shared/types.el")))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("file:///workspace/payment%20service/src/api.el" "/workspace/payment service/src/api.el" "/workspace/payment service/src/api.el" "/workspace/payment service/src/api.el" "/external/shared/types.el")"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

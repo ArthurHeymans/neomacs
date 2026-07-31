@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_all_the_icons_nerd_fonts_parity;
+use super::assert_all_the_icons_nerd_fonts_batch;
 
 #[test]
-fn readme_family_customization_changes_the_font_used_by_real_icons() {
-    let elisp_form = r##"(let* ((all-the-icons-nerd-fonts-family
+fn families_public_surface_batch() {
+    assert_all_the_icons_nerd_fonts_batch(&[
+        (
+            "readme_family_customization_changes_the_font_used_by_real_icons",
+            r##"(let* ((all-the-icons-nerd-fonts-family
                       "Project Nerd Symbols")
                      (icon
                       (all-the-icons-nerd-fa
@@ -19,17 +22,15 @@ fn readme_family_customization_changes_the_font_used_by_real_icons() {
                 (all-the-icons-icon-family icon)
                 (get-text-property 0 'face icon)
                 (get-text-property 0 'font-lock-face icon)
-                (get-text-property 0 'display icon)))"##;
-    let expect = expect![[
+                (get-text-property 0 'display icon)))"##,
+            true,
+            expect![[
         r#"OK ("" (61595) "Project Nerd Symbols" #1=(:family "Project Nerd Symbols" :height 1.7999999999999998 :inherit success) #1# (raise 0.12))"#
-    ]];
-
-    assert_all_the_icons_nerd_fonts_parity(elisp_form, expect);
-}
-
-#[test]
-fn application_palette_renders_real_language_file_terminal_weather_and_powerline_icons() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "application_palette_renders_real_language_file_terminal_weather_and_powerline_icons",
+            r##"(mapcar
                (lambda (spec)
                  (let* ((family (nth 0 spec))
                         (name (nth 1 spec))
@@ -67,17 +68,15 @@ fn application_palette_renders_real_language_file_terminal_weather_and_powerline
                  (all-the-icons-nerd-linux
                   "docker" font-lock-doc-face)
                  (all-the-icons-nerd-pl
-                  "right-hard-divider" shadow)))"##;
-    let expect = expect![[
+                  "right-hard-divider" shadow)))"##,
+            true,
+            expect![[
         r#"OK ((all-the-icons-nerd-fa "github" "" (61595) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-constant-face) (raise -0.24)) (all-the-icons-nerd-md "language-rust" "󱘗" (988695) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-type-face) (raise -0.24)) (all-the-icons-nerd-cod "terminal" "" (60037) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-builtin-face) (raise -0.24)) (all-the-icons-nerd-dev "python" "" (59196) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-keyword-face) (raise -0.24)) (all-the-icons-nerd-oct "file" "" (62629) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-string-face) (raise -0.24)) (all-the-icons-nerd-weather "day-sunny" "" (58125) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit warning) (raise -0.24)) (all-the-icons-nerd-seti "javascript" "" (58892) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-variable-name-face) (raise -0.24)) (all-the-icons-nerd-custom "c" "" (58910) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-function-name-face) (raise -0.24)) (all-the-icons-nerd-linux "docker" "" (62216) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-doc-face) (raise -0.24)) (all-the-icons-nerd-pl "right-hard-divider" "" (57522) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit shadow) (raise -0.24)))"#
-    ]];
-
-    assert_all_the_icons_nerd_fonts_parity(elisp_form, expect);
-}
-
-#[test]
-fn normalized_hyphenated_names_render_icons_whose_nerd_data_uses_underscores() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "normalized_hyphenated_names_render_icons_whose_nerd_data_uses_underscores",
+            r##"(mapcar
                (lambda (spec)
                  (let ((icon
                         (funcall
@@ -96,17 +95,15 @@ fn normalized_hyphenated_names_render_icons_whose_nerd_data_uses_underscores() {
                  (all-the-icons-nerd-pl
                   "left-hard-divider")
                  (all-the-icons-nerd-ple
-                  "pixelated-squares-small-mirrored")))"##;
-    let expect = expect![[
+                  "pixelated-squares-small-mirrored")))"##,
+            true,
+            expect![[
         r#"OK (((all-the-icons-nerd-md "format-align-left") "󰉢" (983650) "Symbols Nerd Font") ((all-the-icons-nerd-custom "common-lisp") "" (59056) "Symbols Nerd Font") ((all-the-icons-nerd-pl "left-hard-divider") "" (57520) "Symbols Nerd Font") ((all-the-icons-nerd-ple "pixelated-squares-small-mirrored") "" (57541) "Symbols Nerd Font"))"#
-    ]];
-
-    assert_all_the_icons_nerd_fonts_parity(elisp_form, expect);
-}
-
-#[test]
-fn family_renderer_preserves_real_face_height_adjust_and_flip_arguments() {
-    let elisp_form = r##"(let ((icon
+    ]],
+        ),
+        (
+            "family_renderer_preserves_real_face_height_adjust_and_flip_arguments",
+            r##"(let ((icon
                       (all-the-icons-nerd-fa
                        "github"
                        :face 'font-lock-keyword-face
@@ -119,26 +116,25 @@ fn family_renderer_preserves_real_face_height_adjust_and_flip_arguments() {
                  (substring-no-properties icon))
                 (all-the-icons-icon-family icon)
                 (text-properties-at 0 icon)
-                (get-text-property 0 'display icon)))"##;
-    let expect = expect![[
+                (get-text-property 0 'display icon)))"##,
+            true,
+            expect![[
         r#"OK ("" (61595) "Symbols Nerd Font" (face #1=(:family "Symbols Nerd Font" :height 2.1 :inherit font-lock-keyword-face) font-lock-face #1# display #2=(raise -0.24) rear-nonsticky t) #2#)"#
-    ]];
-
-    assert_all_the_icons_nerd_fonts_parity(elisp_form, expect);
-}
-
-#[test]
-fn unknown_icon_name_reports_the_real_family_and_candidate_to_the_user() {
-    let elisp_form = r##"(condition-case error
+    ]],
+        ),
+        (
+            "unknown_icon_name_reports_the_real_family_and_candidate_to_the_user",
+            r##"(condition-case error
                (all-the-icons-nerd-fa
                 "definitely-missing")
              (error
               (list
                (car error)
-               (error-message-string error))))"##;
-    let expect = expect![[
+               (error-message-string error))))"##,
+            true,
+            expect![[
         r#"OK (error "Unable to find icon with name ‘definitely-missing’ in icon set ‘nerd-fa’")"#
-    ]];
-
-    assert_all_the_icons_nerd_fonts_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

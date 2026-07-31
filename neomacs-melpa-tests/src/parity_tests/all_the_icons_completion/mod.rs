@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ALL_THE_ICONS_COMPLETION_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const ALL_THE_ICONS_COMPLETION_TEST_TIMEOUT: Duration = Duration::from_secs(120);
@@ -107,4 +109,15 @@ pub(crate) fn assert_all_the_icons_completion_parity(elisp_form: &str, expected:
             panic!("all-the-icons-completion parity case `{name}` failed:\n{error}")
         });
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+/// Multi-probe batch for `assert_all_the_icons_completion_parity` cases (2a).
+pub(crate) fn assert_all_the_icons_completion_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        all_the_icons_completion_oracle(),
+        &name,
+        "all_the_icons_completion_parity",
+        cases,
+    );
 }

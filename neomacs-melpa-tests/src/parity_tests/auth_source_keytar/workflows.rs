@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auth_source_keytar_parity;
+use super::assert_auth_source_keytar_batch;
 
 #[test]
-fn auth_source_keytar_enabled_backend_dispatches_real_host_user_lookup_through_search_function() {
-    let elisp_form = r##"(let ((auth-sources nil)
+fn workflows_public_surface_batch() {
+    assert_auth_source_keytar_batch(&[
+        (
+            "auth_source_keytar_enabled_backend_dispatches_real_host_user_lookup_through_search_function",
+            r##"(let ((auth-sources nil)
                                calls)
           (cl-letf
               (((symbol-function
@@ -33,17 +36,15 @@ fn auth_source_keytar_enabled_backend_dispatches_real_host_user_lookup_through_s
                 search
                 :host "git.internal"
                 :user "deploy")
-               (nreverse calls)))))"##;
-    let expect = expect![[
+               (nreverse calls)))))"##,
+            true,
+            expect![[
         r#"OK ((keytar) ("Keytar" keytar auth-source-keytar-search) "workflow-secret" (("git.internal" "deploy")))"#
-    ]];
-
-    assert_auth_source_keytar_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_keytar_real_auth_source_search_exposes_direct_password_result_contract() {
-    let elisp_form = r##"(let ((auth-sources
+    ]],
+        ),
+        (
+            "auth_source_keytar_real_auth_source_search_exposes_direct_password_result_contract",
+            r##"(let ((auth-sources
                                 '(keytar))
                                calls)
           (auth-source-forget-all-cached)
@@ -62,15 +63,13 @@ fn auth_source_keytar_real_auth_source_search_exposes_direct_password_result_con
                  :user "release"
                  :max 1
                  :require '(:secret))))
-             (nreverse calls))))"##;
-    let expect = expect![[r#"OK ((:ok "direct-secret") (("registry.internal" "release")))"#]];
-
-    assert_auth_source_keytar_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_keytar_real_auth_source_search_handles_service_wide_credential_listing() {
-    let elisp_form = r##"(let ((auth-sources
+             (nreverse calls))))"##,
+            true,
+            expect![[r#"OK ((:ok "direct-secret") (("registry.internal" "release")))"#]],
+        ),
+        (
+            "auth_source_keytar_real_auth_source_search_handles_service_wide_credential_listing",
+            r##"(let ((auth-sources
                                 '(keytar))
                                calls)
           (auth-source-forget-all-cached)
@@ -87,16 +86,13 @@ fn auth_source_keytar_real_auth_source_search_handles_service_wide_credential_li
                  :service "artifact-service"
                  :max 10
                  :require '(:secret))))
-             (nreverse calls))))"##;
-    let expect =
-        expect![[r#"OK ((:ok ((:secret "beta") (:secret "alpha"))) ("artifact-service"))"#]];
-
-    assert_auth_source_keytar_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_keytar_real_pick_first_password_workflow_surfaces_backend_result_shape() {
-    let elisp_form = r##"(let ((auth-sources
+             (nreverse calls))))"##,
+            true,
+            expect![[r#"OK ((:ok ((:secret "beta") (:secret "alpha"))) ("artifact-service"))"#]],
+        ),
+        (
+            "auth_source_keytar_real_pick_first_password_workflow_surfaces_backend_result_shape",
+            r##"(let ((auth-sources
                                 '(keytar))
                                calls)
           (auth-source-forget-all-cached)
@@ -113,17 +109,15 @@ fn auth_source_keytar_real_pick_first_password_workflow_surfaces_backend_result_
                 (auth-source-pick-first-password
                  :host "database.internal"
                  :user "backup")))
-             (nreverse calls))))"##;
-    let expect = expect![[
+             (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ((:error wrong-type-argument (listp "picked-secret")) (("database.internal" "backup")))"#
-    ]];
-
-    assert_auth_source_keytar_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_keytar_repeated_real_search_and_enable_exercise_auth_source_cache_invalidation() {
-    let elisp_form = r##"(let ((auth-sources
+    ]],
+        ),
+        (
+            "auth_source_keytar_repeated_real_search_and_enable_exercise_auth_source_cache_invalidation",
+            r##"(let ((auth-sources
                                 '(keytar))
                                (calls 0))
           (auth-source-forget-all-cached)
@@ -162,17 +156,15 @@ fn auth_source_keytar_repeated_real_search_and_enable_exercise_auth_source_cache
                  second
                  third
                  calls
-                 auth-sources)))))"##;
-    let expect = expect![[
+                 auth-sources)))))"##,
+            true,
+            expect![[
         r#"OK ((:ok "\0\0\0\0\0\0\0\0") (:ok "\0\0\0\0\0\0\0\0") (:ok "secret-2") 2 (keytar))"#
-    ]];
-
-    assert_auth_source_keytar_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_keytar_two_independent_services_keep_provider_arguments_and_secrets_separate() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "auth_source_keytar_two_independent_services_keep_provider_arguments_and_secrets_separate",
+            r##"(let (calls)
           (cl-letf
               (((symbol-function 'keytar-get-password)
                 (lambda (service account)
@@ -193,17 +185,15 @@ fn auth_source_keytar_two_independent_services_keep_provider_arguments_and_secre
              (auth-source-keytar-search
               :service "git"
               :account "bob")
-             (nreverse calls))))"##;
-    let expect = expect![[
+             (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ("git::alice" "database::reader" "git::bob" (("git" "alice") ("database" "reader") ("git" "bob")))"#
-    ]];
-
-    assert_auth_source_keytar_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_keytar_listing_to_selection_workflow_preserves_provider_reverse_order() {
-    let elisp_form = r##"(cl-letf
+    ]],
+        ),
+        (
+            "auth_source_keytar_listing_to_selection_workflow_preserves_provider_reverse_order",
+            r##"(cl-letf
           (((symbol-function
              'keytar-find-credentials)
             (lambda (_)
@@ -224,17 +214,15 @@ fn auth_source_keytar_listing_to_selection_workflow_preserves_provider_reverse_o
                 (plist-get
                  entry
                  :secret))
-              entries))))"##;
-    let expect = expect![[
+              entries))))"##,
+            true,
+            expect![[
         r#"OK ((#1=(:secret "current-secret") (:secret "old-secret")) #1# "current-secret" ("current-secret" "old-secret"))"#
-    ]];
-
-    assert_auth_source_keytar_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_keytar_provider_rotation_is_observed_by_uncached_direct_searches() {
-    let elisp_form = r##"(let ((passwords
+    ]],
+        ),
+        (
+            "auth_source_keytar_provider_rotation_is_observed_by_uncached_direct_searches",
+            r##"(let ((passwords
                                 '("version-one"
                                   "version-two"
                                   "version-three"))
@@ -257,10 +245,11 @@ fn auth_source_keytar_provider_rotation_is_observed_by_uncached_direct_searches(
               :host "rotating.internal"
               :user "service")
              passwords
-             (nreverse calls))))"##;
-    let expect = expect![[
+             (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ("version-one" "version-two" "version-three" nil (("rotating.internal" "service") ("rotating.internal" "service") ("rotating.internal" "service")))"#
-    ]];
-
-    assert_auth_source_keytar_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

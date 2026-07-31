@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ASYNC_JOB_QUEUE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod dispatch;
 mod lifecycle;
 mod registry;
@@ -134,4 +136,30 @@ pub(crate) fn assert_async_job_queue_parity(elisp_form: &str, expected: Expect) 
 
 pub(crate) fn assert_async_job_queue_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_async_job_queue_source_parity("async-job-queue-autoloads.el", elisp_form, expected);
+}
+
+
+
+
+
+/// Multi-probe batch for `assert_async_job_queue_autoload_parity` cases (2a).
+pub(crate) fn assert_async_job_queue_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        async_job_queue_oracle("async-job-queue-autoloads.el"),
+        &name,
+        "async_job_queue_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_async_job_queue_parity` cases (2a).
+pub(crate) fn assert_async_job_queue_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        async_job_queue_oracle("async-job-queue.el"),
+        &name,
+        "async_job_queue_parity",
+        cases,
+    );
 }

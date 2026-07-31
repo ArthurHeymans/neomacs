@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_asyncloop_parity;
+use super::assert_asyncloop_batch;
 
 #[test]
-fn asyncloop_pause_resume_and_cancel_form_a_complete_reusable_lifecycle() {
-    let elisp_form = r##"(let (events)
+fn lifecycle_public_surface_batch() {
+    assert_asyncloop_batch(&[
+        (
+            "asyncloop_pause_resume_and_cancel_form_a_complete_reusable_lifecycle",
+            r##"(let (events)
          (asyncloop-test-reset)
          (asyncloop-test-with-scheduler
            (let* ((buffer
@@ -60,17 +63,15 @@ fn asyncloop_pause_resume_and_cancel_form_a_complete_reusable_lifecycle() {
                       asyncloop-test-cancelled)
                      #'<)
                     (asyncloop-test-log-text buffer)))
-               (kill-buffer buffer)))))"##;
-    let expect = expect![[
+               (kill-buffer buffer)))))"##,
+            true,
+            expect![[
         r#"OK ((nil t t #1=(stage-2 stage-3)) ((:paused t nil nil #1#) (:resumed nil t nil #1# (:asyncloop-test-timer 1)) (:cancelled nil nil nil nil)) (1) "<TIME>: Loop told to pause\n<TIME>: Loop told to resume\n<TIME>: Loop told to cancel\n")"#
-    ]];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_worker_can_pause_mid_series_then_resume_remaining_practical_work() {
-    let elisp_form = r##"(let (events loop)
+    ]],
+        ),
+        (
+            "asyncloop_worker_can_pause_mid_series_then_resume_remaining_practical_work",
+            r##"(let (events loop)
          (asyncloop-test-reset)
          (asyncloop-test-with-scheduler
            (setq loop
@@ -105,17 +106,15 @@ fn asyncloop_worker_can_pause_mid_series_then_resume_remaining_practical_work() 
                   (reverse events)
                   (asyncloop-paused loop)
                   (asyncloop-scheduled loop)
-                  (asyncloop-remainder loop)))))))"##;
-    let expect = expect![
+                  (asyncloop-remainder loop)))))))"##,
+            true,
+            expect![
         "OK (((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) ((:loaded) t nil 2) ((:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) (:loaded :transformed :saved) nil nil nil)"
-    ];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_worker_can_cancel_mid_series_and_prevent_all_followup_side_effects() {
-    let elisp_form = r##"(let (events loop)
+    ],
+        ),
+        (
+            "asyncloop_worker_can_cancel_mid_series_and_prevent_all_followup_side_effects",
+            r##"(let (events loop)
          (asyncloop-test-reset)
          (asyncloop-test-with-scheduler
            (setq loop
@@ -143,17 +142,15 @@ fn asyncloop_worker_can_cancel_mid_series_and_prevent_all_followup_side_effects(
               (sort
                (copy-sequence
                 asyncloop-test-cancelled)
-               #'<)))))"##;
-    let expect = expect![
+               #'<)))))"##,
+            true,
+            expect![
         "OK (((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) (:validated) nil nil nil nil (1))"
-    ];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_reset_all_cancels_every_registered_loop_and_clears_registry() {
-    let elisp_form = r##"(let* ((buffer-a
+    ],
+        ),
+        (
+            "asyncloop_reset_all_cancels_every_registered_loop_and_clears_registry",
+            r##"(let* ((buffer-a
                  (generate-new-buffer
                   " *asyncloop-reset-a*"))
                 (buffer-b
@@ -205,17 +202,15 @@ fn asyncloop_reset_all_cancels_every_registered_loop_and_clears_registry() {
                 (asyncloop-test-log-text buffer-a)
                 (asyncloop-test-log-text buffer-b)))
            (kill-buffer buffer-a)
-           (kill-buffer buffer-b)))"##;
-    let expect = expect![[
+           (kill-buffer buffer-b)))"##,
+            true,
+            expect![[
         r#"OK (nil (11 22) (nil nil nil nil) (nil nil nil nil) "<TIME>: Loop told to cancel\n<TIME>: All asyncloops reset by command\n" "<TIME>: Loop told to cancel\n<TIME>: All asyncloops reset by command\n")"#
-    ]];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_reset_all_ignores_one_broken_loop_and_still_wipes_registry() {
-    let elisp_form = r##"(let* ((healthy
+    ]],
+        ),
+        (
+            "asyncloop_reset_all_ignores_one_broken_loop_and_still_wipes_registry",
+            r##"(let* ((healthy
                  (asyncloop-create
                   :timer
                   '(:asyncloop-test-timer 7)
@@ -233,15 +228,13 @@ fn asyncloop_reset_all_ignores_one_broken_loop_and_still_wipes_registry() {
             asyncloop-objects
             (asyncloop-remainder healthy)
             (asyncloop-scheduled healthy)
-            asyncloop-test-cancelled)))"##;
-    let expect = expect!["OK (nil nil (work) t nil)"];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_notify_simultaneity_informs_current_and_other_idle_loops() {
-    let elisp_form = r##"(let* ((this
+            asyncloop-test-cancelled)))"##,
+            true,
+            expect!["OK (nil nil (work) t nil)"],
+        ),
+        (
+            "asyncloop_notify_simultaneity_informs_current_and_other_idle_loops",
+            r##"(let* ((this
                  (asyncloop-create
                   :timer :this-timer))
                 (other-active
@@ -284,17 +277,15 @@ fn asyncloop_notify_simultaneity_informs_current_and_other_idle_loops() {
                   (asyncloop-notify-simultaneity this)
                   (nreverse logged))))
            (setq timer-idle-list
-                 original-timer-idle-list)))"##;
-    let expect = expect![[
+                 original-timer-idle-list)))"##,
+            true,
+            expect![[
         r#"OK ((:other-timer) nil ((:this "Two or more asyncloops running, please wait...") (:active "Two or more asyncloops running, please wait...")))"#
-    ]];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_notify_simultaneity_is_silent_when_no_other_idle_loop_is_active() {
-    let elisp_form = r##"(let* ((this
+    ]],
+        ),
+        (
+            "asyncloop_notify_simultaneity_is_silent_when_no_other_idle_loop_is_active",
+            r##"(let* ((this
                  (asyncloop-create
                   :timer :this-timer))
                 (other
@@ -317,15 +308,13 @@ fn asyncloop_notify_simultaneity_is_silent_when_no_other_idle_loop_is_active() {
                   (asyncloop-notify-simultaneity this)
                   logged)))
            (setq timer-idle-list
-                 original-timer-idle-list)))"##;
-    let expect = expect!["OK (nil nil)"];
-
-    assert_asyncloop_parity(elisp_form, expect);
-}
-
-#[test]
-fn asyncloop_resume_reports_invariant_when_called_on_just_launched_loop() {
-    let elisp_form = r##"(let ((loop
+                 original-timer-idle-list)))"##,
+            true,
+            expect!["OK (nil nil)"],
+        ),
+        (
+            "asyncloop_resume_reports_invariant_when_called_on_just_launched_loop",
+            r##"(let ((loop
                 (asyncloop-create
                  :just-launched t
                  :paused t))
@@ -359,10 +348,11 @@ fn asyncloop_resume_reports_invariant_when_called_on_just_launched_loop() {
               (asyncloop-scheduled loop)
               (asyncloop-just-launched loop)
               (asyncloop-timer loop)
-              messages))))"##;
-    let expect = expect![[
+              messages))))"##,
+            true,
+            expect![[
         r#"OK ("Please report bug: (asyncloop-just-launched loop) was t" nil t t (:asyncloop-test-timer 1) ("Please report bug: (asyncloop-just-launched loop) was t"))"#
-    ]];
-
-    assert_asyncloop_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

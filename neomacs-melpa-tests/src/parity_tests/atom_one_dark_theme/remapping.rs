@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_atom_one_dark_theme_parity;
+use super::assert_atom_one_dark_theme_batch;
 
 #[test]
-fn atom_one_dark_theme_mode_branch_matrix_calls_exact_faces_colors_and_order() {
-    let elisp_form = r##"(let (observations)
+fn remapping_public_surface_batch() {
+    assert_atom_one_dark_theme_batch(&[
+        (
+            "atom_one_dark_theme_mode_branch_matrix_calls_exact_faces_colors_and_order",
+            r##"(let (observations)
          (dolist
              (mode
               '(js2-mode
@@ -32,17 +35,15 @@ fn atom_one_dark_theme_mode_branch_matrix_calls_exact_faces_colors_and_order() {
                  (atom-one-dark-theme-change-faces-for-mode)
                  (nreverse calls))
                 observations))))
-         (nreverse observations))"##;
-    let expect = expect![[
+         (nreverse observations))"##,
+            true,
+            expect![[
         r##"OK ((js2-mode (:cookie font-lock-variable-name-face #1=(:foreground "#ABB2BF")) ((font-lock-constant-face :foreground "#D19A66") (font-lock-doc-face (:inherit (font-lock-comment-face))) (font-lock-variable-name-face . #1#))) (html-mode (:cookie font-lock-variable-name-face #2=(:foreground "#D19A66")) ((font-lock-function-name-face :foreground "#E06C75") (font-lock-variable-name-face . #2#))) (javascript-mode nil nil) (web-mode nil nil) (text-mode nil nil))"##
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_actual_buffer_local_remapping_alists_match_supported_modes() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_actual_buffer_local_remapping_alists_match_supported_modes",
+            r##"(mapcar
          (lambda (mode)
            (with-temp-buffer
              (setq major-mode mode)
@@ -58,17 +59,15 @@ fn atom_one_dark_theme_actual_buffer_local_remapping_alists_match_supported_mode
            html-mode
            javascript-mode
            web-mode
-           text-mode))"##;
-    let expect = expect![[
+           text-mode))"##,
+            true,
+            expect![[
         r##"OK ((js2-mode (font-lock-variable-name-face . #1=(:foreground "#ABB2BF")) ((font-lock-variable-name-face #1# font-lock-variable-name-face) (font-lock-doc-face (:inherit (font-lock-comment-face)) font-lock-doc-face) (font-lock-constant-face (:foreground "#D19A66") font-lock-constant-face)) t) (html-mode (font-lock-variable-name-face . #2=(:foreground "#D19A66")) ((font-lock-variable-name-face #2# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t) (javascript-mode nil nil nil) (web-mode nil nil nil) (text-mode nil nil nil))"##
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_force_gate_accepts_every_truthy_value_but_rejects_nil() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_force_gate_accepts_every_truthy_value_but_rejects_nil",
+            r##"(mapcar
          (lambda (value)
            (with-temp-buffer
              (setq major-mode 'html-mode)
@@ -80,17 +79,15 @@ fn atom_one_dark_theme_force_gate_accepts_every_truthy_value_but_rejects_nil() {
                 face-remapping-alist
                 (local-variable-p
                  'face-remapping-alist)))))
-         '(t nil 0 enabled "yes" (enabled)))"##;
-    let expect = expect![[
+         '(t nil 0 enabled "yes" (enabled)))"##,
+            true,
+            expect![[
         r##"OK ((t (font-lock-variable-name-face . #1=(:foreground "#D19A66")) ((font-lock-variable-name-face #1# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t) (nil nil nil nil) (0 (font-lock-variable-name-face . #2=(:foreground "#D19A66")) ((font-lock-variable-name-face #2# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t) (enabled (font-lock-variable-name-face . #3=(:foreground "#D19A66")) ((font-lock-variable-name-face #3# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t) ("yes" (font-lock-variable-name-face . #4=(:foreground "#D19A66")) ((font-lock-variable-name-face #4# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t) ((enabled) (font-lock-variable-name-face . #5=(:foreground "#D19A66")) ((font-lock-variable-name-face #5# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t))"##
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_interactive_call_bypasses_nil_force_gate_and_returns_last_cookie() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_interactive_call_bypasses_nil_force_gate_and_returns_last_cookie",
+            r##"(with-temp-buffer
          (setq major-mode 'html-mode)
          (setq-local
           atom-one-dark-theme-force-faces-for-mode
@@ -106,17 +103,15 @@ fn atom_one_dark_theme_interactive_call_bypasses_nil_force_gate_and_returns_last
            #'atom-one-dark-theme-change-faces-for-mode)
           face-remapping-alist
           (local-variable-p
-           'face-remapping-alist)))"##;
-    let expect = expect![[
+           'face-remapping-alist)))"##,
+            true,
+            expect![[
         r##"OK (t (interactive nil) nil nil (font-lock-variable-name-face . #1=(:foreground "#D19A66")) ((font-lock-variable-name-face #1# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t)"##
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_registered_hook_applies_real_html_font_lock_workflow() {
-    let elisp_form = r##"(let ((hook-count 0))
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_registered_hook_applies_real_html_font_lock_workflow",
+            r##"(let ((hook-count 0))
          (dolist
              (function after-change-major-mode-hook)
            (when
@@ -152,17 +147,15 @@ fn atom_one_dark_theme_registered_hook_applies_real_html_font_lock_workflow() {
                "Hello"))
             (buffer-substring-no-properties
              (point-min)
-             (point-max)))))"##;
-    let expect = expect![[
+             (point-max)))))"##,
+            true,
+            expect![[
         r##"OK (1 html-mode ((font-lock-variable-name-face (:foreground "#D19A66") font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) (("section" font-lock-function-name-face) ("class" font-lock-variable-name-face) ("\"card\"" font-lock-string-face) ("data-kind" font-lock-variable-name-face) ("\"primary\"" font-lock-string-face) ("Hello" nil)) "<section class=\"card\" data-kind=\"primary\">Hello</section>")"##
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_js2_recipe_remaps_three_faces_with_exact_effective_values() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_js2_recipe_remaps_three_faces_with_exact_effective_values",
+            r##"(with-temp-buffer
          (setq major-mode 'js2-mode)
          (let ((result
                 (atom-one-dark-theme-change-faces-for-mode)))
@@ -179,17 +172,15 @@ fn atom_one_dark_theme_js2_recipe_remaps_three_faces_with_exact_effective_values
                   face-remapping-alist))))
              '(font-lock-constant-face
                font-lock-doc-face
-               font-lock-variable-name-face)))))"##;
-    let expect = expect![[
+               font-lock-variable-name-face)))))"##,
+            true,
+            expect![[
         r##"OK ((font-lock-variable-name-face . #1=(:foreground "#ABB2BF")) ((font-lock-variable-name-face . #4=(#1# font-lock-variable-name-face)) (font-lock-doc-face . #3=((:inherit (font-lock-comment-face)) font-lock-doc-face)) (font-lock-constant-face . #2=((:foreground "#D19A66") font-lock-constant-face))) ((font-lock-constant-face #2#) (font-lock-doc-face #3#) (font-lock-variable-name-face #4#)))"##
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_major_mode_changes_clear_old_remaps_and_apply_new_recipe() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_major_mode_changes_clear_old_remaps_and_apply_new_recipe",
+            r##"(with-temp-buffer
          (setq major-mode 'js2-mode)
          (run-hooks
           'after-change-major-mode-hook)
@@ -212,17 +203,15 @@ fn atom_one_dark_theme_major_mode_changes_clear_old_remaps_and_apply_new_recipe(
               html
               face-remapping-alist
               (local-variable-p
-               'face-remapping-alist)))))"##;
-    let expect = expect![[
+               'face-remapping-alist)))))"##,
+            true,
+            expect![[
         r##"OK (((font-lock-variable-name-face (:foreground "#ABB2BF") font-lock-variable-name-face) (font-lock-doc-face (:inherit (font-lock-comment-face)) font-lock-doc-face) (font-lock-constant-face (:foreground "#D19A66") font-lock-constant-face)) ((font-lock-variable-name-face (:foreground "#D19A66") font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) nil nil)"##
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_repeated_html_remaps_stack_then_cookie_removal_matches_gnu() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_repeated_html_remaps_stack_then_cookie_removal_matches_gnu",
+            r##"(with-temp-buffer
          (setq major-mode 'html-mode)
          (let ((first
                 (atom-one-dark-theme-change-faces-for-mode))
@@ -245,17 +234,15 @@ fn atom_one_dark_theme_repeated_html_remaps_stack_then_cookie_removal_matches_gn
             (equal first second)
             after-both
             after-first-removal
-            face-remapping-alist)))"##;
-    let expect = expect![[
+            face-remapping-alist)))"##,
+            true,
+            expect![[
         r##"OK ((font-lock-variable-name-face :foreground "#D19A66") (font-lock-variable-name-face :foreground "#D19A66") t ((font-lock-variable-name-face (:foreground "#D19A66") (:foreground "#D19A66") font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") (:foreground "#E06C75") font-lock-function-name-face)) ((font-lock-variable-name-face (:foreground "#D19A66") font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") (:foreground "#E06C75") font-lock-function-name-face)) ((font-lock-function-name-face (:foreground "#E06C75") (:foreground "#E06C75") font-lock-function-name-face)))"##
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_remapping_error_propagation_stops_at_exact_failed_call() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_remapping_error_propagation_stops_at_exact_failed_call",
+            r##"(mapcar
          (lambda (failure-index)
            (let ((major-mode 'js2-mode)
                  (count 0)
@@ -283,17 +270,15 @@ fn atom_one_dark_theme_remapping_error_propagation_stops_at_exact_failed_call() 
                  (lambda ()
                    (atom-one-dark-theme-change-faces-for-mode)))
                 (nreverse calls)))))
-         '(1 2 3 4))"##;
-    let expect = expect![[
+         '(1 2 3 4))"##,
+            true,
+            expect![[
         r##"OK ((1 (:signal error ("fixture failure 1 font-lock-constant-face")) ((font-lock-constant-face :foreground "#D19A66"))) (2 (:signal error ("fixture failure 2 font-lock-doc-face")) ((font-lock-constant-face :foreground "#D19A66") (font-lock-doc-face #1=(:inherit (font-lock-comment-face))))) (3 (:signal error ("fixture failure 3 font-lock-variable-name-face")) ((font-lock-constant-face :foreground "#D19A66") (font-lock-doc-face #1#) (font-lock-variable-name-face :foreground "#ABB2BF"))) (4 (:ok (:cookie 3 font-lock-variable-name-face)) ((font-lock-constant-face :foreground "#D19A66") (font-lock-doc-face #1#) (font-lock-variable-name-face :foreground "#ABB2BF"))))"##
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_unsupported_and_force_disabled_hook_runs_have_no_local_effect() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_unsupported_and_force_disabled_hook_runs_have_no_local_effect",
+            r##"(list
          (with-temp-buffer
            (setq major-mode 'special-mode)
            (list
@@ -313,8 +298,9 @@ fn atom_one_dark_theme_unsupported_and_force_disabled_hook_runs_have_no_local_ef
             (local-variable-p
              'face-remapping-alist)
             (local-variable-p
-             'atom-one-dark-theme-force-faces-for-mode))))"##;
-    let expect = expect!["OK ((nil nil nil) (nil nil t))"];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
+             'atom-one-dark-theme-force-faces-for-mode))))"##,
+            true,
+            expect!["OK ((nil nil nil) (nil nil t))"],
+        ),
+    ]);
 }

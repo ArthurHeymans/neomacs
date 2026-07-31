@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_alert_termux_autoload_parity, assert_alert_termux_parity};
+use super::{assert_alert_termux_autoload_batch, assert_alert_termux_batch};
 
 #[test]
-fn alert_termux_registry_loads_exact_dependency_and_registers_one_style() {
-    let elisp_form = r##"(list
+fn registry_alert_termux_batch() {
+    assert_alert_termux_batch(&[
+        (
+            "alert_termux_registry_loads_exact_dependency_and_registers_one_style",
+            r##"(list
          (featurep 'alert)
          (featurep 'alert-termux)
          (list alert-termux-command
@@ -19,14 +22,13 @@ fn alert_termux_registry_loads_exact_dependency_and_registers_one_style() {
                  #'alert-termux-notify)))
           (seq-filter
            (lambda (entry) (eq (car entry) 'termux))
-           alert-styles)))"##;
-    let expect = expect![[r#"OK (t t (nil file nil) ((termux "Notify using termux" t)))"#]];
-    assert_alert_termux_parity(elisp_form, expect);
-}
-
-#[test]
-fn alert_termux_callable_surface_and_dependency_contract_match() {
-    let elisp_form = r##"(list
+           alert-styles)))"##,
+            true,
+            expect![[r#"OK (t t (nil file nil) ((termux "Notify using termux" t)))"#]],
+        ),
+        (
+            "alert_termux_callable_surface_and_dependency_contract_match",
+            r##"(list
          (help-function-arglist 'alert-termux-notify t)
          (commandp 'alert-termux-notify)
          (macrop 'alert-termux-notify)
@@ -37,32 +39,15 @@ fn alert_termux_callable_surface_and_dependency_contract_match() {
                   (fboundp symbol)
                   (help-function-arglist symbol t)))
           '(alert alert-define-style
-            alert-encode-string alert-message-notify)))"##;
-    let expect = expect![
+            alert-encode-string alert-message-notify)))"##,
+            true,
+            expect![
         "OK ((info) nil nil nil ((alert t (message &rest --cl-rest--)) (alert-define-style t (name &rest plist)) (alert-encode-string t (str)) (alert-message-notify t (info))))"
-    ];
-    assert_alert_termux_parity(elisp_form, expect);
-}
-
-#[test]
-fn alert_termux_autoload_file_does_not_load_package_or_publish_commands() {
-    let elisp_form = r##"(list
-         (featurep 'alert)
-         (featurep 'alert-termux)
-         (mapcar
-          (lambda (symbol)
-            (list symbol
-                  (fboundp symbol)
-                  (autoloadp (and (fboundp symbol)
-                                  (symbol-function symbol)))))
-          '(alert-termux-notify alert)))"##;
-    let expect = expect!["OK (nil nil ((alert-termux-notify nil nil) (alert nil nil)))"];
-    assert_alert_termux_autoload_parity(elisp_form, expect);
-}
-
-#[test]
-fn alert_termux_style_can_be_selected_as_alert_default() {
-    let elisp_form = r##"(let (sent)
+    ],
+        ),
+        (
+            "alert_termux_style_can_be_selected_as_alert_default",
+            r##"(let (sent)
          (let ((alert-default-style 'termux)
                (alert-user-configuration nil)
                (alert-internal-configuration nil)
@@ -88,9 +73,32 @@ fn alert_termux_style_can_be_selected_as_alert_default() {
                        :category 'ci
                        :data '(:job 7))
                 sent
-                (length alert-active-alerts))))))"##;
-    let expect = expect![[
+                (length alert-active-alerts))))))"##,
+            true,
+            expect![[
         r#"OK (nil ((:message "Build finished") (:title "termux-origin") (:severity high) (:category ci) (:mode text-mode) (:persistent nil) (:data (:job 7))) 1)"#
-    ]];
-    assert_alert_termux_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
+}
+
+#[test]
+fn registry_alert_termux_autoload_batch() {
+    assert_alert_termux_autoload_batch(&[
+        (
+            "alert_termux_autoload_file_does_not_load_package_or_publish_commands",
+            r##"(list
+         (featurep 'alert)
+         (featurep 'alert-termux)
+         (mapcar
+          (lambda (symbol)
+            (list symbol
+                  (fboundp symbol)
+                  (autoloadp (and (fboundp symbol)
+                                  (symbol-function symbol)))))
+          '(alert-termux-notify alert)))"##,
+            true,
+            expect!["OK (nil nil ((alert-termux-notify nil nil) (alert nil nil)))"],
+        ),
+    ]);
 }

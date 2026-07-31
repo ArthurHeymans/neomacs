@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_aiken_mode_parity;
+use super::assert_aiken_mode_batch;
 
 #[test]
-fn real_git_project_keeps_aiken_buffers_project_scoped_and_auto_selected() {
-    let elisp_form = r##"
+fn workflows_public_surface_batch() {
+    assert_aiken_mode_batch(&[
+        (
+            "real_git_project_keeps_aiken_buffers_project_scoped_and_auto_selected",
+            r##"
 (let* ((root (make-temp-file "aiken-project-" t))
        (default-directory (file-name-as-directory root))
        (source (expand-file-name "validators/payment.ak" root))
@@ -44,16 +47,15 @@ fn real_git_project_keeps_aiken_buffers_project_scoped_and_auto_selected() {
     (when (buffer-live-p source-buffer) (kill-buffer source-buffer))
     (when (buffer-live-p library-buffer) (kill-buffer library-buffer))
     (delete-directory root t)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ((aiken-mode "validators/payment.ak" t) (aiken-mode "lib/helpers.ak" t) t)"#
-    ]];
-    assert_aiken_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn compile_workflow_routes_aiken_check_from_project_without_starting_tool() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "compile_workflow_routes_aiken_check_from_project_without_starting_tool",
+            r##"
 (progn
   (setq aiken-mode-test-compile-event nil)
   (unwind-protect
@@ -89,16 +91,15 @@ fn compile_workflow_routes_aiken_check_from_project_without_starting_tool() {
                    compile-command))))
           (delete-directory root t)))
     (makunbound 'aiken-mode-test-compile-event)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (fake-compilation-buffer ("aiken check" nil nil nil t aiken-mode) "aiken check")"#
-    ]];
-    assert_aiken_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn user_formatter_hook_can_replace_buffer_through_mocked_aiken_cli_boundary() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "user_formatter_hook_can_replace_buffer_through_mocked_aiken_cli_boundary",
+            r##"
 (progn
   (setq aiken-mode-test-format-event nil)
   (defvar aiken-mode-test-call-process nil)
@@ -139,16 +140,15 @@ fn user_formatter_hook_can_replace_buffer_through_mocked_aiken_cli_boundary() {
            (buffer-modified-p))))
     (fmakunbound 'aiken-mode-test-format-buffer)
     (makunbound 'aiken-mode-test-format-event)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("fn add(x:Int,y:Int){x+y}\n" "aiken" t t nil ("fmt" "-")) "fn add(x: Int, y: Int) { x + y }\n" 8 aiken-mode t)"#
-    ]];
-    assert_aiken_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn project_save_hook_formats_only_aiken_buffers_and_preserves_plain_files() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "project_save_hook_formats_only_aiken_buffers_and_preserves_plain_files",
+            r##"
 (progn
   (setq aiken-mode-test-hook-events nil)
   (fset
@@ -185,16 +185,15 @@ fn project_save_hook_formats_only_aiken_buffers_and_preserves_plain_files() {
           (kill-buffer notes)))
     (fmakunbound 'aiken-mode-test-format-on-save)
     (makunbound 'aiken-mode-test-hook-events)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ((("validator.ak" aiken-mode)) "fn valid(x: Int) { True }\n" "x:Int is documentation\n")"#
-    ]];
-    assert_aiken_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn compilation_error_text_retains_aiken_file_line_column_navigation_metadata() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "compilation_error_text_retains_aiken_file_line_column_navigation_metadata",
+            r##"
 (let* ((root (make-temp-file "aiken-errors-" t))
        (source (expand-file-name "validators/payment.ak" root)))
   (unwind-protect
@@ -231,16 +230,15 @@ fn compilation_error_text_retains_aiken_file_line_column_navigation_metadata() {
               (- (point) (length "validators/payment.ak:3:5"))
               'face)))))
     (delete-directory root t)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("Checking acme/payment\nvalidators/payment.ak:3:5: error: expected Bool\n" t "validators/payment.ak" 3 5 font-lock-function-name-face)"#
-    ]];
-    assert_aiken_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn mode_can_run_deterministic_process_filter_workflow_for_aiken_output() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "mode_can_run_deterministic_process_filter_workflow_for_aiken_output",
+            r##"
 (progn
   (setq aiken-mode-test-process-events nil)
   (unwind-protect
@@ -268,9 +266,11 @@ fn mode_can_run_deterministic_process_filter_workflow_for_aiken_output() {
             (list process aiken-mode-test-process-events
                   major-mode (buffer-string)))))
     (makunbound 'aiken-mode-test-process-events)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (fake-aiken-process ("aiken-check" ("aiken" "check") t t t) aiken-mode "")"#
-    ]];
-    assert_aiken_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

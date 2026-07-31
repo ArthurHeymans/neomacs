@@ -1,32 +1,31 @@
 use expect_test::expect;
 
-use super::assert_asx_parity;
+use super::assert_asx_batch;
 
 #[test]
-fn asx_google_extractor_reads_result_titles_and_question_urls_in_dom_order() {
-    let elisp_form = r##"(asx--extract-links-google
-         (asx-test-search-dom))"##;
-    let expect = expect![[
+fn search_public_surface_batch() {
+    assert_asx_batch(&[
+        (
+            "asx_google_extractor_reads_result_titles_and_question_urls_in_dom_order",
+            r##"(asx--extract-links-google
+         (asx-test-search-dom))"##,
+            true,
+            expect![[
         r#"OK (("First " . "https://stackoverflow.com/questions/101/first") ("Second result" . "https://emacs.stackexchange.com/questions/202/second"))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_duckduckgo_extractor_combines_nested_title_text_and_trims_display_urls() {
-    let elisp_form = r##"(asx--extract-links-duckduckgo
-         (asx-test-search-dom))"##;
-    let expect = expect![[
+    ]],
+        ),
+        (
+            "asx_duckduckgo_extractor_combines_nested_title_text_and_trims_display_urls",
+            r##"(asx--extract-links-duckduckgo
+         (asx-test-search-dom))"##,
+            true,
+            expect![[
         r#"OK (("Duck  one" . "stackoverflow.com/questions/303/duck-one") ("Duck two" . "example.com/articles/404"))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_extract_links_dispatches_through_builtin_and_custom_engine_configuration() {
-    let elisp_form = r##"(let ((dom
+    ]],
+        ),
+        (
+            "asx_extract_links_dispatches_through_builtin_and_custom_engine_configuration",
+            r##"(let ((dom
                 (asx-test-search-dom))
                calls)
          (cl-letf
@@ -52,17 +51,15 @@ fn asx_extract_links_dispatches_through_builtin_and_custom_engine_configuration(
                       :extract-fn
                       #'asx-test-custom-extractor))))
               (asx--extract-links dom))
-            calls)))"##;
-    let expect = expect![[
+            calls)))"##,
+            true,
+            expect![[
         r#"OK ((("First " . "https://stackoverflow.com/questions/101/first") ("Second result" . "https://emacs.stackexchange.com/questions/202/second")) (("Duck  one" . "stackoverflow.com/questions/303/duck-one") ("Duck two" . "example.com/articles/404")) (("Custom" . "https://custom.invalid/questions/9")) (html))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_filter_posts_keeps_only_question_paths_without_reordering_or_rewriting_links() {
-    let elisp_form = r##"(asx--filter-posts
+    ]],
+        ),
+        (
+            "asx_filter_posts_keeps_only_question_paths_without_reordering_or_rewriting_links",
+            r##"(asx--filter-posts
          '(("Question"
             .
             "https://stackoverflow.com/questions/123/title")
@@ -80,17 +77,15 @@ fn asx_filter_posts_keeps_only_question_paths_without_reordering_or_rewriting_li
             "https://serverfault.com/questions/0007/x")
            ("No digits"
             .
-            "https://example.com/questions/abc")))"##;
-    let expect = expect![[
+            "https://example.com/questions/abc")))"##,
+            true,
+            expect![[
         r#"OK (("Question" . "https://stackoverflow.com/questions/123/title") ("Bare question path" . "questions/9") ("Leading zeros" . "https://serverfault.com/questions/0007/x"))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_post_prefixes_mark_every_title_equal_to_current_post_and_preserve_urls() {
-    let elisp_form = r##"(let ((asx--posts
+    ]],
+        ),
+        (
+            "asx_post_prefixes_mark_every_title_equal_to_current_post_and_preserve_urls",
+            r##"(let ((asx--posts
                 '(("First" . "url-1")
                   ("Duplicate" . "url-2")
                   ("Duplicate" . "url-3")
@@ -105,17 +100,15 @@ fn asx_post_prefixes_mark_every_title_equal_to_current_post_and_preserve_urls() 
               (asx--get-prefix post)))
            asx--posts)
           (asx--get-posts-with-prefix
-           asx--posts)))"##;
-    let expect = expect![[
+           asx--posts)))"##,
+            true,
+            expect![[
         r#"OK (#1=("Duplicate" . "url-2") ((("First" . "url-1") "   ") (#1# "=> ") (("Duplicate" . "url-3") "=> ") (("Last" . "url-4") "   ")) (("   First" . "url-1") ("=> Duplicate" . "url-2") ("=> Duplicate" . "url-3") ("   Last" . "url-4")))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_select_post_prompts_with_prefixed_candidates_and_stores_selected_index() {
-    let elisp_form = r##"(let ((asx--posts
+    ]],
+        ),
+        (
+            "asx_select_post_prompts_with_prefixed_candidates_and_stores_selected_index",
+            r##"(let ((asx--posts
                 '(("First" . "url-1")
                   ("Second" . "url-2")
                   ("Third" . "url-3")))
@@ -137,17 +130,15 @@ fn asx_select_post_prompts_with_prefixed_candidates_and_stores_selected_index() 
             (asx--select-post asx--posts)
             asx--current-post-index
             (asx--get-current-post)
-            observed)))"##;
-    let expect = expect![[
+            observed)))"##,
+            true,
+            expect![[
         r#"OK (2 2 ("Third" . "url-3") ("Post: " (("=> First" . "url-1") ("   Second" . "url-2") ("   Third" . "url-3")) nil))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_handle_search_filters_results_selects_first_and_requests_post_without_prompt() {
-    let elisp_form = r##"(let ((asx-prompt-post-p nil)
+    ]],
+        ),
+        (
+            "asx_handle_search_filters_results_selects_first_and_requests_post_without_prompt",
+            r##"(let ((asx-prompt-post-p nil)
                (asx--current-post-index 9)
                requests)
          (cl-letf
@@ -167,17 +158,15 @@ fn asx_handle_search_filters_results_selects_first_and_requests_post_without_pro
              '(fixture-dom))
             asx--posts
             asx--current-post-index
-            (nreverse requests))))"##;
-    let expect = expect![[
+            (nreverse requests))))"##,
+            true,
+            expect![[
         r#"OK (:queued (#1=("First" . "https://stackoverflow.com/questions/1/first") ("Second" . "https://emacs.stackexchange.com/questions/2/second")) 0 (#1#))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_handle_search_prompt_path_uses_selector_before_requesting_chosen_post() {
-    let elisp_form = r##"(let ((asx-prompt-post-p t)
+    ]],
+        ),
+        (
+            "asx_handle_search_prompt_path_uses_selector_before_requesting_chosen_post",
+            r##"(let ((asx-prompt-post-p t)
                events)
          (cl-letf
              (((symbol-function
@@ -206,17 +195,15 @@ fn asx_handle_search_prompt_path_uses_selector_before_requesting_chosen_post() {
              '(fixture-dom))
             asx--posts
             asx--current-post-index
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:queued #1=(("First" . "questions/1") #2=("Second" . "questions/2")) 1 ((:select #1#) (:request #2#)))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_handle_search_signals_when_extraction_contains_no_question_posts() {
-    let elisp_form = r##"(let (requests)
+    ]],
+        ),
+        (
+            "asx_handle_search_signals_when_extraction_contains_no_question_posts",
+            r##"(let (requests)
          (cl-letf
              (((symbol-function
                 'asx--extract-links)
@@ -235,15 +222,13 @@ fn asx_handle_search_signals_when_extraction_contains_no_question_posts() {
                 (car error)
                 (cdr error))))
             asx--posts
-            requests)))"##;
-    let expect = expect![[r#"OK ((user-error ("No posts found")) nil nil)"#]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_remove_and_next_deletes_all_matching_urls_then_advances_in_remaining_ring() {
-    let elisp_form = r##"(let ((asx--posts
+            requests)))"##,
+            true,
+            expect![[r#"OK ((user-error ("No posts found")) nil nil)"#]],
+        ),
+        (
+            "asx_remove_and_next_deletes_all_matching_urls_then_advances_in_remaining_ring",
+            r##"(let ((asx--posts
                 '(("First" . "url-1")
                   ("Bad A" . "bad-url")
                   ("Bad B" . "bad-url")
@@ -265,16 +250,13 @@ fn asx_remove_and_next_deletes_all_matching_urls_then_advances_in_remaining_ring
              "bad-url")
             asx--posts
             asx--current-post-index
-            (nreverse calls))))"##;
-    let expect =
-        expect![[r#"OK (:advanced #1=(("First" . "url-1") ("Last" . "url-4")) 1 ((1 1 #1#)))"#]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_remove_and_next_signals_after_removing_the_last_available_post() {
-    let elisp_form = r##"(let ((asx--posts
+            (nreverse calls))))"##,
+            true,
+            expect![[r#"OK (:advanced #1=(("First" . "url-1") ("Last" . "url-4")) 1 ((1 1 #1#)))"#]],
+        ),
+        (
+            "asx_remove_and_next_signals_after_removing_the_last_available_post",
+            r##"(let ((asx--posts
                 '(("Only" . "bad-url")))
                calls)
          (cl-letf
@@ -290,15 +272,13 @@ fn asx_remove_and_next_signals_after_removing_the_last_available_post() {
                 (car error)
                 (cdr error))))
             asx--posts
-            calls)))"##;
-    let expect = expect![[r#"OK ((user-error ("No posts found")) nil nil)"#]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_navigation_commands_forward_exact_offsets_and_first_post_delta() {
-    let elisp_form = r##"(let ((asx--current-post-index 4)
+            calls)))"##,
+            true,
+            expect![[r#"OK ((user-error ("No posts found")) nil nil)"#]],
+        ),
+        (
+            "asx_navigation_commands_forward_exact_offsets_and_first_post_delta",
+            r##"(let ((asx--current-post-index 4)
                calls)
          (cl-letf
              (((symbol-function 'asx-n-post)
@@ -310,15 +290,13 @@ fn asx_navigation_commands_forward_exact_offsets_and_first_post_delta() {
             (asx-previous-post)
             (asx-reload-post)
             (asx-first-post)
-            (nreverse calls))))"##;
-    let expect = expect!["OK (1 -1 0 -4 (1 -1 0 -4))"];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_n_post_wraps_forward_backward_and_large_offsets_then_requests_current_post() {
-    let elisp_form = r##"(let ((asx--posts
+            (nreverse calls))))"##,
+            true,
+            expect!["OK (1 -1 0 -4 (1 -1 0 -4))"],
+        ),
+        (
+            "asx_n_post_wraps_forward_backward_and_large_offsets_then_requests_current_post",
+            r##"(let ((asx--posts
                 '(("Zero" . "url-0")
                   ("One" . "url-1")
                   ("Two" . "url-2")))
@@ -341,17 +319,15 @@ fn asx_n_post_wraps_forward_backward_and_large_offsets_then_requests_current_pos
             (asx-n-post -1)
             (asx-n-post 8)
             asx--current-post-index
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:requested :requested :requested :requested :requested 1 ((1 #2=("One" . "url-1")) (2 #1=("Two" . "url-2")) (0 ("Zero" . "url-0")) (2 #1#) (1 #2#)))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_jump_selects_from_current_posts_then_requests_the_selected_post() {
-    let elisp_form = r##"(let ((asx--posts
+    ]],
+        ),
+        (
+            "asx_jump_selects_from_current_posts_then_requests_the_selected_post",
+            r##"(let ((asx--posts
                 '(("First" . "url-1")
                   ("Second" . "url-2")))
                (asx--current-post-index 0)
@@ -376,10 +352,11 @@ fn asx_jump_selects_from_current_posts_then_requests_the_selected_post() {
            (list
             (asx-jump)
             asx--current-post-index
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:queued 1 ((:select (("First" . "url-1") #1=("Second" . "url-2"))) (:request #1#)))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

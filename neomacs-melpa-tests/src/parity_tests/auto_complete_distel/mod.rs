@@ -6,6 +6,8 @@ use crate::{
 };
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod candidates;
 mod documentation;
 mod prefixes;
@@ -93,5 +95,29 @@ pub(crate) fn assert_auto_complete_distel_autoload_parity(elisp_form: &str, expe
         "auto-complete-distel-autoloads.el",
         elisp_form,
         expected,
+    );
+}
+
+
+
+/// Multi-probe batch for `assert_auto_complete_distel_autoload_parity` cases (2a).
+pub(crate) fn assert_auto_complete_distel_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_complete_distel_oracle("auto-complete-distel-autoloads.el"),
+        &name,
+        "auto_complete_distel_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_auto_complete_distel_parity` cases (2a).
+pub(crate) fn assert_auto_complete_distel_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_complete_distel_oracle("auto-complete-distel.el"),
+        &name,
+        "auto_complete_distel_parity",
+        cases,
     );
 }

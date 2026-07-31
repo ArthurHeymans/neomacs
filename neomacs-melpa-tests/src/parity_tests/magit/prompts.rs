@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_magit_parity;
+use super::assert_magit_batch;
 
 #[test]
-fn magit_prompt_matching_selects_patterns_suffixes_and_match_groups() {
-    let elisp_form = r##"(let* ((prompts
+fn prompts_public_surface_batch() {
+    assert_magit_batch(&[
+        (
+            "magit_prompt_matching_selects_patterns_suffixes_and_match_groups",
+            r##"(let* ((prompts
                      '("^bar: ?$"
                        "^foo '\\(?99:.*\\)': ?$"
                        "^foo: ?$"))
@@ -19,15 +22,13 @@ fn magit_prompt_matching_selects_patterns_suffixes_and_match_groups() {
                 (magit-process-match-prompt '("^foo: ?$") "foo:")
                 (magit-process-match-prompt '("^foo: ?$") "foo: ")
                 matched
-                payload))"##;
-    let expect = expect![[r#"OK (nil "foo: " "foo: " "foo 'payload': " "payload")"#]];
-
-    assert_magit_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_password_prompt_patterns_extract_hosts_without_protocol_noise() {
-    let elisp_form = r##"(mapcar
+                payload))"##,
+            true,
+            expect![[r#"OK (nil "foo: " "foo: " "foo 'payload': " "payload")"#]],
+        ),
+        (
+            "magit_password_prompt_patterns_extract_hosts_without_protocol_noise",
+            r##"(mapcar
               (lambda (prompt)
                 (and
                  (magit-process-match-prompt
@@ -43,10 +44,11 @@ fn magit_password_prompt_patterns_extract_hosts_without_protocol_noise() {
                 "(user@host) Password for user@host: "
                 "volumio@192.168.0.211's password: "
                 "Token: "
-                "not a credential prompt"))"##;
-    let expect = expect![[
+                "not a credential prompt"))"##,
+            true,
+            expect![[
         r#"OK (t t "example.com" "me@magit.vc" "ahihi@foo" "user@host" "volumio@192.168.0.211" t nil)"#
-    ]];
-
-    assert_magit_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

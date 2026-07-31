@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_indent_mode_parity;
+use super::assert_auto_indent_mode_batch;
 
 #[test]
-fn auto_indent_mode_repository_detection_walks_all_marker_types_and_caches_result() {
-    let elisp_form = r##"(let ((root
+fn repository_public_surface_batch() {
+    assert_auto_indent_mode_batch(&[
+        (
+            "auto_indent_mode_repository_detection_walks_all_marker_types_and_caches_result",
+            r##"(let ((root
                                 (expand-file-name
                                  "auto-indent-repositories"
                                  default-directory)))
@@ -43,16 +46,15 @@ fn auto_indent_mode_repository_detection_walks_all_marker_types_and_caches_resul
                          (auto-indent-is-repository-p))))))
                 '(".git" ".hg" ".bzr" "_darcs")))
            (when (file-exists-p root)
-             (delete-directory root t))))"##;
-    let expect = expect![[
+             (delete-directory root t))))"##,
+            true,
+            expect![[
         r#"OK ((".git" t "git/" t) (".hg" t "../../../../" t) (".bzr" t "../../../../" t) ("_darcs" t "../../../../" t))"#
-    ]];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_non_repository_result_is_cached_as_sentinel() {
-    let elisp_form = r##"(let ((root
+    ]],
+        ),
+        (
+            "auto_indent_mode_non_repository_result_is_cached_as_sentinel",
+            r##"(let ((root
                                 (expand-file-name
                                  "auto-indent-plain-tree"
                                  default-directory)))
@@ -75,14 +77,13 @@ fn auto_indent_mode_non_repository_result_is_cached_as_sentinel() {
                     auto-indent-is-repository
                     (auto-indent-is-repository-p)))))
            (when (file-exists-p root)
-             (delete-directory root t))))"##;
-    let expect = expect![[r#"OK (t "[ORACLE-WORKSPACE]/" t)"#]];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_aggressive_policy_combines_file_style_and_repository_state() {
-    let elisp_form = r##"(mapcar
+             (delete-directory root t))))"##,
+            true,
+            expect![[r#"OK (t "[ORACLE-WORKSPACE]/" t)"#]],
+        ),
+        (
+            "auto_indent_mode_aggressive_policy_combines_file_style_and_repository_state",
+            r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (setq buffer-file-name (nth 0 case)
@@ -94,16 +95,15 @@ fn auto_indent_mode_aggressive_policy_combines_file_style_and_repository_state()
            ("/file.el" conservative not-repository)
            ("/file.el" moderate "/repo/")
            ("/file.el" moderate not-repository)
-           ("/file.el" unknown "/repo/")))"##;
-    let expect = expect![[
+           ("/file.el" unknown "/repo/")))"##,
+            true,
+            expect![[
         r#"OK (((nil moderate nil) t) (("/file.el" aggressive not-repository) t) (("/file.el" conservative not-repository) nil) (("/file.el" moderate "/repo/") nil) (("/file.el" moderate not-repository) t) (("/file.el" unknown "/repo/") t))"#
-    ]];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_add_to_alist_inserts_replaces_and_honors_no_replace() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "auto_indent_mode_add_to_alist_inserts_replaces_and_honors_no_replace",
+            r##"(progn
          (defvar auto-indent-test-alist)
          (let ((auto-indent-test-alist
                 '(("Alpha" . 1)
@@ -124,16 +124,15 @@ fn auto_indent_mode_add_to_alist_inserts_replaces_and_honors_no_replace() {
           (progn
             (auto-indent-add-to-alist
              'auto-indent-test-alist '("BETA" . 20))
-            (copy-tree auto-indent-test-alist)))))"##;
-    let expect = expect![[
+            (copy-tree auto-indent-test-alist)))))"##,
+            true,
+            expect![[
         r#"OK ((("gamma" . 3) ("Alpha" . 1) ("beta" . 2)) (("gamma" . 3) ("Alpha" . 10) ("beta" . 2)) (("gamma" . 3) ("Alpha" . 10) ("beta" . 2)) (("BETA" . 20) ("gamma" . 3) ("Alpha" . 10) ("beta" . 2)))"#
-    ]];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_pair_interval_uses_major_mode_then_default_and_throttle() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_indent_mode_pair_interval_uses_major_mode_then_default_and_throttle",
+            r##"(with-temp-buffer
          (insert "one\ntwo\nthree\nfour\nfive\n")
          (setq auto-indent-pairs-begin (point-min)
                auto-indent-pairs-end (point-max)
@@ -157,16 +156,15 @@ fn auto_indent_mode_pair_interval_uses_major_mode_then_default_and_throttle() {
              0.3)
             (((fixture-mode "NaN" 4)
               (default 0.5 1))
-             1))))"##;
-    let expect = expect![[
+             1))))"##,
+            true,
+            expect![[
         r#"OK (((((fixture-mode 0.2 4) (default 0.5 1)) nil) 1.0) ((((other-mode 0.2 4) (default 0.5 1)) nil) 2.5) ((((fixture-mode 0.2 4) (default 0.5 1)) 0.3) 0.3) ((((fixture-mode "NaN" 4) (default 0.5 1)) 1) 0.0025))"#
-    ]];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_pair_interval_update_records_observed_rate_per_line() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_indent_mode_pair_interval_update_records_observed_rate_per_line",
+            r##"(with-temp-buffer
          (insert "one\ntwo\nthree\nfour\n")
          (setq auto-indent-pairs-begin (point-min)
                auto-indent-pairs-end (point-max)
@@ -183,16 +181,15 @@ fn auto_indent_mode_pair_interval_update_records_observed_rate_per_line() {
                   (auto-indent-par-region-interval-update 0.08)
                   (copy-tree
                    auto-indent-next-pair-timer-geo-mean))))
-           (list first second)))"##;
-    let expect = expect![
+           (list first second)))"##,
+            true,
+            expect![
         "OK (((fixture-mode 0.01 1) (default 0.001 0)) ((fixture-mode 0.0010000000000000002 2) (default 0.001 0)))"
-    ];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_save_interval_only_persists_when_both_options_enable() {
-    let elisp_form = r##"(let (calls)
+    ],
+        ),
+        (
+            "auto_indent_mode_save_interval_only_persists_when_both_options_enable",
+            r##"(let (calls)
          (cl-letf (((symbol-function 'customize-save-variable)
                     (lambda (symbol value)
                       (push (list symbol value) calls)
@@ -209,16 +206,15 @@ fn auto_indent_mode_save_interval_only_persists_when_both_options_enable() {
             '((nil . nil)
               (t . nil)
               (nil . t)
-              (t . t)))))"##;
-    let expect = expect![
+              (t . t)))))"##,
+            true,
+            expect![
         "OK (((nil) nil nil) ((t) nil nil) ((nil . t) nil nil) ((t . t) :saved ((auto-indent-next-pair-timer-geo-mean ((default 0.02 3))))))"
-    ];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_save_interval_swallows_customization_errors() {
-    let elisp_form = r##"(let ((auto-indent-next-pair t)
+    ],
+        ),
+        (
+            "auto_indent_mode_save_interval_swallows_customization_errors",
+            r##"(let ((auto-indent-next-pair t)
              (auto-indent-save-next-pair t)
              (auto-indent-next-pair-timer-geo-mean
               '((default 0.02 3))))
@@ -227,14 +223,13 @@ fn auto_indent_mode_save_interval_swallows_customization_errors() {
                       (error "read-only customization file"))))
            (list
             (auto-indent-save-par-region-interval)
-            auto-indent-next-pair-timer-geo-mean)))"##;
-    let expect = expect!["OK (nil ((default 0.02 3)))"];
-    assert_auto_indent_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_indent_mode_repository_cache_is_buffer_local_between_files() {
-    let elisp_form = r##"(let ((first
+            auto-indent-next-pair-timer-geo-mean)))"##,
+            true,
+            expect!["OK (nil ((default 0.02 3)))"],
+        ),
+        (
+            "auto_indent_mode_repository_cache_is_buffer_local_between_files",
+            r##"(let ((first
                                 (generate-new-buffer
                                  " *auto-indent-repo*"))
              (second
@@ -258,7 +253,9 @@ fn auto_indent_mode_repository_cache_is_buffer_local_between_files() {
                   (list auto-indent-is-repository
                         (auto-indent-is-repository-p)))))
            (kill-buffer first)
-           (kill-buffer second)))"##;
-    let expect = expect![[r#"OK (("/repo/" t) (not-repository nil))"#]];
-    assert_auto_indent_mode_parity(elisp_form, expect);
+           (kill-buffer second)))"##,
+            true,
+            expect![[r#"OK (("/repo/" t) (not-repository nil))"#]],
+        ),
+    ]);
 }

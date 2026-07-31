@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_atomic_chrome_parity;
+use super::assert_atomic_chrome_batch;
 
 #[test]
-fn atomic_chrome_set_major_mode_selects_first_matching_url_rule_and_falls_back_exactly() {
-    let elisp_form = r##"(let ((atomic-chrome-url-major-mode-alist
+fn buffers_public_surface_batch() {
+    assert_atomic_chrome_batch(&[
+        (
+            "atomic_chrome_set_major_mode_selects_first_matching_url_rule_and_falls_back_exactly",
+            r##"(let ((atomic-chrome-url-major-mode-alist
                 '(("github\\.com/repo"
                    . emacs-lisp-mode)
                   ("github\\.com"
@@ -27,16 +30,15 @@ fn atomic_chrome_set_major_mode_selects_first_matching_url_rule_and_falls_back_e
              "https://example.test/"
              "https://unmatched.test/"
              ""
-             nil)))"##;
-    let expect = expect![[
+             nil)))"##,
+            true,
+            expect![[
         r#"OK (("https://github.com/repo/file.el" nil emacs-lisp-mode ("Elisp" (lexical-binding (:propertize "/l" help-echo "Using lexical-binding mode") (:propertize "/d" help-echo "Using old dynamic scoping mode\nmouse-1: Enable lexical-binding mode" face warning mouse-face mode-line-highlight local-map (keymap (mode-line keymap (mouse-1 . elisp-enable-lexical-binding))))))) ("https://github.com/issues" nil text-mode "Text") ("https://example.test/" nil fundamental-mode "Fundamental") ("https://unmatched.test/" nil special-mode "Special") ("" nil special-mode "Special") (nil nil special-mode "Special"))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_set_major_mode_invokes_selected_function_once_and_propagates_invalid_rules() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "atomic_chrome_set_major_mode_invokes_selected_function_once_and_propagates_invalid_rules",
+            r##"(let (events)
           (cl-labels
               ((selected-mode ()
                  (push
@@ -83,16 +85,15 @@ fn atomic_chrome_set_major_mode_invokes_selected_function_once_and_propagates_in
                     (lambda ()
                       (atomic-chrome-set-major-mode
                        "anything")))))
-               (nreverse events)))))"##;
-    let expect = expect![[
+               (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK ((:selected-result selected-mode) (:fallback-result fallback-mode) (:error invalid-regexp ("Unmatched [ or [^")) ((selected " *temp*" fundamental-mode) (fallback " *temp*" fundamental-mode)))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_show_edit_buffer_full_and_split_styles_call_exact_window_operations() {
-    let elisp_form = r##"(let ((buffer
+    ]],
+        ),
+        (
+            "atomic_chrome_show_edit_buffer_full_and_split_styles_call_exact_window_operations",
+            r##"(let ((buffer
                 (generate-new-buffer
                  " *atomic-show*"))
                events)
@@ -155,16 +156,15 @@ fn atomic_chrome_show_edit_buffer_full_and_split_styles_call_exact_window_operat
                      "Split title"))
                    events))
                 (nreverse events))
-            (atomic-chrome-test-kill-buffer buffer)))"##;
-    let expect = expect![[
+            (atomic-chrome-test-kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK ((switch " *atomic-show*") (raise nil) (window-frame :selected-window) (focus :selected-frame) (:full-return nil) (pop " *atomic-show*") (raise nil) (window-frame :selected-window) (focus :selected-frame) (:split-return nil))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_show_edit_buffer_frame_style_selects_platform_specific_frame_constructor() {
-    let elisp_form = r##"(let ((buffer
+    ]],
+        ),
+        (
+            "atomic_chrome_show_edit_buffer_frame_style_selects_platform_specific_frame_constructor",
+            r##"(let ((buffer
                 (generate-new-buffer
                  " *atomic-frame-show*"))
                (atomic-chrome-buffer-frame-width
@@ -264,16 +264,15 @@ fn atomic_chrome_show_edit_buffer_frame_style_selects_platform_specific_frame_co
                         (nreverse events))
                        snapshots)))))
             (atomic-chrome-test-kill-buffer buffer))
-          (nreverse snapshots))"##;
-    let expect = expect![[
+          (nreverse snapshots))"##,
+            true,
+            expect![[
         r#"OK (((pgtk nil nil) :made-frame ((make-frame ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-frame) (switch " *atomic-frame-show*") (raise :made-frame) (window-frame :selected-window) (focus :active-frame))) ((x "wayland-1" ":8") :made-frame ((make-frame ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-frame) (switch " *atomic-frame-show*") (raise :made-frame) (window-frame :selected-window) (focus :active-frame))) ((x ":7" ":8") :made-on-display ((make-on ":8" ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-on-display) (switch " *atomic-frame-show*") (raise :made-on-display) (window-frame :selected-window) (focus :active-frame))) ((ns nil nil) :made-frame ((make-frame ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-frame) (switch " *atomic-frame-show*") (raise :made-frame) (window-frame :selected-window) (focus :active-frame))) ((mac nil nil) :made-frame ((make-frame ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-frame) (switch " *atomic-frame-show*") (raise :made-frame) (window-frame :selected-window) (focus :active-frame))) ((w32 nil nil) :made-on-display ((make-on "w32" ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-on-display) (switch " *atomic-frame-show*") (raise :made-on-display) (window-frame :selected-window) (focus :active-frame))) ((nil nil nil) :made-frame ((make-frame ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-frame) (switch " *atomic-frame-show*") (raise :made-frame) (window-frame :selected-window) (focus :active-frame))))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_create_buffer_assigns_unique_title_mode_text_frame_and_table_entry() {
-    let elisp_form = r##"(let ((atomic-chrome-buffer-table
+    ]],
+        ),
+        (
+            "atomic_chrome_create_buffer_assigns_unique_title_mode_text_frame_and_table_entry",
+            r##"(let ((atomic-chrome-buffer-table
                 (make-hash-table
                  :test 'equal))
                (atomic-chrome-url-major-mode-alist
@@ -340,16 +339,15 @@ fn atomic_chrome_create_buffer_assigns_unique_title_mode_text_frame_and_table_en
                  (atomic-chrome-test-buffer-table-snapshot)))
             (mapc
              #'atomic-chrome-test-kill-buffer
-             buffers)))"##;
-    let expect = expect![[
+             buffers)))"##,
+            true,
+            expect![[
         r#"OK ((("Editor" "(message \"one\")" emacs-lisp-mode nil nil nil t) ("Editor<2>" "plain text" text-mode nil nil nil t) ("No title" "" text-mode nil nil nil nil)) ((show "Editor" "Editor" nil) (show "Editor<2>" "Editor" nil) (show "No title" "" nil)) (("Editor" :socket-a :frame-Editor) ("Editor<2>" :socket-b :frame-Editor) ("No title" :socket-c :frame-empty)))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_update_buffer_replaces_contents_preserves_table_and_handles_missing_socket() {
-    let elisp_form = r##"(let ((buffer
+    ]],
+        ),
+        (
+            "atomic_chrome_update_buffer_replaces_contents_preserves_table_and_handles_missing_socket",
+            r##"(let ((buffer
                 (generate-new-buffer
                  " *atomic-update*"))
                (atomic-chrome-buffer-table
@@ -380,16 +378,15 @@ fn atomic_chrome_update_buffer_replaces_contents_preserves_table_and_handles_mis
                  (with-current-buffer buffer
                    (buffer-string))
                  (atomic-chrome-test-buffer-table-snapshot)))
-            (atomic-chrome-test-kill-buffer buffer)))"##;
-    let expect = expect![[
+            (atomic-chrome-test-kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK (nil ("new\ncontent" 12 t) nil "new\ncontent" ((" *atomic-update*" :socket nil)))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_update_buffer_propagates_read_only_failure_without_mutating_old_text() {
-    let elisp_form = r##"(let ((buffer
+    ]],
+        ),
+        (
+            "atomic_chrome_update_buffer_propagates_read_only_failure_without_mutating_old_text",
+            r##"(let ((buffer
                 (generate-new-buffer
                  " *atomic-update-read-only*"))
                (atomic-chrome-buffer-table
@@ -418,16 +415,15 @@ fn atomic_chrome_update_buffer_propagates_read_only_failure_without_mutating_old
                     (buffer-modified-p)
                     buffer-read-only))
                  (atomic-chrome-test-buffer-table-snapshot)))
-            (atomic-chrome-test-kill-buffer buffer)))"##;
-    let expect = expect![[
+            (atomic-chrome-test-kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK ((:error buffer-read-only ((:buffer nil))) ("locked" nil t) ((" *atomic-update-read-only*" :socket nil)))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_close_current_buffer_obeys_modified_confirmation_before_delegating() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "atomic_chrome_close_current_buffer_obeys_modified_confirmation_before_delegating",
+            r##"(let (events)
           (cl-letf
               (((symbol-function 'yes-or-no-p)
                 (lambda (prompt)
@@ -466,9 +462,11 @@ fn atomic_chrome_close_current_buffer_obeys_modified_confirmation_before_delegat
                   (with-temp-buffer
                     (insert "modified")
                     (atomic-chrome-close-current-buffer))
-                  (nreverse events)))))))"##;
-    let expect = expect![[
+                  (nreverse events)))))))"##,
+            true,
+            expect![[
         r#"OK (:closed nil (((close " *temp*") (prompt "Buffer has not been saved, close anyway? ")) :closed ((prompt "Buffer has not been saved, close anyway? ") (close " *temp*"))))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

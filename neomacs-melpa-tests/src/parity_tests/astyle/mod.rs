@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ASTYLE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod arguments;
 mod commands;
 mod mode;
@@ -98,4 +100,30 @@ pub(crate) fn assert_astyle_parity(elisp_form: &str, expected: Expect) {
 
 pub(crate) fn assert_astyle_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_astyle_source_parity("astyle-autoloads.el", elisp_form, expected);
+}
+
+
+
+
+
+/// Multi-probe batch for `assert_astyle_autoload_parity` cases (2a).
+pub(crate) fn assert_astyle_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        astyle_oracle("astyle-autoloads.el"),
+        &name,
+        "astyle_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_astyle_parity` cases (2a).
+pub(crate) fn assert_astyle_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        astyle_oracle("astyle.el"),
+        &name,
+        "astyle_parity",
+        cases,
+    );
 }

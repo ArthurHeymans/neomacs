@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_ast_grep_parity;
+use super::assert_ast_grep_batch;
 
 /// Searching a real project through the documented `ast-grep-search' command.
 ///
@@ -33,9 +33,13 @@ use super::assert_ast_grep_parity;
 /// gap: `ast-grep--parse-stream-line' records only the start of each match
 /// even though the JSON carries `range.end'.  The rewrite workflow, which uses
 /// the other parser, shows the end positions populated from the same field.
+
 #[test]
-fn searching_a_real_project_parses_ast_greps_own_json_stream_into_candidates() {
-    let elisp_form = r##"(let* ((project (ast-grep-test-project))
+fn workflows_public_surface_batch() {
+    assert_ast_grep_batch(&[
+        (
+            "searching_a_real_project_parses_ast_greps_own_json_stream_into_candidates",
+            r##"(let* ((project (ast-grep-test-project))
        (records (ast-grep-test-install project))
        (default-directory project))
   (let ((candidates
@@ -45,34 +49,15 @@ fn searching_a_real_project_parses_ast_greps_own_json_stream_into_candidates() {
           :count (length candidates)
           :matches (mapcar #'ast-grep-test-match-summary candidates)
           :calls (ast-grep-test-calls-made)
-          :unrecorded (ast-grep-test-unrecorded))))"##;
-
-    let expect = expect![[
+          :unrecorded (ast-grep-test-unrecorded))))"##,
+            true,
+            expect![[
         r#"OK (:records 3 :count 4 :matches (("[ORACLE-SANDBOX]/proj/src/other.js" 0 0 nil nil "console.log" nil) ("[ORACLE-SANDBOX]/proj/src/app.js" 0 23 nil nil "console.log" nil) ("[ORACLE-SANDBOX]/proj/src/app.js" 1 0 nil nil "console.log" nil) ("[ORACLE-SANDBOX]/proj/src/app.js" 3 2 nil nil "console.log" nil)) :calls ("run|--pattern=console.log|--json=stream|<project>/|") :unrecorded nil)"#
-    ]];
-
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-/// The rewrite path, which adds `--rewrite=' to the same command and makes
-/// ast-grep emit a `replacement' alongside every match.
-///
-/// Asserted against the real 0.40.0 reply because the replacement field is
-/// exactly the kind of thing an invented fixture gets subtly wrong -- it is
-/// emitted per match, beside the original `text', and the package has to pair
-/// them up.  The argument vector is asserted too: `--rewrite' has to reach the
-/// tool, and it has to be the only difference from the plain search.
-///
-/// Note that this goes through `ast-grep--collect-rewrites', not the search
-/// parser.  ast-grep.el has two of them: `ast-grep--parse-stream-line' builds
-/// search candidates and records neither the end position nor the replacement,
-/// while `ast-grep--parse-rewrite-line' records both.  Feeding rewrite output
-/// to the search parser therefore yields a nil replacement for every match --
-/// which looks exactly like the package failing to read a field the tool
-/// plainly emitted, and is really just the wrong entry point.
-#[test]
-fn rewriting_asks_the_tool_for_replacements_and_pairs_them_with_each_match() {
-    let elisp_form = r##"(let* ((project (ast-grep-test-project))
+    ]],
+        ),
+        (
+            "rewriting_asks_the_tool_for_replacements_and_pairs_them_with_each_match",
+            r##"(let* ((project (ast-grep-test-project))
        (records (ast-grep-test-install project))
        (default-directory project))
   (let ((matches (ast-grep--collect-rewrites "console.log" "logger.info" project)))
@@ -85,34 +70,15 @@ fn rewriting_asks_the_tool_for_replacements_and_pairs_them_with_each_match() {
                           (plist-get m :text) (plist-get m :replacement)))
                   matches)
           :calls (ast-grep-test-calls-made)
-          :unrecorded (ast-grep-test-unrecorded))))"##;
-
-    let expect = expect![[
+          :unrecorded (ast-grep-test-unrecorded))))"##,
+            true,
+            expect![[
         r#"OK (:count 4 :matches (("app.js" 0 23 0 34 "console.log" "logger.info") ("app.js" 1 0 1 11 "console.log" "logger.info") ("app.js" 3 2 3 13 "console.log" "logger.info") ("other.js" 0 0 0 11 "console.log" "logger.info")) :calls ("run|--pattern=console.log|--rewrite=logger.info|--json=stream|<project>/|") :unrecorded nil)"#
-    ]];
-
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-/// `ast-grep-outline' drives a subcommand the tool does not have.
-///
-/// ast-grep-outline.el builds `ast-grep outline --json=stream FILE', but
-/// ast-grep 0.40.0's command list is `run', `scan', `test', `new', `lsp',
-/// `completions' and `help' -- there is no `outline'.  The real binary answers
-/// `error: unrecognized subcommand 'outline'' on stderr and exits 2, so the
-/// entire outline feature -- the imenu integration, the pickers, the minor
-/// mode -- cannot work against a released ast-grep.
-///
-/// The suite beside this one has twelve outline tests and they all pass,
-/// because they redefine `ast-grep--run-outline' and feed it JSON of their own.
-/// That is the android-mode and `alda down' lesson a third time: mocking the
-/// package's own function past the boundary makes a dead feature look alive.
-///
-/// What is asserted here is the failure as a user meets it -- the exit status,
-/// the tool's own message, and the error the package raises from it.
-#[test]
-fn the_outline_feature_calls_a_subcommand_ast_grep_does_not_have() {
-    let elisp_form = r##"(let* ((project (ast-grep-test-project))
+    ]],
+        ),
+        (
+            "the_outline_feature_calls_a_subcommand_ast_grep_does_not_have",
+            r##"(let* ((project (ast-grep-test-project))
        (records (ast-grep-test-install project))
        (file (expand-file-name "src/app.js" project))
        (default-directory project))
@@ -120,11 +86,11 @@ fn the_outline_feature_calls_a_subcommand_ast_grep_does_not_have() {
         :outcome (ast-grep-test-error-data
                   (lambda () (ast-grep--run-outline file)))
         :calls (ast-grep-test-calls-made)
-        :unrecorded (ast-grep-test-unrecorded)))"##;
-
-    let expect = expect![[
+        :unrecorded (ast-grep-test-unrecorded)))"##,
+            true,
+            expect![[
         r#"OK (:command ("ast-grep" "outline" "--json=stream" "[ORACLE-SANDBOX]/proj/src/app.js") :outcome (:error error ("The ast-grep failed with exit code 2: error: unrecognized subcommand 'outline'\n\nUsage: ast-grep [OPTIONS] <COMMAND>\n\nFor more information, try '--help'.")) :calls ("outline|--json=stream|<project>/src/app.js|") :unrecorded nil)"#
-    ]];
-
-    assert_ast_grep_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

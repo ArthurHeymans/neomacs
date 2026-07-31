@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_ai_code_parity;
+use super::assert_ai_code_batch;
 
 #[test]
-fn prompt_suffix_pipeline_preserves_provider_order_and_memoizes_nil() {
-    let elisp_form = r##"
+fn prompts_public_surface_batch() {
+    assert_ai_code_batch(&[
+        (
+            "prompt_suffix_pipeline_preserves_provider_order_and_memoizes_nil",
+            r##"
 (progn
   (setq ai-code-test-provider-calls 0)
   (unwind-protect
@@ -27,30 +30,28 @@ fn prompt_suffix_pipeline_preserves_provider_order_and_memoizes_nil() {
                  "Implement bounded retries.")
                 ai-code-test-provider-calls)))
     (makunbound 'ai-code-test-provider-calls)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("Verify focused tests." "Report changed files.") ("Verify focused tests." "Report changed files.") 1 "Implement bounded retries.\nVerify focused tests.\nReport changed files." 2)"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn prompt_command_detection_accepts_only_true_single_token_cli_commands() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "prompt_command_detection_accepts_only_true_single_token_cli_commands",
+            r##"
 (mapcar
  (lambda (text) (list text (and (ai-code--direct-command-p text) t)))
  '("/help" "/resume" "/model opus" " /help" "/help\nnext"
    "Explain /help" "/" "/compact"))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("/help" t) ("/resume" t) ("/model opus" nil) (" /help" nil) ("/help\nnext" t) ("Explain /help" nil) ("/" t) ("/compact" t))"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn structured_change_and_question_briefs_preserve_scope_and_boundaries() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "structured_change_and_question_briefs_preserve_scope_and_boundaries",
+            r##"
 (list
  (ai-code--compose-code-change-brief
   :goal "Make payment retries idempotent."
@@ -64,16 +65,15 @@ fn structured_change_and_question_briefs_preserve_scope_and_boundaries() {
   :scope "schedule_retry and its transaction boundary"
   :context "The worker acknowledges after committing."
   :instruction "Trace the state transitions and identify the race window."))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("Goal:\nMake payment retries idempotent.\n\nScope:\nsrc/payments/retry.rs::schedule_retry\n\nContext:\nDuplicate delivery occurs after a worker restart.\n\nClipboard context:\ntrace-id=abc; attempts=2\n\nBoundaries:\nPreserve the public API and database schema.\n\nAgent responsibilities:\nInspect the relevant files before editing. Plan briefly, then edit the code. Run appropriate project verification for the change. Fix failures caused by the change.\n\nVerification evidence:\nReport the exact verification command(s), result, and any remaining risk or blocker.\n\nInstruction:\nAdd focused property tests before editing production code." "Goal:\nExplain why the retry can execute twice.\n\nScope:\nschedule_retry and its transaction boundary\n\nContext:\nThe worker acknowledges after committing.\n\nBoundaries:\nAnswer the question only. Do not make code changes.\n\nInstruction:\nTrace the state transitions and identify the race window.")"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn task_helpers_generate_safe_names_initial_content_and_search_handoff() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "task_helpers_generate_safe_names_initial_content_and_search_handoff",
+            r##"
 (let ((timestamp "2026-07-27T12:00:00-0400"))
   (cl-letf (((symbol-function 'format-time-string)
              (lambda (&rest _args) timestamp)))
@@ -90,16 +90,15 @@ fn task_helpers_generate_safe_names_initial_content_and_search_handoff() {
      (ai-code--build-task-search-prompt
       "/workspace/tasks/"
       "OAuth incidents involving refresh-token reuse"))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (nil "rdar://problem/12345678 - Sync race" "task_2026-07-27T12:00:00-0400_fix_oauth_refresh_retry_race.org" nil "Search the content of all .org files recursively under directory: /workspace/tasks/\nSearch target description: OAuth incidents involving refresh-token reuse\nFocus on matching content inside the files, not just file names.\nReturn the relevant file paths, matched excerpts, and a concise summary.")"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn input_symbol_pipeline_flattens_nested_imenu_and_extracts_real_languages() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "input_symbol_pipeline_flattens_nested_imenu_and_extracts_real_languages",
+            r##"
 (let* ((index
         '(("Classes"
            ("PaymentService" . 10)
@@ -118,16 +117,15 @@ fn input_symbol_pipeline_flattens_nested_imenu_and_extracts_real_languages() {
       "async function fetchLedger(id) {"
       "export function settleInvoice() {"
       "let total = 0;"))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("retry_payment" "PaymentService" "*" "charge" "MAX_RETRIES") ("retry_payment" "PaymentService" "fetchLedger" nil nil))"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn prompt_path_preprocessing_relativizes_repo_files_and_keeps_external_paths() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "prompt_path_preprocessing_relativizes_repo_files_and_keeps_external_paths",
+            r##"
 (let* ((root (make-temp-file "ai-code-prompt-paths-" t))
        (outside (make-temp-file "ai-code-external-" nil ".md"))
        (source (expand-file-name "src/payment_retry.el" root)))
@@ -151,16 +149,15 @@ fn prompt_path_preprocessing_relativizes_repo_files_and_keeps_external_paths() {
             outside))))
     (delete-directory root t)
     (delete-file outside)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("Compare @$ROOT//src/payment_retry.el with @$OUTSIDE and keep spacing." "@src/payment_retry.el" t)"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn git_and_github_prompt_builders_create_review_ready_handoffs() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "git_and_github_prompt_builders_create_review_ready_handoffs",
+            r##"
 (list
  (ai-code--normalize-branch-name "  refs/heads/feature/oauth-race  ")
  (ai-code--default-pr-target-branch "feature/oauth-race")
@@ -174,16 +171,15 @@ fn git_and_github_prompt_builders_create_review_ready_handoffs() {
   'github
   "https://github.com/acme/payment-service/issues/91"
   t))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("  refs/heads/feature/oauth-race  " nil "Analyze the Git commit history for the entire repository 'payment-service'.\n\nRepository: payment-service\n\nThe detailed Git log content is in the 'git.log' file (which has been added to the chat).\nPlease use its content for your analysis, following these instructions:\nFind the commit that introduced duplicate settlement." "Review pull request: https://github.com/acme/payment-service/pull/77\n\nReview this pull request.\n\nReview Steps:\n1. Requirement Fit: Verify the PR implementation against requirements.\n2. Code Quality: Check code quality, security, and performance concerns.\n3. Findings: For each issue include location, issue, fix suggestion, and priority.\n\nProvide an overall assessment at the end." "Investigate issue: https://github.com/acme/payment-service/issues/91\n\nInvestigate this GitHub issue using the repository as context.\n\nIssue Investigation Steps:\n1. Understand the issue description, reproduction details, and expected behavior.\n2. Analyze relevant code in this repository as context and identify likely root causes.\n3. Provide concrete insights on how to fix it, including likely files or areas to change.\n4. No need to make code change. Provide analysis only.")"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn discussion_and_note_prompts_capture_locations_and_search_scope() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "discussion_and_note_prompts_capture_locations_and_search_scope",
+            r##"
 (list
  (ai-code--format-code-change-explanation-outline
   "Summarize the behavior change."
@@ -199,9 +195,11 @@ fn discussion_and_note_prompts_capture_locations_and_search_scope() {
    (ai-code--build-note-search-prompt
     '("/workspace/tasks/" "/workspace/notes/incidents/")
     "refresh-token reuse incidents")))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("Explanation Steps:\n1. Summarize the behavior change.\n2. Trace data flow and state transitions.\n3. Identify risks, compatibility impact, and verification evidence.\n4. Focus on understanding the change. Do not make code changes." "Insert the note into the current Org file.\nTarget file: /workspace/notes/payments.org\nInsert location: around line 42 (current cursor position)\n\nNote request:\nRecord the retry invariants and operational warning.\n\nOnly update the requested insertion location. Do not change unrelated sections. Go ahead and start do the work." "Create a new Org note file under directory: /workspace/notes/incidents/\nAutomatically determine a concise filename from the note title/content you identified. Use lowercase letters, numbers, and underscores for the filename, with .org extension.\n\nNote request:\nCreate a postmortem note for duplicate settlement.\n\nDo not modify unrelated files. Go ahead and start the work." "Search my notes and related files for: refresh-token reuse incidents\nSearch scope paths:\n- /workspace/tasks/\n- /workspace/notes/incidents/\nUse the available search tools to inspect the selected paths.\nFocus on relevant information inside files, not just file names.\nReturn the most relevant paths, matched excerpts, and a concise answer.")"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

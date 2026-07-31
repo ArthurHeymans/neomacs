@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_highlight_symbol_parity;
+use super::assert_auto_highlight_symbol_batch;
 
 #[test]
-fn auto_highlight_symbol_edit_mode_renames_every_highlighted_occurrence_in_real_code() {
-    let elisp_form = r##"(save-window-excursion
+fn editing_public_surface_batch() {
+    assert_auto_highlight_symbol_batch(&[
+        (
+            "auto_highlight_symbol_edit_mode_renames_every_highlighted_occurrence_in_real_code",
+            r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -40,17 +43,15 @@ fn auto_highlight_symbol_edit_mode_renames_every_highlighted_occurrence_in_real_
                                 (point)
                                 ahs-edit-mode-enable
                                 ahs-mode-line
-                                (auto-highlight-symbol-test-overlays)))))"##;
-    let expect = expect![[
+                                (auto-highlight-symbol-test-overlays)))))"##,
+            true,
+            expect![[
         r#"OK ((#("(let ((alpha 1))\n  (+ alpha alpha))" 7 33 (fontified t)) t " *HSA*" ((8 13 current ahs-edit-mode-face 1000 t t) (8 13 others ahs-face nil t t) (23 28 others ahs-face nil t t) (29 34 others ahs-face nil t t))) #("(let ((alpha-renamed 1))\n  (+ alpha-renamed alpha-renamed))" 7 12 (fontified t) 20 30 (fontified t) 43 44 (fontified t)) 21 t " *HSA*" nil)"#
-    ]];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_symbol_modification_replaces_shorter_and_longer_targets_exactly() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_highlight_symbol_symbol_modification_replaces_shorter_and_longer_targets_exactly",
+            r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -99,16 +100,13 @@ fn auto_highlight_symbol_symbol_modification_replaces_shorter_and_longer_targets
                                  (list
                                   current
                                   medium
-                                  lengthy))))))"##;
-    let expect =
-        expect![[r#"OK ("replacement replacement replacement" ((1 12) (13 24) (25 36)))"#]];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_modification_hook_tracks_before_after_and_undo_inhibition() {
-    let elisp_form = r##"(with-temp-buffer
+                                  lengthy))))))"##,
+            true,
+            expect![[r#"OK ("replacement replacement replacement" ((1 12) (13 24) (25 36)))"#]],
+        ),
+        (
+            "auto_highlight_symbol_modification_hook_tracks_before_after_and_undo_inhibition",
+            r##"(with-temp-buffer
                            (insert "alpha")
                            (let ((overlay
                                   (make-overlay
@@ -148,17 +146,15 @@ fn auto_highlight_symbol_modification_hook_tracks_before_after_and_undo_inhibiti
                                    ahs-start-modification)))
                               '((self-insert-command)
                                 (undo)
-                                (redo)))))"##;
-    let expect = expect![
+                                (redo)))))"##,
+            true,
+            expect![
         "OK (((self-insert-command) (nil nil) nil t) ((undo) (#1=(undo . #2=(redo)) nil) #1# t) ((redo) (#2# nil) #2# t))"
-    ];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_edit_mode_on_off_updates_hooks_faces_lighter_and_user_hooks() {
-    let elisp_form = r##"(save-window-excursion
+    ],
+        ),
+        (
+            "auto_highlight_symbol_edit_mode_on_off_updates_hooks_faces_lighter_and_user_hooks",
+            r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -210,17 +206,15 @@ fn auto_highlight_symbol_edit_mode_on_off_updates_hooks_faces_lighter_and_user_h
                                  'ahs-unhighlight
                                  post-command-hook)
                                 auto-highlight-symbol-test-events
-                                (auto-highlight-symbol-test-overlays)))))"##;
-    let expect = expect![[
+                                (auto-highlight-symbol-test-overlays)))))"##,
+            true,
+            expect![[
         r#"OK ((t " *HSA*" ahs-edit-mode-face nil (apply ahs-clear t) #1=(:on)) nil " HSA" (ahs-unhighlight ahs-start-timer t) (:off . #1#) ((1 6 current ahs-plugin-whole-buffer-face 1000 t t) (1 6 others ahs-face nil t t) (7 12 others ahs-face nil t t)))"#
-    ]];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_edit_mode_condition_reports_disabled_and_read_only_buffers() {
-    let elisp_form = r##"(let ((ahs-suppress-log nil)
+    ]],
+        ),
+        (
+            "auto_highlight_symbol_edit_mode_condition_reports_disabled_and_read_only_buffers",
+            r##"(let ((ahs-suppress-log nil)
                                 messages)
                            (cl-letf
                                (((symbol-function
@@ -253,17 +247,15 @@ fn auto_highlight_symbol_edit_mode_condition_reports_disabled_and_read_only_buff
                                 read-only
                                 enabled))
                              (list
-                              (nreverse messages))))"##;
-    let expect = expect![[
+                              (nreverse messages))))"##,
+            true,
+            expect![[
         r#"OK (("`auto-highlight-symbol-mode' is not working at current buffer." "Buffer is read-only: `fixture-read-only'"))"#
-    ]];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_post_command_exits_edit_mode_when_cursor_leaves_current_overlay() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_highlight_symbol_post_command_exits_edit_mode_when_cursor_leaves_current_overlay",
+            r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -289,15 +281,13 @@ fn auto_highlight_symbol_post_command_exits_edit_mode_when_cursor_leaves_current
                               ahs-current-overlay
                               ahs-overlay-list
                               ahs-start-modification
-                              ahs-inhibit-modification)))"##;
-    let expect = expect!["OK (8 nil nil nil nil nil)"];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_onekey_edit_temporarily_switches_whole_buffer_then_restores_range() {
-    let elisp_form = r##"(save-window-excursion
+                              ahs-inhibit-modification)))"##,
+            true,
+            expect!["OK (8 nil nil nil nil nil)"],
+        ),
+        (
+            "auto_highlight_symbol_onekey_edit_temporarily_switches_whole_buffer_then_restores_range",
+            r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -331,17 +321,15 @@ fn auto_highlight_symbol_onekey_edit_temporarily_switches_whole_buffer_then_rest
                                 ahs-edit-mode-enable
                                 ahs-onekey-range-store
                                 ahs-current-range
-                                ahs-mode-line))))"##;
-    let expect = expect![[
+                                ahs-mode-line))))"##,
+            true,
+            expect![[
         r#"OK ((t #1=((name . "display area") (lighter . "HS") (start . window-start) (end . window-end)) ((name . "whole buffer") (lighter . "HSA") (face . ahs-plugin-whole-buffer-face) (start . point-min) (end . point-max)) " *HSA*" 3) nil nil #1# " HS")"#
-    ]];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_onekey_edit_all_windows_path_creates_matches_but_misses_edit_mode() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_highlight_symbol_onekey_edit_all_windows_path_creates_matches_but_misses_edit_mode",
+            r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -364,17 +352,15 @@ fn auto_highlight_symbol_onekey_edit_all_windows_path_creates_matches_but_misses
                               ahs-onekey-range-store
                               ahs-current-range
                               ahs-mode-line
-                              (auto-highlight-symbol-test-overlays))))"##;
-    let expect = expect![[
+                              (auto-highlight-symbol-test-overlays))))"##,
+            true,
+            expect![[
         r#"OK (nil nil ((name . "display area") (lighter . "HS") (start . window-start) (end . window-end)) " HS" ((1 6 current ahs-plugin-whole-buffer-face 1000 t t) (1 6 others ahs-face nil t t) (7 12 others ahs-face nil t t)))"#
-    ]];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_highlight_symbol_edit_command_prefix_selects_temporary_whole_buffer_workflow() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_highlight_symbol_edit_command_prefix_selects_temporary_whole_buffer_workflow",
+            r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -397,10 +383,11 @@ fn auto_highlight_symbol_edit_command_prefix_selects_temporary_whole_buffer_work
                               ahs-onekey-range-store
                               ahs-current-range
                               ahs-mode-line
-                              (auto-highlight-symbol-test-overlays))))"##;
-    let expect = expect![[
+                              (auto-highlight-symbol-test-overlays))))"##,
+            true,
+            expect![[
         r#"OK (t ((name . "display area") (lighter . "HS") (start . window-start) (end . window-end)) ((name . "whole buffer") (lighter . "HSA") (face . ahs-plugin-whole-buffer-face) (start . point-min) (end . point-max)) " *HSA*" ((1 6 current ahs-edit-mode-face 1000 t t) (1 6 others ahs-face nil t t) (7 12 others ahs-face nil t t)))"#
-    ]];
-
-    assert_auto_highlight_symbol_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

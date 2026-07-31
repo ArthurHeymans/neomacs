@@ -1,25 +1,26 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_auctex_parity;
+use super::assert_auto_complete_auctex_batch;
 
 #[test]
-fn auto_complete_auctex_setup_prepends_all_sources_to_an_existing_completion_configuration() {
-    let elisp_form = r##"(let ((ac-sources
+fn workflows_public_surface_batch() {
+    assert_auto_complete_auctex_batch(&[
+        (
+            "auto_complete_auctex_setup_prepends_all_sources_to_an_existing_completion_configuration",
+            r##"(let ((ac-sources
                                 '(ac-source-words-in-buffer
                                   ac-source-files)))
           (list
            (ac-auctex-setup)
-           ac-sources))"##;
-    let expect = expect![
+           ac-sources))"##,
+            true,
+            expect![
         "OK (#1=(ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs ac-source-words-in-buffer ac-source-files) #1#)"
-    ];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_repeated_setup_preserves_the_packages_exact_prepend_semantics() {
-    let elisp_form = r##"(let ((ac-sources
+    ],
+        ),
+        (
+            "auto_complete_auctex_repeated_setup_preserves_the_packages_exact_prepend_semantics",
+            r##"(let ((ac-sources
                                 '(ac-source-dictionary)))
           (ac-auctex-setup)
           (let ((once
@@ -28,17 +29,15 @@ fn auto_complete_auctex_repeated_setup_preserves_the_packages_exact_prepend_sema
             (list
              once
              ac-sources
-             (length ac-sources))))"##;
-    let expect = expect![
+             (length ac-sources))))"##,
+            true,
+            expect![
         "OK (#1=(ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs ac-source-dictionary) (ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs . #1#) 11)"
-    ];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_real_latex_mode_hook_installs_sources_in_an_authoring_buffer() {
-    let elisp_form = r##"(with-temp-buffer
+    ],
+        ),
+        (
+            "auto_complete_auctex_real_latex_mode_hook_installs_sources_in_an_authoring_buffer",
+            r##"(with-temp-buffer
           (let ((ac-sources
                  '(ac-source-words-in-same-mode-buffers)))
             (LaTeX-mode)
@@ -53,17 +52,15 @@ fn auto_complete_auctex_real_latex_mode_hook_installs_sources_in_an_authoring_bu
                 LaTeX-math-default
                 LaTeX-environment-list
                 LaTeX-label-list
-                LaTeX-bibitem-list)))))"##;
-    let expect = expect![[
+                LaTeX-bibitem-list)))))"##,
+            true,
+            expect![[
         r#"OK (LaTeX-mode "LaTeX/P" t (ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs ac-source-words-in-same-mode-buffers) t)"#
-    ]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_sources_are_data_only_and_do_not_generate_interactive_commands() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_auctex_sources_are_data_only_and_do_not_generate_interactive_commands",
+            r##"(mapcar
           (lambda (source)
             (let ((command
                    (intern
@@ -80,17 +77,15 @@ fn auto_complete_auctex_sources_are_data_only_and_do_not_generate_interactive_co
             ac-source-auctex-symbols
             ac-source-auctex-environments
             ac-source-auctex-labels
-            ac-source-auctex-bibs))"##;
-    let expect = expect![
+            ac-source-auctex-bibs))"##,
+            true,
+            expect![
         "OK ((ac-source-auctex-macros t auctex-macros nil nil) (ac-source-auctex-symbols t auctex-symbols nil nil) (ac-source-auctex-environments t auctex-environments nil nil) (ac-source-auctex-labels t auctex-labels nil nil) (ac-source-auctex-bibs t auctex-bibs nil nil))"
-    ];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_practical_document_workflow_finds_macro_environment_label_and_citation() {
-    let elisp_form = r##"(with-temp-buffer
+    ],
+        ),
+        (
+            "auto_complete_auctex_practical_document_workflow_finds_macro_environment_label_and_citation",
+            r##"(with-temp-buffer
           (LaTeX-mode)
           (insert
            "\\documentclass{article}\n"
@@ -125,17 +120,15 @@ fn auto_complete_auctex_practical_document_workflow_finds_macro_environment_labe
                (ac-auctex-label-candidates))
              (let ((ac-prefix "knu"))
                (ac-auctex-bib-candidates))
-             (buffer-string))))"##;
-    let expect = expect![[
+             (buffer-string))))"##,
+            true,
+            expect![[
         r#"OK (("includegraphics" "include") ("begfigure" "begfigure*") ("sec:intro") ("knuth1984" "knuth1992") "\\documentclass{article}\n\\begin{document}\n\\section{Introduction}\\label{sec:intro}\nSee \\ref{sec:in} and \\cite[p. 42]{knu}\n\\begfig\n\\incl\n\\end{document}\n")"#
-    ]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_practical_macro_selection_inserts_real_current_yasnippet_fields() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_auctex_practical_macro_selection_inserts_real_current_yasnippet_fields",
+            r##"(with-temp-buffer
           (LaTeX-mode)
           (insert
            "\\documentclass{article}\n"
@@ -162,18 +155,15 @@ fn auto_complete_auctex_practical_macro_selection_inserts_real_current_yasnippet
                (buffer-string)
                (point)
                (line-number-at-pos)
-               (current-column)))))"##;
-    let expect = expect![[
+               (current-column)))))"##,
+            true,
+            expect![[
         r#"OK ("includegraphics" t "\\documentclass{article}\n\\begin{document}\n\\includegraphics[width=0.8\\textwidth]{Filename}" 58 3 16)"#
-    ]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_source_reload_deduplicates_global_registration_but_hook_setup_repeats_sources()
- {
-    let elisp_form = r##"(let ((source
+    ]],
+        ),
+        (
+            "auto_complete_auctex_source_reload_deduplicates_global_registration_but_hook_setup_repeats_sources",
+            r##"(let ((source
                                 (getenv
                                  "NEOMACS_PACKAGE_SOURCE"))
                                (ac-sources
@@ -194,17 +184,15 @@ fn auto_complete_auctex_source_reload_deduplicates_global_registration_but_hook_
                (eq function 'ac-auctex-setup))
              LaTeX-mode-hook))
            (length ac-sources)
-           ac-sources))"##;
-    let expect = expect![
+           ac-sources))"##,
+            true,
+            expect![
         "OK (1 1 11 (ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs ac-source-files))"
-    ];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_label_and_bibliography_prefixes_follow_cursor_position_in_real_text() {
-    let elisp_form = r##"(with-temp-buffer
+    ],
+        ),
+        (
+            "auto_complete_auctex_label_and_bibliography_prefixes_follow_cursor_position_in_real_text",
+            r##"(with-temp-buffer
           (insert
            "See \\ref{sec:implementation} and "
            "\\cite[chapter 2]{knuth")
@@ -256,10 +244,11 @@ fn auto_complete_auctex_label_and_bibliography_prefixes_follow_cursor_position_i
                 ac-auctex-label-candidates)
                (ac-source-auctex-bibs
                 "\\cite[chapter 2]{knuth"
-                ac-auctex-bib-candidates)))))"##;
-    let expect = expect![[
+                ac-auctex-bib-candidates)))))"##,
+            true,
+            expect![[
         r#"OK ((ac-source-auctex-labels "sec:imple" ("\\\\ref{\\([^}]*\\)\\=" 10 (((init . LaTeX-label-list) (candidates . ac-auctex-label-candidates) (requires . 0) (symbol . "r") (prefix . "\\\\ref{\\([^}]*\\)\\=")))) "sec:imple" ("sec:implementation")) (ac-source-auctex-bibs "\\cite[chapter 2]{knuth" ("\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=" 51 (((init . LaTeX-bibitem-list) (candidates . ac-auctex-bib-candidates) (requires . 0) (symbol . "b") (prefix . "\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=")))) "knuth" ("knuth1984")))"#
-    ]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

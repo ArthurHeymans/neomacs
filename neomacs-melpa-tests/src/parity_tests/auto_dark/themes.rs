@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_dark_parity;
+use super::assert_auto_dark_batch;
 
 #[test]
-fn auto_dark_themes_for_mode_selects_exact_dark_light_and_unknown_slots() {
-    let elisp_form = r##"(mapcar
+fn themes_public_surface_batch() {
+    assert_auto_dark_batch(&[
+        (
+            "auto_dark_themes_for_mode_selects_exact_dark_light_and_unknown_slots",
+            r##"(mapcar
           (lambda (themes)
             (let ((auto-dark-themes
                    themes))
@@ -29,17 +32,15 @@ fn auto_dark_themes_for_mode_selects_exact_dark_light_and_unknown_slots() {
              nil)
             ((one two)
              (three four)
-             (ignored))))"##;
-    let expect = expect![
+             (ignored))))"##,
+            true,
+            expect![
         "OK ((nil ((dark nil) (light nil) (unknown nil) (nil nil))) ((#1=(wombat) #2=(leuven)) ((dark #1#) (light #2#) (unknown nil) (nil nil))) ((nil #3=(tango)) ((dark nil) (light #3#) (unknown nil) (nil nil))) ((#4=(tango-dark) nil) ((dark #4#) (light nil) (unknown nil) (nil nil))) ((#5=(one two) #6=(three four) (ignored)) ((dark #5#) (light #6#) (unknown nil) (nil nil))))"
-    ];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_update_frame_backgrounds_sets_global_mode_before_every_frame() {
-    let elisp_form = r##"(let ((frame-background-mode
+    ],
+        ),
+        (
+            "auto_dark_update_frame_backgrounds_sets_global_mode_before_every_frame",
+            r##"(let ((frame-background-mode
                                 'initial)
                                events)
           (cl-letf
@@ -69,17 +70,15 @@ fn auto_dark_update_frame_backgrounds_sets_global_mode_before_every_frame() {
              (auto-dark--update-frame-backgrounds
               'dark)
              frame-background-mode
-             (nreverse events))))"##;
-    let expect = expect![
+             (nreverse events))))"##,
+            true,
+            expect![
         "OK ((frame-a frame-b frame-c) dark ((:frame-list dark) (:set frame-a dark) (:set frame-b dark) (:set frame-c dark)))"
-    ];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_enable_themes_deduplicates_targets_disables_only_others_and_uses_fast_or_load_path() {
-    let elisp_form = r##"(let ((custom-enabled-themes
+    ],
+        ),
+        (
+            "auto_dark_enable_themes_deduplicates_targets_disables_only_others_and_uses_fast_or_load_path",
+            r##"(let ((custom-enabled-themes
                                 '(old-theme
                                   user
                                   keep-theme))
@@ -122,17 +121,15 @@ fn auto_dark_enable_themes_deduplicates_targets_disables_only_others_and_uses_fa
                 user
                 new-theme))
              custom-enabled-themes
-             (nreverse events))))"##;
-    let expect = expect![[
+             (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK ("Warning (emacs): Failed to enable theme(s): new-theme" (old-theme user keep-theme) ((:disable old-theme) (:disable user) (:enable keep-theme)))"#
-    ]];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_enable_themes_collects_all_failures_and_warns_once_after_other_themes_continue() {
-    let elisp_form = r##"(let ((custom-enabled-themes
+    ]],
+        ),
+        (
+            "auto_dark_enable_themes_collects_all_failures_and_warns_once_after_other_themes_continue",
+            r##"(let ((custom-enabled-themes
                                 '(obsolete))
                                events)
           (mapc
@@ -171,17 +168,15 @@ fn auto_dark_enable_themes_collects_all_failures_and_warns_once_after_other_them
                    bad-one
                    good-two
                    bad-two))))
-             (nreverse events))))"##;
-    let expect = expect![[
+             (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (("Warning (emacs): Failed to enable theme(s): bad-two, bad-one" nil) ((:disable obsolete) (:enable bad-two) (:enable good-two) (:enable bad-one) (:enable good-one)))"#
-    ]];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_declared_but_not_loaded_theme_uses_load_path_for_issue_96() {
-    let elisp_form = r##"(let ((custom-enabled-themes nil)
+    ]],
+        ),
+        (
+            "auto_dark_declared_but_not_loaded_theme_uses_load_path_for_issue_96",
+            r##"(let ((custom-enabled-themes nil)
                                events)
           (unless
               (custom-theme-p
@@ -219,17 +214,15 @@ fn auto_dark_declared_but_not_loaded_theme_uses_load_path_for_issue_96() {
               'theme-settings)
              (auto-dark--enable-themes
               '(auto-dark-fixture-declared))
-             (nreverse events))))"##;
-    let expect = expect![[
+             (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK ((auto-dark-fixture-declared user changed) nil "Warning (emacs): Failed to enable theme(s): auto-dark-fixture-declared" nil)"#
-    ]];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_set_theme_updates_state_frames_themes_then_selected_hook() {
-    let elisp_form = r##"(let* ((auto-dark-themes
+    ]],
+        ),
+        (
+            "auto_dark_set_theme_updates_state_frames_themes_then_selected_hook",
+            r##"(let* ((auto-dark-themes
                                  '((dark-a dark-b)
                                    (light-a)))
                                 (auto-dark--last-dark-mode-state
@@ -275,17 +268,15 @@ fn auto_dark_set_theme_updates_state_frames_themes_then_selected_hook() {
                (auto-dark--set-theme
                 'light))
              auto-dark--last-dark-mode-state
-             (nreverse events))))"##;
-    let expect = expect![
+             (nreverse events))))"##,
+            true,
+            expect![
         "OK (nil dark ((:frames dark dark) (:themes (dark-a dark-b) dark) :dark-hook) nil light ((:frames light light) (:themes (light-a) light) :light-hook))"
-    ];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_set_theme_is_complete_noop_before_theme_variable_initialization() {
-    let elisp_form = r##"(let ((saved
+    ],
+        ),
+        (
+            "auto_dark_set_theme_is_complete_noop_before_theme_variable_initialization",
+            r##"(let ((saved
                                 auto-dark-themes)
                                (auto-dark--last-dark-mode-state
                                 'unknown)
@@ -314,15 +305,13 @@ fn auto_dark_set_theme_is_complete_noop_before_theme_variable_initialization() {
                    events)))
             (set
              'auto-dark-themes
-             saved)))"##;
-    let expect = expect!["OK (nil nil unknown nil)"];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_toggle_appearance_switches_unknown_light_and_dark_states_practically() {
-    let elisp_form = r##"(let (calls)
+             saved)))"##,
+            true,
+            expect!["OK (nil nil unknown nil)"],
+        ),
+        (
+            "auto_dark_toggle_appearance_switches_unknown_light_and_dark_states_practically",
+            r##"(let (calls)
           (cl-letf
               (((symbol-function
                  'auto-dark--set-theme)
@@ -347,17 +336,15 @@ fn auto_dark_toggle_appearance_switches_unknown_light_and_dark_states_practicall
                 nil
                 light
                 dark))
-             (nreverse calls))))"##;
-    let expect = expect![
+             (nreverse calls))))"##,
+            true,
+            expect![
         "OK (((unknown (:set dark) dark) (nil (:set dark) dark) (light (:set dark) dark) (dark (:set light) light)) (dark dark dark light))"
-    ];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_check_and_set_skips_exact_state_but_repairs_theme_drift() {
-    let elisp_form = r##"(let ((auto-dark-themes
+    ],
+        ),
+        (
+            "auto_dark_check_and_set_skips_exact_state_but_repairs_theme_drift",
+            r##"(let ((auto-dark-themes
                                 '((dark-theme)
                                   (light-theme)))
                                calls)
@@ -398,15 +385,13 @@ fn auto_dark_check_and_set_skips_exact_state_but_repairs_theme_drift() {
                     '(light-theme)))
                (list
                 (auto-dark--check-and-set-dark-mode)
-                (nreverse calls))))))"##;
-    let expect = expect!["OK ((nil nil) (:changed #1=(dark light)) (:changed #1#))"];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_custom_theme_setter_preloads_missing_themes_sets_default_and_refreshes_active_mode() {
-    let elisp_form = r##"(let ((setter
+                (nreverse calls))))))"##,
+            true,
+            expect!["OK ((nil nil) (:changed #1=(dark light)) (:changed #1#))"],
+        ),
+        (
+            "auto_dark_custom_theme_setter_preloads_missing_themes_sets_default_and_refreshes_active_mode",
+            r##"(let ((setter
                                 (get
                                  'auto-dark-themes
                                  'custom-set))
@@ -455,17 +440,15 @@ fn auto_dark_custom_theme_setter_preloads_missing_themes_sets_default_and_refres
              auto-dark-themes
              (default-value
               'auto-dark-themes)
-             (nreverse calls))))"##;
-    let expect = expect![
+             (nreverse calls))))"##,
+            true,
+            expect![
         "OK (:refreshed #1=((already-loaded needs-load-dark) (needs-load-light already-loaded)) #1# ((:load needs-load-dark nil t) (:load needs-load-light nil t) (:refresh #1#)))"
-    ];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_custom_theme_setter_propagates_preload_failure_before_setting_or_refreshing() {
-    let elisp_form = r##"(let ((setter
+    ],
+        ),
+        (
+            "auto_dark_custom_theme_setter_propagates_preload_failure_before_setting_or_refreshing",
+            r##"(let ((setter
                                 (get
                                  'auto-dark-themes
                                  'custom-set))
@@ -499,17 +482,15 @@ fn auto_dark_custom_theme_setter_propagates_preload_failure_before_setting_or_re
                  '((failing-theme)
                    (other-theme)))))
              auto-dark-themes
-             (nreverse calls))))"##;
-    let expect = expect![[
+             (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ((:error error ("fixture unsafe theme")) ((old-dark) (old-light)) ((:load failing-theme nil t)))"#
-    ]];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_real_builtin_theme_configuration_enable_toggle_and_disable_workflow_match() {
-    let elisp_form = r##"(let ((custom-safe-themes t)
+    ]],
+        ),
+        (
+            "auto_dark_real_builtin_theme_configuration_enable_toggle_and_disable_workflow_match",
+            r##"(let ((custom-safe-themes t)
                                (auto-dark-detection-method
                                 'manual)
                                (frame-background-mode
@@ -554,10 +535,11 @@ fn auto_dark_real_builtin_theme_configuration_enable_toggle_and_disable_workflow
                          auto-dark--last-dark-mode-state))))))
             (mapc
              #'disable-theme
-             '(tango-dark tango))))"##;
-    let expect = expect![
+             '(tango-dark tango))))"##,
+            true,
+            expect![
         "OK (((tango-dark) ((tango-dark t t t) (tango t t nil) (tsdh-dark nil nil nil) (tsdh-light nil nil nil) (wombat nil nil nil) (leuven nil nil nil))) ((tango) ((tango-dark t t nil) (tango t t t) (tsdh-dark nil nil nil) (tsdh-light nil nil nil) (wombat nil nil nil) (leuven nil nil nil))) ((tango-dark) ((tango-dark t t t) (tango t t nil) (tsdh-dark nil nil nil) (tsdh-light nil nil nil) (wombat nil nil nil) (leuven nil nil nil))) nil (tango-dark) dark dark)"
-    ];
-
-    assert_auto_dark_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }

@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{CachedMelpaOracle, ZERO_B_LAYOUT_MELPA_PIN};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod keybindings;
 mod layouts;
 mod state;
@@ -37,4 +39,15 @@ pub(crate) fn assert_zero_b_layout_signal_parity(form: &str, expected: Expect) {
         .run_signal(&name, form)
         .unwrap_or_else(|error| panic!("0blayout signal parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+/// Multi-probe batch for `assert_zero_b_layout_parity` cases (2a).
+pub(crate) fn assert_zero_b_layout_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        zero_b_layout_oracle(),
+        &name,
+        "zero_b_layout_parity",
+        cases,
+    );
 }

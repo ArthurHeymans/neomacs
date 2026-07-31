@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_aurora_config_mode_autoload_parity, assert_aurora_config_mode_parity};
+use super::{assert_aurora_config_mode_autoload_batch, assert_aurora_config_mode_batch};
 
 #[test]
-fn aurora_config_mode_descriptor_and_installed_payload_match_exact_melpa_archive() {
-    let elisp_form = r##"(let* ((descriptor
+fn registry_aurora_config_mode_batch() {
+    assert_aurora_config_mode_batch(&[
+        (
+            "aurora_config_mode_descriptor_and_installed_payload_match_exact_melpa_archive",
+            r##"(let* ((descriptor
                 (cadr
                  (assq
                   'aurora-config-mode
@@ -38,17 +41,15 @@ fn aurora_config_mode_descriptor_and_installed_payload_match_exact_melpa_archive
                  (secure-hash
                   'sha256
                   (current-buffer)))))
-            files)))"##;
-    let expect = expect![[
+            files)))"##,
+            true,
+            expect![[
         r#"OK ((aurora-config-mode "20180216.2302" "Major mode for Apache Aurora configuration files." nil ((:maintainers ("Berk D. Demir" . "bdd@mindcast.org")) (:authors ("Berk D. Demir" . "bdd@mindcast.org")) (:keywords "languages" "configuration") (:revdesc . "8273ec7937a2") (:commit . "8273ec7937a21b469b9dbb6c11714255b890f410") (:url . "https://github.com/bdd/aurora-config.el"))) (("aurora-config-mode-pkg.el" 446 "969bb7486c9a10ca6210f6649555b8ae7ba8a4e7e1b382500b4f961ee7ae88bf") ("aurora-config-mode.el" 3705 "63e5a15768e7ef53e499508e166566c42c1fa867b86ea1733adc7b362bbb3492")))"#
-    ]];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurora_config_mode_complete_prefixed_symbol_inventory_records_every_surface() {
-    let elisp_form = r##"(let (symbols)
+    ]],
+        ),
+        (
+            "aurora_config_mode_complete_prefixed_symbol_inventory_records_every_surface",
+            r##"(let (symbols)
           (mapatoms
            (lambda (symbol)
              (let ((name
@@ -87,17 +88,15 @@ fn aurora_config_mode_complete_prefixed_symbol_inventory_records_every_surface()
               (symbol-name
                (car left))
               (symbol-name
-               (car right))))))"##;
-    let expect = expect![
+               (car right))))))"##,
+            true,
+            expect![
         "OK ((aurora-config-aurora-struct-keywords nil t nil nil nil) (aurora-config-diff t nil nil nil (jobpath)) (aurora-config-font-lock-keywords nil t nil nil nil) (aurora-config-inspect t nil nil nil (jobpath)) (aurora-config-last-job-path nil t nil nil nil) (aurora-config-mode t nil nil nil nil) (aurora-config-mode-abbrev-table nil t nil nil nil) (aurora-config-mode-autoloads nil nil nil nil nil) (aurora-config-mode-hook nil t nil nil nil) (aurora-config-mode-map nil t nil nil nil) (aurora-config-mode-syntax-table nil t nil nil nil) (aurora-config-pystachio-struct-keywords nil t nil nil nil) (aurora-config-read-jobpath t nil nil nil nil) (aurora-config-run-aurora t nil nil nil (command jobpath)))"
-    ];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurora_config_mode_all_callable_metadata_interactive_forms_docs_and_sources_are_exact() {
-    let elisp_form = r##"(mapcar
+    ],
+        ),
+        (
+            "aurora_config_mode_all_callable_metadata_interactive_forms_docs_and_sources_are_exact",
+            r##"(mapcar
           (lambda (symbol)
             (list
              symbol
@@ -118,17 +117,15 @@ fn aurora_config_mode_all_callable_metadata_interactive_forms_docs_and_sources_a
             aurora-config-run-aurora
             aurora-config-inspect
             aurora-config-diff
-            aurora-config-mode))"##;
-    let expect = expect![[
+            aurora-config-mode))"##,
+            true,
+            expect![[
         r#"OK ((aurora-config-read-jobpath t nil nil nil "Read job path from minibuffer with history defaulting to buffer local last used." "aurora-config-mode.el") (aurora-config-run-aurora t nil nil (command jobpath) "Run `aurora COMMAND JOBPATH' with the config in current buffer." "aurora-config-mode.el") (aurora-config-inspect t t (interactive (list (aurora-config-read-jobpath))) (jobpath) "Run `aurora inspect JOBPATH' with the config in current buffer." "aurora-config-mode.el") (aurora-config-diff t t (interactive (list (aurora-config-read-jobpath))) (jobpath) "Run `aurora diff JOBPATH' with the config in current buffer." "aurora-config-mode.el") (aurora-config-mode t t (interactive nil) nil "Major mode for Aurora configuration files, derived from Python mode.\n\nIn addition to any hooks its parent mode `python-mode' might have run,\nthis mode runs the hook `aurora-config-mode-hook', as the final or\npenultimate step during initialization.\n\n\\{aurora-config-mode-map}" "aurora-config-mode.el"))"#
-    ]];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurora_config_mode_declared_constants_state_and_keymap_have_exact_contracts() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "aurora_config_mode_declared_constants_state_and_keymap_have_exact_contracts",
+            r##"(list
           (mapcar
            (lambda (symbol)
              (list
@@ -177,17 +174,74 @@ fn aurora_config_mode_declared_constants_state_and_keymap_have_exact_contracts()
            (file-name-nondirectory
             (symbol-file
              'aurora-config-mode-map
-             'defvar))))"##;
-    let expect = expect![[
+             'defvar))))"##,
+            true,
+            expect![[
         r#"OK (((aurora-config-aurora-struct-keywords t ("HealthCheckConfig" "Job" "Process" "JVMProcess" "Resources" "SequentialTask" "Service" "Task" "UpdateConfig") t ("HealthCheckConfig" "Job" "Process" "JVMProcess" "Resources" "SequentialTask" "Service" "Task" "UpdateConfig") t nil nil nil "aurora-config-mode.el") (aurora-config-pystachio-struct-keywords t ("Enum" "Integer" "List" "Map" "String" "Struct") t ("Enum" "Integer" "List" "Map" "String" "Struct") t nil nil nil "aurora-config-mode.el") (aurora-config-font-lock-keywords t (("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) t (("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) t nil nil nil "aurora-config-mode.el") (aurora-config-last-job-path t "smf1/" t "smf1/" t t nil nil "aurora-config-mode.el")) (t (keymap (100 . aurora-config-diff) (105 . aurora-config-inspect)) aurora-config-inspect aurora-config-diff nil "`aurora-config-mode' key map." "aurora-config-mode.el"))"#
-    ]];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
+    ]],
+        ),
+        (
+            "aurora_config_mode_source_reloads_preserve_defvars_reset_constants_and_deduplicate_file_rules",
+            r##"(let ((source
+                (symbol-file
+                 'aurora-config-mode
+                 'defun)))
+          (setq-default
+           aurora-config-last-job-path
+           "fixture/default")
+          (setq
+           aurora-config-aurora-struct-keywords
+           '(fixture-aurora)
+           aurora-config-pystachio-struct-keywords
+           '(fixture-pystachio)
+           aurora-config-font-lock-keywords
+           '(fixture-font-lock))
+          (define-key
+           aurora-config-mode-map
+           (kbd "C-c a x")
+           'fixture-command)
+          (load source nil t)
+          (load source nil t)
+          (list
+           aurora-config-aurora-struct-keywords
+           aurora-config-pystachio-struct-keywords
+           aurora-config-font-lock-keywords
+           (default-value
+            'aurora-config-last-job-path)
+           (lookup-key
+            aurora-config-mode-map
+            (kbd "C-c a x"))
+           (mapcar
+            (lambda (regexp)
+              (let ((count 0))
+                (dolist
+                    (entry auto-mode-alist count)
+                  (when
+                      (and
+                       (equal
+                        (car entry)
+                        regexp)
+                       (eq
+                        (cdr entry)
+                        'aurora-config-mode))
+                    (setq count
+                          (1+ count))))))
+            '("\\.aurora\\'"
+              "\\.mesos\\'"))))"##,
+            true,
+            expect![[
+        r#"OK (("HealthCheckConfig" "Job" "Process" "JVMProcess" "Resources" "SequentialTask" "Service" "Task" "UpdateConfig") ("Enum" "Integer" "List" "Map" "String" "Struct") (("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) "fixture/default" fixture-command (1 1))"#
+    ]],
+        ),
+    ]);
 }
 
 #[test]
-fn aurora_config_mode_generated_autoloads_register_files_commands_prefixes_and_history() {
-    let elisp_form = r##"(let* ((history
+fn registry_aurora_config_mode_autoload_batch() {
+    assert_aurora_config_mode_autoload_batch(&[
+        (
+            "aurora_config_mode_generated_autoloads_register_files_commands_prefixes_and_history",
+            r##"(let* ((history
                 (seq-find
                  (lambda (entry)
                    (and
@@ -245,65 +299,11 @@ fn aurora_config_mode_generated_autoloads_register_files_commands_prefixes_and_h
                (boundp symbol)))
             '(aurora-config-read-jobpath
               aurora-config-run-aurora
-              aurora-config-last-job-path))))"##;
-    let expect = expect![[
+              aurora-config-last-job-path))))"##,
+            true,
+            expect![[
         r#"OK (t nil ((defun . aurora-config-inspect) (defun . aurora-config-diff) (defun . aurora-config-mode) (provide . aurora-config-mode-autoloads)) nil (("\\.mesos\\'" . aurora-config-mode) ("\\.aurora\\'" . aurora-config-mode)) ((aurora-config-inspect t "aurora-config-mode" nil t "[Arg list not available until function definition is loaded.]") (aurora-config-diff t "aurora-config-mode" nil t "[Arg list not available until function definition is loaded.]") (aurora-config-mode t "aurora-config-mode" nil t "[Arg list not available until function definition is loaded.]")) ((aurora-config-read-jobpath nil nil) (aurora-config-run-aurora nil nil) (aurora-config-last-job-path nil nil)))"#
-    ]];
-
-    assert_aurora_config_mode_autoload_parity(elisp_form, expect);
-}
-
-#[test]
-fn aurora_config_mode_source_reloads_preserve_defvars_reset_constants_and_deduplicate_file_rules() {
-    let elisp_form = r##"(let ((source
-                (symbol-file
-                 'aurora-config-mode
-                 'defun)))
-          (setq-default
-           aurora-config-last-job-path
-           "fixture/default")
-          (setq
-           aurora-config-aurora-struct-keywords
-           '(fixture-aurora)
-           aurora-config-pystachio-struct-keywords
-           '(fixture-pystachio)
-           aurora-config-font-lock-keywords
-           '(fixture-font-lock))
-          (define-key
-           aurora-config-mode-map
-           (kbd "C-c a x")
-           'fixture-command)
-          (load source nil t)
-          (load source nil t)
-          (list
-           aurora-config-aurora-struct-keywords
-           aurora-config-pystachio-struct-keywords
-           aurora-config-font-lock-keywords
-           (default-value
-            'aurora-config-last-job-path)
-           (lookup-key
-            aurora-config-mode-map
-            (kbd "C-c a x"))
-           (mapcar
-            (lambda (regexp)
-              (let ((count 0))
-                (dolist
-                    (entry auto-mode-alist count)
-                  (when
-                      (and
-                       (equal
-                        (car entry)
-                        regexp)
-                       (eq
-                        (cdr entry)
-                        'aurora-config-mode))
-                    (setq count
-                          (1+ count))))))
-            '("\\.aurora\\'"
-              "\\.mesos\\'"))))"##;
-    let expect = expect![[
-        r#"OK (("HealthCheckConfig" "Job" "Process" "JVMProcess" "Resources" "SequentialTask" "Service" "Task" "UpdateConfig") ("Enum" "Integer" "List" "Map" "String" "Struct") (("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) "fixture/default" fixture-command (1 1))"#
-    ]];
-
-    assert_aurora_config_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

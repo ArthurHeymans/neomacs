@@ -1,11 +1,13 @@
 use expect_test::expect;
 
-use super::assert_audio_notes_mode_parity;
+use super::assert_audio_notes_mode_batch;
 
 #[test]
-fn audio_notes_mode_external_player_expands_file_arguments_replaces_live_process_and_disables_exit_query()
- {
-    let elisp_form = r##"(progn
+fn playback_public_surface_batch() {
+    assert_audio_notes_mode_batch(&[
+        (
+            "audio_notes_mode_external_player_expands_file_arguments_replaces_live_process_and_disables_exit_query",
+            r##"(progn
                           (require 'cl)
                           (let* ((directory
                                  (audio-notes-test-directory
@@ -64,17 +66,15 @@ fn audio_notes_mode_external_player_expands_file_arguments_replaces_live_process
                              (list
                               (anm/play-file file)
                               anm/process
-                              (nreverse events)))))"##;
-    let expect = expect![[
+                              (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK (:query-disabled new-process ((:status old-process) (:kill old-process) (:start "anm/player-command" fake-process-buffer "mock-player" ("--quiet" "[ORACLE-SANDBOX]/external-player/voice memo.wav" "--again" "[ORACLE-SANDBOX]/external-player/voice memo.wav")) (:query new-process nil)))"#
-    ]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_external_player_preserves_stopped_process_until_new_process_is_started() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "audio_notes_mode_external_player_preserves_stopped_process_until_new_process_is_started",
+            r##"(progn
                           (require 'cl)
                           (let* ((directory
                                  (audio-notes-test-directory
@@ -120,17 +120,15 @@ fn audio_notes_mode_external_player_preserves_stopped_process_until_new_process_
                              (list
                               (anm/play-file file)
                               anm/process
-                              (nreverse events)))))"##;
-    let expect = expect![[
+                              (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK (:done replacement ((:status stopped-process) (:start "anm/player-command" nil "player" "[ORACLE-SANDBOX]/stopped-player/note.mp3") (:query replacement nil)))"#
-    ]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_external_player_surfaces_undeclared_legacy_cl_runtime_dependency() {
-    let elisp_form = r##"(let* ((directory
+    ]],
+        ),
+        (
+            "audio_notes_mode_external_player_surfaces_undeclared_legacy_cl_runtime_dependency",
+            r##"(let* ((directory
                                  (audio-notes-test-directory
                                   "missing-cl-runtime"))
                                 (file
@@ -157,15 +155,13 @@ fn audio_notes_mode_external_player_surfaces_undeclared_legacy_cl_runtime_depend
                                (lambda ()
                                  (anm/play-file file)))
                               anm/process
-                              (nreverse events))))"##;
-    let expect = expect!["OK (nil nil (:signal void-function (concatenate)) nil nil)"];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_internal_player_expands_real_file_and_returns_backend_value() {
-    let elisp_form = r##"(let* ((directory
+                              (nreverse events))))"##,
+            true,
+            expect!["OK (nil nil (:signal void-function (concatenate)) nil nil)"],
+        ),
+        (
+            "audio_notes_mode_internal_player_expands_real_file_and_returns_backend_value",
+            r##"(let* ((directory
                                  (audio-notes-test-directory
                                   "internal-player"))
                                 (file
@@ -188,16 +184,13 @@ fn audio_notes_mode_internal_player_expands_real_file_and_returns_backend_value(
                                    :sound-finished)))
                              (list
                               (anm/play-file relative)
-                              (nreverse calls))))"##;
-    let expect =
-        expect![[r#"OK (:sound-finished ("[ORACLE-SANDBOX]/internal-player/relative.wav"))"#]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_internal_unknown_format_disables_mode_and_signals_guidance() {
-    let elisp_form = r##"(let* ((directory
+                              (nreverse calls))))"##,
+            true,
+            expect![[r#"OK (:sound-finished ("[ORACLE-SANDBOX]/internal-player/relative.wav"))"#]],
+        ),
+        (
+            "audio_notes_mode_internal_unknown_format_disables_mode_and_signals_guidance",
+            r##"(let* ((directory
                                  (audio-notes-test-directory
                                   "unknown-format"))
                                 (file
@@ -225,17 +218,15 @@ fn audio_notes_mode_internal_unknown_format_disables_mode_and_signals_guidance()
                               (audio-notes-test-error
                                (lambda ()
                                  (anm/play-file file)))
-                              (nreverse calls))))"##;
-    let expect = expect![[
+                              (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ((:signal error ("Oops! Emacs internal player, can’t play the format of the file [ORACLE-SANDBOX]/unknown-format/memo.m4a.\nChange ‘anm/player’ to a command name (like \"mplayer\").")) ((:mode -1)))"#
-    ]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_internal_arbitrary_backend_error_preserves_legacy_signal_shape() {
-    let elisp_form = r##"(let* ((directory
+    ]],
+        ),
+        (
+            "audio_notes_mode_internal_arbitrary_backend_error_preserves_legacy_signal_shape",
+            r##"(let* ((directory
                                  (audio-notes-test-directory
                                   "backend-error"))
                                 (file
@@ -265,17 +256,15 @@ fn audio_notes_mode_internal_arbitrary_backend_error_preserves_legacy_signal_sha
                               (audio-notes-test-error
                                (lambda ()
                                  (anm/play-file file)))
-                              (nreverse calls))))"##;
-    let expect = expect![[
+                              (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ((:signal wrong-type-argument (stringp ("decoder failed" 17))) ((:mode -1)))"#
-    ]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_play_file_rejects_missing_files_and_invalid_player_configurations() {
-    let elisp_form = r##"(let ((missing
+    ]],
+        ),
+        (
+            "audio_notes_mode_play_file_rejects_missing_files_and_invalid_player_configurations",
+            r##"(let ((missing
                                 (expand-file-name
                                  "missing.wav"
                                  default-directory))
@@ -323,17 +312,15 @@ fn audio_notes_mode_play_file_rejects_missing_files_and_invalid_player_configura
                                  (list
                                   missing-result
                                   invalid-results
-                                  (nreverse calls))))))"##;
-    let expect = expect![[
+                                  (nreverse calls))))))"##,
+            true,
+            expect![[
         r#"OK ((:signal error ("FILE isn’t a file!")) ((nil (:signal void-function (concatenate))) (invalid (:signal error ("‘anm/player-command’ invalid: invalid"))) (42 (:signal error ("‘anm/player-command’ invalid: 42"))) ("player" (:signal error ("‘anm/player-command’ invalid: player")))) ((:mode -1)))"#
-    ]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_first_note_workflow_selects_file_updates_buffers_and_runs_hooks_in_order() {
-    let elisp_form = r##"(let* ((directory
+    ]],
+        ),
+        (
+            "audio_notes_mode_first_note_workflow_selects_file_updates_buffers_and_runs_hooks_in_order",
+            r##"(let* ((directory
                                  (audio-notes-test-directory
                                   "first-note"))
                                 (first
@@ -432,17 +419,15 @@ fn audio_notes_mode_first_note_workflow_selects_file_updates_buffers_and_runs_ho
                                (kill-buffer anm/dired-buffer))
                              (when
                                  (buffer-live-p anm/process-buffer)
-                               (kill-buffer anm/process-buffer))))"##;
-    let expect = expect![[
+                               (kill-buffer anm/process-buffer))))"##,
+            true,
+            expect![[
         r#"OK (nil "01-first.wav" (20 "01-first.wav") "" (:list-files (:message "2 notes left. Playing 01-first.wav") (:revert nil) (:before "[ORACLE-SANDBOX]/first-note/01-first.wav") (:play-file "[ORACLE-SANDBOX]/first-note/01-first.wav") (:after "[ORACLE-SANDBOX]/first-note/01-first.wav")))"#
-    ]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_replay_workflow_keeps_current_note_and_reports_replay() {
-    let elisp_form = r##"(let* ((directory
+    ]],
+        ),
+        (
+            "audio_notes_mode_replay_workflow_keeps_current_note_and_reports_replay",
+            r##"(let* ((directory
                                  (audio-notes-test-directory
                                   "replay"))
                                 (current
@@ -507,17 +492,15 @@ fn audio_notes_mode_replay_workflow_keeps_current_note_and_reports_replay() {
                                (kill-buffer anm/dired-buffer))
                              (when
                                  (buffer-live-p anm/process-buffer)
-                               (kill-buffer anm/process-buffer))))"##;
-    let expect = expect![[
+                               (kill-buffer anm/process-buffer))))"##,
+            true,
+            expect![[
         r#"OK (nil t (:list-files (:message "Replaying current.mp3") :revert (:play "[ORACLE-SANDBOX]/replay/current.mp3")))"#
-    ]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_live_playback_toggles_mplayer_pause_or_stops_other_players() {
-    let elisp_form = r##"(let ((anm/current
+    ]],
+        ),
+        (
+            "audio_notes_mode_live_playback_toggles_mplayer_pause_or_stops_other_players",
+            r##"(let ((anm/current
                                 "/fixed/current.wav")
                                events
                                mplayer)
@@ -560,17 +543,15 @@ fn audio_notes_mode_live_playback_toggles_mplayer_pause_or_stops_other_players()
                                  (list
                                   pause-result
                                   stop-result
-                                  (nreverse events))))))"##;
-    let expect = expect![[
+                                  (nreverse events))))))"##,
+            true,
+            expect![[
         r#"OK (:paused :stopped (:alive (:mplayer t) (:send "pause") :alive (:mplayer nil) :stop))"#
-    ]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_empty_queue_exits_mode_without_touching_player_buffers() {
-    let elisp_form = r##"(let ((anm/current nil)
+    ]],
+        ),
+        (
+            "audio_notes_mode_empty_queue_exits_mode_without_touching_player_buffers",
+            r##"(let ((anm/current nil)
                                events)
                            (cl-letf
                                (((symbol-function
@@ -601,17 +582,15 @@ fn audio_notes_mode_empty_queue_exits_mode_without_touching_player_buffers() {
                              (list
                               (anm/play-pause-current)
                               anm/current
-                              (nreverse events))))"##;
-    let expect = expect![[
+                              (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:disabled nil (:list (:message "No more notes. Exiting `audio-notes-mode'.") (:mode -1)))"#
-    ]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn audio_notes_mode_before_hook_error_aborts_player_and_after_hook_execution() {
-    let elisp_form = r##"(let* ((directory
+    ]],
+        ),
+        (
+            "audio_notes_mode_before_hook_error_aborts_player_and_after_hook_execution",
+            r##"(let* ((directory
                                  (audio-notes-test-directory
                                   "hook-error"))
                                 (file
@@ -672,8 +651,9 @@ fn audio_notes_mode_before_hook_error_aborts_player_and_after_hook_execution() {
                                (kill-buffer anm/dired-buffer))
                              (when
                                  (buffer-live-p anm/process-buffer)
-                               (kill-buffer anm/process-buffer))))"##;
-    let expect = expect![[r#"OK ((:signal error ("before hook failed")) "memo.wav" (:before))"#]];
-
-    assert_audio_notes_mode_parity(elisp_form, expect);
+                               (kill-buffer anm/process-buffer))))"##,
+            true,
+            expect![[r#"OK ((:signal error ("before hook failed")) "memo.wav" (:before))"#]],
+        ),
+    ]);
 }

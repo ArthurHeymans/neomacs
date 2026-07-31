@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_atl_long_lines_parity;
+use super::assert_atl_long_lines_batch;
 
 #[test]
-fn global_atl_long_lines_cross_buffer_commands_share_and_supersede_one_timer() {
-    let elisp_form = r##"(let ((buffer-a
+fn workflows_public_surface_batch() {
+    assert_atl_long_lines_batch(&[
+        (
+            "global_atl_long_lines_cross_buffer_commands_share_and_supersede_one_timer",
+            r##"(let ((buffer-a
                 (generate-new-buffer
                  " *atl-long-lines-a*"))
                (buffer-b
@@ -118,16 +121,15 @@ fn global_atl_long_lines_cross_buffer_commands_share_and_supersede_one_timer() {
            (when global-atl-long-lines-mode
              (global-atl-long-lines-mode -1))
            (kill-buffer buffer-a)
-           (kill-buffer buffer-b)))"##;
-    let expect = expect![[
+           (kill-buffer buffer-b)))"##,
+            true,
+            expect![[
         "OK (((t 1) (t 1)) ((:schedule 1 :a 0.4 nil atl-long-lines-do-toggle nil) (:cancel 1 :a) (:schedule 2 :b 0.4 nil atl-long-lines-do-toggle nil)) (2) (2 :b) ((nil 0) (nil 0)))"
-    ]];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_enabled_post_command_to_timer_callback_keeps_short_line_truncated() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "atl_long_lines_enabled_post_command_to_timer_callback_keeps_short_line_truncated",
+            r##"(with-temp-buffer
          (insert "short")
          (goto-char
           (point-min))
@@ -167,14 +169,13 @@ fn atl_long_lines_enabled_post_command_to_timer_callback_keeps_short_line_trunca
                 atl-long-lines-mode
                 (atl-long-lines-test-hook-count
                  #'atl-long-lines--start-timer
-                 post-command-hook))))))"##;
-    let expect = expect!["OK (t t (0.4 nil atl-long-lines-do-toggle nil) t 1)"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_cursor_navigation_recomputes_wrapping_for_each_visited_line() {
-    let elisp_form = r##"(with-temp-buffer
+                 post-command-hook))))))"##,
+            true,
+            expect!["OK (t t (0.4 nil atl-long-lines-do-toggle nil) t 1)"],
+        ),
+        (
+            "atl_long_lines_cursor_navigation_recomputes_wrapping_for_each_visited_line",
+            r##"(with-temp-buffer
          (insert
           "tiny\n"
           "this is a realistically long source-code line\n"
@@ -216,14 +217,13 @@ fn atl_long_lines_cursor_navigation_recomputes_wrapping_for_each_visited_line() 
                  (atl-long-lines--end-line-column)
                  truncate-lines)
                 states))
-             (nreverse states))))"##;
-    let expect = expect!["OK ((1 4 t) (2 45 nil) (3 6 t) (2 45 nil) (1 4 t))"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_rapid_post_commands_cancel_superseded_work_and_only_latest_callback_drives_ui() {
-    let elisp_form = r##"(with-temp-buffer
+             (nreverse states))))"##,
+            true,
+            expect!["OK ((1 4 t) (2 45 nil) (3 6 t) (2 45 nil) (1 4 t))"],
+        ),
+        (
+            "atl_long_lines_rapid_post_commands_cancel_superseded_work_and_only_latest_callback_drives_ui",
+            r##"(with-temp-buffer
          (insert
           "short\n"
           "this line is substantially longer than the fixture window\n")
@@ -287,14 +287,13 @@ fn atl_long_lines_rapid_post_commands_cancel_superseded_work_and_only_latest_cal
                atl-long-lines--timer
                (car live))
               truncate-lines
-              (length callbacks)))))"##;
-    let expect = expect!["OK ((1) (2) 2 t nil 2)"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_runtime_delay_customization_affects_the_next_command_without_reenabling_mode() {
-    let elisp_form = r##"(with-temp-buffer
+              (length callbacks)))))"##,
+            true,
+            expect!["OK ((1) (2) 2 t nil 2)"],
+        ),
+        (
+            "atl_long_lines_runtime_delay_customization_affects_the_next_command_without_reenabling_mode",
+            r##"(with-temp-buffer
          (let ((atl-long-lines-delay 0.4)
                observed)
            (cl-letf
@@ -326,16 +325,15 @@ fn atl_long_lines_runtime_delay_customization_affects_the_next_command_without_r
              (list
               atl-long-lines-mode
               (nreverse observed)
-              atl-long-lines--timer))))"##;
-    let expect = expect![
+              atl-long-lines--timer))))"##,
+            true,
+            expect![
         "OK (t ((0.4 nil atl-long-lines-do-toggle nil) (2.5 nil atl-long-lines-do-toggle nil)) (:timer 2.5))"
-    ];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_disable_stops_future_post_command_scheduling_but_reenable_restores_it() {
-    let elisp_form = r##"(with-temp-buffer
+    ],
+        ),
+        (
+            "atl_long_lines_disable_stops_future_post_command_scheduling_but_reenable_restores_it",
+            r##"(with-temp-buffer
          (let ((schedules 0))
            (cl-letf
                (((symbol-function 'timerp)
@@ -363,14 +361,13 @@ fn atl_long_lines_disable_stops_future_post_command_scheduling_but_reenable_rest
               atl-long-lines-mode
               (atl-long-lines-test-hook-count
                #'atl-long-lines--start-timer
-               post-command-hook)))))"##;
-    let expect = expect!["OK (2 t 1)"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_real_idle_timer_event_handler_applies_the_current_line_policy() {
-    let elisp_form = r##"(with-temp-buffer
+               post-command-hook)))))"##,
+            true,
+            expect!["OK (2 t 1)"],
+        ),
+        (
+            "atl_long_lines_real_idle_timer_event_handler_applies_the_current_line_policy",
+            r##"(with-temp-buffer
          (insert
           "this line is longer than twelve columns")
          (goto-char
@@ -405,7 +402,9 @@ fn atl_long_lines_real_idle_timer_event_handler_applies_the_current_line_policy(
                   atl-long-lines-mode))
              (when
                  (timerp timer)
-               (cancel-timer timer)))))"##;
-    let expect = expect!["OK (nil t nil t t)"];
-    assert_atl_long_lines_parity(elisp_form, expect);
+               (cancel-timer timer)))))"##,
+            true,
+            expect!["OK (nil t nil t t)"],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_async_backup_parity;
+use super::assert_async_backup_batch;
 
 #[test]
-fn async_backup_real_child_copies_content_with_exact_process_command_and_status() {
-    let elisp_form = r##"(let* ((input
+fn process_public_surface_batch() {
+    assert_async_backup_batch(&[
+        (
+            "async_backup_real_child_copies_content_with_exact_process_command_and_status",
+            r##"(let* ((input
                 (async-backup-test-write-file
                  "process-success/input.txt"
                  "saved content\n"))
@@ -44,16 +47,15 @@ fn async_backup_real_child_copies_content_with_exact_process_command_and_status(
                  (file-exists-p output)
                  (async-backup-test-read-file output)))
             (async-backup-test-kill-buffer
-             (get-buffer "*async-backup*"))))"##;
-    let expect = expect![[
+             (get-buffer "*async-backup*"))))"##,
+            true,
+            expect![[
         r#"OK (t "async-backup" exit 0 ("emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//process-success/input.txt\" \"$ROOT//process-success/backups$ROOT//process-success/input-2026-07-27T13-30-00.txt\")") t 0 t "saved content\n")"#
-    ]];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_returns_before_gate_opens_and_child_finishes_later() {
-    let elisp_form = r##"(let* ((input
+    ]],
+        ),
+        (
+            "async_backup_returns_before_gate_opens_and_child_finishes_later",
+            r##"(let* ((input
                 (async-backup-test-write-file
                  "process-async/input.org"
                  "* asynchronous\n"))
@@ -92,16 +94,15 @@ fn async_backup_returns_before_gate_opens_and_child_finishes_later() {
                  (file-exists-p output)
                  (async-backup-test-read-file output)))
             (async-backup-test-kill-buffer
-             (get-buffer "*async-backup*"))))"##;
-    let expect = expect![[
+             (get-buffer "*async-backup*"))))"##,
+            true,
+            expect![[
         r#"OK (((run open listen connect stop) nil :editor-continued) exit 0 t "* asynchronous\n")"#
-    ]];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_multiple_calls_launch_concurrent_children_instead_of_queueing() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "async_backup_multiple_calls_launch_concurrent_children_instead_of_queueing",
+            r##"(let* ((root
                 (async-backup-test-path
                  "process-concurrent/backups"))
                (gate
@@ -151,16 +152,15 @@ fn async_backup_multiple_calls_launch_concurrent_children_instead_of_queueing() 
                  (mapcar #'process-exit-status processes)
                  (mapcar #'async-backup-test-read-file outputs)))
             (async-backup-test-kill-buffer
-             (get-buffer "*async-backup*"))))"##;
-    let expect = expect![[
+             (get-buffer "*async-backup*"))))"##,
+            true,
+            expect![[
         r#"OK ((("async-backup" "async-backup<1>" "async-backup<2>") (#1=(run open listen connect stop) #1# #1#) 3 (nil nil nil)) (0 0 0) ("content-one.txt\n" "content-two.txt\n" "content-three.txt\n"))"#
-    ]];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_same_timestamp_collision_leaves_one_success_and_one_failure() {
-    let elisp_form = r##"(let* ((input
+    ]],
+        ),
+        (
+            "async_backup_same_timestamp_collision_leaves_one_success_and_one_failure",
+            r##"(let* ((input
                 (async-backup-test-write-file
                  "process-collision/input.txt"
                  "collision content\n"))
@@ -215,15 +215,13 @@ fn async_backup_same_timestamp_collision_leaves_one_success_and_one_failure() {
                      (buffer-string))
                     t))))
             (async-backup-test-kill-buffer
-             (get-buffer "*async-backup*"))))"##;
-    let expect =
-        expect![[r#"OK (("async-backup" "async-backup<1>") (0 73) t "collision content\n" t)"#]];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_missing_input_is_reported_by_child_without_creating_output() {
-    let elisp_form = r##"(let* ((input
+             (get-buffer "*async-backup*"))))"##,
+            true,
+            expect![[r#"OK (("async-backup" "async-backup<1>") (0 73) t "collision content\n" t)"#]],
+        ),
+        (
+            "async_backup_missing_input_is_reported_by_child_without_creating_output",
+            r##"(let* ((input
                 (async-backup-test-path
                  "process-missing/input.txt"))
                (root
@@ -256,14 +254,13 @@ fn async_backup_missing_input_is_reported_by_child_without_creating_output() {
                      (buffer-string))
                     t))))
             (async-backup-test-kill-buffer
-             (get-buffer "*async-backup*"))))"##;
-    let expect = expect!["OK (nil exit 1 nil t)"];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_missing_emacs_executable_signals_after_creating_output_directory() {
-    let elisp_form = r##"(let* ((input
+             (get-buffer "*async-backup*"))))"##,
+            true,
+            expect!["OK (nil exit 1 nil t)"],
+        ),
+        (
+            "async_backup_missing_emacs_executable_signals_after_creating_output_directory",
+            r##"(let* ((input
                 (async-backup-test-write-file
                  "process-no-emacs/input.txt"
                  "input\n"))
@@ -285,16 +282,15 @@ fn async_backup_missing_emacs_executable_signals_after_creating_output_directory
               (concat
                (directory-file-name root)
                (file-name-directory input)))
-             (get-buffer "*async-backup*"))))"##;
-    let expect = expect![[
+             (get-buffer "*async-backup*"))))"##,
+            true,
+            expect![[
         r#"OK ((:error file-missing ("Searching for program" "No such file or directory" "emacs")) t (:buffer "*async-backup*"))"#
-    ]];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_child_stdout_and_stderr_share_persistent_process_buffer() {
-    let elisp_form = r##"(let* ((input
+    ]],
+        ),
+        (
+            "async_backup_child_stdout_and_stderr_share_persistent_process_buffer",
+            r##"(let* ((input
                 (async-backup-test-write-file
                  "process-output/input.txt"
                  "input\n"))
@@ -323,14 +319,13 @@ fn async_backup_child_stdout_and_stderr_share_persistent_process_buffer() {
                       (string-match-p "stdout-line" text)
                       (string-match-p "stderr-line" text))))
                  (buffer-live-p buffer)))
-            (async-backup-test-kill-buffer buffer)))"##;
-    let expect = expect!["OK (t exit 0 (0 12) t)"];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_sequential_children_reuse_named_output_buffer_and_append_results() {
-    let elisp_form = r##"(let* ((root
+            (async-backup-test-kill-buffer buffer)))"##,
+            true,
+            expect!["OK (t exit 0 (0 12) t)"],
+        ),
+        (
+            "async_backup_sequential_children_reuse_named_output_buffer_and_append_results",
+            r##"(let* ((root
                 (async-backup-test-path
                  "process-buffer/backups"))
                (async-backup-location root)
@@ -375,14 +370,13 @@ fn async_backup_sequential_children_reuse_named_output_buffer_and_append_results
                        "copied:second.txt"
                        text))))))
             (async-backup-test-kill-buffer
-             (get-buffer "*async-backup*"))))"##;
-    let expect = expect![[r#"OK (("async-backup" "async-backup") (t t) (0 48))"#]];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_process_environment_is_snapshotted_independently_per_launch() {
-    let elisp_form = r##"(let* ((root
+             (get-buffer "*async-backup*"))))"##,
+            true,
+            expect![[r#"OK (("async-backup" "async-backup") (t t) (0 48))"#]],
+        ),
+        (
+            "async_backup_process_environment_is_snapshotted_independently_per_launch",
+            r##"(let* ((root
                 (async-backup-test-path
                  "process-env/backups"))
                (gate
@@ -428,14 +422,13 @@ fn async_backup_process_environment_is_snapshotted_independently_per_launch() {
                      (cdr entry)))
                   expected)))
             (async-backup-test-kill-buffer
-             (get-buffer "*async-backup*"))))"##;
-    let expect = expect![[r#"OK ((0 0) ((t "alpha\n" "alpha") (t "beta\n" "beta")))"#]];
-    assert_async_backup_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_backup_caller_can_explicitly_delete_running_child_and_output_buffer() {
-    let elisp_form = r##"(let* ((input
+             (get-buffer "*async-backup*"))))"##,
+            true,
+            expect![[r#"OK ((0 0) ((t "alpha\n" "alpha") (t "beta\n" "beta")))"#]],
+        ),
+        (
+            "async_backup_caller_can_explicitly_delete_running_child_and_output_buffer",
+            r##"(let* ((input
                 (async-backup-test-write-file
                  "process-cleanup/input.txt"
                  "input\n"))
@@ -471,7 +464,9 @@ fn async_backup_caller_can_explicitly_delete_running_child_and_output_buffer() {
              (process-live-p process)
              (process-status process)
              (buffer-live-p buffer)
-             (file-exists-p output))))"##;
-    let expect = expect!["OK (((run open listen connect stop) t nil) nil signal nil nil)"];
-    assert_async_backup_parity(elisp_form, expect);
+             (file-exists-p output))))"##,
+            true,
+            expect!["OK (((run open listen connect stop) t nil) nil signal nil nil)"],
+        ),
+    ]);
 }

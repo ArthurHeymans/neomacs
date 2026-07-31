@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_zero_x_zero_parity, assert_zero_x_zero_signal_parity};
+use super::{assert_zero_x_zero_batch};
 
 #[test]
-fn zero_x_zero_upload_file_expands_path_and_forwards_exact_size() {
-    let elisp_form = r##"(let* ((root
+fn commands_public_surface_batch() {
+    assert_zero_x_zero_batch(&[
+        (
+            "zero_x_zero_upload_file_expands_path_and_forwards_exact_size",
+            r##"(let* ((root
                         (getenv
                          "NEOMACS_TEST_SANDBOX_ROOT"))
                        (default-directory
@@ -47,17 +50,15 @@ fn zero_x_zero_upload_file_expands_path_and_forwards_exact_size() {
                      (list
                       (0x0-upload-file server file)
                       (nreverse events)))
-                 (delete-file file)))"##;
-    let expect = expect![[
+                 (delete-file file)))"##,
+            true,
+            expect![[
         r#"OK (uploaded ((send #1=(:host "example.test") "payload.txt" nil) (handle #1# 7 response)))"#
-    ]];
-
-    assert_zero_x_zero_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_zero_upload_text_forwards_full_buffer_and_active_region_bounds() {
-    let elisp_form = r##"(let ((server
+    ]],
+        ),
+        (
+            "zero_x_zero_upload_text_forwards_full_buffer_and_active_region_bounds",
+            r##"(let ((server
                       '(:host "example.test"))
                      events)
                (cl-letf (((symbol-function '0x0--send)
@@ -107,17 +108,15 @@ fn zero_x_zero_upload_text_forwards_full_buffer_and_active_region_bounds() {
                      (list
                       full
                       region
-                      (nreverse events))))))"##;
-    let expect = expect![[
+                      (nreverse events))))))"##,
+            true,
+            expect![[
         r#"OK (uploaded uploaded ((send "upload.txt" (:start 1 :end 7)) (handle 6 response) (send "upload.txt" (:start 2 :end 5)) (handle 3 response)))"#
-    ]];
-
-    assert_zero_x_zero_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_zero_upload_kill_ring_copies_content_into_an_isolated_buffer() {
-    let elisp_form = r##"(let ((server
+    ]],
+        ),
+        (
+            "zero_x_zero_upload_kill_ring_copies_content_into_an_isolated_buffer",
+            r##"(let ((server
                       '(:host "example.test"))
                      (kill-ring '("copied λ text"))
                      (kill-ring-yank-pointer nil)
@@ -147,17 +146,15 @@ fn zero_x_zero_upload_kill_ring_copies_content_into_an_isolated_buffer() {
                             'uploaded)))
                  (list
                   (0x0-upload-kill-ring server)
-                  (nreverse events))))"##;
-    let expect = expect![[
+                  (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (uploaded ((send " *temp*" (:start 1 :end 14) "copied λ text") (handle 13 response)))"#
-    ]];
-
-    assert_zero_x_zero_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_zero_shorten_uri_builds_curl_request_and_skips_timeout_estimate() {
-    let elisp_form = r##"(let ((server
+    ]],
+        ),
+        (
+            "zero_x_zero_shorten_uri_builds_curl_request_and_skips_timeout_estimate",
+            r##"(let ((server
                       '(:scheme "https"
                         :host "example.test"))
                      (0x0-use-curl t)
@@ -186,29 +183,25 @@ fn zero_x_zero_shorten_uri_builds_curl_request_and_skips_timeout_estimate() {
                   (0x0-shorten-uri
                    server
                    "https://long.example/path?q=1")
-                  (nreverse events))))"##;
-    let expect = expect![[
+                  (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (shortened ((curl ("-s" "-S" "-F" "shorten=https://long.example/path?q=1" "https://example.test") nil) (handle (:scheme "https" :host "example.test") nil response)))"#
-    ]];
-
-    assert_zero_x_zero_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_zero_shorten_uri_rejects_url_fallback() {
-    let elisp_form = r##"(let ((0x0-use-curl nil))
+    ]],
+        ),
+        (
+            "zero_x_zero_shorten_uri_rejects_url_fallback",
+            r##"(let ((0x0-use-curl nil))
                (0x0-shorten-uri
                 '(:scheme "https"
                   :host "example.test")
-                "https://long.example"))"##;
-    let expect = expect![[r#"ERR (error "Unsupported currenlty without using curl")"#]];
-
-    assert_zero_x_zero_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_zero_popup_upload_forwards_content_then_kills_the_popup() {
-    let elisp_form = r##"(let ((server
+                "https://long.example"))"##,
+            false,
+            expect![[r#"ERR (error "Unsupported currenlty without using curl")"#]],
+        ),
+        (
+            "zero_x_zero_popup_upload_forwards_content_then_kills_the_popup",
+            r##"(let ((server
                       '(:host "example.test"))
                      (popup
                       (generate-new-buffer
@@ -244,17 +237,15 @@ fn zero_x_zero_popup_upload_forwards_content_then_kills_the_popup() {
                (list
                 result
                 (nreverse events)
-                (buffer-live-p popup)))"##;
-    let expect = expect![[
+                (buffer-live-p popup)))"##,
+            true,
+            expect![[
         r#"OK (t ((send "popup-upload.txt" (:start 1 :end 11) "popup body") (handle 10 response)) nil)"#
-    ]];
-
-    assert_zero_x_zero_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_zero_popup_creates_local_upload_binding_and_displays_instructions() {
-    let elisp_form = r##"(let (shown message-text popup)
+    ]],
+        ),
+        (
+            "zero_x_zero_popup_creates_local_upload_binding_and_displays_instructions",
+            r##"(let (shown message-text popup)
                (cl-letf (((symbol-function 'pop-to-buffer)
                           (lambda (buffer &rest _)
                             (setq shown buffer)
@@ -283,15 +274,13 @@ fn zero_x_zero_popup_creates_local_upload_binding_and_displays_instructions() {
                              (commandp binding))))
                         message-text))
                    (when (buffer-live-p popup)
-                     (kill-buffer popup)))))"##;
-    let expect = expect![[r#"OK ("*upload*" (t t) "Press C-c C-c to upload.")"#]];
-
-    assert_zero_x_zero_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_zero_dwim_dispatches_region_kill_dired_file_guess_and_fallback() {
-    let elisp_form = r##"(let ((server
+                     (kill-buffer popup)))))"##,
+            true,
+            expect![[r#"OK ("*upload*" (t t) "Press C-c C-c to upload.")"#]],
+        ),
+        (
+            "zero_x_zero_dwim_dispatches_region_kill_dired_file_guess_and_fallback",
+            r##"(let ((server
                       '(:host "example.test"))
                      events
                      region-active
@@ -373,10 +362,11 @@ fn zero_x_zero_dwim_dispatches_region_kill_dired_file_guess_and_fallback() {
                     accepted-file-result
                     rejected-file-result
                     fallback-result
-                    (nreverse events)))))"##;
-    let expect = expect![[
+                    (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK (text kill-ring file file nil text (text kill-ring (file "/dired/file") (prompt "Is publicly sharing this file, /guessed/file, what you intended?") (file "/guessed/file") (prompt "Is publicly sharing this file, /guessed/file, what you intended?") text))"#
-    ]];
-
-    assert_zero_x_zero_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

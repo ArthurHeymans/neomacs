@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auth_source_xoauth2_parity;
+use super::assert_auth_source_xoauth2_batch;
 
 #[test]
-fn auth_source_xoauth2_curl_transport_posts_exact_request_and_parses_json() {
-    let elisp_form = r##"(let ((auth-source-xoauth2-use-curl
+fn transport_public_surface_batch() {
+    assert_auth_source_xoauth2_batch(&[
+        (
+            "auth_source_xoauth2_curl_transport_posts_exact_request_and_parses_json",
+            r##"(let ((auth-source-xoauth2-use-curl
                 t)
                calls)
          (cl-letf
@@ -24,16 +27,15 @@ fn auth_source_xoauth2_curl_transport_posts_exact_request_and_parses_json() {
             (auth-source-xoauth2--url-post
              "https://token.example/oauth"
              "client_id=id&refresh_token=refresh")
-            (nreverse calls))))"##;
-    let expect = expect![[
+            (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK (((access_token . "curl-token") (expires_in . 3600) (token_type . "Bearer")) (("curl" nil t nil ("--silent" "--request" "POST" "--data" "client_id=id&refresh_token=refresh" "--header" "Content-Type:application/x-www-form-urlencoded" "https://token.example/oauth"))))"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_curl_transport_parses_output_even_on_nonzero_status() {
-    let elisp_form = r##"(let ((auth-source-xoauth2-use-curl
+    ]],
+        ),
+        (
+            "auth_source_xoauth2_curl_transport_parses_output_even_on_nonzero_status",
+            r##"(let ((auth-source-xoauth2-use-curl
                 t))
          (cl-letf
              (((symbol-function 'call-process)
@@ -44,14 +46,13 @@ fn auth_source_xoauth2_curl_transport_parses_output_even_on_nonzero_status() {
                  22)))
            (auth-source-xoauth2--url-post
             "https://token.example"
-            "payload")))"##;
-    let expect = expect![[r#"OK ((error . "invalid_grant") (error_description . "expired"))"#]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_curl_transport_propagates_invalid_json_signal() {
-    let elisp_form = r##"(let ((auth-source-xoauth2-use-curl
+            "payload")))"##,
+            true,
+            expect![[r#"OK ((error . "invalid_grant") (error_description . "expired"))"#]],
+        ),
+        (
+            "auth_source_xoauth2_curl_transport_propagates_invalid_json_signal",
+            r##"(let ((auth-source-xoauth2-use-curl
                 t))
          (cl-letf
              (((symbol-function 'call-process)
@@ -62,14 +63,13 @@ fn auth_source_xoauth2_curl_transport_propagates_invalid_json_signal() {
             (lambda ()
               (auth-source-xoauth2--url-post
                "https://token.example"
-               "payload")))))"##;
-    let expect = expect![[r#"OK (:error json-unknown-keyword ("not"))"#]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_url_transport_sets_request_bindings_and_kills_buffer() {
-    let elisp_form = r##"(let ((auth-source-xoauth2-use-curl
+               "payload")))))"##,
+            true,
+            expect![[r#"OK (:error json-unknown-keyword ("not"))"#]],
+        ),
+        (
+            "auth_source_xoauth2_url_transport_sets_request_bindings_and_kills_buffer",
+            r##"(let ((auth-source-xoauth2-use-curl
                 nil)
                captured
                response-buffer)
@@ -101,16 +101,15 @@ fn auth_source_xoauth2_url_transport_sets_request_bindings_and_kills_buffer() {
               result
               captured
               (buffer-live-p
-               response-buffer)))))"##;
-    let expect = expect![[
+               response-buffer)))))"##,
+            true,
+            expect![[
         r#"OK (((access_token . "url-token") (expires_in . 1800)) ("https://token.example/oauth" "POST" "client_id=id" (("Content-Type" . "application/x-www-form-urlencoded"))) nil)"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_url_transport_returns_nil_without_header_separator() {
-    let elisp_form = r##"(let ((auth-source-xoauth2-use-curl
+    ]],
+        ),
+        (
+            "auth_source_xoauth2_url_transport_returns_nil_without_header_separator",
+            r##"(let ((auth-source-xoauth2-use-curl
                 nil)
                response-buffer)
          (cl-letf
@@ -135,16 +134,15 @@ fn auth_source_xoauth2_url_transport_returns_nil_without_header_separator() {
                   (buffer-string)))
              (when
                  (buffer-live-p response-buffer)
-               (kill-buffer response-buffer)))))"##;
-    let expect = expect![[
+               (kill-buffer response-buffer)))))"##,
+            true,
+            expect![[
         r#"OK (nil t "HTTP/1.1 200 OK\nContent-Type: application/json\n{\"access_token\":\"hidden\"}")"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_url_transport_propagates_retrieval_failure() {
-    let elisp_form = r##"(let ((auth-source-xoauth2-use-curl
+    ]],
+        ),
+        (
+            "auth_source_xoauth2_url_transport_propagates_retrieval_failure",
+            r##"(let ((auth-source-xoauth2-use-curl
                 nil))
          (cl-letf
              (((symbol-function 'url-retrieve-synchronously)
@@ -154,7 +152,9 @@ fn auth_source_xoauth2_url_transport_propagates_retrieval_failure() {
             (lambda ()
               (auth-source-xoauth2--url-post
                "https://token.example"
-               "payload")))))"##;
-    let expect = expect![[r#"OK (:error error ("network unavailable"))"#]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
+               "payload")))))"##,
+            true,
+            expect![[r#"OK (:error error ("network unavailable"))"#]],
+        ),
+    ]);
 }

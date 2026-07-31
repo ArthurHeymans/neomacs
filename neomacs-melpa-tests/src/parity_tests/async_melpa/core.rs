@@ -1,9 +1,12 @@
-use super::{assert_async_melpa_parity, assert_async_melpa_signal_parity};
+use super::{assert_async_melpa_batch};
 use expect_test::{Expect, expect};
 
 #[test]
-fn current_public_defaults_aliases_and_custom_metadata_match_the_melpa_release() {
-    let elisp_form = r##"
+fn core_public_surface_batch() {
+    assert_async_melpa_batch(&[
+        (
+            "current_public_defaults_aliases_and_custom_metadata_match_the_melpa_release",
+            r##"
 (list
  async-prompt-for-password
  async-process-noquery-on-exit
@@ -32,16 +35,15 @@ fn current_public_defaults_aliases_and_custom_metadata_match_the_melpa_release()
        'custom-type)
   (get 'async-variables-noprops-function
        'custom-type)))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (t nil nil t nil nil nil nil nil nil nil "-Q" nil ("-syntax-table\\'" "-abbrev-table\\'") t t (boolean function))"#
-    ]];
-    assert_async_melpa_parity(elisp_form, expect);
-}
-
-#[test]
-fn purecopy_strips_nested_string_properties_and_preserves_nonstrings_and_input() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "purecopy_strips_nested_string_properties_and_preserves_nonstrings_and_input",
+            r##"
 (let* ((top
         (propertize
          "top" 'face 'bold))
@@ -84,16 +86,15 @@ fn purecopy_strips_nested_string_properties_and_preserves_nonstrings_and_input()
     vector)
    (async--purecopy 42)
    (async--purecopy nil)))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("top" (inside "nested") ("key" . "value") 17 [vector]) (nil nil nil nil) ((face bold) (help-echo "tip") (category key) (category value)) t 42 nil)"#
-    ]];
-    assert_async_melpa_parity(elisp_form, expect);
-}
-
-#[test]
-fn inject_variables_honors_include_predicate_exclusions_quoting_vectors_and_noprops() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "inject_variables_honors_include_predicate_exclusions_quoting_vectors_and_noprops",
+            r##"
 (progn
   (defvar async-melpa-alpha nil)
   (defvar async-melpa-beta nil)
@@ -143,16 +144,15 @@ fn inject_variables_honors_include_predicate_exclusions_quoting_vectors_and_nopr
       'async-melpa-rejected)
      (boundp
       'async-melpa-syntax-table))))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ((setq async-melpa-vector #2=[1 two "three"] async-melpa-alpha "alpha" async-melpa-beta '#1=(one (two . three))) "alpha" nil #1# #2# nil nil nil)"#
-    ]];
-    assert_async_melpa_parity(elisp_form, expect);
-}
-
-#[test]
-fn message_packet_recognition_preserves_marker_values_and_rejects_nonplists() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "message_packet_recognition_preserves_marker_values_and_rejects_nonplists",
+            r##"
 (mapcar
  #'async-message-p
  '(nil
@@ -166,14 +166,13 @@ fn message_packet_recognition_preserves_marker_values_and_rejects_nonplists() {
    ((:async-message t))
    (:async-message 0
     :payload "value")))
-"##;
-    let expect: Expect = expect!["OK (nil nil nil nil nil t marker nil 0)"];
-    assert_async_melpa_parity(elisp_form, expect);
-}
-
-#[test]
-fn wire_encoding_round_trips_unicode_vectors_dotted_pairs_and_embedded_eof() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect!["OK (nil nil nil nil nil t marker nil 0)"],
+        ),
+        (
+            "wire_encoding_round_trips_unicode_vectors_dotted_pairs_and_embedded_eof",
+            r##"
 (let ((value
        '("λ雪"
          [alpha 17 "β"]
@@ -195,16 +194,15 @@ fn wire_encoding_round_trips_unicode_vectors_dotted_pairs_and_embedded_eof() {
         "\n" wire)
        (async--receive-sexp
         wire)))))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (t t 102 ("λ雪" [alpha 17 "β"] (left . right) (:nested (1 2 3)) "before\4after"))"#
-    ]];
-    assert_async_melpa_parity(elisp_form, expect);
-}
-
-#[test]
-fn wire_encoding_preserves_shared_and_circular_structure() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "wire_encoding_preserves_shared_and_circular_structure",
+            r##"
 (let* ((shared
         (list 'shared))
        (cycle
@@ -231,14 +229,13 @@ fn wire_encoding_preserves_shared_and_circular_structure() {
         decoded-cycle
         (cdr decoded-cycle))
        (car decoded-cycle)))))
-"##;
-    let expect: Expect = expect!["OK (t t t cycle)"];
-    assert_async_melpa_parity(elisp_form, expect);
-}
-
-#[test]
-fn handle_result_stores_future_values_and_callback_values_with_expected_cleanup() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect!["OK (t t t cycle)"],
+        ),
+        (
+            "handle_result_stores_future_values_and_callback_values_with_expected_cleanup",
+            r##"
 (let ((future-buffer
        (generate-new-buffer
         " *async-melpa-future*"))
@@ -285,14 +282,13 @@ fn handle_result_stores_future_values_and_callback_values_with_expected_cleanup(
          callback-buffer)
       (kill-buffer
        callback-buffer))))
-"##;
-    let expect: Expect = expect!["OK ((t (:answer 42)) ((:done t) t) t nil)"];
-    assert_async_melpa_parity(elisp_form, expect);
-}
-
-#[test]
-fn handle_result_resignals_exact_child_error_and_cleans_buffer() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect!["OK ((t (:answer 42)) ((:done t) t) t nil)"],
+        ),
+        (
+            "handle_result_resignals_exact_child_error_and_cleans_buffer",
+            r##"
 (let ((buffer
        (generate-new-buffer
         " *async-melpa-signal*"))
@@ -303,14 +299,13 @@ fn handle_result_resignals_exact_child_error_and_cleans_buffer() {
      (wrong-type-argument
       integerp not-an-integer))
    buffer))
-"##;
-    let expect: Expect = expect!["ERR (wrong-type-argument integerp not-an-integer)"];
-    assert_async_melpa_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn child_program_arguments_cover_pipe_argument_child_init_cached_library_and_quiet_switch() {
-    let elisp_form = r##"
+"##,
+            false,
+            expect!["ERR (wrong-type-argument integerp not-an-integer)"],
+        ),
+        (
+            "child_program_arguments_cover_pipe_argument_child_init_cached_library_and_quiet_switch",
+            r##"
 (let* ((async-quiet-switch
         "-q")
        (async-library
@@ -344,16 +339,15 @@ fn child_program_arguments_cover_pipe_argument_child_init_cached_library_and_qui
     (last
      (let ((async-child-init nil))
        (async--emacs-program-args))))))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("-q" "-l" "async.el" "-l" t "-batch" "-f" "async-batch-invoke" (lambda nil (list "λ" 42)) "<none>")"#
-    ]];
-    assert_async_melpa_parity(elisp_form, expect);
-}
-
-#[test]
-fn sandbox_let_and_fold_left_expand_to_current_callback_shapes() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "sandbox_let_and_fold_left_expand_to_current_callback_shapes",
+            r##"
 (list
  (macroexpand
   '(async-sandbox
@@ -374,16 +368,15 @@ fn sandbox_let_and_fold_left_expand_to_current_callback_shapes() {
   '(alpha
     (beta 2)
     gamma)))
-"##;
-    let expect: Expect = expect![
+"##,
+            true,
+            expect![
         "OK ((async-get (async-start (lambda nil 42))) (async-start (lambda nil (+ 1 2)) (lambda (x) (async-start (lambda nil (+ x 4)) (lambda (y) (progn (list x y)))))) (:binding (gamma) :inside (:binding (beta 2) :inside (:binding (alpha) :inside (done)))))"
-    ];
-    assert_async_melpa_parity(elisp_form, expect);
-}
-
-#[test]
-fn send_parent_branch_transmits_quoted_message_and_child_branch_prints_wire_packet() {
-    let elisp_form = r##"
+    ],
+        ),
+        (
+            "send_parent_branch_transmits_quoted_message_and_child_branch_prints_wire_packet",
+            r##"
 (let (transmissions
       child-output)
   (cl-letf
@@ -419,16 +412,15 @@ fn send_parent_branch_transmits_quoted_message_and_child_branch_prints_wire_pack
        (read
         (substring child-output 1)))
       'utf-8-emacs-unix)))))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (((fixture-process '(:operation sum :values (2 3 5) :async-message t))) t (:phase complete :payload "λ" :async-message t))"#
-    ]];
-    assert_async_melpa_parity(elisp_form, expect);
-}
-
-#[test]
-fn receive_delegates_to_wire_receiver_and_batch_invoke_prints_value_and_signal_protocols() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "receive_delegates_to_wire_receiver_and_batch_invoke_prints_value_and_signal_protocols",
+            r##"
 (let (receive-calls
       value-output
       signal-output)
@@ -470,16 +462,15 @@ fn receive_delegates_to_wire_receiver_and_batch_invoke_prints_value_and_signal_p
    signal-output
    async-in-child-emacs
    command-line-args-left))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ((nil) "\n(:value \"λ\")\n" "\n(async-signal (error \"child failure\"))\n" t nil)"#
-    ]];
-    assert_async_melpa_parity(elisp_form, expect);
-}
-
-#[test]
-fn read_from_client_reassembles_fragmented_multiple_wire_messages() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "read_from_client_reassembles_fragmented_multiple_wire_messages",
+            r##"
 (let* ((buffer
         (generate-new-buffer
          " *async-melpa-client*"))
@@ -542,16 +533,15 @@ fn read_from_client_reassembles_fragmented_multiple_wire_messages() {
     (when
         (buffer-live-p buffer)
       (kill-buffer buffer))))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (((:phase first :async-message t) (:phase second :payload "����" :async-message t)) 115 "\"KDpwaGFzZSBmaXJzdCA6YXN5bmMtbWVzc2FnZSB0KQ==\"\n\"KDpwaGFzZSBzZWNvbmQgOnBheWxvYWQgIs67IiA6YXN5bmMtbWVzc2FnZSB0KQ==\"\n")"#
-    ]];
-    assert_async_melpa_parity(elisp_form, expect);
-}
-
-#[test]
-fn start_future_returns_structured_unicode_and_transitions_to_ready() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "start_future_returns_structured_unicode_and_transitions_to_ready",
+            r##"
 (let* ((future
         (async-start
          (lambda ()
@@ -571,29 +561,26 @@ fn start_future_returns_structured_unicode_and_transitions_to_ready() {
    (async-ready future)
    (buffer-live-p
     (process-buffer future))))
-"##;
-    let expect: Expect =
-        expect![[r#"OK (nil ("λ雪" [1 two 3] (:nested ((left . right)))) t nil)"#]];
-    assert_async_melpa_parity(elisp_form, expect);
-}
-
-#[test]
-fn start_future_resignals_exact_child_error() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect![[r#"OK (nil ("λ雪" [1 two 3] (:nested ((left . right)))) t nil)"#]],
+        ),
+        (
+            "start_future_resignals_exact_child_error",
+            r##"
 (async-get
  (async-start
   (lambda ()
     (signal
      'wrong-type-argument
      '(integerp child-value)))))
-"##;
-    let expect: Expect = expect!["ERR (wrong-type-argument integerp child-value)"];
-    assert_async_melpa_signal_parity(elisp_form, expect);
-}
-
-#[test]
-fn callback_receives_messages_before_final_result_and_future_then_yields_nil() {
-    let elisp_form = r##"
+"##,
+            false,
+            expect!["ERR (wrong-type-argument integerp child-value)"],
+        ),
+        (
+            "callback_receives_messages_before_final_result_and_future_then_yields_nil",
+            r##"
 (let (events)
   (let ((future
          (async-start
@@ -614,16 +601,15 @@ fn callback_receives_messages_before_final_result_and_future_then_yields_nil() {
      (async-ready future)
      (buffer-live-p
       (process-buffer future)))))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (((:phase first :payload "����" :async-message t) (:phase second :payload (1 2 3) :async-message t) finished) nil t nil)"#
-    ]];
-    assert_async_melpa_parity(elisp_form, expect);
-}
-
-#[test]
-fn parent_to_child_message_roundtrip_supports_real_request_response_workflow() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "parent_to_child_message_roundtrip_supports_real_request_response_workflow",
+            r##"
 (let (received)
   (let ((future
          (async-start
@@ -650,14 +636,13 @@ fn parent_to_child_message_roundtrip_supports_real_request_response_workflow() {
      received
      (async-get future)
      (async-ready future))))
-"##;
-    let expect: Expect = expect!["OK ((sum 17 t) nil t)"];
-    assert_async_melpa_parity(elisp_form, expect);
-}
-
-#[test]
-fn callback_reassembles_message_larger_than_process_chunk_with_unicode_edges() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect!["OK ((sum 17 t) nil t)"],
+        ),
+        (
+            "callback_reassembles_message_larger_than_process_chunk_with_unicode_edges",
+            r##"
 (let (events)
   (let ((future
          (async-start
@@ -689,14 +674,13 @@ fn callback_reassembles_message_larger_than_process_chunk_with_unicode_edges() {
              events)))))
     (async-wait future)
     (nreverse events)))
-"##;
-    let expect: Expect = expect![[r#"OK ((message 65541 "����" "����") finished)"#]];
-    assert_async_melpa_parity(elisp_form, expect);
-}
-
-#[test]
-fn sandbox_and_async_let_execute_real_child_workflows() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect![[r#"OK ((message 65541 "����" "����") finished)"#]],
+        ),
+        (
+            "sandbox_and_async_let_execute_real_child_workflows",
+            r##"
 (let ((sandbox-value
        (async-sandbox
         (lambda ()
@@ -723,14 +707,13 @@ fn sandbox_and_async_let_execute_real_child_workflows() {
     (list
      sandbox-value
      received)))
-"##;
-    let expect: Expect = expect![[r#"OK ((15 (1 4 9 16 25) "λ雪") (3 7))"#]];
-    assert_async_melpa_parity(elisp_form, expect);
-}
-
-#[test]
-fn start_process_future_callback_failure_and_noquery_cover_real_process_lifecycle() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect![[r#"OK ((15 (1 4 9 16 25) "λ雪") (3 7))"#]],
+        ),
+        (
+            "start_process_future_callback_failure_and_noquery_cover_real_process_lifecycle",
+            r##"
 (let (callback-result
       query noquery)
   (let* ((success
@@ -802,9 +785,11 @@ fn start_process_future_callback_failure_and_noquery_cover_real_process_lifecycl
         (list
          success callback failure
          query noquery))))))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (t 0 (0 "callback-output") nil (error "Async process 'async-melpa-failure' failed with exit code 7") 7 (t nil) (nil nil nil nil nil))"#
-    ]];
-    assert_async_melpa_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

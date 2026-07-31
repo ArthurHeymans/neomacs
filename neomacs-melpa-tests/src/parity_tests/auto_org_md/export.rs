@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_org_md_parity;
+use super::assert_auto_org_md_batch;
 
 #[test]
-fn auto_org_md_export_skips_fundamental_mode_without_touching_exporter() {
-    let elisp_form = r##"(let (calls)
+fn export_public_surface_batch() {
+    assert_auto_org_md_batch(&[
+        (
+            "auto_org_md_export_skips_fundamental_mode_without_touching_exporter",
+            r##"(let (calls)
          (cl-letf (((symbol-function 'org-md-export-to-markdown)
                     (lambda (&rest arguments)
                       (push arguments calls)
@@ -15,14 +18,13 @@ fn auto_org_md_export_skips_fundamental_mode_without_touching_exporter() {
               (auto-org-md-export)
               calls
               major-mode
-              (buffer-string)))))"##;
-    let expect = expect![[r#"OK (nil nil fundamental-mode "")"#]];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_export_skips_text_and_markdown_modes() {
-    let elisp_form = r##"(progn
+              (buffer-string)))))"##,
+            true,
+            expect![[r#"OK (nil nil fundamental-mode "")"#]],
+        ),
+        (
+            "auto_org_md_export_skips_text_and_markdown_modes",
+            r##"(progn
          (define-derived-mode
            auto-org-md-test-markdown-mode
            text-mode
@@ -40,14 +42,13 @@ fn auto_org_md_export_skips_text_and_markdown_modes() {
                       (auto-org-md-export)
                       calls)))
             '(text-mode
-              auto-org-md-test-markdown-mode)))))"##;
-    let expect = expect!["OK ((text-mode nil nil) (auto-org-md-test-markdown-mode nil nil))"];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_export_invokes_markdown_exporter_once_in_org_mode() {
-    let elisp_form = r##"(let (calls)
+              auto-org-md-test-markdown-mode)))))"##,
+            true,
+            expect!["OK ((text-mode nil nil) (auto-org-md-test-markdown-mode nil nil))"],
+        ),
+        (
+            "auto_org_md_export_invokes_markdown_exporter_once_in_org_mode",
+            r##"(let (calls)
          (cl-letf (((symbol-function 'org-md-export-to-markdown)
                     (lambda (&rest arguments)
                       (push arguments calls)
@@ -59,14 +60,13 @@ fn auto_org_md_export_invokes_markdown_exporter_once_in_org_mode() {
               (auto-org-md-export)
               (nreverse calls)
               (buffer-string)
-              major-mode))))"##;
-    let expect = expect![[r#"OK (:exported (nil) "* Heading\nBody" org-mode)"#]];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_export_recognizes_modes_derived_from_org_mode() {
-    let elisp_form = r##"(progn
+              major-mode))))"##,
+            true,
+            expect![[r#"OK (:exported (nil) "* Heading\nBody" org-mode)"#]],
+        ),
+        (
+            "auto_org_md_export_recognizes_modes_derived_from_org_mode",
+            r##"(progn
          (define-derived-mode
            auto-org-md-test-derived-mode
            org-mode
@@ -82,14 +82,13 @@ fn auto_org_md_export_recognizes_modes_derived_from_org_mode() {
                 (derived-mode-p 'org-mode)
                 (auto-org-md-export)
                 (nreverse calls)
-                major-mode)))))"##;
-    let expect = expect!["OK (org-mode :derived-export (nil) auto-org-md-test-derived-mode)"];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_export_forwards_exporter_return_values_exactly() {
-    let elisp_form = r##"(mapcar
+                major-mode)))))"##,
+            true,
+            expect!["OK (org-mode :derived-export (nil) auto-org-md-test-derived-mode)"],
+        ),
+        (
+            "auto_org_md_export_forwards_exporter_return_values_exactly",
+            r##"(mapcar
          (lambda (value)
            (cl-letf (((symbol-function
                        'org-md-export-to-markdown)
@@ -98,16 +97,15 @@ fn auto_org_md_export_forwards_exporter_return_values_exactly() {
                (org-mode)
                (list value
                      (auto-org-md-export)))))
-         '(nil t :file "notes.md" 42 (nested value)))"##;
-    let expect = expect![[
+         '(nil t :file "notes.md" 42 (nested value)))"##,
+            true,
+            expect![[
         r#"OK ((nil nil) (t t) (:file :file) ("notes.md" "notes.md") (42 42) (#1=(nested value) #1#))"#
-    ]];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_export_propagates_exporter_error_data() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_org_md_export_propagates_exporter_error_data",
+            r##"(with-temp-buffer
          (org-mode)
          (cl-letf (((symbol-function
                      'org-md-export-to-markdown)
@@ -117,14 +115,13 @@ fn auto_org_md_export_propagates_exporter_error_data() {
                        '("fixture export failed"
                          "notes.org")))))
            (auto-org-md-test-error
-            #'auto-org-md-export)))"##;
-    let expect = expect![[r#"OK (:signal file-error ("fixture export failed" "notes.org"))"#]];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_export_calls_exporter_without_arguments() {
-    let elisp_form = r##"(with-temp-buffer
+            #'auto-org-md-export)))"##,
+            true,
+            expect![[r#"OK (:signal file-error ("fixture export failed" "notes.org"))"#]],
+        ),
+        (
+            "auto_org_md_export_calls_exporter_without_arguments",
+            r##"(with-temp-buffer
          (org-mode)
          (let (observed)
            (cl-letf (((symbol-function
@@ -134,14 +131,13 @@ fn auto_org_md_export_calls_exporter_without_arguments() {
                         :done)))
              (list
               (auto-org-md-export)
-              observed))))"##;
-    let expect = expect!["OK (:done nil)"];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_export_preserves_current_buffer_context_for_exporter() {
-    let elisp_form = r##"(with-temp-buffer
+              observed))))"##,
+            true,
+            expect!["OK (:done nil)"],
+        ),
+        (
+            "auto_org_md_export_preserves_current_buffer_context_for_exporter",
+            r##"(with-temp-buffer
          (org-mode)
          (insert "* First\nBody\n* Second\nTail\n")
          (setq buffer-file-name
@@ -167,14 +163,13 @@ fn auto_org_md_export_preserves_current_buffer_context_for_exporter() {
             (point)
             (point-min)
             (point-max)
-            (buffer-modified-p))))"##;
-    let expect = expect![[r#"OK ((org-mode 10 9 18 t "context.org") 10 9 18 t)"#]];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_export_uses_runtime_derived_mode_predicate() {
-    let elisp_form = r##"(let (calls)
+            (buffer-modified-p))))"##,
+            true,
+            expect![[r#"OK ((org-mode 10 9 18 t "context.org") 10 9 18 t)"#]],
+        ),
+        (
+            "auto_org_md_export_uses_runtime_derived_mode_predicate",
+            r##"(let (calls)
          (cl-letf (((symbol-function 'derived-mode-p)
                     (lambda (&rest parents)
                       (push parents calls)
@@ -186,14 +181,13 @@ fn auto_org_md_export_uses_runtime_derived_mode_predicate() {
              (fundamental-mode)
              (list
               (auto-org-md-export)
-              (nreverse calls)))))"##;
-    let expect = expect!["OK (:exported ((org-mode)))"];
-    assert_auto_org_md_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_org_md_export_is_noninteractive_but_callable_via_funcall_interactively() {
-    let elisp_form = r##"(with-temp-buffer
+              (nreverse calls)))))"##,
+            true,
+            expect!["OK (:exported ((org-mode)))"],
+        ),
+        (
+            "auto_org_md_export_is_noninteractive_but_callable_via_funcall_interactively",
+            r##"(with-temp-buffer
          (org-mode)
          (cl-letf (((symbol-function
                      'org-md-export-to-markdown)
@@ -205,7 +199,9 @@ fn auto_org_md_export_is_noninteractive_but_callable_via_funcall_interactively()
            (list
             (commandp 'auto-org-md-export)
             (funcall-interactively
-             #'auto-org-md-export))))"##;
-    let expect = expect!["OK (nil (nil nil nil))"];
-    assert_auto_org_md_parity(elisp_form, expect);
+             #'auto-org-md-export))))"##,
+            true,
+            expect!["OK (nil (nil nil nil))"],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_compile_parity;
+use super::assert_auto_compile_batch;
 
 #[test]
-fn auto_compile_recursive_start_compiles_real_libraries_and_skips_hidden_and_nosearch_trees() {
-    let elisp_form = r##"(let* ((root
+fn workflows_public_surface_batch() {
+    assert_auto_compile_batch(&[
+        (
+            "auto_compile_recursive_start_compiles_real_libraries_and_skips_hidden_and_nosearch_trees",
+            r##"(let* ((root
                  (auto-compile-test-path
                   "recursive-start/"))
                 (top
@@ -33,16 +36,15 @@ fn auto_compile_recursive_start_compiles_real_libraries_and_skips_hidden_and_nos
              (file-relative-name source root)
              (file-exists-p
               (auto-compile-test-dest source))))
-          (list top nested hidden nosearch)))"##;
-    let expect = expect![[
+          (list top nested hidden nosearch)))"##,
+            true,
+            expect![[
         r#"OK (("top.el" t) ("lib/nested.el" t) (".hidden/hidden.el" nil) ("vendor/skipped.el" nil))"#
-    ]];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_recursive_quit_removes_regular_and_stray_destinations_but_respects_skipped_trees() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "auto_compile_recursive_quit_removes_regular_and_stray_destinations_but_respects_skipped_trees",
+            r##"(let* ((root
                  (auto-compile-test-path
                   "recursive-quit/"))
                 (source
@@ -75,14 +77,13 @@ fn auto_compile_recursive_quit_removes_regular_and_stray_destinations_but_respec
           (file-exists-p dest)
           (file-exists-p stray)
           (file-exists-p hidden)
-          (file-exists-p nosearch)))"##;
-    let expect = expect!["OK (t nil nil t t)"];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_recursive_quit_option_controls_nonlibrary_source_destination_removal() {
-    let elisp_form = r##"(let* ((root
+          (file-exists-p nosearch)))"##,
+            true,
+            expect!["OK (t nil nil t t)"],
+        ),
+        (
+            "auto_compile_recursive_quit_option_controls_nonlibrary_source_destination_removal",
+            r##"(let* ((root
                  (auto-compile-test-path
                   "recursive-nonlib/"))
                 (source
@@ -106,14 +107,13 @@ fn auto_compile_recursive_quit_option_controls_nonlibrary_source_destination_rem
            (list
             (file-exists-p source)
             kept
-            (file-exists-p dest))))"##;
-    let expect = expect!["OK (t t nil)"];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_recursive_start_honors_recompile_option_and_source_freshness() {
-    let elisp_form = r##"(let* ((root
+            (file-exists-p dest))))"##,
+            true,
+            expect!["OK (t t nil)"],
+        ),
+        (
+            "auto_compile_recursive_start_honors_recompile_option_and_source_freshness",
+            r##"(let* ((root
                  (auto-compile-test-path
                   "recursive-freshness/"))
                 (fresh-source
@@ -152,14 +152,13 @@ fn auto_compile_recursive_start_honors_recompile_option_and_source_freshness() {
                        compiled)
                       t)))
            (toggle-auto-compile root 'start)
-           (nreverse compiled)))"##;
-    let expect = expect![[r#"OK (("stale.el" t))"#]];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_on_load_rebuilds_outdated_bytecode_and_executes_new_behavior() {
-    let elisp_form = r##"(let* ((directory
+           (nreverse compiled)))"##,
+            true,
+            expect![[r#"OK (("stale.el" t))"#]],
+        ),
+        (
+            "auto_compile_on_load_rebuilds_outdated_bytecode_and_executes_new_behavior",
+            r##"(let* ((directory
                  (auto-compile-test-path
                   "load-workflow/"))
                 (source
@@ -195,14 +194,13 @@ fn auto_compile_on_load_rebuilds_outdated_bytecode_and_executes_new_behavior() {
             (file-newer-than-file-p dest source)
             (auto-compile-reloadable-value)
             (featurep
-             'auto-compile-reloadable))))"##;
-    let expect = expect!["OK (t new t)"];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_require_advice_rebuilds_then_loads_new_bytecode_behavior() {
-    let elisp_form = r##"(let* ((directory
+             'auto-compile-reloadable))))"##,
+            true,
+            expect!["OK (t new t)"],
+        ),
+        (
+            "auto_compile_require_advice_rebuilds_then_loads_new_bytecode_behavior",
+            r##"(let* ((directory
                  (auto-compile-test-path
                   "require-workflow/"))
                 (source
@@ -238,14 +236,13 @@ fn auto_compile_require_advice_rebuilds_then_loads_new_bytecode_behavior() {
              (when (featurep
                     'auto-compile-required)
                (unload-feature
-                'auto-compile-required t)))))"##;
-    let expect = expect![[r#"OK (auto-compile-required 99 t "elc")"#]];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_load_advice_is_inert_when_mode_disabled_and_active_when_enabled() {
-    let elisp_form = r##"(let ((calls nil))
+                'auto-compile-required t)))))"##,
+            true,
+            expect![[r#"OK (auto-compile-required 99 t "elc")"#]],
+        ),
+        (
+            "auto_compile_load_advice_is_inert_when_mode_disabled_and_active_when_enabled",
+            r##"(let ((calls nil))
          (cl-letf (((symbol-function
                      'auto-compile-on-load)
                     (lambda (file &optional nosuffix)
@@ -267,14 +264,13 @@ fn auto_compile_load_advice_is_inert_when_mode_disabled_and_active_when_enabled(
              (auto-compile-on-load-mode -1)
              (list
               disabled
-              (nreverse calls)))))"##;
-    let expect = expect![[r#"OK (nil (("subr-x.el" t)))"#]];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_on_load_removes_earlier_stray_bytecode_that_would_shadow_real_source() {
-    let elisp_form = r##"(let* ((early
+              (nreverse calls)))))"##,
+            true,
+            expect![[r#"OK (nil (("subr-x.el" t)))"#]],
+        ),
+        (
+            "auto_compile_on_load_removes_earlier_stray_bytecode_that_would_shadow_real_source",
+            r##"(let* ((early
                  (auto-compile-test-path
                   "shadow/early/"))
                 (late
@@ -304,14 +300,13 @@ fn auto_compile_on_load_removes_earlier_stray_bytecode_that_would_shadow_real_so
           (file-exists-p stray)
           (file-name-nondirectory
            (auto-compile--locate-library
-            "shadowed" nil))))"##;
-    let expect = expect![[r#"OK (t nil "shadowed.el")"#]];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_on_load_compiler_error_deletes_destination_and_contains_failure() {
-    let elisp_form = r##"(let* ((source
+            "shadowed" nil))))"##,
+            true,
+            expect![[r#"OK (t nil "shadowed.el")"#]],
+        ),
+        (
+            "auto_compile_on_load_compiler_error_deletes_destination_and_contains_failure",
+            r##"(let* ((source
                  (auto-compile-test-write
                   "load-error/broken.el"
                   "(provide 'broken)\n"))
@@ -333,16 +328,15 @@ fn auto_compile_on_load_compiler_error_deletes_destination_and_contains_failure(
            (list
             (auto-compile-on-load "broken")
             (file-exists-p dest)
-            (current-message))))"##;
-    let expect = expect![[
+            (current-message))))"##,
+            true,
+            expect![[
         r#"OK ("Deleting [ORACLE-SANDBOX]/auto-compile-fixture/load-error/broken.elc...done" nil nil)"#
-    ]];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_loading_guard_prevents_recursive_reentry_for_same_library() {
-    let elisp_form = r##"(let ((calls 0)
+    ]],
+        ),
+        (
+            "auto_compile_loading_guard_prevents_recursive_reentry_for_same_library",
+            r##"(let ((calls 0)
                (auto-compile--loading
                 '("already-loading")))
          (cl-letf (((symbol-function
@@ -355,14 +349,13 @@ fn auto_compile_loading_guard_prevents_recursive_reentry_for_same_library() {
             (auto-compile-on-load
              "already-loading")
             calls
-            auto-compile--loading)))"##;
-    let expect = expect![[r#"OK (nil 0 ("already-loading"))"#]];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_git_inhibit_distinguishes_attached_and_detached_head() {
-    let elisp_form = r##"(let* ((repository
+            auto-compile--loading)))"##,
+            true,
+            expect![[r#"OK (nil 0 ("already-loading"))"#]],
+        ),
+        (
+            "auto_compile_git_inhibit_distinguishes_attached_and_detached_head",
+            r##"(let* ((repository
                  (auto-compile-test-path
                   "git-workflow/"))
                 (default-directory repository))
@@ -386,7 +379,9 @@ fn auto_compile_git_inhibit_distinguishes_attached_and_detached_head() {
             "checkout" "--quiet" "--detach" "HEAD")
            (list
             attached
-            (auto-compile-inhibit-compile-detached-git-head))))"##;
-    let expect = expect!["OK (nil t)"];
-    assert_auto_compile_parity(elisp_form, expect);
+            (auto-compile-inhibit-compile-detached-git-head))))"##,
+            true,
+            expect!["OK (nil t)"],
+        ),
+    ]);
 }

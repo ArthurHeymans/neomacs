@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_age_parity;
+use super::assert_age_batch;
 
 #[test]
-fn age_encrypts_and_decrypts_a_recipient_message_through_a_cli() {
-    let elisp_form = r##"(let* ((root
+fn workflows_public_surface_batch() {
+    assert_age_batch(&[
+        (
+            "age_encrypts_and_decrypts_a_recipient_message_through_a_cli",
+            r##"(let* ((root
                                  (expand-file-name
                                   "round-trip"
                                   (getenv
@@ -97,16 +100,13 @@ fn age_encrypts_and_decrypts_a_recipient_message_through_a_cli() {
                                (string-match-p
                                 "--decrypt.*-i "
                                 log)
-                               t))))"##;
-    let expect =
-        expect![[r#"OK ("age-encryption.org/v1\ndeploy-token-42\n" "deploy-token-42\n" t t)"#]];
-
-    assert_age_parity(elisp_form, expect);
-}
-
-#[test]
-fn age_opens_edits_and_saves_an_encrypted_org_file_transparently() {
-    let elisp_form = r##"(let* ((root
+                               t))))"##,
+            true,
+            expect![[r#"OK ("age-encryption.org/v1\ndeploy-token-42\n" "deploy-token-42\n" t t)"#]],
+        ),
+        (
+            "age_opens_edits_and_saves_an_encrypted_org_file_transparently",
+            r##"(let* ((root
                                  (expand-file-name
                                   "org-vault"
                                   (getenv
@@ -226,17 +226,15 @@ fn age_opens_edits_and_saves_an_encrypted_org_file_transparently() {
                                  (with-current-buffer buffer
                                    (set-buffer-modified-p nil))
                                  (kill-buffer buffer))
-                               (age-file-disable))))"##;
-    let expect = expect![[
+                               (age-file-disable))))"##,
+            true,
+            expect![[
         r#"OK ((org-mode "* Project Phoenix\n** TODO rotate deploy token\n** DONE publish runbook\n" t nil) "age-encryption.org/v1\n* Project Phoenix\n** TODO rotate deploy token\n** DONE publish runbook\n" "* Project Phoenix\n** TODO rotate deploy token\n** DONE publish runbook\n")"#
-    ]];
-
-    assert_age_parity(elisp_form, expect);
-}
-
-#[test]
-fn age_supplies_credentials_from_an_encrypted_authinfo_file() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "age_supplies_credentials_from_an_encrypted_authinfo_file",
+            r##"(let* ((root
                                  (expand-file-name
                                   "auth-source"
                                   (getenv
@@ -351,15 +349,13 @@ fn age_supplies_credentials_from_an_encrypted_authinfo_file() {
                                           (funcall secret)
                                         secret))))
                                (auth-source-forget-all-cached)
-                               (age-file-disable))))"##;
-    let expect = expect![[r#"OK ("api.example.test" "alice" "443" "swordfish")"#]];
-
-    assert_age_parity(elisp_form, expect);
-}
-
-#[test]
-fn age_reports_a_corrupt_cipher_as_a_user_visible_decryption_error() {
-    let elisp_form = r##"(let* ((root
+                               (age-file-disable))))"##,
+            true,
+            expect![[r#"OK ("api.example.test" "alice" "443" "swordfish")"#]],
+        ),
+        (
+            "age_reports_a_corrupt_cipher_as_a_user_visible_decryption_error",
+            r##"(let* ((root
                                  (expand-file-name
                                   "corrupt"
                                   (getenv
@@ -423,10 +419,11 @@ fn age_reports_a_corrupt_cipher_as_a_user_visible_decryption_error() {
                                 (list
                                  (car problem)
                                  (error-message-string
-                                  problem))))))"##;
-    let expect = expect![[
+                                  problem))))))"##,
+            true,
+            expect![[
         r#"OK (age-error "Age error: \"Age failed with error\", \"malformed payload\"")"#
-    ]];
-
-    assert_age_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_atl_long_lines_parity;
+use super::assert_atl_long_lines_batch;
 
 #[test]
-fn atl_long_lines_minor_mode_initial_metadata_lighter_keymap_and_hook_state_match() {
-    let elisp_form = r##"(with-temp-buffer
+fn modes_public_surface_batch() {
+    assert_atl_long_lines_batch(&[
+        (
+            "atl_long_lines_minor_mode_initial_metadata_lighter_keymap_and_hook_state_match",
+            r##"(with-temp-buffer
          (list
           atl-long-lines-mode
           (local-variable-p
@@ -22,16 +25,15 @@ fn atl_long_lines_minor_mode_initial_metadata_lighter_keymap_and_hook_state_matc
            #'atl-long-lines--start-timer
            post-command-hook)
           (local-variable-p
-           'post-command-hook)))"##;
-    let expect = expect![[
+           'post-command-hook)))"##,
+            true,
+            expect![[
         r#"OK (nil nil (atl-long-lines-mode " ATL-LL") nil t (atl-long-lines-mode--set-explicitly) 0 nil)"#
-    ]];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_enabling_mode_installs_one_buffer_local_post_command_callback_idempotently() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "atl_long_lines_enabling_mode_installs_one_buffer_local_post_command_callback_idempotently",
+            r##"(with-temp-buffer
          (let ((before
                 post-command-hook))
            (atl-long-lines-mode 1)
@@ -53,14 +55,13 @@ fn atl_long_lines_enabling_mode_installs_one_buffer_local_post_command_callback_
               (atl-long-lines-test-hook-count
                #'atl-long-lines--start-timer
                post-command-hook)
-              post-command-hook))))"##;
-    let expect = expect!["OK (nil (t t t 1) t 1 (atl-long-lines--start-timer t))"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_disabling_mode_removes_only_its_local_callback() {
-    let elisp_form = r##"(with-temp-buffer
+              post-command-hook))))"##,
+            true,
+            expect!["OK (nil (t t t 1) t 1 (atl-long-lines--start-timer t))"],
+        ),
+        (
+            "atl_long_lines_disabling_mode_removes_only_its_local_callback",
+            r##"(with-temp-buffer
          (let ((other
                 (lambda () :other)))
            (add-hook
@@ -86,14 +87,13 @@ fn atl_long_lines_disabling_mode_removes_only_its_local_callback() {
              (delq
               t
               (copy-sequence
-               post-command-hook))))))"##;
-    let expect = expect!["OK (nil t 0 t 1)"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_mode_hook_sequence_for_repeated_enable_and_disable_matches() {
-    let elisp_form = r##"(with-temp-buffer
+               post-command-hook))))))"##,
+            true,
+            expect!["OK (nil t 0 t 1)"],
+        ),
+        (
+            "atl_long_lines_mode_hook_sequence_for_repeated_enable_and_disable_matches",
+            r##"(with-temp-buffer
          (let ((transitions nil))
            (add-hook
             'atl-long-lines-mode-hook
@@ -112,14 +112,13 @@ fn atl_long_lines_mode_hook_sequence_for_repeated_enable_and_disable_matches() {
             atl-long-lines-mode
             (atl-long-lines-test-hook-count
              #'atl-long-lines--start-timer
-             post-command-hook))))"##;
-    let expect = expect!["OK ((t t nil nil) nil 0)"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_turn_on_helper_activates_only_the_current_buffer() {
-    let elisp_form = r##"(let ((first
+             post-command-hook))))"##,
+            true,
+            expect!["OK ((t t nil nil) nil 0)"],
+        ),
+        (
+            "atl_long_lines_turn_on_helper_activates_only_the_current_buffer",
+            r##"(let ((first
                 (generate-new-buffer
                  " *atl-first*"))
                (second
@@ -145,14 +144,13 @@ fn atl_long_lines_turn_on_helper_activates_only_the_current_buffer() {
                    #'atl-long-lines--start-timer
                    post-command-hook))))
            (kill-buffer first)
-           (kill-buffer second)))"##;
-    let expect = expect!["OK (t nil 1 0)"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_minor_mode_state_and_hooks_are_independent_across_buffers() {
-    let elisp_form = r##"(let ((first
+           (kill-buffer second)))"##,
+            true,
+            expect!["OK (t nil 1 0)"],
+        ),
+        (
+            "atl_long_lines_minor_mode_state_and_hooks_are_independent_across_buffers",
+            r##"(let ((first
                 (generate-new-buffer
                  " *atl-one*"))
                (second
@@ -181,14 +179,13 @@ fn atl_long_lines_minor_mode_state_and_hooks_are_independent_across_buffers() {
                    #'atl-long-lines--start-timer
                    post-command-hook))))
            (kill-buffer first)
-           (kill-buffer second)))"##;
-    let expect = expect!["OK (t nil 1 0)"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn global_atl_long_lines_mode_updates_existing_ordinary_buffers_and_cleans_up() {
-    let elisp_form = r##"(let ((first
+           (kill-buffer second)))"##,
+            true,
+            expect!["OK (t nil 1 0)"],
+        ),
+        (
+            "global_atl_long_lines_mode_updates_existing_ordinary_buffers_and_cleans_up",
+            r##"(let ((first
                 (generate-new-buffer
                  "atl-global-one"))
                (second
@@ -230,14 +227,13 @@ fn global_atl_long_lines_mode_updates_existing_ordinary_buffers_and_cleans_up() 
                      post-command-hook)))))
            (global-atl-long-lines-mode -1)
            (kill-buffer first)
-           (kill-buffer second)))"##;
-    let expect = expect!["OK ((t t t) nil nil nil 0 0)"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn global_atl_long_lines_mode_activates_buffers_created_after_global_enable() {
-    let elisp_form = r##"(let (created)
+           (kill-buffer second)))"##,
+            true,
+            expect!["OK ((t t t) nil nil nil 0 0)"],
+        ),
+        (
+            "global_atl_long_lines_mode_activates_buffers_created_after_global_enable",
+            r##"(let (created)
          (unwind-protect
              (progn
                (global-atl-long-lines-mode 1)
@@ -259,7 +255,9 @@ fn global_atl_long_lines_mode_activates_buffers_created_after_global_enable() {
            (global-atl-long-lines-mode -1)
            (when
                (buffer-live-p created)
-             (kill-buffer created))))"##;
-    let expect = expect!["OK (t t 1)"];
-    assert_atl_long_lines_parity(elisp_form, expect);
+             (kill-buffer created))))"##,
+            true,
+            expect!["OK (t t 1)"],
+        ),
+    ]);
 }

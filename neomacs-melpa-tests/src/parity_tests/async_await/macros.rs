@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_async_await_parity;
+use super::assert_async_await_batch;
 
 #[test]
-fn async_defun_awaits_resolved_values_in_source_order_and_returns_last_value() {
-    let elisp_form = r##"(let (events)
+fn macros_public_surface_batch() {
+    assert_async_await_batch(&[
+        (
+            "async_defun_awaits_resolved_values_in_source_order_and_returns_last_value",
+            r##"(let (events)
           (async-defun parity-ordered (input)
             (push (list :start input) events)
             (let ((first
@@ -23,15 +26,13 @@ fn async_defun_awaits_resolved_values_in_source_order_and_returns_last_value() {
                   (parity-ordered 4))))
             (list
              outcome
-             (nreverse events))))"##;
-    let expect =
-        expect!["OK ((fulfilled (:fullfilled (4 6 18))) ((:start 4) (:first 6) (:second 18)))"];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_defun_preserves_required_optional_and_rest_argument_semantics() {
-    let elisp_form = r##"(progn
+             (nreverse events))))"##,
+            true,
+            expect!["OK ((fulfilled (:fullfilled (4 6 18))) ((:start 4) (:first 6) (:second 18)))"],
+        ),
+        (
+            "async_defun_preserves_required_optional_and_rest_argument_semantics",
+            r##"(progn
           (async-defun parity-arguments
               (required &optional optional &rest rest)
             (await
@@ -47,16 +48,15 @@ fn async_defun_preserves_required_optional_and_rest_argument_semantics() {
             (parity-arguments :required))
            (async-await-test-settle
             (parity-arguments
-             :required :optional 1 2 3))))"##;
-    let expect = expect![
+             :required :optional 1 2 3))))"##,
+            true,
+            expect![
         "OK ((required &optional optional &rest rest) (fulfilled (:fullfilled (:required nil nil 0))) (fulfilled (:fullfilled (:required :optional (1 2 3) 3))))"
-    ];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_defun_preserves_docstring_declarations_and_interactive_contract() {
-    let elisp_form = r##"(progn
+    ],
+        ),
+        (
+            "async_defun_preserves_docstring_declarations_and_interactive_contract",
+            r##"(progn
           (async-defun parity-command (count)
             "Return COUNT asynchronously."
             (interactive "p")
@@ -68,16 +68,15 @@ fn async_defun_preserves_docstring_declarations_and_interactive_contract() {
            (help-function-arglist
             'parity-command t)
            (async-await-test-settle
-            (parity-command 6))))"##;
-    let expect = expect![[
+            (parity-command 6))))"##,
+            true,
+            expect![[
         r#"OK ("Return COUNT asynchronously." (interactive "p") t (count) (fulfilled (:fullfilled 12)))"#
-    ]];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn async_lambda_captures_lexical_state_across_multiple_awaits() {
-    let elisp_form = r##"(let* ((factor 7)
+    ]],
+        ),
+        (
+            "async_lambda_captures_lexical_state_across_multiple_awaits",
+            r##"(let* ((factor 7)
                  (offset 3)
                  (function
                   (async-lambda (value)
@@ -89,14 +88,13 @@ fn async_lambda_captures_lexical_state_across_multiple_awaits() {
                        (promise-resolve
                         (+ scaled offset)))))))
           (async-await-test-settle
-           (funcall function 5)))"##;
-    let expect = expect!["OK (fulfilled (:fullfilled 38))"];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn one_async_lambda_is_reusable_without_state_leaking_between_invocations() {
-    let elisp_form = r##"(let ((function
+           (funcall function 5)))"##,
+            true,
+            expect!["OK (fulfilled (:fullfilled 38))"],
+        ),
+        (
+            "one_async_lambda_is_reusable_without_state_leaking_between_invocations",
+            r##"(let ((function
                  (async-lambda (label values)
                    (let (seen)
                      (dolist (value values)
@@ -112,16 +110,15 @@ fn one_async_lambda_is_reusable_without_state_leaking_between_invocations() {
            (async-await-test-settle
             (funcall function
                      :right
-                     '(8 9 10)))))"##;
-    let expect = expect![
+                     '(8 9 10)))))"##,
+            true,
+            expect![
         "OK ((fulfilled (:fullfilled ((:left 1) (:left 2)))) (fulfilled (:fullfilled ((:right 8) (:right 9) (:right 10)))))"
-    ];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn nested_async_functions_flatten_each_others_promises_practically() {
-    let elisp_form = r##"(progn
+    ],
+        ),
+        (
+            "nested_async_functions_flatten_each_others_promises_practically",
+            r##"(progn
           (async-defun parity-inner (value)
             (await
              (async-await-test-delay
@@ -140,14 +137,13 @@ fn nested_async_functions_flatten_each_others_promises_practically() {
                (+ left-value
                   right-value))))
           (async-await-test-settle
-           (parity-outer 3 4)))"##;
-    let expect = expect!["OK (fulfilled (:fullfilled (9 16 25)))"];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn awaits_inside_loops_conditionals_and_let_star_keep_control_flow() {
-    let elisp_form = r##"(progn
+           (parity-outer 3 4)))"##,
+            true,
+            expect!["OK (fulfilled (:fullfilled (9 16 25)))"],
+        ),
+        (
+            "awaits_inside_loops_conditionals_and_let_star_keep_control_flow",
+            r##"(progn
           (async-defun parity-control-flow (values)
             (let ((index 0)
                   result)
@@ -171,16 +167,15 @@ fn awaits_inside_loops_conditionals_and_let_star_keep_control_flow() {
               (nreverse result)))
           (async-await-test-settle
            (parity-control-flow
-            '(2 4 7 9))))"##;
-    let expect = expect![
+            '(2 4 7 9))))"##,
+            true,
+            expect![
         "OK (fulfilled (:fullfilled ((0 2 2 :even) (1 4 5 :odd) (2 7 9 :odd) (3 9 12 :even))))"
-    ];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn await_accepts_non_promise_values_of_practical_elisp_types() {
-    let elisp_form = r##"(progn
+    ],
+        ),
+        (
+            "await_accepts_non_promise_values_of_practical_elisp_types",
+            r##"(progn
           (async-defun parity-plain-values ()
             (list
              (await nil)
@@ -196,15 +191,13 @@ fn await_accepts_non_promise_values_of_practical_elisp_types() {
                 (puthash "key" "value" table)
                 (gethash "key" table)))))
           (async-await-test-settle
-           (parity-plain-values)))"##;
-    let expect =
-        expect![[r#"OK (fulfilled (:fullfilled (nil 42 "text" :keyword (a b) [1 2 3] "value")))"#]];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn promise_returned_as_final_body_value_is_adopted_and_flattened() {
-    let elisp_form = r##"(progn
+           (parity-plain-values)))"##,
+            true,
+            expect![[r#"OK (fulfilled (:fullfilled (nil 42 "text" :keyword (a b) [1 2 3] "value")))"#]],
+        ),
+        (
+            "promise_returned_as_final_body_value_is_adopted_and_flattened",
+            r##"(progn
           (async-defun parity-final-promise (value)
             (await
              (promise-resolve
@@ -213,14 +206,13 @@ fn promise_returned_as_final_body_value_is_adopted_and_flattened() {
              0.01
              (list :final (* value 2))))
           (async-await-test-settle
-           (parity-final-promise 11)))"##;
-    let expect = expect!["OK (fulfilled (:fullfilled (:final 22)))"];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn macroexpansion_has_defun_and_lambda_shells_with_local_await_rewriting() {
-    let elisp_form = r##"(let* ((defun-expansion
+           (parity-final-promise 11)))"##,
+            true,
+            expect!["OK (fulfilled (:fullfilled (:final 22)))"],
+        ),
+        (
+            "macroexpansion_has_defun_and_lambda_shells_with_local_await_rewriting",
+            r##"(let* ((defun-expansion
                   (macroexpand-1
                    '(async-defun parity-expanded (x)
                       (await x))))
@@ -266,14 +258,13 @@ fn macroexpansion_has_defun_and_lambda_shells_with_local_await_rewriting() {
              (null
               (memq 'iter-yield
                     lambda-tree))))
-           (fboundp 'await)))"##;
-    let expect = expect!["OK ((defun parity-expanded (x) t t t) (lambda (x) t t t) nil)"];
-    assert_async_await_parity(elisp_form, expect);
-}
-
-#[test]
-fn invocation_runs_until_first_await_then_resumes_asynchronously() {
-    let elisp_form = r##"(let (events)
+           (fboundp 'await)))"##,
+            true,
+            expect!["OK ((defun parity-expanded (x) t t t) (lambda (x) t t t) nil)"],
+        ),
+        (
+            "invocation_runs_until_first_await_then_resumes_asynchronously",
+            r##"(let (events)
           (async-defun parity-lifecycle ()
             (push :before-await events)
             (let ((value
@@ -292,9 +283,11 @@ fn invocation_runs_until_first_await_then_resumes_asynchronously() {
               (list
                immediate
                outcome
-               (nreverse events)))))"##;
-    let expect = expect![
+               (nreverse events)))))"##,
+            true,
+            expect![
         "OK ((:before-await) (fulfilled (:fullfilled :complete)) (:before-await :resumed))"
-    ];
-    assert_async_await_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }

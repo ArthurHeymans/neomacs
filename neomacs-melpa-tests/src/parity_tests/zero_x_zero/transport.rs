@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_zero_x_zero_parity, assert_zero_x_zero_signal_parity};
+use super::{assert_zero_x_zero_batch};
 
 #[test]
-fn zero_x_zero_host_uri_supports_plain_and_basic_auth_servers() {
-    let elisp_form = r##"(let ((server
+fn transport_public_surface_batch() {
+    assert_zero_x_zero_batch(&[
+        (
+            "zero_x_zero_host_uri_supports_plain_and_basic_auth_servers",
+            r##"(let ((server
                       '(:scheme "https"
                         :host "upload.example")))
                (list
@@ -13,34 +16,30 @@ fn zero_x_zero_host_uri_supports_plain_and_basic_auth_servers() {
                  server
                  '(:user "alice" :pass "s3cret"))
                 (0x0--make-server-host-uri
-                 '(:scheme nil :host nil))))"##;
-    let expect = expect![[
+                 '(:scheme nil :host nil))))"##,
+            true,
+            expect![[
         r#"OK ("https://upload.example" "https://alice:s3cret@upload.example" "nil://nil")"#
-    ]];
-
-    assert_zero_x_zero_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_zero_curl_arguments_distinguish_file_and_buffer_uploads() {
-    let elisp_form = r##"(let ((server
+    ]],
+        ),
+        (
+            "zero_x_zero_curl_arguments_distinguish_file_and_buffer_uploads",
+            r##"(let ((server
                       '(:scheme "https"
                         :host "example.test")))
                (list
                 (0x0--make-0x0-curl-args
                  server "/path/a b.txt")
                 (0x0--make-0x0-curl-args
-                 server "upload.txt" t)))"##;
-    let expect = expect![[
+                 server "upload.txt" t)))"##,
+            true,
+            expect![[
         r#"OK (("-s" "-S" "-F" "file=@/path/a b.txt" "https://example.test") ("-s" "-S" "-F" "file=@-;filename=upload.txt" "https://example.test"))"#
-    ]];
-
-    assert_zero_x_zero_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_zero_curl_dispatches_files_and_regions_to_exact_process_apis() {
-    let elisp_form = r##"(let (calls buffers)
+    ]],
+        ),
+        (
+            "zero_x_zero_curl_dispatches_files_and_regions_to_exact_process_apis",
+            r##"(let (calls buffers)
                (cl-letf (((symbol-function 'call-process)
                           (lambda (&rest args)
                             (push
@@ -83,34 +82,30 @@ fn zero_x_zero_curl_dispatches_files_and_regions_to_exact_process_apis() {
                     (lambda (buffer)
                       (when (buffer-live-p buffer)
                         (kill-buffer buffer)))
-                    buffers))))"##;
-    let expect = expect![[
+                    buffers))))"##,
+            true,
+            expect![[
         r#"OK ((call-process "/custom/curl" nil :buffer nil "-s" "https://one") (call-process-region 2 5 "/custom/curl" nil :buffer nil "-s" "https://two"))"#
-    ]];
-
-    assert_zero_x_zero_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_zero_url_properties_distinguish_file_and_bounded_sources() {
-    let elisp_form = r##"(let ((server
+    ]],
+        ),
+        (
+            "zero_x_zero_url_properties_distinguish_file_and_bounded_sources",
+            r##"(let ((server
                       '(:scheme "http"
                         :host "local.test")))
                (list
                 (0x0--make-url-props
                  server "/path/to/file.txt")
                 (0x0--make-url-props
-                 server "/path/to/file.txt" t)))"##;
-    let expect = expect![[
+                 server "/path/to/file.txt" t)))"##,
+            true,
+            expect![[
         r#"OK ((:file-path "/path/to/file.txt" :query-str "name=\"file\"; filename=\"file.txt\"" :host-uri "http://local.test") (:file-path nil :query-str "name=\"file\"; filename=\"file.txt\"" :host-uri "http://local.test"))"#
-    ]];
-
-    assert_zero_x_zero_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_zero_url_builds_multipart_body_and_strips_response_headers() {
-    let elisp_form = r##"(let (request)
+    ]],
+        ),
+        (
+            "zero_x_zero_url_builds_multipart_body_and_strips_response_headers",
+            r##"(let (request)
                (cl-letf (((symbol-function 'random)
                           (let ((values '(10 11 12)))
                             (lambda (&rest _)
@@ -155,17 +150,15 @@ fn zero_x_zero_url_builds_multipart_body_and_strips_response_headers() {
                              (buffer-name)
                              (buffer-string))))
                        (when (buffer-live-p response)
-                         (kill-buffer response)))))))"##;
-    let expect = expect![[
+                         (kill-buffer response)))))))"##,
+            true,
+            expect![[
         r#"OK (("https://local.test" "POST" (("Content-Type" . "multipart/form-data; boundary=A-B-C")) "--A-B-C\15\nContent-Disposition: form-data; name=\"file\"; filename=\"x.txt\"\15\nContent-type: text/plain\15\n\15\n123\15\n--A-B-C--") ("*0x0 response*" "\nhttps://local.test/id\n"))"#
-    ]];
-
-    assert_zero_x_zero_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_zero_send_selects_each_curl_policy_and_url_fallback() {
-    let elisp_form = r##"(let ((server
+    ]],
+        ),
+        (
+            "zero_x_zero_send_selects_each_curl_policy_and_url_fallback",
+            r##"(let ((server
                       '(:scheme "https"
                         :host "example.test"
                         :curl-args-fun
@@ -209,17 +202,15 @@ fn zero_x_zero_send_selects_each_curl_policy_and_url_fallback() {
                     (let ((0x0-use-curl nil))
                       (0x0--send
                        server "four.txt" bounds))
-                    (nreverse events)))))"##;
-    let expect = expect![[
+                    (nreverse events)))))"##,
+            true,
+            expect![[
         r#"OK (curl-result curl-result curl-result url-result ((curl ("-s" "-S" "-F" "file=@-;filename=one.txt" "https://example.test") #1=(:start 2 :end 4)) (executable-find "curl") (curl ("-s" "-S" "-F" "file=@-;filename=two.txt" "https://example.test") #1#) (curl ("-s" "-S" "-F" "file=@three.txt" "https://example.test") nil) (url (:file-path nil :query-str "name=\"file\"; filename=\"four.txt\"" :host-uri "https://example.test") #1#)))"#
-    ]];
-
-    assert_zero_x_zero_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_zero_handle_response_yanks_uri_reports_timeout_and_kills_buffer() {
-    let elisp_form = r##"(let ((server
+    ]],
+        ),
+        (
+            "zero_x_zero_handle_response_yanks_uri_reports_timeout_and_kills_buffer",
+            r##"(let ((server
                       '(:scheme "https"
                         :host "example.test"
                         :min-age 30
@@ -252,17 +243,15 @@ fn zero_x_zero_handle_response_yanks_uri_reports_timeout_and_kills_buffer() {
                     result
                     (current-kill 0)
                     (nreverse messages)
-                    (buffer-live-p response)))))"##;
-    let expect = expect![[
+                    (buffer-live-p response)))))"##,
+            true,
+            expect![[
         r#"OK ("https://example.test/item.txt" "https://example.test/item.txt" ("yanked `https://example.test/item.txt' into kill ring. Should last ~71.875 days.") nil)"#
-    ]];
-
-    assert_zero_x_zero_parity(elisp_form, expect);
-}
-
-#[test]
-fn zero_x_zero_handle_response_failure_preserves_the_response_buffer() {
-    let elisp_form = r##"(let ((server
+    ]],
+        ),
+        (
+            "zero_x_zero_handle_response_failure_preserves_the_response_buffer",
+            r##"(let ((server
                       '(:scheme "https"
                         :host "example.test"))
                      (response
@@ -274,10 +263,11 @@ fn zero_x_zero_handle_response_failure_preserves_the_response_buffer() {
                    (0x0--handle-resp
                     server 1 response)
                  (when (buffer-live-p response)
-                   (kill-buffer response))))"##;
-    let expect = expect![[
+                   (kill-buffer response))))"##,
+            false,
+            expect![[
         r#"ERR (error "Failed to upload/parse. see *0x0 bad response* for more details")"#
-    ]];
-
-    assert_zero_x_zero_signal_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

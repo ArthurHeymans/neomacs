@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_read_only_parity;
+use super::assert_auto_read_only_batch;
 
 #[test]
-fn auto_read_only_find_file_hook_checks_selected_buffer_then_project_then_delegates() {
-    let elisp_form = r##"(let (events)
+fn hook_public_surface_batch() {
+    assert_auto_read_only_batch(&[
+        (
+            "auto_read_only_find_file_hook_checks_selected_buffer_then_project_then_delegates",
+            r##"(let (events)
          (cl-letf
              (((symbol-function 'window-buffer)
                (lambda (&optional _window)
@@ -21,14 +24,13 @@ fn auto_read_only_find_file_hook_checks_selected_buffer_then_project_then_delega
                  :protected)))
            (list
             (auto-read-only--hook-find-file)
-            (nreverse events))))"##;
-    let expect = expect!["OK (:protected (:window-buffer :project-current :auto-read-only))"];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_find_file_hook_short_circuits_before_project_for_nonselected_buffer() {
-    let elisp_form = r##"(let ((selected
+            (nreverse events))))"##,
+            true,
+            expect!["OK (:protected (:window-buffer :project-current :auto-read-only))"],
+        ),
+        (
+            "auto_read_only_find_file_hook_short_circuits_before_project_for_nonselected_buffer",
+            r##"(let ((selected
                 (generate-new-buffer
                  " *auto-read-only-selected*"))
                events)
@@ -51,14 +53,13 @@ fn auto_read_only_find_file_hook_short_circuits_before_project_for_nonselected_b
                 (auto-read-only--hook-find-file)
                 (nreverse events)))
            (when (buffer-live-p selected)
-             (kill-buffer selected))))"##;
-    let expect = expect!["OK (nil (:window-buffer))"];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_find_file_hook_suppresses_files_inside_real_shaped_project_value() {
-    let elisp_form = r##"(let (events)
+             (kill-buffer selected))))"##,
+            true,
+            expect!["OK (nil (:window-buffer))"],
+        ),
+        (
+            "auto_read_only_find_file_hook_suppresses_files_inside_real_shaped_project_value",
+            r##"(let (events)
          (cl-letf
              (((symbol-function 'window-buffer)
                (lambda (&optional _window)
@@ -76,14 +77,13 @@ fn auto_read_only_find_file_hook_suppresses_files_inside_real_shaped_project_val
                        events))))
            (list
             (auto-read-only--hook-find-file)
-            (nreverse events))))"##;
-    let expect = expect!["OK (nil ((:project nil)))"];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_find_file_hook_treats_nil_and_singleton_project_values_as_unowned() {
-    let elisp_form = r##"(mapcar
+            (nreverse events))))"##,
+            true,
+            expect!["OK (nil ((:project nil)))"],
+        ),
+        (
+            "auto_read_only_find_file_hook_treats_nil_and_singleton_project_values_as_unowned",
+            r##"(mapcar
          (lambda (project)
            (let (calls)
              (cl-letf
@@ -104,16 +104,15 @@ fn auto_read_only_find_file_hook_treats_nil_and_singleton_project_values_as_unow
          '(nil
            (transient)
            (vc . nil)
-           (vc . "/workspace/project/")))"##;
-    let expect = expect![[
+           (vc . "/workspace/project/")))"##,
+            true,
+            expect![[
         r#"OK ((nil :applied (nil)) (#1=(transient) :applied (#1#)) (#2=(vc) :applied (#2#)) ((vc . "/workspace/project/") nil nil))"#
-    ]];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_find_file_hook_propagates_errors_from_each_reached_stage() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "auto_read_only_find_file_hook_propagates_errors_from_each_reached_stage",
+            r##"(list
          (cl-letf
              (((symbol-function 'window-buffer)
                (lambda (&optional _window)
@@ -140,16 +139,15 @@ fn auto_read_only_find_file_hook_propagates_errors_from_each_reached_stage() {
                (lambda ()
                  (error "action failure"))))
            (auto-read-only-test-error-data
-            #'auto-read-only--hook-find-file)))"##;
-    let expect = expect![[
+            #'auto-read-only--hook-find-file)))"##,
+            true,
+            expect![[
         r#"OK ((:error error ("window failure")) (:error error ("project failure")) (:error error ("action failure")))"#
-    ]];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_find_file_hook_uses_current_default_directory_for_project_lookup() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_read_only_find_file_hook_uses_current_default_directory_for_project_lookup",
+            r##"(with-temp-buffer
          (setq default-directory
                "/workspace/project/subdir/")
          (let (arguments)
@@ -170,16 +168,15 @@ fn auto_read_only_find_file_hook_uses_current_default_directory_for_project_look
              (list
               (auto-read-only--hook-find-file)
               arguments
-              default-directory))))"##;
-    let expect = expect![[
+              default-directory))))"##,
+            true,
+            expect![[
         r#"OK (:applied (nil "/workspace/project/subdir/") "/workspace/project/subdir/")"#
-    ]];
-    assert_auto_read_only_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_read_only_find_file_hook_tracks_real_window_selection_across_two_buffers() {
-    let elisp_form = r##"(save-window-excursion
+    ]],
+        ),
+        (
+            "auto_read_only_find_file_hook_tracks_real_window_selection_across_two_buffers",
+            r##"(save-window-excursion
          (let ((first
                 (generate-new-buffer
                  " *auto-read-only-window-first*"))
@@ -222,7 +219,9 @@ fn auto_read_only_find_file_hook_tracks_real_window_selection_across_two_buffers
              (when (buffer-live-p first)
                (kill-buffer first))
              (when (buffer-live-p second)
-               (kill-buffer second)))))"##;
-    let expect = expect![[r#"OK (nil :applied (" *auto-read-only-window-second*"))"#]];
-    assert_auto_read_only_parity(elisp_form, expect);
+               (kill-buffer second)))))"##,
+            true,
+            expect![[r#"OK (nil :applied (" *auto-read-only-window-second*"))"#]],
+        ),
+    ]);
 }

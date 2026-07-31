@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_aidermacs_parity;
+use super::assert_aidermacs_batch;
 
 #[test]
-fn aidermacs_exact_pin_features_version_and_core_defaults_match() {
-    let elisp_form = r##"(list
+fn surface_public_surface_batch() {
+    assert_aidermacs_batch(&[
+        (
+            "aidermacs_exact_pin_features_version_and_core_defaults_match",
+            r##"(list
                       (mapcar #'featurep
                               '(aidermacs aidermacs-backends
                                 aidermacs-backend-comint
@@ -21,16 +24,15 @@ fn aidermacs_exact_pin_features_version_and_core_defaults_match() {
                        aidermacs-show-diff-after-change
                        aidermacs-output-limit)
                       (get 'aidermacs-use-architect-mode 'obsolete-variable)
-                      (help-function-arglist #'aidermacs-run t))"##;
-    let expect = expect![[
+                      (help-function-arglist #'aidermacs-run t))"##,
+            true,
+            expect![[
         r#"OK ((t t t t t t) (("aider-ce" "aider") comint "sonnet" nil nil nil nil t 10) nil nil)"#
-    ]];
-    assert_aidermacs_parity(elisp_form, expect);
-}
-
-#[test]
-fn aidermacs_customization_types_and_practical_defaults_match() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "aidermacs_customization_types_and_practical_defaults_match",
+            r##"(mapcar
                       (lambda (symbol)
                         (list symbol
                               (default-value symbol)
@@ -59,16 +61,15 @@ fn aidermacs_customization_types_and_practical_defaults_match() {
                         aidermacs-litellm-prices-cache-duration
                         aidermacs-comint-multiline-newline-key
                         aidermacs-vterm-multiline-newline-key
-                        aidermacs-vterm-use-theme-colors))"##;
-    let expect = expect![[
+                        aidermacs-vterm-use-theme-colors))"##,
+            true,
+            expect![[
         r#"OK ((aidermacs-program ("aider-ce" "aider") (choice string (repeat :tag "Program fallbacks" string)) nil) (aidermacs-backend comint (choice (const :tag "Comint" comint) (const :tag "VTerm" vterm)) nil) (aidermacs-enable-notifications t boolean nil) (aidermacs-notify-after-seconds 120 integer nil) (aidermacs-default-chat-mode nil (choice (const :tag "Code (default)" nil) (const :tag "Code" code) (const :tag "Ask" ask) (const :tag "Architect" architect) (const :tag "Help" help)) nil) (aidermacs-config-file nil (choice (const :tag "None" nil) (file :tag "Config file")) nil) (aidermacs-extra-args nil (repeat string) nil) (aidermacs-global-read-only-files nil (repeat string) nil) (aidermacs-project-read-only-files nil (repeat string) nil) (aidermacs-subtree-only nil boolean nil) (aidermacs-auto-commits nil boolean nil) (aidermacs-watch-files nil boolean nil) (aidermacs-auto-accept-architect nil boolean nil) (aidermacs-exit-kills-buffer nil boolean nil) (aidermacs-output-limit 10 integer nil) (aidermacs-show-diff-after-change t boolean nil) (aidermacs-default-model "sonnet" string nil) (aidermacs-architect-model nil (choice (const :tag "Use default model" nil) (string :tag "Specific model")) nil) (aidermacs-editor-model nil (choice (const :tag "Use default model" nil) (string :tag "Specific model")) nil) (aidermacs-weak-model nil (choice (const :tag "Use default model" nil) (string :tag "Specific model")) nil) (aidermacs-litellm-prices-cache-duration 86400 integer nil) (aidermacs-comint-multiline-newline-key "S-<return>" string nil) (aidermacs-vterm-multiline-newline-key "S-<return>" string nil) (aidermacs-vterm-use-theme-colors t boolean nil))"#
-    ]];
-    assert_aidermacs_parity(elisp_form, expect);
-}
-
-#[test]
-fn aidermacs_modes_keymaps_markers_and_prompt_contract_match() {
-    let elisp_form = r##"(let ((keys
+    ]],
+        ),
+        (
+            "aidermacs_modes_keymaps_markers_and_prompt_contract_match",
+            r##"(let ((keys
                            '("C-c C-n" "C-<return>" "C-c C-c"
                              "C-c C-z" "S-<return>" "RET" "<return>")))
                       (list
@@ -96,9 +97,11 @@ fn aidermacs_modes_keymaps_markers_and_prompt_contract_match() {
                                comint-prompt-regexp
                                comint-input-sender
                                (memq #'aidermacs--comint-output-filter
-                                     comint-output-filter-functions)))))"##;
-    let expect = expect![[
+                                     comint-output-filter-functions)))))"##,
+            true,
+            expect![[
         r#"OK ((("C-c C-n" aidermacs-send-line-or-region nil nil) ("C-<return>" aidermacs-send-line-or-region nil nil) ("C-c C-c" aidermacs-send-block-or-region aidermacs-comint-interrupt-subjob aidermacs-vterm-send-C-c) ("C-c C-z" aidermacs-switch-to-buffer nil nil) ("S-<return>" nil comint-accumulate aidermacs-vterm-insert-newline) ("RET" nil nil aidermacs-vterm-send-return) ("<return>" nil nil aidermacs-vterm-send-return)) "<<<<<<< SEARCH" "=======" ">>>>>>> REPLACE" "```" "^[^[:space:]<]*>[[:space:]]+$" "(Y)es/(N)o" (".aider.prompt.org" ".aider.chat.md" ".aider.chat.history.md" ".aider.input.history") (aidermacs-file-diff-selection-mode "Aider Diff Files" t) (aidermacs-comint-mode "^[^[:space:]<]*>[[:space:]]+$" aidermacs-input-sender nil))"#
-    ]];
-    assert_aidermacs_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

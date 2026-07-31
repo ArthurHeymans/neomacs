@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_chunk_parity;
+use super::assert_auto_complete_chunk_batch;
 
 #[test]
-fn auto_complete_chunk_ports_complete_upstream_mode_and_suffix_boundary_matrix() {
-    let elisp_form = r##"(mapcar
+fn boundaries_public_surface_batch() {
+    assert_auto_complete_chunk_batch(&[
+        (
+            "auto_complete_chunk_ports_complete_upstream_mode_and_suffix_boundary_matrix",
+            r##"(mapcar
                            (lambda (case)
                              (apply
                               #'auto-complete-chunk-test-beginning
@@ -23,18 +26,15 @@ fn auto_complete_chunk_ports_complete_upstream_mode_and_suffix_boundary_matrix()
                              (python-mode "a")
                              (fundamental-mode "a..")
                              (emacs-lisp-mode "a..")
-                             (python-mode "a..")))"##;
-    let expect = expect![[
+                             (python-mode "a..")))"##,
+            true,
+            expect![[
         r#"OK ((fundamental-mode "\na.b" 5 2 "a.b") (emacs-lisp-mode "\na.b" 5 2 "a.b") (python-mode "\na.b" 5 2 "a.b") (fundamental-mode "a.b" 4 1 "a.b") (emacs-lisp-mode "a.b" 4 1 "a.b") (python-mode "a.b" 4 1 "a.b") (fundamental-mode "a." 3 1 "a.") (emacs-lisp-mode "a." 3 1 "a.") (python-mode "a." 3 1 "a.") (fundamental-mode "a" 2 1 "a") (emacs-lisp-mode "a" 2 1 "a") (python-mode "a" 2 1 "a") (fundamental-mode "a.." 4 nil nil) (emacs-lisp-mode "a.." 4 1 "a..") (python-mode "a.." 4 nil nil))"#
-    ]];
-
-    assert_auto_complete_chunk_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_chunk_recognizes_bol_whitespace_and_parenthesis_boundaries_without_leaking_context()
- {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_chunk_recognizes_bol_whitespace_and_parenthesis_boundaries_without_leaking_context",
+            r##"(mapcar
                            (lambda (text)
                              (auto-complete-chunk-test-beginning
                               'emacs-lisp-mode
@@ -48,17 +48,15 @@ fn auto_complete_chunk_recognizes_bol_whitespace_and_parenthesis_boundaries_with
                              "{alpha.beta"
                              "prefix)alpha.beta"
                              "prefix]alpha.beta"
-                             "prefix}alpha.beta"))"##;
-    let expect = expect![[
+                             "prefix}alpha.beta"))"##,
+            true,
+            expect![[
         r#"OK ((emacs-lisp-mode "alpha.beta" 11 1 "alpha.beta") (emacs-lisp-mode "prefix alpha.beta" 18 8 "alpha.beta") (emacs-lisp-mode "prefix\11alpha.beta" 18 8 "alpha.beta") (emacs-lisp-mode "prefix\nalpha.beta" 18 8 "alpha.beta") (emacs-lisp-mode "(alpha.beta" 12 2 "alpha.beta") (emacs-lisp-mode "[alpha.beta" 12 2 "alpha.beta") (emacs-lisp-mode "{alpha.beta" 12 1 "{alpha.beta") (emacs-lisp-mode "prefix)alpha.beta" 18 8 "alpha.beta") (emacs-lisp-mode "prefix]alpha.beta" 18 8 "alpha.beta") (emacs-lisp-mode "prefix}alpha.beta" 18 1 "prefix}alpha.beta"))"#
-    ]];
-
-    assert_auto_complete_chunk_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_chunk_point_positions_expose_each_incremental_prefix_boundary() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_chunk_point_positions_expose_each_incremental_prefix_boundary",
+            r##"(with-temp-buffer
                            (emacs-lisp-mode)
                            (insert
                             "alpha.beta.gamma tail")
@@ -74,17 +72,15 @@ fn auto_complete_chunk_point_positions_expose_each_incremental_prefix_boundary()
                                       (buffer-substring-no-properties
                                        beginning
                                        (point))))))
-                            '(1 2 6 7 8 11 12 13 17 18 19 22)))"##;
-    let expect = expect![[
+                            '(1 2 6 7 8 11 12 13 17 18 19 22)))"##,
+            true,
+            expect![[
         r#"OK ((1 nil nil) (2 1 "a") (6 1 "alpha") (7 1 "alpha.") (8 1 "alpha.b") (11 1 "alpha.beta") (12 1 "alpha.beta.") (13 1 "alpha.beta.g") (17 1 "alpha.beta.gamma") (18 nil nil) (19 18 "t") (22 18 "tail"))"#
-    ]];
-
-    assert_auto_complete_chunk_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_chunk_punctuation_classification_changes_with_major_mode_syntax_tables() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_chunk_punctuation_classification_changes_with_major_mode_syntax_tables",
+            r##"(mapcar
                            (lambda (mode)
                              (mapcar
                               (lambda (text)
@@ -101,17 +97,15 @@ fn auto_complete_chunk_punctuation_classification_changes_with_major_mode_syntax
                                 "kebab-case.member")))
                            '(fundamental-mode
                              emacs-lisp-mode
-                             python-mode))"##;
-    let expect = expect![[
+                             python-mode))"##,
+            true,
+            expect![[
         r#"OK (((fundamental-mode "pkg.module/name" 16 1 "pkg.module/name") (fundamental-mode "pkg::member" 12 nil nil) (fundamental-mode "pkg->member" 12 1 "pkg->member") (fundamental-mode "pkg..member" 12 nil nil) (fundamental-mode "pkg...member" 13 nil nil) (fundamental-mode "pkg/member:" 12 1 "pkg/member:") (fundamental-mode "snake_case.member" 18 1 "snake_case.member") (fundamental-mode "kebab-case.member" 18 1 "kebab-case.member")) ((emacs-lisp-mode "pkg.module/name" 16 1 "pkg.module/name") (emacs-lisp-mode "pkg::member" 12 1 "pkg::member") (emacs-lisp-mode "pkg->member" 12 1 "pkg->member") (emacs-lisp-mode "pkg..member" 12 1 "pkg..member") (emacs-lisp-mode "pkg...member" 13 1 "pkg...member") (emacs-lisp-mode "pkg/member:" 12 1 "pkg/member:") (emacs-lisp-mode "snake_case.member" 18 1 "snake_case.member") (emacs-lisp-mode "kebab-case.member" 18 1 "kebab-case.member")) ((python-mode "pkg.module/name" 16 1 "pkg.module/name") (python-mode "pkg::member" 12 nil nil) (python-mode "pkg->member" 12 nil nil) (python-mode "pkg..member" 12 nil nil) (python-mode "pkg...member" 13 nil nil) (python-mode "pkg/member:" 12 1 "pkg/member:") (python-mode "snake_case.member" 18 1 "snake_case.member") (python-mode "kebab-case.member" 18 1 "kebab-case.member")))"#
-    ]];
-
-    assert_auto_complete_chunk_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_chunk_unicode_words_symbols_and_punctuation_follow_active_syntax() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_chunk_unicode_words_symbols_and_punctuation_follow_active_syntax",
+            r##"(mapcar
                            (lambda (mode)
                              (mapcar
                               (lambda (text)
@@ -126,17 +120,15 @@ fn auto_complete_chunk_unicode_words_symbols_and_punctuation_follow_active_synta
                                 "😀.emoji")))
                            '(fundamental-mode
                              emacs-lisp-mode
-                             python-mode))"##;
-    let expect = expect![[
+                             python-mode))"##,
+            true,
+            expect![[
         r#"OK (((fundamental-mode "λ.value" 8 1 "λ.value") (fundamental-mode "naïve.module" 13 1 "naïve.module") (fundamental-mode "東京.駅" 5 1 "東京.駅") (fundamental-mode "δ-value.part" 13 1 "δ-value.part") (fundamental-mode "emoji.😀" 8 1 "emoji.😀") (fundamental-mode "😀.emoji" 8 1 "😀.emoji")) ((emacs-lisp-mode "λ.value" 8 1 "λ.value") (emacs-lisp-mode "naïve.module" 13 1 "naïve.module") (emacs-lisp-mode "東京.駅" 5 1 "東京.駅") (emacs-lisp-mode "δ-value.part" 13 1 "δ-value.part") (emacs-lisp-mode "emoji.😀" 8 1 "emoji.😀") (emacs-lisp-mode "😀.emoji" 8 1 "😀.emoji")) ((python-mode "λ.value" 8 1 "λ.value") (python-mode "naïve.module" 13 1 "naïve.module") (python-mode "東京.駅" 5 1 "東京.駅") (python-mode "δ-value.part" 13 1 "δ-value.part") (python-mode "emoji.😀" 8 1 "emoji.😀") (python-mode "😀.emoji" 8 1 "😀.emoji")))"#
-    ]];
-
-    assert_auto_complete_chunk_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_chunk_custom_dot_syntax_reclassifies_double_separator_edge_case() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_chunk_custom_dot_syntax_reclassifies_double_separator_edge_case",
+            r##"(mapcar
                            (lambda (syntax)
                              (with-temp-buffer
                                (fundamental-mode)
@@ -153,15 +145,13 @@ fn auto_complete_chunk_custom_dot_syntax_reclassifies_double_separator_edge_case
                                        (buffer-substring-no-properties
                                         beginning
                                         (point)))))))
-                           '("." "_" "w" " "))"##;
-    let expect = expect![[r#"OK (("." nil nil) ("_" 1 "a..") ("w" 1 "a..") (" " nil nil))"#]];
-
-    assert_auto_complete_chunk_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_chunk_narrowed_buffer_start_behaves_as_real_bol_boundary() {
-    let elisp_form = r##"(with-temp-buffer
+                           '("." "_" "w" " "))"##,
+            true,
+            expect![[r#"OK (("." nil nil) ("_" 1 "a..") ("w" 1 "a..") (" " nil nil))"#]],
+        ),
+        (
+            "auto_complete_chunk_narrowed_buffer_start_behaves_as_real_bol_boundary",
+            r##"(with-temp-buffer
                            (emacs-lisp-mode)
                            (insert
                             "ignored-prefix alpha.beta ignored-suffix")
@@ -190,15 +180,13 @@ fn auto_complete_chunk_narrowed_buffer_start_behaves_as_real_bol_boundary() {
                                 beginning
                                 (buffer-substring-no-properties
                                  beginning
-                                 (point))))))"##;
-    let expect = expect![[r#"OK (16 26 16 "alpha.beta")"#]];
-
-    assert_auto_complete_chunk_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_chunk_invalid_or_nonmatching_regex_returns_nil_via_documented_error_shield() {
-    let elisp_form = r##"(mapcar
+                                 (point))))))"##,
+            true,
+            expect![[r#"OK (16 26 16 "alpha.beta")"#]],
+        ),
+        (
+            "auto_complete_chunk_invalid_or_nonmatching_regex_returns_nil_via_documented_error_shield",
+            r##"(mapcar
                            (lambda (regex)
                              (with-temp-buffer
                                (insert "alpha.beta")
@@ -211,17 +199,15 @@ fn auto_complete_chunk_invalid_or_nonmatching_regex_returns_nil_via_documented_e
                            '("["
                              "\\`never-matches\\'"
                              nil
-                             42))"##;
-    let expect = expect![[
+                             42))"##,
+            true,
+            expect![[
         r#"OK (("[" (:value nil)) ("\\`never-matches\\'" (:value nil)) (nil (:value nil)) (42 (:value nil)))"#
-    ]];
-
-    assert_auto_complete_chunk_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_chunk_success_and_failure_have_exact_match_data_side_effects() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_chunk_success_and_failure_have_exact_match_data_side_effects",
+            r##"(mapcar
                            (lambda (text)
                              (with-temp-buffer
                                (emacs-lisp-mode)
@@ -238,17 +224,15 @@ fn auto_complete_chunk_success_and_failure_have_exact_match_data_side_effects() 
                                   (match-data)))))
                            '("alpha.beta"
                              "alpha.."
-                             "two words"))"##;
-    let expect = expect![[
+                             "two words"))"##,
+            true,
+            expect![[
         r#"OK (("alpha.beta" (0 8 0 4) 1 ((:marker nil nil) (:marker nil nil) (:marker nil nil) (:marker nil nil))) ("alpha.." (0 8 0 4) 1 ((:marker nil nil) (:marker nil nil) (:marker nil nil) (:marker nil nil))) ("two words" (0 8 0 4) 5 ((:marker nil nil) (:marker nil nil) (:marker nil nil) (:marker nil nil))))"#
-    ]];
-
-    assert_auto_complete_chunk_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_chunk_quotes_operators_and_trailing_delimiters_define_exact_failure_edges() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_chunk_quotes_operators_and_trailing_delimiters_define_exact_failure_edges",
+            r##"(mapcar
                            (lambda (text)
                              (auto-complete-chunk-test-beginning
                               'emacs-lisp-mode
@@ -263,10 +247,11 @@ fn auto_complete_chunk_quotes_operators_and_trailing_delimiters_define_exact_fai
                              "alpha.beta]"
                              "alpha.beta}"
                              "alpha.beta,"
-                             "alpha.beta;"))"##;
-    let expect = expect![[
+                             "alpha.beta;"))"##,
+            true,
+            expect![[
         r#"OK ((emacs-lisp-mode "'alpha.beta" 12 nil nil) (emacs-lisp-mode "`alpha.beta" 12 nil nil) (emacs-lisp-mode ",alpha.beta" 12 nil nil) (emacs-lisp-mode "\"alpha.beta" 12 nil nil) (emacs-lisp-mode "x=alpha.beta" 13 1 "x=alpha.beta") (emacs-lisp-mode "x+alpha.beta" 13 1 "x+alpha.beta") (emacs-lisp-mode "alpha.beta)" 12 nil nil) (emacs-lisp-mode "alpha.beta]" 12 nil nil) (emacs-lisp-mode "alpha.beta}" 12 1 "alpha.beta}") (emacs-lisp-mode "alpha.beta," 12 nil nil) (emacs-lisp-mode "alpha.beta;" 12 nil nil))"#
-    ]];
-
-    assert_auto_complete_chunk_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

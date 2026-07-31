@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AIRLINE_THEMES_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod filesystem;
 mod lifecycle;
 mod modeline;
@@ -141,4 +143,30 @@ pub(crate) fn assert_airline_themes_parity(elisp_form: &str, expected: Expect) {
 
 pub(crate) fn assert_airline_themes_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_airline_themes_source_parity("airline-themes-autoloads.el", elisp_form, expected);
+}
+
+
+
+
+
+/// Multi-probe batch for `assert_airline_themes_autoload_parity` cases (2a).
+pub(crate) fn assert_airline_themes_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        airline_themes_oracle("airline-themes-autoloads.el"),
+        &name,
+        "airline_themes_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_airline_themes_parity` cases (2a).
+pub(crate) fn assert_airline_themes_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        airline_themes_oracle("airline-themes.el"),
+        &name,
+        "airline_themes_parity",
+        cases,
+    );
 }

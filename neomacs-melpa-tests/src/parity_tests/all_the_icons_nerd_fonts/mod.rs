@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ALL_THE_ICONS_NERD_FONTS_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod families;
 mod overrides;
 mod prefer;
@@ -51,5 +53,31 @@ pub(crate) fn assert_all_the_icons_nerd_fonts_autoload_parity(elisp_form: &str, 
         "all-the-icons-nerd-fonts-autoloads.el",
         elisp_form,
         expected,
+    );
+}
+
+
+
+
+
+/// Multi-probe batch for `assert_all_the_icons_nerd_fonts_autoload_parity` cases (2a).
+pub(crate) fn assert_all_the_icons_nerd_fonts_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        all_the_icons_nerd_fonts_oracle("all-the-icons-nerd-fonts-autoloads.el"),
+        &name,
+        "all_the_icons_nerd_fonts_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_all_the_icons_nerd_fonts_parity` cases (2a).
+pub(crate) fn assert_all_the_icons_nerd_fonts_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        all_the_icons_nerd_fonts_oracle("all-the-icons-nerd-fonts.el"),
+        &name,
+        "all_the_icons_nerd_fonts_parity",
+        cases,
     );
 }

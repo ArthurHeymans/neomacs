@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_alchemist_parity;
+use super::assert_alchemist_batch;
 
 #[test]
-fn alchemist_completion_builds_real_elixir_erlang_module_and_arity_candidates_with_metadata() {
-    let elisp_form = r##"(let (rows)
+fn completion_public_surface_batch() {
+    assert_alchemist_batch(&[
+        (
+            "alchemist_completion_builds_real_elixir_erlang_module_and_arity_candidates_with_metadata",
+            r##"(let (rows)
                       (dolist
                           (case
                            '(("Lis"
@@ -35,16 +38,15 @@ fn alchemist_completion_builds_real_elixir_erlang_module_and_arity_candidates_wi
                                  0 'meta candidate)))
                              candidates))
                            rows)))
-                      (nreverse rows))"##;
-    let expect = expect![[
+                      (nreverse rows))"##,
+            true,
+            expect![[
         r#"OK (("Lis" (("List" nil) ("List.delete" "/2") ("List.to_string" "/1"))) ("List." (("List.delete" "/2") ("List.delete_at" "/2"))) ("List.del" (("List.delete" "/2") ("List.delete_at" "/2"))) (":file" ((":filename" nil) (":file_server" nil))) (":file." ((":file.pid2name" "/1") (":file.set_cwd" "/1"))) ("En" (("Enum" "") ("Enumerable" ""))))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_help_completion_preserves_qualified_modules_overloads_and_prompt_decisions() {
-    let elisp_form = r##"(let (prompts)
+    ]],
+        ),
+        (
+            "alchemist_help_completion_preserves_qualified_modules_overloads_and_prompt_decisions",
+            r##"(let (prompts)
                       (cl-letf
                           (((symbol-function 'completing-read)
                             (lambda (prompt collection &rest arguments)
@@ -65,16 +67,15 @@ fn alchemist_help_completion_preserves_qualified_modules_overloads_and_prompt_de
                          (alchemist-complete--completing-prompt
                           "Missing"
                           '("Missing" "Missing.other/1"))
-                         (nreverse prompts))))"##;
-    let expect = expect![[
+                         (nreverse prompts))))"##,
+            true,
+            expect![[
         r#"OK (("List" "List.delete/2" "List.delete/3" "List.to_string/1") ("String.Chars.Atom" "String.Chars.Atom.to_string/1") "List.delete_at/2" "Only" "Missing.other/1" (("Elixir help: " ("List.delete/2" "List.delete_at/2") (nil nil "List.del")) ("Elixir help: " ("Missing" "Missing.other/1") (nil nil "Missing"))))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_completion_process_output_removes_markers_ansi_duplicates_and_falls_back_to_dabbrev() {
-    let elisp_form = r##"(let ((alchemist-company-last-completion "List.del")
+    ]],
+        ),
+        (
+            "alchemist_completion_process_output_removes_markers_ansi_duplicates_and_falls_back_to_dabbrev",
+            r##"(let ((alchemist-company-last-completion "List.del")
                           (alchemist-company-filter-output nil)
                           delivered)
                       (cl-letf
@@ -105,16 +106,15 @@ fn alchemist_completion_process_output_removes_markers_ansi_duplicates_and_falls
                                  (lambda (candidates)
                                    (setq delivered candidates)))
                            (alchemist-company-serve-candidates-to-callback nil))
-                         delivered)))"##;
-    let expect = expect![[
+                         delivered)))"##,
+            true,
+            expect![[
         r#"OK ((#("delete_at" 0 9 (meta "/2")) #("List.delete" 0 11 (meta "")) #("delete" 0 6 (meta "/2"))) nil ("List.delete\ndelete/2\n") #1=(#("List.delete" 0 11 (meta "/2")) #("List.delete_at" 0 14 (meta "/2"))) #1# nil #2=("local_helper" "local_other") #2#)"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_company_builds_context_from_real_nested_source_and_switches_iex_protocol() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "alchemist_company_builds_context_from_real_nested_source_and_switches_iex_protocol",
+            r##"(with-temp-buffer
                       (insert
                        "defmodule Shop.Checkout do\n"
                        "  alias Money, as: Cash\n"
@@ -135,16 +135,15 @@ fn alchemist_company_builds_context_from_real_nested_source_and_switches_iex_pro
                             "Cash.ne"))
                          (alchemist-company--annotation
                           (propertize
-                           "flatten" 'meta "/1")))))"##;
-    let expect = expect![[
+                           "flatten" 'meta "/1")))))"##,
+            true,
+            expect![[
         r#"OK ("{ \"Cash.ne\", [ context: Elixir, imports: [Enum,GenServer,Shop.Checkout], aliases: [{Cash, Money}] ] }" "{ \"Cash.ne\", [ context: Elixir, imports: [Enum,GenServer,Shop.Checkout], aliases: [{Cash, Money}] ] }" "{ \"Cash.ne\", [ context: [], imports: [], aliases: [] ] }" "/1")"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
-}
-
-#[test]
-fn alchemist_company_backend_runs_real_prefix_candidate_doc_and_location_boundaries() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "alchemist_company_backend_runs_real_prefix_candidate_doc_and_location_boundaries",
+            r##"(with-temp-buffer
                       (insert
                        "defmodule Shop do\n"
                        "  alias List, as: Items\n"
@@ -204,9 +203,11 @@ fn alchemist_company_backend_runs_real_prefix_candidate_doc_and_location_boundar
                                "delete" 'meta "/2"))
                              async-callback
                              alchemist-company-last-completion
-                             (nreverse events))))))"##;
-    let expect = expect![[
+                             (nreverse events))))))"##,
+            true,
+            expect![[
         r#"OK (t "Items.del" :async :async opened "/2" (requested documented) "Items.del" ((complete "{ \"Items.del\", [ context: Elixir, imports: [Shop], aliases: [{Items, List}] ] }" alchemist-company-filter) (doc "Items.delete") (location "Items.delete")))"#
-    ]];
-    assert_alchemist_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,12 +1,13 @@
 use expect_test::expect;
 
-use super::{
-    assert_all_the_icons_nerd_fonts_autoload_parity, assert_all_the_icons_nerd_fonts_parity,
-};
+use super::{assert_all_the_icons_nerd_fonts_autoload_batch, assert_all_the_icons_nerd_fonts_batch};
 
 #[test]
-fn package_loads_real_dependencies_and_immediately_renders_a_nerd_font_icon() {
-    let elisp_form = r##"(let ((icon
+fn registry_all_the_icons_nerd_fonts_batch() {
+    assert_all_the_icons_nerd_fonts_batch(&[
+        (
+            "package_loads_real_dependencies_and_immediately_renders_a_nerd_font_icon",
+            r##"(let ((icon
                       (all-the-icons-nerd-fa
                        "github"
                        :face 'font-lock-constant-face)))
@@ -19,17 +20,21 @@ fn package_loads_real_dependencies_and_immediately_renders_a_nerd_font_icon() {
                  (substring-no-properties icon))
                 (all-the-icons-icon-family icon)
                 (get-text-property 0 'face icon)
-                (get-text-property 0 'display icon)))"##;
-    let expect = expect![[
+                (get-text-property 0 'display icon)))"##,
+            true,
+            expect![[
         r#"OK (t t t "" (61595) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-constant-face) (raise -0.24))"#
-    ]];
-
-    assert_all_the_icons_nerd_fonts_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }
 
 #[test]
-fn autoloaded_commands_run_a_complete_prefer_render_and_restore_workflow() {
-    let elisp_form = r##"(progn
+fn registry_all_the_icons_nerd_fonts_autoload_batch() {
+    assert_all_the_icons_nerd_fonts_autoload_batch(&[
+        (
+            "autoloaded_commands_run_a_complete_prefer_render_and_restore_workflow",
+            r##"(progn
          (require 'all-the-icons)
          (let* ((history
                       (seq-find
@@ -97,10 +102,11 @@ fn autoloaded_commands_run_a_complete_prefer_render_and_restore_workflow() {
                   autoload-events))
              (when
                  (featurep 'all-the-icons-nerd-fonts)
-               (all-the-icons-nerd-fonts-unprefer)))))"##;
-    let expect = expect![[
+               (all-the-icons-nerd-fonts-unprefer)))))"##,
+            true,
+            expect![[
         r#"OK (t t ("" (61595) "FontAwesome" (:family "FontAwesome" :height 1.2 :inherit success)) ("" (60036) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit success)) ("" (61595) "FontAwesome" (:family "FontAwesome" :height 1.2 :inherit success)) t nil ((defun . all-the-icons-nerd-fonts-prefer) (defun . all-the-icons-nerd-fonts-unprefer) (provide . all-the-icons-nerd-fonts-autoloads)))"#
-    ]];
-
-    assert_all_the_icons_nerd_fonts_autoload_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_anki_editor_view_parity;
+use super::assert_anki_editor_view_batch;
 
 #[test]
-fn protocol_link_searches_real_card_directories_and_reveals_the_matching_subtree() {
-    let elisp_form = r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+fn workflows_public_surface_batch() {
+    assert_anki_editor_view_batch(&[
+        (
+            "protocol_link_searches_real_card_directories_and_reveals_the_matching_subtree",
+            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
          (root (expand-file-name "anki editor view" sandbox))
          (active (expand-file-name "active decks" root))
          (archive (expand-file-name "archive" root))
@@ -67,16 +70,15 @@ fn protocol_link_searches_real_card_directories_and_reveals_the_matching_subtree
           (set-buffer-modified-p nil))
         (kill-buffer opened-buffer))
       (when (file-directory-p root)
-        (delete-directory root t))))"##;
-    let expect = expect![[
+        (delete-directory root t))))"##,
+            true,
+            expect![[
         r#"OK (anki-editor-view--open-anki-note "active decks/networking.org" "TCP handshake" "4242" "** TCP handshake\n:PROPERTIES:\n:ANKI_NOTE_ID: 4242\n:END:\nSYN, SYN-ACK, ACK.\n*** Troubleshooting\nPacket captures should show all three messages.\n" nil (nil))"#
-    ]];
-    assert_anki_editor_view_parity(elisp_form, expect);
-}
-
-#[test]
-fn duplicate_note_ids_warn_and_open_the_first_search_result() {
-    let elisp_form = r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    ]],
+        ),
+        (
+            "duplicate_note_ids_warn_and_open_the_first_search_result",
+            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
          (root (expand-file-name "anki-editor-view-duplicates" sandbox))
          (current (expand-file-name "current.org" root))
          (archive (expand-file-name "archive.org" root))
@@ -129,16 +131,15 @@ fn duplicate_note_ids_warn_and_open_the_first_search_result() {
           (set-buffer-modified-p nil))
         (kill-buffer opened-buffer))
       (when (file-directory-p root)
-        (delete-directory root t))))"##;
-    let expect = expect![[
+        (delete-directory root t))))"##,
+            true,
+            expect![[
         r#"OK ("rg -n -e \":ANKI_NOTE_ID: 77\" --no-heading  \"[ORACLE-SANDBOX]/anki-editor-view-duplicates/archive.org\" \"[ORACLE-SANDBOX]/anki-editor-view-duplicates/current.org\"" "current.org" "Current explanation" "77" ("Warning: Found more than one (2) location of the Anki Note"))"#
-    ]];
-    assert_anki_editor_view_parity(elisp_form, expect);
-}
-
-#[test]
-fn a_missing_anki_note_reports_the_problem_without_replacing_the_users_buffer() {
-    let elisp_form = r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    ]],
+        ),
+        (
+            "a_missing_anki_note_reports_the_problem_without_replacing_the_users_buffer",
+            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
          (root (expand-file-name "anki-editor-view-missing" sandbox))
          messages)
     (when (file-directory-p root)
@@ -168,7 +169,9 @@ fn a_missing_anki_note_reports_the_problem_without_replacing_the_users_buffer() 
                (buffer-string)
                (nreverse messages)))))
       (when (file-directory-p root)
-        (delete-directory root t))))"##;
-    let expect = expect![[r#"OK (nil t "Cards due today: 20" ("Anki note not found."))"#]];
-    assert_anki_editor_view_parity(elisp_form, expect);
+        (delete-directory root t))))"##,
+            true,
+            expect![[r#"OK (nil t "Cards due today: 20" ("Anki note not found."))"#]],
+        ),
+    ]);
 }

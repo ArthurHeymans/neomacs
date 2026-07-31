@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_asx_parity;
+use super::assert_asx_batch;
 
 #[test]
-fn asx_get_buffer_reuses_the_configured_live_buffer_and_honors_name_changes() {
-    let elisp_form = r##"(let ((asx-buffer-name "*asx-parity-buffer-a*")
+fn rendering_public_surface_batch() {
+    assert_asx_batch(&[
+        (
+            "asx_get_buffer_reuses_the_configured_live_buffer_and_honors_name_changes",
+            r##"(let ((asx-buffer-name "*asx-parity-buffer-a*")
                first second third)
          (unwind-protect
              (progn
@@ -28,15 +31,13 @@ fn asx_get_buffer_reuses_the_configured_live_buffer_and_honors_name_changes() {
               (when
                   (buffer-live-p buffer)
                 (kill-buffer buffer)))
-            (list first third))))"##;
-    let expect = expect![[r#"OK (t nil "*asx-parity-buffer-a*" "*asx-parity-buffer-b*" t t)"#]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_prepare_buffer_switches_when_needed_clears_old_content_and_makes_it_writable() {
-    let elisp_form = r##"(let ((asx-buffer-name "*asx-parity-prepare*")
+            (list first third))))"##,
+            true,
+            expect![[r#"OK (t nil "*asx-parity-buffer-a*" "*asx-parity-buffer-b*" t t)"#]],
+        ),
+        (
+            "asx_prepare_buffer_switches_when_needed_clears_old_content_and_makes_it_writable",
+            r##"(let ((asx-buffer-name "*asx-parity-prepare*")
                target
                switches)
          (unwind-protect
@@ -67,31 +68,27 @@ fn asx_prepare_buffer_switches_when_needed_clears_old_content_and_makes_it_writa
                     (nreverse switches)))))
            (when
                (buffer-live-p target)
-             (kill-buffer target))))"##;
-    let expect = expect![[
+             (kill-buffer target))))"##,
+            true,
+            expect![[
         r##"OK ((:buffer nil) "#+STARTUP: overview indent\n" nil 28 ("*asx-parity-prepare*"))"##
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_finalize_buffer_trims_trailing_space_enables_read_only_org_display_and_rewinds() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "asx_finalize_buffer_trims_trailing_space_enables_read_only_org_display_and_rewinds",
+            r##"(with-temp-buffer
          (insert
           "#+TITLE: Example   \n\nBody with spaces   \n\n")
          (goto-char
           (point-max))
          (asx--finalize-buffer)
-         (asx-test-rendered-buffer-summary))"##;
-    let expect = expect![[r##"OK ("#+TITLE: Example\n\nBody with spaces\n" org-mode t t 1 t)"##]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_insert_tags_preserves_order_duplicates_and_the_empty_tags_label_contract() {
-    let elisp_form = r##"(list
+         (asx-test-rendered-buffer-summary))"##,
+            true,
+            expect![[r##"OK ("#+TITLE: Example\n\nBody with spaces\n" org-mode t t 1 t)"##]],
+        ),
+        (
+            "asx_insert_tags_preserves_order_duplicates_and_the_empty_tags_label_contract",
+            r##"(list
          (with-temp-buffer
            (asx--insert-tags
             '("emacs"
@@ -100,15 +97,13 @@ fn asx_insert_tags_preserves_order_duplicates_and_the_empty_tags_label_contract(
            (buffer-string))
          (with-temp-buffer
            (asx--insert-tags nil)
-           (buffer-string)))"##;
-    let expect = expect![[r#"OK ("\nTags: emacs common-lisp emacs " "\nTags: ")"#]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_insert_question_renders_metadata_body_links_code_and_tags_together() {
-    let elisp_form = r##"(let ((question
+           (buffer-string)))"##,
+            true,
+            expect![[r#"OK ("\nTags: emacs common-lisp emacs " "\nTags: ")"#]],
+        ),
+        (
+            "asx_insert_question_renders_metadata_body_links_code_and_tags_together",
+            r##"(let ((question
                 (list
                  :url
                  "https://stackoverflow.com/questions/101/first"
@@ -132,17 +127,15 @@ fn asx_insert_question_renders_metadata_body_links_code_and_tags_together() {
            (asx--insert-question question)
            (buffer-substring-no-properties
             (point-min)
-            (point-max))))"##;
-    let expect = expect![[
+            (point-max))))"##,
+            true,
+            expect![[
         r##"OK "#+TITLE: How to map data?\nhttps://stackoverflow.com/questions/101/first\n* Question (12)\n\nUse [[https://www.gnu.org/software/emacs/][Emacs]] carefully.\n\nTags: emacs elisp ""##
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_insert_answers_adds_visibility_only_to_the_first_answer_and_keeps_scores_order() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "asx_insert_answers_adds_visibility_only_to_the_first_answer_and_keeps_scores_order",
+            r##"(with-temp-buffer
          (asx--insert-answers
           '((:score "10"
              :body
@@ -171,17 +164,15 @@ fn asx_insert_answers_adds_visibility_only_to_the_first_answer_and_keeps_scores_
           (how-many
            "^\\* Answer"
            (point-min)
-           (point-max))))"##;
-    let expect = expect![[
+           (point-max))))"##,
+            true,
+            expect![[
         r#"OK ("\n* Answer (10)\n:PROPERTIES:\n:VISIBILITY: all\n:END:\n\nFirst answer\n\n* Answer (3)\n\nSecond answer\n\n* Answer (-2)\n\nThird answer with inline-code\n" 1 3)"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_insert_node_renders_a_realistic_nested_dom_as_plain_org_friendly_text() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "asx_insert_node_renders_a_realistic_nested_dom_as_plain_org_friendly_text",
+            r##"(with-temp-buffer
          (asx--insert-node
           '((p nil
                "Read "
@@ -201,16 +192,13 @@ fn asx_insert_node_renders_a_realistic_nested_dom_as_plain_org_friendly_text() {
              "(message \"done\")")))
          (buffer-substring-no-properties
           (point-min)
-          (point-max)))"##;
-    let expect =
-        expect![[r#"OK "Read [[https://example.com/docs][the docs]] before trying this.\n""#]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_insert_post_runs_the_full_buffer_lifecycle_and_limits_answer_count() {
-    let elisp_form = r##"(let ((asx-buffer-name "*asx-parity-full-post*")
+          (point-max)))"##,
+            true,
+            expect![[r#"OK "Read [[https://example.com/docs][the docs]] before trying this.\n""#]],
+        ),
+        (
+            "asx_insert_post_runs_the_full_buffer_lifecycle_and_limits_answer_count",
+            r##"(let ((asx-buffer-name "*asx-parity-full-post*")
                (asx-number-of-answers 1)
                target)
          (unwind-protect
@@ -261,17 +249,15 @@ fn asx_insert_post_runs_the_full_buffer_lifecycle_and_limits_answer_count() {
                          (point-max))))))))
            (when
                (buffer-live-p target)
-             (kill-buffer target))))"##;
-    let expect = expect![[
+             (kill-buffer target))))"##,
+            true,
+            expect![[
         r##"OK (("#+STARTUP: overview indent\n#+TITLE: A complete practical post\nhttps://stackoverflow.com/questions/101/first\n* Question (12)\n\nQuestion body with emphasis.\n\nTags: emacs elisp\n* Answer (7)\n:PROPERTIES:\n:VISIBILITY: all\n:END:\n\nFirst answer.\n" org-mode t t 1 t) 1 0)"##
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_full_normalized_code_block_workflow_reports_the_renderer_error_and_partial_buffer() {
-    let elisp_form = r##"(let ((asx-buffer-name "*asx-parity-code-block-post*")
+    ]],
+        ),
+        (
+            "asx_full_normalized_code_block_workflow_reports_the_renderer_error_and_partial_buffer",
+            r##"(let ((asx-buffer-name "*asx-parity-code-block-post*")
                target)
          (unwind-protect
              (progn
@@ -313,17 +299,15 @@ fn asx_full_normalized_code_block_workflow_reports_the_renderer_error_and_partia
                           (point))))))))
            (when
                (buffer-live-p target)
-             (kill-buffer target))))"##;
-    let expect = expect![[
+             (kill-buffer target))))"##,
+            true,
+            expect![[
         r##"OK ((:error wrong-type-argument (symbolp "(+ 1 2)")) "#+STARTUP: overview indent\n#+TITLE: How to  ?\nhttps://stackoverflow.com/questions/101/first\n* Question (12)\n\nQuestion body.\n\n#+BEGIN_EXAMPLE emacs\n" fundamental-mode nil nil 148)"##
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
-}
-
-#[test]
-fn asx_insert_post_dom_retries_unanswered_posts_or_inserts_them_by_configuration() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "asx_insert_post_dom_retries_unanswered_posts_or_inserts_them_by_configuration",
+            r##"(let (events)
          (cl-letf
              (((symbol-function
                 'asx--normalize-post)
@@ -365,10 +349,11 @@ fn asx_insert_post_dom_retries_unanswered_posts_or_inserts_them_by_configuration
                '("Answered"
                  "https://example.invalid/questions/2"
                  ((:score "1")))))
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:retried :inserted :inserted ((:retry "https://example.invalid/questions/1") (:insert (:url "https://example.invalid/questions/1" :title "No answer" :answers nil)) (:insert (:url "https://example.invalid/questions/2" :title "Answered" :answers ((:score "1"))))))"#
-    ]];
-
-    assert_asx_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

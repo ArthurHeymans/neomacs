@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_aidermacs_parity;
+use super::assert_aidermacs_batch;
 
 #[test]
-fn a_real_session_detects_each_edited_file_format_and_skips_the_one_that_does_not_exist() {
-    let elisp_form = r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+fn workflows_public_surface_batch() {
+    assert_aidermacs_batch(&[
+        (
+            "a_real_session_detects_each_edited_file_format_and_skips_the_one_that_does_not_exist",
+            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (root (file-name-as-directory (expand-file-name "repo" sandbox)))
        (program (expand-file-name "bin/aider-standin" sandbox))
        (log (expand-file-name "argv.log" sandbox))
@@ -84,18 +87,15 @@ fn a_real_session_detects_each_edited_file_format_and_skips_the_one_that_does_no
       (when-let ((buffer (get-buffer buffer-name)))
         (when-let ((process (get-buffer-process buffer)))
           (delete-process process))
-        (kill-buffer buffer)))))"##;
-
-    let expect = expect![[
+        (kill-buffer buffer)))))"##,
+            true,
+            expect![[
         r#"OK (:ready t :mode aidermacs-comint-mode :announced 4 :detected (("src/real.el" "src/block.el" "src/diff.el")) :argv "argv: [--model] [standin] [--no-pretty] [--no-fancy-input]\n")"#
-    ]];
-
-    assert_aidermacs_parity(elisp_form, expect);
-}
-
-#[test]
-fn answering_an_aider_question_sends_the_analysis_request_back_automatically() {
-    let elisp_form = r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    ]],
+        ),
+        (
+            "answering_an_aider_question_sends_the_analysis_request_back_automatically",
+            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (root (file-name-as-directory (expand-file-name "repo" sandbox)))
        (program (expand-file-name "bin/aider-standin" sandbox))
        (received (expand-file-name "received.log" sandbox))
@@ -162,24 +162,15 @@ fn answering_an_aider_question_sends_the_analysis_request_back_automatically() {
       (when-let ((buffer (get-buffer buffer-name)))
         (when-let ((process (get-buffer-process buffer)))
           (delete-process process))
-        (kill-buffer buffer)))))"##;
-
-    let expect = expect![[
+        (kill-buffer buffer)))))"##,
+            true,
+            expect![[
         r#"OK (:ready t :awaiting-after-question t :awaiting-cleared t :received "/run ls -la\ny\nPlease analyze the command output above.\n")"#
-    ]];
-
-    assert_aidermacs_parity(elisp_form, expect);
-}
-
-#[test]
-fn the_community_edition_only_flag_is_withheld_from_a_stock_aider() {
-    // Verified against the real tool: aider 0.86.1 has no `--linear-output`,
-    // and passing it makes the process print its usage message and exit 2
-    // (`aider: error: unrecognized arguments: --linear-output`).  The
-    // package therefore gates the flag on the resolved program path
-    // matching "aider-ce", and this pins both sides of that gate -- getting
-    // it wrong would stop every stock-aider session from starting at all.
-    let elisp_form = r##"(let ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
+    ]],
+        ),
+        (
+            "the_community_edition_only_flag_is_withheld_from_a_stock_aider",
+            r##"(let ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
   (cl-flet
       ((session-args (binary-name)
          (let* ((root (file-name-as-directory
@@ -223,11 +214,11 @@ fn the_community_edition_only_flag_is_withheld_from_a_stock_aider() {
                    (mapcar #'copy-sequence captured)
                    (and (member "--linear-output" captured) t))))))
     (list :stock (session-args "aider")
-          :community-edition (session-args "aider-ce"))))"##;
-
-    let expect = expect![[
+          :community-edition (session-args "aider-ce"))))"##,
+            true,
+            expect![[
         r#"OK (:stock ("aider" ("--model" "m" "--no-auto-accept-architect") nil) :community-edition ("aider-ce" ("--model" "m" "--no-auto-accept-architect" "--linear-output") t))"#
-    ]];
-
-    assert_aidermacs_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

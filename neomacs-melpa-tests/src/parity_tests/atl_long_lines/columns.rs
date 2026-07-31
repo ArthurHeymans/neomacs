@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_atl_long_lines_parity;
+use super::assert_atl_long_lines_batch;
 
 #[test]
-fn atl_long_lines_end_column_measures_ascii_empty_and_trailing_space_lines() {
-    let elisp_form = r##"(with-temp-buffer
+fn columns_public_surface_batch() {
+    assert_atl_long_lines_batch(&[
+        (
+            "atl_long_lines_end_column_measures_ascii_empty_and_trailing_space_lines",
+            r##"(with-temp-buffer
          (insert
           "\n"
           "alpha\n"
@@ -18,14 +21,13 @@ fn atl_long_lines_end_column_measures_ascii_empty_and_trailing_space_lines() {
               (atl-long-lines--end-line-column)
               columns)
              (forward-line 1))
-           (nreverse columns)))"##;
-    let expect = expect!["OK (0 5 14)"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_end_column_honors_buffer_local_tab_width_and_tab_stops() {
-    let elisp_form = r##"(mapcar
+           (nreverse columns)))"##,
+            true,
+            expect!["OK (0 5 14)"],
+        ),
+        (
+            "atl_long_lines_end_column_honors_buffer_local_tab_width_and_tab_stops",
+            r##"(mapcar
          (lambda (width)
            (with-temp-buffer
              (setq-local
@@ -38,14 +40,13 @@ fn atl_long_lines_end_column_honors_buffer_local_tab_width_and_tab_stops() {
              (list
               width
               (atl-long-lines--end-line-column))))
-         '(2 4 8 16))"##;
-    let expect = expect!["OK ((2 4) (4 8) (8 16) (16 32))"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_end_column_counts_wide_combining_and_multilingual_characters() {
-    let elisp_form = r##"(mapcar
+         '(2 4 8 16))"##,
+            true,
+            expect!["OK ((2 4) (4 8) (8 16) (16 32))"],
+        ),
+        (
+            "atl_long_lines_end_column_counts_wide_combining_and_multilingual_characters",
+            r##"(mapcar
          (lambda (text)
            (with-temp-buffer
              (insert text)
@@ -59,15 +60,13 @@ fn atl_long_lines_end_column_counts_wide_combining_and_multilingual_characters()
          '("雪λ"
            "é"
            "🙂x"
-           "日本語 abc"))"##;
-    let expect =
-        expect![[r#"OK (("雪λ" 2 3 3) ("é" 2 1 1) ("🙂x" 2 3 3) ("日本語 abc" 7 10 10))"#]];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_end_column_uses_the_current_logical_line_not_buffer_maximum() {
-    let elisp_form = r##"(with-temp-buffer
+           "日本語 abc"))"##,
+            true,
+            expect![[r#"OK (("雪λ" 2 3 3) ("é" 2 1 1) ("🙂x" 2 3 3) ("日本語 abc" 7 10 10))"#]],
+        ),
+        (
+            "atl_long_lines_end_column_uses_the_current_logical_line_not_buffer_maximum",
+            r##"(with-temp-buffer
          (insert
           "short\n"
           "this is the longest line in this fixture\n"
@@ -81,14 +80,13 @@ fn atl_long_lines_end_column_uses_the_current_logical_line_not_buffer_maximum() 
              line
              (line-number-at-pos)
              (atl-long-lines--end-line-column)))
-          '(2 0 1)))"##;
-    let expect = expect!["OK ((2 3 8) (0 1 5) (1 2 40))"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_end_column_respects_narrowing_at_a_partial_line_boundary() {
-    let elisp_form = r##"(with-temp-buffer
+          '(2 0 1)))"##,
+            true,
+            expect!["OK ((2 3 8) (0 1 5) (1 2 40))"],
+        ),
+        (
+            "atl_long_lines_end_column_respects_narrowing_at_a_partial_line_boundary",
+            r##"(with-temp-buffer
          (insert
           "prefix-ABCDEFGHIJ-suffix\nnext")
          (let ((start
@@ -105,14 +103,13 @@ fn atl_long_lines_end_column_respects_narrowing_at_a_partial_line_boundary() {
             (point-min)
             (point-max)
             (line-end-position)
-            (atl-long-lines--end-line-column))))"##;
-    let expect = expect![[r#"OK ("ABCDEFGHIJ" 8 18 18 10)"#]];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_end_column_preserves_point_mark_current_buffer_and_match_data() {
-    let elisp_form = r##"(let ((original
+            (atl-long-lines--end-line-column))))"##,
+            true,
+            expect![[r#"OK ("ABCDEFGHIJ" 8 18 18 10)"#]],
+        ),
+        (
+            "atl_long_lines_end_column_preserves_point_mark_current_buffer_and_match_data",
+            r##"(let ((original
                 (current-buffer)))
          (with-temp-buffer
            (insert
@@ -142,14 +139,13 @@ fn atl_long_lines_end_column_preserves_point_mark_current_buffer_and_match_data(
               (not
                (eq
                 original
-                (current-buffer)))))))"##;
-    let expect = expect!["OK (16 t t t t)"];
-    assert_atl_long_lines_parity(elisp_form, expect);
-}
-
-#[test]
-fn atl_long_lines_end_column_tracks_live_edits_to_the_same_line() {
-    let elisp_form = r##"(with-temp-buffer
+                (current-buffer)))))))"##,
+            true,
+            expect!["OK (16 t t t t)"],
+        ),
+        (
+            "atl_long_lines_end_column_tracks_live_edits_to_the_same_line",
+            r##"(with-temp-buffer
          (insert "abc")
          (goto-char 2)
          (let ((initial
@@ -166,7 +162,9 @@ fn atl_long_lines_end_column_tracks_live_edits_to_the_same_line() {
               initial
               extended
               (buffer-string)
-              (atl-long-lines--end-line-column)))))"##;
-    let expect = expect![[r#"OK (3 9 "a\11Z" 9)"#]];
-    assert_atl_long_lines_parity(elisp_form, expect);
+              (atl-long-lines--end-line-column)))))"##,
+            true,
+            expect![[r#"OK (3 9 "a\11Z" 9)"#]],
+        ),
+    ]);
 }

@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AGDA_EDITOR_TACTICS_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod indentation;
 mod mode;
 mod parsing;
@@ -45,5 +47,29 @@ pub(crate) fn assert_agda_editor_tactics_autoload_parity(elisp_form: &str, expec
         "agda-editor-tactics-autoloads.el",
         elisp_form,
         expected,
+    );
+}
+
+
+
+/// Multi-probe batch for `assert_agda_editor_tactics_autoload_parity` cases (2a).
+pub(crate) fn assert_agda_editor_tactics_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        agda_editor_tactics_oracle("agda-editor-tactics-autoloads.el"),
+        &name,
+        "agda_editor_tactics_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_agda_editor_tactics_parity` cases (2a).
+pub(crate) fn assert_agda_editor_tactics_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        agda_editor_tactics_oracle("agda-editor-tactics.el"),
+        &name,
+        "agda_editor_tactics_parity",
+        cases,
     );
 }

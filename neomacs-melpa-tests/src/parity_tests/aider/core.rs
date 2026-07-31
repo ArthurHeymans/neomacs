@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_aider_parity;
+use super::assert_aider_batch;
 
 #[test]
-fn aider_multiline_message_protocol_handles_plain_wrapped_and_partial_inputs() {
-    let elisp_form = r##"(mapcar
+fn core_public_surface_batch() {
+    assert_aider_batch(&[
+        (
+            "aider_multiline_message_protocol_handles_plain_wrapped_and_partial_inputs",
+            r##"(mapcar
          #'aider--process-message-if-multi-line
          '("single line"
            ""
@@ -12,16 +15,15 @@ fn aider_multiline_message_protocol_handles_plain_wrapped_and_partial_inputs() {
            "\nleading"
            "trailing\n"
            "{aider\nalready wrapped\naider}"
-           "prefix {aider\nalready marked"))"##;
-    let expect = expect![[
+           "prefix {aider\nalready marked"))"##,
+            true,
+            expect![[
         r#"OK ("single line" "" "{aider\nline one\nline two\naider}" "{aider\n\nleading\naider}" "{aider\ntrailing\n\naider}" "{aider\nalready wrapped\naider}" "prefix {aider\nalready marked")"#
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_cli_history_parser_preserves_order_multiline_blocks_and_unclosed_input() {
-    let elisp_form = r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    ]],
+        ),
+        (
+            "aider_cli_history_parser_preserves_order_multiline_blocks_and_unclosed_input",
+            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                 (history (expand-file-name "history/.aider.input.history" root)))
          (make-directory (file-name-directory history) t)
          (with-temp-file history
@@ -38,16 +40,15 @@ fn aider_cli_history_parser_preserves_order_multiline_blocks_and_unclosed_input(
           (aider--parse-aider-cli-history history)
           (aider--parse-aider-cli-history
            (expand-file-name "missing" root))
-          (file-attribute-size (file-attributes history))))"##;
-    let expect = expect![[
+          (file-attribute-size (file-attributes history))))"##,
+            true,
+            expect![[
         r#"OK (("first command" "{aider\nline one\nline two\naider}" "second command" "{aider\nunfinished") nil 112)"#
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_buffer_names_cover_repo_branch_file_and_invalid_contexts() {
-    let elisp_form = r##"(let (messages)
+    ]],
+        ),
+        (
+            "aider_buffer_names_cover_repo_branch_file_and_invalid_contexts",
+            r##"(let (messages)
          (cl-letf (((symbol-function 'message)
                     (lambda (format-string &rest args)
                       (push (apply #'format format-string args) messages))))
@@ -77,16 +78,15 @@ fn aider_buffer_names_cover_repo_branch_file_and_invalid_contexts() {
                 (condition-case error-data
                     (aider-buffer-name)
                   (error (list (car error-data) (cadr error-data))))))
-            (nreverse messages))))"##;
-    let expect = expect![[
+            (nreverse messages))))"##,
+            true,
+            expect![[
         r#"OK ("*aider:/repo/project/*" "*aider:/repo/project/:feature/a*" "*aider:/repo/project/*" "*aider:/work/loose/*" (error "Aider: Not in a git repository and current buffer is not associated with a file") ("Aider: Could not determine git branch for '/repo/project/', or branch name is empty. Using default git repo buffer name."))"#
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_prepare_args_adds_architect_guard_and_subtree_once() {
-    let elisp_form = r##"(let ((aider-args '("--model" "sonnet"))
+    ]],
+        ),
+        (
+            "aider_prepare_args_adds_architect_guard_and_subtree_once",
+            r##"(let ((aider-args '("--model" "sonnet"))
                messages)
          (cl-letf (((symbol-function 'aider--maybe-prompt-subtree-only-for-special-modes)
                     (lambda (args) (append args '("--from-mode"))))
@@ -99,16 +99,15 @@ fn aider_prepare_args_adds_architect_guard_and_subtree_once() {
             (let ((aider-args
                    '("--auto-accept-architect" "--subtree-only")))
               (aider--prepare-aider-args nil t))
-            (nreverse messages))))"##;
-    let expect = expect![[
+            (nreverse messages))))"##,
+            true,
+            expect![[
         r#"OK (("--model" "sonnet" "--no-auto-accept-architect" . #1=("--from-mode")) ("--model" "sonnet" "--no-auto-accept-architect" "--from-mode" "--subtree-only") ("--auto-accept-architect" "--subtree-only" . #1#) ("Adding --subtree-only argument as requested."))"#
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_command_completion_reports_exact_bounds_candidates_and_exclusivity() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "aider_command_completion_reports_exact_bounds_candidates_and_exclusivity",
+            r##"(mapcar
          (lambda (input)
            (with-temp-buffer
              (insert input)
@@ -120,16 +119,15 @@ fn aider_command_completion_reports_exact_bounds_candidates_and_exclusivity() {
                      (nth 2 completion)
                      (nth 3 completion)
                      (nth 4 completion))))))
-         '("/" "/co" "prefix /co" "  /rea" "/unknown" "/model suffix"))"##;
-    let expect = expect![[
+         '("/" "/co" "prefix /co" "  /rea" "/unknown" "/model suffix"))"##,
+            true,
+            expect![[
         r#"OK ((1 2 ("/add" "/architect" "/ask" "/code" "/reset" "/undo" "/lint" "/read-only" "/drop" "/copy" "/copy-context" "/clear" "/commit" "/exit" "/quit" "/paste" "/help" "/chat-mode" "/diff" "/editor" "/git" "/load" "/ls" "/map" "/map-refresh" "/think-tokens" "/tokens" "/model" "/editor-model" "/weak-model" "/models" "/reasoning-effort" "/multiline-mode" "/report" "/run" "/save" "/settings" "/test" "/voice" "/web") :exclusive no) (1 4 ("/code" "/copy" "/copy-context" "/commit") :exclusive no) nil nil nil (1 7 ("/model" "/models") :exclusive no))"#
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_comint_mode_installs_buffer_local_hooks_history_and_input_navigation() {
-    let elisp_form = r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    ]],
+        ),
+        (
+            "aider_comint_mode_installs_buffer_local_hooks_history_and_input_navigation",
+            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                 (history (expand-file-name ".aider.input.history" root))
                 (aider-enable-markdown-highlighting nil))
          (with-temp-file history
@@ -159,16 +157,15 @@ fn aider_comint_mode_installs_buffer_local_hooks_history_and_input_navigation() 
                      (list before first second third
                            (buffer-string)
                            aider--history-index
-                           aider--original-input))))))))"##;
-    let expect = expect![[
+                           aider--original-input))))))))"##,
+            true,
+            expect![[
         r#"OK ((aider-comint-mode aider-input-sender t (aider-core--command-completion comint-completion-at-point t) ("newest" "oldest")) "newest" "oldest" "newest" "draft" nil nil)"#
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_current_added_file_parser_reads_latest_prompt_block_and_read_only_suffixes() {
-    let elisp_form = r##"(let ((buffer (generate-new-buffer " *aider-added-files*")))
+    ]],
+        ),
+        (
+            "aider_current_added_file_parser_reads_latest_prompt_block_and_read_only_suffixes",
+            r##"(let ((buffer (generate-new-buffer " *aider-added-files*")))
          (unwind-protect
              (with-current-buffer buffer
                (insert "old.py\n\n> old prompt\n")
@@ -184,16 +181,15 @@ fn aider_current_added_file_parser_reads_latest_prompt_block_and_read_only_suffi
                     (erase-buffer)
                     (insert "no prompt here\n")
                     (aider-core--parse-added-file-list)))))
-           (kill-buffer buffer)))"##;
-    let expect = expect![[
+           (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK (("> old prompt" "src/main.py" "docs/guide.md" "tests/test_main.py") nil)"#
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_auto_trigger_hooks_route_only_exact_commands_at_end_of_line() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "aider_auto_trigger_hooks_route_only_exact_commands_at_end_of_line",
+            r##"(let (calls)
          (cl-letf (((symbol-function 'completion-at-point)
                     (lambda () (push 'completion calls)))
                    ((symbol-function 'aider-prompt-insert-add-file-path)
@@ -211,7 +207,9 @@ fn aider_auto_trigger_hooks_route_only_exact_commands_at_end_of_line() {
                  (aider-core--auto-trigger-command-completion)
                  (aider-core--auto-trigger-file-path-insertion)
                  (aider-core--auto-trigger-insert-prompt))))
-           (nreverse calls)))"##;
-    let expect = expect!["OK (completion add-path drop-path prompt completion)"];
-    assert_aider_parity(elisp_form, expect);
+           (nreverse calls)))"##,
+            true,
+            expect!["OK (completion add-path drop-path prompt completion)"],
+        ),
+    ]);
 }

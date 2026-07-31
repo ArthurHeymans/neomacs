@@ -1,12 +1,13 @@
 use expect_test::expect;
 
-use super::{
-    assert_auto_complete_c_headers_autoload_parity, assert_auto_complete_c_headers_parity,
-};
+use super::{assert_auto_complete_c_headers_autoload_batch, assert_auto_complete_c_headers_batch};
 
 #[test]
-fn auto_complete_c_headers_descriptor_dependency_and_features_are_exact() {
-    let elisp_form = r##"(let* ((descriptor
+fn registry_auto_complete_c_headers_batch() {
+    assert_auto_complete_c_headers_batch(&[
+        (
+            "auto_complete_c_headers_descriptor_dependency_and_features_are_exact",
+            r##"(let* ((descriptor
                 (cadr
                  (assq
                   'auto-complete-c-headers
@@ -39,16 +40,15 @@ fn auto_complete_c_headers_descriptor_dependency_and_features_are_exact() {
           (featurep
            'auto-complete-c-headers)
           (featurep 'auto-complete)
-          (featurep 'popup)))"##;
-    let expect = expect![[
+          (featurep 'popup)))"##,
+            true,
+            expect![[
         r#"OK (auto-complete-c-headers "20150912.323" "An auto-complete source for C/C++ header files." ((auto-complete (1 4))) ((:maintainers ("Masafumi Oyamada" . "stillpedant@gmail.com")) (:authors ("Masafumi Oyamada" . "stillpedant@gmail.com")) (:keywords "c") (:revdesc . "52fef720c6f2") (:commit . "52fef720c6f274ad8de52bef39a343421006c511") (:url . "https://github.com/mooz/auto-complete-c-headers")) (auto-complete "20251231.1622") (popup "20251231.1622") t t t)"#
-    ]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_installed_payload_bytes_are_pinned() {
-    let elisp_form = r##"(let* ((descriptor
+    ]],
+        ),
+        (
+            "auto_complete_c_headers_installed_payload_bytes_are_pinned",
+            r##"(let* ((descriptor
                 (cadr
                  (assq
                   'auto-complete-c-headers
@@ -74,16 +74,15 @@ fn auto_complete_c_headers_installed_payload_bytes_are_pinned() {
                  (secure-hash
                   'sha256
                   (current-buffer))))))
-          files))"##;
-    let expect = expect![[
+          files))"##,
+            true,
+            expect![[
         r#"OK (("auto-complete-c-headers-pkg.el" 470 "3eac4fd25dedf6f5135a6d4fa4cac7f42190d3836058afc46baa4d87319f29d6") ("auto-complete-c-headers.el" 6387 "c699f3f8fc8a8a7ceb16897a32bf7a922680d362ff288bf2253a07facda5a280"))"#
-    ]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_default_configuration_and_source_are_exact() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "auto_complete_c_headers_default_configuration_and_source_are_exact",
+            r##"(list
          achead:include-patterns
          achead:include-directories
          achead:get-include-directories-function
@@ -91,16 +90,15 @@ fn auto_complete_c_headers_default_configuration_and_source_are_exact() {
          achead:inspect-remote-directories
          achead:include-cache
          achead:ac-latest-results-alist
-         ac-source-c-headers)"##;
-    let expect = expect![[
+         ac-source-c-headers)"##,
+            true,
+            expect![[
         r##"OK (("\\.\\(h\\|hpp\\|hh\\)$" "/[a-zA-Z-_]+$") ("." "/usr/include" "/usr/local/include") achead:get-include-directories "#\\(?:include\\|import\\)[ \11]*[<\"][ \11]*\\([^\"<>' \11\15\n]+\\)" t nil nil ((init setq achead:include-cache nil) (candidates . achead:ac-candidates) (prefix . "#\\(?:include\\|import\\)[ \11]*[<\"][ \11]*\\([^\"<>' \11\15\n]+\\)") (document . achead:documentation-for-candidate) (requires . 0) (symbol . "I") (action . ac-start) (limit)))"##
-    ]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_public_function_contracts_and_origins_are_exact() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_c_headers_public_function_contracts_and_origins_are_exact",
+            r##"(mapcar
          (lambda (symbol)
            (list
             symbol
@@ -116,16 +114,15 @@ fn auto_complete_c_headers_public_function_contracts_and_origins_are_exact() {
            achead:path-should-be-displayed
            achead:get-include-file-candidates
            achead:documentation-for-candidate
-           achead:ac-candidates))"##;
-    let expect = expect![[
+           achead:ac-candidates))"##,
+            true,
+            expect![[
         r#"OK ((achead:get-include-directories t nil nil nil "auto-complete-c-headers.el") (achead:get-include-directories-from-options t nil nil (cmd-line-options) "auto-complete-c-headers.el") (achead:file-list-for-directory t nil nil (dir) "auto-complete-c-headers.el") (achead:path-should-be-displayed t nil nil (path) "auto-complete-c-headers.el") (achead:get-include-file-candidates t nil nil (&optional basedir) "auto-complete-c-headers.el") (achead:documentation-for-candidate t nil nil (candidate) "auto-complete-c-headers.el") (achead:ac-candidates t nil nil nil "auto-complete-c-headers.el"))"#
-    ]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_source_load_history_records_complete_contract() {
-    let elisp_form = r##"(let* ((file
+    ]],
+        ),
+        (
+            "auto_complete_c_headers_source_load_history_records_complete_contract",
+            r##"(let* ((file
                  (locate-library
                   "auto-complete-c-headers"))
                 (history
@@ -138,42 +135,15 @@ fn auto_complete_c_headers_source_load_history_records_complete_contract() {
              (memq
               (car event)
               '(defun defvar provide))))
-          history))"##;
-    let expect = expect![
+          history))"##,
+            true,
+            expect![
         "OK ((defun . achead:get-include-directories) (defun . achead:get-include-directories-from-options) (defun . achead:file-list-for-directory) (defun . achead:path-should-be-displayed) (defun . achead:get-include-file-candidates) (defun . achead:documentation-for-candidate) (defun . achead:ac-candidates) (defun . ac-complete-c-headers) (provide . auto-complete-c-headers))"
-    ];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_generated_autoload_provides_feature_without_source() {
-    let elisp_form = r##"(let* ((file
-                 (locate-library
-                  "auto-complete-c-headers-autoloads"))
-                (history
-                 (cdr
-                  (assoc file load-history))))
-         (list
-          (featurep
-           'auto-complete-c-headers-autoloads)
-          (featurep
-           'auto-complete-c-headers)
-          (seq-filter
-           (lambda (event)
-             (memq
-              (car-safe event)
-              '(defun defvar provide)))
-           history)
-          (boundp 'ac-source-c-headers)
-          (fboundp
-           'achead:ac-candidates)))"##;
-    let expect = expect!["OK (t nil ((provide . auto-complete-c-headers-autoloads)) nil nil)"];
-    assert_auto_complete_c_headers_autoload_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_reload_resets_defvars_but_redefines_functions_and_source() {
-    let elisp_form = r##"(let ((source
+    ],
+        ),
+        (
+            "auto_complete_c_headers_reload_resets_defvars_but_redefines_functions_and_source",
+            r##"(let ((source
                 (locate-library
                  "auto-complete-c-headers"))
                (achead:include-patterns
@@ -195,16 +165,15 @@ fn auto_complete_c_headers_reload_resets_defvars_but_redefines_functions_and_sou
           (eq before
               (symbol-function
                'achead:path-should-be-displayed))
-          ac-source-c-headers))"##;
-    let expect = expect![[
+          ac-source-c-headers))"##,
+            true,
+            expect![[
         r##"OK (("\\.inc\\'") ("/custom/include") nil nil ((init setq achead:include-cache nil) (candidates . achead:ac-candidates) (prefix . "#\\(?:include\\|import\\)[ \11]*[<\"][ \11]*\\([^\"<>' \11\15\n]+\\)") (document . achead:documentation-for-candidate) (requires . 0) (symbol . "I") (action . ac-start) (limit)))"##
-    ]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_c_headers_source_entries_resolve_to_callable_completion_behavior() {
-    let elisp_form = r##"(let ((init
+    ]],
+        ),
+        (
+            "auto_complete_c_headers_source_entries_resolve_to_callable_completion_behavior",
+            r##"(let ((init
                 (cdr
                  (assq 'init
                        ac-source-c-headers)))
@@ -236,9 +205,42 @@ fn auto_complete_c_headers_source_entries_resolve_to_callable_completion_behavio
                  ac-source-c-headers))
           (cdr
            (assq 'limit
-                 ac-source-c-headers))))"##;
-    let expect = expect![[
+                 ac-source-c-headers))))"##,
+            true,
+            expect![[
         r#"OK ((setq achead:include-cache nil) achead:ac-candidates achead:documentation-for-candidate ac-start t t t 0 "I" nil)"#
-    ]];
-    assert_auto_complete_c_headers_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
+}
+
+#[test]
+fn registry_auto_complete_c_headers_autoload_batch() {
+    assert_auto_complete_c_headers_autoload_batch(&[
+        (
+            "auto_complete_c_headers_generated_autoload_provides_feature_without_source",
+            r##"(let* ((file
+                 (locate-library
+                  "auto-complete-c-headers-autoloads"))
+                (history
+                 (cdr
+                  (assoc file load-history))))
+         (list
+          (featurep
+           'auto-complete-c-headers-autoloads)
+          (featurep
+           'auto-complete-c-headers)
+          (seq-filter
+           (lambda (event)
+             (memq
+              (car-safe event)
+              '(defun defvar provide)))
+           history)
+          (boundp 'ac-source-c-headers)
+          (fboundp
+           'achead:ac-candidates)))"##,
+            true,
+            expect!["OK (t nil ((provide . auto-complete-c-headers-autoloads)) nil nil)"],
+        ),
+    ]);
 }

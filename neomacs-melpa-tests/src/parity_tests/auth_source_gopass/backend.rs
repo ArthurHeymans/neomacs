@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auth_source_gopass_parity;
+use super::assert_auth_source_gopass_batch;
 
 #[test]
-fn auth_source_gopass_backend_has_exact_source_type_and_search_function() {
-    let elisp_form = r##"(list
+fn backend_public_surface_batch() {
+    assert_auth_source_gopass_batch(&[
+        (
+            "auth_source_gopass_backend_has_exact_source_type_and_search_function",
+            r##"(list
          (slot-value
           auth-source-gopass-backend
           'source)
@@ -17,14 +20,13 @@ fn auth_source_gopass_backend_has_exact_source_type_and_search_function() {
          (functionp
           (slot-value
            auth-source-gopass-backend
-           'search-function)))"##;
-    let expect = expect![[r#"OK ("." gopass auth-source-gopass-search t)"#]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_backend_parse_forwards_exact_gopass_entry() {
-    let elisp_form = r##"(let (calls)
+           'search-function)))"##,
+            true,
+            expect![[r#"OK ("." gopass auth-source-gopass-search t)"#]],
+        ),
+        (
+            "auth_source_gopass_backend_parse_forwards_exact_gopass_entry",
+            r##"(let (calls)
          (cl-letf
              (((symbol-function
                 'auth-source-backend-parse-parameters)
@@ -33,16 +35,15 @@ fn auth_source_gopass_backend_parse_forwards_exact_gopass_entry() {
                  (list :parsed arguments))))
            (list
             (auth-source-gopass-backend-parse 'gopass)
-            (nreverse calls))))"##;
-    let expect = expect![[
+            (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ((:parsed #1=(gopass #s(auth-source-backend gopass "." t t t nil ignore auth-source-gopass-search))) (#1#))"#
-    ]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_backend_parse_rejects_other_entry_shapes_without_delegating() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "auth_source_gopass_backend_parse_rejects_other_entry_shapes_without_delegating",
+            r##"(let (calls)
          (cl-letf
              (((symbol-function
                 'auth-source-backend-parse-parameters)
@@ -53,14 +54,13 @@ fn auth_source_gopass_backend_parse_rejects_other_entry_shapes_without_delegatin
             (mapcar
              #'auth-source-gopass-backend-parse
              '(nil "gopass" (:source gopass) pass default gopass-other))
-            calls)))"##;
-    let expect = expect!["OK ((nil nil nil nil nil nil) nil)"];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_registered_parser_builds_the_package_backend() {
-    let elisp_form = r##"(let ((backend
+            calls)))"##,
+            true,
+            expect!["OK ((nil nil nil nil nil nil) nil)"],
+        ),
+        (
+            "auth_source_gopass_registered_parser_builds_the_package_backend",
+            r##"(let ((backend
                 (auth-source-backend-parse
                  'gopass)))
          (list
@@ -69,14 +69,13 @@ fn auth_source_gopass_registered_parser_builds_the_package_backend() {
            'auth-source-backend)
           (slot-value backend 'source)
           (slot-value backend 'type)
-          (slot-value backend 'search-function)))"##;
-    let expect = expect![[r#"OK (t "." gopass auth-source-gopass-search)"#]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_backend_search_function_is_directly_usable() {
-    let elisp_form = r##"(let ((search
+          (slot-value backend 'search-function)))"##,
+            true,
+            expect![[r#"OK (t "." gopass auth-source-gopass-search)"#]],
+        ),
+        (
+            "auth_source_gopass_backend_search_function_is_directly_usable",
+            r##"(let ((search
                 (slot-value
                  auth-source-gopass-backend
                  'search-function))
@@ -97,9 +96,11 @@ fn auth_source_gopass_backend_search_function_is_directly_usable() {
              :host "imap.example"
              :user "alice"
              :port 993)
-            (nreverse calls))))"##;
-    let expect = expect![[
+            (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK (((:user "alice" :secret "backend-secret")) ("gopass show -o accounts/imap.example/alice"))"#
-    ]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

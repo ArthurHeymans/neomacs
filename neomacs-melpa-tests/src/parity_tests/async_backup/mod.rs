@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ASYNC_BACKUP_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod hooks;
 mod paths;
 mod predicates;
@@ -135,4 +137,30 @@ pub(crate) fn assert_async_backup_parity(elisp_form: &str, expected: Expect) {
 
 pub(crate) fn assert_async_backup_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_async_backup_source_parity("async-backup-autoloads.el", elisp_form, expected);
+}
+
+
+
+
+
+/// Multi-probe batch for `assert_async_backup_autoload_parity` cases (2a).
+pub(crate) fn assert_async_backup_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        async_backup_oracle("async-backup-autoloads.el"),
+        &name,
+        "async_backup_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_async_backup_parity` cases (2a).
+pub(crate) fn assert_async_backup_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        async_backup_oracle("async-backup.el"),
+        &name,
+        "async_backup_parity",
+        cases,
+    );
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_ai_code_parity;
+use super::assert_ai_code_batch;
 
 #[test]
-fn session_registration_updates_existing_work_and_merges_metadata() {
-    let elisp_form = r##"
+fn sessions_public_surface_batch() {
+    assert_ai_code_batch(&[
+        (
+            "session_registration_updates_existing_work_and_merges_metadata",
+            r##"
 (let ((ai-code-session--sessions (make-hash-table :test 'equal))
       (ai-code-session--next-id 0)
       (buffer (generate-new-buffer "*ai-code-session-lifecycle*")))
@@ -28,16 +31,15 @@ fn session_registration_updates_existing_work_and_merges_metadata() {
          (eq second (ai-code-session-get buffer))
          (eq second (ai-code-session-get "S1"))))
     (kill-buffer buffer)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (t "S1" "gemini" t "issue.org" (:branch "main" :dirty-count 3 :status "running") t t)"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn session_registry_orders_activity_and_unregistration_accepts_both_keys() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "session_registry_orders_activity_and_unregistration_accepts_both_keys",
+            r##"
 (let ((ai-code-session--sessions (make-hash-table :test 'equal))
       (ai-code-session--next-id 0)
       (clock 0)
@@ -62,14 +64,13 @@ fn session_registry_orders_activity_and_unregistration_accepts_both_keys() {
               (list ordered after-buffer (ai-code-session-list))))))
     (kill-buffer a)
     (kill-buffer b)))
-"##;
-    let expect = expect![[r#"OK ((("S2" "gemini" nil) ("S1" "codex" nil)) ("S1") nil)"#]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn session_refresh_prunes_dead_buffers_and_preserves_live_runtime_metadata() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect![[r#"OK ((("S2" "gemini" nil) ("S1" "codex" nil)) ("S1") nil)"#]],
+        ),
+        (
+            "session_refresh_prunes_dead_buffers_and_preserves_live_runtime_metadata",
+            r##"
 (let ((ai-code-session--sessions (make-hash-table :test 'equal))
       (ai-code-session--next-id 0)
       (live (generate-new-buffer "*ai-code-live*"))
@@ -95,15 +96,13 @@ fn session_refresh_prunes_dead_buffers_and_preserves_live_runtime_metadata() {
              (ai-code-session-get (ai-code-session-id dead-session))))))
     (when (buffer-live-p live) (kill-buffer live))
     (when (buffer-live-p dead) (kill-buffer dead))))
-"##;
-    let expect =
-        expect![[r#"OK (("S1") (:branch "feature/one" :dirty-count 4 :status "stopped") nil)"#]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn session_buffer_names_roundtrip_project_and_instance_identity() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect![[r#"OK (("S1") (:branch "feature/one" :dirty-count 4 :status "stopped") nil)"#]],
+        ),
+        (
+            "session_buffer_names_roundtrip_project_and_instance_identity",
+            r##"
 (let* ((root (make-temp-file "ai-code-session-name-" t))
        (prefix "codex")
        (plain (ai-code-backends-infra--session-buffer-name prefix root))
@@ -133,15 +132,13 @@ fn session_buffer_names_roundtrip_project_and_instance_identity() {
        (ai-code-backends-infra--session-instance-name named prefix)
        (cdr (ai-code-backends-infra--session-key root instance)))
     (delete-directory root t)))
-"##;
-    let expect =
-        expect![[r#"OK (t t t ((t nil) (t "feature-oauth")) "feature-oauth" "feature-oauth")"#]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn session_dashboard_entry_formats_repository_task_backend_and_dirty_state() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect![[r#"OK (t t t ((t nil) (t "feature-oauth")) "feature-oauth" "feature-oauth")"#]],
+        ),
+        (
+            "session_dashboard_entry_formats_repository_task_backend_and_dirty_state",
+            r##"
 (let* ((buffer (generate-new-buffer "*ai-code-dashboard-entry*"))
        (session
         (make-ai-code-session
@@ -155,9 +152,11 @@ fn session_dashboard_entry_formats_repository_task_backend_and_dirty_state() {
         (list (car entry) (append (cadr entry) nil)
               (ai-code-session-dashboard--backend-label 'open-interpreter)))
     (kill-buffer buffer)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("S42" ("S42" "payment-service" "fix-race.org" "Github Copilot Cli" "feature/atomic-ledger" "running" "7") "Open Interpreter")"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

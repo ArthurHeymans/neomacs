@@ -15,7 +15,7 @@
 
 use expect_test::expect;
 
-use super::assert_ascii_table_parity;
+use super::assert_ascii_table_batch;
 
 /// `M-x ascii-table` in a real frame, then narrow the real window and revert.
 ///
@@ -34,9 +34,13 @@ use super::assert_ascii_table_parity;
 /// The trailing flags state the claims as predicates rather than leaving them
 /// to be read out of the text: narrowing alone did not relayout, `g` did, and
 /// what `g` produced fits inside the window that was measured.
+
 #[test]
-fn narrowing_a_real_window_relayouts_the_table_only_once_g_reverts_it() {
-    let elisp_form = r##"(let* ((snapshot
+fn workflows_public_surface_batch() {
+    assert_ascii_table_batch(&[
+        (
+            "narrowing_a_real_window_relayouts_the_table_only_once_g_reverts_it",
+            r##"(let* ((snapshot
                    (lambda (tag)
                      (with-current-buffer "*ASCII*"
                        (let* ((text (buffer-string))
@@ -85,35 +89,15 @@ fn narrowing_a_real_window_relayouts_the_table_only_once_g_reverts_it() {
                        (nth 2 (nth 2 report)))))
                (when (get-buffer "*ASCII*")
                  (kill-buffer "*ASCII*"))
-               (delete-other-windows)))"##;
-    let expect = expect![[
+               (delete-other-windows)))"##,
+            true,
+            expect![[
         r#"OK (((:after-m-x (("*ASCII*" . 80) ("*scratch*" . 80)) 80 8 "00  NUL  10  DLE  20     30  0  40  @  50  P  60  `  70  p  " 60 1 t) (:after-narrowing (("*ASCII*" . 49) ("*scratch*" . 30) ("*scratch*" . 80)) 49 8 "00  NUL  10  DLE  20     30  0  40  @  50  P  60  `  70  p  " 60 1 t) (:after-g (("*ASCII*" . 49) ("*scratch*" . 30) ("*scratch*" . 80)) 49 6 "00  NUL  16  SYN  2C  ,  42  B  58  X  6E  n  " 46 1 t)) :narrowing-alone-changed-the-table nil :g-changed-the-table t :new-layout-fits-the-window t)"#
-    ]];
-
-    assert_ascii_table_parity(elisp_form, expect);
-}
-
-/// Two real windows on `*ASCII*`, reverted, then one of them deleted.
-///
-/// `ascii-table--width-limit` walks every window showing the buffer and keeps
-/// the smallest width, and with real windows of 49 and 30 columns that is a
-/// distinguishable choice: `split-window-horizontally` leaves the selection
-/// in the 49-column window, so an implementation reading the selected window
-/// would draw six pairs per row instead of three. Rather than assert that in
-/// prose, the workflow asks the package's own `ascii-table--table` and
-/// `ascii-table--column-widths` -- real functions, no substitute -- which
-/// layout each of the two live widths admits, and pins the rendered table
-/// against both answers.
-///
-/// Deleting the narrow window and reverting again widens the table back to
-/// eight pairs per row, so the minimum is recomputed rather than latched.
-///
-/// Real geometry cannot produce a window showing some other buffer next to
-/// these, so the wrong-buffer arm of the walk stays with the mocked test in
-/// `rendering.rs`; this pins the arms that real windows can reach.
-#[test]
-fn reverting_with_two_real_windows_fits_the_narrowest_one_not_the_selected_one() {
-    let elisp_form = r##"(let* ((widest-layout-fitting
+    ]],
+        ),
+        (
+            "reverting_with_two_real_windows_fits_the_narrowest_one_not_the_selected_one",
+            r##"(let* ((widest-layout-fitting
                    (lambda (limit)
                      (cl-loop
                       for pairs in '(8 7 6 5 4 3 2 1)
@@ -177,10 +161,11 @@ fn reverting_with_two_real_windows_fits_the_narrowest_one_not_the_selected_one()
                     (list (nth 4 two) (nth 4 one))))
                (when (get-buffer "*ASCII*")
                  (kill-buffer "*ASCII*"))
-               (delete-other-windows)))"##;
-    let expect = expect![[
+               (delete-other-windows)))"##,
+            true,
+            expect![[
         r#"OK (((:both-windows-show "*ASCII*" "*ASCII*") (:two-windows (("*ASCII*" . 49) ("*ASCII*" . 30) ("*scratch*" . 80)) 49 30 3 "00  NUL  2B  +  56  V  ") (:one-window (("*ASCII*" . 80) ("*scratch*" . 80)) 80 80 8 "00  NUL  10  DLE  20     30  0  40  @  50  P  60  `  70  p  ")) :rendered-layout 3 :narrowest-window-admits 3 :selected-window-alone-would-admit 6 :widened-again (3 8))"#
-    ]];
-
-    assert_ascii_table_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

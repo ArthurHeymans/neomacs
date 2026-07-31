@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_package_update_parity;
+use super::assert_auto_package_update_batch;
 
 #[test]
-fn auto_package_update_async_creates_named_thread_and_stores_it() {
-    let elisp_form = r##"(let
+fn updates_public_surface_batch() {
+    assert_auto_package_update_batch(&[
+        (
+            "auto_package_update_async_creates_named_thread_and_stores_it",
+            r##"(let
                              ((apu--update-thread nil)
                               captured-function
                               captured-name)
@@ -25,16 +28,13 @@ fn auto_package_update_async_creates_named_thread_and_stores_it() {
                                 apu--update-thread
                                 captured-name
                                 (functionp
-                                 captured-function)))))"##;
-    let expect =
-        expect![[r#"OK (fixture-thread fixture-thread "auto-package-update-now-async" t)"#]];
-
-    assert_auto_package_update_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_package_update_async_rejects_second_live_thread_without_force() {
-    let elisp_form = r##"(let
+                                 captured-function)))))"##,
+            true,
+            expect![[r#"OK (fixture-thread fixture-thread "auto-package-update-now-async" t)"#]],
+        ),
+        (
+            "auto_package_update_async_rejects_second_live_thread_without_force",
+            r##"(let
                              ((apu--update-thread
                                'existing-thread)
                               calls)
@@ -63,17 +63,15 @@ fn auto_package_update_async_rejects_second_live_thread_without_force() {
                               (auto-package-update-test-error
                                #'auto-package-update-now-async)
                               apu--update-thread
-                              (nreverse calls))))"##;
-    let expect = expect![[
+                              (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ((:signal error ("auto-package-update thread is still running.")) existing-thread ((:live existing-thread)))"#
-    ]];
-
-    assert_auto_package_update_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_package_update_async_force_signals_live_thread_clears_and_replaces_it() {
-    let elisp_form = r##"(let
+    ]],
+        ),
+        (
+            "auto_package_update_async_force_signals_live_thread_clears_and_replaces_it",
+            r##"(let
                              ((apu--update-thread
                                'existing-thread)
                               calls)
@@ -113,10 +111,11 @@ fn auto_package_update_async_force_signals_live_thread_clears_and_replaces_it() 
                               (auto-package-update-now-async
                                t)
                               apu--update-thread
-                              (nreverse calls))))"##;
-    let expect = expect![[
+                              (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK (replacement-thread replacement-thread ((:live existing-thread) (:signal existing-thread nil nil) (:make t "auto-package-update-now-async")))"#
-    ]];
-
-    assert_auto_package_update_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_audacious_parity;
+use super::assert_audacious_batch;
 
 #[test]
-fn audacious_integer_predicate_accepts_only_complete_signed_decimal_strings() {
-    let elisp_form = r##"(list
+fn songs_public_surface_batch() {
+    assert_audacious_batch(&[
+        (
+            "audacious_integer_predicate_accepts_only_complete_signed_decimal_strings",
+            r##"(list
          (mapcar
           (lambda (value)
             (list
@@ -32,16 +35,15 @@ fn audacious_integer_predicate_accepts_only_complete_signed_decimal_strings() {
                 value))))
           '(nil
             12
-            integer)))"##;
-    let expect = expect![[
+            integer)))"##,
+            true,
+            expect![[
         r#"OK ((("0" t) ("+0" t) ("-0" t) ("007" t) ("+42" t) ("-19" t) ("" nil) ("+" nil) (" 2" nil) ("2 " nil) ("1.0" nil) ("1e2" nil) ("１２" nil)) ((:error wrong-type-argument (stringp nil)) (:error wrong-type-argument (stringp 12)) (:error wrong-type-argument (stringp integer))))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_current_song_info_queries_every_field_trims_and_updates_global_state() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "audacious_current_song_info_queries_every_field_trims_and_updates_global_state",
+            r##"(let (events)
          (audacious-test-reset-state)
          (cl-letf
              (((symbol-function
@@ -76,16 +78,15 @@ fn audacious_current_song_info_queries_every_field_trims_and_updates_global_stat
              audacious-song-title
              audacious-song-position
              audacious-song-length)
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK ("[7/12]: Artist – Song [01:23 / 03:45]" ("7" "12" "Artist – Song" "01:23" "03:45") ("audtool --playlist-position" "audtool --playlist-length" "audtool --current-song" "audtool --current-song-output-length" "audtool --current-song-length" "[7/12]: Artist – Song [01:23 / 03:45]"))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_song_goto_filters_display_builds_prompt_and_accepts_signed_index() {
-    let elisp_form = r##"(let ((audacious-msg
+    ]],
+        ),
+        (
+            "audacious_song_goto_filters_display_builds_prompt_and_accepts_signed_index",
+            r##"(let ((audacious-msg
                 "stale\n")
                prompts
                events)
@@ -122,16 +123,15 @@ fn audacious_song_goto_filters_display_builds_prompt_and_accepts_signed_index() 
             audacious-song-position
             audacious-msg
             (nreverse prompts)
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:refreshed "+03" "stale\n 1 | First\n-2 | Second\n" ("stale\n 1 | First\n-2 | Second\nSong No.: ") ((:shell "audtool --playlist-display") (:call "/fixture/bin/audtool" nil nil nil "--playlist-jump" "+03") (:sleep 0 20) :refresh))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_song_goto_invalid_input_reports_exact_value_without_playback_side_effects() {
-    let elisp_form = r##"(let ((audacious-msg "")
+    ]],
+        ),
+        (
+            "audacious_song_goto_invalid_input_reports_exact_value_without_playback_side_effects",
+            r##"(let ((audacious-msg "")
                events)
          (cl-letf
              (((symbol-function
@@ -173,16 +173,15 @@ fn audacious_song_goto_invalid_input_reports_exact_value_without_playback_side_e
             (audacious-song-goto)
             audacious-song-position
             audacious-msg
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK ("\"3.5\" is not number." "3.5" " 1 | One\n" ((:prompt " 1 | One\nSong No.: ") (:message "\"3.5\" is not number.")))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_song_goto_repeated_prompt_accumulates_prior_playlist_rows_by_design() {
-    let elisp_form = r##"(let ((audacious-msg "")
+    ]],
+        ),
+        (
+            "audacious_song_goto_repeated_prompt_accumulates_prior_playlist_rows_by_design",
+            r##"(let ((audacious-msg "")
                (round 0)
                prompts
                messages)
@@ -213,16 +212,15 @@ fn audacious_song_goto_repeated_prompt_accumulates_prior_playlist_rows_by_design
            (list
             audacious-msg
             (nreverse prompts)
-            (nreverse messages))))"##;
-    let expect = expect![[
+            (nreverse messages))))"##,
+            true,
+            expect![[
         r#"OK ("1 | Song 1\n2 | Song 2\n" ("1 | Song 1\nSong No.: " "1 | Song 1\n2 | Song 2\nSong No.: ") ("\"bad\" is not number." "\"bad\" is not number."))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_helm_song_selection_builds_exact_candidates_jumps_and_refreshes() {
-    let elisp_form = r##"(let (events source)
+    ]],
+        ),
+        (
+            "audacious_helm_song_selection_builds_exact_candidates_jumps_and_refreshes",
+            r##"(let (events source)
          (cl-letf
              (((symbol-function
                 'shell-command-to-string)
@@ -263,16 +261,15 @@ fn audacious_helm_song_selection_builds_exact_candidates_jumps_and_refreshes() {
             (audacious-song-goto-helm)
             source
             audacious-song-position
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:refreshed #1=("audacious" :candidates (" 1 | First" " 2 | Second") :fuzzy-match nil) "2" ((:shell "audtool --playlist-display") (:helm :sources #1# :buffer "*helm audacious*") (:call "/fixture/bin/audtool" nil nil nil "--playlist-jump" "2") (:sleep 0 20) :refresh))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_helm_cancel_returns_nil_without_mutating_song_or_starting_playback() {
-    let elisp_form = r##"(let ((audacious-song-position
+    ]],
+        ),
+        (
+            "audacious_helm_cancel_returns_nil_without_mutating_song_or_starting_playback",
+            r##"(let ((audacious-song-position
                 :preserved)
                events)
          (cl-letf
@@ -296,9 +293,11 @@ fn audacious_helm_cancel_returns_nil_without_mutating_song_or_starting_playback(
            (list
             (audacious-song-goto-helm)
             audacious-song-position
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (nil :preserved ((:sources (:source "audacious" :candidates (" 1 | First") :fuzzy-match nil) :buffer "*helm audacious*")))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

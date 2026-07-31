@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{APEL_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const APEL_TEST_TIMEOUT: Duration = Duration::from_secs(180);
@@ -51,4 +53,15 @@ pub(crate) fn assert_apel_source_parity(source_file: &str, elisp_form: &str, exp
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("APEL parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+/// Multi-probe batch loading one source file (2a).
+pub(crate) fn assert_apel_source_batch(source_file: &str, cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        apel_oracle(source_file),
+        &name,
+        "apel_source_batch",
+        cases,
+    );
 }

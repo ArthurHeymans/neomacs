@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_ac_capf_parity;
+use super::assert_ac_capf_batch;
 
 /// The package's headline workflow: a user edits a real Emacs Lisp file whose
 /// major mode supplies `elisp-completion-at-point', enables ac-capf with the
@@ -8,9 +8,13 @@ use super::assert_ac_capf_parity;
 /// and completes.  Only `fboundp' symbols may appear because point sits in a
 /// function-call position; the shorter `neomacs-ac-capf-fixture-annals'
 /// variable would sort first if the predicate were dropped.
+
 #[test]
-fn emacs_lisp_mode_capf_completes_a_typed_symbol_through_the_trigger_key() {
-    let elisp_form = r##"(progn
+fn workflows_public_surface_batch() {
+    assert_ac_capf_batch(&[
+        (
+            "emacs_lisp_mode_capf_completes_a_typed_symbol_through_the_trigger_key",
+            r##"(progn
  (defun neomacs-ac-capf-fixture-annotate (entry) entry)
  (defun neomacs-ac-capf-fixture-annotation (entry) entry)
  (defun neomacs-ac-capf-fixture-anniversary (entry) entry)
@@ -35,24 +39,15 @@ fn emacs_lisp_mode_capf_completes_a_typed_symbol_through_the_trigger_key() {
               :moved moved
               :after completed
               :session session
-              :file (ac-capf-test-read "notes/session.el")))))))"##;
-
-    let expect = expect![[
+              :file (ac-capf-test-read "notes/session.el")))))))"##,
+            true,
+            expect![[
         r#"OK (:offered ((:prefix "neomacs-ac-capf-fixture-ann" :prefix-start 92 :common "neomacs-ac-capf-fixture-ann" :menu-live t :selected "neomacs-ac-capf-fixture-annotate" :completing t) (("neomacs-ac-capf-fixture-annotate" "s" nil nil (symbol "s")) ("neomacs-ac-capf-fixture-annotation" "s" nil nil (symbol "s")) ("neomacs-ac-capf-fixture-anniversary" "s" nil nil (symbol "s")))) :moved (:prefix "neomacs-ac-capf-fixture-ann" :prefix-start 92 :common "neomacs-ac-capf-fixture-ann" :menu-live t :selected "neomacs-ac-capf-fixture-annotation" :completing t) :after (:text ";;; session.el --- session notes  -*- lexical-binding: t; -*-\n(defun session-run (entry)\n  (neomacs-ac-capf-fixture-annotation" :point 126 :mode emacs-lisp-mode :auto-complete t :sources (ac-source-capf) :capfs (elisp-completion-at-point t)) :session (:prefix nil :prefix-start nil :common nil :menu-live nil :selected nil :completing nil) :file ";;; session.el --- session notes  -*- lexical-binding: t; -*-\n(defun session-run (entry)\n  (neomacs-ac-capf-fixture-annotation\n")"#
-    ]];
-
-    assert_ac_capf_parity(elisp_form, expect);
-}
-
-/// A hand-written capf carrying the metadata a modern completion UI renders:
-/// `:annotation-function', `:company-doc-buffer' and `:exit-function', plus a
-/// propertized and a duplicated candidate.  ac-capf keeps only the plain
-/// strings, so the workflow pins what a user does and does not get, and the
-/// second half drives the same capf through the standard `completion-at-point'
-/// command to show that the metadata really is live.
-#[test]
-fn a_custom_capf_loses_its_annotation_document_and_exit_metadata_through_ac_capf() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "a_custom_capf_loses_its_annotation_document_and_exit_metadata_through_ac_capf",
+            r##"(progn
  (defvar ac-capf-test-exits nil)
  (defvar ac-capf-test-annotations nil)
  (defvar ac-capf-test-docs nil)
@@ -101,22 +96,15 @@ fn a_custom_capf_loses_its_annotation_document_and_exit_metadata_through_ac_capf
               :standard standard
               :standard-text (buffer-substring-no-properties (point-min) (point-max))
               :standard-point (- (point) (point-min))
-              :standard-exits ac-capf-test-exits))))))"##;
-
-    let expect = expect![[
+              :standard-exits ac-capf-test-exits))))))"##,
+            true,
+            expect![[
         r#"OK (:offered ((:prefix "na" :prefix-start 23 :common "na" :menu-live t :selected "naïve" :completing t) (("naïve" "s" nil nil (symbol "s")) ("naïveté" "s" nil nil (symbol "s")) ("narrator" "g" nil nil (symbol "g")) ("narrative" "s" nil nil (symbol "s")))) :after (:text "The reviewer called it naïve" :point 28 :mode text-mode :auto-complete t :sources (ac-source-capf ac-source-project-glossary) :capfs (ac-capf-test-glossary-capf t ispell-completion-at-point)) :ac-exits nil :ac-annotations nil :ac-docs nil :ac-doc-buffer nil :standard t :standard-text "The reviewer called it naïve and narrative" :standard-point 42 :standard-exits ((#("narrative" 0 9 (face bold)) finished)))"#
-    ]];
-
-    assert_ac_capf_parity(elisp_form, expect);
-}
-
-/// Most real capfs hand out a programmed completion table rather than a list.
-/// This workflow installs a branch-name capf whose collection is a function and
-/// whose `:predicate' hides a retired branch, then completes the second menu
-/// entry.  The recorded table calls pin the exact protocol ac-capf drives.
-#[test]
-fn a_capf_whose_collection_is_a_function_drives_the_auto_complete_menu() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "a_capf_whose_collection_is_a_function_drives_the_auto_complete_menu",
+            r##"(progn
  (defvar ac-capf-test-table-calls nil)
  (defun ac-capf-test-branch-table (string predicate action)
    (push (list string action) ac-capf-test-table-calls)
@@ -144,25 +132,15 @@ fn a_capf_whose_collection_is_a_function_drives_the_auto_complete_menu() {
             :moved moved
             :calls (nreverse ac-capf-test-table-calls)
             :after (ac-capf-test-buffer-state)
-            :session (ac-capf-test-session))))))"##;
-
-    let expect = expect![[
+            :session (ac-capf-test-session))))))"##,
+            true,
+            expect![[
         r#"OK (:offered ((:prefix "che" :prefix-start 4 :common "che" :menu-live t :selected "cherry-pick" :completing t) (("cherry-pick" "s" nil nil (symbol "s")) ("check-status" "s" nil nil (symbol "s")) ("checkout-branch" "s" nil nil (symbol "s")))) :moved (:prefix "che" :prefix-start 4 :common "che" :menu-live t :selected "check-status" :completing t) :calls (("che" metadata) ("che" metadata) ("che" (boundaries . "")) ("che" t)) :after (:text "git check-status" :point 16 :mode text-mode :auto-complete t :sources (ac-source-capf) :capfs (ac-capf-test-branch-capf t ispell-completion-at-point)) :session (:prefix nil :prefix-start nil :common nil :menu-live nil :selected nil :completing nil))"#
-    ]];
-
-    assert_ac_capf_parity(elisp_form, expect);
-}
-
-/// Nothing to complete: a misbehaving capf that returns a bare symbol, a capf
-/// that declines, and a capf that claims the region with an empty table.  The
-/// misbehaving one wins the first round -- `completion--capf-wrapper' returns
-/// any non-nil result -- so ac-capf sees a response whose shape gate rejects
-/// it; because ac-capf runs the hook in `optimist' mode the second round skips
-/// that capf and reaches the other two.  Either way the user's buffer must stay
-/// untouched and the session must stay usable.
-#[test]
-fn capfs_that_offer_nothing_leave_the_buffer_and_the_session_untouched() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "capfs_that_offer_nothing_leave_the_buffer_and_the_session_untouched",
+            r##"(progn
  (defvar ac-capf-test-consulted nil)
  (defun ac-capf-test-silent-capf ()
    (push 'silent ac-capf-test-consulted)
@@ -195,24 +173,15 @@ fn capfs_that_offer_nothing_leave_the_buffer_and_the_session_untouched() {
               :second second
               :consulted-again (nreverse ac-capf-test-consulted)
               :menu (ac-capf-test-menu)
-              :after (ac-capf-test-buffer-state)))))))"##;
-
-    let expect = expect![[
+              :after (ac-capf-test-buffer-state)))))))"##,
+            true,
+            expect![[
         r#"OK (:first t :after-first ((:prefix nil :prefix-start nil :common nil :menu-live nil :selected nil :completing nil) nil (:text "nothing matches zzz" :point 19 :mode text-mode :auto-complete t :sources #1=(ac-source-capf) :capfs #2=(ac-capf-test-broken-capf ac-capf-test-silent-capf ac-capf-test-empty-capf t ispell-completion-at-point)) (broken)) :misbehaving (ac-capf-test-broken-capf) :second t :consulted-again (silent empty) :menu nil :after (:text "nothing matches zzz" :point 19 :mode text-mode :auto-complete t :sources #1# :capfs #2#))"#
-    ]];
-
-    assert_ac_capf_parity(elisp_form, expect);
-}
-
-/// A realistic multi-capf buffer: a real etags table is active globally, a
-/// project glossary capf sits behind it, and a buffer-local `:exclusive no'
-/// keyword capf declines for this prefix.  ac-capf must skip
-/// `tags-completion-at-point-function' entirely -- its table does match the
-/// prefix, so a missing filter would replace the whole candidate list -- and it
-/// must restore the default hook value afterwards.
-#[test]
-fn ac_capf_skips_the_tags_capf_and_falls_through_a_non_exclusive_one() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "ac_capf_skips_the_tags_capf_and_falls_through_a_non_exclusive_one",
+            r##"(progn
  (defvar ac-capf-test-consulted nil)
  (defun ac-capf-test-keyword-capf ()
    (push 'keyword ac-capf-test-consulted)
@@ -256,25 +225,15 @@ fn ac_capf_skips_the_tags_capf_and_falls_through_a_non_exclusive_one() {
                           (- (nth 1 response) (point-min))
                           (sort (all-completions "disp" (nth 2 response)) #'string<)
                           (nthcdr 3 response)))))))
-     (setq-default completion-at-point-functions default-capfs))))"##;
-
-    let expect = expect![[
+     (setq-default completion-at-point-functions default-capfs))))"##,
+            true,
+            expect![[
         r#"OK (:offered ((:prefix "disp" :prefix-start 4 :common "disp" :menu-live t :selected "display" :completing t) (("display" "s" nil nil (symbol "s")) ("dispatch" "s" nil nil (symbol "s")) ("dispatcher" "s" nil nil (symbol "s")))) :consulted (keyword glossary) :after (:text "the display" :point 11 :mode text-mode :auto-complete t :sources (ac-source-capf) :capfs (ac-capf-test-keyword-capf t ispell-completion-at-point)) :default-capfs (tags-completion-at-point-function ac-capf-test-glossary-capf) :tags-capf (4 11 ("dispatch-legacy" "dispatch-table") (:exclusive no)))"#
-    ]];
-
-    assert_ac_capf_parity(elisp_form, expect);
-}
-
-/// File-name completion is the classic capf whose completion boundaries start
-/// after the last slash, so `completion-all-completions' reports a non-zero
-/// base size.  ac-capf's non-zero base-size branch reads a free variable `arg'
-/// that upstream never binds, so the public `auto-complete' command fails and
-/// leaves the newline that `ac-put-prefix-overlay' inserted at end of buffer.
-/// The pinned `completion-file-name-table' result shows the capf itself is
-/// sound.
-#[test]
-fn a_file_name_capf_makes_auto_complete_fail_on_the_unbound_arg_variable() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "a_file_name_capf_makes_auto_complete_fail_on_the_unbound_arg_variable",
+            r##"(progn
  (defvar ac-capf-test-requested nil)
  (defun ac-capf-test-include-capf ()
    (let ((bounds (bounds-of-thing-at-point 'symbol)))
@@ -295,11 +254,11 @@ fn a_file_name_capf_makes_auto_complete_fail_on_the_unbound_arg_variable() {
           :file-name-table (sort (all-completions "lib/fi" #'completion-file-name-table)
                                  #'string<)
           :session (ac-capf-test-session)
-          :after (ac-capf-test-buffer-state)))))"##;
-
-    let expect = expect![[
+          :after (ac-capf-test-buffer-state)))))"##,
+            true,
+            expect![[
         r#"OK (:outcome (void-variable arg) :requested ("lib/fi") :file-name-table ("files.el" "finder.el") :session (:prefix "lib/fi" :prefix-start 12 :common nil :menu-live nil :selected nil :completing nil) :after (:text "(load-file \"lib/fi\n" :point 18 :mode emacs-lisp-mode :auto-complete t :sources (ac-source-capf) :capfs (ac-capf-test-include-capf elisp-completion-at-point t)))"#
-    ]];
-
-    assert_ac_capf_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

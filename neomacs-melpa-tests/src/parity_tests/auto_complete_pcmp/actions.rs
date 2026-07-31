@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_pcmp_parity;
+use super::assert_auto_complete_pcmp_batch;
 
 #[test]
-fn auto_complete_pcmp_action_appends_termination_for_sole_completion() {
-    let elisp_form = r##"(with-temp-buffer
+fn actions_public_surface_batch() {
+    assert_auto_complete_pcmp_batch(&[
+        (
+            "auto_complete_pcmp_action_appends_termination_for_sole_completion",
+            r##"(with-temp-buffer
          (insert "git checkout")
          (let ((ac-pcmp--status 'sole)
                (ac-pcmp--point 5)
@@ -17,14 +20,13 @@ fn auto_complete_pcmp_action_appends_termination_for_sole_completion() {
             (buffer-string)
             (point)
             pcomplete-last-completion-length
-            pcomplete-last-completion-stub)))"##;
-    let expect = expect![[r#"OK ("git checkout " 14 9 "ch")"#]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_action_appends_termination_for_shortest_completion() {
-    let elisp_form = r##"(with-temp-buffer
+            pcomplete-last-completion-stub)))"##,
+            true,
+            expect![[r#"OK ("git checkout " 14 9 "ch")"#]],
+        ),
+        (
+            "auto_complete_pcmp_action_appends_termination_for_shortest_completion",
+            r##"(with-temp-buffer
          (insert "cargo ch")
          (let ((ac-pcmp--status 'shortest)
                (ac-pcmp--point 7)
@@ -36,14 +38,13 @@ fn auto_complete_pcmp_action_appends_termination_for_shortest_completion() {
            (list
             (buffer-string)
             pcomplete-last-completion-length
-            pcomplete-last-completion-stub)))"##;
-    let expect = expect![[r#"OK ("cargo ch::" 4 "c")"#]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_action_does_not_append_for_partial_none_or_unknown_status() {
-    let elisp_form = r##"(mapcar
+            pcomplete-last-completion-stub)))"##,
+            true,
+            expect![[r#"OK ("cargo ch::" 4 "c")"#]],
+        ),
+        (
+            "auto_complete_pcmp_action_does_not_append_for_partial_none_or_unknown_status",
+            r##"(mapcar
          (lambda (status)
            (with-temp-buffer
              (insert "tool candidate")
@@ -59,16 +60,15 @@ fn auto_complete_pcmp_action_does_not_append_for_partial_none_or_unknown_status(
                 (buffer-string)
                 pcomplete-last-completion-length
                 pcomplete-last-completion-stub))))
-         '(partial none exact nil custom))"##;
-    let expect = expect![[
+         '(partial none exact nil custom))"##,
+            true,
+            expect![[
         r#"OK ((partial "tool candidate" 9 "ca") (none "tool candidate" 9 "ca") (exact "tool candidate" 9 "ca") (nil "tool candidate" 9 "ca") (custom "tool candidate" 9 "ca"))"#
-    ]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_action_respects_existing_suffix_characters() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_pcmp_action_respects_existing_suffix_characters",
+            r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (insert (car case))
@@ -85,16 +85,15 @@ fn auto_complete_pcmp_action_respects_existing_suffix_characters() {
          '(("directory/" . slash)
            ("host:" . colon)
            ("option=" . equals)
-           ("word" . ordinary)))"##;
-    let expect = expect![[
+           ("word" . ordinary)))"##,
+            true,
+            expect![[
         r#"OK ((("directory/" . slash) "directory/" 10) (("host:" . colon) "host:" 5) (("option=" . equals) "option=" 7) (("word" . ordinary) "word " 5))"#
-    ]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_action_measures_inserted_span_from_saved_candidate_point() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_complete_pcmp_action_measures_inserted_span_from_saved_candidate_point",
+            r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (insert (nth 0 case))
@@ -113,16 +112,15 @@ fn auto_complete_pcmp_action_measures_inserted_span_from_saved_candidate_point()
          '(("abc" partial 1 "")
            ("prefix-value" partial 8 "val")
            ("x" sole 2 "x")
-           ("command/" sole 4 "mand")))"##;
-    let expect = expect![[
+           ("command/" sole 4 "mand")))"##,
+            true,
+            expect![[
         r#"OK ((("abc" partial 1 "") 4 3 "") (("prefix-value" partial 8 "val") 13 5 "val") (("x" sole 2 "x") 3 1 "x") (("command/" sole 4 "mand") 9 5 "mand"))"#
-    ]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_action_preserves_stub_object_without_copying() {
-    let elisp_form = r##"(let ((stub (propertize "ca" 'face 'bold 'origin '(1 2))))
+    ]],
+        ),
+        (
+            "auto_complete_pcmp_action_preserves_stub_object_without_copying",
+            r##"(let ((stub (propertize "ca" 'face 'bold 'origin '(1 2))))
          (with-temp-buffer
            (insert "candidate")
            (let ((ac-pcmp--status 'partial)
@@ -137,15 +135,13 @@ fn auto_complete_pcmp_action_preserves_stub_object_without_copying() {
               pcomplete-last-completion-stub
               (text-properties-at
                0 pcomplete-last-completion-stub)
-              pcomplete-last-completion-length))))"##;
-    let expect =
-        expect![[r#"OK (t #("ca" 0 2 (face bold origin (1 2))) (face bold origin (1 2)) 9)"#]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_action_raw_flag_does_not_change_bookkeeping_contract() {
-    let elisp_form = r##"(mapcar
+              pcomplete-last-completion-length))))"##,
+            true,
+            expect![[r#"OK (t #("ca" 0 2 (face bold origin (1 2))) (face bold origin (1 2)) 9)"#]],
+        ),
+        (
+            "auto_complete_pcmp_action_raw_flag_does_not_change_bookkeeping_contract",
+            r##"(mapcar
          (lambda (raw)
            (with-temp-buffer
              (insert "quoted value")
@@ -161,16 +157,15 @@ fn auto_complete_pcmp_action_raw_flag_does_not_change_bookkeeping_contract() {
                 (buffer-string)
                 pcomplete-last-completion-length
                 pcomplete-last-completion-stub))))
-         '(nil t raw-marker))"##;
-    let expect = expect![[
+         '(nil t raw-marker))"##,
+            true,
+            expect![[
         r#"OK ((nil "quoted value" 5 "va") (t "quoted value" 5 "va") (raw-marker "quoted value" 5 "va"))"#
-    ]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_action_errors_are_reported_without_partial_bookkeeping() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_pcmp_action_errors_are_reported_without_partial_bookkeeping",
+            r##"(with-temp-buffer
          (insert "candidate")
          (let ((ac-pcmp--status 'partial)
                (ac-pcmp--point "not-a-position")
@@ -186,14 +181,13 @@ fn auto_complete_pcmp_action_errors_are_reported_without_partial_bookkeeping() {
               (current-message)
               pcomplete-last-completion-length
               pcomplete-last-completion-stub
-              (buffer-string)))))"##;
-    let expect = expect![[r#"OK (nil nil :old-length :old-stub "candidate")"#]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_self_insert_command_forwards_count_and_trigger_metadata() {
-    let elisp_form = r##"(let (events)
+              (buffer-string)))))"##,
+            true,
+            expect![[r#"OK (nil nil :old-length :old-stub "candidate")"#]],
+        ),
+        (
+            "auto_complete_pcmp_self_insert_command_forwards_count_and_trigger_metadata",
+            r##"(let (events)
          (cl-letf (((symbol-function 'self-insert-command)
                     (lambda (count)
                       (push (list :insert count) events)
@@ -208,15 +202,13 @@ fn auto_complete_pcmp_self_insert_command_forwards_count_and_trigger_metadata() 
                (list
                 result
                 (buffer-string)
-                (nreverse events))))))"##;
-    let expect =
-        expect![[r#"OK (:started "xxxx" ((:insert 4) (:complete :triggered trigger-key)))"#]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_pcmp_candidate_then_action_models_real_auto_complete_lifecycle() {
-    let elisp_form = r##"(with-temp-buffer
+                (nreverse events))))))"##,
+            true,
+            expect![[r#"OK (:started "xxxx" ((:insert 4) (:complete :triggered trigger-key)))"#]],
+        ),
+        (
+            "auto_complete_pcmp_candidate_then_action_models_real_auto_complete_lifecycle",
+            r##"(with-temp-buffer
          (insert "git che")
          (let ((pcomplete-termination-string " ")
                (pcomplete-suffix-list '(?/ ?:))
@@ -235,7 +227,9 @@ fn auto_complete_pcmp_candidate_then_action_models_real_auto_complete_lifecycle(
                 ac-pcmp--status
                 (buffer-string)
                 pcomplete-last-completion-length
-                pcomplete-last-completion-stub)))))"##;
-    let expect = expect![[r#"OK (("checkout") sole "git che " 1 "che")"#]];
-    assert_auto_complete_pcmp_parity(elisp_form, expect);
+                pcomplete-last-completion-stub)))))"##,
+            true,
+            expect![[r#"OK (("checkout") sole "git che " 1 "che")"#]],
+        ),
+    ]);
 }

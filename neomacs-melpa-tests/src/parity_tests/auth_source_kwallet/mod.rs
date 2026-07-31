@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AUTH_SOURCE_KWALLET_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod backend;
 mod process;
 mod registry;
@@ -147,5 +149,31 @@ pub(crate) fn assert_auth_source_kwallet_autoload_parity(elisp_form: &str, expec
         "auth-source-kwallet-autoloads.el",
         elisp_form,
         expected,
+    );
+}
+
+
+
+
+
+/// Multi-probe batch for `assert_auth_source_kwallet_autoload_parity` cases (2a).
+pub(crate) fn assert_auth_source_kwallet_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auth_source_kwallet_oracle("auth-source-kwallet-autoloads.el"),
+        &name,
+        "auth_source_kwallet_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_auth_source_kwallet_parity` cases (2a).
+pub(crate) fn assert_auth_source_kwallet_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auth_source_kwallet_oracle("auth-source-kwallet.el"),
+        &name,
+        "auth_source_kwallet_parity",
+        cases,
     );
 }

@@ -1,11 +1,13 @@
 use expect_test::expect;
 
-use super::assert_atomic_chrome_parity;
+use super::assert_atomic_chrome_batch;
 
 #[test]
-fn atomic_chrome_send_buffer_text_emits_exact_atomic_chrome_update_json_and_clears_modified_state()
-{
-    let elisp_form = r##"(let ((atomic-chrome-buffer-table
+fn messaging_public_surface_batch() {
+    assert_atomic_chrome_batch(&[
+        (
+            "atomic_chrome_send_buffer_text_emits_exact_atomic_chrome_update_json_and_clears_modified_state",
+            r##"(let ((atomic-chrome-buffer-table
                 (make-hash-table
                  :test 'equal))
                (atomic-chrome-server-ghost-text
@@ -46,16 +48,15 @@ fn atomic_chrome_send_buffer_text_emits_exact_atomic_chrome_update_json_and_clea
                (buffer-string)
                (buffer-modified-p)
                (text-properties-at
-                (point-min))))))"##;
-    let expect = expect![[
+                (point-min))))))"##,
+            true,
+            expect![[
         r#"OK (nil ((send atomic-socket "{\"type\":\"updateText\",\"payload\":{\"text\":\"Hello \\\"browser\\\"\\nλ and emoji 😀\"}}")) #("Hello \"browser\"\nλ and emoji 😀" 0 5 (invisible nil face bold)) nil (invisible nil face bold))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_send_buffer_text_emits_exact_ghost_text_json_shape() {
-    let elisp_form = r##"(let ((atomic-chrome-buffer-table
+    ]],
+        ),
+        (
+            "atomic_chrome_send_buffer_text_emits_exact_ghost_text_json_shape",
+            r##"(let ((atomic-chrome-buffer-table
                 (make-hash-table
                  :test 'equal))
                (atomic-chrome-server-ghost-text
@@ -88,15 +89,13 @@ fn atomic_chrome_send_buffer_text_emits_exact_ghost_text_json_shape() {
               (list
                (atomic-chrome-send-buffer-text)
                (nreverse events)
-               (buffer-modified-p)))))"##;
-    let expect =
-        expect![[r#"OK (nil ((send ghost-socket "{\"text\":\"line one\\nline two\"}")) nil)"#]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_send_buffer_text_uses_accessible_narrowed_plain_text() {
-    let elisp_form = r##"(let ((atomic-chrome-buffer-table
+               (buffer-modified-p)))))"##,
+            true,
+            expect![[r#"OK (nil ((send ghost-socket "{\"text\":\"line one\\nline two\"}")) nil)"#]],
+        ),
+        (
+            "atomic_chrome_send_buffer_text_uses_accessible_narrowed_plain_text",
+            r##"(let ((atomic-chrome-buffer-table
                 (make-hash-table
                  :test 'equal))
                (socket
@@ -144,16 +143,15 @@ fn atomic_chrome_send_buffer_text_uses_accessible_narrowed_plain_text() {
                 (point-min)
                 (point-max))
                (point-min)
-               (point-max)))))"##;
-    let expect = expect![[
+               (point-max)))))"##,
+            true,
+            expect![[
         r#"OK (nil (narrowed-socket "{\"type\":\"updateText\",\"payload\":{\"text\":\"editable\"}}") #("editable" 0 8 (category test face italic)) "editable" 8 16)"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_send_buffer_text_sends_empty_content_but_without_socket_only_clears_modified() {
-    let elisp_form = r##"(let ((atomic-chrome-buffer-table
+    ]],
+        ),
+        (
+            "atomic_chrome_send_buffer_text_sends_empty_content_but_without_socket_only_clears_modified",
+            r##"(let ((atomic-chrome-buffer-table
                 (make-hash-table
                  :test 'equal))
                (socket
@@ -192,16 +190,15 @@ fn atomic_chrome_send_buffer_text_sends_empty_content_but_without_socket_only_cl
                 (list
                  empty-result
                  missing-result
-                 (nreverse events))))))"##;
-    let expect = expect![[
+                 (nreverse events))))))"##,
+            true,
+            expect![[
         r#"OK ((nil nil) (nil nil) ((empty-socket "{\"type\":\"updateText\",\"payload\":{\"text\":\"\"}}")))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
-}
-
-#[test]
-fn atomic_chrome_send_buffer_text_propagates_transport_error_before_clearing_modified_state() {
-    let elisp_form = r##"(let ((atomic-chrome-buffer-table
+    ]],
+        ),
+        (
+            "atomic_chrome_send_buffer_text_propagates_transport_error_before_clearing_modified_state",
+            r##"(let ((atomic-chrome-buffer-table
                 (make-hash-table
                  :test 'equal))
                (atomic-chrome-server-ghost-text
@@ -242,9 +239,11 @@ fn atomic_chrome_send_buffer_text_propagates_transport_error_before_clearing_mod
                (buffer-string)
                (gethash
                 (current-buffer)
-                atomic-chrome-buffer-table)))))"##;
-    let expect = expect![[
+                atomic-chrome-buffer-table)))))"##,
+            true,
+            expect![[
         r#"OK ((:error error ("transport failed failing-socket")) ((send failing-socket "{\"type\":\"updateText\",\"payload\":{\"text\":\"must remain modified\"}}")) t "must remain modified" (#s(websocket connecting failing-socket nil nil nil nil nil nil nil "ws://failing-socket.test" nil nil failing-socket :atomic-server nil nil nil) nil))"#
-    ]];
-    assert_atomic_chrome_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

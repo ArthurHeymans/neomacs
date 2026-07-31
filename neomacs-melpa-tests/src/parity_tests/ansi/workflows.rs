@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_ansi_parity;
+use super::assert_ansi_batch;
 
 #[test]
-fn runtime_selected_effects_render_a_complete_ci_summary_with_exact_formatting() {
-    let elisp_form = r##"(let ((jobs
+fn workflows_public_surface_batch() {
+    assert_ansi_batch(&[
+        (
+            "runtime_selected_effects_render_a_complete_ci_summary_with_exact_formatting",
+            r##"(let ((jobs
        '((compile success 42 42 3.14)
          (lint warning 18 20 0.87)
          (integration failure 127 130 12.50))))
@@ -38,16 +41,15 @@ fn runtime_selected_effects_render_a_complete_ci_summary_with_exact_formatting()
         (ansi-cyan "%3d/%-3d" done total)
         (ansi-dark " %6.2fs" seconds))))
    jobs
-   "\n"))"##;
-    let expect = expect![[
+   "\n"))"##,
+            true,
+            expect![[
         r#"OK "\33[1mcompile     \33[0m \33[32mPASS  \33[0m \33[36m 42/42 \33[0m\33[2m   3.14s\33[0m\n\33[1mlint        \33[0m \33[33mWARN  \33[0m \33[36m 18/20 \33[0m\33[2m   0.87s\33[0m\n\33[1mintegration \33[0m \33[41m\33[97m FAIL \33[0m\33[0m \33[36m127/130\33[0m\33[2m  12.50s\33[0m""#
-    ]];
-    assert_ansi_parity(elisp_form, expect);
-}
-
-#[test]
-fn documented_direct_dsl_and_runtime_interfaces_render_the_same_nested_alert() {
-    let elisp_form = r##"(let* ((direct
+    ]],
+        ),
+        (
+            "documented_direct_dsl_and_runtime_interfaces_render_the_same_nested_alert",
+            r##"(let* ((direct
         (ansi-bold
          (ansi-on-red
           (ansi-bright-white " DEPLOY BLOCKED "))))
@@ -68,16 +70,15 @@ fn documented_direct_dsl_and_runtime_interfaces_render_the_same_nested_alert() {
    runtime
    (equal direct dsl)
    (equal dsl runtime)
-   (string-to-list dsl)))"##;
-    let expect = expect![[
+   (string-to-list dsl)))"##,
+            true,
+            expect![[
         r#"OK ("\33[1m\33[41m\33[97m DEPLOY BLOCKED \33[0m\33[0m\33[0m" "\33[1m\33[41m\33[97m DEPLOY BLOCKED \33[0m\33[0m\33[0m" "\33[1m\33[41m\33[97m DEPLOY BLOCKED \33[0m\33[0m\33[0m" t t (27 91 49 109 27 91 52 49 109 27 91 57 55 109 32 68 69 80 76 79 89 32 66 76 79 67 75 69 68 32 27 91 48 109 27 91 48 109 27 91 48 109))"#
-    ]];
-    assert_ansi_parity(elisp_form, expect);
-}
-
-#[test]
-fn terminal_progress_redraws_emit_an_exact_incremental_csi_transcript() {
-    let elisp_form = r##"(with-output-to-string
+    ]],
+        ),
+        (
+            "terminal_progress_redraws_emit_an_exact_incremental_csi_transcript",
+            r##"(with-output-to-string
   (with-ansi-princ
    (column 1)
    (kill 2)
@@ -99,16 +100,15 @@ fn terminal_progress_redraws_emit_an_exact_incremental_csi_transcript() {
    (green "%3d%%" 100)
    " "
    (green "✓")
-   "\n"))"##;
-    let expect = expect![[
+   "\n"))"##,
+            true,
+            expect![[
         r#"OK "\33[1G\33[2K\33[1mcompile \33[0m\33[36m  0%\33[0m\n\33[1F\33[1G\33[2K\33[1mcompile \33[0m\33[33m 50%\33[0m\n\33[1F\33[1G\33[2K\33[1mcompile \33[0m\33[32m100%\33[0m \33[32m✓\33[0m\n""#
-    ]];
-    assert_ansi_parity(elisp_form, expect);
-}
-
-#[test]
-fn with_ansi_princ_writes_one_exact_multiline_release_report_to_a_real_buffer() {
-    let elisp_form = r##"(let ((output (generate-new-buffer " *ansi-release-report*")))
+    ]],
+        ),
+        (
+            "with_ansi_princ_writes_one_exact_multiline_release_report_to_a_real_buffer",
+            r##"(let ((output (generate-new-buffer " *ansi-release-report*")))
   (unwind-protect
       (let ((standard-output output))
         (with-ansi-princ
@@ -125,16 +125,15 @@ fn with_ansi_princ_writes_one_exact_multiline_release_report_to_a_real_buffer() 
            (buffer-string)
            (buffer-size)
            (line-number-at-pos (point-max)))))
-    (kill-buffer output)))"##;
-    let expect = expect![[
+    (kill-buffer output)))"##,
+            true,
+            expect![[
         r#"OK ("\33[1m\33[97mneomacs 0.14.0\33[0m\33[0m\n\33[32m  ✓ core               2048 tests\33[0m\n\33[32m  ✓ oracle              512 tests\33[0m\n\33[33m  ! docs               2 warnings\33[0m\n" 161 5)"#
-    ]];
-    assert_ansi_parity(elisp_form, expect);
-}
-
-#[test]
-fn dumb_terminal_inhibition_keeps_the_report_text_and_restores_colored_output() {
-    let elisp_form = r##"(let ((ansi-inhibit-ansi nil))
+    ]],
+        ),
+        (
+            "dumb_terminal_inhibition_keeps_the_report_text_and_restores_colored_output",
+            r##"(let ((ansi-inhibit-ansi nil))
   (let* ((render
           (lambda (inhibit)
             (let ((ansi-inhibit-ansi inhibit))
@@ -157,9 +156,11 @@ fn dumb_terminal_inhibition_keeps_the_report_text_and_restores_colored_output() 
      colored-after
      (equal colored-before colored-after)
      ansi-inhibit-ansi
-     (string-match-p (regexp-quote "\e[") plain))))"##;
-    let expect = expect![[
+     (string-match-p (regexp-quote "\e[") plain))))"##,
+            true,
+            expect![[
         r#"OK ("\33[1G\33[2K\33[1m\33[31mERROR\33[0m\33[0m: \33[43m\33[30m/var/lib/neomacs at 99%\33[0m\33[0m\n\33[3mfree space: 0.2 GiB\33[0m\n" "ERROR: /var/lib/neomacs at 99%\nfree space: 0.2 GiB\n" "\33[1G\33[2K\33[1m\33[31mERROR\33[0m\33[0m: \33[43m\33[30m/var/lib/neomacs at 99%\33[0m\33[0m\n\33[3mfree space: 0.2 GiB\33[0m\n" t nil nil)"#
-    ]];
-    assert_ansi_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

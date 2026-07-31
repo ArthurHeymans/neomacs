@@ -22,7 +22,7 @@
 
 use expect_test::expect;
 
-use super::assert_auto_dark_parity;
+use super::assert_auto_dark_batch;
 
 /// Run the osascript and termux detectors against real programs.
 ///
@@ -48,9 +48,13 @@ use super::assert_auto_dark_parity;
 /// That is worth pinning precisely because the intuition it corrects is the
 /// obvious one -- a reader who assumes the redirect is load-bearing would also
 /// assume a detector could be broken by removing it.
+
 #[test]
-fn the_shell_detectors_reach_real_programs_with_one_argument_vector_each() {
-    let elisp_form = r##"(let* ((root (file-name-as-directory
+fn workflows_public_surface_batch() {
+    assert_auto_dark_batch(&[
+        (
+            "the_shell_detectors_reach_real_programs_with_one_argument_vector_each",
+            r##"(let* ((root (file-name-as-directory
                      (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                (bin (expand-file-name "auto-dark-bin" root))
                (argv (expand-file-name "argv" root))
@@ -100,10 +104,11 @@ fn the_shell_detectors_reach_real_programs_with_one_argument_vector_each() {
              (shell-command-to-string "cmd uimode night")
              :with-the-redirect
              (shell-command-to-string
-              "cmd uimode night 2>&1 </dev/null"))))"##;
-    let expect = expect![[
+              "cmd uimode night 2>&1 </dev/null"))))"##,
+            true,
+            expect![[
         r#"OK (:osascript-said t :osascript-argv ("-e" "tell application \"System Events\" to tell appearance preferences to return dark mode") :termux-said t :termux-argv ("uimode" "night") :without-the-redirect "Night mode: yes" :with-the-redirect "Night mode: yes")"#
-    ]];
-
-    assert_auto_dark_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

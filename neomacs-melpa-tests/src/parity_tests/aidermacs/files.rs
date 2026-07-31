@@ -1,26 +1,28 @@
 use expect_test::expect;
 
-use super::assert_aidermacs_parity;
+use super::assert_aidermacs_batch;
 
 #[test]
-fn aidermacs_file_command_builder_quotes_localizes_and_handles_empty_inputs() {
-    let elisp_form = r##"(list
+fn files_public_surface_batch() {
+    assert_aidermacs_batch(&[
+        (
+            "aidermacs_file_command_builder_quotes_localizes_and_handles_empty_inputs",
+            r##"(list
                       (aidermacs--prepare-file-paths-for-command
                        "/add"
                        '("/work/src/main.el" "/work/docs/user guide.md" nil))
                       (aidermacs--prepare-file-paths-for-command "/drop" nil)
                       (aidermacs--localize-tramp-path
                        "/ssh:user@example.test:/srv/app/main.py")
-                      (aidermacs--localize-tramp-path "/local/app.el"))"##;
-    let expect = expect![[
+                      (aidermacs--localize-tramp-path "/local/app.el"))"##,
+            true,
+            expect![[
         r#"OK ("/add \"/work/src/main.el\" \"/work/docs/user guide.md\"" "/drop" "/srv/app/main.py" "/local/app.el")"#
-    ]];
-    assert_aidermacs_parity(elisp_form, expect);
-}
-
-#[test]
-fn aidermacs_ls_parser_tracks_real_editable_and_read_only_files_in_order() {
-    let elisp_form = r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    ]],
+        ),
+        (
+            "aidermacs_ls_parser_tracks_real_editable_and_read_only_files_in_order",
+            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                           (root (file-name-as-directory
                                  (expand-file-name "repo" sandbox)))
                           (default-directory root)
@@ -43,15 +45,13 @@ fn aidermacs_ls_parser_tracks_real_editable_and_read_only_files_in_order() {
                          "  docs/guide.md tokens: 25\n"
                          "  missing.el\n"
                          "\nTokens: 60\n"))
-                       aidermacs--tracked-files))"##;
-    let expect =
-        expect![[r#"OK (("docs/guide.md (read-only)" "src/main.el" "docs/guide.md") nil)"#]];
-    assert_aidermacs_parity(elisp_form, expect);
-}
-
-#[test]
-fn aidermacs_output_parser_applies_real_chat_file_state_transitions_and_udiffs() {
-    let elisp_form = r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+                       aidermacs--tracked-files))"##,
+            true,
+            expect![[r#"OK (("docs/guide.md (read-only)" "src/main.el" "docs/guide.md") nil)"#]],
+        ),
+        (
+            "aidermacs_output_parser_applies_real_chat_file_state_transitions_and_udiffs",
+            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                           (root (file-name-as-directory
                                  (expand-file-name "repo" sandbox)))
                           (default-directory root)
@@ -81,14 +81,13 @@ fn aidermacs_output_parser_applies_real_chat_file_state_transitions_and_udiffs()
                          (aidermacs--find-tracked-file
                           (expand-file-name "src/lib/tool.el" root))
                          (aidermacs--find-tracked-file "tool.el")
-                         (aidermacs--find-tracked-file "missing.el"))))"##;
-    let expect = expect![[r#"OK (("README.md") ("README.md (read-only)") nil nil nil)"#]];
-    assert_aidermacs_parity(elisp_form, expect);
-}
-
-#[test]
-fn aidermacs_file_tracking_requires_unambiguous_basename_matches() {
-    let elisp_form = r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+                         (aidermacs--find-tracked-file "missing.el"))))"##,
+            true,
+            expect![[r#"OK (("README.md") ("README.md (read-only)") nil nil nil)"#]],
+        ),
+        (
+            "aidermacs_file_tracking_requires_unambiguous_basename_matches",
+            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                           (root (file-name-as-directory
                                  (expand-file-name "repo" sandbox)))
                           (default-directory root)
@@ -103,16 +102,15 @@ fn aidermacs_file_tracking_requires_unambiguous_basename_matches() {
                         (expand-file-name "docs/guide.md" root))
                        (aidermacs--find-tracked-file "tool.el")
                        (aidermacs--find-tracked-file "main.el")
-                       (aidermacs--find-tracked-file "src/../src/main.el")))"##;
-    let expect = expect![[
+                       (aidermacs--find-tracked-file "src/../src/main.el")))"##,
+            true,
+            expect![[
         r#"OK ("src/main.el" "docs/guide.md (read-only)" "lib/tool.el" "src/main.el" "src/main.el")"#
-    ]];
-    assert_aidermacs_parity(elisp_form, expect);
-}
-
-#[test]
-fn aidermacs_pre_edit_capture_detects_real_changes_and_cleanup_is_idempotent() {
-    let elisp_form = r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    ]],
+        ),
+        (
+            "aidermacs_pre_edit_capture_detects_real_changes_and_cleanup_is_idempotent",
+            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                           (root (file-name-as-directory
                                  (expand-file-name "repo" sandbox)))
                           (default-directory root)
@@ -156,16 +154,15 @@ fn aidermacs_pre_edit_capture_detects_real_changes_and_cleanup_is_idempotent() {
                                    aidermacs--pre-edit-file-buffers
                                    aidermacs--pre-edit-prepared)))))
                         (when (buffer-live-p session)
-                          (kill-buffer session))))"##;
-    let expect = expect![[
+                          (kill-buffer session))))"##,
+            true,
+            expect![[
         r#"OK ((("src/one.el" "before one\n" t) ("src/two.el" "before two\n" t)) ("src/one.el" "src/two.el") nil nil)"#
-    ]];
-    assert_aidermacs_parity(elisp_form, expect);
-}
-
-#[test]
-fn aidermacs_add_and_drop_helpers_build_batched_commands_and_user_messages() {
-    let elisp_form = r##"(let (commands messages)
+    ]],
+        ),
+        (
+            "aidermacs_add_and_drop_helpers_build_batched_commands_and_user_messages",
+            r##"(let (commands messages)
                       (cl-letf
                           (((symbol-function 'aidermacs--send-command)
                             (lambda (command &rest _)
@@ -183,9 +180,11 @@ fn aidermacs_add_and_drop_helpers_build_batched_commands_and_user_messages() {
                         (aidermacs--drop-files-helper
                          '("/repo/src/a.el" "/repo/src/b b.el"))
                         (aidermacs--drop-files-helper nil)
-                        (list (nreverse commands) (nreverse messages))))"##;
-    let expect = expect![[
+                        (list (nreverse commands) (nreverse messages))))"##,
+            true,
+            expect![[
         r#"OK (("/add \"/repo/src/a.el\" \"/repo/src/b b.el\"" "/read-only \"/repo/README.md\"" "/drop \"/repo/src/a.el\" \"/repo/src/b b.el\"") ("Added 2 files as editable" "Reference added" "No files to add." "Dropped 2 files" "No files to drop."))"#
-    ]];
-    assert_aidermacs_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

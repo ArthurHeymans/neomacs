@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_clang_async_parity;
+use super::assert_auto_complete_clang_async_batch;
 
 #[test]
-fn auto_complete_clang_async_template_source_returns_buffer_local_candidates_and_start_point() {
-    let elisp_form = r##"(with-temp-buffer
+fn templates_public_surface_batch() {
+    assert_auto_complete_clang_async_batch(&[
+        (
+            "auto_complete_clang_async_template_source_returns_buffer_local_candidates_and_start_point",
+            r##"(with-temp-buffer
                            (insert "call")
                            (let ((ac-clang-template-candidates
                                   '("(<#int x#>)"
@@ -24,17 +27,15 @@ fn auto_complete_clang_async_template_source_returns_buffer_local_candidates_and
                                (cdr
                                 (assq
                                  'prefix
-                                 ac-source-clang-template))))))"##;
-    let expect = expect![[
+                                 ac-source-clang-template))))))"##,
+            true,
+            expect![[
         r#"OK (#1=("(<#int x#>)" "(<#double x#>)") 3 ((candidates . ac-clang-template-candidate) (prefix . ac-clang-template-prefix) (requires . 0) (action . ac-clang-template-action) (document . ac-clang-document) (cache) (symbol . "t")) #1# 3)"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_action_builds_overload_template_candidates_with_help_and_raw_args() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_clang_async_action_builds_overload_template_candidates_with_help_and_raw_args",
+            r##"(with-temp-buffer
                            (insert "obj.method")
                            (goto-char
                             (point-max))
@@ -63,17 +64,15 @@ fn auto_complete_clang_async_action_builds_overload_template_candidates_with_hel
                                 (ac-clang-action)
                                 captured
                                 (point)
-                                (buffer-string)))))"##;
-    let expect = expect![[
+                                (buffer-string)))))"##,
+            true,
+            expect![[
         r#"OK (nil (11 (("(int x)" "int" "(<#int x#>)") ("(double x)" "double" "(<#double x#>)"))) 11 "obj.method")"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_action_adds_optional_and_variadic_short_forms_without_duplicates() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_clang_async_action_adds_optional_and_variadic_short_forms_without_duplicates",
+            r##"(with-temp-buffer
                            (insert "format")
                            (goto-char
                             (point-max))
@@ -100,17 +99,15 @@ fn auto_complete_clang_async_action_adds_optional_and_variadic_short_forms_witho
                                (list
                                 (ac-clang-action)
                                 captured
-                                (length captured)))))"##;
-    let expect = expect![[
+                                (length captured)))))"##,
+            true,
+            expect![[
         r#"OK (nil (("(int required{#, int optional#})" "void" "(<#int required#>{#, <#int optional#>#})") ("(int required)" "void" "(<#int required#>)") ("(const char *fmt, ...)" "int" "(<#const char *fmt#>, <#...#>)")) 3)"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_action_single_template_starts_completion_and_reports_clean_help() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_clang_async_action_single_template_starts_completion_and_reports_clean_help",
+            r##"(with-temp-buffer
                            (insert "value")
                            (goto-char
                             (point-max))
@@ -146,17 +143,15 @@ fn auto_complete_clang_async_action_single_template_starts_completion_and_report
                                (list
                                 (ac-clang-action)
                                 (nreverse calls)
-                                (nreverse messages)))))"##;
-    let expect = expect![[
+                                (nreverse messages)))))"##,
+            true,
+            expect![[
         r#"OK (#1=("Widget value : const Widget") (((": const Widget" "Widget" ": const Widget"))) #1#)"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_action_without_template_candidates_only_reports_documentation() {
-    let elisp_form = r##"(let* ((item
+    ]],
+        ),
+        (
+            "auto_complete_clang_async_action_without_template_candidates_only_reports_documentation",
+            r##"(let* ((item
                                  (propertize
                                   "constant"
                                   'ac-clang-help
@@ -186,15 +181,13 @@ fn auto_complete_clang_async_action_without_template_candidates_only_reports_doc
                               (ac-clang-action)
                               starts
                               ac-clang-template-candidates
-                              (nreverse messages))))"##;
-    let expect = expect![[r#"OK (#1=("int constant") nil ("ok" "no" "yes:)") #1#)"#]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_template_action_expands_real_nested_arguments_through_yasnippet_api() {
-    let elisp_form = r##"(with-temp-buffer
+                              (nreverse messages))))"##,
+            true,
+            expect![[r#"OK (#1=("int constant") nil ("ok" "no" "yes:)") #1#)"#]],
+        ),
+        (
+            "auto_complete_clang_async_template_action_expands_real_nested_arguments_through_yasnippet_api",
+            r##"(with-temp-buffer
                            (insert "method")
                            (let* ((candidate
                                    (propertize
@@ -218,17 +211,15 @@ fn auto_complete_clang_async_template_action_expands_real_nested_arguments_throu
                               (ac-clang-template-action)
                               (nreverse calls)
                               (buffer-string)
-                              (point))))"##;
-    let expect = expect![[
+                              (point))))"##,
+            true,
+            expect![[
         r#"OK (:expanded (("(${std::vector<int> values}, ${callback(int, char)})" 1 7)) "method" 7)"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_template_action_retries_legacy_yasnippet_argument_order_on_error() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_complete_clang_async_template_action_retries_legacy_yasnippet_argument_order_on_error",
+            r##"(with-temp-buffer
                            (insert "call")
                            (let* ((candidate
                                    (propertize
@@ -256,16 +247,13 @@ fn auto_complete_clang_async_template_action_retries_legacy_yasnippet_argument_o
                              (list
                               (ac-clang-template-action)
                               (nreverse calls)
-                              (buffer-string))))"##;
-    let expect =
-        expect![[r#"OK (:legacy-expanded (("(${int x})" 1 5) (1 5 "(${int x})")) "call")"#]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_template_action_uses_legacy_snippet_package_when_available() {
-    let elisp_form = r##"(with-temp-buffer
+                              (buffer-string))))"##,
+            true,
+            expect![[r#"OK (:legacy-expanded (("(${int x})" 1 5) (1 5 "(${int x})")) "call")"#]],
+        ),
+        (
+            "auto_complete_clang_async_template_action_uses_legacy_snippet_package_when_available",
+            r##"(with-temp-buffer
                            (insert "invoke")
                            (let* ((candidate
                                    (propertize
@@ -294,16 +282,13 @@ fn auto_complete_clang_async_template_action_uses_legacy_snippet_package_when_av
                              (list
                               (ac-clang-template-action)
                               (nreverse calls)
-                              (buffer-string))))"##;
-    let expect =
-        expect![[r#"OK (:inserted (("($${int x}, $${char y})" "" 1)) "($${int x}, $${char y})")"#]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_clang_async_template_action_without_snippet_backend_preserves_text_and_warns() {
-    let elisp_form = r##"(with-temp-buffer
+                              (buffer-string))))"##,
+            true,
+            expect![[r#"OK (:inserted (("($${int x}, $${char y})" "" 1)) "($${int x}, $${char y})")"#]],
+        ),
+        (
+            "auto_complete_clang_async_template_action_without_snippet_backend_preserves_text_and_warns",
+            r##"(with-temp-buffer
                            (insert "call")
                            (let* ((candidate
                                    (propertize
@@ -344,10 +329,11 @@ fn auto_complete_clang_async_template_action_without_snippet_backend_preserves_t
                                 (ac-clang-template-action)
                                 (buffer-string)
                                 (point)
-                                (nreverse messages)))))"##;
-    let expect = expect![[
+                                (nreverse messages)))))"##,
+            true,
+            expect![[
         r#"OK (#1=("Dude! You are too out! Please install a yasnippet or a snippet script:)") "call" 5 #1#)"#
-    ]];
-
-    assert_auto_complete_clang_async_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

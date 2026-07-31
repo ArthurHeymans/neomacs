@@ -6,6 +6,8 @@ use crate::{
 };
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod actions;
 mod advice;
 mod candidates;
@@ -79,5 +81,29 @@ pub(crate) fn assert_auto_complete_pcmp_autoload_parity(elisp_form: &str, expect
         "auto-complete-pcmp-autoloads.el",
         elisp_form,
         expected,
+    );
+}
+
+
+
+/// Multi-probe batch for `assert_auto_complete_pcmp_autoload_parity` cases (2a).
+pub(crate) fn assert_auto_complete_pcmp_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_complete_pcmp_oracle("auto-complete-pcmp-autoloads.el"),
+        &name,
+        "auto_complete_pcmp_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_auto_complete_pcmp_parity` cases (2a).
+pub(crate) fn assert_auto_complete_pcmp_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_complete_pcmp_oracle("auto-complete-pcmp.el"),
+        &name,
+        "auto_complete_pcmp_parity",
+        cases,
     );
 }

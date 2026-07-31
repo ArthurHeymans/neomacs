@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_async_byte_compile_parity;
+use super::assert_auto_async_byte_compile_batch;
 
 #[test]
-fn auto_async_byte_compile_mode_numeric_toggle_and_return_contract_match() {
-    let elisp_form = r##"(with-temp-buffer
+fn mode_public_surface_batch() {
+    assert_auto_async_byte_compile_batch(&[
+        (
+            "auto_async_byte_compile_mode_numeric_toggle_and_return_contract_match",
+            r##"(with-temp-buffer
           (list
            auto-async-byte-compile-mode
            (auto-async-byte-compile-mode nil)
@@ -16,15 +19,13 @@ fn auto_async_byte_compile_mode_numeric_toggle_and_return_contract_match() {
            (auto-async-byte-compile-mode 'toggle)
            auto-async-byte-compile-mode
            (auto-async-byte-compile-mode 'toggle)
-           auto-async-byte-compile-mode))"##;
-    let expect = expect!["OK (nil t t nil nil t t nil nil t t)"];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_mode_installs_and_removes_one_buffer_local_save_hook() {
-    let elisp_form = r##"(with-temp-buffer
+           auto-async-byte-compile-mode))"##,
+            true,
+            expect!["OK (nil t t nil nil t t nil nil t t)"],
+        ),
+        (
+            "auto_async_byte_compile_mode_installs_and_removes_one_buffer_local_save_hook",
+            r##"(with-temp-buffer
           (let ((global-before
                  (default-value
                   'after-save-hook)))
@@ -50,15 +51,13 @@ fn auto_async_byte_compile_mode_installs_and_removes_one_buffer_local_save_hook(
              (equal
               global-before
               (default-value
-               'after-save-hook)))))"##;
-    let expect = expect!["OK (nil t t (auto-async-byte-compile t) t 1 nil nil nil t)"];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_mode_isolated_across_real_buffers() {
-    let elisp_form = r##"(let ((first
+               'after-save-hook)))))"##,
+            true,
+            expect!["OK (nil t t (auto-async-byte-compile t) t 1 nil nil nil t)"],
+        ),
+        (
+            "auto_async_byte_compile_mode_isolated_across_real_buffers",
+            r##"(let ((first
                                 (generate-new-buffer
                                  " *aabc-first*"))
                                (second
@@ -90,15 +89,13 @@ fn auto_async_byte_compile_mode_isolated_across_real_buffers() {
                      #'auto-async-byte-compile
                      after-save-hook)))))
             (kill-buffer first)
-            (kill-buffer second)))"##;
-    let expect = expect!["OK ((t (auto-async-byte-compile t)) (nil nil) nil (nil nil))"];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_enable_helper_forces_mode_on_idempotently() {
-    let elisp_form = r##"(with-temp-buffer
+            (kill-buffer second)))"##,
+            true,
+            expect!["OK ((t (auto-async-byte-compile t)) (nil nil) nil (nil nil))"],
+        ),
+        (
+            "auto_async_byte_compile_enable_helper_forces_mode_on_idempotently",
+            r##"(with-temp-buffer
           (list
            (enable-auto-async-byte-compile-mode)
            auto-async-byte-compile-mode
@@ -110,16 +107,13 @@ fn auto_async_byte_compile_enable_helper_forces_mode_on_idempotently() {
                (eq
                 function
                 #'auto-async-byte-compile))
-             after-save-hook))))"##;
-    let expect = expect!["OK (t t t t 1)"];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_file_filter_matrix_uses_default_case_folding_and_exact_suffix_boundary()
-{
-    let elisp_form = r##"(let (calls)
+             after-save-hook))))"##,
+            true,
+            expect!["OK (t t t t 1)"],
+        ),
+        (
+            "auto_async_byte_compile_file_filter_matrix_uses_default_case_folding_and_exact_suffix_boundary",
+            r##"(let (calls)
           (cl-letf
               (((symbol-function 'aabc/doit)
                 (lambda ()
@@ -143,17 +137,15 @@ fn auto_async_byte_compile_file_filter_matrix_uses_default_case_folding_and_exac
                 "/workspace/module.el~"
                 "/workspace/.el"
                 "/workspace/notel"))
-             (nreverse calls))))"##;
-    let expect = expect![[
+             (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK (((nil nil) ("init.el" (:compiled "init.el")) ("/workspace/module.el" (:compiled "/workspace/module.el")) ("/workspace/MODULE.EL" (:compiled "/workspace/MODULE.EL")) ("/workspace/module.el.gpg" nil) ("/workspace/module.el~" nil) ("/workspace/.el" (:compiled "/workspace/.el")) ("/workspace/notel" nil)) ("init.el" "/workspace/module.el" "/workspace/MODULE.EL" "/workspace/.el"))"#
-    ]];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_exclusion_regexp_prevents_matching_files_and_propagates_bad_regexps() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "auto_async_byte_compile_exclusion_regexp_prevents_matching_files_and_propagates_bad_regexps",
+            r##"(let (calls)
           (cl-letf
               (((symbol-function 'aabc/doit)
                 (lambda ()
@@ -176,17 +168,15 @@ fn auto_async_byte_compile_exclusion_regexp_prevents_matching_files_and_propagat
                 ("/project/src/generated-name.el" "generated")
                 ("/project/src/main.el" "")
                 ("/project/src/main.el" "[broken")))
-             (nreverse calls))))"##;
-    let expect = expect![[
+             (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK (((("/project/src/main.el" nil) (:ok :started)) (("/project/generated/out.el" "/generated/") (:ok nil)) (("/project/src/generated-name.el" "generated") (:ok nil)) (("/project/src/main.el" "") (:ok nil)) (("/project/src/main.el" "[broken") (:error invalid-regexp ("Unmatched [ or [^")))) ("/project/src/main.el"))"#
-    ]];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_real_save_runs_mode_hook_with_saved_file_contents() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "auto_async_byte_compile_real_save_runs_mode_hook_with_saved_file_contents",
+            r##"(let* ((root
                                  (getenv
                                   "NEOMACS_TEST_SANDBOX_ROOT"))
                                 (file
@@ -233,17 +223,15 @@ fn auto_async_byte_compile_real_save_runs_mode_hook_with_saved_file_contents() {
               (kill-buffer buffer))
             (when
                 (file-exists-p file)
-              (delete-file file))))"##;
-    let expect = expect![[
+              (delete-file file))))"##,
+            true,
+            expect![[
         r#"OK ((("[ORACLE-SANDBOX]/save-lifecycle.el" "(setq aabc-save-fixture :saved)\n" nil t "(setq aabc-save-fixture :saved)\n")) nil t "(setq aabc-save-fixture :saved)\n")"#
-    ]];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_async_byte_compile_real_save_without_mode_never_starts_compilation() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "auto_async_byte_compile_real_save_without_mode_never_starts_compilation",
+            r##"(let* ((root
                                  (getenv
                                   "NEOMACS_TEST_SANDBOX_ROOT"))
                                 (file
@@ -279,8 +267,9 @@ fn auto_async_byte_compile_real_save_without_mode_never_starts_compilation() {
               (kill-buffer buffer))
             (when
                 (file-exists-p file)
-              (delete-file file))))"##;
-    let expect = expect![[r#"OK (nil nil nil "(setq aabc-no-mode :saved)\n")"#]];
-
-    assert_auto_async_byte_compile_parity(elisp_form, expect);
+              (delete-file file))))"##,
+            true,
+            expect![[r#"OK (nil nil nil "(setq aabc-no-mode :saved)\n")"#]],
+        ),
+    ]);
 }

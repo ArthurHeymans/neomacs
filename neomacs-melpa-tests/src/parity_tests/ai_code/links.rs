@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_ai_code_parity;
+use super::assert_ai_code_batch;
 
 #[test]
-fn session_link_normalization_handles_terminal_wrapping_urls_and_spaces() {
-    let elisp_form = r##"
+fn links_public_surface_batch() {
+    assert_ai_code_batch(&[
+        (
+            "session_link_normalization_handles_terminal_wrapping_urls_and_spaces",
+            r##"
 (progn
   (require 'ai-code-session-link)
   (list
@@ -21,16 +24,15 @@ fn session_link_normalization_handles_terminal_wrapping_urls_and_spaces() {
     "/workspace/My \n Image.png")
    (ai-code-session-link--normalize-url-link-text
     "https://example.com/app-   \n  page=true")))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("src/Foo.java" "/workspace/My Image.png" "/workspace/Foo.java" "/workspace/Foo.java" "/workspace/image-wrapped.png" "./screens/My Image.png" nil) "/workspace/My Image.png" "https://example.com/app-page=true")"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn session_link_parser_covers_editor_compiler_and_github_location_syntaxes() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "session_link_parser_covers_editor_compiler_and_github_location_syntaxes",
+            r##"
 (progn
   (require 'ai-code-session-link)
   (mapcar
@@ -44,16 +46,15 @@ fn session_link_parser_covers_editor_compiler_and_github_location_syntaxes() {
      "src/lib.rs(42)"
      "./README.md"
      "PaymentService")))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ((:url "https://example.com/review/42") (:file "src/lib.rs" :line-start 42 :column-start 7) (:file "src/lib.rs" :line-start 42) (:file "src/lib.rs:L42-L60") (:file "src/lib.rs" :line-start 42) (:file "src/lib.rs" :line-start 42 :column-start 7) (:file "src/lib.rs" :line-start 42) (:file "./README.md") nil)"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn session_linkification_marks_real_project_files_locations_and_urls() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "session_linkification_marks_real_project_files_locations_and_urls",
+            r##"
 (progn
   (require 'ai-code-session-link)
   (let* ((root (make-temp-file "ai-code-links-" t))
@@ -86,16 +87,15 @@ fn session_linkification_marks_real_project_files_locations_and_urls() {
                    result)))
               (nreverse result))))
       (delete-directory root t))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("src/payment.rs" "src/payment.rs" link highlight) ("src/payment.rs:42:7" "src/payment.rs:42:7" link highlight) ("https://example.com/pull/77" "https://example.com/pull/77" link highlight))"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn session_linkification_reconstructs_wrapped_urls_without_claiming_prose() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "session_linkification_reconstructs_wrapped_urls_without_claiming_prose",
+            r##"
 (progn
   (require 'ai-code-session-link)
   (with-temp-buffer
@@ -120,16 +120,15 @@ fn session_linkification_reconstructs_wrapped_urls_without_claiming_prose() {
                 'ai-code-session-link))
          result))
       (nreverse result))))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("https://example.com/repo/project-int" "https://example.com/repo/project-interface.el") ("erface.el" "https://example.com/repo/project-interface.el") ("https://example.com/repo/pkg" "https://example.com/repo/pkg") ("-interface.el" "-interface.el"))"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn session_symbol_filters_are_language_aware_near_file_references() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "session_symbol_filters_are_language_aware_near_file_references",
+            r##"
 (progn
   (require 'ai-code-session-link)
   (let ((cases
@@ -151,16 +150,15 @@ fn session_symbol_filters_are_language_aware_near_file_references() {
                          t)))
                 (cdr case)))))
      cases)))
-"##;
-    let expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ((emacs-lisp-mode ("ai-code-session-register" t) ("make-ai-code-session" t) ("42" nil) ("*scratch*" nil)) (python-mode ("retry_payment" t) ("PaymentService" t) ("simple" nil) ("UPPER_CASE" nil)) (java-mode ("PaymentService" t) ("retryPayment" nil) ("Simple" nil) ("ALLCAPS" nil)))"#
-    ]];
-    assert_ai_code_parity(elisp_form, expect);
-}
-
-#[test]
-fn session_image_safety_enforces_extension_locality_and_size_budget() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "session_image_safety_enforces_extension_locality_and_size_budget",
+            r##"
 (progn
   (require 'ai-code-session-link)
   (let* ((root (make-temp-file "ai-code-image-link-" t))
@@ -180,8 +178,9 @@ fn session_image_safety_enforces_extension_locality_and_size_budget() {
            (ai-code-session-link--safe-local-image-file-p text)
            (car (ai-code-session-link--image-preview-file-signature small))))
       (delete-directory root t))))
-"##;
-    let expect =
-        expect![[r#"OK (("png" "ppm" "svg" "tif" "tiff" "webp" "xbm" "xpm") t nil nil 3)"#]];
-    assert_ai_code_parity(elisp_form, expect);
+"##,
+            true,
+            expect![[r#"OK (("png" "ppm" "svg" "tif" "tiff" "webp" "xbm" "xpm") t nil nil 3)"#]],
+        ),
+    ]);
 }

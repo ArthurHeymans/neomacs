@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_general_parity, assert_general_signal_parity};
+use super::{assert_general_batch};
 
 #[test]
-fn general_emacs_define_key_accepts_direct_quoted_and_multiple_keymaps() {
-    let elisp_form = r##"(progn
+fn definers_public_surface_batch() {
+    assert_general_batch(&[
+        (
+            "general_emacs_define_key_accepts_direct_quoted_and_multiple_keymaps",
+            r##"(progn
                (defvar
                  neomacs-general-emacs-map-a
                  (make-sparse-keymap))
@@ -38,15 +41,13 @@ fn general_emacs_define_key_accepts_direct_quoted_and_multiple_keymaps() {
                  (kbd "c"))
                 (lookup-key
                  neomacs-general-emacs-map-b
-                 (kbd "c"))))"##;
-    let expect = expect![[r#"OK (forward-char backward-char next-line next-line)"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_def_dispatches_zero_and_one_positional_arguments() {
-    let elisp_form = r##"(progn
+                 (kbd "c"))))"##,
+            true,
+            expect![[r#"OK (forward-char backward-char next-line next-line)"#]],
+        ),
+        (
+            "general_def_dispatches_zero_and_one_positional_arguments",
+            r##"(progn
                (defvar
                  neomacs-general-def-map
                  (make-sparse-keymap))
@@ -66,15 +67,13 @@ fn general_def_dispatches_zero_and_one_positional_arguments() {
                  (kbd "a"))
                 (lookup-key
                  neomacs-general-def-map
-                 (kbd "b"))))"##;
-    let expect = expect![[r#"OK (forward-char backward-char)"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_defs_splits_independent_positional_and_keyword_sections() {
-    let elisp_form = r##"(progn
+                 (kbd "b"))))"##,
+            true,
+            expect![[r#"OK (forward-char backward-char)"#]],
+        ),
+        (
+            "general_defs_splits_independent_positional_and_keyword_sections",
+            r##"(progn
                (defvar
                  neomacs-general-defs-map-a
                  (make-sparse-keymap))
@@ -110,15 +109,13 @@ fn general_defs_splits_independent_positional_and_keyword_sections() {
                  (kbd "d"))
                 (lookup-key
                  neomacs-general-defs-map-b
-                 (kbd "d"))))"##;
-    let expect = expect![[r#"OK (forward-char backward-char next-line previous-line nil)"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_unbind_supports_nil_ignore_and_positional_keymap_forms() {
-    let elisp_form = r##"(progn
+                 (kbd "d"))))"##,
+            true,
+            expect![[r#"OK (forward-char backward-char next-line previous-line nil)"#]],
+        ),
+        (
+            "general_unbind_supports_nil_ignore_and_positional_keymap_forms",
+            r##"(progn
                (defvar
                  neomacs-general-unbind-map
                  (make-sparse-keymap))
@@ -148,15 +145,13 @@ fn general_unbind_supports_nil_ignore_and_positional_keymap_forms() {
                  (kbd "b"))
                 (lookup-key
                  neomacs-general-unbind-map
-                 (kbd "c"))))"##;
-    let expect = expect![[r#"OK (nil nil ignore)"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_create_definer_applies_defaults_and_allows_local_overrides() {
-    let elisp_form = r##"(progn
+                 (kbd "c"))))"##,
+            true,
+            expect![[r#"OK (nil nil ignore)"#]],
+        ),
+        (
+            "general_create_definer_applies_defaults_and_allows_local_overrides",
+            r##"(progn
                (defvar
                  neomacs-general-created-map
                  (make-sparse-keymap))
@@ -188,15 +183,13 @@ fn general_create_definer_applies_defaults_and_allows_local_overrides() {
                  (kbd "C-x b"))
                 (lookup-key
                  neomacs-general-created-map
-                 (kbd "C-c b"))))"##;
-    let expect = expect![[r#"OK (t 72 forward-char backward-char nil)"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_public_definer_macros_expand_to_the_exact_primary_definer_calls() {
-    let elisp_form = r##"(list
+                 (kbd "C-c b"))))"##,
+            true,
+            expect![[r#"OK (t 72 forward-char backward-char nil)"#]],
+        ),
+        (
+            "general_public_definer_macros_expand_to_the_exact_primary_definer_calls",
+            r##"(list
                (macroexpand
                 '(general-emacs-define-key
                      neomacs-general-map
@@ -210,17 +203,15 @@ fn general_public_definer_macros_expand_to_the_exact_primary_definer_calls() {
                 '(general-def
                    :keymaps
                    'neomacs-general-map
-                   "c" #'next-line)))"##;
-    let expect = expect![[
+                   "c" #'next-line)))"##,
+            true,
+            expect![[
         r#"OK ((general-define-key :keymaps 'neomacs-general-map "a" #'forward-char) (general-define-key :states '(normal visual) :keymaps 'neomacs-general-map "b" #'backward-char) (general-define-key :keymaps 'neomacs-general-map "c" #'next-line))"#
-    ]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_evil_setup_creates_the_documented_long_and_short_definer_macros() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "general_evil_setup_creates_the_documented_long_and_short_definer_macros",
+            r##"(progn
                (general-evil-setup t)
                (mapcar
                 (lambda (symbol)
@@ -244,17 +235,15 @@ fn general_evil_setup_creates_the_documented_long_and_short_definer_macros() {
                   general-tomap
                   imap emap nmap vmap mmap
                   omap rmap iemap nvmap
-                  itomap otomap tomap)))"##;
-    let expect = expect![[
+                  itomap otomap tomap)))"##,
+            true,
+            expect![[
         r#"OK ((general-imap t t) (general-emap t t) (general-nmap t t) (general-vmap t t) (general-mmap t t) (general-omap t t) (general-rmap t t) (general-iemap t t) (general-nvmap t t) (general-itomap t t) (general-otomap t t) (general-tomap t t) (imap t t) (emap t t) (nmap t t) (vmap t t) (mmap t t) (omap t t) (rmap t t) (iemap t t) (nvmap t t) (itomap t t) (otomap t t) (tomap t t))"#
-    ]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_lambda_builds_an_interactive_command_and_preserves_body_values() {
-    let elisp_form = r##"(let ((command
+    ]],
+        ),
+        (
+            "general_lambda_builds_an_interactive_command_and_preserves_body_values",
+            r##"(let ((command
                      (general-lambda
                        (list 'result 42))))
                (list
@@ -264,30 +253,27 @@ fn general_lambda_builds_an_interactive_command_and_preserves_body_values() {
                  (indirect-function
                   'general-l)
                  (indirect-function
-                  'general-lambda))))"##;
-    let expect = expect![[r#"OK (t (result 42) t)"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_chord_encodes_ascii_and_multibyte_pairs_exactly() {
-    let elisp_form = r##"(list
+                  'general-lambda))))"##,
+            true,
+            expect![[r#"OK (t (result 42) t)"#]],
+        ),
+        (
+            "general_chord_encodes_ascii_and_multibyte_pairs_exactly",
+            r##"(list
                (general-chord "ab")
                (general-chord "ba")
                (general-chord "λλ")
                (equal
                 (general-chord "ab")
-                (general-chord "ba")))"##;
-    let expect = expect![[r#"OK ([key-chord 97 98] [key-chord 98 97] [key-chord 187 187] nil)"#]];
-
-    assert_general_parity(elisp_form, expect);
-}
-
-#[test]
-fn general_chord_rejects_any_key_count_other_than_two() {
-    let elisp_form = r##"(general-chord "a")"##;
-    let expect = expect![[r#"ERR (error "Key-chord keys must have two elements")"#]];
-
-    assert_general_signal_parity(elisp_form, expect);
+                (general-chord "ba")))"##,
+            true,
+            expect![[r#"OK ([key-chord 97 98] [key-chord 98 97] [key-chord 187 187] nil)"#]],
+        ),
+        (
+            "general_chord_rejects_any_key_count_other_than_two",
+            r##"(general-chord "a")"##,
+            false,
+            expect![[r#"ERR (error "Key-chord keys must have two elements")"#]],
+        ),
+    ]);
 }

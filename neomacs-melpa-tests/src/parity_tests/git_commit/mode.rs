@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_git_commit_parity;
+use super::assert_git_commit_batch;
 
 #[test]
-fn git_commit_mode_toggles_keymap_state_and_remains_permanent_local() {
-    let elisp_form = r##"(with-temp-buffer
+fn mode_public_surface_batch() {
+    assert_git_commit_batch(&[
+        (
+            "git_commit_mode_toggles_keymap_state_and_remains_permanent_local",
+            r##"(with-temp-buffer
                (let ((initial-major-mode major-mode))
                  (git-commit-mode 1)
                  (let ((enabled
@@ -15,15 +18,13 @@ fn git_commit_mode_toggles_keymap_state_and_remains_permanent_local() {
                          (get 'git-commit-mode 'permanent-local)
                          (eq major-mode initial-major-mode))))
                    (git-commit-mode -1)
-                   (list enabled git-commit-mode))))"##;
-    let expect = expect![[r#"OK ((t git-commit-insert-trailer git-commit-prev-message t t) nil)"#]];
-
-    assert_git_commit_parity(elisp_form, expect);
-}
-
-#[test]
-fn git_commit_setup_changelog_support_sets_buffer_local_fill_contract() {
-    let elisp_form = r##"(with-temp-buffer
+                   (list enabled git-commit-mode))))"##,
+            true,
+            expect![[r#"OK ((t git-commit-insert-trailer git-commit-prev-message t t) nil)"#]],
+        ),
+        (
+            "git_commit_setup_changelog_support_sets_buffer_local_fill_contract",
+            r##"(with-temp-buffer
                (let ((global-fill-paragraph-function
                       (default-value 'fill-paragraph-function)))
                  (git-commit-setup-changelog-support)
@@ -35,15 +36,13 @@ fn git_commit_setup_changelog_support_sets_buffer_local_fill_contract() {
                   (local-variable-p 'fill-paragraph-function)
                   (equal
                    (default-value 'fill-paragraph-function)
-                   global-fill-paragraph-function))))"##;
-    let expect = expect![[r#"OK (t t 9 t t)"#]];
-
-    assert_git_commit_parity(elisp_form, expect);
-}
-
-#[test]
-fn git_commit_auto_fill_skips_summary_but_wraps_body_lines() {
-    let elisp_form = r##"(with-temp-buffer
+                   global-fill-paragraph-function))))"##,
+            true,
+            expect![[r#"OK (t t 9 t t)"#]],
+        ),
+        (
+            "git_commit_auto_fill_skips_summary_but_wraps_body_lines",
+            r##"(with-temp-buffer
                (text-mode)
                (setq fill-column 12
                      git-commit-need-summary-line t)
@@ -55,17 +54,15 @@ fn git_commit_auto_fill_skips_summary_but_wraps_body_lines() {
                (list
                 auto-fill-function
                 (buffer-string)
-                (local-variable-p 'auto-fill-function)))"##;
-    let expect = expect![[
+                (local-variable-p 'auto-fill-function)))"##,
+            true,
+            expect![[
         r#"OK (git-commit--auto-fill-except-summary "summary words stay together\n\nbody words\nshould wrap\nhere" t)"#
-    ]];
-
-    assert_git_commit_parity(elisp_form, expect);
-}
-
-#[test]
-fn git_commit_collapse_diff_installs_a_toggle_button_and_invisible_overlay() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "git_commit_collapse_diff_installs_a_toggle_button_and_invisible_overlay",
+            r##"(with-temp-buffer
                (setq-local comment-start "#")
                (setq-local buffer-invisibility-spec nil)
                (insert
@@ -93,15 +90,13 @@ fn git_commit_collapse_diff_installs_a_toggle_button_and_invisible_overlay() {
                   before
                   buffer-invisibility-spec
                   (and overlay
-                       (overlay-get overlay 'invisible)))))"##;
-    let expect = expect![[r#"OK ((t ((git-commit-diff t)) git-commit-diff) t git-commit-diff)"#]];
-
-    assert_git_commit_parity(elisp_form, expect);
-}
-
-#[test]
-fn git_commit_setup_font_lock_configures_comment_syntax_and_exact_faces() {
-    let elisp_form = r##"(let* ((root (make-temp-file "git-commit-font-" t))
+                       (overlay-get overlay 'invisible)))))"##,
+            true,
+            expect![[r#"OK ((t ((git-commit-diff t)) git-commit-diff) t git-commit-diff)"#]],
+        ),
+        (
+            "git_commit_setup_font_lock_configures_comment_syntax_and_exact_faces",
+            r##"(let* ((root (make-temp-file "git-commit-font-" t))
                     (default-directory (file-name-as-directory root)))
                (unwind-protect
                    (progn
@@ -136,10 +131,11 @@ fn git_commit_setup_font_lock_configures_comment_syntax_and_exact_faces() {
                           (re-search-forward "Signed-off-by")
                           (get-text-property (match-beginning 0)
                                              'face)))))
-                 (delete-directory root t)))"##;
-    let expect = expect![[
+                 (delete-directory root t)))"##,
+            true,
+            expect![[
         r##"OK ("#" "^#+[ \11]*" t t git-commit-summary git-commit-overlong-summary git-commit-nonempty-second-line git-commit-trailer-token)"##
-    ]];
-
-    assert_git_commit_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

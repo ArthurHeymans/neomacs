@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AUTO_COMPLETE_MELPA_PIN, CachedMelpaOracle, POPUP_MELPA_PIN};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod completion;
 mod config;
 mod dictionaries;
@@ -78,4 +80,43 @@ pub(crate) fn assert_auto_complete_config_parity(elisp_form: &str, expected: Exp
 
 pub(crate) fn assert_auto_complete_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_auto_complete_source_parity("auto-complete-autoloads.el", elisp_form, expected);
+}
+
+
+
+
+
+
+
+/// Multi-probe batch for `assert_auto_complete_autoload_parity` cases (2a).
+pub(crate) fn assert_auto_complete_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_complete_oracle("auto-complete-autoloads.el"),
+        &name,
+        "auto_complete_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_auto_complete_parity` cases (2a).
+pub(crate) fn assert_auto_complete_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_complete_oracle("auto-complete.el"),
+        &name,
+        "auto_complete_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_auto_complete_config_parity` cases (2a).
+pub(crate) fn assert_auto_complete_config_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_complete_oracle("auto-complete-config.el"),
+        &name,
+        "auto_complete_config_parity",
+        cases,
+    );
 }

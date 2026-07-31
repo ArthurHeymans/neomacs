@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AMPLE_REGEXPS_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod workflows;
 
 const AMPLE_REGEXPS_TEST_TIMEOUT: Duration = Duration::from_secs(180);
@@ -88,4 +90,15 @@ pub(crate) fn assert_ample_regexps_parity(elisp_form: &str, expected: Expect) {
         .run_value(&name, elisp_form)
         .unwrap_or_else(|error| panic!("ample-regexps parity case `{name}` failed:\n{error}"));
     expected.assert_eq(&report.gnu_emacs.to_string());
+}
+
+/// Multi-probe batch for `assert_ample_regexps_parity` cases (2a).
+pub(crate) fn assert_ample_regexps_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        ample_regexps_oracle(),
+        &name,
+        "ample_regexps_parity",
+        cases,
+    );
 }

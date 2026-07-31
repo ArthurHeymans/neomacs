@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_audacious_parity;
+use super::assert_audacious_batch;
 
 #[test]
-fn audacious_run_and_confirmed_kill_issue_exact_process_contracts() {
-    let elisp_form = r##"(mapcar
+fn commands_public_surface_batch() {
+    assert_audacious_batch(&[
+        (
+            "audacious_run_and_confirmed_kill_issue_exact_process_contracts",
+            r##"(mapcar
          (lambda (answer)
            (let (calls prompts)
              (cl-letf
@@ -24,16 +27,15 @@ fn audacious_run_and_confirmed_kill_issue_exact_process_contracts() {
                 (audacious-kill)
                 (nreverse prompts)
                 (nreverse calls)))))
-         '(nil t))"##;
-    let expect = expect![[
+         '(nil t))"##,
+            true,
+            expect![[
         r#"OK ((nil (:process-return "audacious") nil ("Quit Audacious ?") (("audacious" nil 0 nil "-H" "2>/dev/null"))) (t (:process-return "audacious") (:process-return "/fixture/bin/audtool") ("Quit Audacious ?") (("audacious" nil 0 nil "-H" "2>/dev/null") ("/fixture/bin/audtool" nil 0 nil "--shutdown"))))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_manual_volume_forwards_practical_and_edge_values_without_validation() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "audacious_manual_volume_forwards_practical_and_edge_values_without_validation",
+            r##"(let (calls)
          (cl-letf
              (((symbol-function 'call-process)
                (lambda (&rest arguments)
@@ -47,16 +49,15 @@ fn audacious_manual_volume_forwards_practical_and_edge_values_without_validation
                "100"
                ""
                :symbolic))
-            (nreverse calls))))"##;
-    let expect = expect![[
+            (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ((6 6 6 6 6) (("/fixture/bin/audtool" nil nil nil "--set-volume" "+25%") ("/fixture/bin/audtool" nil nil nil "--set-volume" "-0%") ("/fixture/bin/audtool" nil nil nil "--set-volume" "100") ("/fixture/bin/audtool" nil nil nil "--set-volume" "") ("/fixture/bin/audtool" nil nil nil "--set-volume" :symbolic)))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_volume_shortcuts_set_exact_delta_then_report_trimmed_live_volume() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "audacious_volume_shortcuts_set_exact_delta_then_report_trimmed_live_volume",
+            r##"(let (events)
          (cl-letf
              (((symbol-function 'call-process)
                (lambda (&rest arguments)
@@ -84,16 +85,15 @@ fn audacious_volume_shortcuts_set_exact_delta_then_report_trimmed_live_volume() 
            (list
             (audacious-volume-up)
             (audacious-volume-down)
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK ("73%" "73%" ((:call "/fixture/bin/audtool" nil nil nil "--set-volume" "+10%") (:shell "audtool --get-volume") (:message "73%") (:call "/fixture/bin/audtool" nil nil nil "--set-volume" "-10%") (:shell "audtool --get-volume") (:message "73%")))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_pause_status_and_stop_preserve_command_query_and_message_order() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "audacious_pause_status_and_stop_preserve_command_query_and_message_order",
+            r##"(let (events)
          (cl-letf
              (((symbol-function 'call-process)
                (lambda (&rest arguments)
@@ -122,16 +122,15 @@ fn audacious_pause_status_and_stop_preserve_command_query_and_message_order() {
             (audacious-pause)
             (audacious-status)
             (audacious-stop)
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK ("paused" "paused" :called ((:call "/fixture/bin/audtool" nil nil nil "--playback-pause") (:shell "audtool --playback-status") (:message "paused") (:shell "audtool --playback-status") (:message "paused") (:call "/fixture/bin/audtool" nil nil nil "--playback-stop")))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_random_toggle_reports_next_state_before_toggling_for_off_and_on() {
-    let elisp_form = r##"(let ((statuses
+    ]],
+        ),
+        (
+            "audacious_random_toggle_reports_next_state_before_toggling_for_off_and_on",
+            r##"(let ((statuses
                 '("shuffle off\n"
                   "shuffle on\n"))
                events)
@@ -157,16 +156,15 @@ fn audacious_random_toggle_reports_next_state_before_toggling_for_off_and_on() {
            (list
             (audacious-random-toggle)
             (audacious-random-toggle)
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:toggled :toggled ((:shell "audtool --playlist-shuffle-status") (:message "Random: ON") (:call "/fixture/bin/audtool" nil nil nil "--playlist-shuffle-toggle") (:shell "audtool --playlist-shuffle-status") (:message "Random: OFF") (:call "/fixture/bin/audtool" nil nil nil "--playlist-shuffle-toggle")))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_repeat_toggle_uses_substring_status_semantics_and_exact_command() {
-    let elisp_form = r##"(let ((statuses
+    ]],
+        ),
+        (
+            "audacious_repeat_toggle_uses_substring_status_semantics_and_exact_command",
+            r##"(let ((statuses
                 '("not-official\n"
                   "enabled\n"
                   "OFF\n"))
@@ -187,16 +185,15 @@ fn audacious_repeat_toggle_uses_substring_status_semantics_and_exact_command() {
             (audacious-repeat-toggle)
             (audacious-repeat-toggle)
             (audacious-repeat-toggle)
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (0 0 0 ("Repeat: ON" ("/fixture/bin/audtool" nil nil nil "--playlist-repeat-toggle") "Repeat: OFF" ("/fixture/bin/audtool" nil nil nil "--playlist-repeat-toggle") "Repeat: ON" ("/fixture/bin/audtool" nil nil nil "--playlist-repeat-toggle")))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_seek_commands_forward_offsets_and_refresh_only_shortcuts() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "audacious_seek_commands_forward_offsets_and_refresh_only_shortcuts",
+            r##"(let (events)
          (cl-letf
              (((symbol-function 'call-process)
                (lambda (&rest arguments)
@@ -213,16 +210,15 @@ fn audacious_seek_commands_forward_offsets_and_refresh_only_shortcuts() {
             (audacious-song-seek "+3.75")
             (audacious-song-seek-backward)
             (audacious-song-seek-forward)
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:seeked :refreshed :refreshed ((:call "/fixture/bin/audtool" nil nil nil "--playback-seek-relative" "+3.75") (:call "/fixture/bin/audtool" nil nil nil "--playback-seek-relative" "-10") :refresh (:call "/fixture/bin/audtool" nil nil nil "--playback-seek-relative" "+10") :refresh))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_song_navigation_advances_or_reverses_then_waits_and_refreshes() {
-    let elisp_form = r##"(let (events)
+    ]],
+        ),
+        (
+            "audacious_song_navigation_advances_or_reverses_then_waits_and_refreshes",
+            r##"(let (events)
          (cl-letf
              (((symbol-function 'call-process)
                (lambda (&rest arguments)
@@ -244,16 +240,15 @@ fn audacious_song_navigation_advances_or_reverses_then_waits_and_refreshes() {
            (list
             (audacious-song-next)
             (audacious-song-prev)
-            (nreverse events))))"##;
-    let expect = expect![[
+            (nreverse events))))"##,
+            true,
+            expect![[
         r#"OK (:refreshed :refreshed ((:call "/fixture/bin/audtool" nil nil nil "--playlist-advance") (:sleep 0 20) :refresh (:call "/fixture/bin/audtool" nil nil nil "--playlist-reverse") (:sleep 0 20) :refresh))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
-}
-
-#[test]
-fn audacious_play_starts_daemon_only_for_exact_empty_status_then_plays_and_refreshes() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "audacious_play_starts_daemon_only_for_exact_empty_status_then_plays_and_refreshes",
+            r##"(mapcar
          (lambda (status)
            (let (events)
              (cl-letf
@@ -290,9 +285,11 @@ fn audacious_play_starts_daemon_only_for_exact_empty_status_then_plays_and_refre
                 (nreverse events)))))
          '(""
            "stopped\n"
-           " \n"))"##;
-    let expect = expect![[
+           " \n"))"##,
+            true,
+            expect![[
         r#"OK (("" :refreshed ((:shell "audtool --playback-status") :run (:call "/fixture/bin/audtool" nil nil nil "--playback-play") (:sleep 0 20) :refresh)) ("stopped\n" :refreshed ((:shell "audtool --playback-status") (:call "/fixture/bin/audtool" nil nil nil "--playback-play") (:sleep 0 20) :refresh)) (" \n" :refreshed ((:shell "audtool --playback-status") (:call "/fixture/bin/audtool" nil nil nil "--playback-play") (:sleep 0 20) :refresh)))"#
-    ]];
-    assert_audacious_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

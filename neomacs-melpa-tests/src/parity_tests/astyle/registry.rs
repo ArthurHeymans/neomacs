@@ -1,9 +1,12 @@
-use super::{assert_astyle_autoload_parity, assert_astyle_parity};
+use super::{assert_astyle_autoload_batch, assert_astyle_batch};
 use expect_test::{Expect, expect};
 
 #[test]
-fn package_loads_with_reformatter_and_registers_the_generated_public_surface() {
-    let elisp_form = r##"
+fn registry_astyle_batch() {
+    assert_astyle_batch(&[
+        (
+            "package_loads_with_reformatter_and_registers_the_generated_public_surface",
+            r##"
 (list
  (featurep 'astyle)
  (featurep 'reformatter)
@@ -24,16 +27,15 @@ fn package_loads_with_reformatter_and_registers_the_generated_public_surface() {
     astyle-region
     astyle-buffer
     astyle-on-save-mode)))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (t t ((astyle--format-args t nil nil "astyle.el") (astyle-region t t (beg end &optional display-errors) "astyle.el") (astyle-buffer t t (&optional display-errors) "astyle.el") (astyle-on-save-mode t t (&optional arg) "astyle.el")))"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn customization_registry_exposes_exact_defaults_types_group_and_lighter() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "customization_registry_exposes_exact_defaults_types_group_and_lighter",
+            r##"
 (list
  (mapcar
   (lambda (symbol)
@@ -52,16 +54,15 @@ fn customization_registry_exposes_exact_defaults_types_group_and_lighter() {
   'c-basic-offset)
  (get 'astyle 'custom-group)
  (get 'astyle 'group-documentation))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (((astyle-style "google" string nil) (astyle-indent nil integer nil) (astyle-default-rc-name ".astylerc" string nil) (astyle-custom-args nil (repeat string) nil) (astyle-on-save-mode-lighter " astyle" string nil)) ("--pad-oper" "--pad-header" "--break-blocks" "--delete-empty-lines" "--align-pointer=type" "--align-reference=name") nil ((astyle-style custom-variable) (astyle-indent custom-variable) (astyle-default-rc-name custom-variable) (astyle-custom-args custom-variable)) "Astyle functions and settings.")"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn installed_archive_metadata_dependency_and_source_identity_match_the_exact_pin() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "installed_archive_metadata_dependency_and_source_identity_match_the_exact_pin",
+            r##"
 (let* ((description
         (cadr
          (assq
@@ -116,16 +117,15 @@ fn installed_archive_metadata_dependency_and_source_identity_match_the_exact_pin
       'astyle--format-args
       'defun)
      ""))))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("20200328.616" ((emacs "24.4") (reformatter "0.3")) 3854 (t t t t) "astyle.el")"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn on_save_mode_state_is_buffer_local_and_uses_the_generated_lighter_and_hook() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "on_save_mode_state_is_buffer_local_and_uses_the_generated_lighter_and_hook",
+            r##"
 (let ((first
        (generate-new-buffer
         " *astyle-first*"))
@@ -158,14 +158,19 @@ fn on_save_mode_state_is_buffer_local_and_uses_the_generated_lighter_and_hook() 
          astyle-on-save-mode-lighter))
     (kill-buffer first)
     (kill-buffer second)))
-"##;
-    let expect: Expect = expect![[r#"OK ((t t t (astyle-buffer t)) (nil nil nil) " astyle")"#]];
-    assert_astyle_parity(elisp_form, expect);
+"##,
+            true,
+            expect![[r#"OK ((t t t (astyle-buffer t)) (nil nil nil) " astyle")"#]],
+        ),
+    ]);
 }
 
 #[test]
-fn generated_autoloads_publish_buffer_region_and_on_save_mode_commands() {
-    let elisp_form = r##"
+fn registry_astyle_autoload_batch() {
+    assert_astyle_autoload_batch(&[
+        (
+            "generated_autoloads_publish_buffer_region_and_on_save_mode_commands",
+            r##"
 (list
  (mapcar
   (lambda (symbol)
@@ -184,9 +189,11 @@ fn generated_autoloads_publish_buffer_region_and_on_save_mode_commands() {
     astyle-on-save-mode))
  (featurep 'astyle-autoloads)
  (featurep 'astyle))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (((astyle-buffer t "astyle" t nil t) (astyle-region t "astyle" t nil t) (astyle-on-save-mode t "astyle" t nil t)) t nil)"#
-    ]];
-    assert_astyle_autoload_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

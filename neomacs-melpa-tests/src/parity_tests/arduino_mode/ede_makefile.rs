@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_ede_arduino_parity, assert_ede_arduino_signal_parity};
+use super::{assert_ede_arduino_batch};
 
 #[test]
-fn library_guessing_scans_real_includes_skips_local_headers_and_adds_utility_directory() {
-    let elisp_form = r##"(let* ((root
+fn ede_makefile_public_surface_batch() {
+    assert_ede_arduino_batch(&[
+        (
+            "library_guessing_scans_real_includes_skips_local_headers_and_adds_utility_directory",
+            r##"(let* ((root
                           (make-temp-file
                            "arduino-library-scan-" t))
                          (libraries
@@ -60,16 +63,15 @@ fn library_guessing_scans_real_includes_skips_local_headers_and_adds_utility_dir
                       (when (get-file-buffer sketch)
                         (kill-buffer
                          (get-file-buffer sketch)))
-                      (delete-directory root t)))"##;
-    let expect = expect![[
+                      (delete-directory root t)))"##,
+            true,
+            expect![[
         r#"OK (#("Wire" 0 4 (fontified nil)) #("Servo" 0 5 (fontified nil)) #("Servo/utility" 0 5 (fontified nil)))"#
-    ]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn buffer_local_library_override_preserves_declared_order_without_scanning_source() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "buffer_local_library_override_preserves_declared_order_without_scanning_source",
+            r##"(let* ((root
                           (make-temp-file
                            "arduino-library-override-" t))
                          (sketch
@@ -99,14 +101,13 @@ fn buffer_local_library_override_preserves_declared_order_without_scanning_sourc
                             (unwind-protect
                                 (ede-arduino-guess-libs)
                               (kill-buffer buffer))))
-                      (delete-directory root t)))"##;
-    let expect = expect![[r#"OK ("Servo" "SD" "Ethernet")"#]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn makefile_generation_supplies_complete_real_project_board_and_library_contract() {
-    let elisp_form = r##"(let* ((root
+                      (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK ("Servo" "SD" "Ethernet")"#]],
+        ),
+        (
+            "makefile_generation_supplies_complete_real_project_board_and_library_contract",
+            r##"(let* ((root
                           (make-temp-file
                            "arduino-makefile-" t))
                          (sketch
@@ -203,16 +204,15 @@ fn makefile_generation_supplies_complete_real_project_board_and_library_contract
                          (get-file-buffer
                           (expand-file-name
                            "Makefile" root))))
-                      (delete-directory root t)))"##;
-    let expect = expect![[
+                      (delete-directory root t)))"##,
+            true,
+            expect![[
         r##"OK ("# generated makefile\n" (:sync :setup (:insert "arduino:ede-empty" "TARGET" "BuildDemo" "ARDUINO_LIBS" "Servo Ethernet/utility" "MCU" "atmega328p" "F_CPU" "16000000L" "PORT" "/dev/ttyACM0" "AVRDUDE_ARD_BAUDRATE" "57600" "AVRDUDE_ARD_PROGRAMMER" "arduino" "ARDUINO_MK" "/opt/arduino/Arduino.mk" "ARDUINO_HOME" "/opt/arduino")) nil)"##
-    ]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn makefile_generation_rejects_ino_before_one_zero_and_pde_at_or_after_one_zero() {
-    let elisp_form = r##"(let* ((project
+    ]],
+        ),
+        (
+            "makefile_generation_rejects_ino_before_one_zero_and_pde_at_or_after_one_zero",
+            r##"(let* ((project
                           (make-instance
                            'ede-arduino-project
                            :name "Versioned"
@@ -251,16 +251,15 @@ fn makefile_generation_rejects_ino_before_one_zero_and_pde_at_or_after_one_zero(
                              (car error-data)
                              (cadr error-data))))
                          outcomes)))
-                    (nreverse outcomes))"##;
-    let expect = expect![[
+                    (nreverse outcomes))"##,
+            true,
+            expect![[
         r#"OK ((error "Makefile doesn’t support .ino files until Arduino 1.0") (error "Makefile doesn’t support .pde files after Arduino 1.0"))"#
-    ]];
-    assert_ede_arduino_parity(elisp_form, expect);
-}
-
-#[test]
-fn makefile_generation_refuses_to_replace_unmanaged_content_when_user_declines() {
-    let elisp_form = r##"(let* ((root
+    ]],
+        ),
+        (
+            "makefile_generation_refuses_to_replace_unmanaged_content_when_user_declines",
+            r##"(let* ((root
                           (make-temp-file
                            "arduino-makefile-refusal-" t))
                          (makefile
@@ -308,7 +307,9 @@ fn makefile_generation_refuses_to_replace_unmanaged_content_when_user_declines()
                           (get-file-buffer sketch)
                         (kill-buffer
                          (get-file-buffer sketch)))
-                      (delete-directory root t)))"##;
-    let expect = expect![[r#"ERR (error "Not replacing Makefile")"#]];
-    assert_ede_arduino_signal_parity(elisp_form, expect);
+                      (delete-directory root t)))"##,
+            false,
+            expect![[r#"ERR (error "Not replacing Makefile")"#]],
+        ),
+    ]);
 }

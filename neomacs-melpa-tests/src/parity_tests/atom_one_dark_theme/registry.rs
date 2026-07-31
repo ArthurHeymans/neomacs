@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_atom_one_dark_theme_autoload_parity, assert_atom_one_dark_theme_parity};
+use super::{assert_atom_one_dark_theme_autoload_batch, assert_atom_one_dark_theme_batch};
 
 #[test]
-fn atom_one_dark_theme_exact_package_descriptor_origin_and_dependency_contract_match() {
-    let elisp_form = r##"(let ((descriptor
+fn registry_atom_one_dark_theme_batch() {
+    assert_atom_one_dark_theme_batch(&[
+        (
+            "atom_one_dark_theme_exact_package_descriptor_origin_and_dependency_contract_match",
+            r##"(let ((descriptor
                 (cadr
                  (assq 'atom-one-dark-theme package-alist))))
          (list
@@ -20,17 +23,15 @@ fn atom_one_dark_theme_exact_package_descriptor_origin_and_dependency_contract_m
            '(20260119 1824))
           (file-name-nondirectory
            (locate-library
-            "atom-one-dark-theme"))))"##;
-    let expect = expect![[
+            "atom-one-dark-theme"))))"##,
+            true,
+            expect![[
         r#"OK (atom-one-dark-theme "20260119.1824" "Atom One Dark color theme." nil nil ((:maintainers ("Jonathan Chu" . "me@jonathanchu.is")) (:authors ("Jonathan Chu" . "me@jonathanchu.is")) (:revdesc . "bba02fb2672a") (:commit . "bba02fb2672a4c439d71920d8e068a3ff2ed463e") (:url . "https://github.com/jonathanchu/atom-one-dark-theme")) t "atom-one-dark-theme.el")"#
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_installed_payload_hashes_only_exact_archive_files() {
-    let elisp_form = r##"(let* ((descriptor
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_installed_payload_hashes_only_exact_archive_files",
+            r##"(let* ((descriptor
                   (cadr
                    (assq 'atom-one-dark-theme package-alist)))
                  (directory
@@ -64,17 +65,15 @@ fn atom_one_dark_theme_installed_payload_hashes_only_exact_archive_files() {
               (file-regular-p
                (expand-file-name file directory)))
             (directory-files directory nil "\\`[^.]"))
-           #'string<)))"##;
-    let expect = expect![[
+           #'string<)))"##,
+            true,
+            expect![[
         r#"OK (("atom-one-dark-theme-autoloads.el" :generated t) ("atom-one-dark-theme-pkg.el" :archive 392 "9398e08bb830b7d4560d0ea7f935807b934daaa98cc07869ca488da1caebef0d") ("atom-one-dark-theme.el" :archive 46988 "a5c590aeb7dc5c2b8d36601a4c94a1145e46bd2291571af02807dd7a8552630c"))"#
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_registration_documentation_feature_and_initial_state_match() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_registration_documentation_feature_and_initial_state_match",
+            r##"(list
          (custom-theme-p 'atom-one-dark)
          (custom-theme-name-valid-p
           'atom-one-dark)
@@ -91,17 +90,15 @@ fn atom_one_dark_theme_registration_documentation_feature_and_initial_state_matc
          (length
           (atom-one-dark-test-face-settings))
          (length
-          (atom-one-dark-test-value-settings)))"##;
-    let expect = expect![[
+          (atom-one-dark-test-value-settings)))"##,
+            true,
+            expect![[
         r#"OK ((atom-one-dark user changed) t nil atom-one-dark-theme "Atom One Dark - An Emacs port of the Atom One Dark theme from Atom.io." t nil 460 3)"#
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_complete_callable_macro_command_metadata_surface_matches() {
-    let elisp_form = r##"(let (symbols)
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_complete_callable_macro_command_metadata_surface_matches",
+            r##"(let (symbols)
          (mapatoms
           (lambda (symbol)
             (when
@@ -134,17 +131,15 @@ fn atom_one_dark_theme_complete_callable_macro_command_metadata_surface_matches(
                 (lambda (left right)
                   (string<
                    (symbol-name left)
-                   (symbol-name right))))))"##;
-    let expect = expect![[
+                   (symbol-name right))))))"##,
+            true,
+            expect![[
         r#"OK ((atom-one-dark-theme-change-faces-for-mode t nil (interactive nil) "nil" nil nil "atom-one-dark-theme.el") (atom-one-dark-with-color-variables nil t nil "(&rest body)" "Bind the colors list around BODY." 0 "atom-one-dark-theme.el"))"#
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_complete_variable_metadata_defaults_and_hook_surface_match() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_complete_variable_metadata_defaults_and_hook_surface_match",
+            r##"(mapcar
          (lambda (symbol)
            (list
             symbol
@@ -160,17 +155,15 @@ fn atom_one_dark_theme_complete_variable_metadata_defaults_and_hook_surface_matc
             (file-name-nondirectory
              (symbol-file symbol 'defvar))))
          '(atom-one-dark-colors-alist
-           atom-one-dark-theme-force-faces-for-mode))"##;
-    let expect = expect![[
+           atom-one-dark-theme-force-faces-for-mode))"##,
+            true,
+            expect![[
         r##"OK ((atom-one-dark-colors-alist t (("atom-one-dark-accent" . "#528BFF") ("atom-one-dark-fg" if nil "color-248" "#ABB2BF") ("atom-one-dark-bg" if nil "color-235" "#282C34") ("atom-one-dark-bg-1" if nil "color-234" "#121417") ("atom-one-dark-bg-hl" if nil "color-236" "#2C323C") ("atom-one-dark-gutter" if nil "color-239" "#4B5363") ("atom-one-dark-insert" . "#43D08A") ("atom-one-dark-change" . "#E0C285") ("atom-one-dark-delete" . "#E05252") ("atom-one-dark-info" . "#6494ED") ("atom-one-dark-success" . "#73C900") ("atom-one-dark-warning" . "#E2C08D") ("atom-one-dark-error" . "#FF6347") ("atom-one-dark-mono-1" if nil "color-248" "#ABB2BF") ("atom-one-dark-mono-2" if nil "color-244" "#828997") ("atom-one-dark-mono-3" if nil "color-240" "#5C6370") ("atom-one-dark-cyan" . "#56B6C2") ("atom-one-dark-blue" . "#61AFEF") ("atom-one-dark-purple" . "#C678DD") ("atom-one-dark-green" . "#98C379") ("atom-one-dark-red-1" . "#E06C75") ("atom-one-dark-red-2" . "#BE5046") ("atom-one-dark-orange-1" . "#D19A66") ("atom-one-dark-orange-2" . "#E5C07B") ("atom-one-dark-gray" if nil "color-237" "#3E4451") ("atom-one-dark-silver" if nil "color-247" "#9DA5B4") ("atom-one-dark-black" if nil "color-233" "#21252B") ("atom-one-dark-ui-fg" if nil "color-247" "#9DA5B4") ("atom-one-dark-level-3-color" if nil "color-233" "#21252B") ("atom-one-dark-border" if nil "color-232" "#181A1F")) t nil "List of Atom One Dark colors." nil nil "atom-one-dark-theme.el") (atom-one-dark-theme-force-faces-for-mode t t t nil "If t, atom-one-dark-theme will use Face Remapping to alter the theme faces for\nthe current buffer based on its mode in an attempt to mimick the Atom One Dark\nTheme from Atom.io as best as possible.\nThe reason this is required is because some modes (html-mode, jyaml-mode, ...)\ndo not provide the necessary faces to do theming without conflicting with other\nmodes.\nCurrent modes, and their faces, impacted by this variable:\n* js2-mode: font-lock-constant-face, font-lock-doc-face, font-lock-variable-name-face\n* html-mode: font-lock-function-name-face, font-lock-variable-name-face\n" nil nil "atom-one-dark-theme.el"))"##
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_setting_inventory_order_duplicates_and_value_names_are_exact() {
-    let elisp_form = r##"(let* ((settings
+    ]],
+        ),
+        (
+            "atom_one_dark_theme_setting_inventory_order_duplicates_and_value_names_are_exact",
+            r##"(let* ((settings
                   (get 'atom-one-dark 'theme-settings))
                  (face-settings
                   (atom-one-dark-test-face-settings))
@@ -197,18 +190,15 @@ fn atom_one_dark_theme_setting_inventory_order_duplicates_and_value_names_are_ex
            (last faces))
           (mapcar #'cadr value-settings)
           (mapcar #'car value-settings)
-          (mapcar #'caddr value-settings)))"##;
-    let expect = expect![
+          (mapcar #'caddr value-settings)))"##,
+            true,
+            expect![
         "OK (463 460 459 (helm-grep-finish) default tab-line-highlight (fci-rule-color tetris-x-colors ansi-color-names-vector) (theme-value theme-value theme-value) (atom-one-dark atom-one-dark atom-one-dark))"
-    ];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
-}
-
-#[test]
-fn atom_one_dark_theme_source_reloads_accumulate_settings_but_preserve_defvars_and_deduplicate_paths()
- {
-    let elisp_form = r##"(let* ((source
+    ],
+        ),
+        (
+            "atom_one_dark_theme_source_reloads_accumulate_settings_but_preserve_defvars_and_deduplicate_paths",
+            r##"(let* ((source
                   (getenv "NEOMACS_PACKAGE_SOURCE"))
                  (directory
                   (file-name-as-directory
@@ -258,17 +248,21 @@ fn atom_one_dark_theme_source_reloads_accumulate_settings_but_preserve_defvars_a
                    (setq count
                          (1+ count))))))
             observations))
-         (nreverse observations))"##;
-    let expect = expect![[
+         (nreverse observations))"##,
+            true,
+            expect![[
         r##"OK ((926 30 "#010203" user-choice 1 1) (1389 30 "#010203" user-choice 1 1))"##
-    ]];
-
-    assert_atom_one_dark_theme_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }
 
 #[test]
-fn atom_one_dark_theme_generated_autoload_registers_paths_prefix_and_feature_only() {
-    let elisp_form = r##"(let* ((source
+fn registry_atom_one_dark_theme_autoload_batch() {
+    assert_atom_one_dark_theme_autoload_batch(&[
+        (
+            "atom_one_dark_theme_generated_autoload_registers_paths_prefix_and_feature_only",
+            r##"(let* ((source
                   (getenv "NEOMACS_PACKAGE_SOURCE"))
                  (directory
                   (file-name-as-directory
@@ -346,10 +340,11 @@ fn atom_one_dark_theme_generated_autoload_registers_paths_prefix_and_feature_onl
                     (eq
                      (car event)
                      'provide)))
-                 (cdr history))))))"##;
-    let expect = expect![[
+                 (cdr history))))))"##,
+            true,
+            expect![[
         r#"OK (nil t nil nil nil nil t 1 t 1 ("atom-one-dark-theme") ((provide atom-one-dark-theme-autoloads)))"#
-    ]];
-
-    assert_atom_one_dark_theme_autoload_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

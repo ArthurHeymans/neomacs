@@ -1,24 +1,26 @@
 use expect_test::expect;
 
-use super::assert_ast_grep_parity;
+use super::assert_ast_grep_batch;
 
 #[test]
-fn ast_grep_outline_title_mapping_covers_canonical_and_unknown_symbol_types() {
-    let elisp_form = r##"(list
+fn outline_public_surface_batch() {
+    assert_ast_grep_batch(&[
+        (
+            "ast_grep_outline_title_mapping_covers_canonical_and_unknown_symbol_types",
+            r##"(list
           ast-grep--outline-type-titles
           (mapcar
            #'ast-grep--outline-group-title
            '("class" "interface" "function" "method"
-             "constant" "macro" "event-handler" "" nil)))"##;
-    let expect = expect![[
+             "constant" "macro" "event-handler" "" nil)))"##,
+            true,
+            expect![[
         r#"OK ((("class" . "Classes") ("interface" . "Interfaces") ("struct" . "Structs") ("enum" . "Enums") ("trait" . "Traits") ("object" . "Objects") ("module" . "Modules") ("namespace" . "Namespaces") ("function" . "Functions") ("method" . "Methods") ("constructor" . "Constructors") ("field" . "Fields") ("property" . "Properties") ("constant" . "Constants") ("variable" . "Variables") ("type" . "Types") ("macro" . "Macros")) ("Classes" "Interfaces" "Functions" "Methods" "Constants" "Macros" "Event-Handler" "" "Other"))"#
-    ]];
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_outline_command_and_real_process_use_expanded_file_and_outline_label() {
-    let elisp_form = r##"(let* ((file
+    ]],
+        ),
+        (
+            "ast_grep_outline_command_and_real_process_use_expanded_file_and_outline_label",
+            r##"(let* ((file
                 (ast-grep-test-write-file
                  "outline/src/demo.ts"
                  "function run() {}\n"))
@@ -38,16 +40,15 @@ fn ast_grep_outline_command_and_real_process_use_expanded_file_and_outline_label
            (ast-grep--run-outline file)
            (replace-regexp-in-string
             (regexp-quote file) "$FILE"
-            (ast-grep-test-read-file log))))"##;
-    let expect = expect![[
+            (ast-grep-test-read-file log))))"##,
+            true,
+            expect![[
         r#"OK (("[ORACLE-SANDBOX]/bin/sg-outline" "outline" "--json=stream" "$FILE") "{\"items\":[]}\n" "outline\n--json=stream\n$FILE\n")"#
-    ]];
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_outline_parse_flattens_multi_file_stream_and_skips_malformed_lines() {
-    let elisp_form = r##"(let ((output
+    ]],
+        ),
+        (
+            "ast_grep_outline_parse_flattens_multi_file_stream_and_skips_malformed_lines",
+            r##"(let ((output
                (concat
                 "{\"file\":\"a.ts\",\"items\":[{\"name\":\"A\",\"symbolType\":\"class\",\"range\":{\"start\":{\"line\":0,\"column\":0}},\"members\":[]}]}\n"
                 "malformed\n"
@@ -56,16 +57,15 @@ fn ast_grep_outline_parse_flattens_multi_file_stream_and_skips_malformed_lines()
           (list
            (ast-grep--outline-parse output)
            (ast-grep--outline-parse "")
-           (ast-grep--outline-parse nil)))"##;
-    let expect = expect![[
+           (ast-grep--outline-parse nil)))"##,
+            true,
+            expect![[
         r#"OK (((:name "A" :symbolType "class" :range (:start (:line 0 :column 0)) :members nil) (:name "run" :symbolType "function" :range (:start (:line 3 :column 2)) :members nil) (:name "value" :symbolType "variable" :range (:start (:line 5 :column 1)) :members nil)) nil nil)"#
-    ]];
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_outline_flatten_builds_qualified_nested_names_at_character_positions() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "ast_grep_outline_flatten_builds_qualified_nested_names_at_character_positions",
+            r##"(with-temp-buffer
           (insert
            "class Widget {\n"
            "\tmethod render() {\n"
@@ -98,16 +98,15 @@ fn ast_grep_outline_flatten_builds_qualified_nested_names_at_character_positions
                 (nth 1 entry)
                 (nth 2 entry)
                 (char-after (nth 2 entry))))
-             (ast-grep--outline-flatten items nil))))"##;
-    let expect = expect![[
+             (ast-grep--outline-flatten items nil))))"##,
+            true,
+            expect![[
         r#"OK (("class" "Widget" 7 87) ("method" "Widget.render" 24 114) ("function" "Widget.render.inner" 46 105))"#
-    ]];
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_outline_group_orders_types_and_deduplicates_reachable_names() {
-    let elisp_form = r##"(let ((entries
+    ]],
+        ),
+        (
+            "ast_grep_outline_group_orders_types_and_deduplicates_reachable_names",
+            r##"(let ((entries
                '(("variable" "item" 80)
                  ("function" "run" 10)
                  ("method" "Widget.run" 30)
@@ -120,16 +119,15 @@ fn ast_grep_outline_group_orders_types_and_deduplicates_reachable_names() {
            (ast-grep--outline-dedupe-names
             '(("same" . 1) ("other" . 2)
               ("same" . 3) ("same" . 4)))
-           (ast-grep--outline-group entries)))"##;
-    let expect = expect![[
+           (ast-grep--outline-group entries)))"##,
+            true,
+            expect![[
         r#"OK ((("same" . 1) ("other" . 2) ("same<2>" . 3) ("same<3>" . 4)) (("Classes" ("Widget" . 1) ("Gadget" . 50)) ("Functions" ("run" . 10) ("run<2>" . 20) ("run<3>" . 25)) ("Methods" ("Widget.run" . 30)) ("Variables" ("item" . 80)) ("Event-Handler" ("on-click" . 90))))"#
-    ]];
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_outline_imenu_index_runs_real_stub_cli_and_returns_jumpable_groups() {
-    let elisp_form = r##"(let* ((file
+    ]],
+        ),
+        (
+            "ast_grep_outline_imenu_index_runs_real_stub_cli_and_returns_jumpable_groups",
+            r##"(let* ((file
                 (ast-grep-test-write-file
                  "outline/real.ts"
                  "class Widget {}\nfunction run() {}\n"))
@@ -153,16 +151,15 @@ fn ast_grep_outline_imenu_index_runs_real_stub_cli_and_returns_jumpable_groups()
                           (char-after (cdr leaf))))
                        (cdr group)))
                     index))))
-            (ast-grep-test-kill-file-buffer file)))"##;
-    let expect = expect![[
+            (ast-grep-test-kill-file-buffer file)))"##,
+            true,
+            expect![[
         r#"OK ((("Classes" ("Widget" . 7)) ("Functions" ("run" . 26))) ((("Widget" 7 87)) (("run" 26 114))))"#
-    ]];
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_outline_imenu_index_degrades_cli_failure_to_message_and_empty_index() {
-    let elisp_form = r##"(let* ((file
+    ]],
+        ),
+        (
+            "ast_grep_outline_imenu_index_degrades_cli_failure_to_message_and_empty_index",
+            r##"(let* ((file
                 (ast-grep-test-write-file
                  "outline/failure.ts"
                  "function nope() {}\n"))
@@ -180,14 +177,13 @@ fn ast_grep_outline_imenu_index_degrades_cli_failure_to_message_and_empty_index(
                   (list
                    (ast-grep--outline-imenu-index)
                    (nreverse messages))))
-            (ast-grep-test-kill-file-buffer file)))"##;
-    let expect = expect![[r#"OK (nil ("ast-grep outline failed: unsupported outline version"))"#]];
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_outline_mode_restores_prior_imenu_function_and_invalidates_all_caches() {
-    let elisp_form = r##"(with-temp-buffer
+            (ast-grep-test-kill-file-buffer file)))"##,
+            true,
+            expect![[r#"OK (nil ("ast-grep outline failed: unsupported outline version"))"#]],
+        ),
+        (
+            "ast_grep_outline_mode_restores_prior_imenu_function_and_invalidates_all_caches",
+            r##"(with-temp-buffer
           (setq-local imenu-create-index-function #'ignore)
           (setq-local imenu--index-alist '((old . 1)))
           (setq-local consult-imenu--cache 'consult-old)
@@ -226,16 +222,15 @@ fn ast_grep_outline_mode_restores_prior_imenu_function_and_invalidates_all_cache
                 ast-grep--outline-saved-imenu-function
                 imenu--index-alist
                 (local-variable-p 'consult-imenu--cache)
-                (local-variable-p 'helm-cached-imenu-alist))))))"##;
-    let expect = expect![
+                (local-variable-p 'helm-cached-imenu-alist))))))"##,
+            true,
+            expect![
         "OK ((ignore ((old . 1)) consult-old helm-alist helm-candidates 42 unset) (t ast-grep--outline-imenu-index nil nil nil nil nil ignore) (nil ignore unset nil nil nil))"
-    ];
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_outline_mode_without_prior_local_function_restores_global_binding() {
-    let elisp_form = r##"(with-temp-buffer
+    ],
+        ),
+        (
+            "ast_grep_outline_mode_without_prior_local_function_restores_global_binding",
+            r##"(with-temp-buffer
           (kill-local-variable 'imenu-create-index-function)
           (let ((global (default-value 'imenu-create-index-function)))
             (ast-grep-outline-mode 1)
@@ -249,14 +244,13 @@ fn ast_grep_outline_mode_without_prior_local_function_restores_global_binding() 
                during
                (local-variable-p 'imenu-create-index-function)
                (eq imenu-create-index-function global)
-               ast-grep--outline-saved-imenu-function))))"##;
-    let expect = expect!["OK ((t ast-grep--outline-imenu-index unset) nil t unset)"];
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_outline_picker_dispatch_respects_active_ivy_helm_consult_priority() {
-    let elisp_form = r##"(let* ((file
+               ast-grep--outline-saved-imenu-function))))"##,
+            true,
+            expect!["OK ((t ast-grep--outline-imenu-index unset) nil t unset)"],
+        ),
+        (
+            "ast_grep_outline_picker_dispatch_respects_active_ivy_helm_consult_priority",
+            r##"(let* ((file
                 (ast-grep-test-write-file
                  "outline/picker.el"
                  "(defun sample () t)\n"))
@@ -295,14 +289,13 @@ fn ast_grep_outline_picker_dispatch_respects_active_ivy_helm_consult_priority() 
                   (let ((ivy-mode nil) (helm-mode nil))
                     (ast-grep-outline))
                   (nreverse calls)))
-            (ast-grep-test-kill-file-buffer file)))"##;
-    let expect = expect!["OK (counsel helm consult)"];
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_outline_one_shot_restores_origin_state_when_picker_switches_buffers() {
-    let elisp_form = r##"(let* ((file
+            (ast-grep-test-kill-file-buffer file)))"##,
+            true,
+            expect!["OK (counsel helm consult)"],
+        ),
+        (
+            "ast_grep_outline_one_shot_restores_origin_state_when_picker_switches_buffers",
+            r##"(let* ((file
                 (ast-grep-test-write-file
                  "outline/origin.el"
                  "(defun origin () t)\n"))
@@ -334,14 +327,13 @@ fn ast_grep_outline_one_shot_restores_origin_state_when_picker_switches_buffers(
                      (buffer-name (current-buffer))))))
             (ast-grep-test-kill-file-buffer file)
             (when (buffer-live-p other)
-              (kill-buffer other))))"##;
-    let expect = expect![[r#"OK (ignore ((saved . 17)) saved-consult t "origin.el")"#]];
-    assert_ast_grep_parity(elisp_form, expect);
-}
-
-#[test]
-fn ast_grep_outline_command_rejects_missing_executable_and_non_file_buffers() {
-    let elisp_form = r##"(list
+              (kill-buffer other))))"##,
+            true,
+            expect![[r#"OK (ignore ((saved . 17)) saved-consult t "origin.el")"#]],
+        ),
+        (
+            "ast_grep_outline_command_rejects_missing_executable_and_non_file_buffers",
+            r##"(list
           (let ((ast-grep-executable "definitely-no-such-sg"))
             (ast-grep-test-error-data #'ast-grep-outline))
           (let* ((program
@@ -350,9 +342,11 @@ fn ast_grep_outline_command_rejects_missing_executable_and_non_file_buffers() {
                    "exit 0"))
                  (ast-grep-executable program))
             (with-temp-buffer
-              (ast-grep-test-error-data #'ast-grep-outline))))"##;
-    let expect = expect![[
+              (ast-grep-test-error-data #'ast-grep-outline))))"##,
+            true,
+            expect![[
         r#"OK ((:error error ("The ast-grep executable not found. Please install ast-grep")) (:error user-error ("Current buffer is not visiting a file")))"#
-    ]];
-    assert_ast_grep_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

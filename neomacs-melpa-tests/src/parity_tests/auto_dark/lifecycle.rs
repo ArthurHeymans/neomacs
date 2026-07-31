@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_auto_dark_autoload_parity, assert_auto_dark_parity};
+use super::{assert_auto_dark_autoload_batch, assert_auto_dark_batch};
 
 #[test]
-fn auto_dark_mode_enable_with_configured_method_checks_theme_then_registers_listener() {
-    let elisp_form = r##"(let ((auto-dark-mode nil)
+fn lifecycle_auto_dark_batch() {
+    assert_auto_dark_batch(&[
+        (
+            "auto_dark_mode_enable_with_configured_method_checks_theme_then_registers_listener",
+            r##"(let ((auto-dark-mode nil)
                                (auto-dark-detection-method
                                 'manual)
                                events)
@@ -38,15 +41,13 @@ fn auto_dark_mode_enable_with_configured_method_checks_theme_then_registers_list
              (auto-dark-mode 1)
              auto-dark-mode
              auto-dark-detection-method
-             (nreverse events))))"##;
-    let expect = expect!["OK (t t manual ((:check t manual) (:register t manual)))"];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_mode_enable_without_method_persists_detection_before_check_and_registration() {
-    let elisp_form = r##"(let ((auto-dark-mode nil)
+             (nreverse events))))"##,
+            true,
+            expect!["OK (t t manual ((:check t manual) (:register t manual)))"],
+        ),
+        (
+            "auto_dark_mode_enable_without_method_persists_detection_before_check_and_registration",
+            r##"(let ((auto-dark-mode nil)
                                (auto-dark-detection-method nil)
                                events)
           (cl-letf
@@ -79,15 +80,13 @@ fn auto_dark_mode_enable_without_method_persists_detection_before_check_and_regi
              (auto-dark-mode 1)
              auto-dark-mode
              auto-dark-detection-method
-             (nreverse events))))"##;
-    let expect = expect!["OK (t t dbus ((:determine nil) (:check dbus) (:register dbus)))"];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_mode_disable_only_unregisters_listener_and_preserves_theme_and_detection_state() {
-    let elisp_form = r##"(let ((auto-dark-mode t)
+             (nreverse events))))"##,
+            true,
+            expect!["OK (t t dbus ((:determine nil) (:check dbus) (:register dbus)))"],
+        ),
+        (
+            "auto_dark_mode_disable_only_unregisters_listener_and_preserves_theme_and_detection_state",
+            r##"(let ((auto-dark-mode t)
                                (auto-dark-detection-method
                                 'manual)
                                (auto-dark--last-dark-mode-state
@@ -125,16 +124,13 @@ fn auto_dark_mode_disable_only_unregisters_listener_and_preserves_theme_and_dete
              auto-dark--last-dark-mode-state
              auto-dark-themes
              custom-enabled-themes
-             (nreverse events))))"##;
-    let expect =
-        expect!["OK (nil nil manual dark ((wombat) (leuven)) (wombat) ((:unregister nil)))"];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_global_mode_numeric_toggle_hook_and_repeated_enable_semantics_match() {
-    let elisp_form = r##"(let* ((auto-dark-mode nil)
+             (nreverse events))))"##,
+            true,
+            expect!["OK (nil nil manual dark ((wombat) (leuven)) (wombat) ((:unregister nil)))"],
+        ),
+        (
+            "auto_dark_global_mode_numeric_toggle_hook_and_repeated_enable_semantics_match",
+            r##"(let* ((auto-dark-mode nil)
                                 events
                                 (auto-dark-mode-hook
                                  (list
@@ -170,17 +166,15 @@ fn auto_dark_global_mode_numeric_toggle_hook_and_repeated_enable_semantics_match
                auto-dark-mode
                (auto-dark-mode -7)
                auto-dark-mode
-               (nreverse events)))))"##;
-    let expect = expect![
+               (nreverse events)))))"##,
+            true,
+            expect![
         "OK (t t t t nil nil t t nil nil (:check :register (:mode-hook t) :check :register (:mode-hook t) :unregister (:mode-hook nil) :check :register (:mode-hook t) :unregister (:mode-hook nil)))"
-    ];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_mode_enable_failure_leaves_mode_variable_on_and_skips_registration() {
-    let elisp_form = r##"(let ((auto-dark-mode nil)
+    ],
+        ),
+        (
+            "auto_dark_mode_enable_failure_leaves_mode_variable_on_and_skips_registration",
+            r##"(let ((auto-dark-mode nil)
                                (auto-dark-detection-method
                                 'manual)
                                events)
@@ -201,15 +195,13 @@ fn auto_dark_mode_enable_failure_leaves_mode_variable_on_and_skips_registration(
                 (auto-dark-mode 1)))
              auto-dark-mode
              auto-dark-detection-method
-             (nreverse events))))"##;
-    let expect = expect![[r#"OK ((:error error ("fixture theme failure")) t manual (:check))"#]];
-
-    assert_auto_dark_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dark_set_theme_hook_failure_occurs_after_state_frame_and_theme_changes() {
-    let elisp_form = r##"(let ((auto-dark-themes
+             (nreverse events))))"##,
+            true,
+            expect![[r#"OK ((:error error ("fixture theme failure")) t manual (:check))"#]],
+        ),
+        (
+            "auto_dark_set_theme_hook_failure_occurs_after_state_frame_and_theme_changes",
+            r##"(let ((auto-dark-themes
                                 '((dark-theme)
                                   (light-theme)))
                                (auto-dark--last-dark-mode-state
@@ -240,17 +232,21 @@ fn auto_dark_set_theme_hook_failure_occurs_after_state_frame_and_theme_changes()
                 (auto-dark--set-theme
                  'dark)))
              auto-dark--last-dark-mode-state
-             (nreverse events))))"##;
-    let expect = expect![
+             (nreverse events))))"##,
+            true,
+            expect![
         "OK ((:error void-variable (events)) dark ((:frames dark) (:themes (dark-theme))))"
-    ];
-
-    assert_auto_dark_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }
 
 #[test]
-fn auto_dark_autoload_customize_before_enable_runs_real_initial_light_theme_workflow() {
-    let elisp_form = r##"(let ((custom-safe-themes t)
+fn lifecycle_auto_dark_autoload_batch() {
+    assert_auto_dark_autoload_batch(&[
+        (
+            "auto_dark_autoload_customize_before_enable_runs_real_initial_light_theme_workflow",
+            r##"(let ((custom-safe-themes t)
                                (frame-background-mode
                                 'light))
           (unwind-protect
@@ -298,10 +294,11 @@ fn auto_dark_autoload_customize_before_enable_runs_real_initial_light_theme_work
               (auto-dark-stop-timer))
             (mapc
              #'disable-theme
-             '(tango-dark tango))))"##;
-    let expect = expect![
+             '(tango-dark tango))))"##,
+            true,
+            expect![
         "OK ((nil nil nil nil) (t t manual ((tango-dark) (tango)) (tango-dark) dark dark t) nil t)"
-    ];
-
-    assert_auto_dark_autoload_parity(elisp_form, expect);
+    ],
+        ),
+    ]);
 }

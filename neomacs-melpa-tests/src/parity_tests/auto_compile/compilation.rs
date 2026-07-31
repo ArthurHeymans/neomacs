@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_compile_parity;
+use super::assert_auto_compile_batch;
 
 #[test]
-fn auto_compile_start_creates_loadable_bytecode_with_real_runtime_behavior() {
-    let elisp_form = r##"(let* ((source
+fn compilation_public_surface_batch() {
+    assert_auto_compile_batch(&[
+        (
+            "auto_compile_start_creates_loadable_bytecode_with_real_runtime_behavior",
+            r##"(let* ((source
                  (auto-compile-test-write
                   "compile/real-library.el"
                   "(defun auto-compile-real-value (x) (+ x 37))\n(provide 'auto-compile-real-library)\n"))
@@ -29,14 +32,13 @@ fn auto_compile_start_creates_loadable_bytecode_with_real_runtime_behavior() {
             loaded
             (featurep
              'auto-compile-real-library)
-            (auto-compile-real-value 5))))"##;
-    let expect = expect!["OK (t t t t t 42)"];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_without_start_does_not_create_missing_destination() {
-    let elisp_form = r##"(let* ((source
+            (auto-compile-real-value 5))))"##,
+            true,
+            expect!["OK (t t t t t 42)"],
+        ),
+        (
+            "auto_compile_without_start_does_not_create_missing_destination",
+            r##"(let* ((source
                  (auto-compile-test-write
                   "compile/not-enabled.el"
                   "(provide 'auto-compile-not-enabled)\n"))
@@ -46,14 +48,13 @@ fn auto_compile_without_start_does_not_create_missing_destination() {
           (file-exists-p dest)
           (auto-compile-byte-compile source)
           (file-exists-p dest)
-          (get-file-buffer source)))"##;
-    let expect = expect!["OK (nil nil nil nil)"];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_existing_destination_is_rebuilt_to_run_new_source_behavior() {
-    let elisp_form = r##"(let* ((source
+          (get-file-buffer source)))"##,
+            true,
+            expect!["OK (nil nil nil nil)"],
+        ),
+        (
+            "auto_compile_existing_destination_is_rebuilt_to_run_new_source_behavior",
+            r##"(let* ((source
                  (auto-compile-test-write
                   "compile/update.el"
                   "(defun auto-compile-update-value () 'old)\n(provide 'auto-compile-update)\n"))
@@ -77,14 +78,13 @@ fn auto_compile_existing_destination_is_rebuilt_to_run_new_source_behavior() {
            (list
             result
             (file-newer-than-file-p dest source)
-            (auto-compile-update-value))))"##;
-    let expect = expect!["OK (t t new)"];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_after_save_rebuilds_enabled_visited_library_end_to_end() {
-    let elisp_form = r##"(let* ((source
+            (auto-compile-update-value))))"##,
+            true,
+            expect!["OK (t t new)"],
+        ),
+        (
+            "auto_compile_after_save_rebuilds_enabled_visited_library_end_to_end",
+            r##"(let* ((source
                  (auto-compile-test-write
                   "compile/save-hook.el"
                   "(defun auto-compile-save-value () 1)\n(provide 'auto-compile-save-hook)\n"))
@@ -120,14 +120,13 @@ fn auto_compile_after_save_rebuilds_enabled_visited_library_end_to_end() {
                   after-save-hook)
                  t)
                 (auto-compile-save-value)))
-           (kill-buffer buffer)))"##;
-    let expect = expect!["OK (t nil t 42)"];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_no_byte_compile_cookie_returns_marker_without_destination() {
-    let elisp_form = r##"(let* ((source
+           (kill-buffer buffer)))"##,
+            true,
+            expect!["OK (t nil t 42)"],
+        ),
+        (
+            "auto_compile_no_byte_compile_cookie_returns_marker_without_destination",
+            r##"(let* ((source
                  (auto-compile-test-write
                   "compile/no-byte.el"
                   ";;; -*- no-byte-compile: t -*-\n(provide 'auto-compile-no-byte)\n"))
@@ -136,14 +135,13 @@ fn auto_compile_no_byte_compile_cookie_returns_marker_without_destination() {
          (list
           (auto-compile-byte-compile source t)
           (file-exists-p dest)
-          (featurep 'auto-compile-no-byte)))"##;
-    let expect = expect!["OK (no-byte-compile nil nil)"];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_inhibit_hook_short_circuits_before_any_file_is_created() {
-    let elisp_form = r##"(let* ((source
+          (featurep 'auto-compile-no-byte)))"##,
+            true,
+            expect!["OK (no-byte-compile nil nil)"],
+        ),
+        (
+            "auto_compile_inhibit_hook_short_circuits_before_any_file_is_created",
+            r##"(let* ((source
                  (auto-compile-test-write
                   "compile/inhibited.el"
                   "(provide 'auto-compile-inhibited)\n"))
@@ -164,14 +162,13 @@ fn auto_compile_inhibit_hook_short_circuits_before_any_file_is_created() {
          (list
           (auto-compile-byte-compile source t)
           (nreverse events)
-          (file-exists-p dest)))"##;
-    let expect = expect!["OK (nil (first inhibit) nil)"];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_unbalanced_visited_source_marks_retry_and_modified_state() {
-    let elisp_form = r##"(let* ((source
+          (file-exists-p dest)))"##,
+            true,
+            expect!["OK (nil (first inhibit) nil)"],
+        ),
+        (
+            "auto_compile_unbalanced_visited_source_marks_retry_and_modified_state",
+            r##"(let* ((source
                  (auto-compile-test-write
                   "compile/unbalanced.el"
                   "(defun auto-compile-unbalanced ()\n  (list 1 2 3)\n"))
@@ -192,14 +189,13 @@ fn auto_compile_unbalanced_visited_source_marks_retry_and_modified_state() {
                 (buffer-modified-p)
                 (current-message)))
            (set-buffer-modified-p nil)
-           (kill-buffer buffer)))"##;
-    let expect = expect!["OK (nil nil t t nil)"];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_byte_compiler_nil_result_preserves_stale_destination_without_retry_state() {
-    let elisp_form = r##"(let* ((source
+           (kill-buffer buffer)))"##,
+            true,
+            expect!["OK (nil nil t t nil)"],
+        ),
+        (
+            "auto_compile_byte_compiler_nil_result_preserves_stale_destination_without_retry_state",
+            r##"(let* ((source
                  (auto-compile-test-write
                   "compile/failure.el"
                   "(defun auto-compile-failure () 1)\n(provide 'auto-compile-failure)\n"))
@@ -223,14 +219,13 @@ fn auto_compile_byte_compiler_nil_result_preserves_stale_destination_without_ret
                   auto-compile-pretend-byte-compiled
                   (buffer-modified-p)
                   (current-message)))
-             (kill-buffer buffer))))"##;
-    let expect = expect!["OK (nil t nil nil nil)"];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_delete_destination_clears_retry_marker_in_visiting_source_buffer() {
-    let elisp_form = r##"(let* ((source
+             (kill-buffer buffer))))"##,
+            true,
+            expect!["OK (nil t nil nil nil)"],
+        ),
+        (
+            "auto_compile_delete_destination_clears_retry_marker_in_visiting_source_buffer",
+            r##"(let* ((source
                  (auto-compile-test-write
                   "compile/delete.el"
                   "(provide 'auto-compile-delete)\n"))
@@ -250,14 +245,13 @@ fn auto_compile_delete_destination_clears_retry_marker_in_visiting_source_buffer
                  'auto-compile-pretend-byte-compiled)
                 auto-compile-pretend-byte-compiled
                 (current-message)))
-           (kill-buffer buffer)))"##;
-    let expect = expect!["OK (nil nil nil nil)"];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_delete_failure_is_contained_and_dings_once() {
-    let elisp_form = r##"(let* ((directory
+           (kill-buffer buffer)))"##,
+            true,
+            expect!["OK (nil nil nil nil)"],
+        ),
+        (
+            "auto_compile_delete_failure_is_contained_and_dings_once",
+            r##"(let* ((directory
                  (auto-compile-test-path
                   "compile/not-a-file.elc"))
                 (dings 0)
@@ -270,16 +264,15 @@ fn auto_compile_delete_failure_is_contained_and_dings_once() {
             (auto-compile-delete-dest directory)
             (file-directory-p directory)
             dings
-            (current-message))))"##;
-    let expect = expect![[
+            (current-message))))"##,
+            true,
+            expect![[
         r#"OK ("Deleting [ORACLE-SANDBOX]/auto-compile-fixture/compile/not-a-file.elc...failed" t 1 nil)"#
-    ]];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_warning_advice_counts_real_byte_compiler_diagnostics_per_buffer() {
-    let elisp_form = r##"(let* ((source
+    ]],
+        ),
+        (
+            "auto_compile_warning_advice_counts_real_byte_compiler_diagnostics_per_buffer",
+            r##"(let* ((source
                  (auto-compile-test-write
                   "compile/warning.el"
                   "(defun auto-compile-warning () (auto-compile-undefined-function 1))\n(provide 'auto-compile-warning)\n"))
@@ -297,14 +290,13 @@ fn auto_compile_warning_advice_counts_real_byte_compiler_diagnostics_per_buffer(
                 (file-exists-p
                  (auto-compile-test-dest
                   source))))
-           (kill-buffer buffer)))"##;
-    let expect = expect!["OK (t t 2 t)"];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_single_file_toggle_creates_then_removes_loadable_destination() {
-    let elisp_form = r##"(let* ((source
+           (kill-buffer buffer)))"##,
+            true,
+            expect!["OK (t t 2 t)"],
+        ),
+        (
+            "auto_compile_single_file_toggle_creates_then_removes_loadable_destination",
+            r##"(let* ((source
                  (auto-compile-test-write
                   "compile/toggle.el"
                   "(defun auto-compile-toggle-value () 'ready)\n(provide 'auto-compile-toggle-library)\n"))
@@ -321,14 +313,13 @@ fn auto_compile_single_file_toggle_creates_then_removes_loadable_destination() {
            (list
             after-start
             (file-exists-p dest)
-            (current-message))))"##;
-    let expect = expect!["OK ((t t) nil nil)"];
-    assert_auto_compile_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_compile_native_option_dispatches_only_after_successful_byte_compile() {
-    let elisp_form = r##"(let* ((source
+            (current-message))))"##,
+            true,
+            expect!["OK ((t t) nil nil)"],
+        ),
+        (
+            "auto_compile_native_option_dispatches_only_after_successful_byte_compile",
+            r##"(let* ((source
                  (auto-compile-test-write
                   "compile/native.el"
                   "(provide 'auto-compile-native)\n"))
@@ -367,7 +358,9 @@ fn auto_compile_native_option_dispatches_only_after_successful_byte_compile() {
            (unless already-provided
              (setq features
                    (delq 'native-compile
-                         features)))))"##;
-    let expect = expect![[r#"OK (t ((byte "native.el") (native "native.el")))"#]];
-    assert_auto_compile_parity(elisp_form, expect);
+                         features)))))"##,
+            true,
+            expect![[r#"OK (t ((byte "native.el") (native "native.el")))"#]],
+        ),
+    ]);
 }

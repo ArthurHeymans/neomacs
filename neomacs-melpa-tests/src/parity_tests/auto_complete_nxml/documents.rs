@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_nxml_parity;
+use super::assert_auto_complete_nxml_batch;
 
 #[test]
-fn auto_complete_nxml_note_store_appends_lines_at_current_index() {
-    let elisp_form = r##"(progn
+fn documents_public_surface_batch() {
+    assert_auto_complete_nxml_batch(&[
+        (
+            "auto_complete_nxml_note_store_appends_lines_at_current_index",
+            r##"(progn
          (auto-complete-nxml-start-make-doc4ac-in-nxml)
          (auto-complete-nxml-store-note "first line")
          (auto-complete-nxml-store-note "second line")
@@ -14,16 +17,15 @@ fn auto_complete_nxml_note_store_appends_lines_at_current_index() {
            (list zero
                  next-index
                  (auto-complete-nxml-get-stored-note next-index)
-                 (acnxml-test-hash-alist auto-complete-nxml-note-store-hash))))"##;
-    let expect = expect![[
+                 (acnxml-test-hash-alist auto-complete-nxml-note-store-hash))))"##,
+            true,
+            expect![[
         r#"OK ("first line\nsecond line" 1 "third line" ((0 . "first line\nsecond line") (1 . "third line")))"#
-    ]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_name_class_store_keeps_independent_indexed_values() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "auto_complete_nxml_name_class_store_keeps_independent_indexed_values",
+            r##"(progn
          (auto-complete-nxml-start-make-doc4ac-in-nxml)
          (auto-complete-nxml-store-ncls '(name (ns . "root")))
          (let ((first-index (auto-complete-nxml-get-ncls-stored-index)))
@@ -31,16 +33,15 @@ fn auto_complete_nxml_name_class_store_keeps_independent_indexed_values() {
            (list first-index
                  (auto-complete-nxml-get-stored-ncls 0)
                  (auto-complete-nxml-get-stored-ncls first-index)
-                 (acnxml-test-hash-alist auto-complete-nxml-ncls-store-hash))))"##;
-    let expect = expect![[
+                 (acnxml-test-hash-alist auto-complete-nxml-ncls-store-hash))))"##,
+            true,
+            expect![[
         r#"OK (1 #1=(name (ns . "root")) #2=(choice (other . "child")) ((0 . #1#) (1 . #2#)))"#
-    ]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_document_capture_reset_replaces_all_mutable_stores() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "auto_complete_nxml_document_capture_reset_replaces_all_mutable_stores",
+            r##"(progn
          (setq auto-complete-nxml-note-stored-index 17
                auto-complete-nxml-ncls-stored-index 23)
          (puthash 1 "old-note" auto-complete-nxml-note-store-hash)
@@ -54,14 +55,13 @@ fn auto_complete_nxml_document_capture_reset_replaces_all_mutable_stores() {
                  (hash-table-count auto-complete-nxml-note-store-hash)
                  (hash-table-count auto-complete-nxml-ncls-store-hash)
                  (hash-table-count auto-complete-nxml-element-document-hash)
-                 (hash-table-count auto-complete-nxml-attribute-document-hash))))"##;
-    let expect = expect!["OK (t 0 0 0 0 0 0)"];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_make_document_combines_namespace_comment_and_note() {
-    let elisp_form = r##"(progn
+                 (hash-table-count auto-complete-nxml-attribute-document-hash))))"##,
+            true,
+            expect!["OK (t 0 0 0 0 0 0)"],
+        ),
+        (
+            "auto_complete_nxml_make_document_combines_namespace_comment_and_note",
+            r##"(progn
          (auto-complete-nxml-start-make-doc4ac-in-nxml)
          (puthash 4 '(name (html . "table"))
                   auto-complete-nxml-ncls-store-hash)
@@ -78,16 +78,15 @@ fn auto_complete_nxml_make_document_combines_namespace_comment_and_note() {
           (hash-table-count auto-complete-nxml-element-document-hash)
           (acnxml-test-doc-value
            (gethash "urn:xhtml:table"
-                    auto-complete-nxml-element-document-hash))))"##;
-    let expect = expect![[
+                    auto-complete-nxml-element-document-hash))))"##,
+            true,
+            expect![[
         r#"OK (1 (:name "table" :ns "urn:xhtml" :comment "Schema comment" :note "A tabular element."))"#
-    ]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_make_document_distinguishes_missing_empty_and_malformed_name_classes() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "auto_complete_nxml_make_document_distinguishes_missing_empty_and_malformed_name_classes",
+            r##"(progn
          (auto-complete-nxml-start-make-doc4ac-in-nxml)
          (puthash 1 nil auto-complete-nxml-ncls-store-hash)
          (puthash 2 'wildcard auto-complete-nxml-ncls-store-hash)
@@ -103,16 +102,15 @@ fn auto_complete_nxml_make_document_distinguishes_missing_empty_and_malformed_na
                  auto-complete-nxml-element-document-hash)))
              (hash-table-count
               auto-complete-nxml-element-document-hash)))
-          '(1 2 3)))"##;
-    let expect = expect![
+          '(1 2 3)))"##,
+            true,
+            expect![
         "OK ((1 (:value nil) 0) (2 (:signal wrong-type-argument (listp wildcard)) 0) (3 (:value nil) 0))"
-    ];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_document_selected_formats_comment_note_and_fallback() {
-    let elisp_form = r##"(let ((hash (make-hash-table :test 'equal)))
+    ],
+        ),
+        (
+            "auto_complete_nxml_document_selected_formats_comment_note_and_fallback",
+            r##"(let ((hash (make-hash-table :test 'equal)))
          (puthash
           "table"
           (make-auto-complete-nxml-doc
@@ -136,16 +134,15 @@ fn auto_complete_nxml_document_selected_formats_comment_note_and_fallback() {
               (cons name
                     (auto-complete-nxml-get-document-selected
                      name hash "ELEMENT")))
-            '("table" "empty" "missing" "/closing"))))"##;
-    let expect = expect![[
+            '("table" "empty" "missing" "/closing"))))"##,
+            true,
+            expect![[
         r#"OK (("table" . "'table' is ELEMENT in ''.\n\nComment: \nMay contain rows.\n\nNote: \nUse tr children.\n") ("empty" . "'empty' is ELEMENT in ''.\n\nNot documented.\n") ("missing" . "'missing' is ELEMENT in ''.\n\nNot documented.\n") ("/closing" . ""))"#
-    ]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_document_selected_resolves_prefixed_namespace_keys() {
-    let elisp_form = r##"(let ((hash (make-hash-table :test 'equal)))
+    ]],
+        ),
+        (
+            "auto_complete_nxml_document_selected_resolves_prefixed_namespace_keys",
+            r##"(let ((hash (make-hash-table :test 'equal)))
          (puthash
           "urn:math:sum"
           (make-auto-complete-nxml-doc
@@ -168,16 +165,15 @@ fn auto_complete_nxml_document_selected_resolves_prefixed_namespace_keys() {
             (auto-complete-nxml-get-document-selected
              "m:sum" hash "ELEMENT")
             (auto-complete-nxml-get-document-selected
-             "sum" hash "ELEMENT"))))"##;
-    let expect = expect![[
+             "sum" hash "ELEMENT"))))"##,
+            true,
+            expect![[
         r#"OK ("'sum' is ELEMENT in 'urn:math'.\n\nComment: \nAdds operands.\n" "'sum' is ELEMENT in 'urn:default'.\n\nNot documented.\n")"#
-    ]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_document_selected_strips_candidate_text_properties() {
-    let elisp_form = r##"(let* ((hash (make-hash-table :test 'equal))
+    ]],
+        ),
+        (
+            "auto_complete_nxml_document_selected_strips_candidate_text_properties",
+            r##"(let* ((hash (make-hash-table :test 'equal))
               (selected (propertize "entry" 'face 'bold 'meta '(1 2))))
          (puthash
           "entry"
@@ -190,15 +186,13 @@ fn auto_complete_nxml_document_selected_strips_candidate_text_properties() {
                    selected hash "ATTRIBUTE")))
              (list document
                    selected
-                   (text-properties-at 0 selected)))))"##;
-    let expect =
-        expect![[r#"OK ("'entry' is ATTRIBUTE in ''.\n\nComment: \nDocumented.\n" "entry" nil)"#]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_nxml_document_wrappers_select_their_distinct_hashes() {
-    let elisp_form = r##"(progn
+                   (text-properties-at 0 selected)))))"##,
+            true,
+            expect![[r#"OK ("'entry' is ATTRIBUTE in ''.\n\nComment: \nDocumented.\n" "entry" nil)"#]],
+        ),
+        (
+            "auto_complete_nxml_document_wrappers_select_their_distinct_hashes",
+            r##"(progn
          (setq auto-complete-nxml-element-document-hash
                (make-hash-table :test 'equal)
                auto-complete-nxml-attribute-document-hash
@@ -214,9 +208,11 @@ fn auto_complete_nxml_document_wrappers_select_their_distinct_hashes() {
          (cl-letf (((symbol-function 'nxml-ns-get-default) (lambda () nil)))
            (list
             (auto-complete-nxml-get-document-tag "shared")
-            (auto-complete-nxml-get-document-attr "shared"))))"##;
-    let expect = expect![[
+            (auto-complete-nxml-get-document-attr "shared"))))"##,
+            true,
+            expect![[
         r#"OK ("'shared' is ELEMENT in ''.\n\nComment: \nelement-doc\n" "'shared' is ATTRIBUTE in ''.\n\nComment: \nattribute-doc\n")"#
-    ]];
-    assert_auto_complete_nxml_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

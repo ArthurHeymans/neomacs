@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_adoc_mode_parity;
+use super::assert_adoc_mode_batch;
 
 /// The mode's front door: `auto-mode-alist' claims `.adoc' and `.asciidoc' but
 /// not `.txt', and visiting such a file gives the AsciiDoc editing environment
@@ -8,9 +8,13 @@ use super::assert_adoc_mode_parity;
 /// with, the font-lock configuration (multiline keywords, extra managed
 /// properties, its own unfontify function), the completion, xref and fill hooks
 /// the mode installs buffer-locally, and its key bindings.
+
 #[test]
-fn visiting_an_adoc_file_sets_up_the_asciidoc_editing_environment() {
-    let elisp_form = r##"(let ((buffer (adoc-test-open "docs/guide.adoc" adoc-test-guide)))
+fn workflows_public_surface_batch() {
+    assert_adoc_mode_batch(&[
+        (
+            "visiting_an_adoc_file_sets_up_the_asciidoc_editing_environment",
+            r##"(let ((buffer (adoc-test-open "docs/guide.adoc" adoc-test-guide)))
   (unwind-protect
       (with-current-buffer buffer
         (list
@@ -41,25 +45,15 @@ fn visiting_an_adoc_file_sets_up_the_asciidoc_editing_environment() {
                             '("guide.adoc" "guide.asciidoc" "guide.txt"
                               "guide.adoc~"))
          :buffer (list (buffer-modified-p) (point) (buffer-size))))
-    (kill-buffer buffer)))"##;
-
-    let expect = expect![[
+    (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK (:mode (adoc-mode "adoc" t) :comments ("// " "" "^//[ \11]*" 0) :outline ("=\\{1,6\\}[ \11]+[^ \11\n]" t) :font-lock (adoc-font-lock-keywords (adoc-reserved adoc-attribute-list adoc-code-block adoc-flyspell-ignore) adoc-unfontify-region-function t) :hooks (t t t adoc-fill-paragraph adoc-imenu-create-nested-index "^<<<+$" t) :keys (("C-c C-n" . adoc-next-visible-heading) ("C-c C-p" . adoc-previous-visible-heading) ("C-c C-u" . adoc-up-heading) ("M-<left>" . adoc-promote) ("M-<right>" . adoc-demote) ("M-RET" . adoc-insert-list-item) ("TAB" . adoc-cycle) ("C-c C-t" . adoc-toggle-title-type) ("C-c C-s b" . adoc-insert-bold) ("M-." . adoc-follow-thing-at-point)) :auto-mode (("guide.adoc" . adoc-mode) ("guide.asciidoc" . adoc-mode) ("guide.txt" . text-mode) ("guide.adoc~")) :buffer (nil 1 527))"#
-    ]];
-
-    assert_adoc_mode_parity(elisp_form, expect);
-}
-
-/// What the user actually sees: after `font-lock-ensure' every markup construct
-/// in a realistic document carries the mode's face.  The document header, three
-/// title levels, constrained bold/italic/monospace, an inline link split into
-/// its URL and its text, ordered and unordered list markers, two admonitions, an
-/// attribute reference and the source block are all pinned by position, and the
-/// block's Ruby body is fontified with Ruby's own keyword face on top of
-/// `adoc-native-code-face'.
-#[test]
-fn font_lock_marks_up_every_construct_of_a_realistic_document() {
-    let elisp_form = r##"(let ((buffer (adoc-test-open "docs/guide.adoc" adoc-test-guide)))
+    ]],
+        ),
+        (
+            "font_lock_marks_up_every_construct_of_a_realistic_document",
+            r##"(let ((buffer (adoc-test-open "docs/guide.adoc" adoc-test-guide)))
   (unwind-protect
       (with-current-buffer buffer
         (list
@@ -83,22 +77,15 @@ fn font_lock_marks_up_every_construct_of_a_realistic_document() {
                          (search-forward "def widget")
                          (adoc-test-face-runs (line-beginning-position)
                                               (line-end-position 3)))))
-    (kill-buffer buffer)))"##;
-
-    let expect = expect![[
+    (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK (:header (("= Field Guide" . adoc-meta-hide-face) ("Field Guide" . adoc-title-0-face) (":toc:" . adoc-metadata-key-face) ("left" . adoc-metadata-value-face) (":sourcedir:" . adoc-metadata-key-face) ("./src" . adoc-metadata-value-face)) :titles (("== Getting Started" . adoc-meta-hide-face) ("Getting Started" . adoc-title-1-face) ("=== Configuration" . adoc-meta-hide-face) ("Configuration" . adoc-title-2-face) ("== Troubleshooting" . adoc-meta-hide-face) ("Troubleshooting" . adoc-title-1-face)) :inline (("*bold*" . adoc-meta-hide-face) ("*bold*" adoc-bold-face) ("_italic_" adoc-emphasis-face) ("`monospace`" adoc-typewriter-face adoc-verbatim-face) ("https://example.org/widgets" . adoc-url-face) ("widget catalogue" . adoc-reference-face) ("{sourcedir}" . adoc-replacement-face)) :blocks ((". Download" . adoc-list-face) ("* First bullet" . adoc-list-face) ("NOTE:" . adoc-complex-replacement-face) ("WARNING:" . adoc-complex-replacement-face) ("[source,ruby]" . adoc-meta-face) ("----" . adoc-meta-face) ("def widget" font-lock-keyword-face . #1=(adoc-native-code-face)) ("puts" font-lock-builtin-face . #1#)) :source-block (("def" font-lock-keyword-face . #2=(adoc-native-code-face)) (" " . #2#) ("widget" font-lock-function-name-face . #2#) ("(name)\n  " . #2#) ("puts" font-lock-builtin-face . #2#) (" " . #2#) ("\"building\"" font-lock-string-face . #2#) ("\n" . #2#) ("end" font-lock-keyword-face . #2#)))"#
-    ]];
-
-    assert_adoc_mode_parity(elisp_form, expect);
-}
-
-/// Imenu is how a user gets around a long document.  The mode's default index
-/// function nests sections under their parents, and the flat one it also offers
-/// lists them in document order -- both keyed by the title text and pointing at
-/// the title's own position.
-#[test]
-fn imenu_indexes_the_documents_headings_nested_and_flat() {
-    let elisp_form = r##"(let ((buffer (adoc-test-open "docs/guide.adoc" adoc-test-guide)))
+    ]],
+        ),
+        (
+            "imenu_indexes_the_documents_headings_nested_and_flat",
+            r##"(let ((buffer (adoc-test-open "docs/guide.adoc" adoc-test-guide)))
   (unwind-protect
       (with-current-buffer buffer
         (font-lock-ensure)
@@ -112,23 +99,15 @@ fn imenu_indexes_the_documents_headings_nested_and_flat() {
                                  (goto-char position)
                                  (adoc-test-line)))
                              (mapcar #'cdr (adoc-imenu-create-index))))))
-    (kill-buffer buffer)))"##;
-
-    let expect = expect![[
+    (kill-buffer buffer)))"##,
+            true,
+            expect![[
         r#"OK (:default-function adoc-imenu-create-nested-index :nested (("Field Guide to Widgets" (nil . 1) ("Getting Started" (nil . 201) ("Configuration" . 400)) ("Troubleshooting" . 467))) :flat (("Field Guide to Widgets" . 1) ("Getting Started" . 201) ("Configuration" . 400) ("Troubleshooting" . 467)) :titles-at ("= Field Guide to Widgets" "== Getting Started" "=== Configuration" "== Troubleshooting"))"#
-    ]];
-
-    assert_adoc_mode_parity(elisp_form, expect);
-}
-
-/// Restructuring a document with the mode's own keys: `M-<left>' promotes the
-/// section at point (adding a level and normalising it to the two-sided title
-/// form), `M-<right>' demotes it again, and `C-c C-t' converts the one-line
-/// title into the two-line underlined form with an underline the width of the
-/// title.  Every step is a real key press in the visited file.
-#[test]
-fn promote_demote_and_toggle_restructure_a_section_title() {
-    let elisp_form = r##"(let ((buffer (adoc-test-open "docs/guide.adoc" adoc-test-guide)))
+    ]],
+        ),
+        (
+            "promote_demote_and_toggle_restructure_a_section_title",
+            r##"(let ((buffer (adoc-test-open "docs/guide.adoc" adoc-test-guide)))
   (unwind-protect
       (with-current-buffer buffer
         (font-lock-ensure)
@@ -149,22 +128,15 @@ fn promote_demote_and_toggle_restructure_a_section_title() {
                     :imenu (adoc-test-plain (adoc-imenu-create-index))
                     :modified (buffer-modified-p))))))
     (progn (with-current-buffer buffer (set-buffer-modified-p nil))
-           (kill-buffer buffer))))"##;
-
-    let expect = expect![[
+           (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK (:before (:point 400 :column 0 :line-number 26 :line "=== Configuration") :promoted (:point 400 :column 0 :line-number 26 :line "==== Configuration ====") :demoted (:point 400 :column 0 :line-number 26 :line "== Configuration ==") :toggled "Configuration\n-------------" :imenu (("Field Guide to Widgets" . 1) ("Getting Started" . 201) ("Troubleshooting" . 477)) :modified t)"#
-    ]];
-
-    assert_adoc_mode_parity(elisp_form, expect);
-}
-
-/// The styling keys under `C-c C-s': with no region the command wraps the word
-/// at point, and with the word selected it takes the markup back off again --
-/// the toggle a user expects.  A region spanning two words is wrapped whole, and
-/// font lock then shows the result as emphasised.
-#[test]
-fn the_styling_keys_wrap_and_unwrap_asciidoc_emphasis() {
-    let elisp_form = r##"(let ((buffer (adoc-test-open "docs/style.adoc"
+    ]],
+        ),
+        (
+            "the_styling_keys_wrap_and_unwrap_asciidoc_emphasis",
+            r##"(let ((buffer (adoc-test-open "docs/style.adoc"
                               "= Styling\n\nA short bold intro with plain text.\n")))
   (unwind-protect
       (with-current-buffer buffer
@@ -201,23 +173,15 @@ fn the_styling_keys_wrap_and_unwrap_asciidoc_emphasis() {
                       :text (buffer-substring-no-properties (point-min)
                                                             (point-max))))))))
     (progn (with-current-buffer buffer (set-buffer-modified-p nil))
-           (kill-buffer buffer))))"##;
-
-    let expect = expect![[
+           (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK (:bolded (:point 26 :column 14 :line-number 3 :line "A short *bold* intro with plain text.") :selection (t "bold") :unbolded (:point 24 :column 12 :line-number 3 :line "A short bold intro with plain text.") :italic (:point 48 :column 36 :line-number 3 :line "A short bold intro with _plain text_.") :monospace "A `short` bold intro with _plain text_." :faces (("`short`" adoc-typewriter-face adoc-verbatim-face) ("_plain text_" adoc-emphasis-face)) :text "= Styling\n\nA `short` bold intro with _plain text_.\n")"#
-    ]];
-
-    assert_adoc_mode_parity(elisp_form, expect);
-}
-
-/// AsciiDoc is written in every language, so the same markup has to work around
-/// CJK and accented prose: titles, constrained bold/italic/monospace around
-/// Japanese text, an admonition full of accents, a list mixing scripts, and an
-/// attribute value with a non-ASCII name.  The index keeps the titles intact and
-/// `fill-paragraph' rewraps a French paragraph on character, not byte, widths.
-#[test]
-fn the_mode_handles_a_document_written_in_non_ascii_prose() {
-    let elisp_form = r##"(let ((buffer (adoc-test-open "docs/unicode.adoc" adoc-test-unicode)))
+    ]],
+        ),
+        (
+            "the_mode_handles_a_document_written_in_non_ascii_prose",
+            r##"(let ((buffer (adoc-test-open "docs/unicode.adoc" adoc-test-unicode)))
   (unwind-protect
       (with-current-buffer buffer
         (font-lock-ensure)
@@ -238,11 +202,11 @@ fn the_mode_handles_a_document_written_in_non_ascii_prose() {
                 :size (list (buffer-size) (point-max))
                 :filled (adoc-test-lines 4))))
     (progn (with-current-buffer buffer (set-buffer-modified-p nil))
-           (kill-buffer buffer))))"##;
-
-    let expect = expect![[
+           (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK (:faces (("日本語ハンドブック" . adoc-title-0-face) ("Café Notes" . adoc-title-1-face) ("Ünicode Anhang" . adoc-title-2-face) ("*太字*" adoc-bold-face) ("_斜体_" adoc-emphasis-face) ("`等幅`" adoc-typewriter-face adoc-verbatim-face) ("TIP:" . adoc-complex-replacement-face) ("* 項目 1" . adoc-list-face) ("* Élément 2" . adoc-list-face) (":author:" . adoc-metadata-key-face) ("Renée" . adoc-metadata-value-face)) :index (("日本語ハンドブック" . 1) ("Café Notes — Grüße" . 35) ("Ünicode Anhang" . 181)) :size (336 337) :filled "Une phrase française assez longue pour\nêtre remplie sur plusieurs lignes par la\ncommande de remplissage standard d'Emacs\nsans problème.")"#
-    ]];
-
-    assert_adoc_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

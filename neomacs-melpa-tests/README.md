@@ -23,10 +23,11 @@ phase-specific failures.
 - `live_melpa.rs` hard-codes package names and versions, downloads one complete
   dependency transaction below `./tmp`, then gives that same local transaction
   to GNU Emacs and Neomacs. No third-party package payload is tracked by Git.
-- Multi-probe batches (`CachedPackageOracle::run_batch`) run many named Elisp
-  probes in one GNU Emacs process and one Neomacs process (setup once per
-  editor; cases keep separate expect-test snapshots). Pilots: packages `a` and
-  `aa-edit-mode`.
+- Multi-probe batches (`CachedPackageOracle::run_batch` /
+  `parity_tests::batch_support`) run many named Elisp probes in one GNU Emacs
+  process and one Neomacs process (setup once per editor; cases keep separate
+  expect-test snapshots). Package workflow corpora use this path by default;
+  a few isolation-sensitive tests remain single-probe.
 - `src/parity_tests/dash/` uses 103 ordinary Rust `#[test]` functions.
   Each case isolates one API family and covers normal, empty, boundary,
   mutation, evaluation-count, or signal behavior. Together they exercise the

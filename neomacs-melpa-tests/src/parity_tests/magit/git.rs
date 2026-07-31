@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_magit_parity;
+use super::assert_magit_batch;
 
 #[test]
-fn magit_repository_identity_config_and_branch_queries_match() {
-    let elisp_form = r##"(let* ((root (make-temp-file "magit-repo-" t))
+fn git_public_surface_batch() {
+    assert_magit_batch(&[
+        (
+            "magit_repository_identity_config_and_branch_queries_match",
+            r##"(let* ((root (make-temp-file "magit-repo-" t))
                     (default-directory (file-name-as-directory root)))
                (unwind-protect
                    (progn
@@ -32,17 +35,15 @@ fn magit_repository_identity_config_and_branch_queries_match() {
                       (magit-list-remote-branch-names)
                       (magit-list-remote-branch-names "origin")
                       (magit-list-remote-branch-names "origin" t)))
-                 (delete-directory root t)))"##;
-    let expect = expect![[
+                 (delete-directory root t)))"##,
+            true,
+            expect![[
         r#"OK (t nil ("first" "second") "second" t ("master" "origin/master" "upstream/main") ("master") ("origin/master" "upstream/main") ("origin/master") ("master"))"#
-    ]];
-
-    assert_magit_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_tag_queries_distinguish_current_reachable_and_next_tags() {
-    let elisp_form = r##"(let* ((root (make-temp-file "magit-tags-" t))
+    ]],
+        ),
+        (
+            "magit_tag_queries_distinguish_current_reachable_and_next_tags",
+            r##"(let* ((root (make-temp-file "magit-tags-" t))
                     (default-directory (file-name-as-directory root)))
                (unwind-protect
                    (progn
@@ -76,15 +77,13 @@ fn magit_tag_queries_distinguish_current_reachable_and_next_tags() {
                             after-v2
                             (magit-get-current-tag)
                             (magit-get-next-tag))))))
-                 (delete-directory root t)))"##;
-    let expect = expect![[r#"OK ((nil nil) ("v1" nil) ("v2" nil) "v2" "v4")"#]];
-
-    assert_magit_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_toplevel_handles_nested_directories_gitdir_and_symlink_entry() {
-    let elisp_form = r##"(let* ((root (make-temp-file "magit-top-" t))
+                 (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK ((nil nil) ("v1" nil) ("v2" nil) "v2" "v4")"#]],
+        ),
+        (
+            "magit_toplevel_handles_nested_directories_gitdir_and_symlink_entry",
+            r##"(let* ((root (make-temp-file "magit-top-" t))
                     (default-directory (file-name-as-directory root))
                     (repo (expand-file-name "repo/" root))
                     (find-file-visit-truename nil))
@@ -111,15 +110,13 @@ fn magit_toplevel_handles_nested_directories_gitdir_and_symlink_entry() {
                        (magit-toplevel
                         (expand-file-name "repo-link/" root))
                        (expand-file-name "repo-link/" root))))
-                 (delete-directory root t)))"##;
-    let expect = expect![[r#"OK (t t t t)"#]];
-
-    assert_magit_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_bare_repository_detection_distinguishes_repository_kinds() {
-    let elisp_form = r##"(let* ((root (make-temp-file "magit-bare-" t))
+                 (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK (t t t t)"#]],
+        ),
+        (
+            "magit_bare_repository_detection_distinguishes_repository_kinds",
+            r##"(let* ((root (make-temp-file "magit-bare-" t))
                     (bare (expand-file-name "bare.git/" root))
                     (work (expand-file-name "work/" root)))
                (unwind-protect
@@ -140,15 +137,13 @@ fn magit_bare_repository_detection_distinguishes_repository_kinds() {
                       (equal
                        (magit-toplevel work)
                        (file-name-as-directory work))))
-                 (delete-directory root t)))"##;
-    let expect = expect![[r#"OK (t nil t t)"#]];
-
-    assert_magit_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_revision_and_process_queries_preserve_values_order_and_exit_codes() {
-    let elisp_form = r##"(let* ((root (make-temp-file "magit-revisions-" t))
+                 (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK (t nil t t)"#]],
+        ),
+        (
+            "magit_revision_and_process_queries_preserve_values_order_and_exit_codes",
+            r##"(let* ((root (make-temp-file "magit-revisions-" t))
                     (default-directory (file-name-as-directory root)))
                (unwind-protect
                    (progn
@@ -178,8 +173,9 @@ fn magit_revision_and_process_queries_preserve_values_order_and_exit_codes() {
                         clean-code
                         (magit-git-exit-code
                          "diff" "--quiet" "HEAD"))))
-                 (delete-directory root t)))"##;
-    let expect = expect![[r#"OK (t t t nil ("beta" "alpha") "master" 0 1)"#]];
-
-    assert_magit_parity(elisp_form, expect);
+                 (delete-directory root t)))"##,
+            true,
+            expect![[r#"OK (t t t nil ("beta" "alpha") "master" 0 1)"#]],
+        ),
+    ]);
 }

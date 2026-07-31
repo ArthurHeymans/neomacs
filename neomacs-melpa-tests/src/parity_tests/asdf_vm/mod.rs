@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ASDF_VM_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod config;
 mod core;
 mod installer;
@@ -244,4 +246,28 @@ pub(crate) fn assert_asdf_vm_parity(elisp_form: &str, expected: Expect) {
 
 pub(crate) fn assert_asdf_vm_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_asdf_vm_source_parity("asdf-vm-autoloads.el", elisp_form, expected);
+}
+
+
+
+/// Multi-probe batch for `assert_asdf_vm_autoload_parity` cases (2a).
+pub(crate) fn assert_asdf_vm_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        asdf_vm_oracle("asdf-vm-autoloads.el"),
+        &name,
+        "asdf_vm_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_asdf_vm_parity` cases (2a).
+pub(crate) fn assert_asdf_vm_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        asdf_vm_oracle("asdf-vm.el"),
+        &name,
+        "asdf_vm_parity",
+        cases,
+    );
 }

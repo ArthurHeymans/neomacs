@@ -1,9 +1,12 @@
-use super::assert_async_status_parity;
+use super::assert_async_status_batch;
 use expect_test::expect;
 
 #[test]
-fn complete_single_job_lifecycle_allocates_displays_updates_and_cleans_up() {
-    let elisp_form = r##"(let ((id (async-status-req-id "compile"))
+fn workflows_public_surface_batch() {
+    assert_async_status_batch(&[
+        (
+            "complete_single_job_lifecycle_allocates_displays_updates_and_cleans_up",
+            r##"(let ((id (async-status-req-id "compile"))
       (watch-sequence 0)
       events)
   (setq async-status--shown-items nil)
@@ -67,16 +70,15 @@ fn complete_single_job_lifecycle_allocates_displays_updates_and_cleans_up() {
           (file-exists-p
            (async-status--get-absolute-path-by-id id))
         (async-status-clean-up id))
-      (setq async-status--shown-items nil))))"##;
-    let expect = expect![[
+      (setq async-status--shown-items nil))))"##,
+            true,
+            expect![[
         r#"OK ((1 "Compile project" "0.5" "0.5") 0 nil ((:watch-add :normalized (change) async-status--update-items) :show :refresh :show (:watch-remove 1) :refresh (:hide nil)))"#
-    ]];
-    assert_async_status_parity(elisp_form, expect);
-}
-
-#[test]
-fn multiple_jobs_support_interleaved_progress_and_independent_completion() {
-    let elisp_form = r##"(let ((first (async-status-req-id "compile"))
+    ]],
+        ),
+        (
+            "multiple_jobs_support_interleaved_progress_and_independent_completion",
+            r##"(let ((first (async-status-req-id "compile"))
       (second (async-status-req-id "tests"))
       (watch-id 0)
       removed)
@@ -125,14 +127,13 @@ fn multiple_jobs_support_interleaved_progress_and_independent_completion() {
            removed)))
     (setq async-status--shown-items nil)
     (async-status-clean-up first)
-    (async-status-clean-up second)))"##;
-    let expect = expect![[r#"OK ((("Tests" "0.8") ("Compile" "0.2")) (("Compile" "1.0")) (2))"#]];
-    assert_async_status_parity(elisp_form, expect);
-}
-
-#[test]
-fn thresholded_child_updates_publish_only_meaningful_progress_steps() {
-    let elisp_form = r##"(let ((id (async-status-req-id "stream")))
+    (async-status-clean-up second)))"##,
+            true,
+            expect![[r#"OK ((("Tests" "0.8") ("Compile" "0.2")) (("Compile" "1.0")) (2))"#]],
+        ),
+        (
+            "thresholded_child_updates_publish_only_meaningful_progress_steps",
+            r##"(let ((id (async-status-req-id "stream")))
   (unwind-protect
       (let (trace)
         (dolist (value '(0.0 0.005 0.011 0.015 0.021 0.022 0.5 0.999 1.0))
@@ -145,16 +146,15 @@ fn thresholded_child_updates_publish_only_meaningful_progress_steps() {
                      after)
                trace))))
         (nreverse trace))
-    (async-status-clean-up id)))"##;
-    let expect = expect![[
+    (async-status-clean-up id)))"##,
+            true,
+            expect![[
         r#"OK ((0.0 nil "0") (0.005 nil "0") (0.011 t "0.011") (0.015 nil "0.011") (0.021 t "0.021") (0.022 nil "0.021") (0.5 t "0.5") (0.999 t "0.999") (1.0 nil "0.999"))"#
-    ]];
-    assert_async_status_parity(elisp_form, expect);
-}
-
-#[test]
-fn actual_subprocess_can_publish_progress_through_the_message_file() {
-    let elisp_form = r##"(let ((id (async-status-req-id "subprocess"))
+    ]],
+        ),
+        (
+            "actual_subprocess_can_publish_progress_through_the_message_file",
+            r##"(let ((id (async-status-req-id "subprocess"))
       process)
   (setq async-status--shown-items nil)
   (unwind-protect
@@ -189,14 +189,13 @@ fn actual_subprocess_can_publish_progress_through_the_message_file() {
     (when (and process (process-live-p process))
       (delete-process process))
     (setq async-status--shown-items nil)
-    (async-status-clean-up id)))"##;
-    let expect = expect!["OK (0 \"0.75\" \"0.75\")"];
-    assert_async_status_parity(elisp_form, expect);
-}
-
-#[test]
-fn actual_async_child_api_and_file_notification_drive_parent_progress_end_to_end() {
-    let elisp_form = r##"(let* ((id (async-status-req-id "async-child"))
+    (async-status-clean-up id)))"##,
+            true,
+            expect!["OK (0 \"0.75\" \"0.75\")"],
+        ),
+        (
+            "actual_async_child_api_and_file_notification_drive_parent_progress_end_to_end",
+            r##"(let* ((id (async-status-req-id "async-child"))
        (path (async-status--get-absolute-path-by-id id))
        (parent-load-path (copy-sequence load-path))
        (parent-temp-directory temporary-file-directory)
@@ -267,14 +266,13 @@ fn actual_async_child_api_and_file_notification_drive_parent_progress_end_to_end
       (async-status-clean-up id))
     (setq async-status--shown-items nil)
     (when (buffer-live-p buffer)
-      (kill-buffer buffer))))"##;
-    let expect = expect!["OK ((:child \"0.75\") \"0.75\" \"0.75\" t nil exit t)"];
-    assert_async_status_parity(elisp_form, expect);
-}
-
-#[test]
-fn duplicate_registrations_are_removed_one_watch_at_a_time_by_id() {
-    let elisp_form = r##"(let ((id (async-status-req-id "duplicate"))
+      (kill-buffer buffer))))"##,
+            true,
+            expect!["OK ((:child \"0.75\") \"0.75\" \"0.75\" t nil exit t)"],
+        ),
+        (
+            "duplicate_registrations_are_removed_one_watch_at_a_time_by_id",
+            r##"(let ((id (async-status-req-id "duplicate"))
       (next-watch 0)
       removed)
   (setq async-status--shown-items nil)
@@ -311,14 +309,13 @@ fn duplicate_registrations_are_removed_one_watch_at_a_time_by_id() {
              async-status--shown-items
              (nreverse removed)))))
     (setq async-status--shown-items nil)
-    (async-status-clean-up id)))"##;
-    let expect = expect![[r#"OK ((("Second" 2) ("First" 1)) (("First" 1)) nil (2 1))"#]];
-    assert_async_status_parity(elisp_form, expect);
-}
-
-#[test]
-fn cleanup_order_allows_removing_ui_state_after_the_message_file_is_deleted() {
-    let elisp_form = r##"(let ((id (async-status-req-id "cleanup-order"))
+    (async-status-clean-up id)))"##,
+            true,
+            expect![[r#"OK ((("Second" 2) ("First" 1)) (("First" 1)) nil (2 1))"#]],
+        ),
+        (
+            "cleanup_order_allows_removing_ui_state_after_the_message_file_is_deleted",
+            r##"(let ((id (async-status-req-id "cleanup-order"))
       calls)
   (setq async-status--shown-items nil)
   (cl-letf (((symbol-function 'file-notify-add-watch)
@@ -338,14 +335,13 @@ fn cleanup_order_allows_removing_ui_state_after_the_message_file_is_deleted() {
       (list
        file-after-cleanup
        async-status--shown-items
-       (nreverse calls)))))"##;
-    let expect = expect!["OK (nil nil ((:removed :watch) :refresh))"];
-    assert_async_status_parity(elisp_form, expect);
-}
-
-#[test]
-fn workflow_cleanup_can_restore_all_resources_after_a_midstream_error() {
-    let elisp_form = r##"(let ((id (async-status-req-id "failure"))
+       (nreverse calls)))))"##,
+            true,
+            expect!["OK (nil nil ((:removed :watch) :refresh))"],
+        ),
+        (
+            "workflow_cleanup_can_restore_all_resources_after_a_midstream_error",
+            r##"(let ((id (async-status-req-id "failure"))
       removed
       outcome)
   (setq async-status--shown-items nil)
@@ -375,7 +371,9 @@ fn workflow_cleanup_can_restore_all_resources_after_a_midstream_error() {
      async-status--shown-items
      (file-exists-p
       (async-status--get-absolute-path-by-id id))
-     removed)))"##;
-    let expect = expect!["OK (:error error t nil nil (:watch))"];
-    assert_async_status_parity(elisp_form, expect);
+     removed)))"##,
+            true,
+            expect!["OK (:error error t nil nil (:watch))"],
+        ),
+    ]);
 }

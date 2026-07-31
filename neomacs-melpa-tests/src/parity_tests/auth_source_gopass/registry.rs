@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_auth_source_gopass_autoload_parity, assert_auth_source_gopass_parity};
+use super::{assert_auth_source_gopass_autoload_batch, assert_auth_source_gopass_batch};
 
 #[test]
-fn auth_source_gopass_descriptor_and_sources_pin_exact_melpa_payload() {
-    let elisp_form = r##"(let* ((descriptor
+fn registry_auth_source_gopass_batch() {
+    assert_auth_source_gopass_batch(&[
+        (
+            "auth_source_gopass_descriptor_and_sources_pin_exact_melpa_payload",
+            r##"(let* ((descriptor
                 (cadr
                  (assq
                   'auth-source-gopass
@@ -36,16 +39,15 @@ fn auth_source_gopass_descriptor_and_sources_pin_exact_melpa_payload() {
                 (secure-hash
                  'sha256
                  (current-buffer)))))
-           sources)))"##;
-    let expect = expect![[
+           sources)))"##,
+            true,
+            expect![[
         r#"OK ((auth-source-gopass "20230109.1213" "Gopass integration for auth-source." ((emacs (24 4))) ((:maintainers ("Markus M. May" . "mmay@javafreedom.org")) (:authors ("Markus M. May" . "mmay@javafreedom.org")) (:revdesc . "6f7f0cc0d682") (:commit . "6f7f0cc0d682f66d11f7fac4fa5c1e79904232da") (:url . "https://github.com/"))) (("auth-source-gopass-pkg.el" 392 "f02b5312a9651f9f7564ee51a6bad055575c856b7927d95c3a0fe11d9e966b10") ("auth-source-gopass.el" 3650 "747be8d63cf6fb43cfca5ad9f21c20f9831a239bb42e85661a38bffef24c8082")))"#
-    ]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_feature_and_definition_origins_are_exact() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "auth_source_gopass_feature_and_definition_origins_are_exact",
+            r##"(list
          (featurep 'auth-source-gopass)
          (mapcar
           (lambda (symbol)
@@ -69,16 +71,15 @@ fn auth_source_gopass_feature_and_definition_origins_are_exact() {
             auth-source-gopass-path-separator
             auth-source-gopass-executable
             auth-source-gopass-construct-query-path
-            auth-source-gopass-backend)))"##;
-    let expect = expect![[
+            auth-source-gopass-backend)))"##,
+            true,
+            expect![[
         r#"OK (t ((auth-source-gopass--gopass-construct-query-path t "auth-source-gopass.el") (auth-source-gopass-search t "auth-source-gopass.el") (auth-source-gopass-enable t "auth-source-gopass.el") (auth-source-gopass-backend-parse t "auth-source-gopass.el")) ((auth-source-gopass-path-prefix t "auth-source-gopass.el") (auth-source-gopass-path-separator t "auth-source-gopass.el") (auth-source-gopass-executable t "auth-source-gopass.el") (auth-source-gopass-construct-query-path t "auth-source-gopass.el") (auth-source-gopass-backend t "auth-source-gopass.el")))"#
-    ]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_public_functions_have_exact_callable_contracts() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auth_source_gopass_public_functions_have_exact_callable_contracts",
+            r##"(mapcar
          (lambda (symbol)
            (list
             symbol
@@ -89,16 +90,15 @@ fn auth_source_gopass_public_functions_have_exact_callable_contracts() {
          '(auth-source-gopass--gopass-construct-query-path
            auth-source-gopass-search
            auth-source-gopass-enable
-           auth-source-gopass-backend-parse))"##;
-    let expect = expect![[
+           auth-source-gopass-backend-parse))"##,
+            true,
+            expect![[
         r#"OK ((auth-source-gopass--gopass-construct-query-path nil nil (_backend _type host user _port) "Construct the full entry-path for the gopass entry grom HOST and USER.\nUsually starting with the ‘auth-source-gopass-path-prefix’, followed by host\nand user, separated by the ‘auth-source-gopass-path-separator’.") (auth-source-gopass-search nil nil (&rest spec) "Searche gopass for the specified user and host.\nSPEC, BACKEND, TYPE, HOST, USER and PORT are required by auth-source.\n\n(fn &rest SPEC &key BACKEND TYPE HOST USER PORT &allow-other-keys)") (auth-source-gopass-enable nil nil nil "Enable the gopass auth source.") (auth-source-gopass-backend-parse nil nil (entry) "Create a gopass auth-source backend from ENTRY."))"#
-    ]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_custom_options_have_exact_schema_and_defaults() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auth_source_gopass_custom_options_have_exact_schema_and_defaults",
+            r##"(mapcar
          (lambda (symbol)
            (list
             symbol
@@ -109,16 +109,15 @@ fn auth_source_gopass_custom_options_have_exact_schema_and_defaults() {
          '(auth-source-gopass-path-prefix
            auth-source-gopass-path-separator
            auth-source-gopass-executable
-           auth-source-gopass-construct-query-path))"##;
-    let expect = expect![[
+           auth-source-gopass-construct-query-path))"##,
+            true,
+            expect![[
         r#"OK ((auth-source-gopass-path-prefix "accounts" string nil ((funcall #'#[nil ("accounts") #1=(t)]))) (auth-source-gopass-path-separator "/" string nil ((funcall #'#[nil ("/") #1#]))) (auth-source-gopass-executable "gopass" string nil ((funcall #'#[nil ("gopass") #1#]))) (auth-source-gopass-construct-query-path auth-source-gopass--gopass-construct-query-path function nil ((funcall #'#[nil ('auth-source-gopass--gopass-construct-query-path) #1#]))))"#
-    ]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_load_history_records_public_definitions_and_provide() {
-    let elisp_form = r##"(let* ((file
+    ]],
+        ),
+        (
+            "auth_source_gopass_load_history_records_public_definitions_and_provide",
+            r##"(let* ((file
                  (locate-library
                   "auth-source-gopass"))
                 (history
@@ -129,16 +128,43 @@ fn auth_source_gopass_load_history_records_public_definitions_and_provide() {
             (memq
              (car-safe event)
              '(defun defvar provide)))
-          history))"##;
-    let expect = expect![
+          history))"##,
+            true,
+            expect![
         "OK ((defun . auth-source-gopass--gopass-construct-query-path) (defun . auth-source-gopass-search) (defun . auth-source-gopass-enable) (defun . auth-source-gopass-backend-parse) (provide . auth-source-gopass))"
-    ];
-    assert_auth_source_gopass_parity(elisp_form, expect);
+    ],
+        ),
+        (
+            "auth_source_gopass_reload_preserves_custom_values_and_single_parser_hook",
+            r##"(let ((source
+                (locate-library
+                 "auth-source-gopass")))
+         (setq auth-source-gopass-path-prefix "custom"
+               auth-source-gopass-path-separator "::"
+               auth-source-gopass-executable "company-gopass"
+               auth-source-gopass-construct-query-path #'identity)
+         (load source nil t t)
+         (load source nil t t)
+         (list
+          auth-source-gopass-path-prefix
+          auth-source-gopass-path-separator
+          auth-source-gopass-executable
+          auth-source-gopass-construct-query-path
+          (cl-count
+           #'auth-source-gopass-backend-parse
+           auth-source-backend-parser-functions)))"##,
+            true,
+            expect![[r#"OK ("custom" "::" "company-gopass" identity 1)"#]],
+        ),
+    ]);
 }
 
 #[test]
-fn auth_source_gopass_generated_autoload_registers_enable_command() {
-    let elisp_form = r##"(let* ((file
+fn registry_auth_source_gopass_autoload_batch() {
+    assert_auth_source_gopass_autoload_batch(&[
+        (
+            "auth_source_gopass_generated_autoload_registers_enable_command",
+            r##"(let* ((file
                  (locate-library
                   "auth-source-gopass-autoloads"))
                 (history
@@ -160,32 +186,11 @@ fn auth_source_gopass_generated_autoload_registers_enable_command() {
           (commandp 'auth-source-gopass-enable)
           (help-function-arglist
            'auth-source-gopass-enable
-           t)))"##;
-    let expect = expect![[
+           t)))"##,
+            true,
+            expect![[
         r#"OK (t nil ((defun . auth-source-gopass-enable) (provide . auth-source-gopass-autoloads)) t t nil "[Arg list not available until function definition is loaded.]")"#
-    ]];
-    assert_auth_source_gopass_autoload_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_gopass_reload_preserves_custom_values_and_single_parser_hook() {
-    let elisp_form = r##"(let ((source
-                (locate-library
-                 "auth-source-gopass")))
-         (setq auth-source-gopass-path-prefix "custom"
-               auth-source-gopass-path-separator "::"
-               auth-source-gopass-executable "company-gopass"
-               auth-source-gopass-construct-query-path #'identity)
-         (load source nil t t)
-         (load source nil t t)
-         (list
-          auth-source-gopass-path-prefix
-          auth-source-gopass-path-separator
-          auth-source-gopass-executable
-          auth-source-gopass-construct-query-path
-          (cl-count
-           #'auth-source-gopass-backend-parse
-           auth-source-backend-parser-functions)))"##;
-    let expect = expect![[r#"OK ("custom" "::" "company-gopass" identity 1)"#]];
-    assert_auth_source_gopass_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

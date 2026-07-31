@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{AUTO_DARK_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod detection;
 mod lifecycle;
 mod listeners;
@@ -100,4 +102,28 @@ pub(crate) fn assert_auto_dark_parity(elisp_form: &str, expected: Expect) {
 
 pub(crate) fn assert_auto_dark_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_auto_dark_source_parity("auto-dark-autoloads.el", elisp_form, expected);
+}
+
+
+
+/// Multi-probe batch for `assert_auto_dark_autoload_parity` cases (2a).
+pub(crate) fn assert_auto_dark_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_dark_oracle("auto-dark-autoloads.el"),
+        &name,
+        "auto_dark_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_auto_dark_parity` cases (2a).
+pub(crate) fn assert_auto_dark_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        auto_dark_oracle("auto-dark.el"),
+        &name,
+        "auto_dark_parity",
+        cases,
+    );
 }

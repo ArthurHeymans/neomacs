@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_affe_autoload_parity;
+use super::assert_affe_autoload_batch;
 
 #[test]
-fn affe_generated_autoloads_register_both_commands_without_loading_package() {
-    let elisp_form = r##"(list
+fn autoloads_public_surface_batch() {
+    assert_affe_autoload_batch(&[
+        (
+            "affe_generated_autoloads_register_both_commands_without_loading_package",
+            r##"(list
                (featurep 'affe)
                (mapcar
                 (lambda (command)
@@ -27,9 +30,11 @@ fn affe_generated_autoloads_register_both_commands_without_loading_package() {
                (get 'affe-grep-command
                     'custom-autoload)
                (get 'affe-regexp-compiler
-                    'custom-autoload))"##;
-    let expect = expect![[
+                    'custom-autoload))"##,
+            true,
+            expect![[
         r#"OK (nil ((affe-grep t "affe" "Fuzzy grep in DIR with optional INITIAL input.\n\n(fn &optional DIR INITIAL)" nil) (affe-find t "affe" "Fuzzy find in DIR with optional INITIAL input.\n\n(fn &optional DIR INITIAL)" nil)) nil nil nil nil)"#
-    ]];
-    assert_affe_autoload_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

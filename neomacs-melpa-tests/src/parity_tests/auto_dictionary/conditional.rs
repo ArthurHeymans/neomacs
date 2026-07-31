@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_dictionary_parity;
+use super::assert_auto_dictionary_batch;
 
 #[test]
-fn auto_dictionary_conditional_insert_selects_exact_dictionary_and_registers_overlay() {
-    let elisp_form = r##"(with-temp-buffer
+fn conditional_public_surface_batch() {
+    assert_auto_dictionary_batch(&[
+        (
+            "auto_dictionary_conditional_insert_selects_exact_dictionary_and_registers_overlay",
+            r##"(with-temp-buffer
          (let ((ispell-local-dictionary
                 "de"))
            (insert "Alice ")
@@ -25,16 +28,15 @@ fn auto_dictionary_conditional_insert_selects_exact_dictionary_and_registers_ove
                (memq
                 #'adict-conditional-update
                 adict-change-dictionary-hook)
-               t)))))"##;
-    let expect = expect![[
+               t)))))"##,
+            true,
+            expect![[
         r#"OK ("Alice schreibt" 1 (7 15 t adict-conditional-text-face ("en" "writes" "de" "schreibt" t "wrote") (adict-conditional-modification)) t)"#
-    ]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_conditional_insert_uses_fallback_or_empty_text_when_unmatched() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "auto_dictionary_conditional_insert_uses_fallback_or_empty_text_when_unmatched",
+            r##"(list
          (with-temp-buffer
            (let ((ispell-local-dictionary
                   "fr"))
@@ -57,16 +59,15 @@ fn auto_dictionary_conditional_insert_uses_fallback_or_empty_text_when_unmatched
               (buffer-string)
               (adict-test-overlay-state
                (car
-                adict-conditional-overlay-list))))))"##;
-    let expect = expect![[
+                adict-conditional-overlay-list))))))"##,
+            true,
+            expect![[
         r#"OK (("wrote" (1 6 t adict-conditional-text-face ("en" "writes" "de" "schreibt" t "wrote") #1=(adict-conditional-modification))) ("" (nil nil t adict-conditional-text-face ("en" "writes" "de" "schreibt") #1#)))"#
-    ]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_conditional_update_replaces_text_in_place_and_moves_overlay() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_dictionary_conditional_update_replaces_text_in_place_and_moves_overlay",
+            r##"(with-temp-buffer
          (let ((ispell-local-dictionary "en"))
            (insert "Bob ")
            (adict-conditional-insert
@@ -99,16 +100,15 @@ fn auto_dictionary_conditional_update_replaces_text_in_place_and_moves_overlay()
                 (list
                  (buffer-string)
                  (adict-test-overlay-state
-                  overlay)))))))"##;
-    let expect = expect![[
+                  overlay)))))))"##,
+            true,
+            expect![[
         r#"OK (("Bob writes:\n" (5 11 t adict-conditional-text-face #1=("en" "writes" "de" "schreibt" "fr" "écrit") #2=(adict-conditional-modification))) ("Bob schreibt:\n" (5 13 t adict-conditional-text-face #1# #2#)) ("Bob écrit:\n" (5 10 t adict-conditional-text-face #1# #2#)))"#
-    ]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_conditional_update_handles_multiple_independent_insertions() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_dictionary_conditional_update_handles_multiple_independent_insertions",
+            r##"(with-temp-buffer
          (let ((ispell-local-dictionary "en"))
            (adict-conditional-insert
             "en" "Hello"
@@ -141,16 +141,15 @@ fn auto_dictionary_conditional_update_handles_multiple_independent_insertions() 
                   (overlay-end overlay)))
                adict-conditional-overlay-list)
               (length
-               adict-conditional-overlay-list)))))"##;
-    let expect = expect![[
+               adict-conditional-overlay-list)))))"##,
+            true,
+            expect![[
         r#"OK ("Hello, team. Alice writes." "Hallo, team. Alice schreibt." ((20 . 26) (1 . 6)) ((20 . 28) (1 . 6)) 2)"#
-    ]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_user_edit_inside_only_conditional_overlay_unregisters_update_hook() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_dictionary_user_edit_inside_only_conditional_overlay_unregisters_update_hook",
+            r##"(with-temp-buffer
          (let ((ispell-local-dictionary "en"))
            (adict-conditional-insert
             "en" "writes"
@@ -169,14 +168,13 @@ fn auto_dictionary_user_edit_inside_only_conditional_overlay_unregisters_update_
               adict-conditional-overlay-list
               (memq
                #'adict-conditional-update
-               adict-change-dictionary-hook)))))"##;
-    let expect = expect![[r#"OK ("w!rites" nil nil nil nil)"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_editing_one_of_two_conditional_overlays_keeps_remaining_update_live() {
-    let elisp_form = r##"(with-temp-buffer
+               adict-change-dictionary-hook)))))"##,
+            true,
+            expect![[r#"OK ("w!rites" nil nil nil nil)"#]],
+        ),
+        (
+            "auto_dictionary_editing_one_of_two_conditional_overlays_keeps_remaining_update_live",
+            r##"(with-temp-buffer
          (let ((ispell-local-dictionary "en"))
            (adict-conditional-insert
             "en" "hello"
@@ -210,14 +208,13 @@ fn auto_dictionary_editing_one_of_two_conditional_overlays_keeps_remaining_updat
                (memq
                 #'adict-conditional-update
                 adict-change-dictionary-hook)
-               t)))))"##;
-    let expect = expect![[r#"OK ("h!ello freund" nil t 1 t)"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_conditional_insert_prefers_first_duplicate_dictionary_pair() {
-    let elisp_form = r##"(with-temp-buffer
+               t)))))"##,
+            true,
+            expect![[r#"OK ("h!ello freund" nil t 1 t)"#]],
+        ),
+        (
+            "auto_dictionary_conditional_insert_prefers_first_duplicate_dictionary_pair",
+            r##"(with-temp-buffer
          (let ((ispell-local-dictionary "en"))
            (adict-conditional-insert
             "en" "first"
@@ -228,14 +225,13 @@ fn auto_dictionary_conditional_insert_prefers_first_duplicate_dictionary_pair() 
             (overlay-get
              (car
               adict-conditional-overlay-list)
-             'adict-conditional-list))))"##;
-    let expect = expect![[r#"OK ("first" ("en" "first" "en" "second" t "fallback"))"#]];
-    assert_auto_dictionary_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_dictionary_dictionary_change_hook_updates_practical_localized_signature() {
-    let elisp_form = r##"(with-temp-buffer
+             'adict-conditional-list))))"##,
+            true,
+            expect![[r#"OK ("first" ("en" "first" "en" "second" t "fallback"))"#]],
+        ),
+        (
+            "auto_dictionary_dictionary_change_hook_updates_practical_localized_signature",
+            r##"(with-temp-buffer
          (let ((ispell-local-dictionary "en")
                (changes nil)
                (adict-change-dictionary-hook
@@ -271,9 +267,11 @@ fn auto_dictionary_dictionary_change_hook_updates_practical_localized_signature(
                   (nreverse changes)
                   adict-lighter
                   (length
-                   adict-conditional-overlay-list)))))))"##;
-    let expect = expect![[
+                   adict-conditional-overlay-list)))))))"##,
+            true,
+            expect![[
         r#"OK ("Regards,\nAlice — Engineering" "Regards,\nAlice — Entwicklung" "Regards,\nAlice — Ingénierie" ("de" "fr") " fr" 1)"#
-    ]];
-    assert_auto_dictionary_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

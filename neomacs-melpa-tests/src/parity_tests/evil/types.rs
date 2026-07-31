@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_evil_parity;
+use super::assert_evil_batch;
 
 #[test]
-fn evil_exclusive_type_normalizes_boundaries_and_describes_character_counts() {
-    let elisp_form = r##"(with-temp-buffer
+fn types_public_surface_batch() {
+    assert_evil_batch(&[
+        (
+            "evil_exclusive_type_normalizes_boundaries_and_describes_character_counts",
+            r##"(with-temp-buffer
                (insert "first line\nsecond line\nthird")
                (let ((second-line
                       (save-excursion
@@ -17,17 +20,15 @@ fn evil_exclusive_type_normalizes_boundaries_and_describes_character_counts() {
                   (evil-normalize 1 second-line 'exclusive)
                   (evil-describe 1 1 'exclusive)
                   (evil-describe 1 2 'exclusive)
-                  (evil-describe 5 2 'exclusive))))"##;
-    let expect = expect![[
+                  (evil-describe 5 2 'exclusive))))"##,
+            true,
+            expect![[
         r#"OK ((1 1 exclusive) (2 11 inclusive :expanded t) (1 12 line :expanded t) "0 characters" "1 character" "3 characters")"#
-    ]];
-
-    assert_evil_parity(elisp_form, expect);
-}
-
-#[test]
-fn evil_inclusive_type_expands_contracts_reversed_positions_and_describes_counts() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "evil_inclusive_type_expands_contracts_reversed_positions_and_describes_counts",
+            r##"(with-temp-buffer
                (insert "abcdefgh")
                (list
                 (evil-expand 1 1 'inclusive)
@@ -35,17 +36,15 @@ fn evil_inclusive_type_expands_contracts_reversed_positions_and_describes_counts
                 (evil-contract 1 2 'inclusive)
                 (evil-contract 6 2 'inclusive)
                 (evil-describe 1 1 'inclusive)
-                (evil-describe 5 2 'inclusive)))"##;
-    let expect = expect![[
+                (evil-describe 5 2 'inclusive)))"##,
+            true,
+            expect![[
         r#"OK ((1 2 inclusive :expanded t) (2 6 inclusive :expanded t) (1 1 inclusive :expanded nil) (2 5 inclusive :expanded nil) "1 character" "4 characters")"#
-    ]];
-
-    assert_evil_parity(elisp_form, expect);
-}
-
-#[test]
-fn evil_line_and_block_types_expand_contract_and_describe_dimensions() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "evil_line_and_block_types_expand_contract_and_describe_dimensions",
+            r##"(with-temp-buffer
                (insert "alpha\nbravo\ncharlie\n")
                (let ((first 1)
                      (second
@@ -66,17 +65,15 @@ fn evil_line_and_block_types_expand_contract_and_describe_dimensions() {
                   (evil-expand first second 'block)
                   (evil-expand first (1+ third) 'block)
                   (evil-contract first (1+ second) 'block)
-                  (evil-describe first (1+ third) 'block))))"##;
-    let expect = expect![[
+                  (evil-describe first (1+ third) 'block))))"##,
+            true,
+            expect![[
         r#"OK ((1 7 line :expanded t) (1 13 line :expanded t) "2 lines" (1 2 block :expanded t) (1 8 block :expanded t) (1 15 block :expanded t) (1 7 block :expanded nil) "3 rows and 2 columns")"#
-    ]];
-
-    assert_evil_parity(elisp_form, expect);
-}
-
-#[test]
-fn evil_transform_handles_nil_types_markers_and_existing_expansion_flags() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "evil_transform_handles_nil_types_markers_and_existing_expansion_flags",
+            r##"(with-temp-buffer
                (insert "abcdef")
                (let ((marker (copy-marker 2)))
                  (unwind-protect
@@ -86,17 +83,15 @@ fn evil_transform_handles_nil_types_markers_and_existing_expansion_flags() {
                       (evil-transform nil 1 2 nil)
                       (evil-transform :expand marker 2 'inclusive)
                       (evil-expand 1 2 'inclusive :expanded t))
-                   (set-marker marker nil))))"##;
-    let expect = expect![
+                   (set-marker marker nil))))"##,
+            true,
+            expect![
         "OK ((1 2 block) (1 2) (1 2) (2 3 inclusive :expanded t) (1 2 inclusive :expanded t))"
-    ];
-
-    assert_evil_parity(elisp_form, expect);
-}
-
-#[test]
-fn evil_ranges_sort_positions_preserve_properties_and_support_copying_mutators() {
-    let elisp_form = r##"(let* ((range (evil-range 9 3 'inclusive
+    ],
+        ),
+        (
+            "evil_ranges_sort_positions_preserve_properties_and_support_copying_mutators",
+            r##"(let* ((range (evil-range 9 3 'inclusive
                                    :foo 'one :bar 'two))
                     (copy (evil-copy-range range))
                     (changed
@@ -110,17 +105,15 @@ fn evil_ranges_sort_positions_preserve_properties_and_support_copying_mutators()
                 (evil-type range)
                 (evil-range-properties range)
                 changed
-                range))"##;
-    let expect = expect![
+                range))"##,
+            true,
+            expect![
         "OK (#2=(1 1 inclusive . #1=(:foo one :bar two)) t 1 1 inclusive #1# (1 1 line :foo changed :bar two :baz t) #2#)"
-    ];
-
-    assert_evil_parity(elisp_form, expect);
-}
-
-#[test]
-fn evil_range_component_mutators_distinguish_in_place_and_copy_updates() {
-    let elisp_form = r##"(let* ((original
+    ],
+        ),
+        (
+            "evil_range_component_mutators_distinguish_in_place_and_copy_updates",
+            r##"(let* ((original
                      (evil-range 2 8 'exclusive :name 'original))
                     (beg-copy
                      (evil-set-range-beginning original 1 t))
@@ -131,24 +124,23 @@ fn evil_range_component_mutators_distinguish_in_place_and_copy_updates() {
                     (props-copy
                      (evil-set-range-properties
                       original '(:name copy :extra t) t)))
-               (list original beg-copy end-copy type-copy props-copy))"##;
-    let expect = expect![
+               (list original beg-copy end-copy type-copy props-copy))"##,
+            true,
+            expect![
         "OK ((1 1 exclusive :name original) (1 1 exclusive :name original) (1 9 exclusive :name original) (1 1 line :name original) (1 1 exclusive :name copy :extra t))"
-    ];
-
-    assert_evil_parity(elisp_form, expect);
-}
-
-#[test]
-fn evil_range_union_combines_extent_type_and_property_precedence() {
-    let elisp_form = r##"(let ((left (evil-range 1 5 'inclusive :left t))
+    ],
+        ),
+        (
+            "evil_range_union_combines_extent_type_and_property_precedence",
+            r##"(let ((left (evil-range 1 5 'inclusive :left t))
                     (right (evil-range 4 10 'line :right t)))
                (list
                 (evil-range-union left right)
                 (evil-range-union left right 'block)
                 (evil-range-union nil right)
-                (evil-range-union left nil)))"##;
-    let expect = expect!["OK ((1 1 inclusive) (1 1 block) nil nil)"];
-
-    assert_evil_parity(elisp_form, expect);
+                (evil-range-union left nil)))"##,
+            true,
+            expect!["OK ((1 1 inclusive) (1 1 block) nil nil)"],
+        ),
+    ]);
 }

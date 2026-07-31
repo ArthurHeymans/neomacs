@@ -1,25 +1,26 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_auctex_parity;
+use super::assert_auto_complete_auctex_batch;
 
 #[test]
-fn auto_complete_auctex_macro_candidates_normalize_real_auctex_entries_and_filter_prefix() {
-    let elisp_form = r##"(let ((TeX-symbol-list
+fn candidates_public_surface_batch() {
+    assert_auto_complete_auctex_batch(&[
+        (
+            "auto_complete_auctex_macro_candidates_normalize_real_auctex_entries_and_filter_prefix",
+            r##"(let ((TeX-symbol-list
                                 '(("alpha" "Required")
                                   (("alphabet" 1) ["Optional"])
                                   ("beta")
                                   (("alpine" TeX-arg-file))))
                                (ac-prefix
                                 "alp"))
-          (ac-auctex-macro-candidates))"##;
-    let expect = expect![[r#"OK ("alpha" "alphabet" "alpine")"#]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_macro_candidates_preserve_source_order_duplicates_and_case_rules() {
-    let elisp_form = r##"(let ((TeX-symbol-list
+          (ac-auctex-macro-candidates))"##,
+            true,
+            expect![[r#"OK ("alpha" "alphabet" "alpine")"#]],
+        ),
+        (
+            "auto_complete_auctex_macro_candidates_preserve_source_order_duplicates_and_case_rules",
+            r##"(let ((TeX-symbol-list
                                 '(("alpha")
                                   ("Alpha")
                                   (("alphabet" 1))
@@ -34,17 +35,15 @@ fn auto_complete_auctex_macro_candidates_preserve_source_order_duplicates_and_ca
                (list
                 prefix
                 (ac-auctex-macro-candidates))))
-           '("al" "Al" "alpha" "z")))"##;
-    let expect = expect![[
+           '("al" "Al" "alpha" "z")))"##,
+            true,
+            expect![[
         r#"OK (("al" ("alpha" "alphabet" "alpha" "alpine")) ("Al" ("Alpha")) ("alpha" ("alpha" "alphabet" "alpha")) ("z" nil))"#
-    ]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_symbol_candidates_filter_real_math_command_names() {
-    let elisp_form = r##"(let ((LaTeX-math-default
+    ]],
+        ),
+        (
+            "auto_complete_auctex_symbol_candidates_filter_real_math_command_names",
+            r##"(let ((LaTeX-math-default
                                 '((?a "alpha" "Greek alpha" 945)
                                   (?b "beta" "Greek beta" 946)
                                   (?l "leq" ("AMS" "less or equal") 8804)
@@ -57,17 +56,15 @@ fn auto_complete_auctex_symbol_candidates_filter_real_math_command_names() {
                (list
                 prefix
                 (ac-auctex-symbol-candidates))))
-           '("" "al" "le" "L" "missing")))"##;
-    let expect = expect![[
+           '("" "al" "le" "L" "missing")))"##,
+            true,
+            expect![[
         r#"OK (("" ("alpha" "beta" "leq" "Leftarrow")) ("al" ("alpha")) ("le" ("leq")) ("L" ("Leftarrow")) ("missing" nil))"#
-    ]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_symbol_document_formats_strings_lists_unicode_and_missing_entries() {
-    let elisp_form = r##"(let ((LaTeX-math-default
+    ]],
+        ),
+        (
+            "auto_complete_auctex_symbol_document_formats_strings_lists_unicode_and_missing_entries",
+            r##"(let ((LaTeX-math-default
                                 '((?a "alpha" "Greek alpha" 945)
                                   (?l "leq" ("AMS" "less or equal") 8804)
                                   (?n "nexists" "does not exist")
@@ -82,17 +79,15 @@ fn auto_complete_auctex_symbol_document_formats_strings_lists_unicode_and_missin
              "leq"
              "nexists"
              "empty"
-             "unknown")))"##;
-    let expect = expect![[
+             "unknown")))"##,
+            true,
+            expect![[
         r#"OK (("alpha" "Greek alpha == α") ("leq" "AMS less or equal == ≤") ("nexists" "does not exist == ") ("empty" " == ") ("unknown" " == "))"#
-    ]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_environment_candidates_add_beg_prefix_before_filtering() {
-    let elisp_form = r##"(let ((LaTeX-environment-list
+    ]],
+        ),
+        (
+            "auto_complete_auctex_environment_candidates_add_beg_prefix_before_filtering",
+            r##"(let ((LaTeX-environment-list
                                 '(("document")
                                   ("description" LaTeX-env-item)
                                   ("figure" ["htbp!"])
@@ -107,17 +102,15 @@ fn auto_complete_auctex_environment_candidates_add_beg_prefix_before_filtering()
                (list
                 prefix
                 (ac-auctex-environment-candidates))))
-           '("beg" "begf" "begfigure" "figure" "begz")))"##;
-    let expect = expect![[
+           '("beg" "begf" "begfigure" "figure" "begz")))"##,
+            true,
+            expect![[
         r#"OK (("beg" ("begdocument" "begdescription" "begfigure" "begfigure*" "begframe" "begtable")) ("begf" ("begfigure" "begfigure*" "begframe")) ("begfigure" ("begfigure" "begfigure*")) ("figure" nil) ("begz" nil))"#
-    ]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_environment_candidates_honor_custom_prefix_and_duplicate_entries() {
-    let elisp_form = r##"(let ((LaTeX-environment-list
+    ]],
+        ),
+        (
+            "auto_complete_auctex_environment_candidates_honor_custom_prefix_and_duplicate_entries",
+            r##"(let ((LaTeX-environment-list
                                 '(("itemize")
                                   ("itemize")
                                   ("enumerate")
@@ -126,15 +119,13 @@ fn auto_complete_auctex_environment_candidates_honor_custom_prefix_and_duplicate
                                 "begin:")
                                (ac-prefix
                                 "begin:i"))
-          (ac-auctex-environment-candidates))"##;
-    let expect = expect![[r#"OK ("begin:itemize" "begin:itemize")"#]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_label_candidates_filter_real_cross_reference_records() {
-    let elisp_form = r##"(let ((LaTeX-label-list
+          (ac-auctex-environment-candidates))"##,
+            true,
+            expect![[r#"OK ("begin:itemize" "begin:itemize")"#]],
+        ),
+        (
+            "auto_complete_auctex_label_candidates_filter_real_cross_reference_records",
+            r##"(let ((LaTeX-label-list
                                 '(("sec:introduction" "main.tex" 12)
                                   ("sec:implementation" "impl.tex" 48)
                                   ("fig:architecture" "figures.tex" 7)
@@ -142,30 +133,26 @@ fn auto_complete_auctex_label_candidates_filter_real_cross_reference_records() {
                                   ("sec:introduction" "appendix.tex" 4)))
                                (ac-prefix
                                 "sec:i"))
-          (ac-auctex-label-candidates))"##;
-    let expect = expect![[r#"OK ("sec:introduction" "sec:implementation" "sec:introduction")"#]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_bibliography_candidates_filter_keys_and_preserve_metadata_order() {
-    let elisp_form = r##"(let ((LaTeX-bibitem-list
+          (ac-auctex-label-candidates))"##,
+            true,
+            expect![[r#"OK ("sec:introduction" "sec:implementation" "sec:introduction")"#]],
+        ),
+        (
+            "auto_complete_auctex_bibliography_candidates_filter_keys_and_preserve_metadata_order",
+            r##"(let ((LaTeX-bibitem-list
                                 '(("knuth1984" "The TeXbook")
                                   ("knuth1992" "Literate Programming")
                                   ("lamport1994" "LaTeX")
                                   ("knuth1984" "duplicate database")))
                                (ac-prefix
                                 "knuth"))
-          (ac-auctex-bib-candidates))"##;
-    let expect = expect![[r#"OK ("knuth1984" "knuth1992" "knuth1984")"#]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_complete_auctex_source_prefix_regexps_extract_practical_macro_ref_and_cite_prefixes() {
-    let elisp_form = r##"(with-temp-buffer
+          (ac-auctex-bib-candidates))"##,
+            true,
+            expect![[r#"OK ("knuth1984" "knuth1992" "knuth1984")"#]],
+        ),
+        (
+            "auto_complete_auctex_source_prefix_regexps_extract_practical_macro_ref_and_cite_prefixes",
+            r##"(with-temp-buffer
           (mapcar
            (lambda (fixture)
              (erase-buffer)
@@ -206,10 +193,11 @@ fn auto_complete_auctex_source_prefix_regexps_extract_practical_macro_ref_and_ci
              (ac-source-auctex-bibs
               "\\cite[p. 42]{knuth19")
              (ac-source-auctex-bibs
-              "\\cite{first,knuth19"))))"##;
-    let expect = expect![[
+              "\\cite{first,knuth19"))))"##,
+            true,
+            expect![[
         r#"OK ((ac-source-auctex-macros "\\includegr" "\\\\\\([a-zA-Z]*\\)\\=" ("\\\\\\([a-zA-Z]*\\)\\=" 2 (((init . TeX-symbol-list) (candidates . ac-auctex-macro-candidates) (action . ac-auctex-macro-action) (requires . 0) (symbol . "m") (prefix . "\\\\\\([a-zA-Z]*\\)\\=")))) "includegr") (ac-source-auctex-symbols "formula: \\alp" "\\\\\\([a-zA-Z]*\\)\\=" ("\\\\\\([a-zA-Z]*\\)\\=" 11 (((init . LaTeX-math-mode) (candidates . ac-auctex-symbol-candidates) (document . ac-auctex-symbol-document) (action . ac-auctex-symbol-action) (requires . 0) (symbol . "s") (prefix . "\\\\\\([a-zA-Z]*\\)\\=")))) "alp") (ac-source-auctex-environments "\\begfig" "\\\\\\([a-zA-Z]*\\)\\=" ("\\\\\\([a-zA-Z]*\\)\\=" 2 (((init . LaTeX-environment-list) (candidates . ac-auctex-environment-candidates) (action . ac-auctex-environment-action) (requires . 0) (symbol . "e") (prefix . "\\\\\\([a-zA-Z]*\\)\\=")))) "begfig") (ac-source-auctex-labels "See \\ref{sec:impl" "\\\\ref{\\([^}]*\\)\\=" ("\\\\ref{\\([^}]*\\)\\=" 10 (((init . LaTeX-label-list) (candidates . ac-auctex-label-candidates) (requires . 0) (symbol . "r") (prefix . "\\\\ref{\\([^}]*\\)\\=")))) "sec:impl") (ac-source-auctex-bibs "\\cite[p. 42]{knuth19" "\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=" ("\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=" 14 (((init . LaTeX-bibitem-list) (candidates . ac-auctex-bib-candidates) (requires . 0) (symbol . "b") (prefix . "\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=")))) "knuth19") (ac-source-auctex-bibs "\\cite{first,knuth19" "\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=" nil nil))"#
-    ]];
-
-    assert_auto_complete_auctex_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

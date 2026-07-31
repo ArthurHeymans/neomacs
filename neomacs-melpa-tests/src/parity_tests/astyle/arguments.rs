@@ -1,9 +1,12 @@
-use super::assert_astyle_parity;
+use super::assert_astyle_batch;
 use expect_test::{Expect, expect};
 
 #[test]
-fn format_args_use_style_c_mode_offset_and_complete_default_option_set() {
-    let elisp_form = r##"
+fn arguments_public_surface_batch() {
+    assert_astyle_batch(&[
+        (
+            "format_args_use_style_c_mode_offset_and_complete_default_option_set",
+            r##"
 (with-temp-buffer
   (setq buffer-file-name
         (astyle-test-path
@@ -24,16 +27,15 @@ fn format_args_use_style_c_mode_offset_and_complete_default_option_set() {
     (cddr
      (astyle--format-args))
     astyle-default-args)))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("--style=linux" "--indent=spaces=3" . #1=("--pad-oper" "--pad-header" "--break-blocks" "--delete-empty-lines" "--align-pointer=type" "--align-reference=name")) #1# t)"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn format_args_prefer_explicit_indent_and_custom_arguments_in_declared_order() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "format_args_prefer_explicit_indent_and_custom_arguments_in_declared_order",
+            r##"
 (with-temp-buffer
   (setq buffer-file-name
         (astyle-test-path
@@ -51,16 +53,15 @@ fn format_args_prefer_explicit_indent_and_custom_arguments_in_declared_order() {
           "--max-code-length=88"))
   (make-directory default-directory t)
   (astyle--format-args))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK ("--style=allman" "--indent=spaces=8" "--suffix=none" "--convert-tabs" "--max-code-length=88")"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn format_args_are_recomputed_from_buffer_local_settings_for_each_buffer() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "format_args_are_recomputed_from_buffer_local_settings_for_each_buffer",
+            r##"
 (let ((first
        (generate-new-buffer
         " *astyle-args-first*"))
@@ -110,16 +111,15 @@ fn format_args_are_recomputed_from_buffer_local_settings_for_each_buffer() {
            (astyle--format-args))))
     (kill-buffer first)
     (kill-buffer second)))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("--style=google" "--indent=spaces=4" "--first") ("--style=java" "--indent=spaces=6" "--second" "--third"))"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn project_configuration_file_overrides_style_indent_and_custom_arguments() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "project_configuration_file_overrides_style_indent_and_custom_arguments",
+            r##"
 (let* ((project
         (file-name-as-directory
          (astyle-test-path
@@ -153,16 +153,15 @@ fn project_configuration_file_overrides_style_indent_and_custom_arguments() {
      (current-message)
      (file-truename
       configuration))))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("--options=[ORACLE-SANDBOX]/arguments/project/.astylerc") nil "[ORACLE-SANDBOX]/arguments/project/.astylerc")"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn nearest_configuration_and_custom_rc_name_win_in_nested_projects() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "nearest_configuration_and_custom_rc_name_win_in_nested_projects",
+            r##"
 (let* ((root
         (file-name-as-directory
          (astyle-test-path
@@ -201,16 +200,15 @@ fn nearest_configuration_and_custom_rc_name_win_in_nested_projects() {
       module-config)
      (file-truename
       root-config))))
-"##;
-    let expect: Expect = expect![[
+"##,
+            true,
+            expect![[
         r#"OK (("--options=[ORACLE-SANDBOX]/arguments/nearest/module/style.conf") "[ORACLE-SANDBOX]/arguments/nearest/module/style.conf" "[ORACLE-SANDBOX]/arguments/nearest/style.conf")"#
-    ]];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn unsaved_buffer_uses_default_arguments_when_no_configuration_is_addressable() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "unsaved_buffer_uses_default_arguments_when_no_configuration_is_addressable",
+            r##"
 (with-temp-buffer
   (setq default-directory
         (file-name-as-directory
@@ -232,14 +230,13 @@ fn unsaved_buffer_uses_default_arguments_when_no_configuration_is_addressable() 
       :signal
       (car condition)
       (cadr condition)))))
-"##;
-    let expect: Expect = expect!["OK (:signal wrong-type-argument stringp)"];
-    assert_astyle_parity(elisp_form, expect);
-}
-
-#[test]
-fn missing_indent_sources_report_the_exact_conversion_error() {
-    let elisp_form = r##"
+"##,
+            true,
+            expect!["OK (:signal wrong-type-argument stringp)"],
+        ),
+        (
+            "missing_indent_sources_report_the_exact_conversion_error",
+            r##"
 (with-temp-buffer
   (setq buffer-file-name
         (astyle-test-path
@@ -260,7 +257,9 @@ fn missing_indent_sources_report_the_exact_conversion_error() {
       :signal
       (car condition)
       (cdr condition)))))
-"##;
-    let expect: Expect = expect!["OK (:signal wrong-type-argument (numberp nil))"];
-    assert_astyle_parity(elisp_form, expect);
+"##,
+            true,
+            expect!["OK (:signal wrong-type-argument (numberp nil))"],
+        ),
+    ]);
 }

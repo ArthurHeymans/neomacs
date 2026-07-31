@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auth_source_1password_parity;
+use super::assert_auth_source_1password_batch;
 
 #[test]
-fn auth_source_1password_default_reference_builds_real_vault_host_user_paths() {
-    let elisp_form = r##"(mapcar
+fn reference_public_surface_batch() {
+    assert_auth_source_1password_batch(&[
+        (
+            "auth_source_1password_default_reference_builds_real_vault_host_user_paths",
+            r##"(mapcar
           (lambda (case)
             (let ((auth-source-1password-vault
                    (nth 0 case)))
@@ -19,17 +22,15 @@ fn auth_source_1password_default_reference_builds_real_vault_host_user_paths() {
           '(("Personal" "api.example.com" "deploy" 443)
             ("Engineering" "git.example.net" "alice@example.net" "ssh")
             ("共有" "例え.テスト" "利用者" nil)
-            ("vault with spaces" "service host" "user name" 8443)))"##;
-    let expect = expect![[
+            ("vault with spaces" "service host" "user name" 8443)))"##,
+            true,
+            expect![[
         r#"OK ((("Personal" "api.example.com" "deploy" 443) "Personal/api.example.com/deploy") (("Engineering" "git.example.net" "alice@example.net" "ssh") "Engineering/git.example.net/alice@example.net") (("共有" "例え.テスト" "利用者" nil) "共有/例え.テスト/利用者") (("vault with spaces" "service host" "user name" 8443) "vault with spaces/service host/user name"))"#
-    ]];
-
-    assert_auth_source_1password_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_1password_default_reference_preserves_empty_and_embedded_slashes() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auth_source_1password_default_reference_preserves_empty_and_embedded_slashes",
+            r##"(mapcar
           (lambda (case)
             (let ((auth-source-1password-vault
                    (nth 0 case)))
@@ -42,17 +43,15 @@ fn auth_source_1password_default_reference_preserves_empty_and_embedded_slashes(
           '(("" "" "")
             ("Personal/" "/api/v2" "team/alice")
             ("A//B" "host/" "/user")
-            (" vault " " host " " user ")))"##;
-    let expect = expect![[
+            (" vault " " host " " user ")))"##,
+            true,
+            expect![[
         r#"OK ("//" "Personal///api/v2/team/alice" "A//B/host///user" " vault / host / user ")"#
-    ]];
-
-    assert_auth_source_1password_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_1password_reference_ignores_backend_type_port_but_reads_dynamic_vault() {
-    let elisp_form = r##"(let ((auth-source-1password-vault
+    ]],
+        ),
+        (
+            "auth_source_1password_reference_ignores_backend_type_port_but_reads_dynamic_vault",
+            r##"(let ((auth-source-1password-vault
                 "Operations"))
           (list
            (auth-source-1password--1password-construct-entry-path
@@ -74,17 +73,15 @@ fn auth_source_1password_reference_ignores_backend_type_port_but_reads_dynamic_v
               "db.internal"
               "reader"
               nil))
-           auth-source-1password-vault))"##;
-    let expect = expect![[
+           auth-source-1password-vault))"##,
+            true,
+            expect![[
         r#"OK ("Operations/db.internal/reader" "Operations/db.internal/reader" "Temporary/db.internal/reader" "Operations")"#
-    ]];
-
-    assert_auth_source_1password_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_1password_custom_reference_receives_full_auth_source_context_once() {
-    let elisp_form = r##"(let (calls commands)
+    ]],
+        ),
+        (
+            "auth_source_1password_custom_reference_receives_full_auth_source_context_once",
+            r##"(let (calls commands)
           (let ((auth-source-1password-executable
                  "fixture-op")
                 (auth-source-1password-construct-secret-reference
@@ -120,17 +117,15 @@ fn auth_source_1password_custom_reference_receives_full_auth_source_context_once
                 :max 9
                 :require '(:secret))
                (nreverse calls)
-               (nreverse commands)))))"##;
-    let expect = expect![[
+               (nreverse commands)))))"##,
+            true,
+            expect![[
         r#"OK (((:user "service-account" :secret "generated-secret")) ((t password-store "db.prod" "service-account" 5432)) ("fixture-op read op://Custom/db.prod/5432/service-account"))"#
-    ]];
-
-    assert_auth_source_1password_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_1password_reference_supports_symbol_and_lambda_customizers() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "auth_source_1password_reference_supports_symbol_and_lambda_customizers",
+            r##"(let (calls)
           (cl-labels
               ((fixture-reference
                 (backend type host user port)
@@ -163,17 +158,15 @@ fn auth_source_1password_reference_supports_symbol_and_lambda_customizers() {
                 "example.org"
                 "ci"
                 nil))
-             (nreverse calls))))"##;
-    let expect = expect![[
+             (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ("password-store:user@host#443" "lambda/example.org/ci" ((backend password-store "host" "user" 443)))"#
-    ]];
-
-    assert_auth_source_1password_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_1password_default_reference_treats_nil_components_as_empty_segments() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "auth_source_1password_default_reference_treats_nil_components_as_empty_segments",
+            r##"(list
           (let ((auth-source-1password-vault
                  "Personal"))
             (auth-source-1password--1password-construct-entry-path
@@ -189,15 +182,13 @@ fn auth_source_1password_default_reference_treats_nil_components_as_empty_segmen
           (let ((auth-source-1password-vault
                  nil))
             (auth-source-1password--1password-construct-entry-path
-             nil nil nil nil nil)))"##;
-    let expect = expect![[r#"OK ("Personal//user" "Personal/host/" "/host/user" "//")"#]];
-
-    assert_auth_source_1password_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_1password_default_reference_non_string_components_signal_exactly() {
-    let elisp_form = r##"(list
+             nil nil nil nil nil)))"##,
+            true,
+            expect![[r#"OK ("Personal//user" "Personal/host/" "/host/user" "//")"#]],
+        ),
+        (
+            "auth_source_1password_default_reference_non_string_components_signal_exactly",
+            r##"(list
           (let ((auth-source-1password-vault
                  "Personal"))
             (auth-source-1password-test-error-data
@@ -221,10 +212,11 @@ fn auth_source_1password_default_reference_non_string_components_signal_exactly(
             (auth-source-1password-test-error-data
              (lambda ()
                (auth-source-1password--1password-construct-entry-path
-                nil nil "host" '(user) nil)))))"##;
-    let expect = expect![[
+                nil nil "host" '(user) nil)))))"##,
+            true,
+            expect![[
         r#"OK ((:error wrong-type-argument (sequencep 42)) (:error wrong-type-argument (sequencep user-symbol)) (:error wrong-type-argument (characterp "Personal")) (:error wrong-type-argument (characterp user)))"#
-    ]];
-
-    assert_auth_source_1password_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

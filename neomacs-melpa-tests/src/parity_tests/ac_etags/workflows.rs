@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_ac_etags_parity;
+use super::assert_ac_etags_batch;
 
 #[test]
-fn ac_etags_completes_a_tag_prefix_from_a_real_tags_table() {
-    let elisp_form = r#"
+fn workflows_public_surface_batch() {
+    assert_ac_etags_batch(&[
+        (
+            "ac_etags_completes_a_tag_prefix_from_a_real_tags_table",
+            r#"
     ;; The README's whole setup: build a TAGS table for the project, select it
     ;; with `visit-tags-table', run `ac-etags-setup' and `ac-etags-ac-setup', then
     ;; type a prefix and complete.  Every tag sharing the prefix must be offered,
@@ -33,18 +36,15 @@ fn ac_etags_completes_a_tag_prefix_from_a_real_tags_table() {
                   (ac-etags-test-cache-entries)
                   (face-attribute 'ac-etags-candidate-face :inherit nil t)
                   (face-attribute 'ac-etags-selection-face :inherit nil t))))))
-"#;
-
-    let expect = expect![[
+"#,
+            true,
+            expect![[
         r#"OK ((ac-source-etags) t ("bank") "bank_" ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung") (("bank_open" "s" ac-etags-candidate-face ac-etags-selection-face) ("bank_close" "s" ac-etags-candidate-face ac-etags-selection-face) ("bank_audit" "s" ac-etags-candidate-face ac-etags-selection-face) ("bank_transfer" "s" ac-etags-candidate-face ac-etags-selection-face) ("bank_überweisung" "s" ac-etags-candidate-face ac-etags-selection-face)) "int main(void) { bank_open" 27 3 "s" ac-etags--candidates (("bank_" "bank_open" "bank_close" "bank_transfer" "bank_audit" "bank_überweisung")) ac-candidate-face ac-selection-face)"#
-    ]];
-
-    assert_ac_etags_parity(elisp_form, expect);
-}
-
-#[test]
-fn ac_etags_requires_option_sets_the_minimum_prefix_length() {
-    let elisp_form = r#"
+    ]],
+        ),
+        (
+            "ac_etags_requires_option_sets_the_minimum_prefix_length",
+            r#"
     ;; `ac-etags-requires' is the package's one knob and its default is 3, so a
     ;; one or two character prefix must produce nothing at all.  The README shows
     ;; customizing it and calling `ac-etags-setup' again; the new value has to
@@ -73,18 +73,15 @@ fn ac_etags_requires_option_sets_the_minimum_prefix_length() {
               (attempt 1 "int x = b")
               (attempt 5 "int x = bank")
               (attempt 5 "int x = bank_"))))
-"#;
-
-    let expect = expect![[
+"#,
+            true,
+            expect![[
         r#"OK (3 integer ("int x = b" 3 nil nil) ("int x = ba" 3 nil nil) ("int x = ban" 3 "ban" ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")) ("int x = b" 1 "b" ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")) ("int x = bank" 5 nil nil) ("int x = bank_" 5 "bank_" ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")))"#
-    ]];
-
-    assert_ac_etags_parity(elisp_form, expect);
-}
-
-#[test]
-fn ac_etags_cache_serves_a_repeated_prefix_until_the_cache_is_cleared() {
-    let elisp_form = r#"
+    ]],
+        ),
+        (
+            "ac_etags_cache_serves_a_repeated_prefix_until_the_cache_is_cleared",
+            r#"
     ;; The completion cache is keyed only by prefix, so after switching to
     ;; another project's TAGS the same prefix still answers with the previous
     ;; project's tags.  That is exactly why `ac-etags-clear-cache' is an
@@ -109,18 +106,15 @@ fn ac_etags_cache_serves_a_repeated_prefix_until_the_cache_is_cleared() {
             (list first after-first stale cleared fresh
                   (ac-etags-test-cache-entries)
                   (commandp 'ac-etags-clear-cache))))))
-"#;
-
-    let expect = expect![[
+"#,
+            true,
+            expect![[
         r#"OK ((("bank") ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")) (("bank_" "bank_open" "bank_close" "bank_transfer" "bank_audit" "bank_überweisung")) (("ledger") ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")) 0 (("ledger") ("bank_settle" "bank_reconcile")) (("bank_" "bank_reconcile" "bank_settle")) t)"#
-    ]];
-
-    assert_ac_etags_parity(elisp_form, expect);
-}
-
-#[test]
-fn ac_etags_completes_across_several_tags_tables_at_once() {
-    let elisp_form = r#"
+    ]],
+        ),
+        (
+            "ac_etags_completes_across_several_tags_tables_at_once",
+            r#"
     ;; With `tags-add-tables' set to t, a second `visit-tags-table' keeps the
     ;; first table instead of asking "Keep current list of tags tables also?".
     ;; Completion then has to span both projects, and the cache entry must hold
@@ -141,18 +135,15 @@ fn ac_etags_completes_across_several_tags_tables_at_once() {
                     (buffer-string)
                     (point)
                     (ac-etags-test-cache-entries)))))))
-"#;
-
-    let expect = expect![[
+"#,
+            true,
+            expect![[
         r#"OK (("bank") ("ledger" "bank") ("bank_open" "bank_close" "bank_audit" "bank_settle" "bank_transfer" "bank_reconcile" "bank_überweisung") "call bank_open" 15 (("bank_" "bank_reconcile" "bank_settle" "bank_open" "bank_close" "bank_transfer" "bank_audit" "bank_überweisung")))"#
-    ]];
-
-    assert_ac_etags_parity(elisp_form, expect);
-}
-
-#[test]
-fn ac_etags_offers_nothing_and_caches_nothing_without_a_tags_table() {
-    let elisp_form = r#"
+    ]],
+        ),
+        (
+            "ac_etags_offers_nothing_and_caches_nothing_without_a_tags_table",
+            r#"
     ;; Without a tags table the source must stay completely quiet: no
     ;; candidates, no cache entry, no text inserted by `ac-complete', and no
     ;; attempt to read a table (which is what would make etags prompt).
@@ -173,10 +164,9 @@ fn ac_etags_offers_nothing_and_caches_nothing_without_a_tags_table() {
                 (point)
                 (hash-table-count ac-etags--completion-cache)
                 (buffer-name (window-buffer (selected-window)))))))
-"#;
-
-    let expect =
-        expect![[r#"OK (nil nil "bank_" nil nil nil "call bank_" 11 0 "*ac-etags-workflow*")"#]];
-
-    assert_ac_etags_parity(elisp_form, expect);
+"#,
+            true,
+            expect![[r#"OK (nil nil "bank_" nil nil nil "call bank_" 11 0 "*ac-etags-workflow*")"#]],
+        ),
+    ]);
 }

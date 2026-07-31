@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_aider_parity;
+use super::assert_aider_batch;
 
 #[test]
-fn aider_comment_detection_extraction_location_and_instruction_generation_match() {
-    let elisp_form = r##"(let ((comment-start ";; ")
+fn editing_public_surface_batch() {
+    assert_aider_batch(&[
+        (
+            "aider_comment_detection_extraction_location_and_instruction_generation_match",
+            r##"(let ((comment-start ";; ")
                (comment-end ""))
          (list
           (mapcar #'aider--is-comment-line
@@ -23,16 +26,15 @@ fn aider_comment_detection_extraction_location_and_instruction_generation_match(
                      (lambda (_prompt initial &rest _) initial)))
             (list
              (aider--get-comment-instruction "ship it" "demo")
-             (aider--get-comment-instruction "ship it" nil)))))"##;
-    let expect = expect![[
+             (aider--get-comment-instruction "ship it" nil)))))"##,
+            true,
+            expect![[
         r#"OK ((0 0 nil nil nil) t nil "first requirement second detail" ("Selected region on line 1" "Selected region from line 1 to 3") ("In function demo, change code according to requirement: ship it" "Change code according to requirement: ship it"))"#
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_region_change_commands_quote_function_and_free_region_contexts_exactly() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "aider_region_change_commands_quote_function_and_free_region_contexts_exactly",
+            r##"(list
          (aider-region-change-generate-command
           "x = 1;\ny = 2;" "calculate" "remove mutation")
          (aider-region-change-generate-command
@@ -52,16 +54,15 @@ fn aider_region_change_commands_quote_function_and_free_region_contexts_exactly(
                             (car candidates)))))
            (with-temp-buffer
              (setq buffer-file-name "/repo/README.org")
-             (aider--get-standard-instruction nil nil))))"##;
-    let expect = expect![[
+             (aider--get-standard-instruction nil nil))))"##,
+            true,
+            expect![[
         r#"OK ("/architect \"in function calculate, for the following code block, remove mutation: x = 1;\ny = 2;\"" "/architect \"for the following code block, use a constant: x = 1;\"" ("Code change instruction for selected region in function 'demo': " nil 5 "Write a new unit test function based on the given description.") ("Change instruction: " nil 15 "Improve English grammar and clarity of the text."))"#
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_blank_line_todo_workflow_inserts_language_appropriate_requirement() {
-    let elisp_form = r##"(let (results)
+    ]],
+        ),
+        (
+            "aider_blank_line_todo_workflow_inserts_language_appropriate_requirement",
+            r##"(let (results)
          (dolist (mode '(emacs-lisp-mode python-mode))
            (with-temp-buffer
              (setq buffer-file-name
@@ -89,16 +90,15 @@ fn aider_blank_line_todo_workflow_inserts_language_appropriate_requirement() {
                       comment-start
                       comment-end)
                 results))))
-         (nreverse results))"##;
-    let expect = expect![[
+         (nreverse results))"##,
+            true,
+            expect![[
         r##"OK ((emacs-lisp-mode ";; TODO: Validate empty input\n(defun existing () nil)\n" 30 ";" "") (python-mode "# TODO: Validate empty input\ndef existing():\n    pass\n" 29 "# " ""))"##
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_comment_requirement_workflow_deletes_line_and_routes_architect_command() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "aider_comment_requirement_workflow_deletes_line_and_routes_architect_command",
+            r##"(let (calls)
          (with-temp-buffer
            (emacs-lisp-mode)
            (insert ";; Replace mutation with a fold\n(defun demo (xs) xs)\n")
@@ -116,16 +116,15 @@ fn aider_comment_requirement_workflow_deletes_line_and_routes_architect_command(
                         (push (list 'send command switch) calls)
                         t)))
              (aider-function-or-region-change)
-             (list (buffer-string) (nreverse calls)))))"##;
-    let expect = expect![[
+             (list (buffer-string) (nreverse calls)))))"##,
+            true,
+            expect![[
         r#"OK ("(defun demo (xs) xs)\n" ((read "Code change instruction: " "In function demo, change code according to requirement: Replace mutation with a fold") (add-file) (send "/architect In function demo, change code according to requirement: Replace mutation with a fold" t)))"#
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_prompt_mode_cycles_file_and_question_commands_in_real_org_buffer() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "aider_prompt_mode_cycles_file_and_question_commands_in_real_org_buffer",
+            r##"(with-temp-buffer
          (let ((aider-enable-markdown-highlighting nil))
            (aider-prompt-mode))
          (insert "src/main.py\n/read-only src/lib.py\n/drop docs/a.md\n/ask explain\n/architect change\n")
@@ -145,16 +144,15 @@ fn aider_prompt_mode_cycles_file_and_question_commands_in_real_org_buffer() {
             first-pass
             (buffer-string)
             (memq #'aider-core--command-completion
-                  completion-at-point-functions))))"##;
-    let expect = expect![[
+                  completion-at-point-functions))))"##,
+            true,
+            expect![[
         r##"OK (aider-prompt-mode org-mode "# " "/add src/main.py\n/drop src/lib.py\n/add docs/a.md\n/architect explain\n/ask change\n" "/read-only src/main.py\n/add src/lib.py\n/add docs/a.md\n/architect explain\n/ask change\n" (aider-core--command-completion pcomplete-completions-at-point t ispell-completion-at-point))"##
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_prompt_font_lock_marks_safe_and_mutating_commands_in_real_document() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "aider_prompt_font_lock_marks_safe_and_mutating_commands_in_real_document",
+            r##"(with-temp-buffer
          (aider-prompt-mode)
          (insert "/ask explain\n/code change\n/commit now\n/read-only src/a.el\ngo ahead\n")
          (font-lock-ensure)
@@ -164,16 +162,15 @@ fn aider_prompt_font_lock_marks_safe_and_mutating_commands_in_real_document() {
             (search-forward needle)
             (list needle
                   (get-text-property (1- (point)) 'face)))
-          '("/ask" "/code" "/commit" "/read-only" "go ahead")))"##;
-    let expect = expect![[
+          '("/ask" "/code" "/commit" "/read-only" "go ahead")))"##,
+            true,
+            expect![[
         r#"OK (("/ask" font-lock-type-face) ("/code" font-lock-warning-face) ("/commit" font-lock-warning-face) ("/read-only" font-lock-type-face) ("go ahead" font-lock-type-face))"#
-    ]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_class_detection_walks_python_java_rust_and_non_class_contexts() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "aider_class_detection_walks_python_java_rust_and_non_class_contexts",
+            r##"(mapcar
          (lambda (source)
            (with-temp-buffer
              (insert source)
@@ -184,14 +181,13 @@ fn aider_class_detection_walks_python_java_rust_and_non_class_contexts() {
            "trait Render {\n}\n"
            "struct Point {\n int x;\n};\n"
            "def ordinary():\n    pass\n"
-           "class Outer:\n  pass\nclass Inner:\n  pass\n"))"##;
-    let expect = expect![[r#"OK ("UserService" "Gateway" "Render" "Point" nil "Inner")"#]];
-    assert_aider_parity(elisp_form, expect);
-}
-
-#[test]
-fn aider_search_replace_block_parser_tracks_boundaries_content_and_outside_points() {
-    let elisp_form = r##"(with-temp-buffer
+           "class Outer:\n  pass\nclass Inner:\n  pass\n"))"##,
+            true,
+            expect![[r#"OK ("UserService" "Gateway" "Render" "Point" nil "Inner")"#]],
+        ),
+        (
+            "aider_search_replace_block_parser_tracks_boundaries_content_and_outside_points",
+            r##"(with-temp-buffer
          (insert "before\n<<<<<<< SEARCH\nold one\nold two\n=======\nnew one\nnew three\n>>>>>>> REPLACE\nafter\n")
          (let ((inside
                 (progn
@@ -205,9 +201,11 @@ fn aider_search_replace_block_parser_tracks_boundaries_content_and_outside_point
               (goto-char inside)
               (aider--extract-search-replace-blocks))
             (aider--find-search-replace-block-at-point outside)
-            (aider--find-conflict-at-point inside))))"##;
-    let expect = expect![[
+            (aider--find-conflict-at-point inside))))"##,
+            true,
+            expect![[
         r#"OK ((8 22 39 46 65 80) ("\nold one\nold two\n" "\nnew one\nnew three\n") nil (22 39 46 65))"#
-    ]];
-    assert_aider_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

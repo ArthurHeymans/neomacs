@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auto_auto_indent_parity;
+use super::assert_auto_auto_indent_batch;
 
 #[test]
-fn auto_auto_indent_newline_and_indent_creates_real_lisp_indentation_at_point() {
-    let elisp_form = r##"(with-temp-buffer
+fn editing_public_surface_batch() {
+    assert_auto_auto_indent_batch(&[
+        (
+            "auto_auto_indent_newline_and_indent_creates_real_lisp_indentation_at_point",
+            r##"(with-temp-buffer
           (emacs-lisp-mode)
           (insert
            "(let ((value 1))\n"
@@ -17,17 +20,15 @@ fn auto_auto_indent_newline_and_indent_creates_real_lisp_indentation_at_point() 
             (aai-newline-and-indent)
             (list
              before
-             (auto-auto-indent-test-buffer-state))))"##;
-    let expect = expect![[
+             (auto-auto-indent-test-buffer-state))))"##,
+            true,
+            expect![[
         r#"OK (37 ("(let ((value 1))\n  (message \"first\")\n  (message \"second\"))" 40 3 2 nil nil t))"#
-    ]];
-
-    assert_auto_auto_indent_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_auto_indent_newline_between_matching_delimiters_creates_indented_blank_line() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_auto_indent_newline_between_matching_delimiters_creates_indented_blank_line",
+            r##"(mapcar
           (lambda (text)
             (with-temp-buffer
               (emacs-lisp-mode)
@@ -40,17 +41,15 @@ fn auto_auto_indent_newline_between_matching_delimiters_creates_indented_blank_l
                (auto-auto-indent-test-buffer-state))))
           '("()"
             "[]"
-            "{}"))"##;
-    let expect = expect![[
+            "{}"))"##,
+            true,
+            expect![[
         r#"OK (("()" nil ("(\n \n )" 4 2 1 nil nil t)) ("[]" nil ("[\n \n ]" 4 2 1 nil nil t)) ("{}" nil ("{\n\n}" 3 2 0 nil nil t)))"#
-    ]];
-
-    assert_auto_auto_indent_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_auto_indent_newline_replaces_active_region_then_indents_remaining_form() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_auto_indent_newline_replaces_active_region_then_indents_remaining_form",
+            r##"(with-temp-buffer
           (emacs-lisp-mode)
           (insert
            "(progn\n"
@@ -65,15 +64,13 @@ fn auto_auto_indent_newline_replaces_active_region_then_indents_remaining_form()
           (activate-mark)
           (auto-auto-indent-mode 1)
           (aai-newline-and-indent)
-          (auto-auto-indent-test-buffer-state))"##;
-    let expect = expect![[r#"OK ("(progn\n  \n  (message \"kept\"))" 13 3 2 10 nil t)"#]];
-
-    assert_auto_auto_indent_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_auto_indent_nxml_and_web_newline_paths_reindent_new_and_previous_lines() {
-    let elisp_form = r##"(mapcar
+          (auto-auto-indent-test-buffer-state))"##,
+            true,
+            expect![[r#"OK ("(progn\n  \n  (message \"kept\"))" 13 3 2 10 nil t)"#]],
+        ),
+        (
+            "auto_auto_indent_nxml_and_web_newline_paths_reindent_new_and_previous_lines",
+            r##"(mapcar
           (lambda (mode)
             (with-temp-buffer
               (insert "alpha")
@@ -95,17 +92,15 @@ fn auto_auto_indent_nxml_and_web_newline_paths_reindent_new_and_previous_lines()
                  (nreverse calls)))))
           '(fundamental-mode
             nxml-mode
-            web-mode))"##;
-    let expect = expect![[
+            web-mode))"##,
+            true,
+            expect![[
         r#"OK ((fundamental-mode "alpha\n" 7 (2)) (nxml-mode "alpha\n" 7 (2 1)) (web-mode "alpha\n" 7 (2 1)))"#
-    ]];
-
-    assert_auto_auto_indent_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_auto_indent_open_line_indents_both_sides_without_moving_point() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_auto_indent_open_line_indents_both_sides_without_moving_point",
+            r##"(with-temp-buffer
           (insert "alpha beta")
           (goto-char 6)
           (let ((aai-mode t)
@@ -124,15 +119,13 @@ fn auto_auto_indent_open_line_indents_both_sides_without_moving_point() {
                before
                (point)
                (buffer-string)
-               (nreverse calls)))))"##;
-    let expect = expect![[r#"OK (#1=((1 6)) 6 6 "alpha\n beta" ((2 7) . #1#))"#]];
-
-    assert_auto_auto_indent_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_auto_indent_delete_char_handles_text_visible_eol_and_whitespace_joining() {
-    let elisp_form = r##"(mapcar
+               (nreverse calls)))))"##,
+            true,
+            expect![[r#"OK (#1=((1 6)) 6 6 "alpha\n beta" ((2 7) . #1#))"#]],
+        ),
+        (
+            "auto_auto_indent_delete_char_handles_text_visible_eol_and_whitespace_joining",
+            r##"(mapcar
           (lambda (spec)
             (with-temp-buffer
               (emacs-lisp-mode)
@@ -149,17 +142,15 @@ fn auto_auto_indent_delete_char_handles_text_visible_eol_and_whitespace_joining(
           '(("abc" 2)
             ("first\n  second" 6)
             ("first   \n  second" 6)
-            ("(one)\n(two)" 6)))"##;
-    let expect = expect![[
+            ("(one)\n(two)" 6)))"##,
+            true,
+            expect![[
         r#"OK ((("abc" 2) nil "ac" 2 1) (("first\n  second" 6) nil "first second" 6 5) (("first   \n  second" 6) nil "first second" 6 5) (("(one)\n(two)" 6) nil "(one) (two)" 6 5))"#
-    ]];
-
-    assert_auto_auto_indent_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_auto_indent_delete_char_replaces_active_region_exactly() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_auto_indent_delete_char_replaces_active_region_exactly",
+            r##"(with-temp-buffer
           (insert "prefix DELETE suffix")
           (goto-char 8)
           (set-mark 14)
@@ -169,15 +160,13 @@ fn auto_auto_indent_delete_char_replaces_active_region_exactly() {
            (buffer-string)
            (point)
            (mark t)
-           (region-active-p)))"##;
-    let expect = expect![[r#"OK (nil "prefix  suffix" 8 8 t)"#]];
-
-    assert_auto_auto_indent_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_auto_indent_backspace_deletes_matching_pairs_as_one_edit() {
-    let elisp_form = r##"(mapcar
+           (region-active-p)))"##,
+            true,
+            expect![[r#"OK (nil "prefix  suffix" 8 8 t)"#]],
+        ),
+        (
+            "auto_auto_indent_backspace_deletes_matching_pairs_as_one_edit",
+            r##"(mapcar
           (lambda (text)
             (with-temp-buffer
               (insert text)
@@ -191,17 +180,15 @@ fn auto_auto_indent_backspace_deletes_matching_pairs_as_one_edit() {
             "[]"
             "{}"
             "\"\""
-            "''"))"##;
-    let expect = expect![[
+            "''"))"##,
+            true,
+            expect![[
         r#"OK (("()" nil "" 1) ("[]" nil "" 1) ("{}" nil "" 1) ("\"\"" nil "" 1) ("''" nil "" 1))"#
-    ]];
-
-    assert_auto_auto_indent_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_auto_indent_backspace_at_indentation_joins_with_previous_line_and_fixes_gap() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_auto_indent_backspace_at_indentation_joins_with_previous_line_and_fixes_gap",
+            r##"(mapcar
           (lambda (text)
             (with-temp-buffer
               (emacs-lisp-mode)
@@ -216,17 +203,15 @@ fn auto_auto_indent_backspace_at_indentation_joins_with_previous_line_and_fixes_
                (current-column))))
           '("(message \"one\")\n  (message \"two\")"
             "(one)\n    (two)"
-            "word\n  next"))"##;
-    let expect = expect![[
+            "word\n  next"))"##,
+            true,
+            expect![[
         r#"OK (("(message \"one\")\n  (message \"two\")" nil "(message \"one\") (message \"two\")" 17 16) ("(one)\n    (two)" nil "(one) (two)" 7 6) ("word\n  next" nil "word next" 6 5))"#
-    ]];
-
-    assert_auto_auto_indent_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_auto_indent_backspace_uses_region_paredit_and_plain_fallback_branches() {
-    let elisp_form = r##"(list
+    ]],
+        ),
+        (
+            "auto_auto_indent_backspace_uses_region_paredit_and_plain_fallback_branches",
+            r##"(list
           (with-temp-buffer
             (insert "region-delete")
             (goto-char 1)
@@ -262,17 +247,15 @@ fn auto_auto_indent_backspace_uses_region_paredit_and_plain_fallback_branches() 
                  (aai-backspace)
                  (buffer-string)
                  (point)
-                 (nreverse calls))))))"##;
-    let expect = expect![[
+                 (nreverse calls))))))"##,
+            true,
+            expect![[
         r#"OK ((nil "-delete" 1) (nil "plai" 5) (:paredit "paredit" 8 (("paredit" 8))))"#
-    ]];
-
-    assert_auto_auto_indent_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_auto_indent_indented_yank_formats_practical_multiline_lisp_and_sets_mark() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_auto_indent_indented_yank_formats_practical_multiline_lisp_and_sets_mark",
+            r##"(with-temp-buffer
           (emacs-lisp-mode)
           (insert "(progn\n")
           (let ((kill-ring
@@ -289,17 +272,15 @@ fn auto_auto_indent_indented_yank_formats_practical_multiline_lisp_and_sets_mark
               (save-excursion
                 (goto-char (mark t))
                 (forward-sexp)
-                (point))))))"##;
-    let expect = expect![[
+                (point))))))"##,
+            true,
+            expect![[
         r#"OK (("(progn\n  (let ((value 3))\n    (message \"%s\" value))\n)" 54 4 1 8 nil t) "  (let ((value 3))\n    (message \"%s\" value))")"#
-    ]];
-
-    assert_auto_auto_indent_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_auto_indent_indented_yank_dont_indent_limit_and_region_replacement_contracts_match() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auto_auto_indent_indented_yank_dont_indent_limit_and_region_replacement_contracts_match",
+            r##"(mapcar
           (lambda (case)
             (with-temp-buffer
               (emacs-lisp-mode)
@@ -339,17 +320,15 @@ fn auto_auto_indent_indented_yank_dont_indent_limit_and_region_replacement_contr
           '(normal
             dont-indent
             over-limit
-            region))"##;
-    let expect = expect![[
+            region))"##,
+            true,
+            expect![[
         r#"OK ((normal "(progn\n(message \"pasted\")" 26 8 ((8 26))) (dont-indent "(progn\n(message \"pasted\")" 26 8 nil) (over-limit "(progn\n(message \"pasted\")" 26 8 nil) (region "before (message \"pasted\") after" 26 8 ((8 26))))"#
-    ]];
-
-    assert_auto_auto_indent_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_auto_indent_indented_yank_comint_path_removes_trailing_prompt_gap() {
-    let elisp_form = r##"(with-temp-buffer
+    ]],
+        ),
+        (
+            "auto_auto_indent_indented_yank_comint_path_removes_trailing_prompt_gap",
+            r##"(with-temp-buffer
           (insert "prompt>    ")
           (setq major-mode
                 'comint-mode)
@@ -359,15 +338,13 @@ fn auto_auto_indent_indented_yank_comint_path_removes_trailing_prompt_gap() {
                 (aai-mode t))
             (setq kill-ring-yank-pointer kill-ring)
             (aai-indented-yank t)
-            (auto-auto-indent-test-buffer-state)))"##;
-    let expect = expect![[r#"OK ("prompt>    command" 19 1 18 12 nil t)"#]];
-
-    assert_auto_auto_indent_parity(elisp_form, expect);
-}
-
-#[test]
-fn auto_auto_indent_mouse_yank_inside_region_replaces_selection_and_honors_no_indent_variant() {
-    let elisp_form = r##"(mapcar
+            (auto-auto-indent-test-buffer-state)))"##,
+            true,
+            expect![[r#"OK ("prompt>    command" 19 1 18 12 nil t)"#]],
+        ),
+        (
+            "auto_auto_indent_mouse_yank_inside_region_replaces_selection_and_honors_no_indent_variant",
+            r##"(mapcar
           (lambda (dont-indent)
             (with-temp-buffer
               (insert "before SELECT after")
@@ -401,10 +378,11 @@ fn auto_auto_indent_mouse_yank_inside_region_replaces_selection_and_honors_no_in
                    (point)
                    (mark t)
                    (nreverse calls))))))
-          '(nil t))"##;
-    let expect = expect![[
+          '(nil t))"##,
+            true,
+            expect![[
         r#"OK ((nil "before PASTE after" 13 8 (:fixture-event (8 13))) (t "before PASTE after" 13 8 (:fixture-event)))"#
-    ]];
-
-    assert_auto_auto_indent_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

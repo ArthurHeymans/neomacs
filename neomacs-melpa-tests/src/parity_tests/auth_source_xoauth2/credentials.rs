@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auth_source_xoauth2_parity;
+use super::assert_auth_source_xoauth2_batch;
 
 #[test]
-fn auth_source_xoauth2_file_creds_reads_plist_from_gpg_named_file() {
-    let elisp_form = r##"(let ((file-name-handler-alist nil)
+fn credentials_public_surface_batch() {
+    assert_auth_source_xoauth2_batch(&[
+        (
+            "auth_source_xoauth2_file_creds_reads_plist_from_gpg_named_file",
+            r##"(let ((file-name-handler-alist nil)
                (file
                 (auth-source-xoauth2-test-file
                  "single-account.gpg")))
@@ -18,14 +21,13 @@ fn auth_source_xoauth2_file_creds_reads_plist_from_gpg_named_file() {
           file
           "ignored.example"
           "ignored-user"
-          443))"##;
-    let expect = expect![[r#"OK "Symbol’s function definition is void: :token-url""#]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_file_creds_uses_exact_hash_table_tuple() {
-    let elisp_form = r##"(let ((file-name-handler-alist nil)
+          443))"##,
+            true,
+            expect![[r#"OK "Symbol’s function definition is void: :token-url""#]],
+        ),
+        (
+            "auth_source_xoauth2_file_creds_uses_exact_hash_table_tuple",
+            r##"(let ((file-name-handler-alist nil)
                (file
                 (auth-source-xoauth2-test-file
                  "accounts.gpg")))
@@ -58,16 +60,15 @@ fn auth_source_xoauth2_file_creds_uses_exact_hash_table_tuple() {
           (auth-source-xoauth2--file-creds
            file "smtp.two" "bob" 587)
           (auth-source-xoauth2--file-creds
-           file "missing" "alice" 993)))"##;
-    let expect = expect![[
+           file "missing" "alice" 993)))"##,
+            true,
+            expect![[
         r#"OK ((:token-url "one" :client-id "id-one" :client-secret "secret-one" :refresh-token "refresh-one") (:token-url "two" :client-id "id-two" :client-secret "secret-two" :refresh-token "refresh-two") nil nil)"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_file_creds_requires_gpg_extension() {
-    let elisp_form = r##"(mapcar
+    ]],
+        ),
+        (
+            "auth_source_xoauth2_file_creds_requires_gpg_extension",
+            r##"(mapcar
          (lambda (name)
            (auth-source-xoauth2-test-error-data
             (lambda ()
@@ -76,16 +77,15 @@ fn auth_source_xoauth2_file_creds_requires_gpg_extension() {
          '("/fixture/creds.el"
            "/fixture/creds.gpg~"
            "/fixture/no-extension"
-           "/fixture/GPG"))"##;
-    let expect = expect![[
+           "/fixture/GPG"))"##,
+            true,
+            expect![[
         r#"OK ((:error error ("The auth-source-xoauth2-creds file must be GPG encrypted")) (:ok "GPG error: \"no usable configuration\", OpenPGP") (:error error ("The auth-source-xoauth2-creds file must be GPG encrypted")) (:error error ("The auth-source-xoauth2-creds file must be GPG encrypted")))"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_file_creds_reports_read_and_eval_failures() {
-    let elisp_form = r##"(let ((file-name-handler-alist nil)
+    ]],
+        ),
+        (
+            "auth_source_xoauth2_file_creds_reports_read_and_eval_failures",
+            r##"(let ((file-name-handler-alist nil)
                (invalid
                 (auth-source-xoauth2-test-file
                  "invalid.gpg"))
@@ -105,16 +105,15 @@ fn auth_source_xoauth2_file_creds_reports_read_and_eval_failures() {
              (lambda ()
                (auth-source-xoauth2--file-creds
                 file "host" "user" "port"))))
-          (list invalid runtime-error missing)))"##;
-    let expect = expect![[
+          (list invalid runtime-error missing)))"##,
+            true,
+            expect![[
         r#"OK ((:ok "End of file during parsing: #<killed buffer>") (:ok "credential exploded") (:ok "Opening input file: No such file or directory, [ORACLE-SANDBOX]/missing.gpg"))"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_file_creds_evaluates_form_with_lexical_binding() {
-    let elisp_form = r##"(let ((file-name-handler-alist nil)
+    ]],
+        ),
+        (
+            "auth_source_xoauth2_file_creds_evaluates_form_with_lexical_binding",
+            r##"(let ((file-name-handler-alist nil)
                (file
                 (auth-source-xoauth2-test-file
                  "computed.gpg")))
@@ -126,16 +125,15 @@ fn auth_source_xoauth2_file_creds_evaluates_form_with_lexical_binding() {
             "        :client-secret \"secret\" "
             "        :refresh-token \"refresh\"))"))
          (auth-source-xoauth2--file-creds
-          file "host" "user" "port"))"##;
-    let expect = expect![[
+          file "host" "user" "port"))"##,
+            true,
+            expect![[
         r#"OK (:token-url "computed-url" :client-id "computed-id" :client-secret "secret" :refresh-token "refresh")"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_file_hash_lookup_emits_exact_debug_coordinates() {
-    let elisp_form = r##"(let ((file-name-handler-alist nil)
+    ]],
+        ),
+        (
+            "auth_source_xoauth2_file_hash_lookup_emits_exact_debug_coordinates",
+            r##"(let ((file-name-handler-alist nil)
                (file
                 (auth-source-xoauth2-test-file
                  "debug.gpg"))
@@ -160,9 +158,11 @@ fn auth_source_xoauth2_file_hash_lookup_emits_exact_debug_coordinates() {
            (list
             (auth-source-xoauth2--file-creds
              file "host" "user" 443)
-            (nreverse calls))))"##;
-    let expect = expect![[
+            (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ((:token-url "url") (("Searching hash table for (%S %S %S)" ("host" "user" 443))))"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

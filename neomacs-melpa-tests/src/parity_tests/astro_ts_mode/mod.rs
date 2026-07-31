@@ -1,3 +1,4 @@
+use super::batch_support::assert_oracle_batch;
 use std::time::Duration;
 
 use crate::{
@@ -99,4 +100,28 @@ fn astro_ts_mode_harness_contract_reports_all_three_pinned_grammars_and_package(
             (cadr (assq 'astro-ts-mode package-alist)))))"##;
     let expect = expect![[r#"OK (t t (t t t) "astro-ts-mode.el" "20260417.101")"#]];
     assert_astro_ts_mode_parity(elisp_form, expect);
+}
+
+
+
+/// Multi-probe batch for `assert_astro_ts_mode_autoload_signal_parity` cases (2a).
+pub(crate) fn assert_astro_ts_mode_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        astro_ts_mode_oracle("astro-ts-mode-autoloads.el"),
+        &name,
+        "astro_ts_mode_autoload_signal_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_astro_ts_mode_parity` cases (2a).
+pub(crate) fn assert_astro_ts_mode_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        astro_ts_mode_oracle("astro-ts-mode.el"),
+        &name,
+        "astro_ts_mode_parity",
+        cases,
+    );
 }

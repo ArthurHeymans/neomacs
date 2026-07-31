@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_activity_watch_mode_parity;
+use super::assert_activity_watch_mode_batch;
 
 /// The watcher's lifecycle, including the guard the package puts on it.  In a
 /// plain batch session `activity-watch-mode' refuses to switch on at all.  In
@@ -10,9 +10,13 @@ use super::assert_activity_watch_mode_parity;
 /// second idle stopper are in place.  Switching it off again is guarded the
 /// same way: done from batch the flag flips but the hooks and the timer stay,
 /// and only the interactive route removes them.
+
 #[test]
-fn enabling_the_mode_installs_the_watch_hooks_and_timers() {
-    let elisp_form = r##"(progn
+fn workflows_public_surface_batch() {
+    assert_activity_watch_mode_batch(&[
+        (
+            "enabling_the_mode_installs_the_watch_hooks_and_timers",
+            r##"(progn
   (aw-test-setup-server)
   (let ((buffer (aw-test-open "work/main.el" "(defun demo () 42)\n")))
     (unwind-protect
@@ -62,24 +66,15 @@ fn enabling_the_mode_installs_the_watch_hooks_and_timers() {
                               activity-watch-timer
                               activity-watch-idle-timer)
                         (assq 'activity-watch-mode minor-mode-alist)))))))
-      (kill-buffer buffer))))"##;
-    let expect = expect![[
+      (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK ((nil nil nil nil) (t nil nil) (t (t t t) t (activity-watch--save 2) (activity-watch--stop-timer (0 30 0 0) t) t t) (nil t t) (nil (nil nil nil) nil nil nil) (activity-watch-mode " activity-watch"))"#
-    ]];
-
-    assert_activity_watch_mode_parity(elisp_form, expect);
-}
-
-/// What ActivityWatch actually receives.  The first edit in a watched buffer
-/// creates the editor bucket and posts one heartbeat, and this pins both
-/// complete requests: method, URL, the `pulsetime' query parameter, the
-/// Content-Type header and the exact JSON body, including which fields carry
-/// the language, project, file and branch.  Saving the same file straight
-/// afterwards adds nothing, because a heartbeat for that file has just been
-/// sent.
-#[test]
-fn saving_a_watched_file_creates_the_bucket_and_posts_one_heartbeat() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "saving_a_watched_file_creates_the_bucket_and_posts_one_heartbeat",
+            r##"(progn
   (aw-test-setup-server)
   (aw-test-park-sampler)
   (let ((buffer (aw-test-open "work/main.el" "(defun demo () 42)\n"))
@@ -99,25 +94,15 @@ fn saving_a_watched_file_creates_the_bucket_and_posts_one_heartbeat() {
                   (and activity-watch-last-heartbeat-time t)
                   (buffer-modified-p))))
       (activity-watch-turn-off)
-      (kill-buffer buffer))))"##;
-    let expect = expect![[
+      (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK ((("POST" "http://localhost:5600/api/0/buckets/aw-watcher-emacs_<HOST>" ("\"Content-Type: application/json\"") "{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}") ("POST" "http://localhost:5600/api/0/buckets/aw-watcher-emacs_<HOST>/heartbeat?pulsetime=30" ("\"Content-Type: application/json\"") "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}")) t t t t nil)"#
-    ]];
-
-    assert_activity_watch_mode_parity(elisp_form, expect);
-}
-
-/// When a heartbeat is *not* sent.  A second save of the same file inside the
-/// `activity-watch-max-heartbeat-per-sec' window is dropped, and a buffer with
-/// no file behind it never reports at all.  An auto-save file, though, is
-/// reported: the package means to skip those, but it hands
-/// `auto-save-file-name-p' the full path instead of the file name, so the check
-/// never matches - the same call answers 0 for the bare name and nil for the
-/// path.  Dropping the rate limit to zero then makes every activity event
-/// report, so one edit-and-save cycle sends two heartbeats.
-#[test]
-fn heartbeats_are_skipped_for_rate_limits_and_buffers_without_a_file() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "heartbeats_are_skipped_for_rate_limits_and_buffers_without_a_file",
+            r##"(progn
   (aw-test-setup-server)
   (aw-test-park-sampler)
   (let ((tracked (aw-test-open "work/main.el" "(defun demo () 42)\n"))
@@ -171,23 +156,15 @@ fn heartbeats_are_skipped_for_rate_limits_and_buffers_without_a_file() {
       (activity-watch-turn-off)
       (dolist (buffer (list tracked scratch autosaved))
         (with-current-buffer buffer (set-buffer-modified-p nil))
-        (kill-buffer buffer)))))"##;
-    let expect = expect![[
+        (kill-buffer buffer)))))"##,
+            true,
+            expect![[
         r#"OK (2 2 (nil 2) (nil 0 3) 5 7 ("http://localhost:5600/api/0/buckets/aw-watcher-emacs_<HOST>" "http://localhost:5600/api/0/buckets/aw-watcher-emacs_<HOST>/heartbeat?pulsetime=30"))"#
-    ]];
-
-    assert_activity_watch_mode_parity(elisp_form, expect);
-}
-
-/// Project attribution.  With the default resolver list nothing here is
-/// available, so heartbeats carry the fallback name.  Switching to the `cwd'
-/// resolver names the file's own directory, and switching to the `project'
-/// resolver - after project.el is loaded - names the repository root a level
-/// above it.  `activity-watch-refresh-project-name', the package's autoloaded
-/// command, is what re-resolves the cached buffer-local name in between.
-#[test]
-fn the_heartbeat_names_the_project_the_configured_resolver_finds() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "the_heartbeat_names_the_project_the_configured_resolver_finds",
+            r##"(progn
   (aw-test-setup-server)
   (aw-test-park-sampler)
   (make-directory (aw-test-path "repo/.git") t)
@@ -225,22 +202,15 @@ fn the_heartbeat_names_the_project_the_configured_resolver_finds() {
                                   (aw-test-requests)))))))
       (activity-watch-turn-off)
       (with-current-buffer buffer (set-buffer-modified-p nil))
-      (kill-buffer buffer))))"##;
-    let expect = expect![[
+      (kill-buffer buffer))))"##,
+            true,
+            expect![[
         r#"OK (((projectile project magit-dir-force magit-origin) "unknown" ("{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}" "{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}")) ("src" ("{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"src\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"src\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}")) ("repo" ("{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"repo\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"repo\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}")))"#
-    ]];
-
-    assert_activity_watch_mode_parity(elisp_form, expect);
-}
-
-/// The server is there but unhappy: both requests come back 500.  The bucket
-/// is never marked as created, the package's error callback reports the
-/// server's body and switches the watcher off - locally and globally - and
-/// request logs its own failure too.  The hooks and the sampler are gone
-/// afterwards, so the next edit and save send nothing at all.
-#[test]
-fn a_failing_server_turns_the_watcher_off() {
-    let elisp_form = r##"(progn
+    ]],
+        ),
+        (
+            "a_failing_server_turns_the_watcher_off",
+            r##"(progn
   (aw-test-setup-server "500")
   (aw-test-park-sampler)
   (let ((buffer (aw-test-open "work/main.el" "(defun demo () 42)\n"))
@@ -271,20 +241,13 @@ fn a_failing_server_turns_the_watcher_off() {
                   (aw-test-requests))))
       (activity-watch-turn-off)
       (with-current-buffer buffer (set-buffer-modified-p nil))
-      (kill-buffer buffer))))"##;
-    let expect = expect![[r#"OK ((2 nil nil nil nil nil (t t)) no-request)"#]];
-
-    assert_activity_watch_mode_parity(elisp_form, expect);
-}
-
-/// With `activity-watch-org-clock-active' set, a heartbeat sent while an Org
-/// clock is running carries the clocked task's property - the configured
-/// `activity-watch-org-clock-property', lowercased, as the first key of the
-/// data object - so time can be attributed to the ticket being worked on.
-/// After clocking out the same edits produce heartbeats without it.
-#[test]
-fn an_active_org_clock_adds_its_ticket_property_to_the_heartbeat() {
-    let elisp_form = r##"(progn
+      (kill-buffer buffer))))"##,
+            true,
+            expect![[r#"OK ((2 nil nil nil nil nil (t t)) no-request)"#]],
+        ),
+        (
+            "an_active_org_clock_adds_its_ticket_property_to_the_heartbeat",
+            r##"(progn
   (aw-test-setup-server)
   (aw-test-park-sampler)
   (require 'org)
@@ -323,10 +286,11 @@ fn an_active_org_clock_adds_its_ticket_property_to_the_heartbeat() {
       (activity-watch-turn-off)
       (dolist (buffer (list tasks code))
         (with-current-buffer buffer (set-buffer-modified-p nil))
-        (kill-buffer buffer)))))"##;
-    let expect = expect![[
+        (kill-buffer buffer)))))"##,
+            true,
+            expect![[
         r#"OK ("TICKET_ID" nil ("{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}" "{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"ticket_id\":\"OPS-4711\",\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"ticket_id\":\"OPS-4711\",\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}") ("{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}"))"#
-    ]];
-
-    assert_activity_watch_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

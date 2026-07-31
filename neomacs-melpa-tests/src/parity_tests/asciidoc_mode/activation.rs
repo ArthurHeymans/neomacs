@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_asciidoc_mode_parity;
+use super::assert_asciidoc_mode_batch;
 
 #[test]
-fn real_pinned_grammars_activate_both_parsers_and_the_complete_mode_integration() {
-    let elisp_form = r##"(with-temp-buffer
+fn activation_public_surface_batch() {
+    assert_asciidoc_mode_batch(&[
+        (
+            "real_pinned_grammars_activate_both_parsers_and_the_complete_mode_integration",
+            r##"(with-temp-buffer
   (insert
    "= Practical Document\n"
    ":author: Ada\n\n"
@@ -36,16 +39,15 @@ fn real_pinned_grammars_activate_both_parsers_and_the_complete_mode_integration(
    (memq #'asciidoc-flymake
          flymake-diagnostic-functions)
    comment-start
-   comment-start-skip))"##;
-    let expect = expect![[
+   comment-start-skip))"##,
+            true,
+            expect![[
         r#"OK (asciidoc-mode "AsciiDoc" text-mode t t t (asciidoc asciidoc-inline) asciidoc ((comment title) (block delimiter table list attribute macro metadata) (inline-markup inline-link inline-macro inline-reference) (replacement)) (("Section" "\\`title[1-5]\\'" nil asciidoc--imenu-name)) "\\`\\(?:document_title\\|title[1-5]\\)\\'" "\\`\\(?:document_title\\|title[1-5]\\)\\'" t t (asciidoc--xref-backend t) (asciidoc--capf t ispell-completion-at-point) (asciidoc-flymake t) "// " "^//+\\s-*")"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn grammar_install_command_installs_only_missing_languages_with_exact_recipes_and_messages() {
-    let elisp_form = r##"(let ((available '(asciidoc))
+    ]],
+        ),
+        (
+            "grammar_install_command_installs_only_missing_languages_with_exact_recipes_and_messages",
+            r##"(let ((available '(asciidoc))
        installs
        messages
        source-alists)
@@ -75,16 +77,15 @@ fn grammar_install_command_installs_only_missing_languages_with_exact_recipes_an
      (nreverse installs)
      (nreverse messages)
      (nreverse source-alists)
-     available)))"##;
-    let expect = expect![[
+     available)))"##,
+            true,
+            expect![[
         r#"OK (nil (asciidoc-inline) ("Installing tree-sitter grammar for asciidoc-inline..." "Installing tree-sitter grammar for asciidoc-inline...done") (((asciidoc "https://github.com/cathaysia/tree-sitter-asciidoc" nil "tree-sitter-asciidoc/src") (asciidoc-inline "https://github.com/cathaysia/tree-sitter-asciidoc" nil "tree-sitter-asciidoc_inline/src"))) (asciidoc-inline asciidoc))"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn grammar_install_command_propagates_install_failure_without_attempting_later_messages() {
-    let elisp_form = r##"(let (calls)
+    ]],
+        ),
+        (
+            "grammar_install_command_propagates_install_failure_without_attempting_later_messages",
+            r##"(let (calls)
   (cl-letf
       (((symbol-function
          'treesit-language-available-p)
@@ -109,16 +110,15 @@ fn grammar_install_command_propagates_install_failure_without_attempting_later_m
        (list
         (car error)
         (cdr error)
-        (nreverse calls))))))"##;
-    let expect = expect![[
+        (nreverse calls))))))"##,
+            true,
+            expect![[
         r#"OK (error ("compiler rejected asciidoc") ((available asciidoc) (message "Installing tree-sitter grammar for asciidoc...") (install asciidoc)))"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
-}
-
-#[test]
-fn grammarless_fallback_remains_a_usable_text_mode_with_comments_filling_and_flymake() {
-    let elisp_form = r##"(cl-letf
+    ]],
+        ),
+        (
+            "grammarless_fallback_remains_a_usable_text_mode_with_comments_filling_and_flymake",
+            r##"(cl-letf
     (((symbol-function 'asciidoc--ensure-grammars)
       (lambda () nil)))
   (with-temp-buffer
@@ -146,9 +146,11 @@ fn grammarless_fallback_remains_a_usable_text_mode_with_comments_filling_and_fly
      (buffer-string)
      (string-match-p
       "^[ \t]*//"
-      (buffer-string)))))"##;
-    let expect = expect![[
+      (buffer-string)))))"##,
+            true,
+            expect![[
         r#"OK (asciidoc-mode text-mode nil nil nil nil (asciidoc-flymake t) "// " "^//+\\s-*" "= Fallback Document\n\nVisit https://example.com/a/b for\npractical details about the project.\n" nil)"#
-    ]];
-    assert_asciidoc_mode_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

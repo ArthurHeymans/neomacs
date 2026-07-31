@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_game_2048_parity;
+use super::assert_game_2048_batch;
 
 #[test]
-fn game_2048_move_slides_through_empty_cells_to_the_edge() {
-    let elisp_form = r##"(let ((*2048-columns* 4)
+fn moves_public_surface_batch() {
+    assert_game_2048_batch(&[
+        (
+            "game_2048_move_slides_through_empty_cells_to_the_edge",
+            r##"(let ((*2048-columns* 4)
                      (*2048-rows* 1)
                      (*2048-board*
                       (vector 0 0 0 2))
@@ -16,15 +19,13 @@ fn game_2048_move_slides_through_empty_cells_to_the_edge() {
                 (2048-move 0 3 0 -1)
                 *2048-board*
                 *2048-score*
-                *2048-combines-this-move*))"##;
-    let expect = expect!["OK (t [2 0 0 0] 0 [nil nil nil nil])"];
-
-    assert_game_2048_parity(elisp_form, expect);
-}
-
-#[test]
-fn game_2048_move_combines_once_updates_score_and_marks_destination() {
-    let elisp_form = r##"(let ((*2048-columns* 4)
+                *2048-combines-this-move*))"##,
+            true,
+            expect!["OK (t [2 0 0 0] 0 [nil nil nil nil])"],
+        ),
+        (
+            "game_2048_move_combines_once_updates_score_and_marks_destination",
+            r##"(let ((*2048-columns* 4)
                      (*2048-rows* 1)
                      (*2048-board*
                       (vector 2 2 4 0))
@@ -53,15 +54,13 @@ fn game_2048_move_combines_once_updates_score_and_marks_destination() {
                 (copy-sequence *2048-board*)
                 *2048-score*
                 (copy-sequence
-                 *2048-combines-this-move*)))"##;
-    let expect = expect!["OK (t [4 0 4 0] 14 4 [t nil nil nil] t [4 4 0 0] 14 [t nil nil nil])"];
-
-    assert_game_2048_parity(elisp_form, expect);
-}
-
-#[test]
-fn game_2048_move_rejects_blocked_and_out_of_bounds_destinations() {
-    let elisp_form = r##"(let ((*2048-columns* 2)
+                 *2048-combines-this-move*)))"##,
+            true,
+            expect!["OK (t [4 0 4 0] 14 4 [t nil nil nil] t [4 4 0 0] 14 [t nil nil nil])"],
+        ),
+        (
+            "game_2048_move_rejects_blocked_and_out_of_bounds_destinations",
+            r##"(let ((*2048-columns* 2)
                      (*2048-rows* 1)
                      (*2048-board*
                       (vector 2 4))
@@ -73,15 +72,13 @@ fn game_2048_move_rejects_blocked_and_out_of_bounds_destinations() {
                 (2048-move 0 0 0 1)
                 (2048-move 0 1 0 1)
                 *2048-board*
-                *2048-score*))"##;
-    let expect = expect!["OK (nil nil [2 4] 0)"];
-
-    assert_game_2048_parity(elisp_form, expect);
-}
-
-#[test]
-fn game_2048_left_and_right_merge_pairs_without_double_combining() {
-    let elisp_form = r##"(let ((*2048-columns* 4)
+                *2048-score*))"##,
+            true,
+            expect!["OK (nil nil [2 4] 0)"],
+        ),
+        (
+            "game_2048_left_and_right_merge_pairs_without_double_combining",
+            r##"(let ((*2048-columns* 4)
                      (*2048-rows* 1)
                      events)
                (cl-letf (((symbol-function
@@ -118,15 +115,13 @@ fn game_2048_left_and_right_merge_pairs_without_double_combining() {
                     left-score
                     *2048-board*
                     *2048-score*
-                    (nreverse events)))))"##;
-    let expect = expect!["OK ([4 4 0 0] 8 [0 0 4 4] 8 (random print check random print check))"];
-
-    assert_game_2048_parity(elisp_form, expect);
-}
-
-#[test]
-fn game_2048_up_and_down_process_columns_in_directional_order() {
-    let elisp_form = r##"(let ((*2048-columns* 1)
+                    (nreverse events)))))"##,
+            true,
+            expect!["OK ([4 4 0 0] 8 [0 0 4 4] 8 (random print check random print check))"],
+        ),
+        (
+            "game_2048_up_and_down_process_columns_in_directional_order",
+            r##"(let ((*2048-columns* 1)
                      (*2048-rows* 4))
                (cl-letf (((symbol-function
                            '2048-insert-random-cell)
@@ -158,15 +153,13 @@ fn game_2048_up_and_down_process_columns_in_directional_order() {
                     up-score
                     (append *2048-board*
                             nil)
-                    *2048-score*))))"##;
-    let expect = expect!["OK ((4 4 0 0) 8 (0 0 4 4) 8)"];
-
-    assert_game_2048_parity(elisp_form, expect);
-}
-
-#[test]
-fn game_2048_directional_noop_does_not_insert_a_random_tile() {
-    let elisp_form = r##"(let ((*2048-columns* 2)
+                    *2048-score*))))"##,
+            true,
+            expect!["OK ((4 4 0 0) 8 (0 0 4 4) 8)"],
+        ),
+        (
+            "game_2048_directional_noop_does_not_insert_a_random_tile",
+            r##"(let ((*2048-columns* 2)
                      (*2048-rows* 1)
                      (*2048-board*
                       (vector 2 4))
@@ -186,15 +179,13 @@ fn game_2048_directional_noop_does_not_insert_a_random_tile() {
                  (2048-left)
                  (list
                   *2048-board*
-                  random-called)))"##;
-    let expect = expect!["OK ([2 4] nil)"];
-
-    assert_game_2048_parity(elisp_form, expect);
-}
-
-#[test]
-fn game_2048_move_macro_resets_flags_then_prints_and_checks() {
-    let elisp_form = r##"(let ((*2048-columns* 2)
+                  random-called)))"##,
+            true,
+            expect!["OK ([2 4] nil)"],
+        ),
+        (
+            "game_2048_move_macro_resets_flags_then_prints_and_checks",
+            r##"(let ((*2048-columns* 2)
                      (*2048-rows* 2)
                      (*2048-combines-this-move*
                       (vector t t t t))
@@ -216,15 +207,13 @@ fn game_2048_move_macro_resets_flags_then_prints_and_checks() {
                     events)
                    (push 'body events))
                   *2048-combines-this-move*
-                  (nreverse events))))"##;
-    let expect = expect!["OK (checked [nil nil nil nil] ([nil nil nil nil] body print check))"];
-
-    assert_game_2048_parity(elisp_form, expect);
-}
-
-#[test]
-fn game_2048_random_move_maps_each_random_index_to_one_direction() {
-    let elisp_form = r##"(let (events)
+                  (nreverse events))))"##,
+            true,
+            expect!["OK (checked [nil nil nil nil] ([nil nil nil nil] body print check))"],
+        ),
+        (
+            "game_2048_random_move_maps_each_random_index_to_one_direction",
+            r##"(let (events)
                (cl-letf (((symbol-function '2048-left)
                           (lambda ()
                             (push 'left events)))
@@ -249,8 +238,9 @@ fn game_2048_random_move_maps_each_random_index_to_one_direction() {
                                       (cdr values)))))))
                  (dotimes (_ 4)
                    (2048-random-move))
-                 (nreverse events)))"##;
-    let expect = expect!["OK (left right up down)"];
-
-    assert_game_2048_parity(elisp_form, expect);
+                 (nreverse events)))"##,
+            true,
+            expect!["OK (left right up down)"],
+        ),
+    ]);
 }

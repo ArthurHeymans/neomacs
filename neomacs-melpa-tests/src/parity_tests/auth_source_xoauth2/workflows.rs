@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_auth_source_xoauth2_parity;
+use super::assert_auth_source_xoauth2_batch;
 
 #[test]
-fn auth_source_xoauth2_real_auth_source_search_returns_access_token() {
-    let elisp_form = r##"(let ((auth-sources
+fn workflows_public_surface_batch() {
+    assert_auth_source_xoauth2_batch(&[
+        (
+            "auth_source_xoauth2_real_auth_source_search_returns_access_token",
+            r##"(let ((auth-sources
                 '(xoauth2))
                (auth-source-xoauth2-creds
                 '(:token-url "https://token.example"
@@ -37,16 +40,15 @@ fn auth_source_xoauth2_real_auth_source_search_returns_access_token() {
                   (plist-get entry :user)
                   (plist-get entry :secret)))
                matches)
-              (nreverse calls)))))"##;
-    let expect = expect![[
+              (nreverse calls)))))"##,
+            true,
+            expect![[
         r#"OK (((:host "smtp.example" :port 587 :user "alice@example" :secret "integration-token")) (("smtp.example" 587 "alice@example" "integration-token")) (("https://token.example" "client_id=client&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_real_password_lookup_returns_access_token() {
-    let elisp_form = r##"(let ((auth-sources
+    ]],
+        ),
+        (
+            "auth_source_xoauth2_real_password_lookup_returns_access_token",
+            r##"(let ((auth-sources
                 '(xoauth2))
                (auth-source-xoauth2-creds
                 (lambda (host user port)
@@ -71,16 +73,15 @@ fn auth_source_xoauth2_real_password_lookup_returns_access_token() {
              :host "smtp.example"
              :user "alice"
              :port "submission")
-            (nreverse calls))))"##;
-    let expect = expect![[
+            (nreverse calls))))"##,
+            true,
+            expect![[
         r#"OK ("password-token" (("https://smtp.example/token" "client_id=alice&client_secret=secret&refresh_token=refresh-submission&grant_type=refresh_token")))"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_enable_then_search_models_application_startup() {
-    let elisp_form = r##"(let ((auth-sources
+    ]],
+        ),
+        (
+            "auth_source_xoauth2_enable_then_search_models_application_startup",
+            r##"(let ((auth-sources
                 '("~/.authinfo"))
                (auth-source-xoauth2-creds
                 '(:token-url "url"
@@ -105,16 +106,15 @@ fn auth_source_xoauth2_enable_then_search_models_application_startup() {
              (list
               auth-sources
               (car matches)
-              (nreverse calls)))))"##;
-    let expect = expect![[
+              (nreverse calls)))))"##,
+            true,
+            expect![[
         r#"OK ((xoauth2 "~/.authinfo") (:host "imap.example" :port 993 :user "alice" :secret "startup-token") (("url" "client_id=id&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
-}
-
-#[test]
-fn auth_source_xoauth2_file_provider_drives_full_token_workflow() {
-    let elisp_form = r##"(let ((file-name-handler-alist nil)
+    ]],
+        ),
+        (
+            "auth_source_xoauth2_file_provider_drives_full_token_workflow",
+            r##"(let ((file-name-handler-alist nil)
                (file
                 (auth-source-xoauth2-test-file
                  "workflow.gpg"))
@@ -152,9 +152,11 @@ fn auth_source_xoauth2_file_provider_drives_full_token_workflow() {
                :host "smtp.example"
                :user "alice"
                :port 587)
-              (nreverse calls)))))"##;
-    let expect = expect![[
+              (nreverse calls)))))"##,
+            true,
+            expect![[
         r#"OK ("file-workflow-token" nil (("https://token.example" "client_id=client&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
-    ]];
-    assert_auth_source_xoauth2_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }

@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::{assert_magit_parity, assert_magit_signal_parity};
+use super::{assert_magit_batch};
 
 #[test]
-fn magit_ellipsis_respects_display_capability_and_customization() {
-    let elisp_form = r##"(list
+fn formatting_public_surface_batch() {
+    assert_magit_batch(&[
+        (
+            "magit_ellipsis_respects_display_capability_and_customization",
+            r##"(list
               (cl-letf (((symbol-function 'char-displayable-p)
                          (lambda (_) t)))
                 (list (magit--ellipsis 'margin)
@@ -24,15 +27,13 @@ fn magit_ellipsis_respects_display_capability_and_customization() {
                  (cl-letf (((symbol-function 'char-displayable-p)
                             (lambda (_) nil)))
                    (list (magit--ellipsis 'margin)
-                         (magit--ellipsis))))))"##;
-    let expect = expect![[r#"OK (("…" "…") (">" "...") (("·" ".") ("!" ">")))"#]];
-
-    assert_magit_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_text_face_composition_preserves_existing_properties_and_order() {
-    let elisp_form = r##"(let ((text
+                         (magit--ellipsis))))))"##,
+            true,
+            expect![[r#"OK (("…" "…") (">" "...") (("·" ".") ("!" ">")))"#]],
+        ),
+        (
+            "magit_text_face_composition_preserves_existing_properties_and_order",
+            r##"(let ((text
                     (concat
                      (propertize "ab" 'font-lock-face 'highlight)
                      (propertize "cd" 'face 'italic)
@@ -48,16 +49,13 @@ fn magit_text_face_composition_preserves_existing_properties_and_order() {
                 (get-text-property 2 'font-lock-face text)
                 (get-text-property 4 'font-lock-face text)
                 (get-text-property 2 'face text)
-                (substring-no-properties text)))"##;
-    let expect =
-        expect![[r#"OK ((bold highlight) (bold italic underline) (underline) nil "abcdef")"#]];
-
-    assert_magit_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_face_helpers_apply_and_query_complete_string_properties() {
-    let elisp_form = r##"(let ((bold
+                (substring-no-properties text)))"##,
+            true,
+            expect![[r#"OK ((bold highlight) (bold italic underline) (underline) nil "abcdef")"#]],
+        ),
+        (
+            "magit_face_helpers_apply_and_query_complete_string_properties",
+            r##"(let ((bold
                     (magit--propertize-face "abc" 'bold))
                    (mixed
                     (concat
@@ -68,18 +66,17 @@ fn magit_face_helpers_apply_and_query_complete_string_properties() {
                 (get-text-property 0 'font-lock-face bold)
                 (magit-face-property-all 'bold bold)
                 (magit-face-property-all 'bold mixed)
-                (substring-no-properties bold)))"##;
-    let expect = expect![[r#"OK (bold bold t nil "abc")"#]];
-
-    assert_magit_parity(elisp_form, expect);
-}
-
-#[test]
-fn magit_malformed_ellipsis_customization_signals_user_error() {
-    let elisp_form = r##"(let ((magit-ellipsis
+                (substring-no-properties bold)))"##,
+            true,
+            expect![[r#"OK (bold bold t nil "abc")"#]],
+        ),
+        (
+            "magit_malformed_ellipsis_customization_signals_user_error",
+            r##"(let ((magit-ellipsis
                     '((margin (?· . "!")))))
-               (magit--ellipsis))"##;
-    let expect = expect![[r#"ERR (user-error "Variable magit-ellipsis is invalid")"#]];
-
-    assert_magit_signal_parity(elisp_form, expect);
+               (magit--ellipsis))"##,
+            false,
+            expect![[r#"ERR (user-error "Variable magit-ellipsis is invalid")"#]],
+        ),
+    ]);
 }

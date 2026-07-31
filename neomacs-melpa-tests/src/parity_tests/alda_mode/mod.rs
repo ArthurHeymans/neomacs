@@ -3,6 +3,8 @@ use std::time::Duration;
 use crate::{ALDA_MODE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
+use super::batch_support::assert_oracle_batch;
+
 mod editing;
 mod history;
 mod registry;
@@ -213,4 +215,28 @@ pub(crate) fn assert_alda_mode_parity(elisp_form: &str, expected: Expect) {
 
 pub(crate) fn assert_alda_mode_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_alda_mode_source_parity("alda-mode-autoloads.el", elisp_form, expected);
+}
+
+
+
+/// Multi-probe batch for `assert_alda_mode_autoload_parity` cases (2a).
+pub(crate) fn assert_alda_mode_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        alda_mode_oracle("alda-mode-autoloads.el"),
+        &name,
+        "alda_mode_autoload_parity",
+        cases,
+    );
+}
+
+/// Multi-probe batch for `assert_alda_mode_parity` cases (2a).
+pub(crate) fn assert_alda_mode_batch(cases: &[(&str, &str, bool, Expect)]) {
+    let name = current_test_name();
+    assert_oracle_batch(
+        alda_mode_oracle("alda-mode.el"),
+        &name,
+        "alda_mode_parity",
+        cases,
+    );
 }

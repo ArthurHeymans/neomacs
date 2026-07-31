@@ -1,10 +1,13 @@
 use expect_test::expect;
 
-use super::assert_anakondo_parity;
+use super::assert_anakondo_batch;
 
 #[test]
-fn turning_the_mode_on_analyses_the_project_with_the_documented_commands() {
-    let elisp_form = r##"
+fn workflows_public_surface_batch() {
+    assert_anakondo_batch(&[
+        (
+            "turning_the_mode_on_analyses_the_project_with_the_documented_commands",
+            r##"
         ;; A user opens a namespace in a `deps.edn' project and turns
         ;; `anakondo-minor-mode' on.  The package has to find the project root
         ;; the way it documents - clojure-mode first - ask the Clojure CLI for
@@ -50,18 +53,15 @@ fn turning_the_mode_on_analyses_the_project_with_the_documented_commands() {
                             (sort entries (lambda (a b) (string< (car a) (car b)))))
             :commands (ak-test-commands)
             :messages (ak-test-messages "^Analysing project for completion\\.\\.\\..*$"))))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:major-mode clojure-mode :clojure-mode-available t :project-el-available nil :enabled (:on t :lighter " k" :capf (anakondo-completion-at-point t) :capf-buffer-local t) :root (:cached-roots 1 :is-clojure-project-dir t :root "[ORACLE-SANDBOX]/project/") :caches (":java-classes-cache" ":ns-def-cache" ":ns-usage-cache" ":var-def-cache") :namespaces (":inventory.core" ":inventory.util") :var-namespaces (":inventory.core" ":inventory.util") :java-classes ((":com.warehouse.Barcode" "com.warehouse.Barcode" lazy)) :commands (("-Spath") ("--lint" "[ORACLE-SANDBOX]/project/src:[ORACLE-SANDBOX]/project/lib/warehouse.jar\\n" "--config" "{:output {:analysis true :format :json}}" "--lang" "clj" "cwd [ORACLE-SANDBOX]/project/src/inventory") ("-Spath")) :messages ("Analysing project for completion...done"))"#
-    ]];
-
-    assert_anakondo_parity(elisp_form, expect);
-}
-
-#[test]
-fn completing_a_var_pipes_the_unsaved_buffer_to_clj_kondo() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "completing_a_var_pipes_the_unsaved_buffer_to_clj_kondo",
+            r##"
         ;; The user starts a new function that is not on disk yet and asks for
         ;; completion.  anakondo must analyse the *buffer*, not the file: it
         ;; pipes the whole buffer into `clj-kondo --lint -' and offers the vars
@@ -86,18 +86,15 @@ fn completing_a_var_pipes_the_unsaved_buffer_to_clj_kondo() {
                    :buffer-tail (car (last (split-string
                                             (buffer-substring-no-properties (point-min) (point-max))
                                             "\n" t)))))))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:offered (:start-column 3 :prefix "tot" :candidates ("total-price")) :modified t :stdin-is-the-buffer t :stdin-tail "  (tot" :buffer-analysis-command ("--lint" "-" "--config" "{:output {:analysis true :format :json}}" "--lang" "clj" "cwd [ORACLE-SANDBOX]/project/src/inventory" "stdin-bytes 751") :completed (:line 31 :column 14 :text "  (total-price") :buffer-tail "  (total-price")"#
-    ]];
-
-    assert_anakondo_parity(elisp_form, expect);
-}
-
-#[test]
-fn completing_an_aliased_namespace_qualifies_every_var_with_the_alias() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "completing_an_aliased_namespace_qualifies_every_var_with_the_alias",
+            r##"
         ;; `inventory.core' requires `inventory.util' as `util' and
         ;; `clojure.string' as `str'.  Typing `util/' must offer every var
         ;; clj-kondo found in that namespace, each prefixed with the alias the
@@ -121,18 +118,15 @@ fn completing_an_aliased_namespace_qualifies_every_var_with_the_alias() {
             :current-namespace-var (progn (goto-char (point-max))
                                           (insert "\n(defn d [] (describ")
                                           (ak-test-candidates)))))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:aliased (:start-column 12 :prefix "util/" :candidates ("util/apply-discount" "util/default-price" "util/normalize-name")) :aliased-but-unanalysed (:start-column 12 :prefix "str/" :candidates nil) :namespace-names (:start-column 12 :prefix "inventory." :candidates ("inventory.core" "inventory.util")) :current-namespace-var (:start-column 12 :prefix "describ" :candidates ("describe")))"#
-    ]];
-
-    assert_anakondo_parity(elisp_form, expect);
-}
-
-#[test]
-fn java_classes_and_public_static_members_come_from_a_real_jar() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "java_classes_and_public_static_members_come_from_a_real_jar",
+            r##"
         ;; The Java half runs against a real jar built by the real JDK tools.
         ;; anakondo scans it with `jar tf' at startup, keeping each class
         ;; unresolved, and only shells out to `javap' when the user actually
@@ -172,18 +166,15 @@ fn java_classes_and_public_static_members_come_from_a_real_jar() {
             :members-again (progn (goto-char (point-max))
                                   (insert "\n(defn c [] (com.warehouse.Barcode/")
                                   (ak-test-candidates)))))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:tools (:javac t :jar t :javap t) :enabled t :class-prefix (:start-column 12 :prefix "com.warehouse.Bar" :candidates ("com.warehouse.Barcode")) :still-lazy lazy :members (:start-column 12 :prefix "com.warehouse.Barcode/" :candidates ("com.warehouse.Barcode/LENGTH" "com.warehouse.Barcode/PREFIX" "com.warehouse.Barcode/format" "com.warehouse.Barcode/valid")) :resolved (("LENGTH" "int" nil nil) ("PREFIX" "java.lang.String" nil nil) ("format" "java.lang.String" "(java.lang.String)" t) ("valid" "boolean" "(java.lang.String)" t)) :members-again (:start-column 12 :prefix "com.warehouse.Barcode/" :candidates ("com.warehouse.Barcode/LENGTH" "com.warehouse.Barcode/PREFIX" "com.warehouse.Barcode/format" "com.warehouse.Barcode/valid")))"#
-    ]];
-
-    assert_anakondo_parity(elisp_form, expect);
-}
-
-#[test]
-fn clojure_default_imports_are_offered_but_cannot_be_resolved_on_a_modern_jdk() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "clojure_default_imports_are_offered_but_cannot_be_resolved_on_a_modern_jdk",
+            r##"
         ;; anakondo ships Clojure's default `java.lang' imports, so `Integ'
         ;; offers `Integer'.  Resolving its members is a different matter: the
         ;; package reads the JVM's `sun.boot.class.path' property, which JDK 9
@@ -211,18 +202,15 @@ fn clojure_default_imports_are_offered_but_cannot_be_resolved_on_a_modern_jdk() 
             :project-class-still-resolves (progn (goto-char (point-max))
                                                  (insert "\n(defn c [] (com.warehouse.Barcode/")
                                                  (ak-test-candidates)))))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:java-version-property-exists nil :default-import-offered (:start-column 12 :prefix "Integ" :candidates ("Integer")) :default-import-members (:start-column 12 :prefix "Integer/" :candidates nil) :project-class-still-resolves (:start-column 12 :prefix "com.warehouse.Barcode/" :candidates ("com.warehouse.Barcode/LENGTH" "com.warehouse.Barcode/PREFIX" "com.warehouse.Barcode/format" "com.warehouse.Barcode/valid")))"#
-    ]];
-
-    assert_anakondo_parity(elisp_form, expect);
-}
-
-#[test]
-fn refreshing_rebuilds_the_analysis_and_refuses_when_the_mode_is_off() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "refreshing_rebuilds_the_analysis_and_refuses_when_the_mode_is_off",
+            r##"
         ;; `anakondo-refresh-project-cache' is the documented way to resync
         ;; after editing files on disk: it must run the whole project analysis
         ;; again - classpath, clj-kondo, jars - and say so both times.  Off the
@@ -246,18 +234,15 @@ fn refreshing_rebuilds_the_analysis_and_refuses_when_the_mode_is_off() {
                            (progn (anakondo-refresh-project-cache) :no-signal)
                          (error (list :signal (car error) :data (cdr error)))))
                 :commands-after-refusal (length (ak-test-commands)))))))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:commands (:after-enable 3 :after-refresh 6) :announced 2 :still-one-root 1 :interactive t :refused-when-off (:signal error :data ("Anakondo minor mode not on in current buffer")) :commands-after-refusal 6)"#
-    ]];
-
-    assert_anakondo_parity(elisp_form, expect);
-}
-
-#[test]
-fn turning_the_mode_off_releases_the_project_cache_and_unhooks_completion() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "turning_the_mode_off_releases_the_project_cache_and_unhooks_completion",
+            r##"
         ;; Turning the mode off has to give the memory back and stop answering
         ;; completion, and turning it on again has to rebuild from scratch.
         ;; A second buffer in the same project must keep its own hook while
@@ -292,18 +277,15 @@ fn turning_the_mode_off_releases_the_project_cache_and_unhooks_completion() {
              (when (buffer-live-p second)
                (with-current-buffer second (set-buffer-modified-p nil))
                (kill-buffer second)))))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:with-one-buffer (:roots 1 :capf #1=(anakondo-completion-at-point t)) :second-buffer (:roots 1 :capf (anakondo-completion-at-point t) :candidates (:start-column 12 :prefix "apply-disc" :candidates ("apply-discount"))) :second-off (:on nil :capf (tags-completion-at-point-function) :roots 0 :candidates nil) :first-still-analysed (:on t :capf #1#))"#
-    ]];
-
-    assert_anakondo_parity(elisp_form, expect);
-}
-
-#[test]
-fn a_clj_kondo_that_cannot_run_leaves_the_mode_on_with_nothing_analysed() {
-    let elisp_form = r##"
+    ]],
+        ),
+        (
+            "a_clj_kondo_that_cannot_run_leaves_the_mode_on_with_nothing_analysed",
+            r##"
         ;; A clj-kondo that is installed but fails - a bad config, an
         ;; unreadable classpath, a broken install - writes to stderr and exits
         ;; non-zero, so the package's `json-read' meets the shell's error text.
@@ -340,11 +322,11 @@ fn a_clj_kondo_that_cannot_run_leaves_the_mode_on_with_nothing_analysed() {
               (with-current-buffer buffer (set-buffer-modified-p nil))
               (kill-buffer buffer))
             (ak-test-teardown)))
-    "##;
-
-    let expect = expect![[
+    "##,
+            true,
+            expect![[
         r#"OK (:enabling (:signal json-readtable-error :data (99)) :mode-left-on t :capf (anakondo-completion-at-point t) :roots 1 :caches-empty ((":var-def-cache" 0) (":ns-def-cache" 0) (":ns-usage-cache" 0) (":java-classes-cache" 0)) :process-buffer-cleaned nil :completion (:signal json-readtable-error :data (99)) :commands (("-Spath") ("--lint" "[ORACLE-SANDBOX]/project/src:[ORACLE-SANDBOX]/project/lib/warehouse.jar\\n" "--config" "{:output {:analysis true :format :json}}" "--lang" "clj") ("--lint" "-" "--config" "{:output {:analysis true :format :json}}" "--lang" "clj")) :messages ("Analysing project for completion..."))"#
-    ]];
-
-    assert_anakondo_parity(elisp_form, expect);
+    ]],
+        ),
+    ]);
 }
