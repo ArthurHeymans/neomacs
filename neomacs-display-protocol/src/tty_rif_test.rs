@@ -2533,3 +2533,97 @@ fn index_method_scrolls_with_ind_ri_and_never_su_sd() {
         "reverse scroll must be RI, not SD: {text:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Wide-char neutralization (GNU dispnew.c neutralize_wide_char parity)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn overwriting_the_padding_half_of_a_wide_pair_blanks_the_base() {
+    // A child-frame border landing on the right half of a CJK char: the
+    // terminal blanks the orphaned base, so the model must too, or the
+    // divergence is invisible to every later diff.
+    let mut grid = TtyGrid::new(10, 2);
+    grid.set(1, 4, '\u{65e5}', CellAttrs::default(), false);
+    grid.set(1, 5, ' ', CellAttrs::default(), true);
+
+    grid.set(1, 5, '|', CellAttrs::default(), false);
+
+    let base = &grid.cells[10 + 4];
+    assert_eq!(base.ch, ' ', "orphaned wide base must become a space");
+    assert!(!base.padding);
+    assert_eq!(grid.cells[10 + 5].ch, '|');
+}
+
+#[test]
+fn overwriting_the_base_half_of_a_wide_pair_blanks_the_padding() {
+    let mut grid = TtyGrid::new(10, 2);
+    grid.set(0, 2, '\u{65e5}', CellAttrs::default(), false);
+    grid.set(0, 3, ' ', CellAttrs::default(), true);
+
+    grid.set(0, 2, 'X', CellAttrs::default(), false);
+
+    let orphan = &grid.cells[3];
+    assert!(
+        !orphan.padding,
+        "orphaned padding must become a plain space"
+    );
+    assert_eq!(orphan.ch, ' ');
+    assert_eq!(grid.cells[2].ch, 'X');
+}
+
+#[test]
+fn rewriting_a_wide_pair_in_place_keeps_it_intact() {
+    // The rasterizer writes base then padding every frame; neutralization
+    // must not eat the pair it is in the middle of rewriting.
+    let mut grid = TtyGrid::new(10, 1);
+    grid.set(0, 2, '\u{65e5}', CellAttrs::default(), false);
+    grid.set(0, 3, ' ', CellAttrs::default(), true);
+
+    grid.set(0, 2, '\u{672c}', CellAttrs::default(), false);
+    grid.set(0, 3, ' ', CellAttrs::default(), true);
+
+    assert_eq!(grid.cells[2].ch, '\u{672c}');
+    assert!(
+        grid.cells[3].padding,
+        "rewritten pair keeps its padding half"
+    );
+}
+
+#[test]
+fn wide_base_in_the_final_column_rasterizes_as_a_space() {
+    // No room for the padding half: the terminal would blank the base while
+    // the model kept it. GNU never emits a partially visible multi-column
+    // glyph.
+    let mut state = FrameDisplayState::new(10, 5, 8.0, 16.0);
+    state.background = Color::BLACK;
+
+    let mut matrix = GlyphMatrix::new(5, 10);
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    for (i, ch) in "abcdefghi".chars().enumerate() {
+        row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
+    }
+    let mut wide = Glyph::char('\u{4e16}', FaceId::new(0), 9);
+    wide.wide = true;
+    row.glyphs[GlyphArea::Text as usize].push(wide);
+    matrix.rows[0] = row;
+
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: DisplayWindowId::new(1),
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
+        text_clip_bounds: None,
+        selected: true,
+    });
+
+    let mut rif = TtyRif::new(10, 5);
+    rif.rasterize(&state);
+
+    assert_eq!(rif.desired.cells[9].ch, ' ', "clipped wide base is a space");
+    assert!(!rif.desired.cells[9].padding);
+    assert!(
+        rif.desired.cells[..10].iter().all(|cell| !cell.padding),
+        "no padding cell may survive at the row edge"
+    );
+}

@@ -106,6 +106,9 @@ impl TtyGrid {
     /// Set a cell at (row, col). No-op if out of bounds.
     pub fn set(&mut self, row: usize, col: usize, ch: char, attrs: CellAttrs, padding: bool) {
         if row < self.height && col < self.width {
+            if !padding {
+                self.neutralize_overwrite(row, col);
+            }
             let idx = row * self.width + col;
             self.cells[idx] = TtyCell {
                 ch,
@@ -113,6 +116,41 @@ impl TtyGrid {
                 padding,
                 extenders: None,
             };
+        }
+    }
+
+    /// GNU's neutralize_wide_char (dispnew.c): overwriting one half of a
+    /// wide base+padding pair must space-fill the surviving half, or the
+    /// terminal blanks it while the model keeps it — a divergence no later
+    /// diff can see. Called before every non-padding single-cell write
+    /// (child borders, frame-rect clears, face fills, menus); a padding
+    /// write needs no neutralization because its base was written
+    /// immediately before it and already cleaned both sides.
+    fn neutralize_overwrite(&mut self, row: usize, col: usize) {
+        let row_start = row * self.width;
+        let blank = |cell: &mut TtyCell| {
+            cell.ch = ' ';
+            cell.padding = false;
+            cell.extenders = None;
+        };
+        // The old cell is a padding half: blank leftward through its base.
+        if self.cells[row_start + col].padding {
+            let mut base = col;
+            while base > 0 && self.cells[row_start + base].padding {
+                base -= 1;
+            }
+            for cell in &mut self.cells[row_start + base..row_start + col] {
+                blank(cell);
+            }
+        }
+        // Any padding run to the right belonged to the overwritten cell's
+        // pair (a padding cell is always preceded by base-or-padding):
+        // blank the orphans.
+        for offset in col + 1..self.width {
+            if !self.cells[row_start + offset].padding {
+                break;
+            }
+            blank(&mut self.cells[row_start + offset]);
         }
     }
 
@@ -135,6 +173,9 @@ impl TtyGrid {
             } else {
                 Some(Box::<str>::from(extenders))
             };
+            if !padding {
+                self.neutralize_overwrite(row, col);
+            }
             self.cells[idx] = TtyCell {
                 ch,
                 attrs,
@@ -1381,7 +1422,16 @@ impl TtyRif {
                         }
                     }
                     _ => {
-                        let ch = glyph_to_char(glyph);
+                        // A wide base in the final screen column has no room
+                        // for its padding half: the terminal blanks it while
+                        // the model would keep it. GNU never emits a
+                        // partially visible multi-column glyph; write the
+                        // space it would show instead.
+                        let ch = if glyph.wide && col + 1 >= screen_width {
+                            ' '
+                        } else {
+                            glyph_to_char(glyph)
+                        };
                         if let Some(col) = visible_cell(col, self.desired.width) {
                             self.desired.set(screen_row, col, ch, attrs, false);
                         }
