@@ -3927,6 +3927,88 @@ impl FrameManager {
         removed
     }
 
+    /// Replace ROOT with its descendant WINDOW, deleting the other windows in
+    /// ROOT's subtree.
+    ///
+    /// This mirrors GNU Emacs's `delete-other-windows-internal` /
+    /// `replace_window`: WINDOW keeps its identity and window-local state but
+    /// inherits ROOT's geometry and normal sizes.  Keeping this as one tree
+    /// transition avoids the geometry drift caused by deleting sibling leaves
+    /// one at a time.
+    pub fn keep_only_window_in_subtree(
+        &mut self,
+        frame_id: FrameId,
+        window_id: WindowId,
+        root_id: WindowId,
+    ) -> bool {
+        let Some(frame) = self.frames.get_mut(&frame_id) else {
+            return false;
+        };
+        let Some(root) = frame.root_window.find(root_id) else {
+            return false;
+        };
+        let Some(mut replacement) = root.find(window_id).cloned() else {
+            return false;
+        };
+
+        if window_id == root_id {
+            return true;
+        }
+
+        let root_bounds = *root.bounds();
+        let root_top_line = root.top_line();
+        let root_left_col = root.left_col();
+        let root_normal_lines = root.normal_lines();
+        let root_normal_cols = root.normal_cols();
+
+        let mut kept_ids = HashSet::new();
+        collect_window_ids(&replacement, &mut kept_ids);
+        let mut removed_windows = Vec::new();
+        collect_window_metadata(root, &mut removed_windows);
+        removed_windows.retain(|(id, _)| !kept_ids.contains(id));
+
+        resize_window_subtree(&mut replacement, root_bounds);
+        sync_window_character_edges_from_bounds_at(
+            &mut replacement,
+            root_left_col,
+            root_top_line,
+            frame.char_width,
+            frame.char_height,
+        );
+        replacement.set_normal_lines(root_normal_lines);
+        replacement.set_normal_cols(root_normal_cols);
+        if let Window::Leaf {
+            vscroll,
+            preserve_vscroll_p,
+            ..
+        } = &mut replacement
+        {
+            *vscroll = 0;
+            *preserve_vscroll_p = false;
+        }
+        replacement.invalidate_display_state();
+
+        let Some(root) = frame.root_window.find_mut(root_id) else {
+            return false;
+        };
+        *root = replacement;
+
+        if let Some(kept_subtree) = frame.root_window.find(window_id)
+            && kept_subtree.find(frame.selected_window).is_none()
+            && let Some(first) = kept_subtree.leaf_ids().first()
+        {
+            frame.selected_window = *first;
+        }
+        frame.recalculate_minibuffer_bounds();
+
+        for (id, parameters) in removed_windows {
+            self.deleted_windows.insert(id);
+            self.deleted_window_parameters.insert(id, parameters);
+        }
+
+        true
+    }
+
     fn alloc_window_id(&mut self) -> WindowId {
         let id = WindowId(self.next_window_id);
         self.next_window_id += 1;
@@ -4638,6 +4720,24 @@ fn delete_window_in_tree(tree: &mut Window, target: WindowId) -> bool {
     }
 
     false
+}
+
+fn collect_window_ids(window: &Window, ids: &mut HashSet<WindowId>) {
+    ids.insert(window.id());
+    if let Window::Internal { children, .. } = window {
+        for child in children {
+            collect_window_ids(child, ids);
+        }
+    }
+}
+
+fn collect_window_metadata(window: &Window, windows: &mut Vec<(WindowId, WindowParameters)>) {
+    windows.push((window.id(), window.parameters().clone()));
+    if let Window::Internal { children, .. } = window {
+        for child in children {
+            collect_window_metadata(child, windows);
+        }
+    }
 }
 
 fn find_parent_in_tree(node: &Window, target: WindowId) -> Option<WindowId> {

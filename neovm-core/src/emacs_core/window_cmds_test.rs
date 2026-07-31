@@ -2034,6 +2034,39 @@ fn delete_other_windows_keeps_one() {
 }
 
 #[test]
+fn delete_other_windows_relocates_kept_window_across_frame_width_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        "(let ((right (split-window nil nil 'right)))
+           (select-window right)
+           (delete-other-windows)
+           (let ((edges (window-edges)))
+             (list (car edges) (nth 2 edges) (frame-width))))",
+    );
+    assert_eq!(result, "OK (0 80 80)");
+}
+
+#[test]
+fn delete_other_windows_internal_only_replaces_its_root_subtree_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        "(let* ((left (selected-window))
+                (right (split-window nil nil 'right))
+                (bottom-right (split-window right nil 'below))
+                (right-root (window-parent right)))
+           (select-window left)
+           (delete-other-windows-internal bottom-right right-root)
+           (let ((left-edges (window-edges left))
+                 (kept-edges (window-edges bottom-right)))
+             (list (length (window-list))
+                   (car left-edges) (nth 2 left-edges)
+                   (car kept-edges) (nth 2 kept-edges)
+                   (eq (selected-window) bottom-right))))",
+    );
+    assert_eq!(result, "OK (2 0 40 40 80 t)");
+}
+
+#[test]
 fn delete_other_windows_updates_current_buffer_when_kept_window_differs() {
     crate::test_utils::init_test_tracing();
     let result = bootstrap_eval_one_with_frame(

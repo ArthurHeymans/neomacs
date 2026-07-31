@@ -4081,17 +4081,27 @@ pub(crate) fn builtin_delete_other_windows(
         .frames
         .get(fid)
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
-
-    let all_ids: Vec<WindowId> = frame.window_list();
-    let to_delete: Vec<WindowId> = all_ids.into_iter().filter(|&w| w != keep_wid).collect();
-
-    for wid in to_delete {
-        let _ = eval.frames.delete_window(fid, wid);
+    let root_wid = frame.root_window.id();
+    if !eval
+        .frames
+        .keep_only_window_in_subtree(fid, keep_wid, root_wid)
+    {
+        return Err(signal(
+            "error",
+            vec![Value::string("Cannot make window fill its frame")],
+        ));
     }
     // Select the kept window.
-    let selected_buffer = if let Some(f) = eval.frames.get_mut(fid) {
-        f.select_window(keep_wid);
-        f.find_window(keep_wid).and_then(|w| w.buffer_id())
+    let selected_buffer = if let Some(frame) = eval.frames.get_mut(fid) {
+        if frame
+            .find_window(keep_wid)
+            .is_some_and(crate::window::Window::is_leaf)
+        {
+            frame.select_window(keep_wid);
+        }
+        frame
+            .find_window(frame.selected_window)
+            .and_then(|window| window.buffer_id())
     } else {
         None
     };
@@ -4148,10 +4158,10 @@ pub(crate) fn builtin_delete_window_internal(
         Err(signal("error", vec![Value::string("Deletion failed")]))
     }
 }
-/// `(delete-other-windows-internal &optional WINDOW ALL-FRAMES)` -> nil.
+/// `(delete-other-windows-internal &optional WINDOW ROOT)` -> nil.
 ///
-/// Deletes all ordinary windows in FRAME except WINDOW. ALL-FRAMES is accepted
-/// for arity compatibility and currently ignored.
+/// Replace ROOT with its descendant WINDOW, defaulting ROOT to WINDOW's frame
+/// root.
 pub(crate) fn builtin_delete_other_windows_internal(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -4163,16 +4173,43 @@ pub(crate) fn builtin_delete_other_windows_internal(
     let frame = frames
         .get(fid)
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
-
-    let all_ids: Vec<WindowId> = frame.window_list();
-    let to_delete: Vec<WindowId> = all_ids.into_iter().filter(|&w| w != keep_wid).collect();
-
-    for wid in to_delete {
-        let _ = frames.delete_window(fid, wid);
+    let root_wid = if args.get(1).is_none_or(|root| root.is_nil()) {
+        frame.root_window.id()
+    } else {
+        let root_wid = resolve_window_object_id_with_pred_in_state(
+            frames,
+            buffers,
+            args.get(1),
+            "window-valid-p",
+        )?;
+        if frames.find_valid_window_frame_id(root_wid) != Some(fid) {
+            return Err(signal(
+                "error",
+                vec![Value::string(
+                    "Specified root is not an ancestor of specified window",
+                )],
+            ));
+        }
+        root_wid
+    };
+    if !frames.keep_only_window_in_subtree(fid, keep_wid, root_wid) {
+        return Err(signal(
+            "error",
+            vec![Value::string(
+                "Specified root is not an ancestor of specified window",
+            )],
+        ));
     }
-    let selected_buffer = if let Some(f) = frames.get_mut(fid) {
-        f.select_window(keep_wid);
-        f.find_window(keep_wid).and_then(|w| w.buffer_id())
+    let selected_buffer = if let Some(frame) = frames.get_mut(fid) {
+        if frame
+            .find_window(keep_wid)
+            .is_some_and(crate::window::Window::is_leaf)
+        {
+            frame.select_window(keep_wid);
+        }
+        frame
+            .find_window(frame.selected_window)
+            .and_then(|window| window.buffer_id())
     } else {
         None
     };
