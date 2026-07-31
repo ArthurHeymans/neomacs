@@ -2,9 +2,11 @@ use super::*;
 use crate::face::{Face, FaceAttributes, UnderlineStyle};
 use crate::frame_glyphs::{CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor};
 use crate::glyph_matrix::{
-    FaceFillItem, FrameDisplayState, Glyph, GlyphArea, GlyphMatrix, GlyphRow, WindowMatrixEntry,
+    FaceFillItem, FrameDisplayState, Glyph, GlyphArea, GlyphMatrix, GlyphRow, RowDamage,
+    WindowMatrixEntry,
 };
 use crate::tty_capabilities::TtyNoColorVideo;
+use crate::types::Px;
 use crate::types::{Color, DisplayFrameId, DisplayWindowId, Rect};
 use std::collections::HashMap;
 
@@ -2735,5 +2737,62 @@ fn colored_tail_with_bce_erases_and_establishes_the_fill_color() {
     assert!(
         !between.contains("\x1b[0m"),
         "no SGR reset may sit between bg and erase: {text:?}"
+    );
+}
+
+#[test]
+fn layout_reused_shifted_damage_seeds_the_region_scroll() {
+    // Producer-path acceptance: the semantic seed travels from
+    // RowDamage::ReusedShifted on the glyph rows through rasterize (1x1
+    // TTY metrics make dvpos the line delta) into an accepted, verified
+    // ScrollRows plan — not via the test-only seed setter.
+    let cols = 20usize;
+    let rows = 12usize;
+    let build_state = |first_line: usize, shifted: bool| {
+        let mut state = FrameDisplayState::new(cols, rows, 1.0, 1.0);
+        state.background = Color::BLACK;
+        let mut matrix = GlyphMatrix::new(rows, cols);
+        for r in 0..rows {
+            let mut row = GlyphRow::new(GlyphRowRole::Text);
+            for (i, ch) in format!("{:<20}", format!("seed-line-{:02}", first_line + r))
+                .chars()
+                .enumerate()
+            {
+                row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
+            }
+            if shifted {
+                row.damage = RowDamage::ReusedShifted { dvpos: Px(-1.0) };
+            }
+            matrix.rows[r] = row;
+        }
+        state.window_matrices.push(WindowMatrixEntry {
+            window_id: DisplayWindowId::new(1),
+            matrix,
+            pixel_bounds: Rect::new(0.0, 0.0, cols as f32, rows as f32),
+            text_pixel_bounds: Rect::new(0.0, 0.0, cols as f32, rows as f32),
+            text_clip_bounds: None,
+            selected: true,
+        });
+        state
+    };
+
+    let mut rif = TtyRif::new(cols, rows);
+    rif.rasterize(&build_state(0, false));
+    let _ = render_output(&mut rif);
+
+    // One line scrolled: content moved up (dvpos = -1px at 1px line height).
+    rif.rasterize(&build_state(1, true));
+    let ops = rif.plan_for_test();
+    assert!(
+        matches!(
+            ops.first(),
+            Some(TermOp::ScrollRows { dir: ScrollDir::Up(n), .. }) if n.get() == 1
+        ),
+        "shifted-damage seed must plan a verified region scroll: {ops:?}"
+    );
+    assert_eq!(
+        rif.frame_stats().scroll_seed_accepted,
+        1,
+        "the layout hint, not voting, must carry this scroll"
     );
 }
