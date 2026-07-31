@@ -911,8 +911,39 @@ impl<'a> BufferChars<'a> {
         code
     }
 
-    #[inline]
+    /// Hot path only: a sequential (or repeated) read whose byte lands in
+    /// the cached storage window on an ASCII byte — ~a dozen instructions,
+    /// small enough to inline into every scan loop (the full function
+    /// measured 686 bytes of code, which nothing inlines, leaving 10 percent
+    /// of the editing profile in call overhead). Everything else outlines.
+    #[inline(always)]
     fn char_at(&mut self, idx: usize) -> char {
+        if let Some((c_idx, c_byte, c_width)) = self.cursor {
+            let byte_pos = if idx == c_idx {
+                c_byte
+            } else if idx == c_idx + 1 {
+                c_byte.add_len(c_width)
+            } else {
+                return self.char_at_outlined(idx);
+            };
+            if let Some((start, base, len)) = self.window {
+                let pos = byte_pos.get();
+                if pos >= start && pos < start + len {
+                    // SAFETY: pos is inside the window per the check; window
+                    // validity is the struct invariant (see `window`).
+                    let b = unsafe { *base.add(pos - start) };
+                    if b < 0x80 {
+                        self.cursor = Some((idx, byte_pos, EmacsByteLen::new(1)));
+                        return b as char;
+                    }
+                }
+            }
+        }
+        self.char_at_outlined(idx)
+    }
+
+    #[inline(never)]
+    fn char_at_outlined(&mut self, idx: usize) -> char {
         // For a forward step (or re-read of the same char) advance the byte
         // cursor directly; otherwise pay for one (cached) char->byte
         // conversion.  GNU's syntax scanners never convert per char -- they
