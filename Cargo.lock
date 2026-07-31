@@ -3450,6 +3450,7 @@ dependencies = [
  "bitflags 2.13.1",
  "num_enum",
  "proptest",
+ "rustc-hash 2.1.2",
  "serde",
  "serde_json",
  "strum",

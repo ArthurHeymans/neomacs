@@ -12,6 +12,7 @@ default = []
 neo-term = []
 
 [dependencies]
+rustc-hash.workspace = true
 bitflags.workspace = true
 num_enum.workspace = true
 serde.workspace = true

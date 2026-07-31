@@ -2005,3 +2005,118 @@ fn tty_capable_p_matches_gnu_capability_and_ncv_logic() {
     assert!(!ncv_underline.supports(TtyCapability::Underline));
     assert!(ncv_underline.supports(TtyCapability::Bold));
 }
+
+// ---------------------------------------------------------------------------
+// Scroll detection + synchronized output (issue #206)
+// ---------------------------------------------------------------------------
+
+/// Write `text` into desired row `row`, one char per cell.
+fn set_row(rif: &mut TtyRif, row: usize, text: &str) {
+    for (col, ch) in text.chars().enumerate() {
+        rif.desired.set(row, col, ch, CellAttrs::default(), false);
+    }
+}
+
+fn render_output(rif: &mut TtyRif) -> Vec<u8> {
+    rif.diff_and_render();
+    rif.take_output()
+}
+
+#[test]
+fn scrolled_rows_emit_region_scroll_not_row_rewrites() {
+    let mut rif = TtyRif::new(20, 10);
+    for r in 0..10 {
+        set_row(&mut rif, r, &format!("line-number-{r:02}"));
+    }
+    let _ = render_output(&mut rif); // establish the screen
+
+    // Scroll down by one: rows shift up, one new line appears at the bottom.
+    for r in 0..9 {
+        set_row(&mut rif, r, &format!("line-number-{:02}", r + 1));
+    }
+    set_row(&mut rif, 9, "line-number-10");
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+
+    assert!(
+        text.contains("\x1b[1S"),
+        "one-line shift must emit a scroll-up, got: {text:?}"
+    );
+    assert!(
+        text.contains(";10r") || text.contains("[1;10r"),
+        "scroll must be bounded by a DECSTBM region, got: {text:?}"
+    );
+    // The shifted rows must NOT be retransmitted: their text moved, the
+    // terminal moved it, so e.g. row content 'line-number-05' appears
+    // nowhere in the output.
+    assert!(
+        !text.contains("line-number-05"),
+        "shifted row content was retransmitted: {text:?}"
+    );
+    // The newly exposed bottom line IS transmitted.
+    assert!(
+        text.contains("line-number-10"),
+        "exposed row must be drawn: {text:?}"
+    );
+}
+
+#[test]
+fn scroll_model_matches_terminal_after_region_scroll() {
+    // After the scroll path runs, the internal `current` grid must agree
+    // with what the terminal shows: a second render with unchanged desired
+    // content emits no further row writes.
+    let mut rif = TtyRif::new(20, 10);
+    for r in 0..10 {
+        set_row(&mut rif, r, &format!("stable-content-{r:02}"));
+    }
+    let _ = render_output(&mut rif);
+    for r in 0..9 {
+        set_row(&mut rif, r, &format!("stable-content-{:02}", r + 1));
+    }
+    set_row(&mut rif, 9, "stable-content-10");
+    let _ = render_output(&mut rif);
+
+    // Re-render the same content.
+    for r in 0..9 {
+        set_row(&mut rif, r, &format!("stable-content-{:02}", r + 1));
+    }
+    set_row(&mut rif, 9, "stable-content-10");
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    assert!(
+        !text.contains("stable-content"),
+        "steady state after a scroll must be a no-op, got: {text:?}"
+    );
+}
+
+#[test]
+fn small_changes_do_not_trigger_scroll() {
+    let mut rif = TtyRif::new(20, 10);
+    for r in 0..10 {
+        set_row(&mut rif, r, &format!("plain-old-row-{r:02}"));
+    }
+    let _ = render_output(&mut rif);
+    for r in 0..10 {
+        set_row(&mut rif, r, &format!("plain-old-row-{r:02}"));
+    }
+    set_row(&mut rif, 4, "edited-this-row!");
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    assert!(
+        !text.contains("\x1b[1S"),
+        "an edit is not a scroll: {text:?}"
+    );
+    assert!(text.contains("edited-this-row!"));
+}
+
+#[test]
+fn every_render_is_wrapped_in_synchronized_output() {
+    let mut rif = TtyRif::new(8, 4);
+    set_row(&mut rif, 0, "abc");
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    let begin = text.find("\x1b[?2026h").expect("begin sync");
+    let end = text.find("\x1b[?2026l").expect("end sync");
+    assert!(begin < end, "sync begin must precede end");
+    assert!(begin == 0, "sync begin must be the first bytes of a frame");
+}

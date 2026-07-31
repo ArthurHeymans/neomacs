@@ -599,8 +599,70 @@ impl TtyRif {
     pub fn diff_and_render(&mut self) {
         self.output.clear();
 
+        // Synchronized output (DECSET 2026): the terminal buffers everything
+        // between h/l and presents it atomically, eliminating tearing during
+        // partial updates. Supported by kitty/ghostty/wezterm/tmux/Windows
+        // Terminal and ignored as an unknown private mode elsewhere; GNU's
+        // terminal update has no equivalent.
+        self.output.extend_from_slice(b"\x1b[?2026h");
+
         // Hide cursor during update to avoid flicker.
         self.output.extend_from_slice(b"\x1b[?25l");
+
+        // Vertical scroll: when a run of rows merely shifted, tell the
+        // terminal to move them (DECSTBM region + SU/SD) instead of
+        // retransmitting every row - the issue-206 case where one scroll
+        // step redrew the whole frame. See detect_scroll for the design.
+        if !self.force_full_render
+            && let Some(scroll) = detect_scroll(&self.current, &self.desired)
+        {
+            let n = scroll.delta.unsigned_abs();
+            // Region-relative scroll: set margins, scroll, reset margins.
+            self.output.extend_from_slice(
+                format!("\x1b[{};{}r", scroll.top + 1, scroll.bottom + 1).as_bytes(),
+            );
+            // SGR reset first: SU/SD fill exposed lines with the current
+            // background (BCE); make that the default background.
+            self.output.extend_from_slice(b"\x1b[0m");
+            if scroll.delta > 0 {
+                self.output
+                    .extend_from_slice(format!("\x1b[{n}S").as_bytes());
+            } else {
+                self.output
+                    .extend_from_slice(format!("\x1b[{n}T").as_bytes());
+            }
+            self.output.extend_from_slice(b"\x1b[r");
+            // Mirror the terminal-side move in our model of the screen, and
+            // poison the exposed rows so the diff below repaints them (the
+            // terminal filled them with blank cells whose exact attributes
+            // we choose not to depend on).
+            let w = self.current.width;
+            let poison = TtyCell {
+                ch: '\0',
+                ..TtyCell::default()
+            };
+            if scroll.delta > 0 {
+                for i in scroll.top..=scroll.bottom - n {
+                    let (dst, src) = (i * w, (i + n) * w);
+                    for col in 0..w {
+                        self.current.cells[dst + col] = self.current.cells[src + col].clone();
+                    }
+                }
+                for i in scroll.bottom + 1 - n..=scroll.bottom {
+                    self.current.cells[i * w..(i + 1) * w].fill(poison.clone());
+                }
+            } else {
+                for i in (scroll.top + n..=scroll.bottom).rev() {
+                    let (dst, src) = (i * w, (i - n) * w);
+                    for col in 0..w {
+                        self.current.cells[dst + col] = self.current.cells[src + col].clone();
+                    }
+                }
+                for i in scroll.top..scroll.top + n {
+                    self.current.cells[i * w..(i + 1) * w].fill(poison.clone());
+                }
+            }
+        }
 
         let mut last_attrs: Option<CellAttrs> = None;
 
@@ -678,6 +740,9 @@ impl TtyRif {
             write_cursor_shape(&mut self.output, self.cursor_shape);
             self.output.extend_from_slice(b"\x1b[?25h");
         }
+
+        // End synchronized update: present the frame atomically.
+        self.output.extend_from_slice(b"\x1b[?2026l");
 
         // Swap: current now reflects what is on screen.
         std::mem::swap(&mut self.current, &mut self.desired);
@@ -882,6 +947,137 @@ fn visible_cell_range(start: i64, extent: usize, limit: usize) -> std::ops::Rang
     let visible_start = start.clamp(0, limit);
     let visible_end = end.clamp(visible_start, limit);
     visible_start as usize..visible_end as usize
+}
+
+/// Hash of one grid row, used only to ACCELERATE scroll matching; equality
+/// of the actual cells is always verified before a match is trusted, so a
+/// collision can cost time but never correctness.
+fn row_hash(row: &[TtyCell]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = rustc_hash::FxHasher::default();
+    for c in row {
+        h.write_u32(c.ch as u32);
+        c.attrs.fg.hash(&mut h);
+        c.attrs.bg.hash(&mut h);
+        h.write_u8(
+            (c.attrs.bold as u8)
+                | ((c.attrs.italic as u8) << 1)
+                | ((c.attrs.strikethrough as u8) << 2)
+                | ((c.attrs.inverse as u8) << 3)
+                | ((c.padding as u8) << 4),
+        );
+        h.write_u8(c.attrs.underline);
+        if let Some(e) = &c.extenders {
+            h.write(e.as_bytes());
+        }
+    }
+    h.finish()
+}
+
+/// A vertical scroll detected between the current and desired grids:
+/// desired row `i` equals current row `i + delta` for every `i` in
+/// `rows.start .. rows.end - delta.max(0)` (and symmetrically for negative
+/// delta). Emitting a terminal region scroll makes those rows identical
+/// without retransmitting them.
+struct DetectedScroll {
+    top: usize,
+    bottom: usize, // inclusive
+    delta: isize,  // >0: content moves up (scroll down through the buffer)
+}
+
+/// Find the single dominant vertical shift between the grids, if any.
+///
+/// GNU infers scrolls with an O(rows^2) dynamic program over
+/// baud-rate-based insert/delete-line cost matrices (scroll.c
+/// calculate_scrolling), a design for terminals where IL/DL had per-line
+/// padding costs. Modern terminals all support region scrolls (DECSTBM +
+/// SU/SD), so the decision collapses to "is there a shift with a long
+/// matching run": vote for candidate deltas by row-hash equality, verify
+/// the best run cell-by-cell, done in O(rows) hashes + one run of row
+/// comparisons. (Neovim receives scroll deltas semantically from its core;
+/// a layout-provided hint can replace the inference here the same way
+/// later.)
+fn detect_scroll(current: &TtyGrid, desired: &TtyGrid) -> Option<DetectedScroll> {
+    const MIN_RUN: usize = 4;
+    let (w, h) = (desired.width, desired.height);
+    if w != current.width || h != current.height || h < MIN_RUN + 1 {
+        return None;
+    }
+    let old_hash: Vec<u64> = (0..h)
+        .map(|r| row_hash(&current.cells[r * w..(r + 1) * w]))
+        .collect();
+    let new_hash: Vec<u64> = (0..h)
+        .map(|r| row_hash(&desired.cells[r * w..(r + 1) * w]))
+        .collect();
+
+    // Changed band: rows outside it already match in place.
+    let top = (0..h).find(|&r| old_hash[r] != new_hash[r])?;
+    let bottom = (0..h).rfind(|&r| old_hash[r] != new_hash[r])?;
+
+    // Vote for deltas using positions of equal hashes inside the band.
+    let mut by_hash: rustc_hash::FxHashMap<u64, Vec<usize>> = rustc_hash::FxHashMap::default();
+    for r in top..=bottom {
+        by_hash.entry(old_hash[r]).or_default().push(r);
+    }
+    let mut votes: rustc_hash::FxHashMap<isize, usize> = rustc_hash::FxHashMap::default();
+    for i in top..=bottom {
+        if let Some(js) = by_hash.get(&new_hash[i]) {
+            for &j in js {
+                if i != j {
+                    *votes.entry(j as isize - i as isize).or_default() += 1;
+                }
+            }
+        }
+    }
+    let (&delta, &n) = votes.iter().max_by_key(|entry| *entry.1)?;
+    if n < MIN_RUN || delta == 0 {
+        return None;
+    }
+
+    // Longest contiguous run where desired[i] == current[i + delta], with
+    // real cell equality (hashes only route). Composite rows are excluded:
+    // the conservative full-tail repaint path owns them.
+    let row_eq = |i: usize| -> bool {
+        let j = i as isize + delta;
+        if j < 0 || j as usize >= h {
+            return false;
+        }
+        let j = j as usize;
+        if new_hash[i] != old_hash[j] {
+            return false;
+        }
+        let d = &desired.cells[i * w..(i + 1) * w];
+        let c = &current.cells[j * w..(j + 1) * w];
+        d == c && !row_has_composite_cells(d)
+    };
+    let (mut best_lo, mut best_len) = (0usize, 0usize);
+    let mut run_lo: Option<usize> = None;
+    for i in top..=bottom + 1 {
+        if i <= bottom && row_eq(i) {
+            run_lo.get_or_insert(i);
+        } else if let Some(lo) = run_lo.take() {
+            if i - lo > best_len {
+                best_lo = lo;
+                best_len = i - lo;
+            }
+        }
+    }
+    if best_len < MIN_RUN {
+        return None;
+    }
+    // The region covers the matched run plus the rows the scroll exposes.
+    let (top, bottom) = if delta > 0 {
+        (best_lo, best_lo + best_len - 1 + delta as usize)
+    } else {
+        (
+            best_lo.checked_sub((-delta) as usize)?,
+            best_lo + best_len - 1,
+        )
+    };
+    if bottom >= h {
+        return None;
+    }
+    Some(DetectedScroll { top, bottom, delta })
 }
 
 fn row_has_composite_cells(row: &[TtyCell]) -> bool {
