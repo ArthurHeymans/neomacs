@@ -2132,6 +2132,30 @@ impl BufferText {
         }
 
         Self::ensure_position_anchor_cache_current(&storage, content_epoch);
+
+        // Cheap-first bracket; see the byte->char direction above.
+        {
+            let mut mini = TextPositionBounds::new(TextPositionAnchor::new(
+                storage.metrics.char_end(),
+                storage.metrics.emacs_byte_end(),
+            ));
+            storage
+                .backend
+                .storage_position_hint()
+                .consider_char_anchor(&mut mini, target);
+            let cached = storage.pos_cache.get();
+            if cached.is_valid_for(storage.content_epoch) {
+                mini.consider_char_anchor(target, cached.anchor);
+            }
+            if let Some(result) = mini.interpolate_char(target) {
+                storage.pos_cache.set(PositionCache {
+                    epoch: content_epoch,
+                    anchor: TextPositionAnchor::new(target, result),
+                });
+                return result;
+            }
+        }
+
         let bounds = Self::char_position_bounds(&storage, target);
 
         // GNU marker.c CONSIDER: an all-single-byte bracket converts by
@@ -2203,6 +2227,35 @@ impl BufferText {
         }
 
         Self::ensure_position_anchor_cache_current(&storage, content_epoch);
+
+        // Cheap-first bracket: structural anchors plus the position cache
+        // only. Sequential queries (font-lock walking a buffer) land next to
+        // the cache anchor and interpolate immediately; building the FULL
+        // bounds first walked the stride-anchor vec and the marker chain on
+        // every call, and measured 6 percent self time after the byte-range
+        // reroute made this the single conversion entry.
+        {
+            let mut mini = TextPositionBounds::new(TextPositionAnchor::new(
+                storage.metrics.char_end(),
+                storage.metrics.emacs_byte_end(),
+            ));
+            storage
+                .backend
+                .storage_position_hint()
+                .consider_byte_anchor(&mut mini, target);
+            let cached = storage.pos_cache.get();
+            if cached.is_valid_for(storage.content_epoch) {
+                mini.consider_byte_anchor(target, cached.anchor);
+            }
+            if let Some(result) = mini.interpolate_byte(target) {
+                storage.pos_cache.set(PositionCache {
+                    epoch: content_epoch,
+                    anchor: TextPositionAnchor::new(result, target),
+                });
+                return result;
+            }
+        }
+
         let bounds = Self::byte_position_bounds(&storage, target);
 
         // GNU marker.c CONSIDER, mirrored from the char->byte direction: an
