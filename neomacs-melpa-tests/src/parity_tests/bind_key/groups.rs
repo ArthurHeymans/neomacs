@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_bind_key_batch};
+use super::{ParityBatchCase, assert_bind_key_batch};
 
-#[test]
-fn groups_public_surface_batch() {
-    assert_bind_key_batch(&[
-        (
-            "bind_keys_prefix_map_sets_parent_binding_commands_docstring_and_menu_name",
-            r##"(progn
+fn bind_keys_prefix_map_sets_parent_binding_commands_docstring_and_menu_name() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "bind_keys_prefix_map_sets_parent_binding_commands_docstring_and_menu_name",
+        r##"(progn
                (defvar neomacs-bind-key-host-map
                  (make-sparse-keymap))
                (let ((personal-keybindings nil))
@@ -28,14 +26,17 @@ fn groups_public_surface_batch() {
                        'variable-documentation)
                   (keymapp neomacs-bind-key-prefix-map)
                   (mapcar #'car personal-keybindings))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (neomacs-bind-key-prefix-map beginning-of-line end-of-line "Neomacs prefix documentation" t (("e" . neomacs-bind-key-prefix-map) ("a" . neomacs-bind-key-prefix-map) ("C-c b" . neomacs-bind-key-host-map)))"#
     ]],
-        ),
-        (
-            "bind_keys_repeat_map_sets_continue_properties_but_not_exit_properties",
-            r##"(progn
+    )
+}
+
+fn bind_keys_repeat_map_sets_continue_properties_but_not_exit_properties() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "bind_keys_repeat_map_sets_continue_properties_but_not_exit_properties",
+        r##"(progn
                (defun neomacs-bind-key-next () (interactive))
                (defun neomacs-bind-key-prev () (interactive))
                (defun neomacs-bind-key-quit () (interactive))
@@ -58,14 +59,17 @@ fn groups_public_surface_batch() {
                   (documentation-property
                    'neomacs-bind-key-repeat-map
                    'variable-documentation))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (neomacs-bind-key-next neomacs-bind-key-quit neomacs-bind-key-prev neomacs-bind-key-repeat-map nil neomacs-bind-key-repeat-map "Neomacs repeat map")"#
     ]],
-        ),
-        (
-            "bind_keys_switches_maps_and_prefix_groups_without_reordering_bindings",
-            r##"(progn
+    )
+}
+
+fn bind_keys_switches_maps_and_prefix_groups_without_reordering_bindings() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "bind_keys_switches_maps_and_prefix_groups_without_reordering_bindings",
+        r##"(progn
                (defvar neomacs-bind-key-map-one
                  (make-sparse-keymap))
                (defvar neomacs-bind-key-map-two
@@ -87,14 +91,17 @@ fn groups_public_surface_batch() {
                   (lookup-key neomacs-bind-key-prefix-one "b")
                   (lookup-key neomacs-bind-key-map-two "Z")
                   (mapcar #'caar (reverse personal-keybindings)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (beginning-of-line neomacs-bind-key-prefix-one forward-char backward-char end-of-line ("A" "x" "a" "b" "Z"))"#
     ]],
-        ),
-        (
-            "bind_keys_package_defers_an_unbound_map_until_the_feature_loads",
-            r##"(let ((personal-keybindings nil))
+    )
+}
+
+fn bind_keys_package_defers_an_unbound_map_until_the_feature_loads() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "bind_keys_package_defers_an_unbound_map_until_the_feature_loads",
+        r##"(let ((personal-keybindings nil))
                (makunbound 'neomacs-deferred-bind-key-map)
                (bind-keys
                 :package neomacs-deferred-bind-key-feature
@@ -116,31 +123,53 @@ fn groups_public_surface_batch() {
                   (nth 2 before)
                   (lookup-key neomacs-deferred-bind-key-map "x")
                   personal-keybindings)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil t nil forward-char ((("x" . neomacs-deferred-bind-key-map) forward-char nil)))"#
     ]],
-        ),
-        (
-            "bind_keys_rejects_a_prefix_without_a_prefix_map",
-            r##"(bind-keys :prefix "C-c b"
+    )
+}
+
+fn bind_keys_rejects_a_prefix_without_a_prefix_map() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "bind_keys_rejects_a_prefix_without_a_prefix_map",
+        r##"(bind-keys :prefix "C-c b"
                ("x" . forward-char))"##,
-            false,
-            expect![[r#"ERR (error "Both :prefix-map and :prefix must be supplied")"#]],
-        ),
-        (
-            "bind_keys_rejects_repeat_exit_bindings_without_a_repeat_map",
-            r##"(bind-keys :exit
+        false,
+        expect![[r#"ERR (error "Both :prefix-map and :prefix must be supplied")"#]],
+    )
+}
+
+fn bind_keys_rejects_repeat_exit_bindings_without_a_repeat_map() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "bind_keys_rejects_repeat_exit_bindings_without_a_repeat_map",
+        r##"(bind-keys :exit
                ("q" . keyboard-quit))"##,
-            false,
-            expect![[r#"ERR (error ":continue and :exit require specifying :repeat-map")"#]],
-        ),
-        (
-            "bind_keys_rejects_a_menu_name_without_a_prefix",
-            r##"(bind-keys :menu-name "Broken"
+        false,
+        expect![[r#"ERR (error ":continue and :exit require specifying :repeat-map")"#]],
+    )
+}
+
+fn bind_keys_rejects_a_menu_name_without_a_prefix() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "bind_keys_rejects_a_menu_name_without_a_prefix",
+        r##"(bind-keys :menu-name "Broken"
                ("x" . forward-char))"##,
-            false,
-            expect![[r#"ERR (error "If :menu-name is supplied, :prefix must be too")"#]],
-        ),
-    ]);
+        false,
+        expect![[r#"ERR (error "If :menu-name is supplied, :prefix must be too")"#]],
+    )
+}
+
+#[test]
+fn groups_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        bind_keys_prefix_map_sets_parent_binding_commands_docstring_and_menu_name(),
+        bind_keys_repeat_map_sets_continue_properties_but_not_exit_properties(),
+        bind_keys_switches_maps_and_prefix_groups_without_reordering_bindings(),
+        bind_keys_package_defers_an_unbound_map_until_the_feature_loads(),
+        bind_keys_rejects_a_prefix_without_a_prefix_map(),
+        bind_keys_rejects_repeat_exit_bindings_without_a_repeat_map(),
+        bind_keys_rejects_a_menu_name_without_a_prefix(),
+    ];
+    assert_bind_key_batch(&cases);
 }

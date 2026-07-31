@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_astute_batch;
+use super::{ParityBatchCase, assert_astute_batch};
 
-#[test]
-fn casefold_public_surface_batch() {
-    assert_astute_batch(&[
-        (
-            "astute_case_insensitize_expands_mixed_ascii_words_without_changing_nonletters",
-            r##"(mapcar
+fn astute_case_insensitize_expands_mixed_ascii_words_without_changing_nonletters() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "astute_case_insensitize_expands_mixed_ascii_words_without_changing_nonletters",
+        r##"(mapcar
          (lambda (string)
            (list
             string
@@ -20,14 +18,17 @@ fn casefold_public_surface_batch() {
            "rock-and-roll"
            "O'Reilly"
            "v2.1"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("" "") ("Astute" "[Aa][Ss][Tt][Uu][Tt][Ee]") ("twas" "[Tt][Ww][Aa][Ss]") ("n'" "[Nn]'") ("90s" "90[Ss]") ("rock-and-roll" "[Rr][Oo][Cc][Kk]-[Aa][Nn][Dd]-[Rr][Oo][Ll][Ll]") ("O'Reilly" "[Oo]'[Rr][Ee][Ii][Ll][Ll][Yy]") ("v2.1" "[Vv]2.1"))"#
     ]],
-        ),
-        (
-            "astute_case_insensitive_exception_fragments_match_real_prefix_spellings",
-            r##"(let* ((fragments
+    )
+}
+
+fn astute_case_insensitive_exception_fragments_match_real_prefix_spellings() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "astute_case_insensitive_exception_fragments_match_real_prefix_spellings",
+        r##"(let* ((fragments
                   (mapcar
                    #'astute-case-insensitize
                    '("bout"
@@ -59,14 +60,17 @@ fn casefold_public_surface_batch() {
              "about"
              "causeway"
              "n"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("[Bb][Oo][Uu][Tt]" "[Tt][Ww][Aa][Ss]" "[Cc][Aa][Uu][Ss][Ee]" "[Nn]'") "\\`\\(?:[Bb][Oo][Uu][Tt]\\|[Tt][Ww][Aa][Ss]\\|[Cc][Aa][Uu][Ss][Ee]\\|[Nn]'\\)\\'" (("bout" . t) ("BOUT" . t) ("Bout" . t) ("tWaS" . t) ("CAUSE" . t) ("n'" . t) ("N'" . t) ("about") ("causeway") ("n")))"#
     ]],
-        ),
-        (
-            "astute_default_prefix_exception_keyword_matches_decades_and_configured_elisions",
-            r##"(let ((regexp
+    )
+}
+
+fn astute_default_prefix_exception_keyword_matches_decades_and_configured_elisions() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "astute_default_prefix_exception_keyword_matches_decades_and_configured_elisions",
+        r##"(let ((regexp
                 (car
                  (nth 3
                       (astute-init-font-lock)))))
@@ -86,14 +90,17 @@ fn casefold_public_surface_batch() {
              "'n'"
              "'not-an-exception"
              "plain"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Oo][Uu][Tt]\\|\\(?1:'\\)[Ee][Mm]\\|\\(?1:'\\)[Nn]'\\|\\(?1:'\\)[Cc][Aa][Uu][Ss][Ee]\\|\\(?1:'\\)[Rr][Oo][Uu][Nn][Dd]\\|\\(?1:'\\)[Tt][Ww][Aa][Ss]\\|\\(?1:'\\)[Tt][Ii][Ss]" (("'90s" "'" 0 1) ("'90" "'" 0 1) ("'bout" "'" 0 1) ("'Bout" "'" 0 1) ("'CAUSE" "'" 0 1) ("'round" "'" 0 1) ("'twas" "'" 0 1) ("'TIS" "'" 0 1) ("'em" "'" 0 1) ("'n'" "'" 0 1) nil nil))"#
     ]],
-        ),
-        (
-            "astute_custom_prefix_exception_keyword_preserves_order_regexes_and_case_folding",
-            r##"(let* ((astute-prefix-single-quote-exceptions
+    )
+}
+
+fn astute_custom_prefix_exception_keyword_preserves_order_regexes_and_case_folding() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "astute_custom_prefix_exception_keyword_preserves_order_regexes_and_case_folding",
+        r##"(let* ((astute-prefix-single-quote-exceptions
                   '("ello"
                     "x.y"
                     "[ab]"))
@@ -113,14 +120,17 @@ fn casefold_public_surface_batch() {
              "'b"
              "'c"
              "'20s"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Ee][Ll][Ll][Oo]\\|\\(?1:'\\)[Xx].[Yy]\\|\\(?1:'\\)[[Aa][Bb]]" (("'ello" "'" 0 1) ("'ELLO" "'" 0 1) ("'x.y" "'" 0 1) ("'Xay" "'" 0 1) nil nil nil ("'20s" "'" 0 1)))"#
     ]],
-        ),
-        (
-            "astute_quote_regexes_report_open_close_and_inner_capture_boundaries",
-            r##"(list
+    )
+}
+
+fn astute_quote_regexes_report_open_close_and_inner_capture_boundaries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "astute_quote_regexes_report_open_close_and_inner_capture_boundaries",
+        r##"(list
          (astute-test-match-summary
           astute-double-quote-open-regexp
           '("\"word"
@@ -158,14 +168,17 @@ fn casefold_public_surface_batch() {
             "1'a"
             "a-'b"
             "ab")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("\"w" "\"" 0 1) ("\"w" "\"" 1 2) nil nil ("\"!" "\"" 0 1)) (("d\"" "\"" 4 5) ("d\"" "\"" 4 5) nil nil ("!\"" "\"" 1 2)) (("'w" "'" 0 1) ("'w" "'" 1 2) nil nil ("'!" "'" 0 1)) (("d'" "'" 4 5) ("d'" "'" 4 5) nil nil ("!'" "'" 1 2)) (nil nil nil nil nil nil nil))"#
     ]],
-        ),
-        (
-            "astute_dash_regexes_distinguish_bounded_en_em_and_longer_hyphen_runs",
-            r##"(list
+    )
+}
+
+fn astute_dash_regexes_distinguish_bounded_en_em_and_longer_hyphen_runs() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "astute_dash_regexes_distinguish_bounded_en_em_and_longer_hyphen_runs",
+        r##"(list
          (astute-test-match-summary
           astute-en-dash-regexp
           '("a--b"
@@ -184,10 +197,22 @@ fn casefold_public_surface_batch() {
             "a----b"
             "a --- b"
             "x---y---z")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("a--b" "--" 1 3) nil nil nil nil (" -- " "--" 2 4) ("x--y" "--" 1 3)) (("a---b" "---" 1 4) nil nil nil nil (" --- " "---" 2 5) ("x---y" "---" 1 4)))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn casefold_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        astute_case_insensitize_expands_mixed_ascii_words_without_changing_nonletters(),
+        astute_case_insensitive_exception_fragments_match_real_prefix_spellings(),
+        astute_default_prefix_exception_keyword_matches_decades_and_configured_elisions(),
+        astute_custom_prefix_exception_keyword_preserves_order_regexes_and_case_folding(),
+        astute_quote_regexes_report_open_close_and_inner_capture_boundaries(),
+        astute_dash_regexes_distinguish_bounded_en_em_and_longer_hyphen_runs(),
+    ];
+    assert_astute_batch(&cases);
 }

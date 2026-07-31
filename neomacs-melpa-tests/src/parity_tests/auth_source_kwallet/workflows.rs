@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auth_source_kwallet_batch;
+use super::{ParityBatchCase, assert_auth_source_kwallet_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_auth_source_kwallet_batch(&[
-        (
-            "auth_source_kwallet_real_auth_source_search_returns_secret_and_exact_process_request",
-            r##"(let ((auth-source-do-cache nil))
+fn auth_source_kwallet_real_auth_source_search_returns_secret_and_exact_process_request() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_kwallet_real_auth_source_search_returns_secret_and_exact_process_request",
+        r##"(let ((auth-source-do-cache nil))
                            (auth-source-kwallet-test-enable-clean)
                            (setq auth-source-kwallet-test-output
                                  "mail-password\n")
@@ -23,14 +21,17 @@ fn workflows_public_surface_batch() {
                              1)
                             (nreverse
                              auth-source-kwallet-test-process-calls)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((:user "alice" :secret "mail-password")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@imap.example") t)))"#
     ]],
-        ),
-        (
-            "auth_source_kwallet_real_auth_source_pick_first_password_supports_mail_client_usage",
-            r##"(let ((auth-source-do-cache nil))
+    )
+}
+
+fn auth_source_kwallet_real_auth_source_pick_first_password_supports_mail_client_usage() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_kwallet_real_auth_source_pick_first_password_supports_mail_client_usage",
+        r##"(let ((auth-source-do-cache nil))
                            (auth-source-kwallet-test-enable-clean)
                            (setq auth-source-kwallet-test-output
                                  "smtp-password\n")
@@ -44,14 +45,17 @@ fn workflows_public_surface_batch() {
                              "submission")
                             (nreverse
                              auth-source-kwallet-test-process-calls)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("smtp-password" (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "mailer@smtp.example") t)))"#
     ]],
-        ),
-        (
-            "auth_source_kwallet_auth_source_type_filter_is_forwarded_but_backend_runs_for_every_value",
-            r##"(let ((auth-source-do-cache nil))
+    )
+}
+
+fn auth_source_kwallet_auth_source_type_filter_is_forwarded_but_backend_runs_for_every_value() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_kwallet_auth_source_type_filter_is_forwarded_but_backend_runs_for_every_value",
+        r##"(let ((auth-source-do-cache nil))
                            (auth-source-kwallet-test-enable-clean)
                            (mapcar
                             (lambda (type)
@@ -78,14 +82,17 @@ fn workflows_public_surface_batch() {
                               (netrc secrets)
                               t
                               nil)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((kwallet ((:user "alice" :secret "typed-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@typed.example") t))) ((kwallet) ((:user "alice" :secret "typed-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@typed.example") t))) (netrc ((:user "alice" :secret "typed-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@typed.example") t))) ((netrc secrets) ((:user "alice" :secret "typed-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@typed.example") t))) (t ((:user "alice" :secret "typed-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@typed.example") t))) (nil ((:user "alice" :secret "typed-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@typed.example") t))))"#
     ]],
-        ),
-        (
-            "auth_source_kwallet_auth_source_max_zero_returns_boolean_for_success_and_failure",
-            r##"(let ((auth-source-do-cache nil))
+    )
+}
+
+fn auth_source_kwallet_auth_source_max_zero_returns_boolean_for_success_and_failure() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_kwallet_auth_source_max_zero_returns_boolean_for_success_and_failure",
+        r##"(let ((auth-source-do-cache nil))
                            (auth-source-kwallet-test-enable-clean)
                            (let ((success
                                   (auth-source-search
@@ -111,14 +118,17 @@ fn workflows_public_surface_batch() {
                                 failure
                                 (nreverse
                                  auth-source-kwallet-test-process-calls)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t nil (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@max-zero.example") t) ("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@missing.example") t)))"#
     ]],
-        ),
-        (
-            "auth_source_kwallet_auth_source_cache_reuses_first_secret_without_second_process",
-            r##"(let ((auth-source-do-cache t)
+    )
+}
+
+fn auth_source_kwallet_auth_source_cache_reuses_first_secret_without_second_process() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_kwallet_auth_source_cache_reuses_first_secret_without_second_process",
+        r##"(let ((auth-source-do-cache t)
                                (spec
                                 '(:host
                                   "cached.example"
@@ -150,14 +160,17 @@ fn workflows_public_surface_batch() {
                                 (auth-source-recall spec)
                                 (nreverse
                                  auth-source-kwallet-test-process-calls)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (#1=((:user "alice" :secret "first-secret")) #1# t #1# (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@cached.example") t)))"#
     ]],
-        ),
-        (
-            "auth_source_kwallet_reenable_flushes_cache_and_fetches_rotated_secret",
-            r##"(let ((auth-source-do-cache t)
+    )
+}
+
+fn auth_source_kwallet_reenable_flushes_cache_and_fetches_rotated_secret() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_kwallet_reenable_flushes_cache_and_fetches_rotated_secret",
+        r##"(let ((auth-source-do-cache t)
                                (spec
                                 '(:host
                                   "rotate.example"
@@ -184,14 +197,17 @@ fn workflows_public_surface_batch() {
                                 new
                                 (nreverse
                                  auth-source-kwallet-test-process-calls)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((:user "deploy" :secret "old-token")) ((:user "deploy" :secret "new-token")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "deploy@rotate.example") t) ("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "deploy@rotate.example") t)))"#
     ]],
-        ),
-        (
-            "auth_source_kwallet_require_keys_are_forwarded_but_backend_returns_its_minimal_token",
-            r##"(let ((auth-source-do-cache nil))
+    )
+}
+
+fn auth_source_kwallet_require_keys_are_forwarded_but_backend_returns_its_minimal_token() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_kwallet_require_keys_are_forwarded_but_backend_returns_its_minimal_token",
+        r##"(let ((auth-source-do-cache nil))
                            (auth-source-kwallet-test-enable-clean)
                            (mapcar
                             (lambda (required)
@@ -218,14 +234,17 @@ fn workflows_public_surface_batch() {
                               (:host)
                               (:port)
                               (:missing))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil ((:user "alice" :secret "required-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@required.example") t))) ((:secret) ((:user "alice" :secret "required-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@required.example") t))) ((:user :secret) ((:user "alice" :secret "required-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@required.example") t))) ((:host) ((:user "alice" :secret "required-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@required.example") t))) ((:port) ((:user "alice" :secret "required-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@required.example") t))) ((:missing) ((:user "alice" :secret "required-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@required.example") t))))"#
     ]],
-        ),
-        (
-            "auth_source_kwallet_create_and_delete_requests_remain_read_only_searches",
-            r##"(let ((auth-source-do-cache nil))
+    )
+}
+
+fn auth_source_kwallet_create_and_delete_requests_remain_read_only_searches() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_kwallet_create_and_delete_requests_remain_read_only_searches",
+        r##"(let ((auth-source-do-cache nil))
                            (auth-source-kwallet-test-enable-clean)
                            (mapcar
                             (lambda (operation)
@@ -251,14 +270,17 @@ fn workflows_public_surface_batch() {
                               (:create (:secret))
                               (:delete t)
                               (:create t :delete t))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil ((:user "alice" :secret "read-only-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@readonly.example") t))) ((:create t) ((:user "alice" :secret "read-only-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@readonly.example") t))) ((:create (:secret)) ((:user "alice" :secret "read-only-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@readonly.example") t))) ((:delete t) ((:user "alice" :secret "read-only-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@readonly.example") t))) ((:create t :delete t) ((:user "alice" :secret "read-only-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@readonly.example") t))))"#
     ]],
-        ),
-        (
-            "auth_source_kwallet_multiple_account_workflow_caches_each_host_user_spec_independently",
-            r##"(let ((auth-source-do-cache t)
+    )
+}
+
+fn auth_source_kwallet_multiple_account_workflow_caches_each_host_user_spec_independently() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_kwallet_multiple_account_workflow_caches_each_host_user_spec_independently",
+        r##"(let ((auth-source-do-cache t)
                                (first-spec
                                 '(:host
                                   "git.example"
@@ -301,14 +323,17 @@ fn workflows_public_surface_batch() {
                                  second-spec)
                                 (nreverse
                                  auth-source-kwallet-test-process-calls)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (#1=((:user "alice" :secret "alice-token")) #2=((:user "robot" :secret "robot-token")) #1# #2# (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@git.example") t) ("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "robot@git.example") t)))"#
     ]],
-        ),
-        (
-            "auth_source_kwallet_auth_source_list_values_surface_backend_key_concatenation_limit",
-            r##"(let ((auth-source-do-cache nil))
+    )
+}
+
+fn auth_source_kwallet_auth_source_list_values_surface_backend_key_concatenation_limit() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_kwallet_auth_source_list_values_surface_backend_key_concatenation_limit",
+        r##"(let ((auth-source-do-cache nil))
                            (auth-source-kwallet-test-enable-clean)
                            (mapcar
                             (lambda (spec)
@@ -337,14 +362,17 @@ fn workflows_public_surface_batch() {
                                ("alice" "robot")
                                :max
                                1))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((:host ("one.example" "two.example") :user "alice" :max 1) (:signal wrong-type-argument (characterp "one.example")) nil nil) ((:host "one.example" :user ("alice" "robot") :max 1) (:signal wrong-type-argument (characterp "alice")) nil nil))"#
     ]],
-        ),
-        (
-            "auth_source_kwallet_real_executable_round_trip_returns_wallet_folder_and_key_output",
-            r##"(let* ((fixture-root
+    )
+}
+
+fn auth_source_kwallet_real_executable_round_trip_returns_wallet_folder_and_key_output() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_kwallet_real_executable_round_trip_returns_wallet_folder_and_key_output",
+        r##"(let* ((fixture-root
                                  (expand-file-name
                                   "kwallet-real-process"
                                   user-emacs-directory))
@@ -400,14 +428,17 @@ fn workflows_public_surface_batch() {
                                (delete-directory
                                 fixture-root
                                 t))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:user "deploy" :secret "wallet=Real Wallet\nfolder=Real Folder\nkey=deploy::real.example"))"#
     ]],
-        ),
-        (
-            "auth_source_kwallet_real_executable_nonzero_exit_is_a_missing_credential",
-            r##"(let* ((fixture-root
+    )
+}
+
+fn auth_source_kwallet_real_executable_nonzero_exit_is_a_missing_credential() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_kwallet_real_executable_nonzero_exit_is_a_missing_credential",
+        r##"(let* ((fixture-root
                                  (expand-file-name
                                   "kwallet-real-failure"
                                   user-emacs-directory))
@@ -457,12 +488,15 @@ fn workflows_public_surface_batch() {
                                (delete-directory
                                 fixture-root
                                 t))))"##,
-            true,
-            expect!["OK nil"],
-        ),
-        (
-            "auth_source_kwallet_real_executable_integrates_with_auth_source_password_lookup",
-            r##"(let* ((fixture-root
+        true,
+        expect!["OK nil"],
+    )
+}
+
+fn auth_source_kwallet_real_executable_integrates_with_auth_source_password_lookup() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_kwallet_real_executable_integrates_with_auth_source_password_lookup",
+        r##"(let* ((fixture-root
                                  (expand-file-name
                                   "kwallet-real-auth-source"
                                   user-emacs-directory))
@@ -515,8 +549,27 @@ fn workflows_public_surface_batch() {
                                (delete-directory
                                 fixture-root
                                 t))))"##,
-            true,
-            expect![[r#"OK "token-for-ci-bot@git.example""#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK "token-for-ci-bot@git.example""#]],
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auth_source_kwallet_real_auth_source_search_returns_secret_and_exact_process_request(),
+        auth_source_kwallet_real_auth_source_pick_first_password_supports_mail_client_usage(),
+        auth_source_kwallet_auth_source_type_filter_is_forwarded_but_backend_runs_for_every_value(),
+        auth_source_kwallet_auth_source_max_zero_returns_boolean_for_success_and_failure(),
+        auth_source_kwallet_auth_source_cache_reuses_first_secret_without_second_process(),
+        auth_source_kwallet_reenable_flushes_cache_and_fetches_rotated_secret(),
+        auth_source_kwallet_require_keys_are_forwarded_but_backend_returns_its_minimal_token(),
+        auth_source_kwallet_create_and_delete_requests_remain_read_only_searches(),
+        auth_source_kwallet_multiple_account_workflow_caches_each_host_user_spec_independently(),
+        auth_source_kwallet_auth_source_list_values_surface_backend_key_concatenation_limit(),
+        auth_source_kwallet_real_executable_round_trip_returns_wallet_folder_and_key_output(),
+        auth_source_kwallet_real_executable_nonzero_exit_is_a_missing_credential(),
+        auth_source_kwallet_real_executable_integrates_with_auth_source_password_lookup(),
+    ];
+    assert_auth_source_kwallet_batch(&cases);
 }

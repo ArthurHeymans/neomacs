@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{AGENT_SHELL_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod completion;
 mod content;
@@ -183,9 +186,9 @@ pub(crate) fn assert_agent_shell_parity(elisp_form: &str, expected: Expect) {
 }
 
 /// Multi-probe batch for `assert_agent_shell_parity` cases (2a).
-pub(crate) fn assert_agent_shell_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_agent_shell_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         agent_shell_oracle("agent-shell.el"),
         &name,
         "agent_shell_parity",

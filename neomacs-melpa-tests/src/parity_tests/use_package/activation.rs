@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_use_package_batch;
+use super::{ParityBatchCase, assert_use_package_batch};
 
-#[test]
-fn activation_public_surface_batch() {
-    assert_use_package_batch(&[
-        (
-            "use_package_commands_create_interactive_autoloads_without_loading_the_feature",
-            r##"(progn
+fn use_package_commands_create_interactive_autoloads_without_loading_the_feature() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "use_package_commands_create_interactive_autoloads_without_loading_the_feature",
+        r##"(progn
                (fmakunbound 'neomacs-use-package-command-one)
                (fmakunbound 'neomacs-use-package-command-two)
                (use-package neomacs-use-package-command-library
@@ -25,14 +23,17 @@ fn activation_public_surface_batch() {
                      (commandp symbol))))
                 '(neomacs-use-package-command-one
                   neomacs-use-package-command-two)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((neomacs-use-package-command-one t "neomacs-use-package-command-library" nil t) (neomacs-use-package-command-two t "neomacs-use-package-command-library" nil t))"#
     ]],
-        ),
-        (
-            "use_package_hooks_apply_suffixes_autoload_symbols_and_run_lambda_entries",
-            r##"(let ((neomacs-use-package-mode-hook nil)
+    )
+}
+
+fn use_package_hooks_apply_suffixes_autoload_symbols_and_run_lambda_entries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "use_package_hooks_apply_suffixes_autoload_symbols_and_run_lambda_entries",
+        r##"(let ((neomacs-use-package-mode-hook nil)
                     events)
                (fmakunbound 'neomacs-use-package-hook-function)
                (use-package neomacs-use-package-hook-library
@@ -56,12 +57,15 @@ fn activation_public_surface_batch() {
                        (lambda () (push 'symbol events)))
                  (run-hooks 'neomacs-use-package-mode-hook)
                  (list before (nreverse events))))"##,
-            true,
-            expect![[r#"OK ((nil) (lambda symbol))"#]],
-        ),
-        (
-            "use_package_mode_interpreter_magic_and_fallback_register_exact_alist_entries",
-            r##"(let ((auto-mode-alist nil)
+        true,
+        expect![[r#"OK ((nil) (lambda symbol))"#]],
+    )
+}
+
+fn use_package_mode_interpreter_magic_and_fallback_register_exact_alist_entries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "use_package_mode_interpreter_magic_and_fallback_register_exact_alist_entries",
+        r##"(let ((auto-mode-alist nil)
                     (interpreter-mode-alist nil)
                     (magic-mode-alist nil)
                     (magic-fallback-mode-alist nil))
@@ -85,14 +89,17 @@ fn activation_public_surface_batch() {
                 (autoloadp
                  (symbol-function
                   'neomacs-use-package-detect-mode))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK ((("\\.neo2\\'" . neomacs-use-package-detect-mode) ("\\.neo\\'" . neomacs-use-package-detect-mode)) (("neo2" . neomacs-use-package-detect-mode) ("neo" . neomacs-use-package-detect-mode)) (("NEO!" . neomacs-use-package-detect-mode)) (("fallback" . neomacs-use-package-detect-mode)) t)"##
     ]],
-        ),
-        (
-            "use_package_after_all_waits_for_every_feature_in_normalized_order",
-            r##"(progn
+    )
+}
+
+fn use_package_after_all_waits_for_every_feature_in_normalized_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "use_package_after_all_waits_for_every_feature_in_normalized_order",
+        r##"(progn
                (defvar neomacs-use-package-events nil)
                (setq neomacs-use-package-events nil)
                (use-package neomacs-use-package-after-all-target
@@ -111,12 +118,15 @@ fn activation_public_surface_batch() {
                     after-one
                     (nreverse
                      neomacs-use-package-events)))))"##,
-            true,
-            expect![[r#"OK (nil nil (configured))"#]],
-        ),
-        (
-            "use_package_after_any_runs_once_when_the_first_of_several_features_loads",
-            r##"(progn
+        true,
+        expect![[r#"OK (nil nil (configured))"#]],
+    )
+}
+
+fn use_package_after_any_runs_once_when_the_first_of_several_features_loads() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "use_package_after_any_runs_once_when_the_first_of_several_features_loads",
+        r##"(progn
                (defvar neomacs-use-package-events nil)
                (setq neomacs-use-package-events nil)
                (use-package neomacs-use-package-after-any-target
@@ -134,12 +144,15 @@ fn activation_public_surface_batch() {
                  (list
                   after-first
                   neomacs-use-package-events)))"##,
-            true,
-            expect![[r#"OK ((configured) (configured))"#]],
-        ),
-        (
-            "use_package_deferred_config_runs_when_the_declared_feature_is_provided",
-            r##"(progn
+        true,
+        expect![[r#"OK ((configured) (configured))"#]],
+    )
+}
+
+fn use_package_deferred_config_runs_when_the_declared_feature_is_provided() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "use_package_deferred_config_runs_when_the_declared_feature_is_provided",
+        r##"(progn
                (defvar neomacs-use-package-events nil)
                (setq neomacs-use-package-events nil)
                (use-package neomacs-use-package-deferred-feature
@@ -152,12 +165,15 @@ fn activation_public_surface_batch() {
                   before
                   (nreverse
                    neomacs-use-package-events))))"##,
-            true,
-            expect![[r#"OK (nil (configured))"#]],
-        ),
-        (
-            "use_package_demand_loads_a_real_library_between_init_and_config",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK (nil (configured))"#]],
+    )
+}
+
+fn use_package_demand_loads_a_real_library_between_init_and_config() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "use_package_demand_loads_a_real_library_between_init_and_config",
+        r##"(let* ((root
                     (make-temp-file "use-package-demand-" t))
                    (load-path
                     (cons root load-path))
@@ -181,8 +197,21 @@ fn activation_public_surface_batch() {
                       (featurep
                        'neomacs-use-package-demand)))
                  (delete-directory root t)))"##,
-            true,
-            expect![[r#"OK ((init config) t t)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK ((init config) t t)"#]],
+    )
+}
+
+#[test]
+fn activation_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        use_package_commands_create_interactive_autoloads_without_loading_the_feature(),
+        use_package_hooks_apply_suffixes_autoload_symbols_and_run_lambda_entries(),
+        use_package_mode_interpreter_magic_and_fallback_register_exact_alist_entries(),
+        use_package_after_all_waits_for_every_feature_in_normalized_order(),
+        use_package_after_any_runs_once_when_the_first_of_several_features_loads(),
+        use_package_deferred_config_runs_when_the_declared_feature_is_provided(),
+        use_package_demand_loads_a_real_library_between_init_and_config(),
+    ];
+    assert_use_package_batch(&cases);
 }

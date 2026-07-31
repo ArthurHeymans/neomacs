@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{ASYNC_MELPA_PIN, ASYNC_STATUS_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod files;
 mod items;
@@ -124,9 +127,9 @@ pub(crate) fn assert_async_status_autoload_parity(elisp_form: &str, expected: Ex
 
 
 /// Multi-probe batch for `assert_async_status_autoload_parity` cases (2a).
-pub(crate) fn assert_async_status_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_async_status_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         async_status_oracle("async-status-autoloads.el"),
         &name,
         "async_status_autoload_parity",
@@ -135,9 +138,9 @@ pub(crate) fn assert_async_status_autoload_batch(cases: &[(&str, &str, bool, Exp
 }
 
 /// Multi-probe batch for `assert_async_status_parity` cases (2a).
-pub(crate) fn assert_async_status_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_async_status_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         async_status_oracle("async-status.el"),
         &name,
         "async_status_parity",

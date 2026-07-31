@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_airline_themes_batch;
+use super::{ParityBatchCase, assert_airline_themes_batch};
 
-#[test]
-fn lifecycle_public_surface_batch() {
-    assert_airline_themes_batch(&[
-        (
-            "airline_themes_enable_switch_disable_workflow_applies_and_restores_real_faces",
-            r##"(let ((faces
+fn airline_themes_enable_switch_disable_workflow_applies_and_restores_real_faces() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "airline_themes_enable_switch_disable_workflow_applies_and_restores_real_faces",
+        r##"(let ((faces
                 '(airline-normal-outer
                   airline-normal-center
                   airline-insert-outer
@@ -55,14 +53,17 @@ fn lifecycle_public_surface_batch() {
               (face-attribute face :foreground nil t)
               (face-attribute face :background nil t)))
            faces)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (((airline-light t (airline-light) ((airline-normal-outer "#ffffff" "#005fff" unspecified unspecified) (airline-normal-center "#005fff" "#afffff" unspecified unspecified) (airline-insert-outer "#ffffff" "#00875f" unspecified unspecified) (airline-visual-outer "#ffffff" "#ff5f00" unspecified unspecified) (mode-line "#005fff" "#afffff" nil nil) (mode-line-inactive "#666666" "#b2b2b2" nil nil))) (airline-doom-one t (airline-doom-one) ((airline-normal-outer "#1B2229" "#51afef" unspecified unspecified) (airline-normal-center "#bbc2cf" "#21242b" unspecified unspecified) (airline-insert-outer "#1B2229" "#98be65" unspecified unspecified) (airline-visual-outer "#1B2229" "#4db5bd" unspecified unspecified) (mode-line "#bbc2cf" "#21242b" nil nil) (mode-line-inactive "#5B6268" "#23272e" nil nil))) (airline-transparent t (airline-transparent) ((airline-normal-outer "#8d96a1" "NONE" unspecified unspecified) (airline-normal-center "#3f4b59" "NONE" unspecified unspecified) (airline-insert-outer "#1d1f21" "#BBE67E" unspecified unspecified) (airline-visual-outer "#1d1f21" "#F07178" unspecified unspecified) (mode-line "#3f4b59" "NONE" nil nil) (mode-line-inactive "#1d1f21" "NONE" nil nil)))) nil ((airline-normal-outer "#141413" "#aeee00") (airline-normal-center "#8cffba" "#242321") (airline-insert-outer "#141413" "#0a9dff") (airline-visual-outer "#141413" "#ffa724") (mode-line unspecified unspecified) (mode-line-inactive unspecified unspecified)))"##
     ]],
-        ),
-        (
-            "airline_themes_reload_is_idempotent_for_settings_modeline_and_enabled_state",
-            r##"(let (snapshots first-settings)
+    )
+}
+
+fn airline_themes_reload_is_idempotent_for_settings_modeline_and_enabled_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "airline_themes_reload_is_idempotent_for_settings_modeline_and_enabled_state",
+        r##"(let (snapshots first-settings)
          (dotimes (iteration 3)
            (when (custom-theme-p 'airline-doom-one)
              (put 'airline-doom-one 'theme-settings nil)
@@ -106,14 +107,17 @@ fn lifecycle_public_surface_batch() {
              (lambda (theme)
                (eq theme 'airline-doom-one))
              custom-enabled-themes))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((0 31 t "59bc99f40dbf40670e9af38f4b8c39468ce24909f30ff9dd5f7bfcac517c10a4" 1 nil) (1 31 t "59bc99f40dbf40670e9af38f4b8c39468ce24909f30ff9dd5f7bfcac517c10a4" 1 nil) (2 31 t "59bc99f40dbf40670e9af38f4b8c39468ce24909f30ff9dd5f7bfcac517c10a4" 1 nil)) (airline-doom-one) (airline-doom-one) 1)"#
     ]],
-        ),
-        (
-            "airline_themes_cursor_customization_drives_all_evil_state_cursor_shapes",
-            r##"(let ((symbols
+    )
+}
+
+fn airline_themes_cursor_customization_drives_all_evil_state_cursor_shapes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "airline_themes_cursor_customization_drives_all_evil_state_cursor_shapes",
+        r##"(let ((symbols
                 '(evil-emacs-state-cursor
                   evil-normal-state-cursor
                   evil-insert-state-cursor
@@ -144,14 +148,17 @@ fn lifecycle_public_surface_batch() {
              (lambda (symbol)
                (list symbol (symbol-value symbol)))
              symbols))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (((evil-emacs-state-cursor "#a9a1e1") (evil-normal-state-cursor "#51afef") (evil-insert-state-cursor (bar "#98be65")) (evil-replace-state-cursor "#ff6c6b") (evil-visual-state-cursor "#4db5bd")) ((evil-emacs-state-cursor sentinel-evil-emacs-state-cursor) (evil-normal-state-cursor sentinel-evil-normal-state-cursor) (evil-insert-state-cursor sentinel-evil-insert-state-cursor) (evil-replace-state-cursor sentinel-evil-replace-state-cursor) (evil-visual-state-cursor sentinel-evil-visual-state-cursor)))"##
     ]],
-        ),
-        (
-            "airline_themes_eshell_customization_preserves_or_installs_a_real_prompt_function",
-            r##"(let ((sentinel (lambda () "sentinel prompt")))
+    )
+}
+
+fn airline_themes_eshell_customization_preserves_or_installs_a_real_prompt_function() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "airline_themes_eshell_customization_preserves_or_installs_a_real_prompt_function",
+        r##"(let ((sentinel (lambda () "sentinel prompt")))
          (setq eshell-prompt-function sentinel
                eshell-prompt-regexp "sentinel-regexp"
                eshell-highlight-prompt nil
@@ -174,12 +181,15 @@ fn lifecycle_public_surface_batch() {
             (eq eshell-prompt-function sentinel)
             eshell-prompt-regexp
             eshell-highlight-prompt)))"##,
-            true,
-            expect![[r#"OK ((t "sentinel prompt" "sentinel-regexp" nil) t nil "^ [^#$]* [#$] " t)"#]],
-        ),
-        (
-            "airline_themes_set_modeline_replaces_global_and_local_formats_consistently",
-            r##"(let ((original-default
+        true,
+        expect![[r#"OK ((t "sentinel prompt" "sentinel-regexp" nil) t nil "^ [^#$]* [#$] " t)"#]],
+    )
+}
+
+fn airline_themes_set_modeline_replaces_global_and_local_formats_consistently() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "airline_themes_set_modeline_replaces_global_and_local_formats_consistently",
+        r##"(let ((original-default
                 (copy-tree
                  (default-value 'mode-line-format)))
                first-buffer second-buffer)
@@ -209,10 +219,21 @@ fn lifecycle_public_surface_batch() {
            'sha256
            (prin1-to-string
             (default-value 'mode-line-format)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil #1=("%e" (:eval (let* ((current-window-width (window-width)) (active (powerline-selected-window-active)) (separator-left (intern (format "powerline-%s-%s" (powerline-current-separator) (car powerline-default-separator-dir)))) (separator-right (intern (format "powerline-%s-%s" (powerline-current-separator) (cdr powerline-default-separator-dir)))) (mode-line-face (if active 'mode-line 'mode-line-inactive)) (evil-mode-active (featurep 'evil)) (visual-block (if evil-mode-active (and (evil-visual-state-p) (eq evil-visual-selection 'block)) nil)) (visual-line (if evil-mode-active (and (evil-visual-state-p) (eq evil-visual-selection 'line)) nil)) (current-evil-state-string (if evil-mode-active (upcase (concat (symbol-name evil-state) (cond (visual-block "-BLOCK") (visual-line "-LINE")))) nil)) (current-evil-state-string (if (and current-evil-state-string (< current-window-width 80)) (substring current-evil-state-string 0 1) current-evil-state-string)) (outer-face (if active (if evil-mode-active (cond ((eq evil-state (intern "normal")) 'airline-normal-outer) ((eq evil-state (intern "insert")) 'airline-insert-outer) ((eq evil-state (intern "visual")) 'airline-visual-outer) ((eq evil-state (intern "replace")) 'airline-replace-outer) ((eq evil-state (intern "emacs")) 'airline-emacs-outer) (t 'airline-normal-outer)) 'airline-normal-outer) 'powerline-inactive1)) (inner-face (if active (if evil-mode-active (cond ((eq evil-state (intern "normal")) 'airline-normal-inner) ((eq evil-state (intern "insert")) 'airline-insert-inner) ((eq evil-state (intern "visual")) 'airline-visual-inner) ((eq evil-state (intern "replace")) 'airline-replace-inner) ((eq evil-state (intern "emacs")) 'airline-emacs-inner) (t 'airline-normal-inner)) 'airline-normal-inner) 'powerline-inactive2)) (center-face (if active (if evil-mode-active (cond ((eq evil-state (intern "normal")) 'airline-normal-center) ((eq evil-state (intern "insert")) 'airline-insert-center) ((eq evil-state (intern "visual")) 'airline-visual-center) ((eq evil-state (intern "replace")) 'airline-replace-center) ((eq evil-state (intern "emacs")) 'airline-emacs-center) (t 'airline-normal-center)) 'airline-normal-center) 'airline-inactive3)) (lhs-mode (when (or (not airline-hide-state-on-inactive-buffers) (and airline-hide-state-on-inactive-buffers active)) (if evil-mode-active (list (powerline-raw (concat " " current-evil-state-string " ") outer-face) (funcall separator-left outer-face inner-face) (powerline-raw "%*" inner-face 'l)) (list (powerline-raw "%*" outer-face 'l) (powerline-raw " " outer-face) (funcall separator-left outer-face inner-face))))) (lhs-rest (list (if (and (or (not airline-hide-eyebrowse-on-inactive-buffers) (and airline-hide-eyebrowse-on-inactive-buffers active)) (featurep 'eyebrowse)) (powerline-raw (concat " " (eyebrowse-mode-line-indicator)) inner-face 'r)) (if (and (or (not airline-hide-vc-branch-on-inactive-buffers) (and airline-hide-vc-branch-on-inactive-buffers active)) buffer-file-name vc-mode) (powerline-raw (airline-get-vc) inner-face)) (powerline-raw " " inner-face) (funcall separator-left inner-face center-face) (cond ((and buffer-file-name (eq airline-display-directory 'airline-directory-shortened)) (powerline-raw (airline-shorten-directory default-directory airline-shortened-directory-length) center-face 'l)) ((and buffer-file-name (eq airline-display-directory 'airline-directory-full)) (powerline-raw default-directory center-face 'l)) (t (powerline-raw " " center-face))) (powerline-raw "%b" center-face) (when (and (boundp 'which-func-mode) which-func-mode) (powerline-raw which-func-format center-face 'l)) (when (boundp 'erc-modified-channels-object) (powerline-raw erc-modified-channels-object center-face 'l)))) (lhs (append lhs-mode lhs-rest)) (rhs (list (powerline-raw global-mode-string center-face 'r) (powerline-minor-modes center-face 'l) (powerline-raw (char-to-string airline-utf-glyph-subseparator-right) center-face 'l) (powerline-major-mode center-face 'l) (powerline-process center-face) (powerline-raw " " center-face) (funcall separator-right center-face inner-face) (powerline-raw (format " %s " buffer-file-coding-system) inner-face) (funcall separator-right inner-face outer-face) (powerline-raw "%3p" outer-face 'l) (powerline-raw (char-to-string airline-utf-glyph-linenumber) outer-face 'l) (powerline-raw (format "%%l/%d" (count-lines (point-min) (point-max))) outer-face 'l) (powerline-raw "ln :" outer-face 'l) (powerline-raw "%3c " outer-face 'l)))) (concat (powerline-render lhs) (powerline-fill center-face (powerline-width rhs)) (powerline-render rhs))))) #1#) (nil #1# #1#) nil 2 "59bc99f40dbf40670e9af38f4b8c39468ce24909f30ff9dd5f7bfcac517c10a4")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn lifecycle_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        airline_themes_enable_switch_disable_workflow_applies_and_restores_real_faces(),
+        airline_themes_reload_is_idempotent_for_settings_modeline_and_enabled_state(),
+        airline_themes_cursor_customization_drives_all_evil_state_cursor_shapes(),
+        airline_themes_eshell_customization_preserves_or_installs_a_real_prompt_function(),
+        airline_themes_set_modeline_replaces_global_and_local_formats_consistently(),
+    ];
+    assert_airline_themes_batch(&cases);
 }

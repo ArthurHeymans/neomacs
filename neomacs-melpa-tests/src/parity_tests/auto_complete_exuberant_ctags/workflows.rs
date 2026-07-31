@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_exuberant_ctags_batch;
+use super::{ParityBatchCase, assert_auto_complete_exuberant_ctags_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_auto_complete_exuberant_ctags_batch(&[
-        (
-            "auto_complete_exuberant_ctags_setup_installs_one_global_save_hook",
-            r##"(let ((after-save-hook nil))
+fn auto_complete_exuberant_ctags_setup_installs_one_global_save_hook() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_setup_installs_one_global_save_hook",
+        r##"(let ((after-save-hook nil))
                            (ac-exuberant-ctags-setup)
                            (ac-exuberant-ctags-setup)
                            (list
@@ -15,12 +13,15 @@ fn workflows_public_surface_batch() {
                             (memq
                              'ac-exuberant-ctags-build-index
                              after-save-hook)))"##,
-            true,
-            expect!["OK (#1=(ac-exuberant-ctags-build-index) #1#)"],
-        ),
-        (
-            "auto_complete_exuberant_ctags_source_init_builds_only_when_index_is_nil",
-            r##"(let ((calls 0)
+        true,
+        expect!["OK (#1=(ac-exuberant-ctags-build-index) #1#)"],
+    )
+}
+
+fn auto_complete_exuberant_ctags_source_init_builds_only_when_index_is_nil() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_source_init_builds_only_when_index_is_nil",
+        r##"(let ((calls 0)
                                 (initializer
                                  (cdr
                                   (assq
@@ -48,12 +49,15 @@ fn workflows_public_surface_batch() {
                                 first
                                 calls
                                 ac-exuberant-ctags-index))))"##,
-            true,
-            expect![[r#"OK ((1 #1=("built f C")) 2 #1#)"#]],
-        ),
-        (
-            "auto_complete_exuberant_ctags_real_project_build_and_candidate_workflow_matches",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK ((1 #1=("built f C")) 2 #1#)"#]],
+    )
+}
+
+fn auto_complete_exuberant_ctags_real_project_build_and_candidate_workflow_matches() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_real_project_build_and_candidate_workflow_matches",
+        r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "real-project"))
                                 (source
@@ -83,14 +87,17 @@ fn workflows_public_surface_batch() {
                                   (auto-complete-exuberant-ctags-test-relative
                                    ac-exuberant-ctags-tag-file-dir
                                    root))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("reset_state f C" "render_model f C" "render_frame f C") ("render_model" "render_frame") "./")"#
     ]],
-        ),
-        (
-            "auto_complete_exuberant_ctags_after_save_hook_rebuilds_real_project_index",
-            r##"(let* ((root
+    )
+}
+
+fn auto_complete_exuberant_ctags_after_save_hook_rebuilds_real_project_index() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_after_save_hook_rebuilds_real_project_index",
+        r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "save-hook-project"))
                                 (source
@@ -124,12 +131,15 @@ fn workflows_public_surface_batch() {
                                (set-buffer-modified-p nil)
                                (kill-buffer
                                 (current-buffer)))))"##,
-            true,
-            expect![[r#"OK (("new_name f C") t nil)"#]],
-        ),
-        (
-            "auto_complete_exuberant_ctags_switching_projects_replaces_index_and_directory",
-            r##"(let* ((sandbox
+        true,
+        expect![[r#"OK (("new_name f C") t nil)"#]],
+    )
+}
+
+fn auto_complete_exuberant_ctags_switching_projects_replaces_index_and_directory() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_switching_projects_replaces_index_and_directory",
+        r##"(let* ((sandbox
                                  (auto-complete-exuberant-ctags-test-root
                                   "switch-projects"))
                                 (first
@@ -160,12 +170,15 @@ fn workflows_public_surface_batch() {
                               (auto-complete-exuberant-ctags-test-relative
                                ac-exuberant-ctags-tag-file-dir
                                sandbox))))"##,
-            true,
-            expect![[r#"OK ((("first_api f C") "first/") ("second_api m Ruby") "second/")"#]],
-        ),
-        (
-            "auto_complete_exuberant_ctags_real_auto_complete_source_requires_three_characters",
-            r##"(save-window-excursion
+        true,
+        expect![[r#"OK ((("first_api f C") "first/") ("second_api m Ruby") "second/")"#]],
+    )
+}
+
+fn auto_complete_exuberant_ctags_real_auto_complete_source_requires_three_characters() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_real_auto_complete_source_requires_three_characters",
+        r##"(save-window-excursion
                            (let ((ac-exuberant-ctags-index
                                   '("render f C"
                                     "rename m Rust"))
@@ -210,14 +223,17 @@ fn workflows_public_surface_batch() {
                                                ac-completing)))
                                         (auto-complete-mode -1))))))
                               '("x = re" "x = ren"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("x = re" nil nil nil nil nil nil nil) ("x = ren" t ("ren") "ren" "ren" ("render" "rename") t t))"#
     ]],
-        ),
-        (
-            "auto_complete_exuberant_ctags_real_auto_complete_project_session_matches",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_complete_exuberant_ctags_real_auto_complete_project_session_matches() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_real_auto_complete_project_session_matches",
+        r##"(save-window-excursion
                            (let* ((root
                                    (auto-complete-exuberant-ctags-test-root
                                     "auto-complete-session"))
@@ -274,10 +290,23 @@ fn workflows_public_surface_batch() {
                                              ac-exuberant-ctags-tag-file-dir
                                              root)))))
                                    (auto-complete-mode -1))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("reset_state f C" "render_model f C" "render_frame f C") "render" "render" ("render_model" "render_frame") t "render_model") "render_frame" "result = render_frame" nil nil "./")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_exuberant_ctags_setup_installs_one_global_save_hook(),
+        auto_complete_exuberant_ctags_source_init_builds_only_when_index_is_nil(),
+        auto_complete_exuberant_ctags_real_project_build_and_candidate_workflow_matches(),
+        auto_complete_exuberant_ctags_after_save_hook_rebuilds_real_project_index(),
+        auto_complete_exuberant_ctags_switching_projects_replaces_index_and_directory(),
+        auto_complete_exuberant_ctags_real_auto_complete_source_requires_three_characters(),
+        auto_complete_exuberant_ctags_real_auto_complete_project_session_matches(),
+    ];
+    assert_auto_complete_exuberant_ctags_batch(&cases);
 }

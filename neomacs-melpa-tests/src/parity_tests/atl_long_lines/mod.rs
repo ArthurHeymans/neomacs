@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{ATL_LONG_LINES_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod columns;
 mod modes;
@@ -70,9 +73,9 @@ pub(crate) fn assert_atl_long_lines_autoload_parity(elisp_form: &str, expected: 
 
 
 /// Multi-probe batch for `assert_atl_long_lines_autoload_parity` cases (2a).
-pub(crate) fn assert_atl_long_lines_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_atl_long_lines_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         atl_long_lines_oracle("atl-long-lines-autoloads.el"),
         &name,
         "atl_long_lines_autoload_parity",
@@ -81,9 +84,9 @@ pub(crate) fn assert_atl_long_lines_autoload_batch(cases: &[(&str, &str, bool, E
 }
 
 /// Multi-probe batch for `assert_atl_long_lines_parity` cases (2a).
-pub(crate) fn assert_atl_long_lines_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_atl_long_lines_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         atl_long_lines_oracle("atl-long-lines.el"),
         &name,
         "atl_long_lines_parity",

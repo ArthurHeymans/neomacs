@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_ac_js2_batch;
+use super::{ParityBatchCase, assert_ac_js2_batch};
 
 /// The documented installation, `(add-hook 'js2-mode-hook 'ac-js2-mode)`:
 /// enabling the minor mode arms `completion-at-point`, the save hook, the
@@ -8,12 +8,10 @@ use super::assert_ac_js2_batch;
 /// name inside a function inserts the declaration ac-js2 found in the parse
 /// tree.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_ac_js2_batch(&[
-        (
-            "ac_js2_mode_arms_completion_and_completes_a_local_name_at_point",
-            r##"(ac-js2-test-in-source
+fn ac_js2_mode_arms_completion_and_completes_a_local_name_at_point() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ac_js2_mode_arms_completion_and_completes_a_local_name_at_point",
+        r##"(ac-js2-test-in-source
  ac-js2-test-source
  (let ((mode (list :major major-mode
                    :minor (and ac-js2-mode t)
@@ -35,27 +33,33 @@ fn workflows_public_surface_batch() {
            :line (buffer-substring-no-properties (line-beginning-position)
                                                  (line-end-position))
            :point (point)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:mode (:major js2-mode :minor t :capf ac-js2-completion-function :save t :skewer-hook t :clients nil :keys (ac-js2-jump-to-definition pop-tag-mark ac-js2-expand-function) :errors 0) :completion (:beg 428 :end 431 :locals ("visitor" "main" "shout" "config" "greet" "greeting") :total 230 :point 431) :line "    shout" :point 433)"#
     ]],
-        ),
-        (
-            "parse_tree_candidates_carry_signatures_object_shapes_and_leading_comments",
-            r##"(ac-js2-test-in-source
+    )
+}
+
+fn parse_tree_candidates_carry_signatures_object_shapes_and_leading_comments() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "parse_tree_candidates_carry_signatures_object_shapes_and_leading_comments",
+        r##"(ac-js2-test-in-source
  ac-js2-test-source
  (goto-char (point-max))
  (let* ((completion (ac-js2-test-completion))
         (docs (ac-js2-test-docs (plist-get completion :locals))))
    (list :completion completion :docs docs)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:completion (:beg nil :end nil :locals ("main" "shout" "config" "greet" "greeting") :total 229 :point 452) :docs (("main" . "function main()") ("shout" . "function (text)") ("config" . "locale : \"de-DE\"\nretries : 3\nonError : function (error)") ("greet" . "Returns a polite greeting for NAME.\n\nfunction greet(name, punctuation)") ("greeting" . "Utilities for the demo app. */\n\"Grüße\"")))"#
     ]],
-        ),
-        (
-            "dot_completion_lists_the_properties_of_a_real_object_literal",
-            r##"(ac-js2-test-in-source
+    )
+}
+
+fn dot_completion_lists_the_properties_of_a_real_object_literal() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "dot_completion_lists_the_properties_of_a_real_object_literal",
+        r##"(ac-js2-test-in-source
  ac-js2-test-source
  (goto-char (point-min))
  (search-forward "    greet(visitor, \"!\");")
@@ -64,14 +68,17 @@ fn workflows_public_surface_batch() {
  (let* ((completion (ac-js2-test-completion))
         (docs (ac-js2-test-docs (plist-get completion :locals))))
    (list :completion completion :docs docs)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:completion (:beg 435 :end 435 :locals ("locale" "retries" "onError") :total 3 :point 435) :docs (("locale" . "\"de-DE\"") ("retries" . "3") ("onError" . "function (error)")))"#
     ]],
-        ),
-        (
-            "jump_to_definition_lands_on_declarations_and_object_literal_properties",
-            r##"(ac-js2-test-in-source
+    )
+}
+
+fn jump_to_definition_lands_on_declarations_and_object_literal_properties() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "jump_to_definition_lands_on_declarations_and_object_literal_properties",
+        r##"(ac-js2-test-in-source
  ac-js2-test-source
  (let ((origin (ac-js2-test-point-in "    greet(visitor" "greet")))
    (execute-kbd-macro (kbd "M-."))
@@ -102,14 +109,17 @@ fn workflows_public_surface_batch() {
              (list :origin origin :jumped jumped :popped popped :prop prop
                    :missing missing :unsupported unsupported
                    :ring (ring-length find-tag-marker-ring)))))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:origin 405 :jumped (99 "function greet(name, punctuation)" 1) :popped (user-error ("At start of xref history") 99) :prop (206 "locale: \"de-DE\"," 2) :missing (user-error ("At start of xref history") 455) :unsupported (error ("Node is not a supported jump node") 394) :ring 4)"#
     ]],
-        ),
-        (
-            "a_connected_browser_merges_its_properties_and_calls_stay_unevaluated",
-            r##"(ac-js2-test-in-source
+    )
+}
+
+fn a_connected_browser_merges_its_properties_and_calls_stay_unevaluated() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "a_connected_browser_merges_its_properties_and_calls_stay_unevaluated",
+        r##"(ac-js2-test-in-source
  ac-js2-test-source
  (let ((skewer-clients '(fake-browser))
        (ac-js2-evaluate-calls nil)
@@ -137,14 +147,17 @@ fn workflows_public_surface_batch() {
                :docs docs
                :call-candidates (nth 2 call)
                :requests (reverse requests)))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:dot (:beg 461 :end 461 :candidates ("locale" "retries" "onError" "locale" "hasOwnProperty" "toLocaleString")) :docs (("locale" . "\"de-DE\"") ("retries" . "3") ("hasOwnProperty" . "function hasOwnProperty()") ("toLocaleString" . "function toLocaleString()")) :call-candidates nil :requests (("config" "complete" ((prototypes . t)))))"#
     ]],
-        ),
-        (
-            "an_empty_buffer_completes_the_externs_and_an_unparseable_one_signals",
-            r##"(let ((empty (ac-js2-test-in-source
+    )
+}
+
+fn an_empty_buffer_completes_the_externs_and_an_unparseable_one_signals() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "an_empty_buffer_completes_the_externs_and_an_unparseable_one_signals",
+        r##"(let ((empty (ac-js2-test-in-source
               ""
               (let ((result (ac-js2-completion-function)))
                 (list :beg (nth 0 result) :end (nth 1 result)
@@ -164,10 +177,22 @@ fn workflows_public_surface_batch() {
                        :point (point)
                        :text (buffer-substring-no-properties (point-min) (point-max))))))
     (list :empty empty :broken broken)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:empty (:beg nil :end nil :locals nil :total 224 :first "break" :errors 0) :broken (:errors (("msg.no.paren.after.parms" 41)) :completion (wrong-type-argument (number-or-marker-p nil)) :point 77 :text "var ready = true;\nfunction broken(alpha {\n    return alpha;\n}\nvar tail = 1;\n"))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        ac_js2_mode_arms_completion_and_completes_a_local_name_at_point(),
+        parse_tree_candidates_carry_signatures_object_shapes_and_leading_comments(),
+        dot_completion_lists_the_properties_of_a_real_object_literal(),
+        jump_to_definition_lands_on_declarations_and_object_literal_properties(),
+        a_connected_browser_merges_its_properties_and_calls_stay_unevaluated(),
+        an_empty_buffer_completes_the_externs_and_an_unparseable_one_signals(),
+    ];
+    assert_ac_js2_batch(&cases);
 }

@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{ASYNC_GNU_ELPA_PIN, CachedPackageOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod futures;
 mod processes;
@@ -39,9 +42,9 @@ pub(crate) fn assert_async_signal_parity(form: &str, expected: Expect) {
 }
 
 /// Multi-probe batch for `assert_async_parity` cases (2a).
-pub(crate) fn assert_async_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_async_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         async_oracle(),
         &name,
         "async_parity",

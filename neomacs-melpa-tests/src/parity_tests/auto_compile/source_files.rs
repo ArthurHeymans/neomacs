@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_compile_batch;
+use super::{ParityBatchCase, assert_auto_compile_batch};
 
-#[test]
-fn source_files_public_surface_batch() {
-    assert_auto_compile_batch(&[
-        (
-            "auto_compile_source_file_predicate_recognizes_plain_and_representation_suffixes",
-            r##"(let ((load-file-rep-suffixes
+fn auto_compile_source_file_predicate_recognizes_plain_and_representation_suffixes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_source_file_predicate_recognizes_plain_and_representation_suffixes",
+        r##"(let ((load-file-rep-suffixes
                                 '("" ".gz" ".xz")))
          (mapcar
           (lambda (file)
@@ -21,14 +19,17 @@ fn source_files_public_surface_batch() {
             ".el"
             "LIBRARY.EL"
             "/nested/path/library.el")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("library.el" 7) ("library.el.gz" 7) ("library.el.xz" 7) ("library.elc" nil) ("library.el.gz.backup" nil) (".el" 0) ("LIBRARY.EL" 7) ("/nested/path/library.el" 20))"#
     ]],
-        ),
-        (
-            "auto_compile_source_resolution_prefers_first_existing_representation",
-            r##"(let* ((load-file-rep-suffixes
+    )
+}
+
+fn auto_compile_source_resolution_prefers_first_existing_representation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_source_resolution_prefers_first_existing_representation",
+        r##"(let* ((load-file-rep-suffixes
                                  '("" ".gz"))
                                 (plain
                                  (auto-compile-test-write
@@ -55,12 +56,15 @@ fn source_files_public_surface_batch() {
             (auto-compile--byte-compile-source-file dest t))
           (file-name-nondirectory
            (auto-compile--byte-compile-source-file dest nil))))"##,
-            true,
-            expect![[r#"OK ("library.el" "library.el.gz" nil "library.el")"#]],
-        ),
-        (
-            "auto_compile_tree_member_finds_top_level_and_deep_nested_tails",
-            r##"(let ((tree
+        true,
+        expect![[r#"OK ("library.el" "library.el.gz" nil "library.el")"#]],
+    )
+}
+
+fn auto_compile_tree_member_finds_top_level_and_deep_nested_tails() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_tree_member_finds_top_level_and_deep_nested_tails",
+        r##"(let ((tree
                 '(alpha
                   (beta gamma delta)
                   ((epsilon zeta) eta)
@@ -72,14 +76,17 @@ fn source_files_public_surface_batch() {
           (auto-compile--tree-member 'theta tree)
           (auto-compile--tree-member 'missing tree)
           (auto-compile--tree-member 'alpha 'atom)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((alpha (beta . #1=(gamma delta)) ((epsilon . #2=(zeta)) eta) . #3=(theta)) #1# #2# #3# nil nil)"
     ],
-        ),
-        (
-            "auto_compile_tree_member_delete_mutates_middle_last_and_nested_members_correctly",
-            r##"(let ((middle
+    )
+}
+
+fn auto_compile_tree_member_delete_mutates_middle_last_and_nested_members_correctly() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_tree_member_delete_mutates_middle_last_and_nested_members_correctly",
+        r##"(let ((middle
                 (copy-tree
                  '(alpha beta gamma delta)))
                (last
@@ -101,14 +108,17 @@ fn source_files_public_surface_batch() {
           (auto-compile--tree-member
            'missing nested 'delete)
           nested))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (nil (alpha gamma delta) nil (alpha beta) nil #1=(alpha (beta delta) omega) nil #1#)"
     ],
-        ),
-        (
-            "auto_compile_modify_mode_line_moves_single_control_between_nested_anchors",
-            r##"(let ((original
+    )
+}
+
+fn auto_compile_modify_mode_line_moves_single_control_between_nested_anchors() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_modify_mode_line_moves_single_control_between_nested_anchors",
+        r##"(let ((original
                 (default-value 'mode-line-format)))
          (unwind-protect
              (progn
@@ -136,14 +146,17 @@ fn source_files_public_surface_batch() {
                      (default-value
                       'mode-line-format)))))))
            (set-default 'mode-line-format original)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((alpha (beta gamma mode-line-auto-compile) delta) (alpha mode-line-auto-compile (beta gamma) delta) 1)"
     ],
-        ),
-        (
-            "auto_compile_modify_mode_line_missing_anchor_removes_old_control_and_reports_message",
-            r##"(let ((original
+    )
+}
+
+fn auto_compile_modify_mode_line_missing_anchor_removes_old_control_and_reports_message() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_modify_mode_line_missing_anchor_removes_old_control_and_reports_message",
+        r##"(let ((original
                 (default-value 'mode-line-format)))
          (unwind-protect
              (progn
@@ -156,12 +169,15 @@ fn source_files_public_surface_batch() {
                 (default-value 'mode-line-format)
                 (current-message)))
            (set-default 'mode-line-format original)))"##,
-            true,
-            expect!["OK ((alpha omega) nil)"],
-        ),
-        (
-            "auto_compile_mode_line_reports_missing_destination_and_failed_compile_states",
-            r##"(let* ((source
+        true,
+        expect!["OK ((alpha omega) nil)"],
+    )
+}
+
+fn auto_compile_mode_line_reports_missing_destination_and_failed_compile_states() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_mode_line_reports_missing_destination_and_failed_compile_states",
+        r##"(let* ((source
                  (auto-compile-test-write
                   "mode-line/missing.el"
                   "(provide 'missing)\n"))
@@ -191,14 +207,17 @@ fn source_files_public_surface_batch() {
                        control))
                     (list missing failed)))))
            (kill-buffer buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((":" "No compile warnings\nmouse-1 display compile log") ("-" "Byte-compile destination is writable") ("%%" "Byte-compiled file doesn't exist\nmouse-1 create")) ((":" "No compile warnings\nmouse-1 display compile log") ("-" "Byte-compile destination is writable") ("!" "Failed to byte-compile\nmouse-1 retry")))"#
     ]],
-        ),
-        (
-            "auto_compile_mode_line_distinguishes_outdated_and_up_to_date_bytecode",
-            r##"(let* ((source
+    )
+}
+
+fn auto_compile_mode_line_distinguishes_outdated_and_up_to_date_bytecode() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_mode_line_distinguishes_outdated_and_up_to_date_bytecode",
+        r##"(let* ((source
                  (auto-compile-test-write
                   "mode-line/times.el"
                   "(provide 'times)\n"))
@@ -232,14 +251,17 @@ fn source_files_public_surface_batch() {
                        control))
                     (list outdated current)))))
            (kill-buffer buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("" nil) ("-" "Byte-compile destination is writable") ("*" "Byte-compiled file needs updating\nmouse-1 update")) (("" nil) ("-" "Byte-compile destination is writable") ("-" "Byte-compiled file is up-to-date\nmouse-1 remove")))"#
     ]],
-        ),
-        (
-            "auto_compile_mode_line_warning_counter_carries_practical_display_metadata",
-            r##"(let* ((source
+    )
+}
+
+fn auto_compile_mode_line_warning_counter_carries_practical_display_metadata() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_mode_line_warning_counter_carries_practical_display_metadata",
+        r##"(let* ((source
                  (auto-compile-test-write
                   "mode-line/warnings.el"
                   "(provide 'warnings)\n"))
@@ -266,10 +288,25 @@ fn source_files_public_surface_batch() {
                     0 'local-map counter)
                    [mode-line mouse-1]))))
            (kill-buffer buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("3" "3 compile warnings\nmouse-1 display compile log" error mode-line-highlight auto-compile-display-log)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn source_files_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_compile_source_file_predicate_recognizes_plain_and_representation_suffixes(),
+        auto_compile_source_resolution_prefers_first_existing_representation(),
+        auto_compile_tree_member_finds_top_level_and_deep_nested_tails(),
+        auto_compile_tree_member_delete_mutates_middle_last_and_nested_members_correctly(),
+        auto_compile_modify_mode_line_moves_single_control_between_nested_anchors(),
+        auto_compile_modify_mode_line_missing_anchor_removes_old_control_and_reports_message(),
+        auto_compile_mode_line_reports_missing_destination_and_failed_compile_states(),
+        auto_compile_mode_line_distinguishes_outdated_and_up_to_date_bytecode(),
+        auto_compile_mode_line_warning_counter_carries_practical_display_metadata(),
+    ];
+    assert_auto_compile_batch(&cases);
 }

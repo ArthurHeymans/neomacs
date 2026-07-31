@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_alert_termux_autoload_batch, assert_alert_termux_batch};
+use super::{ParityBatchCase, assert_alert_termux_autoload_batch, assert_alert_termux_batch};
 
-#[test]
-fn registry_alert_termux_batch() {
-    assert_alert_termux_batch(&[
-        (
-            "alert_termux_registry_loads_exact_dependency_and_registers_one_style",
-            r##"(list
+fn alert_termux_registry_loads_exact_dependency_and_registers_one_style() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alert_termux_registry_loads_exact_dependency_and_registers_one_style",
+        r##"(list
          (featurep 'alert)
          (featurep 'alert-termux)
          (list alert-termux-command
@@ -23,12 +21,15 @@ fn registry_alert_termux_batch() {
           (seq-filter
            (lambda (entry) (eq (car entry) 'termux))
            alert-styles)))"##,
-            true,
-            expect![[r#"OK (t t (nil file nil) ((termux "Notify using termux" t)))"#]],
-        ),
-        (
-            "alert_termux_callable_surface_and_dependency_contract_match",
-            r##"(list
+        true,
+        expect![[r#"OK (t t (nil file nil) ((termux "Notify using termux" t)))"#]],
+    )
+}
+
+fn alert_termux_callable_surface_and_dependency_contract_match() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alert_termux_callable_surface_and_dependency_contract_match",
+        r##"(list
          (help-function-arglist 'alert-termux-notify t)
          (commandp 'alert-termux-notify)
          (macrop 'alert-termux-notify)
@@ -40,14 +41,17 @@ fn registry_alert_termux_batch() {
                   (help-function-arglist symbol t)))
           '(alert alert-define-style
             alert-encode-string alert-message-notify)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((info) nil nil nil ((alert t (message &rest --cl-rest--)) (alert-define-style t (name &rest plist)) (alert-encode-string t (str)) (alert-message-notify t (info))))"
     ],
-        ),
-        (
-            "alert_termux_style_can_be_selected_as_alert_default",
-            r##"(let (sent)
+    )
+}
+
+fn alert_termux_style_can_be_selected_as_alert_default() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alert_termux_style_can_be_selected_as_alert_default",
+        r##"(let (sent)
          (let ((alert-default-style 'termux)
                (alert-user-configuration nil)
                (alert-internal-configuration nil)
@@ -74,20 +78,17 @@ fn registry_alert_termux_batch() {
                        :data '(:job 7))
                 sent
                 (length alert-active-alerts))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil ((:message "Build finished") (:title "termux-origin") (:severity high) (:category ci) (:mode text-mode) (:persistent nil) (:data (:job 7))) 1)"#
     ]],
-        ),
-    ]);
+    )
 }
 
-#[test]
-fn registry_alert_termux_autoload_batch() {
-    assert_alert_termux_autoload_batch(&[
-        (
-            "alert_termux_autoload_file_does_not_load_package_or_publish_commands",
-            r##"(list
+fn alert_termux_autoload_file_does_not_load_package_or_publish_commands() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alert_termux_autoload_file_does_not_load_package_or_publish_commands",
+        r##"(list
          (featurep 'alert)
          (featurep 'alert-termux)
          (mapcar
@@ -97,8 +98,25 @@ fn registry_alert_termux_autoload_batch() {
                   (autoloadp (and (fboundp symbol)
                                   (symbol-function symbol)))))
           '(alert-termux-notify alert)))"##,
-            true,
-            expect!["OK (nil nil ((alert-termux-notify nil nil) (alert nil nil)))"],
-        ),
-    ]);
+        true,
+        expect!["OK (nil nil ((alert-termux-notify nil nil) (alert nil nil)))"],
+    )
+}
+
+#[test]
+fn registry_alert_termux_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        alert_termux_registry_loads_exact_dependency_and_registers_one_style(),
+        alert_termux_callable_surface_and_dependency_contract_match(),
+        alert_termux_style_can_be_selected_as_alert_default(),
+    ];
+    assert_alert_termux_batch(&cases);
+}
+
+#[test]
+fn registry_alert_termux_autoload_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        alert_termux_autoload_file_does_not_load_package_or_publish_commands(),
+    ];
+    assert_alert_termux_autoload_batch(&cases);
 }

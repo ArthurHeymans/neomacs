@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_asdf_vm_batch;
+use super::{ParityBatchCase, assert_asdf_vm_batch};
 
-#[test]
-fn plugin_menu_public_surface_batch() {
-    assert_asdf_vm_batch(&[
-        (
-            "asdf_vm_plugin_menu_entries_merge_repository_and_installed_state_with_exact_faces",
-            r##"(cl-letf
+fn asdf_vm_plugin_menu_entries_merge_repository_and_installed_state_with_exact_faces() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_plugin_menu_entries_merge_repository_and_installed_state_with_exact_faces",
+        r##"(cl-letf
                (((symbol-function
                   'asdf-vm-plugin--repository-alist)
                  (lambda ()
@@ -39,14 +37,17 @@ fn plugin_menu_public_surface_batch() {
                      (cadr entry)
                      nil))))
                 (asdf-vm-plugin-menu--list-entries)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("https://example/ruby.git" (("available" asdf-vm-plugin-menu-status-available) ("ruby" asdf-vm-plugin-menu-status-available) ("https://example/ruby.git" asdf-vm-plugin-menu-status-available))) ("https://example/node.git" (("installed" asdf-vm-plugin-menu-status-installed) ("nodejs" asdf-vm-plugin-menu-status-installed) ("https://example/node.git" asdf-vm-plugin-menu-status-installed))) ("https://example/資料.git" (("installed" asdf-vm-plugin-menu-status-installed) ("資料" asdf-vm-plugin-menu-status-installed) ("https://example/資料.git" asdf-vm-plugin-menu-status-installed))))"#
     ]],
-        ),
-        (
-            "asdf_vm_plugin_menu_mode_initializes_columns_padding_sort_refresh_imenu_and_keymap",
-            r##"(with-temp-buffer
+    )
+}
+
+fn asdf_vm_plugin_menu_mode_initializes_columns_padding_sort_refresh_imenu_and_keymap() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_plugin_menu_mode_initializes_columns_padding_sort_refresh_imenu_and_keymap",
+        r##"(with-temp-buffer
                (let ((asdf-vm-plugin-menu-list-padding
                       4)
                      (asdf-vm-plugin-menu-status-column-width
@@ -79,14 +80,17 @@ fn plugin_menu_public_surface_batch() {
                      "r"
                      "w"
                      "x")))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (asdf-vm-plugin-menu-mode "ASDF-VM Plugin Menu" [("Status" 12 asdf-vm-plugin-menu--status-predicate) ("Plugin" 31 asdf-vm-plugin-menu--name-predicate) ("Repository Url" 42 asdf-vm-plugin-menu--url-predicate)] 4 ("Status") asdf-vm-plugin-menu--refresh asdf-vm-plugin-menu--imenu-prev-index-position-function tabulated-list-get-id (("u" asdf-vm-plugin-menu-mark-unmark) ("DEL" asdf-vm-plugin-menu-backup-unmark) ("d" asdf-vm-plugin-menu-mark-delete) ("i" asdf-vm-plugin-menu-mark-install) ("r" revert-buffer) ("w" asdf-vm-plugin-browse-url) ("x" asdf-vm-plugin-menu-execute)))"#
     ]],
-        ),
-        (
-            "asdf_vm_plugin_menu_field_getters_return_selected_entry_columns_or_empty_strings",
-            r##"(with-temp-buffer
+    )
+}
+
+fn asdf_vm_plugin_menu_field_getters_return_selected_entry_columns_or_empty_strings() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_plugin_menu_field_getters_return_selected_entry_columns_or_empty_strings",
+        r##"(with-temp-buffer
                (asdf-vm-plugin-menu-mode)
                (setq
                 tabulated-list-entries
@@ -126,14 +130,17 @@ fn plugin_menu_public_surface_batch() {
                       missing
                       ruby
                       (funcall read-fields))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("ruby-id" "installed" "ruby" "https://example/ruby.git") (nil (nil "" "" "")) ("ruby-id" "installed" "ruby" "https://example/ruby.git") ("node-id" "available" "nodejs" "https://example/node.git"))"#
     ]],
-        ),
-        (
-            "asdf_vm_plugin_menu_mark_commands_enforce_mode_and_only_mark_eligible_statuses",
-            r##"(let ((wrong-mode
+    )
+}
+
+fn asdf_vm_plugin_menu_mark_commands_enforce_mode_and_only_mark_eligible_statuses() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_plugin_menu_mark_commands_enforce_mode_and_only_mark_eligible_statuses",
+        r##"(let ((wrong-mode
                     (with-temp-buffer
                       (asdf-vm-test-error-data
                        (lambda ()
@@ -199,14 +206,17 @@ fn plugin_menu_public_surface_batch() {
                              (line-beginning-position))))
                          '("ruby-id"
                            "node-id"))))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error asdf-vm-incorrect-mode-error (fundamental-mode)) "node-id" nil (("ruby-id" 68) ("node-id" 73)) (("ruby-id" 32) ("node-id" 32)))"#
     ]],
-        ),
-        (
-            "asdf_vm_plugin_browse_url_dispatches_primary_secondary_and_missing_url_error",
-            r##"(let ((browse-url-secondary-browser-function
+    )
+}
+
+fn asdf_vm_plugin_browse_url_dispatches_primary_secondary_and_missing_url_error() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_plugin_browse_url_dispatches_primary_secondary_and_missing_url_error",
+        r##"(let ((browse-url-secondary-browser-function
                     (lambda (url)
                       (list
                        :secondary
@@ -233,14 +243,17 @@ fn plugin_menu_public_surface_batch() {
                      (asdf-vm-plugin-browse-url
                       "")))
                   (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:primary (:secondary "https://example/node") (:error asdf-vm-plugin-menu-missing-url-error ("ruby")) (("https://example/ruby")))"#
     ]],
-        ),
-        (
-            "asdf_vm_plugin_menu_execute_scans_marks_runs_delete_and_install_batches_then_refreshes",
-            r##"(with-temp-buffer
+    )
+}
+
+fn asdf_vm_plugin_menu_execute_scans_marks_runs_delete_and_install_batches_then_refreshes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_plugin_menu_execute_scans_marks_runs_delete_and_install_batches_then_refreshes",
+        r##"(with-temp-buffer
                (setq major-mode
                      'asdf-vm-plugin-menu-mode)
                (insert
@@ -295,14 +308,17 @@ fn plugin_menu_public_surface_batch() {
                    (list
                     (asdf-vm-plugin-menu-execute)
                     (nreverse calls)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:refreshed ((:remove "ruby" t) (:add "資料" "https://example/資料.git" t) (:add "nodejs" "https://example/nodejs.git" t) (:refresh)))"#
     ]],
-        ),
-        (
-            "asdf_vm_plugin_menu_sort_predicates_apply_status_name_and_repository_rules",
-            r##"(let ((available-z
+    )
+}
+
+fn asdf_vm_plugin_menu_sort_predicates_apply_status_name_and_repository_rules() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_plugin_menu_sort_predicates_apply_status_name_and_repository_rules",
+        r##"(let ((available-z
                     '("z"
                       ["available"
                        "zeta"
@@ -333,12 +349,15 @@ fn plugin_menu_public_surface_batch() {
                 (asdf-vm-plugin-menu--url-predicate
                  available-z
                  available-a)))"##,
-            true,
-            expect!["OK (t nil t t nil)"],
-        ),
-        (
-            "asdf_vm_plugin_menu_command_creates_utf8_buffer_refreshes_and_displays_same_window",
-            r##"(let ((asdf-vm-plugin-menu-buffer-name
+        true,
+        expect!["OK (t nil t t nil)"],
+    )
+}
+
+fn asdf_vm_plugin_menu_command_creates_utf8_buffer_refreshes_and_displays_same_window() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_plugin_menu_command_creates_utf8_buffer_refreshes_and_displays_same_window",
+        r##"(let ((asdf-vm-plugin-menu-buffer-name
                     "*fixture-plugin-menu*")
                    calls)
                (cl-letf
@@ -372,10 +391,24 @@ fn plugin_menu_public_surface_batch() {
                       major-mode
                       buffer-file-coding-system
                       (nreverse calls))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("*fixture-plugin-menu*" asdf-vm-plugin-menu-mode utf-8 ((:refresh "*fixture-plugin-menu*" nil) (:display "*fixture-plugin-menu*" nil)))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn plugin_menu_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        asdf_vm_plugin_menu_entries_merge_repository_and_installed_state_with_exact_faces(),
+        asdf_vm_plugin_menu_mode_initializes_columns_padding_sort_refresh_imenu_and_keymap(),
+        asdf_vm_plugin_menu_field_getters_return_selected_entry_columns_or_empty_strings(),
+        asdf_vm_plugin_menu_mark_commands_enforce_mode_and_only_mark_eligible_statuses(),
+        asdf_vm_plugin_browse_url_dispatches_primary_secondary_and_missing_url_error(),
+        asdf_vm_plugin_menu_execute_scans_marks_runs_delete_and_install_batches_then_refreshes(),
+        asdf_vm_plugin_menu_sort_predicates_apply_status_name_and_repository_rules(),
+        asdf_vm_plugin_menu_command_creates_utf8_buffer_refreshes_and_displays_same_window(),
+    ];
+    assert_asdf_vm_batch(&cases);
 }

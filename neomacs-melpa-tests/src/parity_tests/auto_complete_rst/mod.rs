@@ -5,7 +5,10 @@ use crate::{
 };
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod generation;
 mod parsing;
@@ -118,9 +121,9 @@ pub(crate) fn assert_auto_complete_rst_autoload_parity(elisp_form: &str, expecte
 
 
 /// Multi-probe batch for `assert_auto_complete_rst_autoload_parity` cases (2a).
-pub(crate) fn assert_auto_complete_rst_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_auto_complete_rst_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         auto_complete_rst_oracle("auto-complete-rst-autoloads.el"),
         &name,
         "auto_complete_rst_autoload_parity",
@@ -129,9 +132,9 @@ pub(crate) fn assert_auto_complete_rst_autoload_batch(cases: &[(&str, &str, bool
 }
 
 /// Multi-probe batch for `assert_auto_complete_rst_parity` cases (2a).
-pub(crate) fn assert_auto_complete_rst_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_auto_complete_rst_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         auto_complete_rst_oracle("auto-complete-rst.el"),
         &name,
         "auto_complete_rst_parity",

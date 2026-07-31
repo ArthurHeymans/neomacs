@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_ac_sly_batch;
+use super::{ParityBatchCase, assert_ac_sly_batch};
 
 /// The package's headline workflow: connected to a Lisp, the user types a
 /// symbol prefix in a lisp buffer and completes from what the Lisp reports.
@@ -9,12 +9,10 @@ use super::assert_ac_sly_batch;
 /// user typed -- so the second half types an upper-case prefix and gets
 /// upper-case candidates back for the same Lisp answer.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_ac_sly_batch(&[
-        (
-            "ac_sly_completes_a_typed_symbol_in_a_lisp_buffer_from_the_live_connection",
-            r##"(ac-sly-test-session
+fn ac_sly_completes_a_typed_symbol_in_a_lisp_buffer_from_the_live_connection() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ac_sly_completes_a_typed_symbol_in_a_lisp_buffer_from_the_live_connection",
+        r##"(ac-sly-test-session
  (ac-sly-test-connect)
  (ac-sly-test-lisp-buffer "(")
  (ac-set-trigger-key "TAB")
@@ -42,14 +40,17 @@ fn workflows_public_surface_batch() {
                  :upper-case upper
                  :after (ac-sly-test-buffer-state)
                  :rpcs (ac-sly-test-rpcs))))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:installed (:sources #1=(ac-source-sly-simple) :source ((init . ac-sly-init) (candidates . ac-source-sly-simple-candidates) (candidate-face . ac-sly-menu-face) (selection-face . ac-sly-selection-face) (prefix . sly-symbol-start-pos) (symbol . "l") (document . ac-sly-documentation) (match . ac-source-sly-case-correcting-completions)) :connected t :implementation "sbcl") :offered ((:prefix "ca" :prefix-start 1 :common "ca" :menu-live t :selected "car") (("car" "l" nil nil) ("cadr" "l" nil completions-first-difference) ("case" "l" nil completions-first-difference) ("catch" "l" nil completions-first-difference))) :moved (:prefix "ca" :prefix-start 1 :common "ca" :menu-live t :selected "cadr") :completed (:text "(cadr" :point 5 :mode lisp-mode :connected t :auto-complete t :sources #1#) :upper-case ((:prefix "CA" :prefix-start 1 :common "CA" :menu-live t :selected "CAr") (("CAr" "l" nil nil) ("CAdr" "l" nil completions-first-difference) ("CAse" "l" nil completions-first-difference) ("CAtch" "l" nil completions-first-difference))) :after (:text "(CAr" :point 4 :mode lisp-mode :connected t :auto-complete t :sources #1#) :rpcs ((slynk:connection-info) (slynk-completion:simple-completions "ca" 'nil) (slynk-completion:simple-completions "CA" 'nil)))"#
     ]],
-        ),
-        (
-            "ac_sly_fuzzy_source_shows_the_lisps_flags_unless_the_option_is_off",
-            r##"(ac-sly-test-session
+    )
+}
+
+fn ac_sly_fuzzy_source_shows_the_lisps_flags_unless_the_option_is_off() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ac_sly_fuzzy_source_shows_the_lisps_flags_unless_the_option_is_off",
+        r##"(ac-sly-test-session
  (ac-sly-test-connect)
  (ac-sly-test-lisp-buffer "(str")
  (set-up-sly-ac t)
@@ -73,14 +74,17 @@ fn workflows_public_surface_batch() {
              :without-flags without-flags
              :after (ac-sly-test-buffer-state)
              :rpcs (ac-sly-test-rpcs))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:with-flags (:sources #1=(ac-source-sly-fuzzy) :show-flags t :session (:prefix "string" :prefix-start 1 :common "string" :menu-live t :selected "string") :menu (("string" "l" "-f---- 87.50%" nil) ("string=" "l" "-f---- 80.00%" nil) ("stringp" "l" "-f---- 72.50%" nil))) :completed (:text "(string=" :point 8 :mode lisp-mode :connected t :auto-complete t :sources #1#) :without-flags (("string" "l" nil nil) ("string=" "l" nil nil) ("stringp" "l" nil nil)) :after (:text "(string" :point 7 :mode lisp-mode :connected t :auto-complete t :sources #1#) :rpcs ((slynk:connection-info) (slynk-completion:flex-completions "str" 'nil) (slynk-completion:flex-completions "str" 'nil)))"#
     ]],
-        ),
-        (
-            "ac_sly_completes_at_the_sly_repl_prompt_after_set_up_sly_ac",
-            r##"(ac-sly-test-session
+    )
+}
+
+fn ac_sly_completes_at_the_sly_repl_prompt_after_set_up_sly_ac() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ac_sly_completes_at_the_sly_repl_prompt_after_set_up_sly_ac",
+        r##"(ac-sly-test-session
  (setq ac-sly-test-contribs '(sly-mrepl))
  (ac-sly-test-connect)
  (ac-sly-test-repl-buffer)
@@ -101,14 +105,17 @@ fn workflows_public_surface_batch() {
            :offered offered
            :after (ac-sly-test-buffer-state)
            :rpcs (ac-sly-test-rpcs)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:repl (:buffer "*sly-mrepl for sbcl*" :mode sly-mrepl-mode :sources #1=(ac-source-sly-simple) :prompt "CL-USER> ") :offered ((:prefix "ca" :prefix-start 10 :common "ca" :menu-live t :selected "car") (("car" "l" nil nil) ("cadr" "l" nil completions-first-difference) ("case" "l" nil completions-first-difference) ("catch" "l" nil completions-first-difference))) :after (:text "CL-USER> (cadr" :point 14 :mode sly-mrepl-mode :connected t :auto-complete t :sources #1#) :rpcs ((slynk:connection-info) (slynk:slynk-add-load-paths :elided) (slynk:slynk-require '("slynk/mrepl" "slynk/arglists")) (slynk-mrepl:create-mrepl 1) (slynk-completion:simple-completions "ca" 'nil)))"#
     ]],
-        ),
-        (
-            "ac_sly_documentation_asks_the_lisp_for_a_swank_symbol_it_cannot_read",
-            r##"(ac-sly-test-session
+    )
+}
+
+fn ac_sly_documentation_asks_the_lisp_for_a_swank_symbol_it_cannot_read() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ac_sly_documentation_asks_the_lisp_for_a_swank_symbol_it_cannot_read",
+        r##"(ac-sly-test-session
  (ac-sly-test-connect)
  (ac-sly-test-lisp-buffer "(ca")
  (set-up-sly-ac)
@@ -125,14 +132,17 @@ fn workflows_public_surface_batch() {
      (list :documented documented
            :slynk-documentation control
            :rpcs (ac-sly-test-rpcs)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:documented (:candidate "car" :document ac-sly-documentation :quick-help (error "Synchronous Lisp Evaluation aborted")) :slynk-documentation "Return the car of LIST.  Signals TYPE-ERROR otherwise." :rpcs ((slynk:connection-info) (slynk-completion:simple-completions "ca" 'nil) (swank:documentation-symbol "car") (slynk:documentation-symbol "car")))"#
     ]],
-        ),
-        (
-            "ac_sly_offers_nothing_until_a_lisp_connection_exists",
-            r##"(ac-sly-test-session
+    )
+}
+
+fn ac_sly_offers_nothing_until_a_lisp_connection_exists() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ac_sly_offers_nothing_until_a_lisp_connection_exists",
+        r##"(ac-sly-test-session
  (ac-sly-test-lisp-buffer "(ca")
  (set-up-sly-ac)
  (auto-complete-mode 1)
@@ -154,10 +164,21 @@ fn workflows_public_surface_batch() {
            :connected connected
            :after (ac-sly-test-buffer-state)
            :rpcs (ac-sly-test-rpcs)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:disconnected (:connected nil :sources #1=(ac-source-sly-simple) :started t :menu nil :state (:text "(ca" :point 3 :mode lisp-mode :connected nil :auto-complete t :sources #1#) :rpcs nil) :connected ((:prefix "ca" :prefix-start 1 :common "ca" :menu-live t :selected "car") (("car" "l" nil nil) ("cadr" "l" nil completions-first-difference) ("case" "l" nil completions-first-difference) ("catch" "l" nil completions-first-difference))) :after (:text "(car" :point 4 :mode lisp-mode :connected t :auto-complete t :sources #1#) :rpcs ((slynk:connection-info) (slynk-completion:simple-completions "ca" 'nil)))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        ac_sly_completes_a_typed_symbol_in_a_lisp_buffer_from_the_live_connection(),
+        ac_sly_fuzzy_source_shows_the_lisps_flags_unless_the_option_is_off(),
+        ac_sly_completes_at_the_sly_repl_prompt_after_set_up_sly_ac(),
+        ac_sly_documentation_asks_the_lisp_for_a_swank_symbol_it_cannot_read(),
+        ac_sly_offers_nothing_until_a_lisp_connection_exists(),
+    ];
+    assert_ac_sly_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_two_bit_batch};
+use super::{ParityBatchCase, assert_two_bit_batch};
 
-#[test]
-fn binary_public_surface_batch() {
-    assert_two_bit_batch(&[
-        (
-            "two_bit_public_constants_and_struct_defaults_match_the_pinned_release",
-            r##"(let ((data (make-2bit-data))
+fn two_bit_public_constants_and_struct_defaults_match_the_pinned_release() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_public_constants_and_struct_defaults_match_the_pinned_release",
+        r##"(let ((data (make-2bit-data))
                      (blocks
                       (make-2bit-block-collection))
                      (sequence
@@ -48,14 +46,17 @@ fn binary_public_surface_batch() {
                   sequence)
                  (2bit-sequence-dna-offset
                   sequence))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (440477507 ["T" "C" "A" "G"] t (nil nil nil nil nil nil nil nil) t (nil nil nil) t (nil nil nil nil nil nil))"#
     ]],
-        ),
-        (
-            "two_bit_relevant_blocks_observe_intersections_and_boundary_quirks",
-            r##"(let ((blocks
+    )
+}
+
+fn two_bit_relevant_blocks_observe_intersections_and_boundary_quirks() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_relevant_blocks_observe_intersections_and_boundary_quirks",
+        r##"(let ((blocks
                     (make-2bit-block-collection
                      :count 5
                      :starts '(0 4 8 10 20)
@@ -69,12 +70,15 @@ fn binary_public_surface_batch() {
                  10 10 blocks)
                 (2bit--relevant-blocks
                  0 100 nil)))"##,
-            true,
-            expect!["OK (((4 . 8) (8 . 10) (10 . 15)) ((4 . 8)) ((10 . 15)) nil)"],
-        ),
-        (
-            "two_bit_cursor_read_and_skip_preserve_binary_bytes_and_exact_position",
-            r##"(let* ((file
+        true,
+        expect!["OK (((4 . 8) (8 . 10) (10 . 15)) ((4 . 8)) ((10 . 15)) nil)"],
+    )
+}
+
+fn two_bit_cursor_read_and_skip_preserve_binary_bytes_and_exact_position() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_cursor_read_and_skip_preserve_binary_bytes_and_exact_position",
+        r##"(let* ((file
                       (expand-file-name
                        "cursor.bin"
                        (getenv "TMPDIR")))
@@ -108,12 +112,15 @@ fn binary_public_surface_batch() {
                       (2bit-data-pos source)))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-            true,
-            expect!["OK ((0 127 128 255) 4 1 3 3 (255 65 66) 6)"],
-        ),
-        (
-            "two_bit_word_helpers_decode_little_and_big_endian_values",
-            r##"(let ((little
+        true,
+        expect!["OK ((0 127 128 255) 4 1 3 3 (255 65 66) 6)"],
+    )
+}
+
+fn two_bit_word_helpers_decode_little_and_big_endian_values() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_word_helpers_decode_little_and_big_endian_values",
+        r##"(let ((little
                     (make-2bit-data
                      :other-endian-p nil))
                    (big
@@ -136,12 +143,15 @@ fn binary_public_surface_batch() {
                  big
                  (unibyte-string
                   18 52 86 120))))"##,
-            true,
-            expect!["OK (2018915346 305419896 305419896 2018915346 305419896)"],
-        ),
-        (
-            "two_bit_read_word_and_words_advance_once_over_contiguous_data",
-            r##"(let* ((file
+        true,
+        expect!["OK (2018915346 305419896 305419896 2018915346 305419896)"],
+    )
+}
+
+fn two_bit_read_word_and_words_advance_once_over_contiguous_data() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_read_word_and_words_advance_once_over_contiguous_data",
+        r##"(let* ((file
                       (expand-file-name
                        "words.bin"
                        (getenv "TMPDIR")))
@@ -178,12 +188,15 @@ fn binary_public_surface_batch() {
                       (2bit-data-pos source)))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-            true,
-            expect!["OK (1 4 (305419896 4294967295) 12 nil 12)"],
-        ),
-        (
-            "two_bit_index_reader_decodes_names_offsets_and_uses_worst_case_read_size",
-            r##"(let* ((file
+        true,
+        expect!["OK (1 4 (305419896 4294967295) 12 nil 12)"],
+    )
+}
+
+fn two_bit_index_reader_decodes_names_offsets_and_uses_worst_case_read_size() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_index_reader_decodes_names_offsets_and_uses_worst_case_read_size",
+        r##"(let* ((file
                       (expand-file-name
                        "index.bin"
                        (getenv "TMPDIR")))
@@ -225,12 +238,15 @@ fn binary_public_surface_batch() {
                          source))))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-            true,
-            expect!["OK (17 4096 absent 2 520)"],
-        ),
-        (
-            "two_bit_block_collection_load_and_skip_consume_exact_word_counts",
-            r##"(let* ((file
+        true,
+        expect!["OK (17 4096 absent 2 520)"],
+    )
+}
+
+fn two_bit_block_collection_load_and_skip_consume_exact_word_counts() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_block_collection_load_and_skip_consume_exact_word_counts",
+        r##"(let* ((file
                       (expand-file-name
                        "blocks.bin"
                        (getenv "TMPDIR")))
@@ -276,12 +292,15 @@ fn binary_public_surface_batch() {
                          source))))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-            true,
-            expect!["OK (2 (3 9) (4 5) 32 99 36)"],
-        ),
-        (
-            "two_bit_open_decodes_little_and_big_endian_headers_and_public_metadata",
-            r##"(let ((little
+        true,
+        expect!["OK (2 (3 9) (4 5) 32 99 36)"],
+    )
+}
+
+fn two_bit_open_decodes_little_and_big_endian_headers_and_public_metadata() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_open_decodes_little_and_big_endian_headers_and_public_metadata",
+        r##"(let ((little
                     (expand-file-name
                      "little.2bit"
                      (getenv "TMPDIR")))
@@ -337,14 +356,17 @@ fn binary_public_surface_batch() {
                  (dolist (file (list little big))
                    (when (file-exists-p file)
                      (delete-file file)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((440477507 nil 0 2 nil 2 ("alpha" "beta")) (1126646042 t 0 2 t 2 ("alpha" "beta")))"#
     ]],
-        ),
-        (
-            "two_bit_maybe_open_preserves_handles_and_opens_path_values",
-            r##"(let ((file
+    )
+}
+
+fn two_bit_maybe_open_preserves_handles_and_opens_path_values() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_maybe_open_preserves_handles_and_opens_path_values",
+        r##"(let ((file
                     (expand-file-name
                      "maybe.2bit"
                      (getenv "TMPDIR"))))
@@ -370,21 +392,27 @@ fn binary_public_surface_batch() {
                          fresh))))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-            true,
-            expect![[r#"OK (t nil t "[ORACLE-TMPDIR]/maybe.2bit" 2)"#]],
-        ),
-        (
-            "two_bit_open_rejects_a_missing_file_with_exact_signal_data",
-            r##"(2bit-open
+        true,
+        expect![[r#"OK (t nil t "[ORACLE-TMPDIR]/maybe.2bit" 2)"#]],
+    )
+}
+
+fn two_bit_open_rejects_a_missing_file_with_exact_signal_data() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_open_rejects_a_missing_file_with_exact_signal_data",
+        r##"(2bit-open
               (expand-file-name
                "missing.2bit"
                (getenv "TMPDIR")))"##,
-            false,
-            expect![[r#"ERR (error "[ORACLE-TMPDIR]/missing.2bit does not exist")"#]],
-        ),
-        (
-            "two_bit_open_rejects_an_invalid_signature_with_exact_decoded_value",
-            r##"(let ((file
+        false,
+        expect![[r#"ERR (error "[ORACLE-TMPDIR]/missing.2bit does not exist")"#]],
+    )
+}
+
+fn two_bit_open_rejects_an_invalid_signature_with_exact_decoded_value() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_open_rejects_an_invalid_signature_with_exact_decoded_value",
+        r##"(let ((file
                     (expand-file-name
                      "bad-signature.2bit"
                      (getenv "TMPDIR"))))
@@ -395,12 +423,15 @@ fn binary_public_surface_batch() {
                      (2bit-open file))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-            false,
-            expect![[r#"ERR (error "Invalid 2bit signature: 305419896")"#]],
-        ),
-        (
-            "two_bit_open_rejects_a_nonzero_version_with_exact_signal_data",
-            r##"(let ((file
+        false,
+        expect![[r#"ERR (error "Invalid 2bit signature: 305419896")"#]],
+    )
+}
+
+fn two_bit_open_rejects_a_nonzero_version_with_exact_signal_data() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_open_rejects_a_nonzero_version_with_exact_signal_data",
+        r##"(let ((file
                     (expand-file-name
                      "bad-version.2bit"
                      (getenv "TMPDIR"))))
@@ -411,8 +442,26 @@ fn binary_public_surface_batch() {
                      (2bit-open file))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-            false,
-            expect![[r#"ERR (error "7 is not a valid 2bit file version number")"#]],
-        ),
-    ]);
+        false,
+        expect![[r#"ERR (error "7 is not a valid 2bit file version number")"#]],
+    )
+}
+
+#[test]
+fn binary_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        two_bit_public_constants_and_struct_defaults_match_the_pinned_release(),
+        two_bit_relevant_blocks_observe_intersections_and_boundary_quirks(),
+        two_bit_cursor_read_and_skip_preserve_binary_bytes_and_exact_position(),
+        two_bit_word_helpers_decode_little_and_big_endian_values(),
+        two_bit_read_word_and_words_advance_once_over_contiguous_data(),
+        two_bit_index_reader_decodes_names_offsets_and_uses_worst_case_read_size(),
+        two_bit_block_collection_load_and_skip_consume_exact_word_counts(),
+        two_bit_open_decodes_little_and_big_endian_headers_and_public_metadata(),
+        two_bit_maybe_open_preserves_handles_and_opens_path_values(),
+        two_bit_open_rejects_a_missing_file_with_exact_signal_data(),
+        two_bit_open_rejects_an_invalid_signature_with_exact_decoded_value(),
+        two_bit_open_rejects_a_nonzero_version_with_exact_signal_data(),
+    ];
+    assert_two_bit_batch(&cases);
 }

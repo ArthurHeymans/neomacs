@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_aiken_mode_batch;
+use super::{ParityBatchCase, assert_aiken_mode_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_aiken_mode_batch(&[
-        (
-            "real_git_project_keeps_aiken_buffers_project_scoped_and_auto_selected",
-            r##"
+fn real_git_project_keeps_aiken_buffers_project_scoped_and_auto_selected() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "real_git_project_keeps_aiken_buffers_project_scoped_and_auto_selected",
+        r##"
 (let* ((root (make-temp-file "aiken-project-" t))
        (default-directory (file-name-as-directory root))
        (source (expand-file-name "validators/payment.ak" root))
@@ -48,14 +46,17 @@ fn workflows_public_surface_batch() {
     (when (buffer-live-p library-buffer) (kill-buffer library-buffer))
     (delete-directory root t)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((aiken-mode "validators/payment.ak" t) (aiken-mode "lib/helpers.ak" t) t)"#
     ]],
-        ),
-        (
-            "compile_workflow_routes_aiken_check_from_project_without_starting_tool",
-            r##"
+    )
+}
+
+fn compile_workflow_routes_aiken_check_from_project_without_starting_tool() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "compile_workflow_routes_aiken_check_from_project_without_starting_tool",
+        r##"
 (progn
   (setq aiken-mode-test-compile-event nil)
   (unwind-protect
@@ -92,14 +93,17 @@ fn workflows_public_surface_batch() {
           (delete-directory root t)))
     (makunbound 'aiken-mode-test-compile-event)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (fake-compilation-buffer ("aiken check" nil nil nil t aiken-mode) "aiken check")"#
     ]],
-        ),
-        (
-            "user_formatter_hook_can_replace_buffer_through_mocked_aiken_cli_boundary",
-            r##"
+    )
+}
+
+fn user_formatter_hook_can_replace_buffer_through_mocked_aiken_cli_boundary() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "user_formatter_hook_can_replace_buffer_through_mocked_aiken_cli_boundary",
+        r##"
 (progn
   (setq aiken-mode-test-format-event nil)
   (defvar aiken-mode-test-call-process nil)
@@ -141,14 +145,17 @@ fn workflows_public_surface_batch() {
     (fmakunbound 'aiken-mode-test-format-buffer)
     (makunbound 'aiken-mode-test-format-event)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("fn add(x:Int,y:Int){x+y}\n" "aiken" t t nil ("fmt" "-")) "fn add(x: Int, y: Int) { x + y }\n" 8 aiken-mode t)"#
     ]],
-        ),
-        (
-            "project_save_hook_formats_only_aiken_buffers_and_preserves_plain_files",
-            r##"
+    )
+}
+
+fn project_save_hook_formats_only_aiken_buffers_and_preserves_plain_files() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "project_save_hook_formats_only_aiken_buffers_and_preserves_plain_files",
+        r##"
 (progn
   (setq aiken-mode-test-hook-events nil)
   (fset
@@ -186,14 +193,17 @@ fn workflows_public_surface_batch() {
     (fmakunbound 'aiken-mode-test-format-on-save)
     (makunbound 'aiken-mode-test-hook-events)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("validator.ak" aiken-mode)) "fn valid(x: Int) { True }\n" "x:Int is documentation\n")"#
     ]],
-        ),
-        (
-            "compilation_error_text_retains_aiken_file_line_column_navigation_metadata",
-            r##"
+    )
+}
+
+fn compilation_error_text_retains_aiken_file_line_column_navigation_metadata() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "compilation_error_text_retains_aiken_file_line_column_navigation_metadata",
+        r##"
 (let* ((root (make-temp-file "aiken-errors-" t))
        (source (expand-file-name "validators/payment.ak" root)))
   (unwind-protect
@@ -231,14 +241,17 @@ fn workflows_public_surface_batch() {
               'face)))))
     (delete-directory root t)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("Checking acme/payment\nvalidators/payment.ak:3:5: error: expected Bool\n" t "validators/payment.ak" 3 5 font-lock-function-name-face)"#
     ]],
-        ),
-        (
-            "mode_can_run_deterministic_process_filter_workflow_for_aiken_output",
-            r##"
+    )
+}
+
+fn mode_can_run_deterministic_process_filter_workflow_for_aiken_output() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "mode_can_run_deterministic_process_filter_workflow_for_aiken_output",
+        r##"
 (progn
   (setq aiken-mode-test-process-events nil)
   (unwind-protect
@@ -267,10 +280,22 @@ fn workflows_public_surface_batch() {
                   major-mode (buffer-string)))))
     (makunbound 'aiken-mode-test-process-events)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (fake-aiken-process ("aiken-check" ("aiken" "check") t t t) aiken-mode "")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        real_git_project_keeps_aiken_buffers_project_scoped_and_auto_selected(),
+        compile_workflow_routes_aiken_check_from_project_without_starting_tool(),
+        user_formatter_hook_can_replace_buffer_through_mocked_aiken_cli_boundary(),
+        project_save_hook_formats_only_aiken_buffers_and_preserves_plain_files(),
+        compilation_error_text_retains_aiken_file_line_column_navigation_metadata(),
+        mode_can_run_deterministic_process_filter_workflow_for_aiken_output(),
+    ];
+    assert_aiken_mode_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_two_bit_batch;
+use super::{ParityBatchCase, assert_two_bit_batch};
 
-#[test]
-fn commands_public_surface_batch() {
-    assert_two_bit_batch(&[
-        (
-            "two_bit_location_prompt_parses_dash_and_dot_ranges_without_numeric_prompts",
-            r##"(let ((selections
+fn two_bit_location_prompt_parses_dash_and_dot_ranges_without_numeric_prompts() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_location_prompt_parses_dash_and_dot_ranges_without_numeric_prompts",
+        r##"(let ((selections
                     '("alpha:2-9"
                       "beta:1..7"))
                    events)
@@ -49,14 +47,17 @@ fn commands_public_surface_batch() {
                   (2bit--location-prompt)
                   (2bit--location-prompt)
                   (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("genome.2bit" "alpha" 2 9) ("genome.2bit" "beta" 1 7) ((file "2bit file: ") (names "genome.2bit") (complete "Sequence: " ("alpha" "beta")) (file "2bit file: ") (names "genome.2bit") (complete "Sequence: " ("alpha" "beta"))))"#
     ]],
-        ),
-        (
-            "two_bit_location_prompt_reads_start_and_defaults_end_to_sequence_size",
-            r##"(let ((numbers '(3 8))
+    )
+}
+
+fn two_bit_location_prompt_reads_start_and_defaults_end_to_sequence_size() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_location_prompt_reads_start_and_defaults_end_to_sequence_size",
+        r##"(let ((numbers '(3 8))
                    events)
                (cl-letf
                    (((symbol-function
@@ -90,14 +91,17 @@ fn commands_public_surface_batch() {
                  (list
                   (2bit--location-prompt)
                   (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("genome.2bit" "alpha" 3 8) ((number "alpha; Start: " 0) (sequence "genome.2bit" "alpha") (number "alpha; Start: 3; End: " 12)))"#
     ]],
-        ),
-        (
-            "two_bit_location_prompt_restores_the_callers_match_data",
-            r##"(progn
+    )
+}
+
+fn two_bit_location_prompt_restores_the_callers_match_data() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_location_prompt_restores_the_callers_match_data",
+        r##"(progn
                (string-match
                 "\\(outer\\)" "outer")
                (let ((before
@@ -117,12 +121,15 @@ fn commands_public_surface_batch() {
                     (2bit--location-prompt)
                     before
                     (match-data t)))))"##,
-            true,
-            expect![[r#"OK (("genome.2bit" "alpha" 2 9) (0 5 0 5) (0 5 0 5))"#]],
-        ),
-        (
-            "two_bit_insert_bases_inserts_at_point_and_forwards_prefix_masking",
-            r##"(let ((file
+        true,
+        expect![[r#"OK (("genome.2bit" "alpha" 2 9) (0 5 0 5) (0 5 0 5))"#]],
+    )
+}
+
+fn two_bit_insert_bases_inserts_at_point_and_forwards_prefix_masking() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_insert_bases_inserts_at_point_and_forwards_prefix_masking",
+        r##"(let ((file
                     (expand-file-name
                      "insert.2bit"
                      (getenv "TMPDIR"))))
@@ -143,12 +150,15 @@ fn commands_public_surface_batch() {
                           (point)))))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-            true,
-            expect![[r#"OK (nil "before|TCNNNCagtcAGafter" 20)"#]],
-        ),
-        (
-            "two_bit_insert_fasta_formats_header_and_short_sequence",
-            r##"(let ((file
+        true,
+        expect![[r#"OK (nil "before|TCNNNCagtcAGafter" 20)"#]],
+    )
+}
+
+fn two_bit_insert_fasta_formats_header_and_short_sequence() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_insert_fasta_formats_header_and_short_sequence",
+        r##"(let ((file
                     (expand-file-name
                      "sample.genome.2bit"
                      (getenv "TMPDIR"))))
@@ -164,12 +174,15 @@ fn commands_public_surface_batch() {
                         (point))))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-            true,
-            expect![[r#"OK (nil "> sample.genome; beta:0-8\nGGGGAAAA\n" 36)"#]],
-        ),
-        (
-            "two_bit_insert_fasta_wraps_every_complete_eighty_character_chunk",
-            r##"(cl-letf
+        true,
+        expect![[r#"OK (nil "> sample.genome; beta:0-8\nGGGGAAAA\n" 36)"#]],
+    )
+}
+
+fn two_bit_insert_fasta_wraps_every_complete_eighty_character_chunk() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_insert_fasta_wraps_every_complete_eighty_character_chunk",
+        r##"(cl-letf
               (((symbol-function '2bit-open)
                 (lambda (&rest _)
                   'data))
@@ -192,14 +205,17 @@ fn commands_public_surface_batch() {
                   "ignored.2bit"
                   "chr1" 10 172)
                  (buffer-string))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil "> fixture; chr1:10-172\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\nGG\n")"#
     ]],
-        ),
-        (
-            "two_bit_insert_commands_publish_the_exact_interactive_argument_contract",
-            r##"(list
+    )
+}
+
+fn two_bit_insert_commands_publish_the_exact_interactive_argument_contract() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_bit_insert_commands_publish_the_exact_interactive_argument_contract",
+        r##"(list
               (interactive-form
                '2bit-insert-bases)
               (interactive-form
@@ -211,10 +227,23 @@ fn commands_public_surface_batch() {
                '2bit-insert-bases)
               (commandp
                '2bit-insert-fasta))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((interactive (2bit--location-prompt)) (interactive (2bit--location-prompt)) nil t t)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn commands_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        two_bit_location_prompt_parses_dash_and_dot_ranges_without_numeric_prompts(),
+        two_bit_location_prompt_reads_start_and_defaults_end_to_sequence_size(),
+        two_bit_location_prompt_restores_the_callers_match_data(),
+        two_bit_insert_bases_inserts_at_point_and_forwards_prefix_masking(),
+        two_bit_insert_fasta_formats_header_and_short_sequence(),
+        two_bit_insert_fasta_wraps_every_complete_eighty_character_chunk(),
+        two_bit_insert_commands_publish_the_exact_interactive_argument_contract(),
+    ];
+    assert_two_bit_batch(&cases);
 }

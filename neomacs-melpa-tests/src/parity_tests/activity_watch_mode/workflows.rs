@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_activity_watch_mode_batch;
+use super::{ParityBatchCase, assert_activity_watch_mode_batch};
 
 /// The watcher's lifecycle, including the guard the package puts on it.  In a
 /// plain batch session `activity-watch-mode' refuses to switch on at all.  In
@@ -11,12 +11,10 @@ use super::assert_activity_watch_mode_batch;
 /// same way: done from batch the flag flips but the hooks and the timer stay,
 /// and only the interactive route removes them.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_activity_watch_mode_batch(&[
-        (
-            "enabling_the_mode_installs_the_watch_hooks_and_timers",
-            r##"(progn
+fn enabling_the_mode_installs_the_watch_hooks_and_timers() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "enabling_the_mode_installs_the_watch_hooks_and_timers",
+        r##"(progn
   (aw-test-setup-server)
   (let ((buffer (aw-test-open "work/main.el" "(defun demo () 42)\n")))
     (unwind-protect
@@ -67,14 +65,17 @@ fn workflows_public_surface_batch() {
                               activity-watch-idle-timer)
                         (assq 'activity-watch-mode minor-mode-alist)))))))
       (kill-buffer buffer))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil nil nil nil) (t nil nil) (t (t t t) t (activity-watch--save 2) (activity-watch--stop-timer (0 30 0 0) t) t t) (nil t t) (nil (nil nil nil) nil nil nil) (activity-watch-mode " activity-watch"))"#
     ]],
-        ),
-        (
-            "saving_a_watched_file_creates_the_bucket_and_posts_one_heartbeat",
-            r##"(progn
+    )
+}
+
+fn saving_a_watched_file_creates_the_bucket_and_posts_one_heartbeat() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "saving_a_watched_file_creates_the_bucket_and_posts_one_heartbeat",
+        r##"(progn
   (aw-test-setup-server)
   (aw-test-park-sampler)
   (let ((buffer (aw-test-open "work/main.el" "(defun demo () 42)\n"))
@@ -95,14 +96,17 @@ fn workflows_public_surface_batch() {
                   (buffer-modified-p))))
       (activity-watch-turn-off)
       (kill-buffer buffer))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("POST" "http://localhost:5600/api/0/buckets/aw-watcher-emacs_<HOST>" ("\"Content-Type: application/json\"") "{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}") ("POST" "http://localhost:5600/api/0/buckets/aw-watcher-emacs_<HOST>/heartbeat?pulsetime=30" ("\"Content-Type: application/json\"") "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}")) t t t t nil)"#
     ]],
-        ),
-        (
-            "heartbeats_are_skipped_for_rate_limits_and_buffers_without_a_file",
-            r##"(progn
+    )
+}
+
+fn heartbeats_are_skipped_for_rate_limits_and_buffers_without_a_file() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "heartbeats_are_skipped_for_rate_limits_and_buffers_without_a_file",
+        r##"(progn
   (aw-test-setup-server)
   (aw-test-park-sampler)
   (let ((tracked (aw-test-open "work/main.el" "(defun demo () 42)\n"))
@@ -157,14 +161,17 @@ fn workflows_public_surface_batch() {
       (dolist (buffer (list tracked scratch autosaved))
         (with-current-buffer buffer (set-buffer-modified-p nil))
         (kill-buffer buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (2 2 (nil 2) (nil 0 3) 5 7 ("http://localhost:5600/api/0/buckets/aw-watcher-emacs_<HOST>" "http://localhost:5600/api/0/buckets/aw-watcher-emacs_<HOST>/heartbeat?pulsetime=30"))"#
     ]],
-        ),
-        (
-            "the_heartbeat_names_the_project_the_configured_resolver_finds",
-            r##"(progn
+    )
+}
+
+fn the_heartbeat_names_the_project_the_configured_resolver_finds() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_heartbeat_names_the_project_the_configured_resolver_finds",
+        r##"(progn
   (aw-test-setup-server)
   (aw-test-park-sampler)
   (make-directory (aw-test-path "repo/.git") t)
@@ -203,14 +210,17 @@ fn workflows_public_surface_batch() {
       (activity-watch-turn-off)
       (with-current-buffer buffer (set-buffer-modified-p nil))
       (kill-buffer buffer))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((projectile project magit-dir-force magit-origin) "unknown" ("{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}" "{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}")) ("src" ("{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"src\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"src\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}")) ("repo" ("{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"repo\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"repo\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}")))"#
     ]],
-        ),
-        (
-            "a_failing_server_turns_the_watcher_off",
-            r##"(progn
+    )
+}
+
+fn a_failing_server_turns_the_watcher_off() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "a_failing_server_turns_the_watcher_off",
+        r##"(progn
   (aw-test-setup-server "500")
   (aw-test-park-sampler)
   (let ((buffer (aw-test-open "work/main.el" "(defun demo () 42)\n"))
@@ -242,12 +252,15 @@ fn workflows_public_surface_batch() {
       (activity-watch-turn-off)
       (with-current-buffer buffer (set-buffer-modified-p nil))
       (kill-buffer buffer))))"##,
-            true,
-            expect![[r#"OK ((2 nil nil nil nil nil (t t)) no-request)"#]],
-        ),
-        (
-            "an_active_org_clock_adds_its_ticket_property_to_the_heartbeat",
-            r##"(progn
+        true,
+        expect![[r#"OK ((2 nil nil nil nil nil (t t)) no-request)"#]],
+    )
+}
+
+fn an_active_org_clock_adds_its_ticket_property_to_the_heartbeat() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "an_active_org_clock_adds_its_ticket_property_to_the_heartbeat",
+        r##"(progn
   (aw-test-setup-server)
   (aw-test-park-sampler)
   (require 'org)
@@ -287,10 +300,22 @@ fn workflows_public_surface_batch() {
       (dolist (buffer (list tasks code))
         (with-current-buffer buffer (set-buffer-modified-p nil))
         (kill-buffer buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("TICKET_ID" nil ("{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}" "{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"ticket_id\":\"OPS-4711\",\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"ticket_id\":\"OPS-4711\",\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}") ("{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}"))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        enabling_the_mode_installs_the_watch_hooks_and_timers(),
+        saving_a_watched_file_creates_the_bucket_and_posts_one_heartbeat(),
+        heartbeats_are_skipped_for_rate_limits_and_buffers_without_a_file(),
+        the_heartbeat_names_the_project_the_configured_resolver_finds(),
+        a_failing_server_turns_the_watcher_off(),
+        an_active_org_clock_adds_its_ticket_property_to_the_heartbeat(),
+    ];
+    assert_activity_watch_mode_batch(&cases);
 }

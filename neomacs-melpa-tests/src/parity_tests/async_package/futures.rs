@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_async_batch};
+use super::{ParityBatchCase, assert_async_batch};
 
-#[test]
-fn futures_public_surface_batch() {
-    assert_async_batch(&[
-        (
-            "async_start_future_returns_structured_unicode_and_transitions_to_ready",
-            r##"(let* ((future
+fn async_start_future_returns_structured_unicode_and_transitions_to_ready() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_start_future_returns_structured_unicode_and_transitions_to_ready",
+        r##"(let* ((future
                       (async-start
                        (lambda ()
                          (sleep-for 0.1)
@@ -25,23 +23,29 @@ fn futures_public_surface_batch() {
                 (async-ready future)
                 (buffer-live-p
                  (process-buffer future))))"##,
-            true,
-            expect![[r#"OK (nil ("λ雪" [1 two 3] (:nested ((left . right)))) t nil)"#]],
-        ),
-        (
-            "async_start_future_resignals_the_exact_child_error",
-            r##"(async-get
+        true,
+        expect![[r#"OK (nil ("λ雪" [1 two 3] (:nested ((left . right)))) t nil)"#]],
+    )
+}
+
+fn async_start_future_resignals_the_exact_child_error() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_start_future_resignals_the_exact_child_error",
+        r##"(async-get
                (async-start
                 (lambda ()
                   (signal
                    'wrong-type-argument
                    '(integerp child-value)))))"##,
-            false,
-            expect![[r#"ERR (wrong-type-argument integerp child-value)"#]],
-        ),
-        (
-            "async_start_callback_receives_messages_before_the_final_result",
-            r##"(let (events)
+        false,
+        expect![[r#"ERR (wrong-type-argument integerp child-value)"#]],
+    )
+}
+
+fn async_start_callback_receives_messages_before_the_final_result() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_start_callback_receives_messages_before_the_final_result",
+        r##"(let (events)
                (let ((future
                       (async-start
                        (lambda ()
@@ -60,14 +64,17 @@ fn futures_public_surface_batch() {
                   (async-get future)
                   (buffer-live-p
                    (process-buffer future)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((:phase first :payload "����" :async-message t) (:phase second :payload (1 2 3) :async-message t) finished) nil nil)"#
     ]],
-        ),
-        (
-            "async_send_and_receive_transport_a_parent_message_into_the_child",
-            r##"(let (received)
+    )
+}
+
+fn async_send_and_receive_transport_a_parent_message_into_the_child() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_send_and_receive_transport_a_parent_message_into_the_child",
+        r##"(let (received)
                (let ((future
                       (async-start
                        (lambda ()
@@ -93,12 +100,15 @@ fn futures_public_surface_batch() {
                   received
                   (async-get future)
                   (async-ready future))))"##,
-            true,
-            expect![[r#"OK ((sum 17 t) nil t)"#]],
-        ),
-        (
-            "async_start_callback_reassembles_a_message_larger_than_a_process_chunk",
-            r##"(let (events)
+        true,
+        expect![[r#"OK ((sum 17 t) nil t)"#]],
+    )
+}
+
+fn async_start_callback_reassembles_a_message_larger_than_a_process_chunk() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_start_callback_reassembles_a_message_larger_than_a_process_chunk",
+        r##"(let (events)
                (let ((future
                       (async-start
                        (lambda ()
@@ -128,12 +138,15 @@ fn futures_public_surface_batch() {
                           events)))))
                  (async-wait future)
                  (nreverse events)))"##,
-            true,
-            expect![[r#"OK ((message 65536 "xxx" "xxx") finished)"#]],
-        ),
-        (
-            "async_inject_variables_recreates_the_selected_parent_environment_in_child",
-            r##"(progn
+        true,
+        expect![[r#"OK ((message 65536 "xxx" "xxx") finished)"#]],
+    )
+}
+
+fn async_inject_variables_recreates_the_selected_parent_environment_in_child() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_inject_variables_recreates_the_selected_parent_environment_in_child",
+        r##"(progn
                (defvar
                  neomacs-async-child-string nil)
                (defvar
@@ -158,12 +171,15 @@ fn futures_public_surface_batch() {
                         0
                         neomacs-async-child-string)
                        neomacs-async-child-list))))))"##,
-            true,
-            expect![[r#"OK ("from-parent" nil (one (two . three)))"#]],
-        ),
-        (
-            "async_callback_future_yields_nil_to_async_get_after_delivery",
-            r##"(let (received)
+        true,
+        expect![[r#"OK ("from-parent" nil (one (two . three)))"#]],
+    )
+}
+
+fn async_callback_future_yields_nil_to_async_get_after_delivery() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_callback_future_yields_nil_to_async_get_after_delivery",
+        r##"(let (received)
                (let ((future
                       (async-start
                        (lambda () 42)
@@ -174,12 +190,15 @@ fn futures_public_surface_batch() {
                   received
                   (async-get future)
                   (async-ready future))))"##,
-            true,
-            expect![[r#"OK (42 nil t)"#]],
-        ),
-        (
-            "async_let_delivers_all_binding_values_to_its_final_parent_callback",
-            r##"(let (received)
+        true,
+        expect![[r#"OK (42 nil t)"#]],
+    )
+}
+
+fn async_let_delivers_all_binding_values_to_its_final_parent_callback() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_let_delivers_all_binding_values_to_its_final_parent_callback",
+        r##"(let (received)
                (let ((outer
                       (async-let
                           ((x (+ 1 2))
@@ -197,12 +216,15 @@ fn futures_public_surface_batch() {
                      (accept-process-output
                       nil 0.05)))
                  received))"##,
-            true,
-            expect![[r#"OK (3 7)"#]],
-        ),
-        (
-            "async_sandbox_returns_the_child_value_synchronously",
-            r##"(async-sandbox
+        true,
+        expect![[r#"OK (3 7)"#]],
+    )
+}
+
+fn async_sandbox_returns_the_child_value_synchronously() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_sandbox_returns_the_child_value_synchronously",
+        r##"(async-sandbox
                (lambda ()
                  (let ((values
                         '(1 2 3 4 5)))
@@ -213,8 +235,23 @@ fn futures_public_surface_batch() {
                        (* value value))
                      values)
                     "λ雪"))))"##,
-            true,
-            expect![[r#"OK (15 (1 4 9 16 25) "λ雪")"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (15 (1 4 9 16 25) "λ雪")"#]],
+    )
+}
+
+#[test]
+fn futures_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        async_start_future_returns_structured_unicode_and_transitions_to_ready(),
+        async_start_future_resignals_the_exact_child_error(),
+        async_start_callback_receives_messages_before_the_final_result(),
+        async_send_and_receive_transport_a_parent_message_into_the_child(),
+        async_start_callback_reassembles_a_message_larger_than_a_process_chunk(),
+        async_inject_variables_recreates_the_selected_parent_environment_in_child(),
+        async_callback_future_yields_nil_to_async_get_after_delivery(),
+        async_let_delivers_all_binding_values_to_its_final_parent_callback(),
+        async_sandbox_returns_the_child_value_synchronously(),
+    ];
+    assert_async_batch(&cases);
 }

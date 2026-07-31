@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auth_source_xoauth2_batch;
+use super::{ParityBatchCase, assert_auth_source_xoauth2_batch};
 
-#[test]
-fn transport_public_surface_batch() {
-    assert_auth_source_xoauth2_batch(&[
-        (
-            "auth_source_xoauth2_curl_transport_posts_exact_request_and_parses_json",
-            r##"(let ((auth-source-xoauth2-use-curl
+fn auth_source_xoauth2_curl_transport_posts_exact_request_and_parses_json() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_xoauth2_curl_transport_posts_exact_request_and_parses_json",
+        r##"(let ((auth-source-xoauth2-use-curl
                 t)
                calls)
          (cl-letf
@@ -28,14 +26,17 @@ fn transport_public_surface_batch() {
              "https://token.example/oauth"
              "client_id=id&refresh_token=refresh")
             (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((access_token . "curl-token") (expires_in . 3600) (token_type . "Bearer")) (("curl" nil t nil ("--silent" "--request" "POST" "--data" "client_id=id&refresh_token=refresh" "--header" "Content-Type:application/x-www-form-urlencoded" "https://token.example/oauth"))))"#
     ]],
-        ),
-        (
-            "auth_source_xoauth2_curl_transport_parses_output_even_on_nonzero_status",
-            r##"(let ((auth-source-xoauth2-use-curl
+    )
+}
+
+fn auth_source_xoauth2_curl_transport_parses_output_even_on_nonzero_status() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_xoauth2_curl_transport_parses_output_even_on_nonzero_status",
+        r##"(let ((auth-source-xoauth2-use-curl
                 t))
          (cl-letf
              (((symbol-function 'call-process)
@@ -47,12 +48,15 @@ fn transport_public_surface_batch() {
            (auth-source-xoauth2--url-post
             "https://token.example"
             "payload")))"##,
-            true,
-            expect![[r#"OK ((error . "invalid_grant") (error_description . "expired"))"#]],
-        ),
-        (
-            "auth_source_xoauth2_curl_transport_propagates_invalid_json_signal",
-            r##"(let ((auth-source-xoauth2-use-curl
+        true,
+        expect![[r#"OK ((error . "invalid_grant") (error_description . "expired"))"#]],
+    )
+}
+
+fn auth_source_xoauth2_curl_transport_propagates_invalid_json_signal() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_xoauth2_curl_transport_propagates_invalid_json_signal",
+        r##"(let ((auth-source-xoauth2-use-curl
                 t))
          (cl-letf
              (((symbol-function 'call-process)
@@ -64,12 +68,15 @@ fn transport_public_surface_batch() {
               (auth-source-xoauth2--url-post
                "https://token.example"
                "payload")))))"##,
-            true,
-            expect![[r#"OK (:error json-unknown-keyword ("not"))"#]],
-        ),
-        (
-            "auth_source_xoauth2_url_transport_sets_request_bindings_and_kills_buffer",
-            r##"(let ((auth-source-xoauth2-use-curl
+        true,
+        expect![[r#"OK (:error json-unknown-keyword ("not"))"#]],
+    )
+}
+
+fn auth_source_xoauth2_url_transport_sets_request_bindings_and_kills_buffer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_xoauth2_url_transport_sets_request_bindings_and_kills_buffer",
+        r##"(let ((auth-source-xoauth2-use-curl
                 nil)
                captured
                response-buffer)
@@ -102,14 +109,17 @@ fn transport_public_surface_batch() {
               captured
               (buffer-live-p
                response-buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((access_token . "url-token") (expires_in . 1800)) ("https://token.example/oauth" "POST" "client_id=id" (("Content-Type" . "application/x-www-form-urlencoded"))) nil)"#
     ]],
-        ),
-        (
-            "auth_source_xoauth2_url_transport_returns_nil_without_header_separator",
-            r##"(let ((auth-source-xoauth2-use-curl
+    )
+}
+
+fn auth_source_xoauth2_url_transport_returns_nil_without_header_separator() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_xoauth2_url_transport_returns_nil_without_header_separator",
+        r##"(let ((auth-source-xoauth2-use-curl
                 nil)
                response-buffer)
          (cl-letf
@@ -135,14 +145,17 @@ fn transport_public_surface_batch() {
              (when
                  (buffer-live-p response-buffer)
                (kill-buffer response-buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil t "HTTP/1.1 200 OK\nContent-Type: application/json\n{\"access_token\":\"hidden\"}")"#
     ]],
-        ),
-        (
-            "auth_source_xoauth2_url_transport_propagates_retrieval_failure",
-            r##"(let ((auth-source-xoauth2-use-curl
+    )
+}
+
+fn auth_source_xoauth2_url_transport_propagates_retrieval_failure() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_xoauth2_url_transport_propagates_retrieval_failure",
+        r##"(let ((auth-source-xoauth2-use-curl
                 nil))
          (cl-letf
              (((symbol-function 'url-retrieve-synchronously)
@@ -153,8 +166,20 @@ fn transport_public_surface_batch() {
               (auth-source-xoauth2--url-post
                "https://token.example"
                "payload")))))"##,
-            true,
-            expect![[r#"OK (:error error ("network unavailable"))"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (:error error ("network unavailable"))"#]],
+    )
+}
+
+#[test]
+fn transport_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auth_source_xoauth2_curl_transport_posts_exact_request_and_parses_json(),
+        auth_source_xoauth2_curl_transport_parses_output_even_on_nonzero_status(),
+        auth_source_xoauth2_curl_transport_propagates_invalid_json_signal(),
+        auth_source_xoauth2_url_transport_sets_request_bindings_and_kills_buffer(),
+        auth_source_xoauth2_url_transport_returns_nil_without_header_separator(),
+        auth_source_xoauth2_url_transport_propagates_retrieval_failure(),
+    ];
+    assert_auth_source_xoauth2_batch(&cases);
 }

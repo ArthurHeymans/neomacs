@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_transient_batch;
+use super::{ParityBatchCase, assert_transient_batch};
 
-#[test]
-fn layout_public_surface_batch() {
-    assert_transient_batch(&[
-        (
-            "transient_define_prefix_builds_exact_layout_and_reuses_it",
-            r##"(progn
+fn transient_define_prefix_builds_exact_layout_and_reuses_it() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "transient_define_prefix_builds_exact_layout_and_reuses_it",
+        r##"(progn
                (transient-define-suffix neomacs-test-a ()
                  :key "a" (interactive))
                (transient-define-suffix neomacs-test-b ()
@@ -27,14 +25,17 @@ fn layout_public_surface_batch() {
                        (eq layout
                            (transient--get-layout
                             'neomacs-test-menu)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ([2 nil ([transient-column nil ((transient-suffix :command neomacs-test-a) (transient-suffix :command neomacs-test-b :key "b") (transient-suffix :command neomacs-test-c :key "C") (transient-suffix :command neomacs-test-m :key "m"))])] t)"#
     ]],
-        ),
-        (
-            "transient_groups_preserve_rows_columns_and_included_layouts",
-            r##"(progn
+    )
+}
+
+fn transient_groups_preserve_rows_columns_and_included_layouts() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "transient_groups_preserve_rows_columns_and_included_layouts",
+        r##"(progn
                (dolist (entry '((neomacs-test-a "a")
                                 (neomacs-test-b "b")
                                 (neomacs-test-c "c")
@@ -62,14 +63,17 @@ fn layout_public_surface_batch() {
                 (transient--get-layout 'neomacs-test-columns)
                 (transient--get-layout 'neomacs-test-list)
                 (transient--get-layout 'neomacs-test-menu)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ([2 nil ([transient-row nil ((transient-suffix :command neomacs-test-a) (transient-suffix :command neomacs-test-b))])] [2 nil ([transient-columns nil ([transient-column nil ((transient-suffix :command neomacs-test-c))] [transient-column nil ((transient-suffix :command neomacs-test-d))])])] [2 nil ((transient-suffix :command neomacs-test-e) (transient-suffix :command neomacs-test-f))] [2 nil (neomacs-test-row neomacs-test-columns [transient-columns nil (neomacs-test-list)])])"#
     ]],
-        ),
-        (
-            "transient_get_suffix_supports_positive_negative_key_and_nested_coordinates",
-            r##"(progn
+    )
+}
+
+fn transient_get_suffix_supports_positive_negative_key_and_nested_coordinates() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "transient_get_suffix_supports_positive_negative_key_and_nested_coordinates",
+        r##"(progn
                (dolist (entry '((neomacs-test-a "a")
                                 (neomacs-test-b "b")
                                 (neomacs-test-c "c")
@@ -90,14 +94,17 @@ fn layout_public_surface_batch() {
                 (copy-tree
                  (transient-get-suffix
                   'neomacs-test-menu [-1 -1 -1]))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((transient-suffix :command neomacs-test-a) (transient-suffix :command neomacs-test-c) (transient-suffix :command neomacs-test-b) (transient-suffix :command neomacs-test-d :description "nested") (transient-suffix :command neomacs-test-d :description "nested"))"#
     ]],
-        ),
-        (
-            "transient_suffix_put_mutates_keys_in_place",
-            r##"(progn
+    )
+}
+
+fn transient_suffix_put_mutates_keys_in_place() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "transient_suffix_put_mutates_keys_in_place",
+        r##"(progn
                (dolist (entry '((neomacs-test-a "a")
                                 (neomacs-test-b "b")
                                 (neomacs-test-c "c")
@@ -123,14 +130,17 @@ fn layout_public_surface_batch() {
                   (eq layout
                       (transient--get-layout 'neomacs-test-menu))
                   (transient--get-layout 'neomacs-test-menu))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t [2 nil ([transient-column nil ((transient-suffix :command neomacs-test-a :key "A") (transient-suffix :command neomacs-test-b :key "B") (transient-suffix :command neomacs-test-c :key "C") (transient-suffix :command neomacs-test-d :key "D"))])])"#
     ]],
-        ),
-        (
-            "transient_insert_append_and_replace_apply_at_exact_locations",
-            r##"(progn
+    )
+}
+
+fn transient_insert_append_and_replace_apply_at_exact_locations() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "transient_insert_append_and_replace_apply_at_exact_locations",
+        r##"(progn
                (dolist (entry '((neomacs-test-a "a")
                                 (neomacs-test-b "b")
                                 (neomacs-test-c "c")
@@ -153,14 +163,17 @@ fn layout_public_surface_batch() {
                (transient-append-suffix
                 'neomacs-test-menu "c" '(neomacs-test-b))
                (transient--get-layout 'neomacs-test-menu))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK [2 nil ([transient-column nil ((transient-suffix :command neomacs-test-z) (transient-suffix :command neomacs-test-a) (transient-suffix :command neomacs-test-y) (transient-suffix :command neomacs-test-x :description "replacement") (transient-suffix :command neomacs-test-c) (transient-suffix :command neomacs-test-b))])]"#
     ]],
-        ),
-        (
-            "transient_remove_suffix_accepts_keys_commands_and_coordinates",
-            r##"(progn
+    )
+}
+
+fn transient_remove_suffix_accepts_keys_commands_and_coordinates() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "transient_remove_suffix_accepts_keys_commands_and_coordinates",
+        r##"(progn
                (dolist (entry '((neomacs-test-a "a")
                                 (neomacs-test-b "b")
                                 (neomacs-test-c "c")
@@ -185,14 +198,17 @@ fn layout_public_surface_batch() {
                (transient-remove-suffix 'neomacs-test-menu [0 0])
                (transient-remove-suffix 'neomacs-test-menu [0 -1])
                (transient--get-layout 'neomacs-test-menu))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK [2 nil ([transient-column nil ((transient-suffix :command neomacs-test-e) (transient-suffix :command neomacs-test-f))])]"#
     ]],
-        ),
-        (
-            "transient_inline_group_expands_nested_includes_without_reordering",
-            r##"(progn
+    )
+}
+
+fn transient_inline_group_expands_nested_includes_without_reordering() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "transient_inline_group_expands_nested_includes_without_reordering",
+        r##"(progn
                (dolist (entry '((neomacs-test-a "a")
                                 (neomacs-test-b "b")
                                 (neomacs-test-c "c")
@@ -217,10 +233,23 @@ fn layout_public_surface_batch() {
                (transient-inline-group
                 'neomacs-test-menu 'neomacs-test-group-d)
                (transient--get-layout 'neomacs-test-menu))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK [2 nil ([transient-column nil ((transient-suffix :command neomacs-test-a))] [transient-columns nil ([transient-column nil ((transient-suffix :command neomacs-test-b))] [transient-column nil ((transient-suffix :command neomacs-test-c))] [transient-column nil ((transient-suffix :command neomacs-test-d))])])]"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn layout_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        transient_define_prefix_builds_exact_layout_and_reuses_it(),
+        transient_groups_preserve_rows_columns_and_included_layouts(),
+        transient_get_suffix_supports_positive_negative_key_and_nested_coordinates(),
+        transient_suffix_put_mutates_keys_in_place(),
+        transient_insert_append_and_replace_apply_at_exact_locations(),
+        transient_remove_suffix_accepts_keys_commands_and_coordinates(),
+        transient_inline_group_expands_nested_includes_without_reordering(),
+    ];
+    assert_transient_batch(&cases);
 }

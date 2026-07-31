@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_compat_batch};
+use super::{ParityBatchCase, assert_compat_batch};
 
-#[test]
-fn collections_public_surface_batch() {
-    assert_compat_batch(&[
-        (
-            "compat_ensure_list_and_proper_list_cover_atoms_dotted_and_circular_inputs",
-            r##"(let ((circle (list 1 2 3)))
+fn compat_ensure_list_and_proper_list_cover_atoms_dotted_and_circular_inputs() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "compat_ensure_list_and_proper_list_cover_atoms_dotted_and_circular_inputs",
+        r##"(let ((circle (list 1 2 3)))
                (setcdr (last circle) circle)
                (list
                 (ensure-list nil)
@@ -26,12 +24,15 @@ fn collections_public_surface_batch() {
                               1
                               "abc"
                               [1 2 3]))))"##,
-            true,
-            expect![[r#"OK (nil (1) (1 . 2) nil (1) ((1 . 2)) (0 1 3 nil nil nil nil nil nil))"#]],
-        ),
-        (
-            "compat_take_drop_and_ntake_preserve_exact_copy_and_mutation_semantics",
-            r##"(let* ((source (list 1 2 3 4))
+        true,
+        expect![[r#"OK (nil (1) (1 . 2) nil (1) ((1 . 2)) (0 1 3 nil nil nil nil nil nil))"#]],
+    )
+}
+
+fn compat_take_drop_and_ntake_preserve_exact_copy_and_mutation_semantics() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "compat_take_drop_and_ntake_preserve_exact_copy_and_mutation_semantics",
+        r##"(let* ((source (list 1 2 3 4))
                     (taken (take 2 source))
                     (dropped (drop 2 source))
                     (mutable (list 'a 'b 'c 'd))
@@ -47,12 +48,15 @@ fn collections_public_surface_batch() {
                 (copy-tree mutable)
                 (copy-tree tail)
                 (eq ntaken mutable)))"##,
-            true,
-            expect![[r#"OK ((1 2) (3 4) (1 2 3 4) nil t (a b) (a b) (c d) t)"#]],
-        ),
-        (
-            "compat_sequence_predicates_cover_closures_function_values_and_boundaries",
-            r##"(let ((numbers '(3 2 1 0 -1 -2 -3))
+        true,
+        expect![[r#"OK ((1 2) (3 4) (1 2 3 4) nil t (a b) (a b) (c d) t)"#]],
+    )
+}
+
+fn compat_sequence_predicates_cover_closures_function_values_and_boundaries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "compat_sequence_predicates_cover_closures_function_values_and_boundaries",
+        r##"(let ((numbers '(3 2 1 0 -1 -2 -3))
                     (threshold 1))
                (list
                 (copy-tree
@@ -77,14 +81,17 @@ fn collections_public_surface_batch() {
                  (funcall
                   (identity #'member-if)
                   #'minusp numbers))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((0 -1 -2 -3) (1 0 -1 -2 -3) (3 2 1) (3 2) t nil (0 -1 -2 -3) (-1 -2 -3))"#
     ]],
-        ),
-        (
-            "compat_length_comparators_cover_lists_vectors_and_equal_boundaries",
-            r##"(list
+    )
+}
+
+fn compat_length_comparators_cover_lists_vectors_and_equal_boundaries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "compat_length_comparators_cover_lists_vectors_and_equal_boundaries",
+        r##"(list
                (mapcar
                 (lambda (limit)
                   (length< '(a b c) limit))
@@ -96,18 +103,24 @@ fn collections_public_surface_batch() {
                (length= nil 0)
                (length= "abc" 3)
                (length= '(a b c) 2))"##,
-            true,
-            expect![[r#"OK ((nil nil nil t) (t t nil nil) t t nil)"#]],
-        ),
-        (
-            "compat_length_comparator_rejects_non_sequence",
-            "(length< 3 1)",
-            false,
-            expect![[r#"ERR (wrong-type-argument sequencep 3)"#]],
-        ),
-        (
-            "compat_hash_table_contains_distinguishes_missing_from_nil_value",
-            r##"(let ((table (make-hash-table :test #'equal)))
+        true,
+        expect![[r#"OK ((nil nil nil t) (t t nil nil) t t nil)"#]],
+    )
+}
+
+fn compat_length_comparator_rejects_non_sequence() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "compat_length_comparator_rejects_non_sequence",
+        "(length< 3 1)",
+        false,
+        expect![[r#"ERR (wrong-type-argument sequencep 3)"#]],
+    )
+}
+
+fn compat_hash_table_contains_distinguishes_missing_from_nil_value() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "compat_hash_table_contains_distinguishes_missing_from_nil_value",
+        r##"(let ((table (make-hash-table :test #'equal)))
                (puthash "present-nil" nil table)
                (puthash "present-value" 7 table)
                (list
@@ -117,8 +130,20 @@ fn collections_public_surface_batch() {
                 (gethash "present-value" table)
                 (hash-table-contains-p "missing" table)
                 (gethash "missing" table 'fallback)))"##,
-            true,
-            expect![[r#"OK (t nil t 7 nil fallback)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (t nil t 7 nil fallback)"#]],
+    )
+}
+
+#[test]
+fn collections_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        compat_ensure_list_and_proper_list_cover_atoms_dotted_and_circular_inputs(),
+        compat_take_drop_and_ntake_preserve_exact_copy_and_mutation_semantics(),
+        compat_sequence_predicates_cover_closures_function_values_and_boundaries(),
+        compat_length_comparators_cover_lists_vectors_and_equal_boundaries(),
+        compat_length_comparator_rejects_non_sequence(),
+        compat_hash_table_contains_distinguishes_missing_from_nil_value(),
+    ];
+    assert_compat_batch(&cases);
 }

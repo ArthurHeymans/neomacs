@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_arduino_mode_batch;
+use super::{ParityBatchCase, assert_arduino_mode_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_arduino_mode_batch(&[
-        (
-            "upload_key_binding_runs_the_real_cli_and_preserves_the_unsaved_sketch",
-            r##"(let* ((fixture
+fn upload_key_binding_runs_the_real_cli_and_preserves_the_unsaved_sketch() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "upload_key_binding_runs_the_real_cli_and_preserves_the_unsaved_sketch",
+        r##"(let* ((fixture
                           (neomacs-arduino-mode-test-fixture))
                          (sketch (plist-get fixture :sketch))
                          (executable
@@ -120,14 +118,17 @@ fn workflows_public_surface_batch() {
                       (setenv
                        "NEOMACS_ARDUINO_MODE_GATE"
                        (plist-get fixture :previous-gate))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:mode arduino-mode :command arduino-upload :started ("arduino-upload" t) :process ("arduino-upload" "*arduino-upload*" (t exit 0 "finished\n")) :invocation "cwd=[ORACLE-SANDBOX]/customer firmware/greenhouse monitor\narg=--upload\narg=[ORACLE-SANDBOX]/customer firmware/greenhouse monitor/greenhouse_monitor.ino\n" :output "Sketch uses 924 bytes (2%) of program storage space.\nUploaded [ORACLE-SANDBOX]/customer firmware/greenhouse monitor/greenhouse_monitor.ino\nCLI read: const int sensorPin = A0;\n" :disk "const int sensorPin = A0;\nvoid setup() { Serial.begin(115200); }\nvoid loop() { Serial.println(analogRead(sensorPin)); }\n" :buffer "const int sensorPin = A0;\nvoid setup() { Serial.begin(115200); }\nvoid loop() { Serial.println(analogRead(sensorPin)); }\n// Unsaved calibration for sensor A1.\n" :modified t :finished (nil nil ("Arduino upload succeed.")))"#
     ]],
-        ),
-        (
-            "verify_key_binding_surfaces_real_cli_diagnostics_and_cleans_async_state",
-            r##"(let* ((fixture
+    )
+}
+
+fn verify_key_binding_surfaces_real_cli_diagnostics_and_cleans_async_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "verify_key_binding_surfaces_real_cli_diagnostics_and_cleans_async_state",
+        r##"(let* ((fixture
                           (neomacs-arduino-mode-test-fixture))
                          (sketch (plist-get fixture :sketch))
                          (executable
@@ -233,10 +234,18 @@ fn workflows_public_surface_batch() {
                       (setenv
                        "NEOMACS_ARDUINO_MODE_GATE"
                        (plist-get fixture :previous-gate))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:mode arduino-mode :command arduino-verify :started ("arduino-verify" t) :process ("arduino-verify" "*arduino-verify*" (t exit 17 "exited abnormally with code 17\n")) :invocation "cwd=[ORACLE-SANDBOX]/customer firmware/greenhouse monitor\narg=--verify\narg=[ORACLE-SANDBOX]/customer firmware/greenhouse monitor/greenhouse_monitor.ino\n" :diagnostics "Verifying [ORACLE-SANDBOX]/customer firmware/greenhouse monitor/greenhouse_monitor.ino\n[ORACLE-SANDBOX]/customer firmware/greenhouse monitor/greenhouse_monitor.ino:7:3: error: sensorPin was not declared in this scope\n" :diagnostics-visible t :source-state (nil nil nil) :messages nil)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        upload_key_binding_runs_the_real_cli_and_preserves_the_unsaved_sketch(),
+        verify_key_binding_surfaces_real_cli_diagnostics_and_cleans_async_state(),
+    ];
+    assert_arduino_mode_batch(&cases);
 }

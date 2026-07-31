@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_dim_other_buffers_batch;
+use super::{ParityBatchCase, assert_auto_dim_other_buffers_batch};
 
-#[test]
-fn windows_public_surface_batch() {
-    assert_auto_dim_other_buffers_batch(&[
-        (
-            "auto_dim_other_buffers_dim_buffer_sets_distinct_parameters_for_two_windows_showing_same_buffer",
-            r##"(save-window-excursion
+fn auto_dim_other_buffers_dim_buffer_sets_distinct_parameters_for_two_windows_showing_same_buffer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dim_other_buffers_dim_buffer_sets_distinct_parameters_for_two_windows_showing_same_buffer",
+        r##"(save-window-excursion
           (let ((buffer
                  (generate-new-buffer
                   " *adob-shared*")))
@@ -43,14 +41,17 @@ fn windows_public_surface_batch() {
                           buffer))))))
               (when (buffer-live-p buffer)
                 (kill-buffer buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((((t " *adob-shared*" nil) (nil " *adob-shared*" t)) (t 1 (default) ((default (#1=(:filtered (:window adob--dim t) auto-dim-other-buffers)))))) ((t " *adob-shared*" nil) (nil " *adob-shared*" t)) (t 1 (default) ((default (#1#)))))"#
     ]],
-        ),
-        (
-            "auto_dim_other_buffers_never_dim_buffer_removes_existing_remaps_without_mutating_window_parameters",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_dim_other_buffers_never_dim_buffer_removes_existing_remaps_without_mutating_window_parameters() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dim_other_buffers_never_dim_buffer_removes_existing_remaps_without_mutating_window_parameters",
+        r##"(save-window-excursion
           (let ((buffer
                  (generate-new-buffer
                   " *adob-never-real*")))
@@ -91,14 +92,17 @@ fn windows_public_surface_batch() {
                         buffer)))))
               (when (buffer-live-p buffer)
                 (kill-buffer buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil ((t " *adob-never-real*" :selected-before) (nil " *adob-never-real*" :other-before)) (nil 0 nil nil))"#
     ]],
-        ),
-        (
-            "auto_dim_other_buffers_update_switches_real_selected_window_and_buffer_state",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_dim_other_buffers_update_switches_real_selected_window_and_buffer_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dim_other_buffers_update_switches_real_selected_window_and_buffer_state",
+        r##"(save-window-excursion
           (let ((first
                  (generate-new-buffer
                   " *adob-update-first*"))
@@ -152,14 +156,17 @@ fn windows_public_surface_batch() {
                 (kill-buffer first))
               (when (buffer-live-p second)
                 (kill-buffer second)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((((t " *adob-update-first*" nil) (nil " *adob-update-second*" nil)) " *adob-update-first*" t) ((t " *adob-update-second*" nil) (nil " *adob-update-first*" t)) " *adob-update-second*" t (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
     ]],
-        ),
-        (
-            "auto_dim_other_buffers_update_moves_highlight_between_windows_showing_same_buffer",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_dim_other_buffers_update_moves_highlight_between_windows_showing_same_buffer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dim_other_buffers_update_moves_highlight_between_windows_showing_same_buffer",
+        r##"(save-window-excursion
           (let ((buffer
                  (generate-new-buffer
                   " *adob-update-shared*")))
@@ -201,14 +208,17 @@ fn windows_public_surface_batch() {
                           buffer))))))
               (when (buffer-live-p buffer)
                 (kill-buffer buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((t " *adob-update-shared*" nil) (nil " *adob-update-shared*" nil)) ((t " *adob-update-shared*" nil) (nil " *adob-update-shared*" t)) t t (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
     ]],
-        ),
-        (
-            "auto_dim_other_buffers_rescan_real_windows_repairs_parameters_and_missing_remaps",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_dim_other_buffers_rescan_real_windows_repairs_parameters_and_missing_remaps() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dim_other_buffers_rescan_real_windows_repairs_parameters_and_missing_remaps",
+        r##"(save-window-excursion
           (let ((first
                  (generate-new-buffer
                   " *adob-rescan-first*"))
@@ -252,14 +262,17 @@ fn windows_public_surface_batch() {
                 (kill-buffer first))
               (when (buffer-live-p second)
                 (kill-buffer second)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((t " *adob-rescan-first*" nil) (nil " *adob-rescan-second*" t)) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
     ]],
-        ),
-        (
-            "auto_dim_other_buffers_buffer_list_hook_routes_selected_and_nonselected_buffers_to_distinct_paths",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_dim_other_buffers_buffer_list_hook_routes_selected_and_nonselected_buffers_to_distinct_paths() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dim_other_buffers_buffer_list_hook_routes_selected_and_nonselected_buffers_to_distinct_paths",
+        r##"(save-window-excursion
           (let ((selected-buffer
                  (generate-new-buffer
                   " *adob-hook-selected*"))
@@ -305,12 +318,15 @@ fn windows_public_surface_batch() {
               (when
                   (buffer-live-p other-buffer)
                 (kill-buffer other-buffer)))))"##,
-            true,
-            expect![[r#"OK (:update (:dim " *adob-hook-other*" nil))"#]],
-        ),
-        (
-            "auto_dim_other_buffers_minibuffer_switch_option_controls_update_while_real_minibuffer_is_identified",
-            r##"(let ((real-minibuffer
+        true,
+        expect![[r#"OK (:update (:dim " *adob-hook-other*" nil))"#]],
+    )
+}
+
+fn auto_dim_other_buffers_minibuffer_switch_option_controls_update_while_real_minibuffer_is_identified() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dim_other_buffers_minibuffer_switch_option_controls_update_while_real_minibuffer_is_identified",
+        r##"(let ((real-minibuffer
                                 (window-minibuffer-p
                                  (minibuffer-window)))
                                events)
@@ -364,14 +380,17 @@ fn windows_public_surface_batch() {
             (list
              real-minibuffer
              (nreverse events))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (t ((:disabled nil :previous-window) (:enabled nil :fixture-minibuffer-window)))"
     ],
-        ),
-        (
-            "auto_dim_other_buffers_initialize_records_selected_pair_and_dims_each_supplied_live_buffer",
-            r##"(let ((first
+    )
+}
+
+fn auto_dim_other_buffers_initialize_records_selected_pair_and_dims_each_supplied_live_buffer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dim_other_buffers_initialize_records_selected_pair_and_dims_each_supplied_live_buffer",
+        r##"(let ((first
                                 (generate-new-buffer
                                  " *adob-init-first*"))
                                (second
@@ -407,12 +426,15 @@ fn windows_public_surface_batch() {
               (kill-buffer first))
             (when (buffer-live-p second)
               (kill-buffer second))))"##,
-            true,
-            expect![[r#"OK (t t ((" *adob-init-first*" t) (" *adob-init-second*" t)))"#]],
-        ),
-        (
-            "auto_dim_other_buffers_base_and_indirect_buffers_keep_independent_remap_cookies_in_real_windows",
-            r##"(save-window-excursion
+        true,
+        expect![[r#"OK (t t ((" *adob-init-first*" t) (" *adob-init-second*" t)))"#]],
+    )
+}
+
+fn auto_dim_other_buffers_base_and_indirect_buffers_keep_independent_remap_cookies_in_real_windows() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dim_other_buffers_base_and_indirect_buffers_keep_independent_remap_cookies_in_real_windows",
+        r##"(save-window-excursion
           (let* ((base
                   (generate-new-buffer
                    " *adob-base*"))
@@ -453,10 +475,25 @@ fn windows_public_surface_batch() {
                 (kill-buffer indirect))
               (when (buffer-live-p base)
                 (kill-buffer base)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:buffer nil) ((t " *adob-base*" nil) (nil " *adob-indirect*" t)) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn windows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_dim_other_buffers_dim_buffer_sets_distinct_parameters_for_two_windows_showing_same_buffer(),
+        auto_dim_other_buffers_never_dim_buffer_removes_existing_remaps_without_mutating_window_parameters(),
+        auto_dim_other_buffers_update_switches_real_selected_window_and_buffer_state(),
+        auto_dim_other_buffers_update_moves_highlight_between_windows_showing_same_buffer(),
+        auto_dim_other_buffers_rescan_real_windows_repairs_parameters_and_missing_remaps(),
+        auto_dim_other_buffers_buffer_list_hook_routes_selected_and_nonselected_buffers_to_distinct_paths(),
+        auto_dim_other_buffers_minibuffer_switch_option_controls_update_while_real_minibuffer_is_identified(),
+        auto_dim_other_buffers_initialize_records_selected_pair_and_dims_each_supplied_live_buffer(),
+        auto_dim_other_buffers_base_and_indirect_buffers_keep_independent_remap_cookies_in_real_windows(),
+    ];
+    assert_auto_dim_other_buffers_batch(&cases);
 }

@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_anju_batch;
+use super::{ParityBatchCase, assert_anju_batch};
 
 /// `(anju-init)' -- the single line the package's INSTALLATION section tells a
 /// user to put in their init file -- run for real, with nothing redefined, and
@@ -21,12 +21,10 @@ use super::assert_anju_batch;
 /// here is mode-line or scroll-bar prefixed, which is exactly what makes them
 /// the legacy gestures anju exists to remove.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_anju_batch(&[
-        (
-            "the_documented_init_line_switches_on_context_menus_and_unbinds_legacy_mouse_keys",
-            r##"(let* ((legacy '("<mode-line> C-<mouse-2>"
+fn the_documented_init_line_switches_on_context_menus_and_unbinds_legacy_mouse_keys() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_documented_init_line_switches_on_context_menus_and_unbinds_legacy_mouse_keys",
+        r##"(let* ((legacy '("<mode-line> C-<mouse-2>"
                  "<vertical-scroll-bar> C-<mouse-2>"
                  "<vertical-line> C-<mouse-2>"
                  "<mode-line> <mouse-2>"
@@ -64,14 +62,17 @@ fn workflows_public_surface_batch() {
           :context-menu-functions-changed
           (not (equal (plist-get before :context-menu-functions)
                       (plist-get after :context-menu-functions))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:before (:context-menu-mode nil :context-menu-functions (t prog-context-menu elisp-context-menu) :legacy (("<mode-line> C-<mouse-2>" . mouse-split-window-horizontally) ("<vertical-scroll-bar> C-<mouse-2>" . mouse-split-window-vertically) ("<vertical-line> C-<mouse-2>" . mouse-split-window-vertically) ("<mode-line> <mouse-2>" . mouse-delete-other-windows) ("<mode-line> <mouse-3>" . mouse-delete-window) ("<mode-line> <double-mouse-1>")) :buffer-identification (("<mode-line> <mouse-1>" . mode-line-previous-buffer) ("<mode-line> <mouse-3>" . mode-line-next-buffer))) :after (:context-menu-mode t :context-menu-functions (t prog-context-menu elisp-context-menu) :legacy (("<mode-line> C-<mouse-2>") ("<vertical-scroll-bar> C-<mouse-2>") ("<vertical-line> C-<mouse-2>") ("<mode-line> <mouse-2>") ("<mode-line> <mouse-3>") ("<mode-line> <double-mouse-1>" . anju-toggle-one-window)) :buffer-identification (("<mode-line> <mouse-1>" . anju-popup-buffer-menu) ("<mode-line> <mouse-3>"))) :context-menus-turned-on t :legacy-keys-were-bound-before t :every-legacy-key-now-unbound nil :context-menu-functions-changed nil)"#
     ]],
-        ),
-        (
-            "disabling_one_area_leaves_that_area_untouched_and_the_others_applied",
-            r##"(let* ((anju-unset-legacy-mouse-bindings-enable nil)
+    )
+}
+
+fn disabling_one_area_leaves_that_area_untouched_and_the_others_applied() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "disabling_one_area_leaves_that_area_untouched_and_the_others_applied",
+        r##"(let* ((anju-unset-legacy-mouse-bindings-enable nil)
        (legacy '("<mode-line> C-<mouse-2>"
                  "<mode-line> <mouse-2>"
                  "<mode-line> <double-mouse-1>"))
@@ -91,10 +92,18 @@ fn workflows_public_surface_batch() {
           :legacy-before legacy-before
           :legacy-after legacy-after
           :context-menu-mode context-menu-mode)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:unset-stage-skipped t :mode-line-stage-still-applied t :context-menus-still-enabled t :legacy-before (("<mode-line> C-<mouse-2>" . mouse-split-window-horizontally) ("<mode-line> <mouse-2>" . mouse-delete-other-windows) ("<mode-line> <double-mouse-1>")) :legacy-after (("<mode-line> C-<mouse-2>" . mouse-split-window-horizontally) ("<mode-line> <mouse-2>" . mouse-delete-other-windows) ("<mode-line> <double-mouse-1>" . anju-toggle-one-window)) :context-menu-mode t)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        the_documented_init_line_switches_on_context_menus_and_unbinds_legacy_mouse_keys(),
+        disabling_one_area_leaves_that_area_untouched_and_the_others_applied(),
+    ];
+    assert_anju_batch(&cases);
 }

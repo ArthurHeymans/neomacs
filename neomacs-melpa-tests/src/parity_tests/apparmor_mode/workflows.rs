@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_apparmor_mode_batch;
+use super::{ParityBatchCase, assert_apparmor_mode_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_apparmor_mode_batch(&[
-        (
-            "apparmor_mode_authors_indents_and_saves_a_real_nested_service_policy",
-            r##"(let* ((root
+fn apparmor_mode_authors_indents_and_saves_a_real_nested_service_policy() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "apparmor_mode_authors_indents_and_saves_a_real_nested_service_policy",
+        r##"(let* ((root
                   (apparmor-mode-test-root
                    "apparmor-authoring"))
                  (path
@@ -76,14 +74,17 @@ fn workflows_public_surface_batch() {
              (kill-buffer buffer))
            (apparmor-mode-test-cleanup root))
          result)"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (:mode apparmor-mode :policy "# -*- mode: apparmor; -*-\nabi <abi/4.0>,\ninclude <tunables/global>\n\n@{a}=/srv/service\n\nprofile service /usr/bin/service flags=(enforce) {\n  capability dac_override,\n  network inet stream,\n  file Cx /usr/libexec/service-helper -> service-helper,\n  file mrix /usr/lib/@{multiarch}/service/plugins/**,\n  file r /dev/{,urandom,null},\n  dbus send\n      bus=session\n      path=/org/example/Service\n      interface=org.example.Service\n      member=Run\n      peer=(name=org.example.Client),\n  profile helper /usr/libexec/service-helper {\n    allow network,\n  }\n}\n" :disk "# -*- mode: apparmor; -*-\nabi <abi/4.0>,\ninclude <tunables/global>\n\n@{a}=/srv/service\n\nprofile service /usr/bin/service flags=(enforce) {\n  capability dac_override,\n  network inet stream,\n  file Cx /usr/libexec/service-helper -> service-helper,\n  file mrix /usr/lib/@{multiarch}/service/plugins/**,\n  file r /dev/{,urandom,null},\n  dbus send\n      bus=session\n      path=/org/example/Service\n      interface=org.example.Service\n      member=Run\n      peer=(name=org.example.Client),\n  profile helper /usr/libexec/service-helper {\n    allow network,\n  }\n}\n")"##
     ]],
-        ),
-        (
-            "apparmor_mode_refontifies_security_rules_after_practical_policy_edits",
-            r##"(with-temp-buffer
+    )
+}
+
+fn apparmor_mode_refontifies_security_rules_after_practical_policy_edits() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "apparmor_mode_refontifies_security_rules_after_practical_policy_edits",
+        r##"(with-temp-buffer
          (apparmor-mode)
          (insert
           "@{a}=/srv/service\n"
@@ -194,14 +195,17 @@ fn workflows_public_surface_batch() {
                      (face-at
                       "  @{HOME}/cache/** rw,"
                       "**")))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:comment-cycle (font-lock-comment-face font-lock-keyword-face) :edited-faces (("@{a}" font-lock-variable-name-face) ("profile-name" font-lock-function-name-face) ("edited-permission" font-lock-constant-face) ("embedded-hash" nil) ("inserted-wildcard" font-lock-regexp-grouping-construct)))"#
     ]],
-        ),
-        (
-            "apparmor_mode_completes_keyword_but_leaves_nested_local_include_unresolved",
-            r##"(let* ((root
+    )
+}
+
+fn apparmor_mode_completes_keyword_but_leaves_nested_local_include_unresolved() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "apparmor_mode_completes_keyword_but_leaves_nested_local_include_unresolved",
+        r##"(let* ((root
                   (apparmor-mode-test-root
                    "apparmor-completion"))
                  (default-directory root)
@@ -285,14 +289,17 @@ fn workflows_public_surface_batch() {
                       t)
                      #'string<)))))
            (apparmor-mode-test-cleanup root)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:keyword (t "capability" 11) :include (nil "include \"local/service-b" 25) :choices ("service" nil) :resolved ("local/service-base" "local/service-extra"))"#
     ]],
-        ),
-        (
-            "apparmor_mode_flymake_discards_a_slow_obsolete_result_after_a_rapid_edit",
-            r##"(let* ((root
+    )
+}
+
+fn apparmor_mode_flymake_discards_a_slow_obsolete_result_after_a_rapid_edit() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "apparmor_mode_flymake_discards_a_slow_obsolete_result_after_a_rapid_edit",
+        r##"(let* ((root
                   (apparmor-mode-test-root
                    "apparmor-flymake"))
                  (path
@@ -421,14 +428,17 @@ fn workflows_public_surface_batch() {
              (kill-buffer buffer))
            (apparmor-mode-test-cleanup root))
          result)"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:diagnostics ((:type :error :text "latest diagnostic" :begin (3 2) :end (3 21))) :latest-input "profile service /usr/bin/service {\n  capability net_bind_service,\n  LATEST_BROKEN rule,\n}\n" :arguments "-Q\n-K\n/dev/stdin\n" :buffer "profile service /usr/bin/service {\n  capability net_bind_service,\n  LATEST_BROKEN rule,\n}\n" :disk "profile service /usr/bin/service {\n  capability net_bind_service,\n  LATEST_BROKEN rule,\n}\n" :modified nil)"#
     ]],
-        ),
-        (
-            "apparmor_mode_flymake_wraps_and_validates_a_real_abstraction_fragment",
-            r##"(let* ((root
+    )
+}
+
+fn apparmor_mode_flymake_wraps_and_validates_a_real_abstraction_fragment() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "apparmor_mode_flymake_wraps_and_validates_a_real_abstraction_fragment",
+        r##"(let* ((root
                   (apparmor-mode-test-root
                    "apparmor-abstraction"))
                  (path
@@ -515,10 +525,21 @@ fn workflows_public_surface_batch() {
              (kill-buffer buffer))
            (apparmor-mode-test-cleanup root))
          result)"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:diagnostics ((:type :error :text "invalid abstraction rule" :begin (2 0) :end (2 24))) :parser-input "profile base { /etc/ssl/certs/** r,\nBROKEN abstraction rule,\n }" :arguments "-Q\n-K\n/dev/stdin\n" :source "/etc/ssl/certs/** r,\nBROKEN abstraction rule,\n")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        apparmor_mode_authors_indents_and_saves_a_real_nested_service_policy(),
+        apparmor_mode_refontifies_security_rules_after_practical_policy_edits(),
+        apparmor_mode_completes_keyword_but_leaves_nested_local_include_unresolved(),
+        apparmor_mode_flymake_discards_a_slow_obsolete_result_after_a_rapid_edit(),
+        apparmor_mode_flymake_wraps_and_validates_a_real_abstraction_fragment(),
+    ];
+    assert_apparmor_mode_batch(&cases);
 }

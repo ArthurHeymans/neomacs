@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_auto_package_update_autoload_batch, assert_auto_package_update_batch};
+use super::{ParityBatchCase, assert_auto_package_update_autoload_batch, assert_auto_package_update_batch};
 
-#[test]
-fn registry_auto_package_update_batch() {
-    assert_auto_package_update_batch(&[
-        (
-            "auto_package_update_exact_descriptor_dependencies_and_archive_payload_match",
-            r##"(let*
+fn auto_package_update_exact_descriptor_dependencies_and_archive_payload_match() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_package_update_exact_descriptor_dependencies_and_archive_payload_match",
+        r##"(let*
                              ((descriptor
                                (cadr
                                 (assq
@@ -51,14 +49,17 @@ fn registry_auto_package_update_batch() {
                                (package-version-join
                                 (package-desc-version dash))
                                (package-desc-reqs dash)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (auto-package-update "20260601.1804" "Automatically update Emacs packages." ((emacs (24 4)) (dash (2 1 0))) nil ((:keywords "package" "update") (:revdesc . "e966c6c95de1") (:commit . "e966c6c95de1742d867250dc15b1c6bd570b6ea5") (:url . "https://github.com/rranelli/auto-package-update.el")) (("auto-package-update-pkg.el" 361 "137a90e8c3931ce94db0eb3a5880d756566cd5fc84db75cba0323b4e0934fc2d") ("auto-package-update.el" 15624 "bfdf1377656ce5d47445734eafd4db1353e87816110a5e7a0a4e78691c012745")) (dash "20260221.1346" ((emacs (24)))))"#
     ]],
-        ),
-        (
-            "auto_package_update_minor_mode_has_exact_buffer_local_keymap_lifecycle",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_package_update_minor_mode_has_exact_buffer_local_keymap_lifecycle() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_package_update_minor_mode_has_exact_buffer_local_keymap_lifecycle",
+        r##"(with-temp-buffer
                            (let ((before
                                   (list
                                    auto-package-update-minor-mode
@@ -83,20 +84,17 @@ fn registry_auto_package_update_batch() {
                                 (get
                                  'auto-package-update-minor-mode
                                  'custom-type)))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((nil nil self-insert-command) (t t quit-window t) nil self-insert-command nil)"
     ],
-        ),
-    ]);
+    )
 }
 
-#[test]
-fn registry_auto_package_update_autoload_batch() {
-    assert_auto_package_update_autoload_batch(&[
-        (
-            "auto_package_update_generated_autoload_exposes_only_public_commands",
-            r##"(let*
+fn auto_package_update_generated_autoload_exposes_only_public_commands() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_package_update_generated_autoload_exposes_only_public_commands",
+        r##"(let*
                              ((history
                                (seq-find
                                 (lambda (entry)
@@ -134,10 +132,26 @@ fn registry_auto_package_update_autoload_batch() {
                                 (car-safe event)
                                 '(defun provide)))
                              (cdr history))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t nil ((auto-package-update-now t t t "auto-package-update.el") (auto-package-update-now-async t t t "auto-package-update.el") (auto-package-update-at-time t t nil "auto-package-update.el") (auto-package-update-maybe t t nil "auto-package-update.el")) ((defun . auto-package-update-now) (defun . auto-package-update-now-async) (defun . auto-package-update-at-time) (defun . auto-package-update-maybe) (provide . auto-package-update-autoloads)))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn registry_auto_package_update_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_package_update_exact_descriptor_dependencies_and_archive_payload_match(),
+        auto_package_update_minor_mode_has_exact_buffer_local_keymap_lifecycle(),
+    ];
+    assert_auto_package_update_batch(&cases);
+}
+
+#[test]
+fn registry_auto_package_update_autoload_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_package_update_generated_autoload_exposes_only_public_commands(),
+    ];
+    assert_auto_package_update_autoload_batch(&cases);
 }

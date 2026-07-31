@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_anzu_batch;
+use super::{ParityBatchCase, assert_anzu_batch};
 
-#[test]
-fn practical_public_surface_batch() {
-    assert_anzu_batch(&[
-        (
-            "incremental_search_reports_each_repeated_match_and_restores_the_mode_line",
-            r##"(let ((buffer
+fn incremental_search_reports_each_repeated_match_and_restores_the_mode_line() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "incremental_search_reports_each_repeated_match_and_restores_the_mode_line",
+        r##"(let ((buffer
          (generate-new-buffer " *anzu-incremental-search-workflow*"))
         result)
     (unwind-protect
@@ -77,14 +75,17 @@ fn practical_public_surface_batch() {
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))
     result)"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:first (:point 6 :line 1 :text "alpha" :indicator "(1/4)") :second (:point 17 :line 1 :text "alpha" :indicator "(2/4)") :during-mode-line (:eval (anzu--update-mode-line)) :after-search (:isearch nil :anzu t :mode-line-restored t) :after-disable (:anzu nil :mode-line-restored t))"#
     ]],
-        ),
-        (
-            "replace_at_cursor_renames_a_symbol_only_inside_the_current_defun",
-            r##"(let ((buffer
+    )
+}
+
+fn replace_at_cursor_renames_a_symbol_only_inside_the_current_defun() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "replace_at_cursor_renames_a_symbol_only_inside_the_current_defun",
+        r##"(let ((buffer
          (generate-new-buffer " *anzu-scoped-rename-workflow*"))
         result)
     (unwind-protect
@@ -139,14 +140,17 @@ fn practical_public_surface_batch() {
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))
     result)"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:before (:point 20 :symbol "target") :after (:point 16 :symbol "environment") :buffer "(defun deploy (environment)\n  (let ((status environment))\n    (message \"%s -> %s\" environment status)))\n\n(setq target 'staging)\n" :prompts ("Query replace regexp \\_<target\\_> with: ") :history ("environment") :mark 1 :mode-line-restored t :stale-anzu-overlays 0)"#
     ]],
-        ),
-        (
-            "regexp_isearch_flows_into_selective_capture_group_replacement",
-            r##"(let ((buffer
+    )
+}
+
+fn regexp_isearch_flows_into_selective_capture_group_replacement() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "regexp_isearch_flows_into_selective_capture_group_replacement",
+        r##"(let ((buffer
          (generate-new-buffer " *anzu-isearch-replace-workflow*"))
         result)
     (unwind-protect
@@ -223,14 +227,17 @@ fn practical_public_surface_batch() {
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))
     result)"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:search (:point 22 :line 1 :text "INFO user=alice id=17" :indicator "(1/3)") :buffer "OK id=17 owner=alice\nWARN user=bob id=23\nINFO user=carol id=42\nOK id=99 owner=dave\n" :point 83 :mark 1 :input-prompts ("Query replace regexp ^INFO user=\\([[:alpha:]]+\\) id=\\([[:digit:]]+\\)$ with: ") :decision-prompts ("Query replacing regexp ^INFO user=\\([[:alpha:]]+\\) id=\\([[:digit:]]+\\)$ with OK id=17 owner=alice: (? for help) " "Query replacing regexp ^INFO user=\\([[:alpha:]]+\\) id=\\([[:digit:]]+\\)$ with OK id=42 owner=carol: (? for help) " "Query replacing regexp ^INFO user=\\([[:alpha:]]+\\) id=\\([[:digit:]]+\\)$ with OK id=99 owner=dave: (? for help) ") :input-answers-left nil :decisions-left nil :history ("OK id=\\2 owner=\\1" "^INFO user=\\([[:alpha:]]+\\) id=\\([[:digit:]]+\\)$") :isearch nil :anzu t :mode-line-restored t :stale-anzu-overlays 0)"#
     ]],
-        ),
-        (
-            "global_mode_covers_existing_and_future_buffers_then_stops_cleanly",
-            r##"(let ((existing
+    )
+}
+
+fn global_mode_covers_existing_and_future_buffers_then_stops_cleanly() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "global_mode_covers_existing_and_future_buffers_then_stops_cleanly",
+        r##"(let ((existing
          (generate-new-buffer " *anzu-global-existing*"))
         future
         disabled-future
@@ -302,14 +309,17 @@ fn practical_public_surface_batch() {
         (when (buffer-live-p buffer)
           (kill-buffer buffer))))
     result)"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:enabled (:existing t :future t) :future-buffer-search (:point 18 :line 1 :text "release" :indicator "(1/3)") :disabled (:existing nil :future nil :new-buffer nil) :global nil)"#
     ]],
-        ),
-        (
-            "search_threshold_and_no_match_face_track_a_refined_log_query",
-            r##"(let ((buffer
+    )
+}
+
+fn search_threshold_and_no_match_face_track_a_refined_log_query() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "search_threshold_and_no_match_face_track_a_refined_log_query",
+        r##"(let ((buffer
          (generate-new-buffer " *anzu-threshold-search-workflow*"))
         result)
     (unwind-protect
@@ -382,10 +392,21 @@ fn practical_public_surface_batch() {
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))
     result)"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:first (:point 6 :line 1 :indicator "(1/3+)" :face anzu-mode-line) :second (:point 40 :line 3 :indicator "(2/3+)" :face anzu-mode-line) :refined-query (:success nil :indicator "(0/0)" :face anzu-mode-line-no-match))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn practical_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        incremental_search_reports_each_repeated_match_and_restores_the_mode_line(),
+        replace_at_cursor_renames_a_symbol_only_inside_the_current_defun(),
+        regexp_isearch_flows_into_selective_capture_group_replacement(),
+        global_mode_covers_existing_and_future_buffers_then_stops_cleanly(),
+        search_threshold_and_no_match_face_track_a_refined_log_query(),
+    ];
+    assert_anzu_batch(&cases);
 }

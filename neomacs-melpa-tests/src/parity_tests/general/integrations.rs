@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_general_batch;
+use super::{ParityBatchCase, assert_general_batch};
 
-#[test]
-fn integrations_public_surface_batch() {
-    assert_general_batch(&[
-        (
-            "general_use_package_keyword_accepts_primary_positional_and_repeated_forms",
-            r##"(progn
+fn general_use_package_keyword_accepts_primary_positional_and_repeated_forms() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_use_package_keyword_accepts_primary_positional_and_repeated_forms",
+        r##"(progn
                (require 'use-package)
                (defvar
                  neomacs-general-use-package-map
@@ -39,12 +37,15 @@ fn integrations_public_surface_batch() {
                 (lookup-key
                  neomacs-general-use-package-map
                  (kbd "c"))))"##,
-            true,
-            expect![[r#"OK (forward-char backward-char next-line)"#]],
-        ),
-        (
-            "general_ghook_keyword_infers_mode_functions_and_supports_explicit_lists",
-            r##"(progn
+        true,
+        expect![[r#"OK (forward-char backward-char next-line)"#]],
+    )
+}
+
+fn general_ghook_keyword_infers_mode_functions_and_supports_explicit_lists() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_ghook_keyword_infers_mode_functions_and_supports_explicit_lists",
+        r##"(progn
                (require 'use-package)
                (defvar
                  neomacs-general-hook-a nil)
@@ -74,14 +75,17 @@ fn integrations_public_surface_batch() {
                (list
                 neomacs-general-hook-a
                 neomacs-general-hook-b))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((neomacs-general-fake-mode forward-char backward-char) (neomacs-general-fake-mode))"#
     ]],
-        ),
-        (
-            "general_gfhook_keyword_infers_hook_names_and_preserves_append_order",
-            r##"(progn
+    )
+}
+
+fn general_gfhook_keyword_infers_hook_names_and_preserves_append_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_gfhook_keyword_infers_hook_names_and_preserves_append_order",
+        r##"(progn
                (require 'use-package)
                (defvar
                  neomacs-general-fake-mode-hook nil)
@@ -109,10 +113,19 @@ fn integrations_public_surface_batch() {
                (list
                 neomacs-general-fake-mode-hook
                 neomacs-general-other-hook))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((backward-char forward-char next-line) (beginning-of-line previous-line))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn integrations_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        general_use_package_keyword_accepts_primary_positional_and_repeated_forms(),
+        general_ghook_keyword_infers_mode_functions_and_supports_explicit_lists(),
+        general_gfhook_keyword_infers_hook_names_and_preserves_append_order(),
+    ];
+    assert_general_batch(&cases);
 }

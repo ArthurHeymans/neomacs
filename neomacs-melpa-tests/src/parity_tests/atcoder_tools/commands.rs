@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_atcoder_tools_batch;
+use super::{ParityBatchCase, assert_atcoder_tools_batch};
 
-#[test]
-fn commands_public_surface_batch() {
-    assert_atcoder_tools_batch(&[
-        (
-            "atcoder_tools_expands_every_placeholder_repetition_and_preserves_order",
-            r##"(atcoder-tools--expand-cmd-templates
+fn atcoder_tools_expands_every_placeholder_repetition_and_preserves_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atcoder_tools_expands_every_placeholder_repetition_and_preserves_order",
+        r##"(atcoder-tools--expand-cmd-templates
           '("compile %s -o %e"
             "test -d %d -e %e"
             "%d|%s|%e|%d|%s|%e"
@@ -15,36 +13,45 @@ fn commands_public_surface_batch() {
           "/workspace/contest"
           "/workspace/contest/main.cpp"
           "/workspace/contest/main")"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("compile /workspace/contest/main.cpp -o /workspace/contest/main" "test -d /workspace/contest -e /workspace/contest/main" "/workspace/contest|/workspace/contest/main.cpp|/workspace/contest/main|/workspace/contest|/workspace/contest/main.cpp|/workspace/contest/main" "literal %% %x")"#
     ]],
-        ),
-        (
-            "atcoder_tools_command_expansion_shell_quotes_spaces_quotes_unicode_and_metacharacters",
-            r##"(atcoder-tools--expand-cmd-templates
+    )
+}
+
+fn atcoder_tools_command_expansion_shell_quotes_spaces_quotes_unicode_and_metacharacters() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atcoder_tools_command_expansion_shell_quotes_spaces_quotes_unicode_and_metacharacters",
+        r##"(atcoder-tools--expand-cmd-templates
           '("cd %d && compiler %s -o %e")
           "/work/AtCoder Finals; echo owned"
           "/work/AtCoder Finals/it's λ.cpp"
           "/work/AtCoder Finals/it's λ")"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("cd /work/AtCoder\\ Finals\\;\\ echo\\ owned && compiler /work/AtCoder\\ Finals/it\\'s\\ \\λ.cpp -o /work/AtCoder\\ Finals/it\\'s\\ \\λ")"#
     ]],
-        ),
-        (
-            "atcoder_tools_replacement_is_nonrecursive_for_placeholder_text_inside_quoted_paths",
-            r##"(atcoder-tools--expand-cmd-templates
+    )
+}
+
+fn atcoder_tools_replacement_is_nonrecursive_for_placeholder_text_inside_quoted_paths() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atcoder_tools_replacement_is_nonrecursive_for_placeholder_text_inside_quoted_paths",
+        r##"(atcoder-tools--expand-cmd-templates
           '("dir=%d src=%s exec=%e")
           "/contest/%s/%e"
           "/source/%e/main.c"
           "/bin/%d/main")"##,
-            true,
-            expect![[r#"OK ("dir=/contest/\\%s/\\%e src=/source/\\%e/main.c exec=/bin/\\%d/main")"#]],
-        ),
-        (
-            "atcoder_tools_command_expansion_handles_empty_templates_and_surfaces_bad_values",
-            r##"(list
+        true,
+        expect![[r#"OK ("dir=/contest/\\%s/\\%e src=/source/\\%e/main.c exec=/bin/\\%d/main")"#]],
+    )
+}
+
+fn atcoder_tools_command_expansion_handles_empty_templates_and_surfaces_bad_values() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atcoder_tools_command_expansion_handles_empty_templates_and_surfaces_bad_values",
+        r##"(list
           (atcoder-tools--expand-cmd-templates
            nil
            "/work"
@@ -73,14 +80,17 @@ fn commands_public_surface_batch() {
              (42)
              (symbol)
              ("ok" nil))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil nil ("") ((:error wrong-type-argument (arrayp nil)) (:error wrong-type-argument (sequencep 42)) (:error wrong-type-argument (sequencep symbol)) (:error wrong-type-argument (arrayp nil))))"#
     ]],
-        ),
-        (
-            "atcoder_tools_c_gcc_test_builds_exact_command_environment_and_deletes_stale_executable",
-            r##"(let* ((root
+    )
+}
+
+fn atcoder_tools_c_gcc_test_builds_exact_command_environment_and_deletes_stale_executable() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atcoder_tools_c_gcc_test_builds_exact_command_environment_and_deletes_stale_executable",
+        r##"(let* ((root
                 (atcoder-tools-test-root))
                (source
                 (atcoder-tools-test-write-file
@@ -119,14 +129,17 @@ fn commands_public_surface_batch() {
                (file-exists-p source)
                (file-exists-p executable)
                (atcoder-tools-test-tree root)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil ("gcc -x c -std=gnu11 -o [ROOT]/abc321/A/main -lm -O2 [ROOT]/abc321/A/main.c && atcoder-tools test -e [ROOT]/abc321/A/main -d [ROOT]/abc321/A" t nil t t) t nil (("abc321/A/main.c" 29 "2ad75d95660563887d8d3f1d0ae1dcf18c2379cbd83a5c72f5ab276351ee6949")))"#
     ]],
-        ),
-        (
-            "atcoder_tools_preloaded_compilation_lifecycle_binds_ansi_terminal_only_during_compile",
-            r##"(progn
+    )
+}
+
+fn atcoder_tools_preloaded_compilation_lifecycle_binds_ansi_terminal_only_during_compile() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atcoder_tools_preloaded_compilation_lifecycle_binds_ansi_terminal_only_during_compile",
+        r##"(progn
          (require 'compile)
          (let* ((comint-terminfo-terminal
                 "fixture-outer")
@@ -159,12 +172,15 @@ fn commands_public_surface_batch() {
                observed
                comint-terminfo-terminal
                (file-exists-p executable))))))"##,
-            true,
-            expect![[r#"OK ("fixture-outer" nil "ansi" "fixture-outer" nil)"#]],
-        ),
-        (
-            "atcoder_tools_c_and_cxx_compiler_variants_construct_exact_practical_commands",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK ("fixture-outer" nil "ansi" "fixture-outer" nil)"#]],
+    )
+}
+
+fn atcoder_tools_c_and_cxx_compiler_variants_construct_exact_practical_commands() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atcoder_tools_c_and_cxx_compiler_variants_construct_exact_practical_commands",
+        r##"(let* ((root
                 (atcoder-tools-test-root))
                (c-source
                 (atcoder-tools-test-write-file
@@ -223,14 +239,17 @@ fn commands_public_surface_batch() {
            (mapcar
             #'car
             (atcoder-tools-test-tree root))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("clang -x c -lm -O2 -o [ROOT]/round\\ 1/C\\ task/main\\ file [ROOT]/round\\ 1/C\\ task/main\\ file.c && atcoder-tools test -e [ROOT]/round\\ 1/C\\ task/main\\ file -d [ROOT]/round\\ 1/C\\ task" t nil) ("clang++ -std=c++14 -stdlib=libc++ -O2 -o [ROOT]/round\\ 1/C\\ task/main\\ file [ROOT]/round\\ 1/C\\ task/main\\ file.cpp && atcoder-tools test -e [ROOT]/round\\ 1/C\\ task/main\\ file -d [ROOT]/round\\ 1/C\\ task" t nil)) nil nil ("round 1/C task/main file.c" "round 1/C task/main file.cpp"))"#
     ]],
-        ),
-        (
-            "atcoder_tools_rust_rustc_and_rustup_workflows_build_and_clean_exact_paths",
-            r##"(let* ((root
+    )
+}
+
+fn atcoder_tools_rust_rustc_and_rustup_workflows_build_and_clean_exact_paths() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atcoder_tools_rust_rustc_and_rustup_workflows_build_and_clean_exact_paths",
+        r##"(let* ((root
                 (atcoder-tools-test-root))
                (source
                 (atcoder-tools-test-write-file
@@ -271,14 +290,17 @@ fn commands_public_surface_batch() {
                 (file-exists-p executable))
                commands)))
           (nreverse commands))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("rustc -Oo [ROOT]/abc133/A/main [ROOT]/abc133/A/main.rs && env RUST_BACKTRACE=1 atcoder-tools test -e [ROOT]/abc133/A/main -d [ROOT]/abc133/A" t nil) (:exists-after nil nil) ("rustup run --install 1.15.1 rustc -Oo [ROOT]/abc133/A/main [ROOT]/abc133/A/main.rs && env RUST_BACKTRACE=1 atcoder-tools test -e [ROOT]/abc133/A/main -d [ROOT]/abc133/A" t nil) (:exists-after t nil))"#
     ]],
-        ),
-        (
-            "atcoder_tools_custom_run_configuration_can_keep_executable_and_join_many_commands",
-            r##"(let* ((root
+    )
+}
+
+fn atcoder_tools_custom_run_configuration_can_keep_executable_and_join_many_commands() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atcoder_tools_custom_run_configuration_can_keep_executable_and_join_many_commands",
+        r##"(let* ((root
                 (atcoder-tools-test-root))
                (source
                 (atcoder-tools-test-write-file
@@ -320,14 +342,17 @@ fn commands_public_surface_batch() {
              (file-exists-p executable)
              (atcoder-tools-test-read-file
               executable))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil ("prepare [ROOT]/practice/A && build [ROOT]/practice/A/solution.xyz [ROOT]/practice/A/solution && verify [ROOT]/practice/A/solution" t nil) t "keep")"#
     ]],
-        ),
-        (
-            "atcoder_tools_compile_signal_preserves_existing_executable_and_propagates",
-            r##"(let* ((root
+    )
+}
+
+fn atcoder_tools_compile_signal_preserves_existing_executable_and_propagates() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atcoder_tools_compile_signal_preserves_existing_executable_and_propagates",
+        r##"(let* ((root
                 (atcoder-tools-test-root))
                (source
                 (atcoder-tools-test-write-file
@@ -352,12 +377,15 @@ fn commands_public_surface_batch() {
              (file-exists-p executable)
              (atcoder-tools-test-read-file
               executable))))"##,
-            true,
-            expect![[r#"OK ((:error error ("compilation refused")) t "existing")"#]],
-        ),
-        (
-            "atcoder_tools_missing_executable_is_tolerated_after_compile_was_started",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK ((:error error ("compilation refused")) t "existing")"#]],
+    )
+}
+
+fn atcoder_tools_missing_executable_is_tolerated_after_compile_was_started() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atcoder_tools_missing_executable_is_tolerated_after_compile_was_started",
+        r##"(let* ((root
                 (atcoder-tools-test-root))
                (source
                 (atcoder-tools-test-write-file
@@ -387,14 +415,17 @@ fn commands_public_surface_batch() {
              (file-exists-p
               (file-name-sans-extension
                source)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:ok nil) ("gcc -x c -std=gnu11 -o [ROOT]/abc777/B/main -lm -O2 [ROOT]/abc777/B/main.c && atcoder-tools test -e [ROOT]/abc777/B/main -d [ROOT]/abc777/B" t) t nil)"#
     ]],
-        ),
-        (
-            "atcoder_tools_public_test_command_forwards_live_buffer_mode_and_file",
-            r##"(let (calls)
+    )
+}
+
+fn atcoder_tools_public_test_command_forwards_live_buffer_mode_and_file() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atcoder_tools_public_test_command_forwards_live_buffer_mode_and_file",
+        r##"(let (calls)
           (cl-letf
               (((symbol-function
                  'atcoder-tools--test)
@@ -413,10 +444,28 @@ fn commands_public_surface_batch() {
                (call-interactively
                 #'atcoder-tools-test)
                (nreverse calls)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:delegated :delegated ((rust-mode "/contest/abc133/A/main.rs") (rust-mode "/contest/abc133/A/main.rs")))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn commands_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        atcoder_tools_expands_every_placeholder_repetition_and_preserves_order(),
+        atcoder_tools_command_expansion_shell_quotes_spaces_quotes_unicode_and_metacharacters(),
+        atcoder_tools_replacement_is_nonrecursive_for_placeholder_text_inside_quoted_paths(),
+        atcoder_tools_command_expansion_handles_empty_templates_and_surfaces_bad_values(),
+        atcoder_tools_c_gcc_test_builds_exact_command_environment_and_deletes_stale_executable(),
+        atcoder_tools_preloaded_compilation_lifecycle_binds_ansi_terminal_only_during_compile(),
+        atcoder_tools_c_and_cxx_compiler_variants_construct_exact_practical_commands(),
+        atcoder_tools_rust_rustc_and_rustup_workflows_build_and_clean_exact_paths(),
+        atcoder_tools_custom_run_configuration_can_keep_executable_and_join_many_commands(),
+        atcoder_tools_compile_signal_preserves_existing_executable_and_propagates(),
+        atcoder_tools_missing_executable_is_tolerated_after_compile_was_started(),
+        atcoder_tools_public_test_command_forwards_live_buffer_mode_and_file(),
+    ];
+    assert_atcoder_tools_batch(&cases);
 }

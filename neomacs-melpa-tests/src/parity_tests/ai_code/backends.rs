@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_ai_code_batch;
+use super::{ParityBatchCase, assert_ai_code_batch};
 
-#[test]
-fn backends_public_surface_batch() {
-    assert_ai_code_batch(&[
-        (
-            "cli_wrappers_construct_complete_launch_specs_at_external_boundary",
-            r##"
+fn cli_wrappers_construct_complete_launch_specs_at_external_boundary() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "cli_wrappers_construct_complete_launch_specs_at_external_boundary",
+        r##"
 (progn
   (mapc
    #'require
@@ -58,14 +56,17 @@ fn backends_public_surface_batch() {
           (nreverse ai-code-test-backend-events)))
     (makunbound 'ai-code-test-backend-events)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("gemini" ("--model" "pro") "Gemini" "gemini" nil nil t nil) ("agy" ("--sandbox") "Antigravity" "antigravity" nil nil t (4)) ("interpreter" ("--local") "Open Interpreter" "open-interpreter" nil nil t nil) ("cursor-agent" ("--mode" "ask") "Cursor" "cursor" nil nil t nil) ("codebuddy" ("--verbose") "CodeBuddy" "codebuddy" nil nil t nil) ("aider" ("--no-auto-commits") "Aider" "aider" nil nil t nil) ("grok" ("--model" "grok-4") "Grok" "grok" nil nil nil nil) ("opencode" ("--port" "4096") "Opencode" "opencode" ("OTUI_USE_ALTERNATE_SCREEN=main-screen") nil nil nil) ("kilo" ("--agent" "review") "Kilo" "kilo" ("OTUI_USE_ALTERNATE_SCREEN=main-screen") nil nil nil) ("kiro-cli" ("chat" "--trust-all-tools" "--agent" "architect" "--verbose") "Kiro" "kiro" nil nil t nil) ("pi" ("--provider" "local") "Pi" "pi" nil "\33[13;2u" t nil))"#
     ]],
-        ),
-        (
-            "mcp_capable_wrappers_forward_environment_multiline_and_prepare_hooks",
-            r##"
+    )
+}
+
+fn mcp_capable_wrappers_forward_environment_multiline_and_prepare_hooks() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "mcp_capable_wrappers_forward_environment_multiline_and_prepare_hooks",
+        r##"
 (progn
   (mapc
    #'require
@@ -102,14 +103,17 @@ fn backends_public_surface_batch() {
           (nreverse ai-code-test-backend-events)))
     (makunbound 'ai-code-test-backend-events)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("/opt/bin/codex" ("--oss") "Codex" "codex" nil nil t nil) ("/opt/bin/claude" ("--model" "opus") "Claude Code" "claude" ("TERM_PROGRAM=emacs" "FORCE_CODE_TERMINAL=true" "CLAUDE_CODE_NO_FLICKER=1") "\33\15" t (4)) ("/opt/bin/copilot" ("--allow-all") "Copilot" "copilot" ("TERM_PROGRAM=vscode" "NO_COLOR=1") "\15\n" t nil))"#
     ]],
-        ),
-        (
-            "resume_commands_append_backend_specific_flags_and_open_pickers_when_required",
-            r##"
+    )
+}
+
+fn resume_commands_append_backend_specific_flags_and_open_pickers_when_required() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "resume_commands_append_backend_specific_flags_and_open_pickers_when_required",
+        r##"
 (progn
   (mapc
    #'require
@@ -150,14 +154,17 @@ fn backends_public_surface_batch() {
           (nreverse ai-code-test-backend-events)))
     (makunbound 'ai-code-test-backend-events)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((start "codex" ("--profile" "work" "resume") nil) (start "claude" ("--model" "sonnet" "--resume") (4)) (start "gemini" ("--model" "pro" "--resume") nil) (start "copilot" ("--allow-all" "--resume") nil) (picker "copilot") (start "opencode" ("--port" "4096" "--continue") nil) (picker "opencode") (start "kilo" ("--agent" "review" "--continue") nil) (picker "kilo") (start "grok" ("--model" "grok-4" "resume") nil) (picker "grok") (start "kiro" ("chat" "--verbose" "--resume") nil))"#
     ]],
-        ),
-        (
-            "backend_send_switch_and_escape_commands_route_labels_prefixes_and_payloads",
-            r##"
+    )
+}
+
+fn backend_send_switch_and_escape_commands_route_labels_prefixes_and_payloads() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "backend_send_switch_and_escape_commands_route_labels_prefixes_and_payloads",
+        r##"
 (progn
   (mapc
    #'require
@@ -192,14 +199,17 @@ fn backends_public_surface_batch() {
         (nreverse ai-code-test-backend-events))
     (makunbound 'ai-code-test-backend-events)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((send "Codex" "codex" "Inspect the failing ledger test, then propose a minimal fix.") (send "Claude Code" "claude" "Review the transaction boundary for duplicate writes.") (switch "Gemini" "gemini" t) (switch "Copilot" "copilot" nil) (send "Aider" "aider" "/add src/payment.rs") (switch "Opencode" "opencode" (4)) (send "Kilo" "kilo" "Run focused tests.") (switch "Grok" "grok" nil) (escape))"#
     ]],
-        ),
-        (
-            "kiro_command_builder_orders_chat_trust_agent_and_user_switches",
-            r##"
+    )
+}
+
+fn kiro_command_builder_orders_chat_trust_agent_and_user_switches() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "kiro_command_builder_orders_chat_trust_agent_and_user_switches",
+        r##"
 (progn
   (require 'ai-code-kiro-cli)
   (let ((ai-code-kiro-cli-program "/opt/kiro cli")
@@ -214,10 +224,21 @@ fn backends_public_surface_batch() {
            (ai-code-kiro-cli-program-switches nil))
        (ai-code-kiro-cli--build-args)))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("chat" "--trust-all-tools" "--agent" "security-review" "--verbose" "--profile" "work") "/opt/kiro cli chat --trust-all-tools --agent security-review --verbose --profile work" ("chat"))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn backends_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        cli_wrappers_construct_complete_launch_specs_at_external_boundary(),
+        mcp_capable_wrappers_forward_environment_multiline_and_prepare_hooks(),
+        resume_commands_append_backend_specific_flags_and_open_pickers_when_required(),
+        backend_send_switch_and_escape_commands_route_labels_prefixes_and_payloads(),
+        kiro_command_builder_orders_chat_trust_agent_and_user_switches(),
+    ];
+    assert_ai_code_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_batch;
+use super::{ParityBatchCase, assert_auto_complete_batch};
 
-#[test]
-fn matching_public_surface_batch() {
-    assert_auto_complete_batch(&[
-        (
-            "auto_complete_prefix_parsers_handle_symbols_files_and_c_family_members_in_real_buffers",
-            r##"(mapcar
+fn auto_complete_prefix_parsers_handle_symbols_files_and_c_family_members_in_real_buffers() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_prefix_parsers_handle_symbols_files_and_c_family_members_in_real_buffers",
+        r##"(mapcar
                           (lambda (case)
                             (with-temp-buffer
                               (insert (car case))
@@ -30,14 +28,17 @@ fn matching_public_surface_batch() {
                             ("alpha-beta")
                             ("12345")
                             ("0xbeef")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("alpha_beta" 11 1 nil nil nil nil) ("obj.member" 11 5 nil 5 nil nil) ("ptr->member" 12 1 6 nil nil nil) ("Type::member" 13 7 nil nil nil 7) ("\"dir/file" 10 2 2 nil nil nil) ("alpha-beta" 11 1 nil nil nil nil) ("12345" 6 1 nil nil nil nil) ("0xbeef" 7 1 nil nil nil nil))"#
     ]],
-        ),
-        (
-            "auto_complete_default_prefix_rejects_numeric_literals_but_accepts_mixed_symbols",
-            r##"(mapcar
+    )
+}
+
+fn auto_complete_default_prefix_rejects_numeric_literals_but_accepts_mixed_symbols() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_default_prefix_rejects_numeric_literals_but_accepts_mixed_symbols",
+        r##"(mapcar
                           (lambda (text)
                             (with-temp-buffer
                               (insert text)
@@ -58,14 +59,17 @@ fn matching_public_surface_batch() {
                             "alpha42"
                             "_42"
                             "λ-value"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("42" 1 nil nil) ("007bond" 1 nil nil) ("0xff" 1 nil nil) ("0b101" 1 nil nil) ("0o755" 1 nil nil) ("alpha42" 1 1 "alpha42") ("_42" 1 1 "_42") ("λ-value" 1 1 "λ-value"))"#
     ]],
-        ),
-        (
-            "auto_complete_source_compilation_expands_prefix_and_match_shorthands_and_filters_dependencies",
-            r##"(let ((ac-prefix-definitions
+    )
+}
+
+fn auto_complete_source_compilation_expands_prefix_and_match_shorthands_and_filters_dependencies() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_source_compilation_expands_prefix_and_match_shorthands_and_filters_dependencies",
+        r##"(let ((ac-prefix-definitions
                                 '((word . ac-prefix-symbol))))
                            (setq
                             auto-complete-test-available-calls
@@ -99,14 +103,17 @@ fn matching_public_surface_batch() {
                                 (depends
                                  auto-complete-test-missing-feature))))
                             auto-complete-test-available-calls))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((((prefix . ac-prefix-symbol) (candidates list "alpha") (prefix . word) (match . ac-match-substring)) ((prefix . ac-prefix-default) (candidates list "beta") (available . auto-complete-test-available))) 11)"#
     ]],
-        ),
-        (
-            "auto_complete_prefix_resolution_groups_only_sources_at_the_winning_start_point",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_complete_prefix_resolution_groups_only_sources_at_the_winning_start_point() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_prefix_resolution_groups_only_sources_at_the_winning_start_point",
+        r##"(with-temp-buffer
                           (insert "obj.member")
                           (let ((ac-sources
                                  '(((candidates list "one")
@@ -142,14 +149,17 @@ fn matching_public_surface_batch() {
                                (ac-prefix-c-dot)
                                (ac-prefix-c-dot
                                 ac-prefix-symbol)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil ac-prefix-symbol 5 (#3=(list "one") #1=(list "two") #2=(list "four"))) ((ac-prefix-symbol) ac-prefix-c-dot 5 (#1# #2#)) ((ac-prefix-c-dot) ac-prefix-symbol 5 (#3# #2#)) ((ac-prefix-c-dot ac-prefix-symbol) "obj\\.\\(.*\\)" 5 (#2#)))"#
     ]],
-        ),
-        (
-            "auto_complete_candidate_pipeline_preserves_values_actions_docs_faces_cache_and_limits",
-            r##"(let ((ac-prefix "a")
+    )
+}
+
+fn auto_complete_candidate_pipeline_preserves_values_actions_docs_faces_cache_and_limits() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_candidate_pipeline_preserves_values_actions_docs_faces_cache_and_limits",
+        r##"(let ((ac-prefix "a")
                                (ac-limit 3)
                                (ac-candidates-cache nil)
                                (source
@@ -204,14 +214,17 @@ fn matching_public_surface_batch() {
                                #'substring-no-properties
                                second)
                               (length ac-candidates-cache))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (1 (("alpha" payload-alpha auto-complete-test-action auto-complete-test-document "x" auto-complete-test-face auto-complete-test-selection) ("alpine" nil auto-complete-test-action auto-complete-test-document "x" auto-complete-test-face auto-complete-test-selection) ("amber" nil auto-complete-test-action auto-complete-test-document "x" auto-complete-test-face auto-complete-test-selection)) ("alpha" "alpine" "amber") 1)"#
     ]],
-        ),
-        (
-            "auto_complete_case_policy_changes_real_candidate_filtering_for_lower_and_upper_prefixes",
-            r##"(mapcar
+    )
+}
+
+fn auto_complete_case_policy_changes_real_candidate_filtering_for_lower_and_upper_prefixes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_case_policy_changes_real_candidate_filtering_for_lower_and_upper_prefixes",
+        r##"(mapcar
                           (lambda (case)
                             (let ((ac-ignore-case (car case))
                                   (ac-prefix (cadr case))
@@ -236,14 +249,17 @@ fn matching_public_surface_batch() {
                             (smart "AL")
                             (t "Al")
                             (nil "al")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((smart "al") ("alpha" "Alpha" "ALPINE" "almanac") "al" "al") ((smart "Al") ("Alpha") "Alpha" "Alpha") ((smart "AL") ("ALPINE") "ALPINE" "ALPINE") ((t "Al") ("alpha" "Alpha" "ALPINE" "almanac") "Al" "Al") ((nil "al") ("alpha" "almanac") "al" "al"))"#
     ]],
-        ),
-        (
-            "auto_complete_duplicate_reduction_distinguishes_actions_and_limits_work_to_front_window",
-            r##"(let* ((a1
+    )
+}
+
+fn auto_complete_duplicate_reduction_distinguishes_actions_and_limits_work_to_front_window() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_duplicate_reduction_distinguishes_actions_and_limits_work_to_front_window",
+        r##"(let* ((a1
                                  (propertize
                                   "same"
                                   'action
@@ -283,14 +299,17 @@ fn matching_public_surface_batch() {
                             (length result)
                             (cl-count 22 result)
                             (cl-count 23 result)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("same" first) ("same" second) ("other" nil) 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 22 23) 30 2 2)"#
     ]],
-        ),
-        (
-            "auto_complete_completion_history_learns_prefix_positions_sorts_and_round_trips",
-            r##"(let ((db (ac-comphist-make)))
+    )
+}
+
+fn auto_complete_completion_history_learns_prefix_positions_sorts_and_round_trips() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_completion_history_learns_prefix_positions_sorts_and_round_trips",
+        r##"(let ((db (ac-comphist-make)))
                            (dolist
                                (event
                                 '(("format" 1)
@@ -364,14 +383,17 @@ fn matching_public_surface_batch() {
                                '("format"
                                  "forward-char"
                                  "function")))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("format" "2.26304096" "1.30349980") ("forward-char" "0.22597242" "2.20505475") ("function" "1.22752738" "0.26798621") ("fresh" "0.26000000" "0.28000000")) ("format" "function" "fresh" "forward-char") (("format" (0 2 0 1 0 0)) ("forward-char" (0 0 0 2 0 0 0 0 0 0 0 0)) ("function" (0 1 0 0 0 0 0 0))) ("2.26304096" "0.22597242" "1.22752738"))"#
     ]],
-        ),
-        (
-            "auto_complete_word_scanner_returns_unique_nearest_candidates_across_both_directions_and_limits",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_complete_word_scanner_returns_unique_nearest_candidates_across_both_directions_and_limits() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_word_scanner_returns_unique_nearest_candidates_across_both_directions_and_limits",
+        r##"(with-temp-buffer
                           (insert
                            "alpha alpine alphabet\n"
                            "zero alpha amber\n"
@@ -395,14 +417,17 @@ fn matching_public_surface_batch() {
                                 (point)
                                 "a"
                                 4)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("alpha" "alphabet" "alpine") ("alpha" "alphabet") ("alphabet" "alpine" "alpha" "amber"))"#
     ]],
-        ),
-        (
-            "auto_complete_word_index_shares_only_compatible_major_mode_buffers",
-            r##"(let ((same
+    )
+}
+
+fn auto_complete_word_index_shares_only_compatible_major_mode_buffers() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_word_index_shares_only_compatible_major_mode_buffers",
+        r##"(let ((same
                                 (generate-new-buffer
                                  " *ac-same*"))
                                (other
@@ -444,12 +469,15 @@ fn matching_public_surface_batch() {
                                      #'string<))))
                              (kill-buffer same)
                              (kill-buffer other)))"##,
-            true,
-            expect![[r#"OK (("sharedAlpha" "sharedBeta") ("sharedAlpha" "sharedBeta"))"#]],
-        ),
-        (
-            "auto_complete_symbol_function_and_variable_sources_classify_injected_real_lisp_objects",
-            r##"(progn
+        true,
+        expect![[r#"OK (("sharedAlpha" "sharedBeta") ("sharedAlpha" "sharedBeta"))"#]],
+    )
+}
+
+fn auto_complete_symbol_function_and_variable_sources_classify_injected_real_lisp_objects() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_symbol_function_and_variable_sources_classify_injected_real_lisp_objects",
+        r##"(progn
                           (fset
                            'auto-complete-fixture-function
                            (lambda (value)
@@ -492,10 +520,27 @@ fn matching_public_surface_batch() {
                               'auto-complete-fixture-function
                               5)
                              auto-complete-fixture-variable)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("auto-complete-fixture-function" t t nil) ("auto-complete-fixture-variable" t nil t) ("auto-complete-fixture-property-only" t nil nil)) 12 fixture-value)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn matching_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_prefix_parsers_handle_symbols_files_and_c_family_members_in_real_buffers(),
+        auto_complete_default_prefix_rejects_numeric_literals_but_accepts_mixed_symbols(),
+        auto_complete_source_compilation_expands_prefix_and_match_shorthands_and_filters_dependencies(),
+        auto_complete_prefix_resolution_groups_only_sources_at_the_winning_start_point(),
+        auto_complete_candidate_pipeline_preserves_values_actions_docs_faces_cache_and_limits(),
+        auto_complete_case_policy_changes_real_candidate_filtering_for_lower_and_upper_prefixes(),
+        auto_complete_duplicate_reduction_distinguishes_actions_and_limits_work_to_front_window(),
+        auto_complete_completion_history_learns_prefix_positions_sorts_and_round_trips(),
+        auto_complete_word_scanner_returns_unique_nearest_candidates_across_both_directions_and_limits(),
+        auto_complete_word_index_shares_only_compatible_major_mode_buffers(),
+        auto_complete_symbol_function_and_variable_sources_classify_injected_real_lisp_objects(),
+    ];
+    assert_auto_complete_batch(&cases);
 }

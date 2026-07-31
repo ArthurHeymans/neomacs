@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_all_the_icons_batch;
+use super::{ParityBatchCase, assert_all_the_icons_batch};
 
 /// The thing every caller does: ask for the icon of a file it is about to show
 /// in a sidebar or a mode line.  Each answer is one glyph from a bundled font,
@@ -11,24 +11,25 @@ use super::assert_all_the_icons_batch;
 /// (PNG) -- and one name that matches nothing, which must come back as the
 /// default file icon rather than as nil.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_all_the_icons_batch(&[
-        (
-            "every_file_gets_the_glyph_its_alist_entry_names",
-            r##"(mapcar (lambda (file)
+fn every_file_gets_the_glyph_its_alist_entry_names() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "every_file_gets_the_glyph_its_alist_entry_names",
+        r##"(mapcar (lambda (file)
           (cons file (all-the-icons-test-describe (all-the-icons-icon-for-file file))))
         '("init.el" "README.md" "config.json" "photo.PNG"
           "Makefile" "Dockerfile" "mystery.zzz"
           ".gitignore" "." ".." "subdir/." "noext"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("init.el" :codepoint 59686 :length 1 :face #1=(:family "file-icons" :height 1.2 :inherit all-the-icons-purple) :font-lock-face #1# :display (raise -0.24) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) ("README.md" :codepoint 61447 :length 1 :face #2=(:family "github-octicons" :height 1.2 :inherit all-the-icons-lcyan) :font-lock-face #2# :display (raise 0.0) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) ("config.json" :codepoint 61564 :length 1 :face #3=(:family "github-octicons" :height 1.2 :inherit all-the-icons-yellow) :font-lock-face #3# :display (raise 0.0) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) ("photo.PNG" :codepoint 61458 :length 1 :face #4=(:family "github-octicons" :height 1.2 :inherit all-the-icons-orange) :font-lock-face #4# :display (raise 0.0) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) ("Makefile" :codepoint 59001 :length 1 :face #5=(:family "file-icons" :height 1.2 :inherit all-the-icons-dorange) :font-lock-face #5# :display (raise -0.24) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) ("Dockerfile" :codepoint 61702 :length 1 :face #6=(:family "file-icons" :height 1.2 :inherit all-the-icons-blue) :font-lock-face #6# :display (raise -0.24) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) ("mystery.zzz" :codepoint 61462 :length 1 :face #7=(:family "FontAwesome" :height 1.2 :inherit all-the-icons-dsilver) :font-lock-face #7# :display (raise 0.0) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) (".gitignore" :codepoint 61487 :length 1 :face #8=(:family "github-octicons" :height 1.2) :font-lock-face #8# :display (raise 0.0) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) ("." :codepoint 61487 :length 1 :face #9=(:family "github-octicons" :height 1.2) :font-lock-face #9# :display (raise 0.0) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) (".." :codepoint 61487 :length 1 :face #10=(:family "github-octicons" :height 1.2) :font-lock-face #10# :display (raise 0.0) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) ("subdir/." :codepoint 61462 :length 1 :face #11=(:family "FontAwesome" :height 1.2 :inherit all-the-icons-dsilver) :font-lock-face #11# :display (raise 0.0) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) ("noext" :codepoint 61462 :length 1 :face #12=(:family "FontAwesome" :height 1.2 :inherit all-the-icons-dsilver) :font-lock-face #12# :display (raise 0.0) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)))"#
     ]],
-        ),
-        (
-            "mode_and_url_lookups_fall_back_when_the_alists_have_no_entry",
-            r##"(list
+    )
+}
+
+fn mode_and_url_lookups_fall_back_when_the_alists_have_no_entry() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "mode_and_url_lookups_fall_back_when_the_alists_have_no_entry",
+        r##"(list
  :modes (mapcar (lambda (mode)
                   (cons mode (all-the-icons-test-describe (all-the-icons-icon-for-mode mode))))
                 '(emacs-lisp-mode dired-mode text-mode fundamental-mode no-such-mode))
@@ -40,14 +41,17 @@ fn workflows_public_surface_batch() {
  :families (list (all-the-icons-icon-family-for-file "init.el")
                  (all-the-icons-icon-family-for-mode 'dired-mode)
                  (all-the-icons-icon-family-for-mode 'no-such-mode)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:modes ((emacs-lisp-mode :codepoint 59686 :length 1 :face #1=(:family "file-icons" :height 1.2 :inherit all-the-icons-purple) :font-lock-face #1# :display (raise -0.12) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) (dired-mode :codepoint 61462 :length 1 :face #2=(:family "github-octicons" :height 1.2) :font-lock-face #2# :display (raise 0.0) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) (text-mode :codepoint 61457 :length 1 :face #3=(:family "github-octicons" :height 1.2 :inherit all-the-icons-cyan) :font-lock-face #3# :display (raise 0.0) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) (fundamental-mode :codepoint 59686 :length 1 :face #4=(:family "file-icons" :height 1.2 :inherit all-the-icons-dsilver) :font-lock-face #4# :display (raise -0.12) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) (no-such-mode :not-a-string no-such-mode)) :urls (("https://github.com/domtronn/all-the-icons.el" :codepoint 61450 :length 1 :face #5=(:family "github-octicons" :height 1.2) :font-lock-face #5# :display (raise -0.24) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) ("https://youtube.com/watch" :codepoint 61799 :length 1 :face #6=(:family "FontAwesome" :height 1.2) :font-lock-face #6# :display (raise -0.24) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) ("https://example.com/" :codepoint 61612 :length 1 :face #7=(:family "FontAwesome" :height 1.2) :font-lock-face #7# :display (raise -0.24) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky))) :families ("file-icons" "github-octicons" nil))"#
     ]],
-        ),
-        (
-            "directory_icons_describe_what_the_directory_actually_is",
-            r##"(let* ((root (all-the-icons-test-sandbox "dirs"))
+    )
+}
+
+fn directory_icons_describe_what_the_directory_actually_is() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "directory_icons_describe_what_the_directory_actually_is",
+        r##"(let* ((root (all-the-icons-test-sandbox "dirs"))
        (plain (expand-file-name "plain" root))
        (repo (expand-file-name "repo" root))
        (link (expand-file-name "link" root))
@@ -60,14 +64,17 @@ fn workflows_public_surface_batch() {
             (cons (file-name-nondirectory dir)
                   (all-the-icons-test-describe (all-the-icons-icon-for-dir dir))))
           (list plain repo link downloads)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("plain" :codepoint 61462 :length 1 :face #1=(:family "github-octicons" :height 1.2) :font-lock-face #1# :display (raise -0.12) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) ("repo" :codepoint 61441 :length 1 :face #2=(:family "github-octicons" :height 1.2) :font-lock-face #2# :display (raise -0.12) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) ("link" :codepoint 61617 :length 1 :face #3=(:family "github-octicons" :height 1.2) :font-lock-face #3# :display (raise -0.12) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) ("Downloads" :codepoint 61677 :length 1 :face #4=(:family "FontAwesome" :height 1.08) :font-lock-face #4# :display (raise -0.12) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)))"#
     ]],
-        ),
-        (
-            "height_and_v_adjust_arguments_change_the_properties_not_the_glyph",
-            r##"(let ((plain (all-the-icons-icon-for-file "sized.el"))
+    )
+}
+
+fn height_and_v_adjust_arguments_change_the_properties_not_the_glyph() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "height_and_v_adjust_arguments_change_the_properties_not_the_glyph",
+        r##"(let ((plain (all-the-icons-icon-for-file "sized.el"))
       (scaled (all-the-icons-icon-for-file "sized.el" :height 2.0 :v-adjust 0.5))
       (faced (all-the-icons-icon-for-file "sized.el" :face 'error))
       (both (all-the-icons-icon-for-file "sized.el" :height 0.5 :face 'shadow)))
@@ -83,14 +90,17 @@ fn workflows_public_surface_batch() {
                                  (substring-no-properties both)))
         :scale-factor all-the-icons-scale-factor
         :default-adjust all-the-icons-default-adjust))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:plain (:codepoint 59686 :length 1 :face #1=(:family "file-icons" :height 1.2 :inherit all-the-icons-purple) :font-lock-face #1# :display (raise -0.24) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) :scaled (:codepoint 59686 :length 1 :face #2=(:family "file-icons" :height 2.4 :inherit all-the-icons-purple) :font-lock-face #2# :display (raise 0.6) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) :faced (:codepoint 59686 :length 1 :face #3=(:family "file-icons" :height 1.2 :inherit error) :font-lock-face #3# :display (raise -0.24) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) :both (:codepoint 59686 :length 1 :face #4=(:family "file-icons" :height 0.6 :inherit shadow) :font-lock-face #4# :display (raise -0.24) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) :same-glyph (t t t) :scale-factor 1.2 :default-adjust -0.2)"#
     ]],
-        ),
-        (
-            "the_alists_are_the_lookup_table_and_a_missing_entry_means_the_default",
-            r##"(list
+    )
+}
+
+fn the_alists_are_the_lookup_table_and_a_missing_entry_means_the_default() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_alists_are_the_lookup_table_and_a_missing_entry_means_the_default",
+        r##"(list
  :taught (let ((all-the-icons-extension-icon-alist
                 (cons '("zzz" all-the-icons-faicon "rocket" :face all-the-icons-red)
                       all-the-icons-extension-icon-alist)))
@@ -106,14 +116,17 @@ fn workflows_public_surface_batch() {
  :unknown-icon-name (condition-case error
                         (all-the-icons-fileicon "no-such-icon-in-this-font")
                       (error error)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:taught (:codepoint 61749 :length 1 :face #1=(:family "FontAwesome" :height 1.2 :inherit all-the-icons-red) :font-lock-face #1# :display (raise -0.24) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) :untaught (:codepoint 61462 :length 1 :face #2=(:family "FontAwesome" :height 1.2 :inherit all-the-icons-dsilver) :font-lock-face #2# :display (raise 0.0) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) :dropped (:codepoint 61462 :length 1 :face #3=(:family "FontAwesome" :height 1.2 :inherit all-the-icons-dsilver) :font-lock-face #3# :display (raise 0.0) :rear-nonsticky t :property-names (face font-lock-face display rear-nonsticky)) :default-entry (all-the-icons-faicon "file-o" :v-adjust 0.0 :face all-the-icons-dsilver) :entries (("el" all-the-icons-fileicon "elisp" :height 1.0 :v-adjust -0.2 :face all-the-icons-purple) ("md" all-the-icons-octicon "markdown" :v-adjust 0.0 :face all-the-icons-lblue) (dired-mode all-the-icons-octicon "file-directory" :v-adjust 0.0)) :unknown-icon-name (error "Unable to find icon with name ‘no-such-icon-in-this-font’ in icon set ‘fileicon’"))"#
     ]],
-        ),
-        (
-            "lookups_are_memoised_per_argument_list_and_the_cache_is_never_invalidated",
-            r##"(let* ((first (all-the-icons-icon-for-file "cached.el"))
+    )
+}
+
+fn lookups_are_memoised_per_argument_list_and_the_cache_is_never_invalidated() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "lookups_are_memoised_per_argument_list_and_the_cache_is_never_invalidated",
+        r##"(let* ((first (all-the-icons-icon-for-file "cached.el"))
        (second (all-the-icons-icon-for-file "cached.el"))
        (after-turning-colour-off
         (let ((all-the-icons-color-icons nil))
@@ -135,14 +148,17 @@ fn workflows_public_surface_batch() {
                                     all-the-icons-icon-for-mode
                                     all-the-icons-icon-for-dir
                                     all-the-icons-icon-for-url))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:same-object t :first-face #1=(:family "file-icons" :height 1.2 :inherit all-the-icons-purple) :colour-off-is-the-cached-object t :colour-off-face #1# :never-seen-face #2=(:family "file-icons" :height 1.2) :seen-again-face #2# :seen-again-is-cached t :cached-functions (t t t t))"#
     ]],
-        ),
-        (
-            "installing_the_fonts_writes_every_bundled_font_without_touching_the_network",
-            r##"(let ((requests nil)
+    )
+}
+
+fn installing_the_fonts_writes_every_bundled_font_without_touching_the_network() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "installing_the_fonts_writes_every_bundled_font_without_touching_the_network",
+        r##"(let ((requests nil)
       (shell-commands nil)
       (home (all-the-icons-test-sandbox "fonts-home")))
   (make-directory (expand-file-name "share" home) t)
@@ -165,10 +181,23 @@ fn workflows_public_surface_batch() {
         :font-names all-the-icons-font-names
         :font-families all-the-icons-font-families
         :subdirectory all-the-icons-fonts-subdirectory))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:requests (("https://raw.githubusercontent.com/domtronn/all-the-icons.el/master/fonts/material-design-icons.ttf" "material-design-icons.ttf" t) ("https://raw.githubusercontent.com/domtronn/all-the-icons.el/master/fonts/weathericons.ttf" "weathericons.ttf" t) ("https://raw.githubusercontent.com/domtronn/all-the-icons.el/master/fonts/octicons.ttf" "octicons.ttf" t) ("https://raw.githubusercontent.com/domtronn/all-the-icons.el/master/fonts/fontawesome.ttf" "fontawesome.ttf" t) ("https://raw.githubusercontent.com/domtronn/all-the-icons.el/master/fonts/file-icons.ttf" "file-icons.ttf" t) ("https://raw.githubusercontent.com/domtronn/all-the-icons.el/master/fonts/all-the-icons.ttf" "all-the-icons.ttf" t)) :shell-commands ("fc-cache -f -v") :installed ("all-the-icons.ttf" "file-icons.ttf" "fontawesome.ttf" "material-design-icons.ttf" "octicons.ttf" "weathericons.ttf") :font-names ("material-design-icons.ttf" "weathericons.ttf" "octicons.ttf" "fontawesome.ttf" "file-icons.ttf" "all-the-icons.ttf") :font-families (material wicon octicon faicon fileicon alltheicon) :subdirectory nil)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        every_file_gets_the_glyph_its_alist_entry_names(),
+        mode_and_url_lookups_fall_back_when_the_alists_have_no_entry(),
+        directory_icons_describe_what_the_directory_actually_is(),
+        height_and_v_adjust_arguments_change_the_properties_not_the_glyph(),
+        the_alists_are_the_lookup_table_and_a_missing_entry_means_the_default(),
+        lookups_are_memoised_per_argument_list_and_the_cache_is_never_invalidated(),
+        installing_the_fonts_writes_every_bundled_font_without_touching_the_network(),
+    ];
+    assert_all_the_icons_batch(&cases);
 }

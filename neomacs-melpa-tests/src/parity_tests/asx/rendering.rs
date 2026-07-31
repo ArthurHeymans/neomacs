@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_asx_batch;
+use super::{ParityBatchCase, assert_asx_batch};
 
-#[test]
-fn rendering_public_surface_batch() {
-    assert_asx_batch(&[
-        (
-            "asx_get_buffer_reuses_the_configured_live_buffer_and_honors_name_changes",
-            r##"(let ((asx-buffer-name "*asx-parity-buffer-a*")
+fn asx_get_buffer_reuses_the_configured_live_buffer_and_honors_name_changes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_get_buffer_reuses_the_configured_live_buffer_and_honors_name_changes",
+        r##"(let ((asx-buffer-name "*asx-parity-buffer-a*")
                first second third)
          (unwind-protect
              (progn
@@ -32,12 +30,15 @@ fn rendering_public_surface_batch() {
                   (buffer-live-p buffer)
                 (kill-buffer buffer)))
             (list first third))))"##,
-            true,
-            expect![[r#"OK (t nil "*asx-parity-buffer-a*" "*asx-parity-buffer-b*" t t)"#]],
-        ),
-        (
-            "asx_prepare_buffer_switches_when_needed_clears_old_content_and_makes_it_writable",
-            r##"(let ((asx-buffer-name "*asx-parity-prepare*")
+        true,
+        expect![[r#"OK (t nil "*asx-parity-buffer-a*" "*asx-parity-buffer-b*" t t)"#]],
+    )
+}
+
+fn asx_prepare_buffer_switches_when_needed_clears_old_content_and_makes_it_writable() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_prepare_buffer_switches_when_needed_clears_old_content_and_makes_it_writable",
+        r##"(let ((asx-buffer-name "*asx-parity-prepare*")
                target
                switches)
          (unwind-protect
@@ -69,26 +70,32 @@ fn rendering_public_surface_batch() {
            (when
                (buffer-live-p target)
              (kill-buffer target))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK ((:buffer nil) "#+STARTUP: overview indent\n" nil 28 ("*asx-parity-prepare*"))"##
     ]],
-        ),
-        (
-            "asx_finalize_buffer_trims_trailing_space_enables_read_only_org_display_and_rewinds",
-            r##"(with-temp-buffer
+    )
+}
+
+fn asx_finalize_buffer_trims_trailing_space_enables_read_only_org_display_and_rewinds() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_finalize_buffer_trims_trailing_space_enables_read_only_org_display_and_rewinds",
+        r##"(with-temp-buffer
          (insert
           "#+TITLE: Example   \n\nBody with spaces   \n\n")
          (goto-char
           (point-max))
          (asx--finalize-buffer)
          (asx-test-rendered-buffer-summary))"##,
-            true,
-            expect![[r##"OK ("#+TITLE: Example\n\nBody with spaces\n" org-mode t t 1 t)"##]],
-        ),
-        (
-            "asx_insert_tags_preserves_order_duplicates_and_the_empty_tags_label_contract",
-            r##"(list
+        true,
+        expect![[r##"OK ("#+TITLE: Example\n\nBody with spaces\n" org-mode t t 1 t)"##]],
+    )
+}
+
+fn asx_insert_tags_preserves_order_duplicates_and_the_empty_tags_label_contract() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_insert_tags_preserves_order_duplicates_and_the_empty_tags_label_contract",
+        r##"(list
          (with-temp-buffer
            (asx--insert-tags
             '("emacs"
@@ -98,12 +105,15 @@ fn rendering_public_surface_batch() {
          (with-temp-buffer
            (asx--insert-tags nil)
            (buffer-string)))"##,
-            true,
-            expect![[r#"OK ("\nTags: emacs common-lisp emacs " "\nTags: ")"#]],
-        ),
-        (
-            "asx_insert_question_renders_metadata_body_links_code_and_tags_together",
-            r##"(let ((question
+        true,
+        expect![[r#"OK ("\nTags: emacs common-lisp emacs " "\nTags: ")"#]],
+    )
+}
+
+fn asx_insert_question_renders_metadata_body_links_code_and_tags_together() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_insert_question_renders_metadata_body_links_code_and_tags_together",
+        r##"(let ((question
                 (list
                  :url
                  "https://stackoverflow.com/questions/101/first"
@@ -128,14 +138,17 @@ fn rendering_public_surface_batch() {
            (buffer-substring-no-properties
             (point-min)
             (point-max))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK "#+TITLE: How to map data?\nhttps://stackoverflow.com/questions/101/first\n* Question (12)\n\nUse [[https://www.gnu.org/software/emacs/][Emacs]] carefully.\n\nTags: emacs elisp ""##
     ]],
-        ),
-        (
-            "asx_insert_answers_adds_visibility_only_to_the_first_answer_and_keeps_scores_order",
-            r##"(with-temp-buffer
+    )
+}
+
+fn asx_insert_answers_adds_visibility_only_to_the_first_answer_and_keeps_scores_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_insert_answers_adds_visibility_only_to_the_first_answer_and_keeps_scores_order",
+        r##"(with-temp-buffer
          (asx--insert-answers
           '((:score "10"
              :body
@@ -165,14 +178,17 @@ fn rendering_public_surface_batch() {
            "^\\* Answer"
            (point-min)
            (point-max))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("\n* Answer (10)\n:PROPERTIES:\n:VISIBILITY: all\n:END:\n\nFirst answer\n\n* Answer (3)\n\nSecond answer\n\n* Answer (-2)\n\nThird answer with inline-code\n" 1 3)"#
     ]],
-        ),
-        (
-            "asx_insert_node_renders_a_realistic_nested_dom_as_plain_org_friendly_text",
-            r##"(with-temp-buffer
+    )
+}
+
+fn asx_insert_node_renders_a_realistic_nested_dom_as_plain_org_friendly_text() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_insert_node_renders_a_realistic_nested_dom_as_plain_org_friendly_text",
+        r##"(with-temp-buffer
          (asx--insert-node
           '((p nil
                "Read "
@@ -193,12 +209,15 @@ fn rendering_public_surface_batch() {
          (buffer-substring-no-properties
           (point-min)
           (point-max)))"##,
-            true,
-            expect![[r#"OK "Read [[https://example.com/docs][the docs]] before trying this.\n""#]],
-        ),
-        (
-            "asx_insert_post_runs_the_full_buffer_lifecycle_and_limits_answer_count",
-            r##"(let ((asx-buffer-name "*asx-parity-full-post*")
+        true,
+        expect![[r#"OK "Read [[https://example.com/docs][the docs]] before trying this.\n""#]],
+    )
+}
+
+fn asx_insert_post_runs_the_full_buffer_lifecycle_and_limits_answer_count() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_insert_post_runs_the_full_buffer_lifecycle_and_limits_answer_count",
+        r##"(let ((asx-buffer-name "*asx-parity-full-post*")
                (asx-number-of-answers 1)
                target)
          (unwind-protect
@@ -250,14 +269,17 @@ fn rendering_public_surface_batch() {
            (when
                (buffer-live-p target)
              (kill-buffer target))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (("#+STARTUP: overview indent\n#+TITLE: A complete practical post\nhttps://stackoverflow.com/questions/101/first\n* Question (12)\n\nQuestion body with emphasis.\n\nTags: emacs elisp\n* Answer (7)\n:PROPERTIES:\n:VISIBILITY: all\n:END:\n\nFirst answer.\n" org-mode t t 1 t) 1 0)"##
     ]],
-        ),
-        (
-            "asx_full_normalized_code_block_workflow_reports_the_renderer_error_and_partial_buffer",
-            r##"(let ((asx-buffer-name "*asx-parity-code-block-post*")
+    )
+}
+
+fn asx_full_normalized_code_block_workflow_reports_the_renderer_error_and_partial_buffer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_full_normalized_code_block_workflow_reports_the_renderer_error_and_partial_buffer",
+        r##"(let ((asx-buffer-name "*asx-parity-code-block-post*")
                target)
          (unwind-protect
              (progn
@@ -300,14 +322,17 @@ fn rendering_public_surface_batch() {
            (when
                (buffer-live-p target)
              (kill-buffer target))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK ((:error wrong-type-argument (symbolp "(+ 1 2)")) "#+STARTUP: overview indent\n#+TITLE: How to  ?\nhttps://stackoverflow.com/questions/101/first\n* Question (12)\n\nQuestion body.\n\n#+BEGIN_EXAMPLE emacs\n" fundamental-mode nil nil 148)"##
     ]],
-        ),
-        (
-            "asx_insert_post_dom_retries_unanswered_posts_or_inserts_them_by_configuration",
-            r##"(let (events)
+    )
+}
+
+fn asx_insert_post_dom_retries_unanswered_posts_or_inserts_them_by_configuration() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_insert_post_dom_retries_unanswered_posts_or_inserts_them_by_configuration",
+        r##"(let (events)
          (cl-letf
              (((symbol-function
                 'asx--normalize-post)
@@ -350,10 +375,26 @@ fn rendering_public_surface_batch() {
                  "https://example.invalid/questions/2"
                  ((:score "1")))))
             (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:retried :inserted :inserted ((:retry "https://example.invalid/questions/1") (:insert (:url "https://example.invalid/questions/1" :title "No answer" :answers nil)) (:insert (:url "https://example.invalid/questions/2" :title "Answered" :answers ((:score "1"))))))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn rendering_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        asx_get_buffer_reuses_the_configured_live_buffer_and_honors_name_changes(),
+        asx_prepare_buffer_switches_when_needed_clears_old_content_and_makes_it_writable(),
+        asx_finalize_buffer_trims_trailing_space_enables_read_only_org_display_and_rewinds(),
+        asx_insert_tags_preserves_order_duplicates_and_the_empty_tags_label_contract(),
+        asx_insert_question_renders_metadata_body_links_code_and_tags_together(),
+        asx_insert_answers_adds_visibility_only_to_the_first_answer_and_keeps_scores_order(),
+        asx_insert_node_renders_a_realistic_nested_dom_as_plain_org_friendly_text(),
+        asx_insert_post_runs_the_full_buffer_lifecycle_and_limits_answer_count(),
+        asx_full_normalized_code_block_workflow_reports_the_renderer_error_and_partial_buffer(),
+        asx_insert_post_dom_retries_unanswered_posts_or_inserts_them_by_configuration(),
+    ];
+    assert_asx_batch(&cases);
 }

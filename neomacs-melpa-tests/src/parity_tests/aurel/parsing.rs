@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_aurel_batch;
+use super::{ParityBatchCase, assert_aurel_batch};
 
-#[test]
-fn parsing_public_surface_batch() {
-    assert_aurel_batch(&[
-        (
-            "aurel_aur_json_interprets_error_empty_info_and_search_shapes",
-            r##"(let ((responses
+fn aurel_aur_json_interprets_error_empty_info_and_search_shapes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_aur_json_interprets_error_empty_info_and_search_shapes",
+        r##"(let ((responses
                 '((("type" . "error")
                    ("error" . "bad request")
                    ("resultcount" . 0))
@@ -40,14 +38,17 @@ fn parsing_public_surface_batch() {
              "fixture:info")
             (aurel-get-aur-packages-info
              "fixture:search"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error error ("ERROR from AUR server: bad request")) nil ((("Name" . "emacs-git") ("ID" . 41))) ((("Name" . "one")) (("Name" . "two"))))"#
     ]],
-        ),
-        (
-            "aurel_parameter_maps_round_trip_known_and_unknown_names",
-            r##"(list
+    )
+}
+
+fn aurel_parameter_maps_round_trip_known_and_unknown_names() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_parameter_maps_round_trip_known_and_unknown_names",
+        r##"(list
          (mapcar
           (lambda (symbol)
             (list
@@ -88,14 +89,17 @@ fn parsing_public_surface_batch() {
             "Optional Deps"
             "Installed Size"
             "Missing")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((name "Name") (pkg-url "URLPath") (depends-make "MakeDepends") (missing nil)) (("Name" name) ("URLPath" pkg-url) ("MakeDepends" depends-make) ("Missing" nil)) ((installed-name "Name") (depends-opt "Optional Deps") (installed-size "Installed Size") (missing nil)) (("Name" installed-name) ("Optional Deps" depends-opt) ("Installed Size" installed-size) ("Missing" nil)))"#
     ]],
-        ),
-        (
-            "aurel_filter_intern_keeps_known_fields_and_reports_unknown_once",
-            r##"(let (messages)
+    )
+}
+
+fn aurel_filter_intern_keeps_known_fields_and_reports_unknown_once() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_filter_intern_keeps_known_fields_and_reports_unknown_once",
+        r##"(let (messages)
          (cl-letf
              (((symbol-function 'message)
                (lambda (format-string &rest arguments)
@@ -117,14 +121,17 @@ fn parsing_public_surface_batch() {
                ("Version" . "1.2")
                ("UnknownField" . "drop")))
             (nreverse messages))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((name . "demo") (votes . 17) (description)) ((installed-name . "demo") (installed-version . "1.2")) ("Warning: unknown parameter `UnknownField'. It will be omitted."))"#
     ]],
-        ),
-        (
-            "aurel_pacman_name_parser_returns_matching_names_in_scan_reverse_order",
-            r##"(with-temp-buffer
+    )
+}
+
+fn aurel_pacman_name_parser_returns_matching_names_in_scan_reverse_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_pacman_name_parser_returns_matching_names_in_scan_reverse_order",
+        r##"(with-temp-buffer
          (insert
           "alpha 1.0-1\n"
           "c++-headers 2.0\n"
@@ -136,12 +143,15 @@ fn parsing_public_surface_batch() {
           (aurel-pacman-query-names-buffer-parse
            (current-buffer))
           (point)))"##,
-            true,
-            expect![[r#"OK (("z-last" "_private" "c++-headers" "alpha") 62)"#]],
-        ),
-        (
-            "aurel_pacman_info_parser_handles_multiple_packages_and_continuations",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK (("z-last" "_private" "c++-headers" "alpha") 62)"#]],
+    )
+}
+
+fn aurel_pacman_info_parser_handles_multiple_packages_and_continuations() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_pacman_info_parser_handles_multiple_packages_and_continuations",
+        r##"(with-temp-buffer
          (insert
           "Name            : alpha\n"
           "Version         : 1.0-1\n"
@@ -155,14 +165,17 @@ fn parsing_public_surface_batch() {
           "\n")
          (aurel-pacman-query-buffer-parse
           (current-buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("Name" . "alpha") ("Version" . "1.0-1") ("Depends On" . "one  two\n                  three") ("Optional Deps" . "None")) (("Name" . "beta") ("Version" . "2.0") ("Description" . "ignored field")))"#
     ]],
-        ),
-        (
-            "aurel_call_pacman_erases_buffer_sets_locale_and_forwards_arguments",
-            r##"(let ((aurel-pacman-locale
+    )
+}
+
+fn aurel_call_pacman_erases_buffer_sets_locale_and_forwards_arguments() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_call_pacman_erases_buffer_sets_locale_and_forwards_arguments",
+        r##"(let ((aurel-pacman-locale
                 "C.UTF-8")
                captured)
          (with-temp-buffer
@@ -192,14 +205,17 @@ fn parsing_public_surface_batch() {
                "beta")
               captured
               (buffer-string)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (23 ("/fixture/bin/pacman" nil t nil ("--query" "--info" "alpha" "beta") "LC_ALL=C.UTF-8" "") "")"#
     ]],
-        ),
-        (
-            "aurel_call_pacman_missing_program_fails_before_touching_buffer",
-            r##"(let ((aurel-pacman-program
+    )
+}
+
+fn aurel_call_pacman_missing_program_fails_before_touching_buffer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_call_pacman_missing_program_fails_before_touching_buffer",
+        r##"(let ((aurel-pacman-program
                 nil))
          (with-temp-buffer
            (insert "preserved")
@@ -210,14 +226,17 @@ fn parsing_public_surface_batch() {
                 (current-buffer)
                 "--query")))
             (buffer-string))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error error ("Couldn’t find pacman.\nSet aurel-pacman-program to a proper value")) "preserved")"#
     ]],
-        ),
-        (
-            "aurel_response_status_accepts_2xx_3xx_and_handles_bad_values",
-            r##"(mapcar
+    )
+}
+
+fn aurel_response_status_accepts_2xx_3xx_and_handles_bad_values() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_response_status_accepts_2xx_3xx_and_handles_bad_values",
+        r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (setq-local
@@ -236,14 +255,17 @@ fn parsing_public_surface_batch() {
            (500 . t)
            (nil)
            ("200" . t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((200 (:ok t)) (399 (:ok t)) (400 (:error error ("Error during request: 400"))) (500 (:ok nil)) (nil (:error error ("Error during request: nil"))) ("200" (:ok nil)))"#
     ]],
-        ),
-        (
-            "aurel_receive_parse_info_reads_json_with_string_keys_lists_and_alists",
-            r##"(cl-letf
+    )
+}
+
+fn aurel_receive_parse_info_reads_json_with_string_keys_lists_and_alists() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_receive_parse_info_reads_json_with_string_keys_lists_and_alists",
+        r##"(cl-letf
          (((symbol-function
             'url-insert-file-contents)
            (lambda (url)
@@ -260,14 +282,17 @@ fn parsing_public_surface_batch() {
                    (point-max)))))
          (aurel-receive-parse-info
           "fixture:packages.json"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("type" . "search") ("resultcount" . 2) ("results" (("Name" . "alpha") ("Keywords" "one" "two") ("OutOfDate")) (("Name" . "beta") ("NumVotes" . 7))))"#
     ]],
-        ),
-        (
-            "aurel_html_action_detection_distinguishes_available_completed_and_unknown",
-            r##"(mapcar
+    )
+}
+
+fn aurel_html_action_detection_distinguishes_available_completed_and_unknown() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_html_action_detection_distinguishes_available_completed_and_unknown",
+        r##"(mapcar
          (lambda (html)
            (with-temp-buffer
              (insert html)
@@ -286,14 +311,17 @@ fn parsing_public_surface_batch() {
          '("<form name=\"do_Vote\">Vote</form><form name=\"do_Notify\">Notify</form>"
            "<form name=\"do_UnVote\">Unvote</form><form name=\"do_UnNotify\">Unnotify</form>"
            "<html>No user controls</html>"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil nil ("do_Vote" "do_UnVote" "do_Notify" "do_UnNotify" nil)) (t t ("do_Vote" "do_UnVote" "do_Notify" "do_UnNotify" nil)) ("Unknown" "Unknown" ("do_Vote" "do_UnVote" "do_Notify" "do_UnNotify" nil)))"#
     ]],
-        ),
-        (
-            "aurel_installed_package_wrappers_use_shared_buffer_and_exact_pacman_modes",
-            r##"(let (calls)
+    )
+}
+
+fn aurel_installed_package_wrappers_use_shared_buffer_and_exact_pacman_modes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_installed_package_wrappers_use_shared_buffer_and_exact_pacman_modes",
+        r##"(let (calls)
          (cl-letf
              (((symbol-function
                 'aurel-call-pacman)
@@ -326,10 +354,27 @@ fn parsing_public_surface_batch() {
              "alpha"
              "beta")
             (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("beta" "alpha") ((("Name" . "alpha") ("Version" . "1")) (("Name" . "beta") ("Version" . "2"))) ((" *aurel-pacman*" ("--query" "--foreign")) (" *aurel-pacman*" ("--query" "--info" "alpha" "beta"))))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn parsing_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        aurel_aur_json_interprets_error_empty_info_and_search_shapes(),
+        aurel_parameter_maps_round_trip_known_and_unknown_names(),
+        aurel_filter_intern_keeps_known_fields_and_reports_unknown_once(),
+        aurel_pacman_name_parser_returns_matching_names_in_scan_reverse_order(),
+        aurel_pacman_info_parser_handles_multiple_packages_and_continuations(),
+        aurel_call_pacman_erases_buffer_sets_locale_and_forwards_arguments(),
+        aurel_call_pacman_missing_program_fails_before_touching_buffer(),
+        aurel_response_status_accepts_2xx_3xx_and_handles_bad_values(),
+        aurel_receive_parse_info_reads_json_with_string_keys_lists_and_alists(),
+        aurel_html_action_detection_distinguishes_available_completed_and_unknown(),
+        aurel_installed_package_wrappers_use_shared_buffer_and_exact_pacman_modes(),
+    ];
+    assert_aurel_batch(&cases);
 }

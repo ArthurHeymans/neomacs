@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_asyncloop_batch;
+use super::{ParityBatchCase, assert_asyncloop_batch};
 
-#[test]
-fn lifecycle_public_surface_batch() {
-    assert_asyncloop_batch(&[
-        (
-            "asyncloop_pause_resume_and_cancel_form_a_complete_reusable_lifecycle",
-            r##"(let (events)
+fn asyncloop_pause_resume_and_cancel_form_a_complete_reusable_lifecycle() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asyncloop_pause_resume_and_cancel_form_a_complete_reusable_lifecycle",
+        r##"(let (events)
          (asyncloop-test-reset)
          (asyncloop-test-with-scheduler
            (let* ((buffer
@@ -64,14 +62,17 @@ fn lifecycle_public_surface_batch() {
                      #'<)
                     (asyncloop-test-log-text buffer)))
                (kill-buffer buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil t t #1=(stage-2 stage-3)) ((:paused t nil nil #1#) (:resumed nil t nil #1# (:asyncloop-test-timer 1)) (:cancelled nil nil nil nil)) (1) "<TIME>: Loop told to pause\n<TIME>: Loop told to resume\n<TIME>: Loop told to cancel\n")"#
     ]],
-        ),
-        (
-            "asyncloop_worker_can_pause_mid_series_then_resume_remaining_practical_work",
-            r##"(let (events loop)
+    )
+}
+
+fn asyncloop_worker_can_pause_mid_series_then_resume_remaining_practical_work() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asyncloop_worker_can_pause_mid_series_then_resume_remaining_practical_work",
+        r##"(let (events loop)
          (asyncloop-test-reset)
          (asyncloop-test-with-scheduler
            (setq loop
@@ -107,14 +108,17 @@ fn lifecycle_public_surface_batch() {
                   (asyncloop-paused loop)
                   (asyncloop-scheduled loop)
                   (asyncloop-remainder loop)))))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) ((:loaded) t nil 2) ((:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) (:loaded :transformed :saved) nil nil nil)"
     ],
-        ),
-        (
-            "asyncloop_worker_can_cancel_mid_series_and_prevent_all_followup_side_effects",
-            r##"(let (events loop)
+    )
+}
+
+fn asyncloop_worker_can_cancel_mid_series_and_prevent_all_followup_side_effects() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asyncloop_worker_can_cancel_mid_series_and_prevent_all_followup_side_effects",
+        r##"(let (events loop)
          (asyncloop-test-reset)
          (asyncloop-test-with-scheduler
            (setq loop
@@ -143,14 +147,17 @@ fn lifecycle_public_surface_batch() {
                (copy-sequence
                 asyncloop-test-cancelled)
                #'<)))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) (:validated) nil nil nil nil (1))"
     ],
-        ),
-        (
-            "asyncloop_reset_all_cancels_every_registered_loop_and_clears_registry",
-            r##"(let* ((buffer-a
+    )
+}
+
+fn asyncloop_reset_all_cancels_every_registered_loop_and_clears_registry() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asyncloop_reset_all_cancels_every_registered_loop_and_clears_registry",
+        r##"(let* ((buffer-a
                  (generate-new-buffer
                   " *asyncloop-reset-a*"))
                 (buffer-b
@@ -203,14 +210,17 @@ fn lifecycle_public_surface_batch() {
                 (asyncloop-test-log-text buffer-b)))
            (kill-buffer buffer-a)
            (kill-buffer buffer-b)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil (11 22) (nil nil nil nil) (nil nil nil nil) "<TIME>: Loop told to cancel\n<TIME>: All asyncloops reset by command\n" "<TIME>: Loop told to cancel\n<TIME>: All asyncloops reset by command\n")"#
     ]],
-        ),
-        (
-            "asyncloop_reset_all_ignores_one_broken_loop_and_still_wipes_registry",
-            r##"(let* ((healthy
+    )
+}
+
+fn asyncloop_reset_all_ignores_one_broken_loop_and_still_wipes_registry() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asyncloop_reset_all_ignores_one_broken_loop_and_still_wipes_registry",
+        r##"(let* ((healthy
                  (asyncloop-create
                   :timer
                   '(:asyncloop-test-timer 7)
@@ -229,12 +239,15 @@ fn lifecycle_public_surface_batch() {
             (asyncloop-remainder healthy)
             (asyncloop-scheduled healthy)
             asyncloop-test-cancelled)))"##,
-            true,
-            expect!["OK (nil nil (work) t nil)"],
-        ),
-        (
-            "asyncloop_notify_simultaneity_informs_current_and_other_idle_loops",
-            r##"(let* ((this
+        true,
+        expect!["OK (nil nil (work) t nil)"],
+    )
+}
+
+fn asyncloop_notify_simultaneity_informs_current_and_other_idle_loops() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asyncloop_notify_simultaneity_informs_current_and_other_idle_loops",
+        r##"(let* ((this
                  (asyncloop-create
                   :timer :this-timer))
                 (other-active
@@ -278,14 +291,17 @@ fn lifecycle_public_surface_batch() {
                   (nreverse logged))))
            (setq timer-idle-list
                  original-timer-idle-list)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:other-timer) nil ((:this "Two or more asyncloops running, please wait...") (:active "Two or more asyncloops running, please wait...")))"#
     ]],
-        ),
-        (
-            "asyncloop_notify_simultaneity_is_silent_when_no_other_idle_loop_is_active",
-            r##"(let* ((this
+    )
+}
+
+fn asyncloop_notify_simultaneity_is_silent_when_no_other_idle_loop_is_active() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asyncloop_notify_simultaneity_is_silent_when_no_other_idle_loop_is_active",
+        r##"(let* ((this
                  (asyncloop-create
                   :timer :this-timer))
                 (other
@@ -309,12 +325,15 @@ fn lifecycle_public_surface_batch() {
                   logged)))
            (setq timer-idle-list
                  original-timer-idle-list)))"##,
-            true,
-            expect!["OK (nil nil)"],
-        ),
-        (
-            "asyncloop_resume_reports_invariant_when_called_on_just_launched_loop",
-            r##"(let ((loop
+        true,
+        expect!["OK (nil nil)"],
+    )
+}
+
+fn asyncloop_resume_reports_invariant_when_called_on_just_launched_loop() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asyncloop_resume_reports_invariant_when_called_on_just_launched_loop",
+        r##"(let ((loop
                 (asyncloop-create
                  :just-launched t
                  :paused t))
@@ -349,10 +368,24 @@ fn lifecycle_public_surface_batch() {
               (asyncloop-just-launched loop)
               (asyncloop-timer loop)
               messages))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("Please report bug: (asyncloop-just-launched loop) was t" nil t t (:asyncloop-test-timer 1) ("Please report bug: (asyncloop-just-launched loop) was t"))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn lifecycle_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        asyncloop_pause_resume_and_cancel_form_a_complete_reusable_lifecycle(),
+        asyncloop_worker_can_pause_mid_series_then_resume_remaining_practical_work(),
+        asyncloop_worker_can_cancel_mid_series_and_prevent_all_followup_side_effects(),
+        asyncloop_reset_all_cancels_every_registered_loop_and_clears_registry(),
+        asyncloop_reset_all_ignores_one_broken_loop_and_still_wipes_registry(),
+        asyncloop_notify_simultaneity_informs_current_and_other_idle_loops(),
+        asyncloop_notify_simultaneity_is_silent_when_no_other_idle_loop_is_active(),
+        asyncloop_resume_reports_invariant_when_called_on_just_launched_loop(),
+    ];
+    assert_asyncloop_batch(&cases);
 }

@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{BIND_KEY_GNU_ELPA_PIN, CachedPackageOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod bindings;
 mod groups;
@@ -42,9 +45,9 @@ pub(crate) fn assert_bind_key_signal_parity(form: &str, expected: Expect) {
 }
 
 /// Multi-probe batch for `assert_bind_key_parity` cases (2a).
-pub(crate) fn assert_bind_key_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_bind_key_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         bind_key_oracle(),
         &name,
         "bind_key_parity",

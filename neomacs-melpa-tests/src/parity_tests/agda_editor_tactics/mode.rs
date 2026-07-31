@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_agda_editor_tactics_batch;
+use super::{ParityBatchCase, assert_agda_editor_tactics_batch};
 
-#[test]
-fn mode_public_surface_batch() {
-    assert_agda_editor_tactics_batch(&[
-        (
-            "agda_editor_tactics_mode_enable_toggle_and_disable_lifecycle_matches",
-            r##"(progn
+fn agda_editor_tactics_mode_enable_toggle_and_disable_lifecycle_matches() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agda_editor_tactics_mode_enable_toggle_and_disable_lifecycle_matches",
+        r##"(progn
          (defvar agda-editor-tactics-test-events nil)
          (setq agda-editor-tactics-test-events nil)
          (with-temp-buffer
@@ -27,14 +25,17 @@ fn mode_public_surface_batch() {
               (agda-editor-tactics-mode 0)
               agda-editor-tactics-mode
               (reverse agda-editor-tactics-test-events)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t t t t nil nil ((t " *temp*" nil) (t " *temp*" nil) (nil " *temp*" nil)))"#
     ]],
-        ),
-        (
-            "agda_editor_tactics_mode_state_is_buffer_local_and_independent",
-            r##"(let ((first (generate-new-buffer " *agda-tactics-first*"))
+    )
+}
+
+fn agda_editor_tactics_mode_state_is_buffer_local_and_independent() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agda_editor_tactics_mode_state_is_buffer_local_and_independent",
+        r##"(let ((first (generate-new-buffer " *agda-tactics-first*"))
              (second (generate-new-buffer " *agda-tactics-second*")))
          (unwind-protect
              (progn
@@ -56,14 +57,17 @@ fn mode_public_surface_batch() {
                 (default-value 'agda-editor-tactics-mode)))
            (kill-buffer first)
            (kill-buffer second)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((t "record First : Set where\n  field\n    value : Set" t) (nil "record Second : Set where\n  field\n    value : Set" t) nil)"#
     ]],
-        ),
-        (
-            "agda_editor_tactics_mode_integrates_with_a_real_major_mode_hook",
-            r##"(progn
+    )
+}
+
+fn agda_editor_tactics_mode_integrates_with_a_real_major_mode_hook() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agda_editor_tactics_mode_integrates_with_a_real_major_mode_hook",
+        r##"(progn
          (define-derived-mode agda-editor-tactics-test-mode
            fundamental-mode
            "Agda-Tactics-Test")
@@ -79,14 +83,17 @@ fn mode_public_surface_batch() {
             agda-editor-tactics-mode
             (local-variable-p 'agda-editor-tactics-mode)
             (buffer-substring-no-properties (point-min) (point-max)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (agda-editor-tactics-test-mode "Agda-Tactics-Test" t t "record Hooked : Set where\n  field\n    x : Set")"#
     ]],
-        ),
-        (
-            "agda_editor_tactics_mode_hook_observes_each_explicit_transition",
-            r##"(progn
+    )
+}
+
+fn agda_editor_tactics_mode_hook_observes_each_explicit_transition() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agda_editor_tactics_mode_hook_observes_each_explicit_transition",
+        r##"(progn
          (defvar agda-editor-tactics-test-states nil)
          (setq agda-editor-tactics-test-states nil)
          (with-temp-buffer
@@ -105,8 +112,18 @@ fn mode_public_surface_batch() {
               agda-editor-tactics-mode
               (reverse agda-editor-tactics-test-states)
               (local-variable-p 'agda-editor-tactics-mode)))))"##,
-            true,
-            expect!["OK (nil ((t . t) (t . t) (nil . t) (nil . t)) t)"],
-        ),
-    ]);
+        true,
+        expect!["OK (nil ((t . t) (t . t) (nil . t) (nil . t)) t)"],
+    )
+}
+
+#[test]
+fn mode_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        agda_editor_tactics_mode_enable_toggle_and_disable_lifecycle_matches(),
+        agda_editor_tactics_mode_state_is_buffer_local_and_independent(),
+        agda_editor_tactics_mode_integrates_with_a_real_major_mode_hook(),
+        agda_editor_tactics_mode_hook_observes_each_explicit_transition(),
+    ];
+    assert_agda_editor_tactics_batch(&cases);
 }

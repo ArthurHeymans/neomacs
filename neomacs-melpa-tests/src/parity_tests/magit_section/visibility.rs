@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_magit_section_batch};
+use super::{ParityBatchCase, assert_magit_section_batch};
 
-#[test]
-fn visibility_public_surface_batch() {
-    assert_magit_section_batch(&[
-        (
-            "magit_section_hide_show_and_toggle_preserve_body_and_hidden_state",
-            r##"(with-temp-buffer
+fn magit_section_hide_show_and_toggle_preserve_body_and_hidden_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "magit_section_hide_show_and_toggle_preserve_body_and_hidden_state",
+        r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root nil)
@@ -36,14 +34,17 @@ fn visibility_public_surface_batch() {
                                    (invisible-p content)
                                    (buffer-substring-no-properties
                                     (point-min) (point-max)))))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((t t "Root\nOne\nbody\n") (nil nil "Root\nOne\nbody\n") (t t "Root\nOne\nbody\n"))"#
     ]],
-        ),
-        (
-            "magit_section_show_and_hide_children_recurse_with_exact_depth",
-            r##"(with-temp-buffer
+    )
+}
+
+fn magit_section_show_and_hide_children_recurse_with_exact_depth() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "magit_section_show_and_hide_children_recurse_with_exact_depth",
+        r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root nil)
@@ -79,12 +80,15 @@ fn visibility_public_surface_batch() {
                          (lambda (section)
                            (and (oref section hidden) t))
                          (list group one two))))))))"##,
-            true,
-            expect![[r#"OK ((t nil nil) (t nil nil) (nil nil nil))"#]],
-        ),
-        (
-            "magit_section_lazy_body_is_inserted_only_when_first_shown",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ((t nil nil) (t nil nil) (nil nil nil))"#]],
+    )
+}
+
+fn magit_section_lazy_body_is_inserted_only_when_first_shown() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "magit_section_lazy_body_is_inserted_only_when_first_shown",
+        r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t)
                      (calls 0))
@@ -113,21 +117,34 @@ fn visibility_public_surface_batch() {
                                    (buffer-substring-no-properties
                                     (point-min) (point-max))
                                    (oref item washer))))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((0 "Root\nLazy\n" t) (1 "Root\nLazy\ndeferred body\n" nil) (1 "Root\nLazy\ndeferred body\n" nil))"#
     ]],
-        ),
-        (
-            "magit_section_root_cannot_be_hidden",
-            r##"(with-temp-buffer
+    )
+}
+
+fn magit_section_root_cannot_be_hidden() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "magit_section_root_cannot_be_hidden",
+        r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root nil)
                    (magit-insert-heading "Root"))
                  (magit-section-hide magit-root-section)))"##,
-            false,
-            expect![[r#"ERR (user-error "Cannot hide root section")"#]],
-        ),
-    ]);
+        false,
+        expect![[r#"ERR (user-error "Cannot hide root section")"#]],
+    )
+}
+
+#[test]
+fn visibility_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        magit_section_hide_show_and_toggle_preserve_body_and_hidden_state(),
+        magit_section_show_and_hide_children_recurse_with_exact_depth(),
+        magit_section_lazy_body_is_inserted_only_when_first_shown(),
+        magit_section_root_cannot_be_hidden(),
+    ];
+    assert_magit_section_batch(&cases);
 }

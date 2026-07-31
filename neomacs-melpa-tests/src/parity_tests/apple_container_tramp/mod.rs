@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{APPLE_CONTAINER_TRAMP_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod workflows;
 
@@ -119,9 +122,9 @@ pub(crate) fn assert_apple_container_tramp_parity(elisp_form: &str, expected: Ex
 }
 
 /// Multi-probe batch for `assert_apple_container_tramp_parity` cases (2a).
-pub(crate) fn assert_apple_container_tramp_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_apple_container_tramp_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         apple_container_tramp_oracle(),
         &name,
         "apple_container_tramp_parity",

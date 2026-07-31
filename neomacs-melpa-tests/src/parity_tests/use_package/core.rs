@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_use_package_batch};
+use super::{ParityBatchCase, assert_use_package_batch};
 
-#[test]
-fn core_public_surface_batch() {
-    assert_use_package_batch(&[
-        (
-            "use_package_public_version_keywords_and_defaults_match_the_pinned_release",
-            r##"(list
+fn use_package_public_version_keywords_and_defaults_match_the_pinned_release() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "use_package_public_version_keywords_and_defaults_match_the_pinned_release",
+        r##"(list
                use-package-version
                use-package-always-defer
                use-package-always-demand
@@ -16,12 +14,15 @@ fn core_public_surface_batch() {
                (and (memq :config use-package-keywords) t)
                (and (memq :vc use-package-keywords) t)
                (length use-package-keywords))"##,
-            true,
-            expect![[r#"OK ("2.4.5" nil nil "-hook" t t t 35)"#]],
-        ),
-        (
-            "use_package_preface_init_and_config_execute_in_declaration_order",
-            r##"(progn
+        true,
+        expect![[r#"OK ("2.4.5" nil nil "-hook" t t t 35)"#]],
+    )
+}
+
+fn use_package_preface_init_and_config_execute_in_declaration_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "use_package_preface_init_and_config_execute_in_declaration_order",
+        r##"(progn
                (defvar neomacs-use-package-events nil)
                (setq neomacs-use-package-events nil)
                (use-package neomacs-use-package-order
@@ -33,12 +34,15 @@ fn core_public_surface_batch() {
                  :config
                  (push 'config neomacs-use-package-events))
                (nreverse neomacs-use-package-events))"##,
-            true,
-            expect![[r#"OK (preface init config)"#]],
-        ),
-        (
-            "use_package_disabled_if_unless_and_requires_gate_all_runtime_forms",
-            r##"(let (events)
+        true,
+        expect![[r#"OK (preface init config)"#]],
+    )
+}
+
+fn use_package_disabled_if_unless_and_requires_gate_all_runtime_forms() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "use_package_disabled_if_unless_and_requires_gate_all_runtime_forms",
+        r##"(let (events)
                (provide 'neomacs-use-package-required)
                (use-package neomacs-use-package-disabled
                  :disabled t
@@ -61,12 +65,15 @@ fn core_public_surface_batch() {
                  :no-require t
                  :init (push 'missing events))
                (nreverse events))"##,
-            true,
-            expect![[r#"OK (if requires)"#]],
-        ),
-        (
-            "use_package_catch_converts_a_missing_required_library_into_an_exact_warning",
-            r##"(let (warnings)
+        true,
+        expect![[r#"OK (if requires)"#]],
+    )
+}
+
+fn use_package_catch_converts_a_missing_required_library_into_an_exact_warning() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "use_package_catch_converts_a_missing_required_library_into_an_exact_warning",
+        r##"(let (warnings)
                (cl-letf (((symbol-function 'display-warning)
                           (lambda (type message &optional level _buffer)
                             (push (list type message level) warnings))))
@@ -75,14 +82,17 @@ fn core_public_surface_batch() {
                             neomacs-use-package-definitely-missing
                           :catch t)))
                    (list result (nreverse warnings)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (#1=((use-package "Cannot load neomacs-use-package-definitely-missing" :error)) #1#)"#
     ]],
-        ),
-        (
-            "use_package_function_normalization_matches_upstream_function_forms",
-            r##"(list
+    )
+}
+
+fn use_package_function_normalization_matches_upstream_function_forms() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "use_package_function_normalization_matches_upstream_function_forms",
+        r##"(list
                (mapcar
                 #'use-package-normalize-function
                 '(nil t symbol
@@ -96,14 +106,17 @@ fn core_public_surface_batch() {
                 '(nil t symbol
                   (lambda () value)
                   1 "text" (nil))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil t symbol symbol (lambda nil value) (lambda nil quoted) 1 "text" (nil)) (t t t nil nil t nil))"#
     ]],
-        ),
-        (
-            "use_package_hook_normalization_handles_default_functions_groups_and_pairs",
-            r##"(mapcar
+    )
+}
+
+fn use_package_hook_normalization_handles_default_functions_groups_and_pairs() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "use_package_hook_normalization_handles_default_functions_groups_and_pairs",
+        r##"(mapcar
                (lambda (args)
                  (use-package-normalize/:hook
                   'neomacs-package :hook args))
@@ -112,17 +125,33 @@ fn core_public_surface_batch() {
                  (mode-a mode-b)
                  (((mode-a mode-b) . shared-function))
                  ((mode-a . one) (mode-b . two))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((mode . neomacs-package-mode)) ((mode . explicit-function)) (((mode-a mode-b) . neomacs-package-mode)) (((mode-a mode-b) . shared-function)) ((mode-a . one) (mode-b . two)))"#
     ]],
-        ),
-        (
-            "use_package_empty_hook_spec_signals_the_exact_normalization_error",
-            r##"(use-package-normalize/:hook
+    )
+}
+
+fn use_package_empty_hook_spec_signals_the_exact_normalization_error() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "use_package_empty_hook_spec_signals_the_exact_normalization_error",
+        r##"(use-package-normalize/:hook
                'neomacs-use-package-invalid :hook nil)"##,
-            false,
-            expect![[r#"ERR (error "use-package: :hook wants a non-empty list")"#]],
-        ),
-    ]);
+        false,
+        expect![[r#"ERR (error "use-package: :hook wants a non-empty list")"#]],
+    )
+}
+
+#[test]
+fn core_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        use_package_public_version_keywords_and_defaults_match_the_pinned_release(),
+        use_package_preface_init_and_config_execute_in_declaration_order(),
+        use_package_disabled_if_unless_and_requires_gate_all_runtime_forms(),
+        use_package_catch_converts_a_missing_required_library_into_an_exact_warning(),
+        use_package_function_normalization_matches_upstream_function_forms(),
+        use_package_hook_normalization_handles_default_functions_groups_and_pairs(),
+        use_package_empty_hook_spec_signals_the_exact_normalization_error(),
+    ];
+    assert_use_package_batch(&cases);
 }

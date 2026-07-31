@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_asm_blox_batch;
+use super::{ParityBatchCase, assert_asm_blox_batch};
 
-#[test]
-fn editing_public_surface_batch() {
-    assert_asm_blox_batch(&[
-        (
-            "asm_blox_box_content_initialization_get_set_line_and_swap_operations_preserve_exact_text",
-            r##"(let ((asm-blox-box-contents nil))
+fn asm_blox_box_content_initialization_get_set_line_and_swap_operations_preserve_exact_text() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asm_blox_box_content_initialization_get_set_line_and_swap_operations_preserve_exact_text",
+        r##"(let ((asm-blox-box-contents nil))
          (asm-blox--initialize-box-contents)
          (asm-blox--set-box-content
           0 0
@@ -32,14 +30,17 @@ fn editing_public_surface_batch() {
             before
             (asm-blox--get-box-content 0 0)
             (asm-blox--get-box-content 2 3))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((12 "(const 1)\n(send right)" ("(const 1)" "(send right)" "" "") "(module stack\n :input-port left)") "(module stack\n :input-port left)" "(const 1)\n(send right)")"#
     ]],
-        ),
-        (
-            "asm_blox_practical_board_render_has_stable_geometry_labels_problem_text_and_edit_properties",
-            r##"(with-temp-buffer
+    )
+}
+
+fn asm_blox_practical_board_render_has_stable_geometry_labels_problem_text_and_edit_properties() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asm_blox_practical_board_render_has_stable_geometry_labels_problem_text_and_edit_properties",
+        r##"(with-temp-buffer
          (asm-blox-test-prepare-edit-buffer
           '((0 0 "(get up)\n(send right)")
             (1 2 "(const 2)")
@@ -81,14 +82,17 @@ fn editing_public_surface_batch() {
              asm-blox--beginning-of-box-points)
             (hash-table-count
              asm-blox--end-of-box-points))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (5839 "0f1dede3221d1d8616c9da7258d9c8e69d7e516fb4aed6359c428041463d6c30" 56 23 5744 5762 5815 (((0 0) 373 (0 0 0) nil) ((1 2) 2227 (1 2 0) nil) ((2 3) 4054 (2 3 0) nil)) 12 12)"#
     ]],
-        ),
-        (
-            "asm_blox_mirror_buffer_editing_enforces_box_dimensions_and_tracks_logical_cursor",
-            r##"(with-temp-buffer
+    )
+}
+
+fn asm_blox_mirror_buffer_editing_enforces_box_dimensions_and_tracks_logical_cursor() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asm_blox_mirror_buffer_editing_enforces_box_dimensions_and_tracks_logical_cursor",
+        r##"(with-temp-buffer
          (asm-blox-test-prepare-edit-buffer
           '((0 0 "alpha\nbeta")))
          (asm-blox--move-to-box 0 0)
@@ -119,14 +123,17 @@ fn editing_public_surface_batch() {
                (current-column))
               trace))
            (nreverse trace)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("alpha!\nbeta" (0 0 0) 6 4 18) ("alpha!\ngamma\nbeta" (0 0 1) 5 5 17) ("alpha!\ngamma\nbeta" #1=(0 0 0) 0 4 12) ("alpha!\ngamma\nbeta" #1# 0 4 12))"#
     ]],
-        ),
-        (
-            "asm_blox_kill_copy_and_yank_workflows_preserve_kill_ring_and_reject_cross_box_regions",
-            r##"(with-temp-buffer
+    )
+}
+
+fn asm_blox_kill_copy_and_yank_workflows_preserve_kill_ring_and_reject_cross_box_regions() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asm_blox_kill_copy_and_yank_workflows_preserve_kill_ring_and_reject_cross_box_regions",
+        r##"(with-temp-buffer
          (let ((kill-ring nil)
                (kill-ring-yank-pointer nil))
            (asm-blox-test-prepare-edit-buffer
@@ -169,14 +176,17 @@ fn editing_public_surface_batch() {
                          (list
                           (car error)
                           (cdr error))))))))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("alpha beta\ngamma" "beta") ("alpha \ngammabeta" "beta") (error ("Can’t kill region across boxes")))"#
     ]],
-        ),
-        (
-            "asm_blox_cell_navigation_wraps_row_major_and_vertical_while_retaining_content_end_positions",
-            r##"(with-temp-buffer
+    )
+}
+
+fn asm_blox_cell_navigation_wraps_row_major_and_vertical_while_retaining_content_end_positions() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asm_blox_cell_navigation_wraps_row_major_and_vertical_while_retaining_content_end_positions",
+        r##"(with-temp-buffer
          (asm-blox-test-prepare-edit-buffer
           '((0 0 "a")
             (0 1 "bb")
@@ -213,14 +223,17 @@ fn editing_public_surface_batch() {
              (asm-blox-get-line-col-num))
             trace)
            (nreverse trace)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (((0 1 0) 2) ((0 2 0) 0) ((0 3 1) 3) (#1=(1 0 0) 0) ((1 1 0) 0) (:previous #1# 0) (:vertical (2 0 0) 0))"
     ],
-        ),
-        (
-            "asm_blox_per_cell_undo_redo_and_stack_swapping_restore_text_and_cursor_state",
-            r##"(with-temp-buffer
+    )
+}
+
+fn asm_blox_per_cell_undo_redo_and_stack_swapping_restore_text_and_cursor_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asm_blox_per_cell_undo_redo_and_stack_swapping_restore_text_and_cursor_state",
+        r##"(with-temp-buffer
          (asm-blox-test-prepare-edit-buffer
           '((0 0 "one")
             (0 1 "two")))
@@ -270,14 +283,17 @@ fn editing_public_surface_batch() {
                  (gethash
                   '(0 1)
                   asm-blox--undo-stacks)))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("one-edit" "one" "one-edit" ("one-edit" "one") ("two") ("two") ("one-edit" "one"))"#
     ]],
-        ),
-        (
-            "asm_blox_nested_parenthesis_matching_and_overlay_lifecycle_follow_box_coordinates",
-            r##"(with-temp-buffer
+    )
+}
+
+fn asm_blox_nested_parenthesis_matching_and_overlay_lifecycle_follow_box_coordinates() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asm_blox_nested_parenthesis_matching_and_overlay_lifecycle_follow_box_coordinates",
+        r##"(with-temp-buffer
          (asm-blox-test-prepare-edit-buffer
           '((1 1 "(send right\n (add (const 1)\n      (const 2)))")))
          (asm-blox--move-to-box 1 1)
@@ -308,14 +324,17 @@ fn editing_public_surface_batch() {
                 (overlays-in
                  (point-min)
                  (point-max)))))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((2 16) (-1 -15) ((2456 2457 asm-blox-show-paren-match-face show-pair) (2458 2459 asm-blox-show-paren-match-face nil)) nil nil)"
     ],
-        ),
-        (
-            "asm_blox_completion_context_keyword_port_matchers_and_eldoc_support_real_nested_forms",
-            r##"(list
+    )
+}
+
+fn asm_blox_completion_context_keyword_port_matchers_and_eldoc_support_real_nested_forms() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asm_blox_completion_context_keyword_port_matchers_and_eldoc_support_real_nested_forms",
+        r##"(list
          (with-temp-buffer
            (insert
             "(send ri (add (const 1) (get -1)))")
@@ -359,14 +378,17 @@ fn editing_public_surface_batch() {
              candidate))
           asm-blox--all-completions)
          (assoc 'SEND asm-blox-eldoc-specs))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("ri" (7 . 9) "send" 1) (("(send" "send" 2 6) ("(add" "add" 14 17) ("(const" "const" 19 24) ("(get" "get" 29 32)) (("up" 1) ("LEFT" 13) ("right" 18) ("down" 24)) ("set" "sub" "send") (SEND "POP -> X; sent X to port." port rest))"#
     ]],
-        ),
-        (
-            "asm_blox_edit_and_execution_modes_install_expected_local_state_without_starting_background_timer",
-            r##"(let ((asm-blox--show-pair-idle-timer t))
+    )
+}
+
+fn asm_blox_edit_and_execution_modes_install_expected_local_state_without_starting_background_timer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asm_blox_edit_and_execution_modes_install_expected_local_state_without_starting_background_timer",
+        r##"(let ((asm-blox--show-pair-idle-timer t))
          (list
           (with-temp-buffer
             (let ((asm-blox--skip-initial-parsing t))
@@ -399,14 +421,17 @@ fn editing_public_surface_batch() {
              (eq
               (current-local-map)
               asm-blox-execution-mode-map)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((asm-blox-mode "asm-blox" t 0 edit t (asm-blox--ensure-buffer-not-empty t) t) (asm-blox-execution-mode "asm-blox-execution" t 0 execute "ASM-BLOX EXECUTION" nil nil t))"#
     ]],
-        ),
-        (
-            "asm_blox_puzzle_selection_sorts_difficulty_renders_saved_slots_and_attaches_action_properties",
-            r##"(let* ((asm-blox-save-directory-name
+    )
+}
+
+fn asm_blox_puzzle_selection_sorts_difficulty_renders_saved_slots_and_attaches_action_properties() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asm_blox_puzzle_selection_sorts_difficulty_renders_saved_slots_and_attaches_action_properties",
+        r##"(let* ((asm-blox-save-directory-name
                  (asm-blox-test-sandbox-path
                   "selection"))
                 (easy
@@ -489,10 +514,26 @@ fn editing_public_surface_batch() {
                    (asm-blox--problem-spec-name
                     (funcall function)))
                  (asm-blox--puzzles-by-difficulty)))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("[x] tutorial Tutorial Fixture          Learn the board.                                               \n[ ] easy     Easy Fixture              A practical easy puzzle.                                       [2] \n[ ] hard     Hard Fixture              A practical hard puzzle.                                       \n" ((1 "Tutorial Fixture" nil) (104 "Easy Fixture" nil) (211 "Hard Fixture" nil)) ("Tutorial Fixture" "Easy Fixture" "Hard Fixture"))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn editing_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        asm_blox_box_content_initialization_get_set_line_and_swap_operations_preserve_exact_text(),
+        asm_blox_practical_board_render_has_stable_geometry_labels_problem_text_and_edit_properties(),
+        asm_blox_mirror_buffer_editing_enforces_box_dimensions_and_tracks_logical_cursor(),
+        asm_blox_kill_copy_and_yank_workflows_preserve_kill_ring_and_reject_cross_box_regions(),
+        asm_blox_cell_navigation_wraps_row_major_and_vertical_while_retaining_content_end_positions(),
+        asm_blox_per_cell_undo_redo_and_stack_swapping_restore_text_and_cursor_state(),
+        asm_blox_nested_parenthesis_matching_and_overlay_lifecycle_follow_box_coordinates(),
+        asm_blox_completion_context_keyword_port_matchers_and_eldoc_support_real_nested_forms(),
+        asm_blox_edit_and_execution_modes_install_expected_local_state_without_starting_background_timer(),
+        asm_blox_puzzle_selection_sorts_difficulty_renders_saved_slots_and_attaches_action_properties(),
+    ];
+    assert_asm_blox_batch(&cases);
 }

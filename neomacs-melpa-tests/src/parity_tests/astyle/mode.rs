@@ -1,12 +1,10 @@
-use super::assert_astyle_batch;
+use super::{ParityBatchCase, assert_astyle_batch};
 use expect_test::{Expect, expect};
 
-#[test]
-fn mode_public_surface_batch() {
-    assert_astyle_batch(&[
-        (
-            "enabling_disabling_and_toggling_mode_updates_only_local_before_save_hook",
-            r##"
+fn enabling_disabling_and_toggling_mode_updates_only_local_before_save_hook() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "enabling_disabling_and_toggling_mode_updates_only_local_before_save_hook",
+        r##"
 (with-temp-buffer
   (let ((global-before-save
          (default-value
@@ -46,12 +44,15 @@ fn mode_public_surface_batch() {
       (default-value
        'before-save-hook)))))
 "##,
-            true,
-            expect!["OK ((t t (astyle-buffer t)) (t 1) (nil nil) (t #1=(astyle-buffer t)) (t #1#) t)"],
-        ),
-        (
-            "lighter_customization_is_reflected_by_enabled_minor_mode_without_changing_hook_behavior",
-            r##"
+        true,
+        expect!["OK ((t t (astyle-buffer t)) (t 1) (nil nil) (t #1=(astyle-buffer t)) (t #1#) t)"],
+    )
+}
+
+fn lighter_customization_is_reflected_by_enabled_minor_mode_without_changing_hook_behavior() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "lighter_customization_is_reflected_by_enabled_minor_mode_without_changing_hook_behavior",
+        r##"
 (with-temp-buffer
   (let ((astyle-on-save-mode-lighter
          " Format[C++]"))
@@ -72,14 +73,17 @@ fn mode_public_surface_batch() {
       'astyle-on-save-mode-lighter
       'custom-group))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t " Format[C++]" (astyle-on-save-mode astyle-on-save-mode-lighter) (astyle-buffer t) string nil)"#
     ]],
-        ),
-        (
-            "mode_instances_and_hooks_remain_independent_across_two_c_buffers",
-            r##"
+    )
+}
+
+fn mode_instances_and_hooks_remain_independent_across_two_c_buffers() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "mode_instances_and_hooks_remain_independent_across_two_c_buffers",
+        r##"
 (let ((first
        (generate-new-buffer
         " *astyle-mode-first*"))
@@ -107,12 +111,15 @@ fn mode_public_surface_batch() {
     (kill-buffer first)
     (kill-buffer second)))
 "##,
-            true,
-            expect!["OK ((t (astyle-buffer t)) (nil nil) nil)"],
-        ),
-        (
-            "enabled_mode_formats_buffer_before_save_and_persists_formatted_content",
-            r##"
+        true,
+        expect!["OK ((t (astyle-buffer t)) (nil nil) nil)"],
+    )
+}
+
+fn enabled_mode_formats_buffer_before_save_and_persists_formatted_content() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "enabled_mode_formats_buffer_before_save_and_persists_formatted_content",
+        r##"
 (let* ((installation
         (astyle-test-install-formatter))
        (argument-log
@@ -160,14 +167,17 @@ fn mode_public_surface_batch() {
       (kill-buffer buffer))
     (astyle-test-kill-error-buffer)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t "int main() {\n    return 0;\n}\n/* saved */\n" "int main() {\n    return 0;\n}\n/* saved */\n" "--style=google\n--indent=spaces=4\n--suffix=none\n" nil (astyle-buffer t))"#
     ]],
-        ),
-        (
-            "disabled_mode_saves_original_unformatted_content_and_does_not_run_program",
-            r##"
+    )
+}
+
+fn disabled_mode_saves_original_unformatted_content_and_does_not_run_program() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "disabled_mode_saves_original_unformatted_content_and_does_not_run_program",
+        r##"
 (let* ((installation
         (astyle-test-install-formatter))
        (argument-log
@@ -211,14 +221,17 @@ fn mode_public_surface_batch() {
       (kill-buffer buffer))
     (astyle-test-kill-error-buffer)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil #("int main(){\nreturn 0;\n}\n/* raw */\n" 0 24 (fontified nil) 24 34 (fontified nil)) "int main(){\nreturn 0;\n}\n/* raw */\n" nil nil)"#
     ]],
-        ),
-        (
-            "formatter_failure_during_save_keeps_raw_content_but_save_still_completes",
-            r##"
+    )
+}
+
+fn formatter_failure_during_save_keeps_raw_content_but_save_still_completes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "formatter_failure_during_save_keeps_raw_content_but_save_still_completes",
+        r##"
 (let* ((installation
         (astyle-test-install-formatter))
        (argument-log
@@ -270,10 +283,22 @@ fn mode_public_surface_batch() {
       (kill-buffer buffer))
     (astyle-test-kill-error-buffer)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (#("int main(){\nreturn 0;\n}\n/* failure still saves */\n" 0 24 (fontified nil) 24 50 (fontified nil)) "int main(){\nreturn 0;\n}\n/* failure still saves */\n" "--style=google\n--indent=spaces=4\n--pad-oper\n--pad-header\n--break-blocks\n--delete-empty-lines\n--align-pointer=type\n--align-reference=name\n" nil nil "fixture formatter failed\n")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn mode_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        enabling_disabling_and_toggling_mode_updates_only_local_before_save_hook(),
+        lighter_customization_is_reflected_by_enabled_minor_mode_without_changing_hook_behavior(),
+        mode_instances_and_hooks_remain_independent_across_two_c_buffers(),
+        enabled_mode_formats_buffer_before_save_and_persists_formatted_content(),
+        disabled_mode_saves_original_unformatted_content_and_does_not_run_program(),
+        formatter_failure_during_save_keeps_raw_content_but_save_still_completes(),
+    ];
+    assert_astyle_batch(&cases);
 }

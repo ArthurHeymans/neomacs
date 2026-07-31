@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_highlight_symbol_batch;
+use super::{ParityBatchCase, assert_auto_highlight_symbol_batch};
 
-#[test]
-fn predicates_public_surface_batch() {
-    assert_auto_highlight_symbol_batch(&[
-        (
-            "auto_highlight_symbol_symbol_predicate_handles_default_regexp_case_and_nodefs",
-            r##"(mapcar
+fn auto_highlight_symbol_symbol_predicate_handles_default_regexp_case_and_nodefs() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_highlight_symbol_symbol_predicate_handles_default_regexp_case_and_nodefs",
+        r##"(mapcar
                            (lambda (case)
                              (let ((ahs-case-fold-search
                                     (car case)))
@@ -26,14 +24,17 @@ fn predicates_public_surface_batch() {
                              (nil . "")
                              (t . "λ-value")
                              (t . "path/to:file")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((t . "Alpha_42") 0 nil) ((nil . "Alpha_42") 0 nil) ((t . "two words") nil nil) ((nil . "") nil nil) ((t . "λ-value") nil nil) ((t . "path/to:file") 0 nil))"#
     ]],
-        ),
-        (
-            "auto_highlight_symbol_symbol_predicate_supports_regex_function_and_mode_alist",
-            r##"(let ((starts-with-user
+    )
+}
+
+fn auto_highlight_symbol_symbol_predicate_supports_regex_function_and_mode_alist() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_highlight_symbol_symbol_predicate_supports_regex_function_and_mode_alist",
+        r##"(let ((starts-with-user
                                 (lambda (symbol)
                                   (string-prefix-p
                                    "user-"
@@ -71,14 +72,17 @@ fn predicates_public_surface_batch() {
                                ((emacs-lisp-mode
                                   . "^elisp-"))
                                "other"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((emacs-lisp-mode "^user-" "User-name") 0) ((emacs-lisp-mode #[(symbol) ((string-prefix-p "user-" symbol)) (t)] "user-name") t) ((text-mode ((emacs-lisp-mode . "^elisp-") (text-mode . "^text-")) "text-value") 0) ((python-mode ((emacs-lisp-mode . "^elisp-")) "anything") 0) ((emacs-lisp-mode ((emacs-lisp-mode . "^elisp-")) "other") nil))"#
     ]],
-        ),
-        (
-            "auto_highlight_symbol_highlight_predicate_extracts_real_symbol_bounds_and_rules",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_highlight_symbol_highlight_predicate_extracts_real_symbol_bounds_and_rules() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_highlight_symbol_highlight_predicate_extracts_real_symbol_bounds_and_rules",
+        r##"(with-temp-buffer
                            (emacs-lisp-mode)
                            (insert
                             "(let ((alpha-value 1))\n  (+ alpha-value 2))")
@@ -102,14 +106,17 @@ fn predicates_public_surface_batch() {
                               (1 nil nil)
                               (24 nil nil)
                               (39 nil nil))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((10 nil nil) ("alpha-value" 8 19)) ((10 "^alpha" nil) ("alpha-value" 8 19)) ((10 "^beta" nil) nil) ((10 nil "^alpha") nil) ((1 nil nil) nil) ((24 nil nil) nil) ((39 nil nil) ("alpha-value" 29 40)))"#
     ]],
-        ),
-        (
-            "auto_highlight_symbol_highlight_predicate_rejects_inhibited_text_and_overlay_faces",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_highlight_symbol_highlight_predicate_rejects_inhibited_text_and_overlay_faces() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_highlight_symbol_highlight_predicate_rejects_inhibited_text_and_overlay_faces",
+        r##"(with-temp-buffer
                            (insert
                             (propertize
                              "commented"
@@ -142,14 +149,17 @@ fn predicates_public_surface_batch() {
                                 (11)
                                 (17)
                                 (17 . t)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((1) nil nil) ((11) ("plain" 11 16) nil) ((17) ("overlayed" 17 26) (font-lock-string-face)) ((17 . t) nil (font-lock-string-face)))"#
     ]],
-        ),
-        (
-            "auto_highlight_symbol_dropdown_expansion_suppresses_symbol_detection_only_when_active",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_highlight_symbol_dropdown_expansion_suppresses_symbol_detection_only_when_active() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_highlight_symbol_dropdown_expansion_suppresses_symbol_detection_only_when_active",
+        r##"(with-temp-buffer
                            (insert "candidate")
                            (goto-char 3)
                            (mapcar
@@ -174,14 +184,17 @@ fn predicates_public_surface_batch() {
                             '((nil nil)
                               (t nil)
                               (t (fixture-overlay)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((nil nil) nil ("candidate" 1 10)) ((t nil) nil ("candidate" 1 10)) ((t #1=(fixture-overlay)) #1# nil))"#
     ]],
-        ),
-        (
-            "auto_highlight_symbol_face_predicate_handles_symbols_lists_and_missing_matches",
-            r##"(progn
+    )
+}
+
+fn auto_highlight_symbol_face_predicate_handles_symbols_lists_and_missing_matches() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_highlight_symbol_face_predicate_handles_symbols_lists_and_missing_matches",
+        r##"(progn
                            (defvar fixture-faces nil)
                            (setq
                             fixture-faces
@@ -201,14 +214,17 @@ fn predicates_public_surface_batch() {
                               (font-lock-comment-face
                                font-lock-string-face)
                               nil)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((font-lock-comment-face (font-lock-comment-face font-lock-string-face)) (font-lock-keyword-face nil) ((font-lock-keyword-face font-lock-string-face) font-lock-string-face) ((font-lock-comment-face font-lock-string-face) font-lock-comment-face) (nil nil))"
     ],
-        ),
-        (
-            "auto_highlight_symbol_prepare_highlight_validates_plugin_boundaries_and_abort",
-            r##"(progn
+    )
+}
+
+fn auto_highlight_symbol_prepare_highlight_validates_plugin_boundaries_and_abort() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_highlight_symbol_prepare_highlight_validates_plugin_boundaries_and_abort",
+        r##"(progn
                            (defvar auto-highlight-symbol-test-range-reversed
                              '((name . "reversed")
                                (start . point-max)
@@ -246,14 +262,17 @@ fn predicates_public_surface_batch() {
                                 auto-highlight-symbol-test-range-reversed
                                 auto-highlight-symbol-test-range-nonnumeric
                                 auto-highlight-symbol-test-range-abort))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((ahs-range-whole-buffer (1 . 11)) (auto-highlight-symbol-test-range-reversed nil) (auto-highlight-symbol-test-range-nonnumeric nil) (auto-highlight-symbol-test-range-abort nil))"
     ],
-        ),
-        (
-            "auto_highlight_symbol_disabled_modes_commands_and_flags_gate_real_idle_highlighting",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_highlight_symbol_disabled_modes_commands_and_flags_gate_real_idle_highlighting() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_highlight_symbol_disabled_modes_commands_and_flags_gate_real_idle_highlighting",
+        r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -292,14 +311,17 @@ fn predicates_public_surface_batch() {
                                 command
                                 minor-mode
                                 flag))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((enabled t ((1 6 current ahs-plugin-whole-buffer-face 1000 t t) (1 6 others ahs-face-unfocused nil t t) (7 12 others ahs-face-unfocused nil t t))) (command nil nil) (minor-mode nil nil) (flag nil nil))"
     ],
-        ),
-        (
-            "auto_highlight_symbol_case_policy_changes_search_matches_without_changing_bounds",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_highlight_symbol_case_policy_changes_search_matches_without_changing_bounds() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_highlight_symbol_case_policy_changes_search_matches_without_changing_bounds",
+        r##"(with-temp-buffer
                            (insert
                             "Alpha alpha ALPHA alphabet")
                            (mapcar
@@ -321,8 +343,23 @@ fn predicates_public_surface_batch() {
                                      (nth 1 match)))
                                   ahs-search-work))))
                             '(nil t)))"##,
-            true,
-            expect!["OK ((nil ((7 12))) (t ((1 6) (7 12) (13 18))))"],
-        ),
-    ]);
+        true,
+        expect!["OK ((nil ((7 12))) (t ((1 6) (7 12) (13 18))))"],
+    )
+}
+
+#[test]
+fn predicates_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_highlight_symbol_symbol_predicate_handles_default_regexp_case_and_nodefs(),
+        auto_highlight_symbol_symbol_predicate_supports_regex_function_and_mode_alist(),
+        auto_highlight_symbol_highlight_predicate_extracts_real_symbol_bounds_and_rules(),
+        auto_highlight_symbol_highlight_predicate_rejects_inhibited_text_and_overlay_faces(),
+        auto_highlight_symbol_dropdown_expansion_suppresses_symbol_detection_only_when_active(),
+        auto_highlight_symbol_face_predicate_handles_symbols_lists_and_missing_matches(),
+        auto_highlight_symbol_prepare_highlight_validates_plugin_boundaries_and_abort(),
+        auto_highlight_symbol_disabled_modes_commands_and_flags_gate_real_idle_highlighting(),
+        auto_highlight_symbol_case_policy_changes_search_matches_without_changing_bounds(),
+    ];
+    assert_auto_highlight_symbol_batch(&cases);
 }

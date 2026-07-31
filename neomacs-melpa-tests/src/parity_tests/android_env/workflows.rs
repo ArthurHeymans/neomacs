@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_android_env_batch;
+use super::{ParityBatchCase, assert_android_env_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_android_env_batch(&[
-        (
-            "compiling_runs_gradlew_from_the_project_root_it_finds_above_the_open_file",
-            r##"
+fn compiling_runs_gradlew_from_the_project_root_it_finds_above_the_open_file() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "compiling_runs_gradlew_from_the_project_root_it_finds_above_the_open_file",
+        r##"
 (progn
   (aenv-test-write
    "checkout/gradlew"
@@ -55,14 +53,17 @@ fn workflows_public_surface_batch() {
                 (list :root (locate-dominating-file "." "gradlew")
                       :result (android-env-gradle "assembleRelease"))))))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:setup (:compilation-mode t :registered-regexps ((android-java ":compile.*?\\(/.*?\\):\\([0-9]+\\): " 1 2) (android-java-2 "^\\(/.[^:]*\\):\\([0-9]*\\): +error:" 1 2) (android-kotlin "^e: \\(.[^:]*\\): (\\([0-9]*\\), \\([0-9]*\\)" 1 2 3)) :hydra-option nil :entry-command-with-hydra-off nil :project-root "[ORACLE-SANDBOX]/checkout/") :compile (:wait :finished :buffer "-*- mode: android-env-compile; default-directory: \"[ORACLE-SANDBOX]/checkout/\" -*-\nAndroid Compile started at <TIME>\n\ncd [ORACLE-SANDBOX]/checkout/; ./gradlew assembleDevDebug\nargv: assembleDevDebug\ncwd: [ORACLE-SANDBOX]/checkout\nBUILD SUCCESSFUL\n\nAndroid Compile finished at <TIME>\n" :mode android-env-compile-mode :error-regexps (android-java android-java-2 android-kotlin)) :unit-test-command "testDevDebug" :unit-test "-*- mode: android-env-compile; default-directory: \"[ORACLE-SANDBOX]/checkout/\" -*-\nAndroid Compile started at <TIME>\n\ncd [ORACLE-SANDBOX]/checkout/; ./gradlew testDevDebug\nargv: testDevDebug\ncwd: [ORACLE-SANDBOX]/checkout\nBUILD SUCCESSFUL\n\nAndroid Compile finished at <TIME>\n" :instrumented-test-command "testDev" :instrumented-test "-*- mode: android-env-compile; default-directory: \"[ORACLE-SANDBOX]/checkout/\" -*-\nAndroid Compile started at <TIME>\n\ncd [ORACLE-SANDBOX]/checkout/; ./gradlew testDev\nargv: testDev\ncwd: [ORACLE-SANDBOX]/checkout\nBUILD SUCCESSFUL\n\nAndroid Compile finished at <TIME>\n" :outside-a-project (:root nil :result "Couldn’t find a gradle project in ancestors directories"))"#
     ]],
-        ),
-        (
-            "javac_and_kotlinc_errors_in_the_build_output_become_navigable_locations",
-            r##"
+    )
+}
+
+fn javac_and_kotlinc_errors_in_the_build_output_become_navigable_locations() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "javac_and_kotlinc_errors_in_the_build_output_become_navigable_locations",
+        r##"
 (progn
   (aenv-test-write "app/app/src/main/java/com/example/Checkout.java"
                    "package com.example;\nclass Checkout {}\n")
@@ -123,14 +124,17 @@ fn workflows_public_surface_batch() {
                          . ":compileDevDebugJavaWithJavac /tmp/x/Checkout.java:17: cannot find symbol"))))))
            '(android-java android-java-2 android-kotlin)))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:wait :finished :buffer "-*- mode: android-env-compile; default-directory: \"[ORACLE-SANDBOX]/app/\" -*-\nAndroid Compile started at <TIME>\n\ncd [ORACLE-SANDBOX]/app/; ./gradlew assembleDevDebug\n> Task :app:compileDevDebugJavaWithJavac\n:compileDevDebugJavaWithJavac [ORACLE-SANDBOX]/app/app/src/main/java/com/example/Checkout.java:17: cannot find symbol\n[ORACLE-SANDBOX]/app/app/src/main/java/com/example/Checkout.java:5: error: cannot find symbol\n[ORACLE-SANDBOX]/app/app/src/main/java/com/example/Checkout.java:8: error: incompatible types: int cannot be converted to String\n> Task :app:compileDevDebugKotlin\ne: [ORACLE-SANDBOX]/app/app/src/main/kotlin/com/example/Gateway.kt: (23, 9): unresolved reference: charge\nGateway.kt:5:16: error: unresolved reference 'chargeCard'.\nBUILD FAILED in 1s\n\nAndroid Compile exited abnormally with code 1 at <TIME>\n" :locations ((:file "[ORACLE-SANDBOX]/app/app/src/main/java/com/example/Checkout.java" :line 17 :column nil) (:file "[ORACLE-SANDBOX]/app/app/src/main/java/com/example/Checkout.java" :line 5 :column nil) (:file "[ORACLE-SANDBOX]/app/app/src/main/java/com/example/Checkout.java" :line 8 :column nil) (:file "[ORACLE-SANDBOX]/app/app/src/main/kotlin/com/example/Gateway.kt" :line 23 :column 9)) :what-each-regexp-matches ((android-java (:javac-absolute) (:javac-relative) (:kotlin-2-2) (:kotlin-historical) (:gradle-task-prefixed . t)) (android-java-2 (:javac-absolute . t) (:javac-relative) (:kotlin-2-2) (:kotlin-historical) (:gradle-task-prefixed)) (android-kotlin (:javac-absolute) (:javac-relative) (:kotlin-2-2) (:kotlin-historical . t) (:gradle-task-prefixed))))"#
     ]],
-        ),
-        (
-            "adb_commands_are_built_from_the_sdk_root_and_quoted_for_the_shell",
-            r##"
+    )
+}
+
+fn adb_commands_are_built_from_the_sdk_root_and_quoted_for_the_shell() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "adb_commands_are_built_from_the_sdk_root_and_quoted_for_the_shell",
+        r##"
 (progn
   (aenv-test-install-sdk)
   (let ((adb (android-env-adb)))
@@ -155,14 +159,17 @@ fn workflows_public_surface_batch() {
                                   (point-min) (point-max)))
               :recorded (aenv-test-argv))))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:adb-path "[ORACLE-SANDBOX]/sdk/platform-tools/adb" :sdk-root "[ORACLE-SANDBOX]/sdk" :adb-buffer-name "*android-adb*" :logcat-clear-output "logcat cleared\n" :uninstall-output "ok\n" :deeplink-output "ok\n" :recorded ("adb [logcat] [-c]" "adb [shell] [pm] [uninstall] [com.example.checkout]" "adb [shell] [am start -a android.intent.action.VIEW -d \"myapp://item/42?ref=spring sale\"]"))"#
     ]],
-        ),
-        (
-            "logcat_streams_from_a_real_adb_process_and_a_tag_restarts_it_filtered",
-            r##"
+    )
+}
+
+fn logcat_streams_from_a_real_adb_process_and_a_tag_restarts_it_filtered() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "logcat_streams_from_a_real_adb_process_and_a_tag_restarts_it_filtered",
+        r##"
 (progn
   (aenv-test-install-sdk)
   (android-env-logcat "")
@@ -195,14 +202,17 @@ fn workflows_public_surface_batch() {
                         (mapcar #'buffer-name (buffer-list)))
             :recorded (aenv-test-argv)))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:settled :settled :unfiltered (:text "I/Checkout( 911): charge accepted\nD/Gateway( 911): retrying\nI/Sync( 1024): idle\n\nProcess Android Logcat finished\n" :view-mode t :read-only t :process nil) :filtered "I/Checkout( 911): charge accepted\n\nProcess Android Logcat finished\n" :crash "F/libc( 911): Fatal signal 11 in tid 911\n\nProcess Android Logcat finished\n" :logcat-buffers ("*Android Logcat*") :recorded ("adb [logcat]" "adb [logcat] [*:S] [Checkout]" "adb [logcat] [-b] [crash]"))"#
     ]],
-        ),
-        (
-            "listing_avds_goes_through_the_sdk_avdmanager_and_loses_the_first_device",
-            r##"
+    )
+}
+
+fn listing_avds_goes_through_the_sdk_avdmanager_and_loses_the_first_device() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "listing_avds_goes_through_the_sdk_avdmanager_and_loses_the_first_device",
+        r##"
 (progn
   (aenv-test-install-sdk)
   ;; avdmanager prints three names, NUL separated, exactly as
@@ -236,14 +246,17 @@ fn workflows_public_surface_batch() {
                               (point-min) (point-max)))
             :recorded (aenv-test-argv)))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:emulator-command "[ORACLE-SANDBOX]/sdk/emulator/emulator" :avdmanager-printed ("Pixel_6_API_33" "Pixel_Tablet_API_34" "Nexus_5X_API_29") :avd-list ("Pixel_Tablet_API_34" "Nexus_5X_API_29") :dropped ("Pixel_6_API_33") :launch-buffer "*android-emulator-Nexus_5X_API_29" :launch-output "boot completed: @Nexus_5X_API_29\n" :recorded ("avdmanager [list] [avd] [--compact] [-0]" "avdmanager [list] [avd] [--compact] [-0]" "avdmanager [list] [avd] [--compact] [-0]" "emulator [@Nexus_5X_API_29]"))"#
     ]],
-        ),
-        (
-            "refactoring_a_source_tree_rewrites_every_file_and_treats_the_mapping_as_regexps",
-            r##"
+    )
+}
+
+fn refactoring_a_source_tree_rewrites_every_file_and_treats_the_mapping_as_regexps() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "refactoring_a_source_tree_rewrites_every_file_and_treats_the_mapping_as_regexps",
+        r##"
 (progn
   ;; Three rows of a real androidx-class-mapping.csv.
   (aenv-test-write
@@ -291,10 +304,22 @@ fn workflows_public_surface_batch() {
           ;; splits on the literal "d " and returns neither.
           :pid-assoc (android-env-logcat-pid-assoc "911 com.example.checkout"))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:mapping (("android.arch.lifecycle.ViewModel" "androidx.lifecycle.ViewModel") ("android.support.v7.widget.RecyclerView" "androidx.recyclerview.widget.RecyclerView") ("android.support.v4.app.Fragment" "androidx.fragment.app.Fragment")) :refactor-file-configured t :files (("Checkout.java" . "import androidx.fragment.app.Fragment;\nimport androidx.recyclerview.widget.RecyclerView;\nclass Checkout extends Fragment {\n  RecyclerView items;\n}\n") ("Gateway.kt" . "import androidx.lifecycle.ViewModel\nclass Gateway : ViewModel()\n") ("Untouched.java" . "import androidx.fragment.app.Fragment;\nimport com.example.Fragment;\n") ("README.md" . "android.support.v4.app.Fragment\n")) :second-pass-replacements 0 :pid-assoc ("911 com.example.checkout"))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        compiling_runs_gradlew_from_the_project_root_it_finds_above_the_open_file(),
+        javac_and_kotlinc_errors_in_the_build_output_become_navigable_locations(),
+        adb_commands_are_built_from_the_sdk_root_and_quoted_for_the_shell(),
+        logcat_streams_from_a_real_adb_process_and_a_tag_restarts_it_filtered(),
+        listing_avds_goes_through_the_sdk_avdmanager_and_loses_the_first_device(),
+        refactoring_a_source_tree_rewrites_every_file_and_treats_the_mapping_as_regexps(),
+    ];
+    assert_android_env_batch(&cases);
 }

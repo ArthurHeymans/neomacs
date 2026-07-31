@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{AFFE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod async_frontend;
 mod autoloads;
@@ -56,9 +59,9 @@ pub(crate) fn assert_affe_autoload_parity(elisp_form: &str, expected: Expect) {
 
 
 /// Multi-probe batch for `assert_affe_autoload_parity` cases (2a).
-pub(crate) fn assert_affe_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_affe_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         affe_oracle("affe-autoloads.el"),
         &name,
         "affe_autoload_parity",
@@ -67,9 +70,9 @@ pub(crate) fn assert_affe_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
 }
 
 /// Multi-probe batch for `assert_affe_backend_parity` cases (2a).
-pub(crate) fn assert_affe_backend_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_affe_backend_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         affe_oracle("affe-backend.el"),
         &name,
         "affe_backend_parity",
@@ -78,9 +81,9 @@ pub(crate) fn assert_affe_backend_batch(cases: &[(&str, &str, bool, Expect)]) {
 }
 
 /// Multi-probe batch for `assert_affe_parity` cases (2a).
-pub(crate) fn assert_affe_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_affe_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         affe_oracle("affe.el"),
         &name,
         "affe_parity",

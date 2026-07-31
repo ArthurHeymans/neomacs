@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_ast_grep_batch;
+use super::{ParityBatchCase, assert_ast_grep_batch};
 
-#[test]
-fn sync_public_surface_batch() {
-    assert_ast_grep_batch(&[
-        (
-            "ast_grep_sync_search_runs_prompt_stream_completion_and_real_file_jump",
-            r##"(let* ((file
+fn ast_grep_sync_search_runs_prompt_stream_completion_and_real_file_jump() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_sync_search_runs_prompt_stream_completion_and_real_file_jump",
+        r##"(let* ((file
                 (ast-grep-test-write-file
                  "sync/src/app.js"
                  "zero\n  console.log(value)\nlast\n"))
@@ -53,14 +51,17 @@ fn sync_public_surface_batch() {
                   (min (+ (point) 11) (point-max)))
                  (hash-table-count ast-grep--candidate-table)))
             (ast-grep-test-kill-file-buffer file)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((:read "ast-grep pattern: " nil ast-grep-history) (:run "console.log($A)" "/fixture/project/") (:complete "ast-grep [console.log($A)]: " nil t nil ast-grep-history ("[ORACLE-SANDBOX]/sync/src/app.js:2:2:console.log(value)") (metadata (affixation-function . ast-grep--affixation)))) t 2 2 "console.log" 1)"#
     ]],
-        ),
-        (
-            "ast_grep_sync_search_no_matches_reports_pattern_and_never_prompts_for_selection",
-            r##"(let (messages completion-called)
+    )
+}
+
+fn ast_grep_sync_search_no_matches_reports_pattern_and_never_prompts_for_selection() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_sync_search_no_matches_reports_pattern_and_never_prompts_for_selection",
+        r##"(let (messages completion-called)
           (cl-letf (((symbol-function 'read-string)
                      (lambda (&rest _) "$A && $A()"))
                     ((symbol-function 'ast-grep--run-command)
@@ -78,12 +79,15 @@ fn sync_public_surface_batch() {
              (nreverse messages)
              completion-called
              (hash-table-count ast-grep--candidate-table))))"##,
-            true,
-            expect![[r#"OK (nil ("No matches found for pattern: $A && $A()") nil 0)"#]],
-        ),
-        (
-            "ast_grep_sync_new_session_discards_stale_registry_before_user_selection",
-            r##"(let* ((stale
+        true,
+        expect![[r#"OK (nil ("No matches found for pattern: $A && $A()") nil 0)"#]],
+    )
+}
+
+fn ast_grep_sync_new_session_discards_stale_registry_before_user_selection() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_sync_new_session_discards_stale_registry_before_user_selection",
+        r##"(let* ((stale
                 (ast-grep--format-candidate
                  '(:file "stale.rs" :start-line 9 :start-column 9
                    :text "stale")))
@@ -108,10 +112,19 @@ fn sync_public_surface_batch() {
              stale-visible
              selected
              (hash-table-count ast-grep--candidate-table))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("stale.rs" 9 9 nil nil nil nil) ("fresh.rs" 1 2 nil nil "fresh" nil) 1)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn sync_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        ast_grep_sync_search_runs_prompt_stream_completion_and_real_file_jump(),
+        ast_grep_sync_search_no_matches_reports_pattern_and_never_prompts_for_selection(),
+        ast_grep_sync_new_session_discards_stale_registry_before_user_selection(),
+    ];
+    assert_ast_grep_batch(&cases);
 }

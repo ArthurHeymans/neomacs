@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{AUTO_HIGHLIGHT_SYMBOL_MELPA_PIN, CachedMelpaOracle, DASH_MELPA_PIN, HT_MELPA_PIN};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod editing;
 mod highlighting;
@@ -126,9 +129,9 @@ pub(crate) fn assert_auto_highlight_symbol_autoload_parity(elisp_form: &str, exp
 
 
 /// Multi-probe batch for `assert_auto_highlight_symbol_autoload_parity` cases (2a).
-pub(crate) fn assert_auto_highlight_symbol_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_auto_highlight_symbol_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         auto_highlight_symbol_oracle("auto-highlight-symbol-autoloads.el"),
         &name,
         "auto_highlight_symbol_autoload_parity",
@@ -137,9 +140,9 @@ pub(crate) fn assert_auto_highlight_symbol_autoload_batch(cases: &[(&str, &str, 
 }
 
 /// Multi-probe batch for `assert_auto_highlight_symbol_parity` cases (2a).
-pub(crate) fn assert_auto_highlight_symbol_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_auto_highlight_symbol_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         auto_highlight_symbol_oracle("auto-highlight-symbol.el"),
         &name,
         "auto_highlight_symbol_parity",

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_general_batch;
+use super::{ParityBatchCase, assert_general_batch};
 
-#[test]
-fn bindings_public_surface_batch() {
-    assert_general_batch(&[
-        (
-            "general_public_defaults_match_the_pinned_release",
-            r##"(list
+fn general_public_defaults_match_the_pinned_release() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_public_defaults_match_the_pinned_release",
+        r##"(list
                general-implicit-kbd
                general-default-prefix
                general-default-non-normal-prefix
@@ -21,14 +19,17 @@ fn bindings_public_surface_batch() {
                general-describe-update-previous-definition
                (keymapp general-override-mode-map)
                general-override-mode)"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t nil nil nil nil (insert replace emacs hybrid iedit-insert) global nil t t on-change t nil)"#
     ]],
-        ),
-        (
-            "general_define_key_binds_supported_key_and_definition_shapes_and_records_them",
-            r##"(progn
+    )
+}
+
+fn general_define_key_binds_supported_key_and_definition_shapes_and_records_them() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_define_key_binds_supported_key_and_definition_shapes_and_records_them",
+        r##"(progn
                (defvar
                  neomacs-general-shapes-map
                  (make-sparse-keymap))
@@ -65,14 +66,17 @@ fn bindings_public_surface_batch() {
                     neomacs-general-shapes-map
                     (kbd "C-c l")))
                   general-keybindings)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (forward-char ignore backward-kill-line "\30b" t ((neomacs-general-shapes-map (nil ("\3a" forward-char nil) ([f8] ignore nil) ([remap kill-line] backward-kill-line nil) ("\3b" "\30b" nil) ("\3l" #[nil ('lambda-result) (t) nil nil nil] nil)))))"#
     ]],
-        ),
-        (
-            "general_define_key_local_map_is_buffer_local_and_records_local_bindings",
-            r##"(let ((general-local-keybindings nil))
+    )
+}
+
+fn general_define_key_local_map_is_buffer_local_and_records_local_bindings() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_define_key_local_map_is_buffer_local_and_records_local_bindings",
+        r##"(let ((general-local-keybindings nil))
                (with-temp-buffer
                  (general-define-key
                   :keymaps 'local
@@ -84,12 +88,15 @@ fn bindings_public_surface_batch() {
                    (kbd "C-c l"))
                   general-local-keybindings))
                )"##,
-            true,
-            expect![[r#"OK (t forward-line ((nil ("\3l" forward-line nil))))"#]],
-        ),
-        (
-            "general_define_key_combines_prefix_infix_and_vector_keys_exactly",
-            r##"(progn
+        true,
+        expect![[r#"OK (t forward-line ((nil ("\3l" forward-line nil))))"#]],
+    )
+}
+
+fn general_define_key_combines_prefix_infix_and_vector_keys_exactly() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_define_key_combines_prefix_infix_and_vector_keys_exactly",
+        r##"(progn
                (defvar
                  neomacs-general-prefix-map
                  (make-sparse-keymap))
@@ -116,12 +123,15 @@ fn bindings_public_surface_batch() {
                 (lookup-key
                  neomacs-general-prefix-map
                  (kbd "p a"))))"##,
-            true,
-            expect![[r#"OK (forward-char backward-char nil 1)"#]],
-        ),
-        (
-            "general_define_key_creates_and_reuses_named_prefix_commands_and_maps",
-            r##"(progn
+        true,
+        expect![[r#"OK (forward-char backward-char nil 1)"#]],
+    )
+}
+
+fn general_define_key_creates_and_reuses_named_prefix_commands_and_maps() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_define_key_creates_and_reuses_named_prefix_commands_and_maps",
+        r##"(progn
                (when
                    (fboundp
                     'neomacs-general-prefix-command)
@@ -175,12 +185,15 @@ fn bindings_public_surface_batch() {
                 (lookup-key
                  neomacs-general-parent-map
                  (kbd "C-c b"))))"##,
-            true,
-            expect![[r#"OK (t t "Neomacs General" t forward-char backward-char)"#]],
-        ),
-        (
-            "general_extended_definitions_cover_ignore_predicate_and_nested_keymap",
-            r##"(progn
+        true,
+        expect![[r#"OK (t t "Neomacs General" t forward-char backward-char)"#]],
+    )
+}
+
+fn general_extended_definitions_cover_ignore_predicate_and_nested_keymap() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_extended_definitions_cover_ignore_predicate_and_nested_keymap",
+        r##"(progn
                (defvar
                  neomacs-general-enabled nil)
                (defvar
@@ -227,12 +240,15 @@ fn bindings_public_surface_batch() {
                      (lookup-key
                       neomacs-general-extended-map
                       (kbd "n")))))))"##,
-            true,
-            expect![[r#"OK (nil self-insert-command forward-char next-line t)"#]],
-        ),
-        (
-            "general_keymap_aliases_select_the_exact_target_map",
-            r##"(progn
+        true,
+        expect![[r#"OK (nil self-insert-command forward-char next-line t)"#]],
+    )
+}
+
+fn general_keymap_aliases_select_the_exact_target_map() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_keymap_aliases_select_the_exact_target_map",
+        r##"(progn
                (defvar
                  neomacs-general-alias-map
                  (make-sparse-keymap))
@@ -255,12 +271,15 @@ fn bindings_public_surface_batch() {
                   (assq
                    'neomacs-alias
                    general-keymap-aliases))))"##,
-            true,
-            expect![[r#"OK (forward-char (neomacs-alias . neomacs-general-alias-map))"#]],
-        ),
-        (
-            "general_define_key_delays_binding_until_a_named_keymap_exists",
-            r##"(progn
+        true,
+        expect![[r#"OK (forward-char (neomacs-alias . neomacs-general-alias-map))"#]],
+    )
+}
+
+fn general_define_key_delays_binding_until_a_named_keymap_exists() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_define_key_delays_binding_until_a_named_keymap_exists",
+        r##"(progn
                (when
                    (boundp
                     'neomacs-general-delayed-map)
@@ -284,12 +303,15 @@ fn bindings_public_surface_batch() {
                   (lookup-key
                    neomacs-general-delayed-map
                    (kbd "C-c d")))))"##,
-            true,
-            expect![[r#"OK (nil forward-char)"#]],
-        ),
-        (
-            "general_override_mode_map_takes_precedence_over_an_active_minor_mode",
-            r##"(progn
+        true,
+        expect![[r#"OK (nil forward-char)"#]],
+    )
+}
+
+fn general_override_mode_map_takes_precedence_over_an_active_minor_mode() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_override_mode_map_takes_precedence_over_an_active_minor_mode",
+        r##"(progn
                (defvar
                  neomacs-general-minor-map
                  (make-sparse-keymap))
@@ -327,12 +349,15 @@ fn bindings_public_surface_batch() {
                         (key-binding
                          (kbd "C-c o")))))
                  (general-override-mode -1)))"##,
-            true,
-            expect![[r#"OK (t t forward-char backward-char backward-char)"#]],
-        ),
-        (
-            "general_describe_keybindings_formats_recorded_bindings_into_an_org_table",
-            r##"(progn
+        true,
+        expect![[r#"OK (t t forward-char backward-char backward-char)"#]],
+    )
+}
+
+fn general_describe_keybindings_formats_recorded_bindings_into_an_org_table() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_describe_keybindings_formats_recorded_bindings_into_an_org_table",
+        r##"(progn
                (defvar
                  neomacs-general-report-map
                  (make-sparse-keymap))
@@ -376,14 +401,17 @@ fn bindings_public_surface_batch() {
                         "*General Keybindings*")
                      (kill-buffer
                       "*General Keybindings*")))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK "* Neomacs-General-Report-Map Keybindings\n|key|command|previous|\n|-+-|\n|=C-c a=|~forward-char~|~beginning-of-line~|\n|=C-c b=|~backward-char~|~nil~|\n\n* Local Keybindings\n""#
     ]],
-        ),
-        (
-            "general_define_key_ignores_an_unpaired_trailing_key",
-            r##"(let ((map
+    )
+}
+
+fn general_define_key_ignores_an_unpaired_trailing_key() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_define_key_ignores_an_unpaired_trailing_key",
+        r##"(let ((map
                      (make-sparse-keymap)))
                (list
                 (general-define-key
@@ -391,8 +419,25 @@ fn bindings_public_surface_batch() {
                  "C-c a")
                 (lookup-key
                  map (kbd "C-c a"))))"##,
-            true,
-            expect![[r#"OK (nil 1)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (nil 1)"#]],
+    )
+}
+
+#[test]
+fn bindings_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        general_public_defaults_match_the_pinned_release(),
+        general_define_key_binds_supported_key_and_definition_shapes_and_records_them(),
+        general_define_key_local_map_is_buffer_local_and_records_local_bindings(),
+        general_define_key_combines_prefix_infix_and_vector_keys_exactly(),
+        general_define_key_creates_and_reuses_named_prefix_commands_and_maps(),
+        general_extended_definitions_cover_ignore_predicate_and_nested_keymap(),
+        general_keymap_aliases_select_the_exact_target_map(),
+        general_define_key_delays_binding_until_a_named_keymap_exists(),
+        general_override_mode_map_takes_precedence_over_an_active_minor_mode(),
+        general_describe_keybindings_formats_recorded_bindings_into_an_org_table(),
+        general_define_key_ignores_an_unpaired_trailing_key(),
+    ];
+    assert_general_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_which_key_batch};
+use super::{ParityBatchCase, assert_which_key_batch};
 
-#[test]
-fn replacements_public_surface_batch() {
-    assert_which_key_batch(&[
-        (
-            "which_key_keymap_based_replacements_cover_cons_string_and_created_prefixes",
-            r##"(let ((map (make-sparse-keymap))
+fn which_key_keymap_based_replacements_cover_cons_string_and_created_prefixes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "which_key_keymap_based_replacements_cover_cons_string_and_created_prefixes",
+        r##"(let ((map (make-sparse-keymap))
                     (prefix-map (make-sparse-keymap)))
                (define-key prefix-map "x" #'ignore)
                (define-key map "\C-a" 'complete)
@@ -22,14 +20,17 @@ fn replacements_public_surface_batch() {
                 (lookup-key map (kbd "C-a"))
                 (keymapp (lookup-key map (kbd "C-b")))
                 (keymapp (lookup-key map (kbd "C-c")))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("C-a" . "mycomplete") ("C-b" . "group:mymap") ("C-c" . "group:mymap2")) complete t t)"#
     ]],
-        ),
-        (
-            "which_key_named_prefix_commands_retain_their_symbolic_description",
-            r##"(progn
+    )
+}
+
+fn which_key_named_prefix_commands_retain_their_symbolic_description() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "which_key_named_prefix_commands_retain_their_symbolic_description",
+        r##"(progn
                (define-prefix-command 'neomacs-which-key-named-map)
                (let ((map (make-sparse-keymap)))
                  (define-key map "\C-a" 'neomacs-which-key-named-map)
@@ -37,12 +38,15 @@ fn replacements_public_surface_batch() {
                   (which-key--get-keymap-bindings map)
                   (keymapp neomacs-which-key-named-map)
                   (commandp 'neomacs-which-key-named-map))))"##,
-            true,
-            expect![[r#"OK ((("C-a" . "neomacs-which-key-named-map")) t nil)"#]],
-        ),
-        (
-            "which_key_global_and_major_mode_prefix_declarations_are_applied_separately",
-            r##"(let* ((major-mode 'neomacs-which-key-test-mode)
+        true,
+        expect![[r#"OK ((("C-a" . "neomacs-which-key-named-map")) t nil)"#]],
+    )
+}
+
+fn which_key_global_and_major_mode_prefix_declarations_are_applied_separately() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "which_key_global_and_major_mode_prefix_declarations_are_applied_separately",
+        r##"(let* ((major-mode 'neomacs-which-key-test-mode)
                     which-key-replacement-alist
                     which-key--prefix-title-alist)
                (which-key-add-key-based-replacements
@@ -59,14 +63,17 @@ fn replacements_public_surface_batch() {
                 (which-key--maybe-get-prefix-title "C-c C-c")
                 which-key-replacement-alist
                 which-key--prefix-title-alist))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("SPC C-k" . "cancel") ("C-c C-c" . "complete") "complete title" "complete" ((neomacs-which-key-test-mode (("\\`C-c C-k\\'") nil . "cancel") (("\\`C-c C-c\\'") nil . "complete")) (("\\`SPC C-k\\'") nil . "cancel") (("\\`SPC C-c\\'") nil . "complete")) ((neomacs-which-key-test-mode ("C-c C-c" . "complete title")) ("SPC C-c" . "complete title")))"#
     ]],
-        ),
-        (
-            "which_key_replacement_matching_handles_regex_quoting_lambdas_and_bad_regex_text",
-            r##"(let ((which-key-replacement-alist
+    )
+}
+
+fn which_key_replacement_matching_handles_regex_quoting_lambdas_and_bad_regex_text() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "which_key_replacement_matching_handles_regex_quoting_lambdas_and_bad_regex_text",
+        r##"(let ((which-key-replacement-alist
                      '((("C-c [a-d]" . nil) . ("C-c a" . "c-c a"))
                        (("C-c .+" . nil) . ("C-c *" . "c-c *"))))
                     (test-mode-1 t)
@@ -98,14 +105,17 @@ fn replacements_public_surface_batch() {
                   ("SPC . ." . "don't replace")
                   ("SPC t 1" . "test mode")
                   ("SPC t 2" . "test mode"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("C-c *" . "c-c *") ("C-c a" . "c-c a") ("C-c ." . "test .") ("C-c *" . "c-c *") ("C-c [" . "bad regexp") ("C-c \\" . "regexp quoting") ("SPC . ." . "don't replace") ("SPC t 1" . "[x] test mode") ("SPC t 2" . "[ ] test mode"))"#
     ]],
-        ),
-        (
-            "which_key_multiple_replacements_chain_in_declaration_order",
-            r##"(let ((which-key-replacement-alist
+    )
+}
+
+fn which_key_multiple_replacements_chain_in_declaration_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "which_key_multiple_replacements_chain_in_declaration_order",
+        r##"(let ((which-key-replacement-alist
                      '(((nil . "helm") . (nil . "HLM"))
                        ((nil . "projectile") . (nil . "PRJTL"))))
                     (which-key-allow-multiple-replacements t))
@@ -115,14 +125,17 @@ fn replacements_public_surface_batch() {
                   ("C-c C-c" . "projectile-x")
                   ("C-c C-c" . "helm-projectile-x")
                   ("C-c C-c" . "unrelated"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("C-c C-c" . "HLM-x") ("C-c C-c" . "PRJTL-x") ("C-c C-c" . "HLM-PRJTL-x") ("C-c C-c" . "unrelated"))"#
     ]],
-        ),
-        (
-            "which_key_nil_replacement_suppresses_matching_bindings_only",
-            r##"(let ((which-key-replacement-alist
+    )
+}
+
+fn which_key_nil_replacement_suppresses_matching_bindings_only() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "which_key_nil_replacement_suppresses_matching_bindings_only",
+        r##"(let ((which-key-replacement-alist
                      '(((nil . "winum-select-window-[1-9]") . t))))
                (list
                 (which-key--maybe-replace
@@ -131,14 +144,17 @@ fn replacements_public_surface_batch() {
                  '("C-c C-c" . "winum-select-window-0"))
                 (which-key--maybe-replace
                  '("C-c C-c" . "other-command"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil ("C-c C-c" . "winum-select-window-0") ("C-c C-c" . "other-command"))"#
     ]],
-        ),
-        (
-            "which_key_extract_key_preserves_ranges_and_returns_the_final_key",
-            r##"(mapcar
+    )
+}
+
+fn which_key_extract_key_preserves_ranges_and_returns_the_final_key() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "which_key_extract_key_preserves_ranges_and_returns_the_final_key",
+        r##"(mapcar
                #'which-key--extract-key
                '("SPC a"
                  "C-x a"
@@ -147,28 +163,49 @@ fn replacements_public_surface_batch() {
                  "M-a a .. c"
                  ""
                  "C-x <f12>"))"##,
-            true,
-            expect![[r#"OK ("a" "a" "a" "a .. c" "a .. c" "" "<f12>")"#]],
-        ),
-        (
-            "which_key_keymap_replacement_rejects_non_string_non_cons_values",
-            r##"(which-key-add-keymap-based-replacements
+        true,
+        expect![[r#"OK ("a" "a" "a" "a .. c" "a .. c" "" "<f12>")"#]],
+    )
+}
+
+fn which_key_keymap_replacement_rejects_non_string_non_cons_values() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "which_key_keymap_replacement_rejects_non_string_non_cons_values",
+        r##"(which-key-add-keymap-based-replacements
                (make-sparse-keymap)
                "C-a"
                42)"##,
-            false,
-            expect![[r#"ERR (user-error "Replacement is neither a cons cell or a string")"#]],
-        ),
-        (
-            "which_key_major_mode_replacement_rejects_non_symbol_modes",
-            r##"(which-key-add-major-mode-key-based-replacements
+        false,
+        expect![[r#"ERR (user-error "Replacement is neither a cons cell or a string")"#]],
+    )
+}
+
+fn which_key_major_mode_replacement_rejects_non_symbol_modes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "which_key_major_mode_replacement_rejects_non_symbol_modes",
+        r##"(which-key-add-major-mode-key-based-replacements
                "not-a-mode"
                "C-a"
                "alpha")"##,
-            false,
-            expect![[
+        false,
+        expect![[
         r#"ERR (error "‘\"not-a-mode\"’ should be a symbol corresponding to a value of major-mode")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn replacements_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        which_key_keymap_based_replacements_cover_cons_string_and_created_prefixes(),
+        which_key_named_prefix_commands_retain_their_symbolic_description(),
+        which_key_global_and_major_mode_prefix_declarations_are_applied_separately(),
+        which_key_replacement_matching_handles_regex_quoting_lambdas_and_bad_regex_text(),
+        which_key_multiple_replacements_chain_in_declaration_order(),
+        which_key_nil_replacement_suppresses_matching_bindings_only(),
+        which_key_extract_key_preserves_ranges_and_returns_the_final_key(),
+        which_key_keymap_replacement_rejects_non_string_non_cons_values(),
+        which_key_major_mode_replacement_rejects_non_symbol_modes(),
+    ];
+    assert_which_key_batch(&cases);
 }

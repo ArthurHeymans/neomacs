@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_asilea_batch;
+use super::{ParityBatchCase, assert_asilea_batch};
 
-#[test]
-fn configuration_public_surface_batch() {
-    assert_asilea_batch(&[
-        (
-            "asilea_sanitize_configuration_covers_step_and_temperature_requirement_matrix",
-            r##"(mapcar
+fn asilea_sanitize_configuration_covers_step_and_temperature_requirement_matrix() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asilea_sanitize_configuration_covers_step_and_temperature_requirement_matrix",
+        r##"(mapcar
          (lambda (spec)
            (let ((asilea-max-steps (nth 0 spec))
                  (asilea-initial-temperature (nth 1 spec))
@@ -32,14 +30,17 @@ fn configuration_public_surface_batch() {
            (0 nil nil)
            (-1 nil nil)
            ("steps" nil nil)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((nil nil nil) :error error ("At least one of ‘asilea-max-steps’ and ‘asilea-initial-temperature’ must be non-nil")) ((nil 10 nil) :error error ("At least one of ‘asilea-max-steps’ and ‘asilea-final-temperature’ must be non-nil")) ((nil nil 1) :error error ("At least one of ‘asilea-max-steps’ and ‘asilea-initial-temperature’ must be non-nil")) ((nil 10 1) :ok nil) ((1 nil nil) :ok nil) ((1 10 nil) :ok nil) ((0 nil nil) :ok nil) ((-1 nil nil) :ok nil) (("steps" nil nil) :ok nil))"#
     ]],
-        ),
-        (
-            "asilea_initial_temperature_honors_explicit_values_without_coercion",
-            r##"(mapcar
+    )
+}
+
+fn asilea_initial_temperature_honors_explicit_values_without_coercion() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asilea_initial_temperature_honors_explicit_values_without_coercion",
+        r##"(mapcar
          (lambda (value)
            (let ((asilea-initial-temperature value)
                  (asilea-max-steps 100)
@@ -51,14 +52,17 @@ fn configuration_public_surface_batch() {
                value
                (asilea--initial-temperature)))))
          '(1 1.0 0 -3 1/2 "hot" symbol (10)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((1 1 t) (1.0 1.0 t) (0 0 t) (-3 -3 t) (1/2 1/2 t) ("hot" "hot" t) (symbol symbol t) (#1=(10) #1# t))"#
     ]],
-        ),
-        (
-            "asilea_automatic_initial_temperature_matches_cooling_schedule_boundaries",
-            r##"(mapcar
+    )
+}
+
+fn asilea_automatic_initial_temperature_matches_cooling_schedule_boundaries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asilea_automatic_initial_temperature_matches_cooling_schedule_boundaries",
+        r##"(mapcar
          (lambda (spec)
            (let ((asilea-initial-temperature nil)
                  (asilea-max-steps (car spec))
@@ -92,14 +96,17 @@ fn configuration_public_surface_batch() {
            (10 1.0)
            (nil 0.005)
            ("10" 0.005)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((1 0.005) :ok 2.0 1.99) ((10 0.005) :ok 2.0 1.9022202609315437) ((100 0.005) :ok 2.0 1.2115408729814559) ((1000 0.005) :ok 151.0 1.0047492554036268) ((5 0.5) :ok 32.0 1.0) ((2 0.9) :ok 101.0 1.0099999999999996) ((0 0.005) :ok 1.0 1.0) ((-1 0.005) :ok 1.0 1.0050251256281406) ((10 0.0) :ok 1.0 1.0) ((10 1.0) :ok 1.0e+INF -0.0e+NaN) ((nil 0.005) :error wrong-type-argument (numberp nil)) (("10" 0.005) :error wrong-type-argument (numberp "10")))"#
     ]],
-        ),
-        (
-            "asilea_sanitize_only_enforces_documented_temperature_presence_not_other_types",
-            r##"(mapcar
+    )
+}
+
+fn asilea_sanitize_only_enforces_documented_temperature_presence_not_other_types() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asilea_sanitize_only_enforces_documented_temperature_presence_not_other_types",
+        r##"(mapcar
          (lambda (bindings)
            (let ((asilea-max-steps (nth 0 bindings))
                  (asilea-initial-temperature (nth 1 bindings))
@@ -123,14 +130,17 @@ fn configuration_public_surface_batch() {
            (1 nil nil -5 -1.0 missing)
            ("one" nil nil "jobs" "cool" 7)
            (nil "hot" "cold" nil nil nil)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((1 nil nil 0 2.0 nil) :ok nil) ((1 nil nil -5 -1.0 missing) :ok nil) (("one" nil nil "jobs" "cool" 7) :ok nil) ((nil "hot" "cold" nil nil nil) :ok nil))"#
     ]],
-        ),
-        (
-            "asilea_configuration_variables_support_independent_dynamic_bindings",
-            r##"(let ((defaults
+    )
+}
+
+fn asilea_configuration_variables_support_independent_dynamic_bindings() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asilea_configuration_variables_support_independent_dynamic_bindings",
+        r##"(let ((defaults
                 (mapcar
                  #'symbol-value
                  '(asilea-concurrent-jobs
@@ -159,8 +169,19 @@ fn configuration_public_surface_batch() {
              asilea-cooling-rate
              asilea-initial-temperature
              asilea-final-temperature))))"##,
-            true,
-            expect!["OK ((1 nil 0.005 nil nil) (4 9 0.25 80 2) (1 nil 0.005 nil nil))"],
-        ),
-    ]);
+        true,
+        expect!["OK ((1 nil 0.005 nil nil) (4 9 0.25 80 2) (1 nil 0.005 nil nil))"],
+    )
+}
+
+#[test]
+fn configuration_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        asilea_sanitize_configuration_covers_step_and_temperature_requirement_matrix(),
+        asilea_initial_temperature_honors_explicit_values_without_coercion(),
+        asilea_automatic_initial_temperature_matches_cooling_schedule_boundaries(),
+        asilea_sanitize_only_enforces_documented_temperature_presence_not_other_types(),
+        asilea_configuration_variables_support_independent_dynamic_bindings(),
+    ];
+    assert_asilea_batch(&cases);
 }

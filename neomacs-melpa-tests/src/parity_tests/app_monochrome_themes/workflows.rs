@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_app_monochrome_batch;
+use super::{ParityBatchCase, assert_app_monochrome_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_app_monochrome_batch(&[
-        (
-            "app_monochrome_dark_supports_a_real_edit_build_and_error_navigation_session",
-            r####"
+fn app_monochrome_dark_supports_a_real_edit_build_and_error_navigation_session() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "app_monochrome_dark_supports_a_real_edit_build_and_error_navigation_session",
+        r####"
 (let* ((root
         (file-name-as-directory
          (expand-file-name
@@ -139,14 +137,17 @@ fn workflows_public_surface_batch() {
     (neomacs-app-monochrome-test-cleanup root))
   result)
 "####,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (:theme (app-monochrome-themes-dark-theme) :source-faces (("defun" font-lock-keyword-face ((:family "Ubuntu Mono") (:foreground "unspecified-fg") (:weight bold) (:slant normal))) ("calculate-total" font-lock-function-name-face ((:family "IBM Plex Mono") (:foreground "unspecified-fg") (:weight regular) (:slant italic))) ("Return the invoiced" font-lock-doc-face ((:family "IBM Plex Mono") (:foreground "grey62") (:weight regular) (:slant italic))) ("let" font-lock-keyword-face ((:family "Ubuntu Mono") (:foreground "unspecified-fg") (:weight bold) (:slant normal))) ("Production tax policy" font-lock-comment-face ((:family "UbuntuMono Nerd Font") (:foreground "#aaa") (:weight regular) (:slant normal))) ("total=%s" font-lock-string-face ((:family "IBM Plex Mono") (:foreground "grey62") (:weight regular) (:slant normal)))) :compilation-faces (("4:8" (compilation-line-number underline) ((:family "Ubuntu Mono") (:foreground "unspecified-fg") (:weight bold))) ("warning:" (underline) ((:foreground "unspecified-fg") (:background "unspecified-bg") (:weight regular))) ("8:2" (compilation-line-number underline) ((:family "Ubuntu Mono") (:foreground "unspecified-fg") (:weight bold))) ("error:" (underline) ((:foreground "unspecified-fg") (:background "unspecified-bg") (:weight regular)))) :diagnostics ("[ORACLE-SANDBOX]/app-monochrome-dark-development/src/revenue.el:4:8: warning: tax policy needs review" "[ORACLE-SANDBOX]/app-monochrome-dark-development/src/revenue.el:8:2: error: production logger is required") :jumps (("src/revenue.el" 4 7 "    ;; Production tax policy.") ("src/revenue.el" 8 1 "(message \"total=%s\" (calculate-total '(10 20)))")) :disk "(defun calculate-total (items)\n  \"Return the invoiced total for ITEMS.\"\n  (let ((tax-rate 0.21))\n    ;; Production tax policy.\n    (+ (apply #'+ items)\n       (* tax-rate (apply #'+ items)))))\n\n(message \"total=%s\" (calculate-total '(10 20)))\n")"##
     ]],
-        ),
-        (
-            "app_monochrome_light_supports_reviewing_folding_and_updating_a_real_org_plan",
-            r####"
+    )
+}
+
+fn app_monochrome_light_supports_reviewing_folding_and_updating_a_real_org_plan() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "app_monochrome_light_supports_reviewing_folding_and_updating_a_real_org_plan",
+        r####"
 (let* ((root
         (file-name-as-directory
          (expand-file-name
@@ -293,14 +294,17 @@ fn workflows_public_surface_batch() {
     (neomacs-app-monochrome-test-cleanup root))
   result)
 "####,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (:theme (app-monochrome-themes-light-theme) :todo-action (:updated "* DONE Ship compatibility release") :fold-action :folded :reveal-action :revealed :folded ("* DONE Ship compatibility release" 2) :revealed ("* DONE Ship compatibility release" nil) :faces (("Parity release" org-document-title ((:foreground "grey12") (:background "white") (:weight bold) (:height 98))) ("DONE" (org-done org-level-1) ((:foreground "black") (:background "#0bf") (:weight regular) (:box 1))) ("compatibility report" org-link ((:foreground "#3c5c5c") (:background "white") (:underline t) (:weight regular))) ("release-2026" (org-verbatim) ((:family "IBM Plex Mono") (:foreground "grey25") (:background "grey95") (:weight bold))) ("message" (org-block) ((:family "VictorMono Nerd Font") (:foreground "grey12") (:background "white") (:weight regular))) ("Owner" org-table ((:family "VictorMono Nerd Font") (:foreground "Blue1") (:background "white") (:weight regular))) ("Notes" org-level-1 ((:foreground "grey12") (:background "white") (:weight regular) (:height 98)))) :point (3 0 "* DONE Ship compatibility release") :modified nil :disk "#+title: Parity release\n\n* DONE Ship compatibility release\nReview the [[https://example.test/report][compatibility report]] and =release-2026= tag.\n** DONE Verify package behavior\n#+begin_src emacs-lisp\n  (message \"parity ready\")\n#+end_src\n\n| Check          | Owner |\n|----------------+-------|\n| GNU comparison | team  |\n\n* Notes\nThe release owner approved the compatibility report.\n")"##
     ]],
-        ),
-        (
-            "app_monochrome_switches_a_real_dired_session_and_restores_the_previous_display",
-            r####"
+    )
+}
+
+fn app_monochrome_switches_a_real_dired_session_and_restores_the_previous_display() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "app_monochrome_switches_a_real_dired_session_and_restores_the_previous_display",
+        r####"
 (let* ((root
         (file-name-as-directory
          (expand-file-name
@@ -431,10 +435,19 @@ fn workflows_public_surface_batch() {
     (neomacs-app-monochrome-test-cleanup root))
   result)
 "####,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (:file "[ORACLE-SANDBOX]/app-monochrome-theme-lifecycle/" :goto-action (:visited "obsolete.log") :flag-action :flagged :unflag-action :unflagged :baseline ((default :family "default") (default :height 1) (default :background "unspecified-bg") (default :foreground "unspecified-fg") (dired-directory :weight bold) (dired-flagged :foreground "unspecified-fg") (dired-flagged :box nil) (warning :foreground "unspecified-fg") (link :foreground "unspecified-fg")) :dark ((default :family "UbuntuMono Nerd Font") (default :height 98) (default :background "unspecified-bg") (default :foreground "unspecified-fg") (dired-directory :weight bold) (dired-flagged :foreground "Red") (dired-flagged :box (:line-width (2 . 2) :color "Red" :style released-button)) (warning :foreground "gold") (link :foreground "#5cacac")) :light ((default :family "default") (default :height 98) (default :background "white") (default :foreground "grey12") (dired-directory :weight bold) (dired-flagged :foreground "Red") (dired-flagged :box (:line-width (2 . 2) :color "Red" :style released-button)) (warning :foreground "red4") (link :foreground "#3c5c5c")) :revealed-dark ((default :family "UbuntuMono Nerd Font") (default :height 98) (default :background "unspecified-bg") (default :foreground "unspecified-fg") (dired-directory :weight bold) (dired-flagged :foreground "Red") (dired-flagged :box (:line-width (2 . 2) :color "Red" :style released-button)) (warning :foreground "gold") (link :foreground "#5cacac")) :restored ((default :family "default") (default :height 1) (default :background "unspecified-bg") (default :foreground "unspecified-fg") (dired-directory :weight bold) (dired-flagged :foreground "unspecified-fg") (dired-flagged :box nil) (warning :foreground "unspecified-fg") (link :foreground "unspecified-fg")) :flagged ("D" ("obsolete.log" dired-flagged ((:foreground "Red") (:background "unspecified-bg") (:weight bold) (:box (:line-width (2 . 2) :color "Red" :style released-button)))) ("src" dired-directory ((:foreground "unspecified-fg") (:background "unspecified-bg") (:weight bold)))) :unflagged (" " "obsolete.log") :theme-states ((app-monochrome-themes-dark-theme) (app-monochrome-themes-light-theme app-monochrome-themes-dark-theme) (app-monochrome-themes-dark-theme) nil))"##
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        app_monochrome_dark_supports_a_real_edit_build_and_error_navigation_session(),
+        app_monochrome_light_supports_reviewing_folding_and_updating_a_real_org_plan(),
+        app_monochrome_switches_a_real_dired_session_and_restores_the_previous_display(),
+    ];
+    assert_app_monochrome_batch(&cases);
 }

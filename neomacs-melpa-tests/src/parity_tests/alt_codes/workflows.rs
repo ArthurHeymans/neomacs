@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_alt_codes_batch;
+use super::{ParityBatchCase, assert_alt_codes_batch};
 
 /// The package's whole purpose: hold Meta, type a Windows alt code on the
 /// keypad, and get the character.  Four codes cover the ranges a user reaches
@@ -11,12 +11,10 @@ use super::assert_alt_codes_batch;
 /// letters rather than a space, which is the data's own quirk and not a
 /// rendering artefact.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_alt_codes_batch(&[
-        (
-            "typing_an_alt_code_on_the_keypad_inserts_the_character_it_names",
-            r##"(alt-codes-test-with-buffer
+fn typing_an_alt_code_on_the_keypad_inserts_the_character_it_names() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "typing_an_alt_code_on_the_keypad_inserts_the_character_it_names",
+        r##"(alt-codes-test-with-buffer
  (let ((max-lisp-eval-depth 12800))
    (list :ascii (alt-codes-test-enter "65")
          :latin1 (alt-codes-test-enter "225")
@@ -25,14 +23,17 @@ fn workflows_public_surface_batch() {
          :spelled-space (alt-codes-test-enter "32")
          :empty-entry (alt-codes-test-enter "189")
          :hook (alt-codes-test-hook))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:ascii ("A" "") :latin1 ("ß" "") :windows-1252 ("€" "") :accented ("Á" "") :spelled-space ("spc" "") :empty-entry ("" "") :hook (t t t))"#
     ]],
-        ),
-        (
-            "the_first_lookup_of_a_session_fails_at_the_default_eval_depth",
-            r##"(alt-codes-test-with-buffer
+    )
+}
+
+fn the_first_lookup_of_a_session_fails_at_the_default_eval_depth() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_first_lookup_of_a_session_fails_at_the_default_eval_depth",
+        r##"(alt-codes-test-with-buffer
  (let ((mark (alt-codes-test-message-mark)))
    (apply #'alt-codes-test-type (alt-codes-test-code ?6 ?5))
    (let ((pending (copy-sequence alt-codes--code)))
@@ -51,14 +52,17 @@ fn workflows_public_surface_batch() {
              :raising-the-limit-works
              (let ((max-lisp-eval-depth 12800))
                (alt-codes--get-symbol "65")))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:depth 1600 :table-entries 383 :announced ("[Alt Code]: 6" "[Alt Code]: 65") :pending "65" :after-commit ("" "65" (nil t t)) :hook-error ("Error in pre-command-hook (alt-codes--pre-command-hook): (excessive-lisp-nesting 1601)") :typing-still-works "z" :raising-the-limit-works "A")"#
     ]],
-        ),
-        (
-            "the_keypad_digits_also_build_a_numeric_prefix_argument",
-            r##"(alt-codes-test-with-buffer
+    )
+}
+
+fn the_keypad_digits_also_build_a_numeric_prefix_argument() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_keypad_digits_also_build_a_numeric_prefix_argument",
+        r##"(alt-codes-test-with-buffer
  (setq prefix-arg nil current-prefix-arg nil)
  (execute-kbd-macro (vconcat (alt-codes-test-code ?1 ?2)))
  (list :pending (copy-sequence alt-codes--code)
@@ -70,14 +74,17 @@ fn workflows_public_surface_batch() {
        (let ((max-lisp-eval-depth 12800))
          (execute-kbd-macro (vconcat [?x]))
          (copy-sequence (buffer-string)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:pending "12" :prefix 12 :keypad-translation [54] :meta-digit-command digit-argument :keypad-command nil :commit-runs-that-many-times "x")"#
     ]],
-        ),
-        (
-            "only_a_symbol_event_commits_the_pending_code",
-            r##"(alt-codes-test-with-buffer
+    )
+}
+
+fn only_a_symbol_event_commits_the_pending_code() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "only_a_symbol_event_commits_the_pending_code",
+        r##"(alt-codes-test-with-buffer
  (let ((max-lisp-eval-depth 12800))
    (apply #'alt-codes-test-type (alt-codes-test-code ?6 ?5))
    (let ((pending (copy-sequence alt-codes--code)))
@@ -89,12 +96,15 @@ fn workflows_public_surface_batch() {
              :after-a-letter after-letter
              :after-a-symbol (list (copy-sequence (buffer-string))
                                    (copy-sequence alt-codes--code)))))))"##,
-            true,
-            expect![[r#"OK (:pending "65" :after-a-letter ("x" "65") :after-a-symbol ("xA" ""))"#]],
-        ),
-        (
-            "an_invalid_code_inserts_nothing_and_still_clears_the_pending_digits",
-            r##"(alt-codes-test-with-buffer
+        true,
+        expect![[r#"OK (:pending "65" :after-a-letter ("x" "65") :after-a-symbol ("xA" ""))"#]],
+    )
+}
+
+fn an_invalid_code_inserts_nothing_and_still_clears_the_pending_digits() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "an_invalid_code_inserts_nothing_and_still_clears_the_pending_digits",
+        r##"(alt-codes-test-with-buffer
  (let ((max-lisp-eval-depth 12800))
    (list :invalid (alt-codes-test-enter "9999")
          :next-code-is-unaffected (alt-codes-test-enter "65")
@@ -106,12 +116,15 @@ fn workflows_public_surface_batch() {
                 (prog1 (list (copy-sequence (buffer-string))
                              (copy-sequence alt-codes--code))
                   (setq buffer-read-only nil))))))"##,
-            true,
-            expect![[r#"OK (:invalid ("" "") :next-code-is-unaffected ("A" "") :read-only ("" ""))"#]],
-        ),
-        (
-            "the_mode_installs_and_removes_its_hook_and_leaves_plain_typing_alone",
-            r##"(list
+        true,
+        expect![[r#"OK (:invalid ("" "") :next-code-is-unaffected ("A" "") :read-only ("" ""))"#]],
+    )
+}
+
+fn the_mode_installs_and_removes_its_hook_and_leaves_plain_typing_alone() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_mode_installs_and_removes_its_hook_and_leaves_plain_typing_alone",
+        r##"(list
  :lifecycle
  (alt-codes-test-with-buffer
   (let ((on (alt-codes-test-hook)))
@@ -143,10 +156,22 @@ fn workflows_public_surface_batch() {
      (global-alt-codes-mode -1)
      (list :armed armed
            :after (with-temp-buffer (text-mode) (alt-codes-test-hook))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:lifecycle (:on (t t t) :off (nil t nil) :hook-value (eldoc-pre-command-refresh-echo-area t)) :mode-off (:digits "65" :keypad "" :hook nil) :globalized (:armed (t t t) :after (nil t nil)))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        typing_an_alt_code_on_the_keypad_inserts_the_character_it_names(),
+        the_first_lookup_of_a_session_fails_at_the_default_eval_depth(),
+        the_keypad_digits_also_build_a_numeric_prefix_argument(),
+        only_a_symbol_event_commits_the_pending_code(),
+        an_invalid_code_inserts_nothing_and_still_clears_the_pending_digits(),
+        the_mode_installs_and_removes_its_hook_and_leaves_plain_typing_alone(),
+    ];
+    assert_alt_codes_batch(&cases);
 }

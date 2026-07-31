@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{ASYNC_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod bytecomp;
 mod core;
@@ -149,9 +152,9 @@ pub(crate) fn assert_async_melpa_autoload_parity(elisp_form: &str, expected: Exp
 
 
 /// Multi-probe batch for `assert_async_melpa_autoload_parity` cases (2a).
-pub(crate) fn assert_async_melpa_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_async_melpa_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         async_melpa_oracle("async-autoloads.el"),
         &name,
         "async_melpa_autoload_parity",
@@ -160,9 +163,9 @@ pub(crate) fn assert_async_melpa_autoload_batch(cases: &[(&str, &str, bool, Expe
 }
 
 /// Multi-probe batch for `assert_async_melpa_parity` cases (2a).
-pub(crate) fn assert_async_melpa_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_async_melpa_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         async_melpa_oracle("async.el"),
         &name,
         "async_melpa_parity",
@@ -171,9 +174,9 @@ pub(crate) fn assert_async_melpa_batch(cases: &[(&str, &str, bool, Expect)]) {
 }
 
 /// Multi-probe batch for `assert_async_melpa_bytecomp_parity` cases (2a).
-pub(crate) fn assert_async_melpa_bytecomp_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_async_melpa_bytecomp_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         async_melpa_oracle("async-bytecomp.el"),
         &name,
         "async_melpa_bytecomp_parity",
@@ -182,9 +185,9 @@ pub(crate) fn assert_async_melpa_bytecomp_batch(cases: &[(&str, &str, bool, Expe
 }
 
 /// Multi-probe batch for `assert_async_melpa_dired_parity` cases (2a).
-pub(crate) fn assert_async_melpa_dired_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_async_melpa_dired_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         async_melpa_oracle("dired-async.el"),
         &name,
         "async_melpa_dired_parity",
@@ -193,9 +196,9 @@ pub(crate) fn assert_async_melpa_dired_batch(cases: &[(&str, &str, bool, Expect)
 }
 
 /// Multi-probe batch for `assert_async_melpa_package_parity` cases (2a).
-pub(crate) fn assert_async_melpa_package_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_async_melpa_package_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         async_melpa_oracle("async-package.el"),
         &name,
         "async_melpa_package_parity",
@@ -204,9 +207,9 @@ pub(crate) fn assert_async_melpa_package_batch(cases: &[(&str, &str, bool, Expec
 }
 
 /// Multi-probe batch for `assert_async_melpa_smtpmail_parity` cases (2a).
-pub(crate) fn assert_async_melpa_smtpmail_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_async_melpa_smtpmail_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         async_melpa_oracle("smtpmail-async.el"),
         &name,
         "async_melpa_smtpmail_parity",

@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{ALL_THE_ICONS_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod workflows;
 
@@ -84,9 +87,9 @@ pub(crate) fn assert_all_the_icons_parity(elisp_form: &str, expected: Expect) {
 }
 
 /// Multi-probe batch for `assert_all_the_icons_parity` cases (2a).
-pub(crate) fn assert_all_the_icons_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_all_the_icons_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         all_the_icons_oracle(),
         &name,
         "all_the_icons_parity",

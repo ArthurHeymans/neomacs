@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_agda_lib_mode_autoload_batch, assert_agda_lib_mode_batch};
+use super::{ParityBatchCase, assert_agda_lib_mode_autoload_batch, assert_agda_lib_mode_batch};
 
-#[test]
-fn workflows_agda_lib_mode_autoload_batch() {
-    assert_agda_lib_mode_autoload_batch(&[
-        (
-            "agda_lib_mode_opens_edits_and_saves_a_library_file_through_its_autoload",
-            r##"(let* ((root
+fn agda_lib_mode_opens_edits_and_saves_a_library_file_through_its_autoload() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agda_lib_mode_opens_edits_and_saves_a_library_file_through_its_autoload",
+        r##"(let* ((root
                                  (expand-file-name
                                   "project"
                                   (getenv
@@ -63,20 +61,17 @@ fn workflows_agda_lib_mode_autoload_batch() {
                                (with-current-buffer buffer
                                  (set-buffer-modified-p nil))
                                (kill-buffer buffer))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (agda-lib-mode t "standard-library.agda-lib" #("name: standard-library\ninclude: src generated\n-- local development paths\n" 0 5 (face font-lock-keyword-face) 23 31 (face font-lock-keyword-face) 46 72 (face font-lock-comment-face)) (font-lock-keyword-face font-lock-keyword-face font-lock-comment-face) "-- " "name: standard-library\ninclude: src generated\n-- local development paths\n")"#
     ]],
-        ),
-    ]);
+    )
 }
 
-#[test]
-fn workflows_agda_lib_mode_batch() {
-    assert_agda_lib_mode_batch(&[
-        (
-            "agda_lib_mode_repairs_comments_and_refontifies_a_real_library_document",
-            r##"(with-temp-buffer
+fn agda_lib_mode_repairs_comments_and_refontifies_a_real_library_document() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agda_lib_mode_repairs_comments_and_refontifies_a_real_library_document",
+        r##"(with-temp-buffer
                            (insert
                             "name sample\n"
                             "include: src\n"
@@ -132,14 +127,17 @@ fn workflows_agda_lib_mode_batch() {
                                '("name:"
                                  "include:"
                                  "depend:")))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (#("name: sample\n-- include: src\ndepend: base\n" 0 5 (face font-lock-keyword-face) 13 28 (face font-lock-comment-face) 29 36 (face font-lock-keyword-face)) (font-lock-keyword-face font-lock-comment-face font-lock-keyword-face) #("name: sample\ninclude: src\ndepend: base\n" 0 5 (face font-lock-keyword-face) 13 21 (face font-lock-keyword-face) 26 33 (face font-lock-keyword-face)) (font-lock-keyword-face font-lock-keyword-face font-lock-keyword-face))"#
     ]],
-        ),
-        (
-            "agda_lib_mode_fills_and_round_trips_documentation_comments",
-            r##"(with-temp-buffer
+    )
+}
+
+fn agda_lib_mode_fills_and_round_trips_documentation_comments() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agda_lib_mode_fills_and_round_trips_documentation_comments",
+        r##"(with-temp-buffer
                            (insert
                             "-- This library exposes algebraic structures and carefully selected experimental modules.\n"
                             "include: src\n"
@@ -173,14 +171,17 @@ fn workflows_agda_lib_mode_batch() {
                               (buffer-string)
                               (line-number-at-pos)
                               comment-start)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("-- This library exposes\n-- algebraic structures and\n-- carefully selected\n-- experimental modules.\ninclude: src\ndepend: base\n" "-- This library exposes\n-- algebraic structures and\n-- carefully selected\n-- experimental modules.\ninclude: src\ndepend: base\n" 2 "-- ")"#
     ]],
-        ),
-        (
-            "agda_lib_mode_highlights_fields_flags_and_comments_in_a_complete_document",
-            r##"(with-temp-buffer
+    )
+}
+
+fn agda_lib_mode_highlights_fields_flags_and_comments_in_a_complete_document() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agda_lib_mode_highlights_fields_flags_and_comments_in_a_complete_document",
+        r##"(with-temp-buffer
                            (insert
                             "name: standard-library\n"
                             "include: src\n"
@@ -218,10 +219,27 @@ fn workflows_agda_lib_mode_batch() {
                                     runs))
                                  (setq position next)))
                              (nreverse runs)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((1 6 "name:" font-lock-keyword-face) (24 32 "include:" font-lock-keyword-face) (59 66 "depend:" font-lock-keyword-face) (72 78 "flags:" font-lock-keyword-face) (98 119 "-- whole-line comment" font-lock-comment-face) (120 128 "include:" font-lock-keyword-face) (133 157 " -- trailing explanation" font-lock-comment-face))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_agda_lib_mode_autoload_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        agda_lib_mode_opens_edits_and_saves_a_library_file_through_its_autoload(),
+    ];
+    assert_agda_lib_mode_autoload_batch(&cases);
+}
+
+#[test]
+fn workflows_agda_lib_mode_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        agda_lib_mode_repairs_comments_and_refontifies_a_real_library_document(),
+        agda_lib_mode_fills_and_round_trips_documentation_comments(),
+        agda_lib_mode_highlights_fields_flags_and_comments_in_a_complete_document(),
+    ];
+    assert_agda_lib_mode_batch(&cases);
 }

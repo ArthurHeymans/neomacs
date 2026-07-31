@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_affe_backend_batch;
+use super::{ParityBatchCase, assert_affe_backend_batch};
 
-#[test]
-fn backend_producer_public_surface_batch() {
-    assert_affe_backend_batch(&[
-        (
-            "affe_backend_producer_filter_accumulates_fragments_lines_totals_and_tail_links",
-            r##"(let* ((affe-backend--producer-head
+fn affe_backend_producer_filter_accumulates_fragments_lines_totals_and_tail_links() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "affe_backend_producer_filter_accumulates_fragments_lines_totals_and_tail_links",
+        r##"(let* ((affe-backend--producer-head
                       (list nil))
                      (affe-backend--producer-tail
                       affe-backend--producer-head)
@@ -36,12 +34,15 @@ fn backend_producer_public_surface_batch() {
                   (eq affe-backend--producer-tail
                       (last
                        affe-backend--producer-head)))))"##,
-            true,
-            expect![[r#"OK ((nil 0 "alpha" t) ("alpha beta" "charlie" "delta") 3 "" t)"#]],
-        ),
-        (
-            "affe_backend_producer_filter_restricts_match_region_and_retains_prefix_suffix_properties",
-            r##"(let* ((affe-backend--producer-head
+        true,
+        expect![[r#"OK ((nil 0 "alpha" t) ("alpha beta" "charlie" "delta") 3 "" t)"#]],
+    )
+}
+
+fn affe_backend_producer_filter_restricts_match_region_and_retains_prefix_suffix_properties() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "affe_backend_producer_filter_restricts_match_region_and_retains_prefix_suffix_properties",
+        r##"(let* ((affe-backend--producer-head
                       (list nil))
                      (affe-backend--producer-tail
                       affe-backend--producer-head)
@@ -66,14 +67,17 @@ fn backend_producer_public_surface_batch() {
                   affe-backend--producer-head))
                 affe-backend--producer-total
                 affe-backend--producer-rest))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("needle" "src/a.el:10:" "" (affe--suffix "" affe--prefix "src/a.el:10:")) ("plain line" nil nil nil) ("tail" "lib/b.el:2:" "" (affe--suffix "" affe--prefix "lib/b.el:2:"))) 3 "rest")"#
     ]],
-        ),
-        (
-            "affe_backend_producer_sentinel_logs_stderr_marks_done_and_appends_final_fragment_once",
-            r##"(let* ((affe-backend--client 'client)
+    )
+}
+
+fn affe_backend_producer_sentinel_logs_stderr_marks_done_and_appends_final_fragment_once() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "affe_backend_producer_sentinel_logs_stderr_marks_done_and_appends_final_fragment_once",
+        r##"(let* ((affe-backend--client 'client)
                      (affe-backend--producer-head
                       (list nil "ready"))
                      (affe-backend--producer-tail
@@ -113,14 +117,17 @@ fn backend_producer_public_surface_batch() {
                    (last
                     affe-backend--producer-head))
                   (nreverse writes))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t 2 ("ready" "tail") t ((client "(log \"Sentinel: finished\\n\\n\")\n") (client "(log \"Stderr:\\nwarning\\n\\n\")\n") (client "(log \"Sentinel: closed\\n\\n\")\n") (client "(log \"Stderr:\\nwarning\\n\\n\")\n")))"#
     ]],
-        ),
-        (
-            "affe_backend_producer_start_logs_and_builds_exact_pipe_process_contract",
-            r##"(let ((affe-backend--client 'client)
+    )
+}
+
+fn affe_backend_producer_start_logs_and_builds_exact_pipe_process_contract() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "affe_backend_producer_start_logs_and_builds_exact_pipe_process_contract",
+        r##"(let ((affe-backend--client 'client)
                     process-arguments writes)
                (cl-letf
                    (((symbol-function 'make-process)
@@ -154,10 +161,20 @@ fn backend_producer_public_surface_batch() {
                     (plist-get process-arguments
                                :filter)
                     (nreverse writes)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (producer-process "rg" t ("rg" "--files" "src") pipe "*producer stderr*" affe-backend--producer-sentinel affe-backend--producer-filter ((client "(log \"Starting (\\\"rg\\\" \\\"--files\\\" \\\"src\\\")\\n\")\n")))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn backend_producer_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        affe_backend_producer_filter_accumulates_fragments_lines_totals_and_tail_links(),
+        affe_backend_producer_filter_restricts_match_region_and_retains_prefix_suffix_properties(),
+        affe_backend_producer_sentinel_logs_stderr_marks_done_and_appends_final_fragment_once(),
+        affe_backend_producer_start_logs_and_builds_exact_pipe_process_contract(),
+    ];
+    assert_affe_backend_batch(&cases);
 }

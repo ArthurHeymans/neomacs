@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{ADDRESSBOOK_BOOKMARK_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod workflows;
 
@@ -159,9 +162,9 @@ pub(crate) fn assert_addressbook_bookmark_parity(elisp_form: &str, expected: Exp
 }
 
 /// Multi-probe batch for `assert_addressbook_bookmark_parity` cases (2a).
-pub(crate) fn assert_addressbook_bookmark_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_addressbook_bookmark_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         addressbook_bookmark_oracle(),
         &name,
         "addressbook_bookmark_parity",

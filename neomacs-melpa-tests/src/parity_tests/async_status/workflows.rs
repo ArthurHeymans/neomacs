@@ -1,12 +1,10 @@
-use super::assert_async_status_batch;
+use super::{ParityBatchCase, assert_async_status_batch};
 use expect_test::expect;
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_async_status_batch(&[
-        (
-            "complete_single_job_lifecycle_allocates_displays_updates_and_cleans_up",
-            r##"(let ((id (async-status-req-id "compile"))
+fn complete_single_job_lifecycle_allocates_displays_updates_and_cleans_up() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "complete_single_job_lifecycle_allocates_displays_updates_and_cleans_up",
+        r##"(let ((id (async-status-req-id "compile"))
       (watch-sequence 0)
       events)
   (setq async-status--shown-items nil)
@@ -71,14 +69,17 @@ fn workflows_public_surface_batch() {
            (async-status--get-absolute-path-by-id id))
         (async-status-clean-up id))
       (setq async-status--shown-items nil))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((1 "Compile project" "0.5" "0.5") 0 nil ((:watch-add :normalized (change) async-status--update-items) :show :refresh :show (:watch-remove 1) :refresh (:hide nil)))"#
     ]],
-        ),
-        (
-            "multiple_jobs_support_interleaved_progress_and_independent_completion",
-            r##"(let ((first (async-status-req-id "compile"))
+    )
+}
+
+fn multiple_jobs_support_interleaved_progress_and_independent_completion() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "multiple_jobs_support_interleaved_progress_and_independent_completion",
+        r##"(let ((first (async-status-req-id "compile"))
       (second (async-status-req-id "tests"))
       (watch-id 0)
       removed)
@@ -128,12 +129,15 @@ fn workflows_public_surface_batch() {
     (setq async-status--shown-items nil)
     (async-status-clean-up first)
     (async-status-clean-up second)))"##,
-            true,
-            expect![[r#"OK ((("Tests" "0.8") ("Compile" "0.2")) (("Compile" "1.0")) (2))"#]],
-        ),
-        (
-            "thresholded_child_updates_publish_only_meaningful_progress_steps",
-            r##"(let ((id (async-status-req-id "stream")))
+        true,
+        expect![[r#"OK ((("Tests" "0.8") ("Compile" "0.2")) (("Compile" "1.0")) (2))"#]],
+    )
+}
+
+fn thresholded_child_updates_publish_only_meaningful_progress_steps() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "thresholded_child_updates_publish_only_meaningful_progress_steps",
+        r##"(let ((id (async-status-req-id "stream")))
   (unwind-protect
       (let (trace)
         (dolist (value '(0.0 0.005 0.011 0.015 0.021 0.022 0.5 0.999 1.0))
@@ -147,14 +151,17 @@ fn workflows_public_surface_batch() {
                trace))))
         (nreverse trace))
     (async-status-clean-up id)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((0.0 nil "0") (0.005 nil "0") (0.011 t "0.011") (0.015 nil "0.011") (0.021 t "0.021") (0.022 nil "0.021") (0.5 t "0.5") (0.999 t "0.999") (1.0 nil "0.999"))"#
     ]],
-        ),
-        (
-            "actual_subprocess_can_publish_progress_through_the_message_file",
-            r##"(let ((id (async-status-req-id "subprocess"))
+    )
+}
+
+fn actual_subprocess_can_publish_progress_through_the_message_file() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "actual_subprocess_can_publish_progress_through_the_message_file",
+        r##"(let ((id (async-status-req-id "subprocess"))
       process)
   (setq async-status--shown-items nil)
   (unwind-protect
@@ -190,12 +197,15 @@ fn workflows_public_surface_batch() {
       (delete-process process))
     (setq async-status--shown-items nil)
     (async-status-clean-up id)))"##,
-            true,
-            expect!["OK (0 \"0.75\" \"0.75\")"],
-        ),
-        (
-            "actual_async_child_api_and_file_notification_drive_parent_progress_end_to_end",
-            r##"(let* ((id (async-status-req-id "async-child"))
+        true,
+        expect!["OK (0 \"0.75\" \"0.75\")"],
+    )
+}
+
+fn actual_async_child_api_and_file_notification_drive_parent_progress_end_to_end() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "actual_async_child_api_and_file_notification_drive_parent_progress_end_to_end",
+        r##"(let* ((id (async-status-req-id "async-child"))
        (path (async-status--get-absolute-path-by-id id))
        (parent-load-path (copy-sequence load-path))
        (parent-temp-directory temporary-file-directory)
@@ -267,12 +277,15 @@ fn workflows_public_surface_batch() {
     (setq async-status--shown-items nil)
     (when (buffer-live-p buffer)
       (kill-buffer buffer))))"##,
-            true,
-            expect!["OK ((:child \"0.75\") \"0.75\" \"0.75\" t nil exit t)"],
-        ),
-        (
-            "duplicate_registrations_are_removed_one_watch_at_a_time_by_id",
-            r##"(let ((id (async-status-req-id "duplicate"))
+        true,
+        expect!["OK ((:child \"0.75\") \"0.75\" \"0.75\" t nil exit t)"],
+    )
+}
+
+fn duplicate_registrations_are_removed_one_watch_at_a_time_by_id() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "duplicate_registrations_are_removed_one_watch_at_a_time_by_id",
+        r##"(let ((id (async-status-req-id "duplicate"))
       (next-watch 0)
       removed)
   (setq async-status--shown-items nil)
@@ -310,12 +323,15 @@ fn workflows_public_surface_batch() {
              (nreverse removed)))))
     (setq async-status--shown-items nil)
     (async-status-clean-up id)))"##,
-            true,
-            expect![[r#"OK ((("Second" 2) ("First" 1)) (("First" 1)) nil (2 1))"#]],
-        ),
-        (
-            "cleanup_order_allows_removing_ui_state_after_the_message_file_is_deleted",
-            r##"(let ((id (async-status-req-id "cleanup-order"))
+        true,
+        expect![[r#"OK ((("Second" 2) ("First" 1)) (("First" 1)) nil (2 1))"#]],
+    )
+}
+
+fn cleanup_order_allows_removing_ui_state_after_the_message_file_is_deleted() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "cleanup_order_allows_removing_ui_state_after_the_message_file_is_deleted",
+        r##"(let ((id (async-status-req-id "cleanup-order"))
       calls)
   (setq async-status--shown-items nil)
   (cl-letf (((symbol-function 'file-notify-add-watch)
@@ -336,12 +352,15 @@ fn workflows_public_surface_batch() {
        file-after-cleanup
        async-status--shown-items
        (nreverse calls)))))"##,
-            true,
-            expect!["OK (nil nil ((:removed :watch) :refresh))"],
-        ),
-        (
-            "workflow_cleanup_can_restore_all_resources_after_a_midstream_error",
-            r##"(let ((id (async-status-req-id "failure"))
+        true,
+        expect!["OK (nil nil ((:removed :watch) :refresh))"],
+    )
+}
+
+fn workflow_cleanup_can_restore_all_resources_after_a_midstream_error() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "workflow_cleanup_can_restore_all_resources_after_a_midstream_error",
+        r##"(let ((id (async-status-req-id "failure"))
       removed
       outcome)
   (setq async-status--shown-items nil)
@@ -372,8 +391,22 @@ fn workflows_public_surface_batch() {
      (file-exists-p
       (async-status--get-absolute-path-by-id id))
      removed)))"##,
-            true,
-            expect!["OK (:error error t nil nil (:watch))"],
-        ),
-    ]);
+        true,
+        expect!["OK (:error error t nil nil (:watch))"],
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        complete_single_job_lifecycle_allocates_displays_updates_and_cleans_up(),
+        multiple_jobs_support_interleaved_progress_and_independent_completion(),
+        thresholded_child_updates_publish_only_meaningful_progress_steps(),
+        actual_subprocess_can_publish_progress_through_the_message_file(),
+        actual_async_child_api_and_file_notification_drive_parent_progress_end_to_end(),
+        duplicate_registrations_are_removed_one_watch_at_a_time_by_id(),
+        cleanup_order_allows_removing_ui_state_after_the_message_file_is_deleted(),
+        workflow_cleanup_can_restore_all_resources_after_a_midstream_error(),
+    ];
+    assert_async_status_batch(&cases);
 }

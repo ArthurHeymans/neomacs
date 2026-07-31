@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_alda_mode_batch;
+use super::{ParityBatchCase, assert_alda_mode_batch};
 
-#[test]
-fn editing_public_surface_batch() {
-    assert_alda_mode_batch(&[
-        (
-            "alda_font_lock_practical_score_assigns_faces_to_language_constructs",
-            r##"(with-temp-buffer
+fn alda_font_lock_practical_score_assigns_faces_to_language_constructs() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alda_font_lock_practical_score_assigns_faces_to_language_constructs",
+        r##"(with-temp-buffer
          (insert
           "piano \"lead\":\n"
           "V1: o4 c+8~2 *3 { d e } [f g] | @start\n"
@@ -24,14 +22,17 @@ fn editing_public_surface_batch() {
                    (1- (point)) 'face)))
           '("piano" "V1" "o4" "c+" "*3" "{" "[" "|"
             "@start" "tempo" "# comment")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (("piano" font-lock-type-face) ("V1" font-lock-function-name-face) ("o4" font-lock-constant-face) ("c+" font-lock-preprocessor-face) ("*3" font-lock-builtin-face) ("{" font-lock-builtin-face) ("[" font-lock-builtin-face) ("|" font-lock-comment-face) ("@start" font-lock-builtin-face) ("tempo" font-lock-variable-name-face) ("# comment" font-lock-comment-face))"##
     ]],
-        ),
-        (
-            "alda_calculate_indentation_handles_labels_comments_and_regular_notes",
-            r##"(with-temp-buffer
+    )
+}
+
+fn alda_calculate_indentation_handles_labels_comments_and_regular_notes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alda_calculate_indentation_handles_labels_comments_and_regular_notes",
+        r##"(with-temp-buffer
          (insert
           "piano:\n"
           "    c d e\n"
@@ -50,12 +51,15 @@ fn editing_public_surface_batch() {
                     (alda-calculate-indentation))
               results))
            (nreverse results)))"##,
-            true,
-            expect!["OK ((1 0 0) (2 4 8) (4 6 4) (5 0 8))"],
-        ),
-        (
-            "alda_indent_previous_level_skips_blank_lines_and_finds_prior_score_indent",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK ((1 0 0) (2 4 8) (4 6 4) (5 0 8))"],
+    )
+}
+
+fn alda_indent_previous_level_skips_blank_lines_and_finds_prior_score_indent() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alda_indent_previous_level_skips_blank_lines_and_finds_prior_score_indent",
+        r##"(with-temp-buffer
          (insert
           "piano:\n"
           "      c d e\n"
@@ -70,12 +74,15 @@ fn editing_public_surface_batch() {
           (alda-indent-prev-level)
           (current-indentation)
           (line-number-at-pos)))"##,
-            true,
-            expect!["OK (3 0 5)"],
-        ),
-        (
-            "alda_indent_line_reindents_labels_notes_and_comments_preserving_point_semantics",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK (3 0 5)"],
+    )
+}
+
+fn alda_indent_line_reindents_labels_notes_and_comments_preserving_point_semantics() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alda_indent_line_reindents_labels_notes_and_comments_preserving_point_semantics",
+        r##"(with-temp-buffer
          (insert
           "    piano:\n"
           "c d e\n"
@@ -99,12 +106,15 @@ fn editing_public_surface_batch() {
                 note-indent
                 (current-indentation)
                 (buffer-string))))))"##,
-            true,
-            expect![[r#"OK ((0 7 3) 8 8 "piano:\n\11c d e\n\11# comment\n")"#]],
-        ),
-        (
-            "alda_colon_flushes_instrument_labels_but_preserves_inline_note_spacing",
-            r##"(let (results)
+        true,
+        expect![[r#"OK ((0 7 3) 8 8 "piano:\n\11c d e\n\11# comment\n")"#]],
+    )
+}
+
+fn alda_colon_flushes_instrument_labels_but_preserves_inline_note_spacing() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alda_colon_flushes_instrument_labels_but_preserves_inline_note_spacing",
+        r##"(let (results)
          (dolist (initial '("    piano" "c d e "))
            (with-temp-buffer
              (insert initial)
@@ -123,8 +133,19 @@ fn editing_public_surface_batch() {
                 (list initial (buffer-string) (point))
                 results))))
          (nreverse results))"##,
-            true,
-            expect![[r#"OK (("    piano" "piano:<TAB>" 12) ("c d e " "c d e :<TAB>" 13))"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (("    piano" "piano:<TAB>" 12) ("c d e " "c d e :<TAB>" 13))"#]],
+    )
+}
+
+#[test]
+fn editing_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        alda_font_lock_practical_score_assigns_faces_to_language_constructs(),
+        alda_calculate_indentation_handles_labels_comments_and_regular_notes(),
+        alda_indent_previous_level_skips_blank_lines_and_finds_prior_score_indent(),
+        alda_indent_line_reindents_labels_notes_and_comments_preserving_point_semantics(),
+        alda_colon_flushes_instrument_labels_but_preserves_inline_note_spacing(),
+    ];
+    assert_alda_mode_batch(&cases);
 }

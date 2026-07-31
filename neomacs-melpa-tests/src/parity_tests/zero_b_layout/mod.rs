@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{CachedMelpaOracle, ZERO_B_LAYOUT_MELPA_PIN};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod keybindings;
 mod layouts;
@@ -42,9 +45,9 @@ pub(crate) fn assert_zero_b_layout_signal_parity(form: &str, expected: Expect) {
 }
 
 /// Multi-probe batch for `assert_zero_b_layout_parity` cases (2a).
-pub(crate) fn assert_zero_b_layout_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_zero_b_layout_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         zero_b_layout_oracle(),
         &name,
         "zero_b_layout_parity",

@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_ac_octave_batch;
+use super::{ParityBatchCase, assert_ac_octave_batch};
 
 /// The installation instructions verbatim: open an Octave file, call
 /// `ac-octave-setup' from `octave-mode-hook', and complete.  Setup has to put
@@ -11,12 +11,10 @@ use super::assert_ac_octave_batch;
 /// Octave's unsorted, duplicated answer into a sorted deduplicated list carrying
 /// the source's own faces, arity symbol and documentation function.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_ac_octave_batch(&[
-        (
-            "ac_octave_setup_completes_a_symbol_from_the_inferior_octave_process",
-            r##"(progn
+fn ac_octave_setup_completes_a_symbol_from_the_inferior_octave_process() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ac_octave_setup_completes_a_symbol_from_the_inferior_octave_process",
+        r##"(progn
   (aco-test-write "project/analysis.m" "function r = analysis(x)\n  r = comm\nend\n")
   (aco-test-start-octave
    '(("completion_matches (\"comm\");"
@@ -40,14 +38,17 @@ fn workflows_public_surface_batch() {
            :point (point)
            :modified (buffer-modified-p)
            :octave-log (aco-test-log-lines)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:major-mode octave-mode :ac-sources (ac-source-octave ac-source-words-in-same-mode-buffers) :source ((candidates . ac-octave-candidate) (document . ac-octave-documentation) (candidate-face . ac-octave-candidate-face) (selection-face . ac-octave-selection-face) (init . ac-octave-init) (requires . 0) (cache) (symbol . "f")) :complete-list ("comma" "commandwindow" "common_size" "commutation_matrix") :candidates ("comma" "common_size" "commandwindow" "commutation_matrix") :properties (symbol "f" document ac-octave-documentation popup-face ac-octave-candidate-face selection-face ac-octave-selection-face) :prefix ("comm" 32 36) :completed "comma" :buffer "function r = analysis(x)\n  r = comma\nend\n" :point 37 :modified t :octave-log ("ARGV -i --no-line-editing --no-gui" "CMD PS2" "CMD disp (getenv ('OCTAVE_SRCDIR'))" "CMD more off;" "CMD PS1 ('octave> ');" "CMD disp (pwd ())" "CMD " "CMD cd <sandbox>/project/;" "CMD completion_matches (\"comm\");"))"#
     ]],
-        ),
-        (
-            "ac_octave_documents_the_selected_candidate_with_octave_help",
-            r##"(progn
+    )
+}
+
+fn ac_octave_documents_the_selected_candidate_with_octave_help() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ac_octave_documents_the_selected_candidate_with_octave_help",
+        r##"(progn
   (aco-test-write "project/analysis.m" "function r = analysis(x)\n  r = comm\nend\n")
   (aco-test-start-octave
    '(("completion_matches (\"comm\");"
@@ -71,14 +72,17 @@ fn workflows_public_surface_batch() {
            :buffer (buffer-substring-no-properties (point-min) (point-max))
            :point (point)
            :octave-log (aco-test-log-lines)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:candidates ("comma" "common_size" "commandwindow" "commutation_matrix") :menu-live t :selected-first "comma" :selected-second "common_size" :documentation "'common_size' is a function from the file /usr/share/octave/9.2.0/m/general/common_size.m\n\n -- [ERR, Y1, ...] = common_size (X1, X2, ...)\n     Determine if all input arguments are either scalar or of\n     common size.  Return ERR = 0 on success.\n\n     See also: size, size_equal, numel, ndims." :digested ("'common_size' is a function from the file /usr/share/octave/9.2.0/m/general/common_size.m" "" " -- [ERR, Y1, ...] = common_size (X1, X2, ...)" "     Determine if all input arguments are either scalar or of" "     common size.  Return ERR = 0 on success." "" "     See also: size, size_equal, numel, ndims.") :completed "common_size" :buffer "function r = analysis(x)\n  r = common_size\nend\n" :point 43 :octave-log ("ARGV -i --no-line-editing --no-gui" "CMD PS2" "CMD disp (getenv ('OCTAVE_SRCDIR'))" "CMD more off;" "CMD PS1 ('octave> ');" "CMD disp (pwd ())" "CMD " "CMD cd <sandbox>/project/;" "CMD completion_matches (\"comm\");" "CMD help common_size;"))"#
     ]],
-        ),
-        (
-            "ac_octave_re_enters_each_buffers_directory_before_completing",
-            r##"(progn
+    )
+}
+
+fn ac_octave_re_enters_each_buffers_directory_before_completing() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ac_octave_re_enters_each_buffers_directory_before_completing",
+        r##"(progn
   (aco-test-write "project/stats/summary.m" "function s = summary(x)\n  s = mean\nend\n")
   (aco-test-write "project/plots/figure.m" "function figure_helper()\n  plot\nend\n")
   (aco-test-start-octave
@@ -102,14 +106,17 @@ fn workflows_public_surface_batch() {
              :one-process (list (process-name inferior-octave-process)
                                 (process-status inferior-octave-process))
              :octave-log (aco-test-log-lines))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:stats ("summary.m" "[ORACLE-SANDBOX]/project/stats/" ("mean" "meansq" "mean_helper") ("mean" "mean_helper" "meansq")) :plots ("figure.m" "[ORACLE-SANDBOX]/project/plots/" ("plot3" "plot" "plotmatrix" "plot_helper") ("plot" "plot3" "plot_helper" "plotmatrix")) :one-process ("Inferior Octave" run) :octave-log ("ARGV -i --no-line-editing --no-gui" "CMD PS2" "CMD disp (getenv ('OCTAVE_SRCDIR'))" "CMD more off;" "CMD PS1 ('octave> ');" "CMD disp (pwd ())" "CMD " "CMD cd <sandbox>/project/stats/;" "CMD completion_matches (\"mean\");" "CMD cd <sandbox>/project/plots/;" "CMD completion_matches (\"plot\");"))"#
     ]],
-        ),
-        (
-            "ac_octave_offers_nothing_when_octave_has_no_matching_symbol",
-            r##"(progn
+    )
+}
+
+fn ac_octave_offers_nothing_when_octave_has_no_matching_symbol() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ac_octave_offers_nothing_when_octave_has_no_matching_symbol",
+        r##"(progn
   (aco-test-write "project/analysis.m" "function r = analysis(x)\n  r = zzz\nend\n")
   (aco-test-start-octave
    '(("completion_matches (\"zzz\");" "")
@@ -130,14 +137,17 @@ fn workflows_public_surface_batch() {
            :point (point)
            :modified (buffer-modified-p)
            :octave-log (aco-test-log-lines)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:candidates nil :complete-list nil :digested nil :selected nil :completed nil :documentation "" :buffer "function r = analysis(x)\n  r = zzz\nend\n" :point 35 :modified nil :octave-log ("ARGV -i --no-line-editing --no-gui" "CMD PS2" "CMD disp (getenv ('OCTAVE_SRCDIR'))" "CMD more off;" "CMD PS1 ('octave> ');" "CMD disp (pwd ())" "CMD " "CMD cd <sandbox>/project/;" "CMD completion_matches (\"zzz\");" "CMD help zzz;"))"#
     ]],
-        ),
-        (
-            "ac_octave_reports_a_dead_session_while_documentation_stays_silent",
-            r##"(progn
+    )
+}
+
+fn ac_octave_reports_a_dead_session_while_documentation_stays_silent() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ac_octave_reports_a_dead_session_while_documentation_stays_silent",
+        r##"(progn
   (aco-test-write "project/analysis.m" "function r = analysis(x)\n  r = comm\nend\n")
   (aco-test-start-octave
    '(("completion_matches (\"comm\");" "commandwindow\ncomma\ncommon_size")))
@@ -160,10 +170,21 @@ fn workflows_public_surface_batch() {
                           (buffer-substring-no-properties (point-min) (point-max)))
            :point (point)
            :octave-log (aco-test-log-lines)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:candidates ("comma" "common_size" "commandwindow") :live nil :complete (:signalled (error #("No inferior octave process running. Type M-x run-octave" 41 55 (font-lock-face help-key-binding face help-key-binding)))) :documentation nil :cached-update ("comma" "common_size" "commandwindow") :buffer "function r = analysis(x)\n  r = comm\nend\n" :point 36 :octave-log ("ARGV -i --no-line-editing --no-gui" "CMD PS2" "CMD disp (getenv ('OCTAVE_SRCDIR'))" "CMD more off;" "CMD PS1 ('octave> ');" "CMD disp (pwd ())" "CMD " "CMD cd <sandbox>/project/;" "CMD completion_matches (\"comm\");"))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        ac_octave_setup_completes_a_symbol_from_the_inferior_octave_process(),
+        ac_octave_documents_the_selected_candidate_with_octave_help(),
+        ac_octave_re_enters_each_buffers_directory_before_completing(),
+        ac_octave_offers_nothing_when_octave_has_no_matching_symbol(),
+        ac_octave_reports_a_dead_session_while_documentation_stays_silent(),
+    ];
+    assert_ac_octave_batch(&cases);
 }

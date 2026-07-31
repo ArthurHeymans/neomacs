@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_aiken_mode_batch;
+use super::{ParityBatchCase, assert_aiken_mode_batch};
 
-#[test]
-fn font_lock_public_surface_batch() {
-    assert_aiken_mode_batch(&[
-        (
-            "all_language_keywords_receive_keyword_face_in_real_source_context",
-            r##"
+fn all_language_keywords_receive_keyword_face_in_real_source_context() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "all_language_keywords_receive_keyword_face_in_real_source_context",
+        r##"
 (with-temp-buffer
   (aiken-mode)
   (insert (mapconcat
@@ -27,14 +25,17 @@ fn font_lock_public_surface_batch() {
        (forward-line 1)))
    aiken-keywords))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("if" font-lock-keyword-face) ("else" font-lock-keyword-face) ("when" font-lock-keyword-face) ("is" font-lock-keyword-face) ("fn" font-lock-keyword-face) ("use" font-lock-keyword-face) ("let" font-lock-keyword-face) ("pub" font-lock-keyword-face) ("type" font-lock-keyword-face) ("opaque" font-lock-keyword-face) ("const" font-lock-keyword-face) ("todo" font-lock-keyword-face) ("error" font-lock-keyword-face) ("expect" font-lock-keyword-face) ("test" font-lock-keyword-face) ("trace" font-lock-keyword-face) ("fail" font-lock-keyword-face) ("validator" font-lock-keyword-face) ("and" font-lock-keyword-face) ("or" font-lock-keyword-face))"#
     ]],
-        ),
-        (
-            "every_operator_uses_longest_token_matching_and_builtin_face",
-            r##"
+    )
+}
+
+fn every_operator_uses_longest_token_matching_and_builtin_face() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "every_operator_uses_longest_token_matching_and_builtin_face",
+        r##"
 (with-temp-buffer
   (aiken-mode)
   (dolist (operator aiken-operators)
@@ -54,14 +55,17 @@ fn font_lock_public_surface_batch() {
          (forward-line 1))))
    aiken-operators))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("=" "=" font-lock-builtin-face font-lock-builtin-face) ("->" "->" font-lock-builtin-face font-lock-builtin-face) (".." ".." font-lock-builtin-face font-lock-builtin-face) ("|>" "|>" font-lock-builtin-face font-lock-builtin-face) (">=" ">=" font-lock-builtin-face font-lock-builtin-face) ("<=" "<=" font-lock-builtin-face font-lock-builtin-face) (">" ">" font-lock-builtin-face font-lock-builtin-face) ("<" "<" font-lock-builtin-face font-lock-builtin-face) ("!=" "!=" font-lock-builtin-face font-lock-builtin-face) ("==" "==" font-lock-builtin-face font-lock-builtin-face) ("&&" "&&" font-lock-builtin-face font-lock-builtin-face) ("||" "||" font-lock-builtin-face font-lock-builtin-face) ("!" "!" font-lock-builtin-face font-lock-builtin-face) ("+" "+" font-lock-builtin-face font-lock-builtin-face) ("-" "-" font-lock-builtin-face font-lock-builtin-face) ("/" "/" font-lock-builtin-face font-lock-builtin-face) ("*" "*" font-lock-builtin-face font-lock-builtin-face) ("%" "%" font-lock-builtin-face font-lock-builtin-face) ("?" "?" font-lock-builtin-face font-lock-builtin-face))"#
     ]],
-        ),
-        (
-            "declarations_highlight_names_types_constants_and_functions_differently",
-            r##"
+    )
+}
+
+fn declarations_highlight_names_types_constants_and_functions_differently() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "declarations_highlight_names_types_constants_and_functions_differently",
+        r##"
 (with-temp-buffer
   (aiken-mode)
   (insert
@@ -82,14 +86,17 @@ fn settle_payment(tx: Transaction) -> Bool { True }\n")
      "use" "cardano" "Transaction" "fn" "settle_payment"
      "Bool" "True")))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("pub" font-lock-keyword-face) ("const" font-lock-keyword-face) ("max_supply" font-lock-type-face) ("Int" font-lock-type-face) ("type" font-lock-keyword-face) ("Payment" font-lock-type-face) ("use" font-lock-keyword-face) ("cardano" font-lock-constant-face) ("Transaction" nil) ("fn" font-lock-keyword-face) ("settle_payment" font-lock-function-name-face) ("Bool" font-lock-type-face) ("True" font-lock-type-face))"#
     ]],
-        ),
-        (
-            "keywords_and_types_inside_comments_and_strings_are_not_code_faces",
-            r##"
+    )
+}
+
+fn keywords_and_types_inside_comments_and_strings_are_not_code_faces() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "keywords_and_types_inside_comments_and_strings_are_not_code_faces",
+        r##"
 (with-temp-buffer
   (aiken-mode)
   (insert
@@ -110,14 +117,17 @@ validator spend(datum: Option<Data>) { True }\n")
    '("validator" "HiddenType" "validator"
      "StringType" "validator" "Option")))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("validator" t nil font-lock-comment-face) ("HiddenType" t nil font-lock-comment-face) ("validator" nil 34 font-lock-string-face) ("StringType" nil 34 font-lock-string-face) ("validator" nil nil font-lock-keyword-face) ("Option" nil nil font-lock-type-face))"#
     ]],
-        ),
-        (
-            "incremental_editing_refontifies_new_keywords_types_and_operators",
-            r##"
+    )
+}
+
+fn incremental_editing_refontifies_new_keywords_types_and_operators() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "incremental_editing_refontifies_new_keywords_types_and_operators",
+        r##"
 (with-temp-buffer
   (aiken-mode)
   (insert "lett result = old_value => NewType\n")
@@ -148,14 +158,17 @@ validator spend(datum: Option<Data>) { True }\n")
       '("let" "NewType" "|>" "next"))
      (buffer-string))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil font-lock-type-face font-lock-builtin-face font-lock-builtin-face) (font-lock-keyword-face font-lock-type-face font-lock-builtin-face nil) #("let result = old_value => NewType\n |> next" 0 3 (face font-lock-keyword-face) 11 12 (face font-lock-builtin-face) 23 24 (face font-lock-builtin-face) 24 25 (face font-lock-builtin-face) 26 33 (face font-lock-type-face) 35 37 (face font-lock-builtin-face)))"#
     ]],
-        ),
-        (
-            "practical_validator_source_has_expected_semantic_face_map",
-            r##"
+    )
+}
+
+fn practical_validator_source_has_expected_semantic_face_map() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "practical_validator_source_has_expected_semantic_face_map",
+        r##"
 (with-temp-buffer
   (aiken-mode)
   (insert
@@ -195,10 +208,22 @@ validator payment {\n\
                (get-text-property start 'face))))
      tokens)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("use" font-lock-keyword-face) ("list" nil) ("pub" font-lock-keyword-face) ("type" font-lock-keyword-face) ("Datum" font-lock-type-face) ("Payment" font-lock-type-face) ("ByteArray" font-lock-type-face) ("Int" font-lock-type-face) ("validator" font-lock-keyword-face) ("Option" font-lock-type-face) ("Data" font-lock-type-face) ("OutputReference" font-lock-type-face) ("Transaction" font-lock-type-face) ("when" font-lock-keyword-face) ("is" font-lock-keyword-face) ("Some" font-lock-type-face) ("->" font-lock-builtin-face) (">=" font-lock-builtin-face) ("&&" font-lock-builtin-face) ("!=" font-lock-builtin-face) ("None" font-lock-type-face) ("fail" font-lock-keyword-face))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn font_lock_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        all_language_keywords_receive_keyword_face_in_real_source_context(),
+        every_operator_uses_longest_token_matching_and_builtin_face(),
+        declarations_highlight_names_types_constants_and_functions_differently(),
+        keywords_and_types_inside_comments_and_strings_are_not_code_faces(),
+        incremental_editing_refontifies_new_keywords_types_and_operators(),
+        practical_validator_source_has_expected_semantic_face_map(),
+    ];
+    assert_aiken_mode_batch(&cases);
 }

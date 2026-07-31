@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_arduino_mode_batch;
+use super::{ParityBatchCase, assert_arduino_mode_batch};
 
-#[test]
-fn editing_public_surface_batch() {
-    assert_arduino_mode_batch(&[
-        (
-            "realistic_sketch_enters_arduino_mode_and_fontifies_language_semantics",
-            r##"(with-temp-buffer
+fn realistic_sketch_enters_arduino_mode_and_fontifies_language_semantics() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "realistic_sketch_enters_arduino_mode_and_fontifies_language_semantics",
+        r##"(with-temp-buffer
                     (insert
                      "const unsigned long interval = 1000;\n"
                      "void setup() {\n"
@@ -37,14 +35,17 @@ fn editing_public_surface_batch() {
                        (funcall face-at "Serial")
                        (funcall face-at "if")
                        (funcall face-at "digitalWrite"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (arduino-mode "arduino/*l" font-lock-type-face font-lock-type-face font-lock-type-face font-lock-keyword-face font-lock-constant-face font-lock-keyword-face font-lock-type-face font-lock-keyword-face)"#
     ]],
-        ),
-        (
-            "practical_sketch_indentation_comments_and_cc_mode_state_match",
-            r##"(with-temp-buffer
+    )
+}
+
+fn practical_sketch_indentation_comments_and_cc_mode_state_match() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "practical_sketch_indentation_comments_and_cc_mode_state_match",
+        r##"(with-temp-buffer
                     (insert
                      "void setup(){\n"
                      "pinMode(LED_BUILTIN,OUTPUT);\n"
@@ -62,14 +63,17 @@ fn editing_public_surface_batch() {
                       (keymap-parent (current-local-map))
                       c-mode-base-map)
                      (derived-mode-p 'c-mode)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("void setup(){\n\11pinMode(LED_BUILTIN,OUTPUT);\n\11if(digitalRead(2)==HIGH){\n\11\11digitalWrite(LED_BUILTIN,LOW);\n\11}\n}\n" 2 2 "/* " " */" t c-mode)"#
     ]],
-        ),
-        (
-            "syntax_table_parses_comments_strings_and_braces_like_real_arduino_code",
-            r##"(with-temp-buffer
+    )
+}
+
+fn syntax_table_parses_comments_strings_and_braces_like_real_arduino_code() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "syntax_table_parses_comments_strings_and_braces_like_real_arduino_code",
+        r##"(with-temp-buffer
                     (insert
                      "void loop() {\n"
                      "  // braces { in comment }\n"
@@ -98,14 +102,17 @@ fn editing_public_surface_batch() {
                             (nth 0 state))
                            states)))
                       (nreverse states)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("braces" nil t 1) ("value" 34 nil 2) ("block" nil t 1) ("Serial" nil nil 1) ("}" nil t 1))"#
     ]],
-        ),
-        (
-            "language_tables_cover_representative_types_constants_functions_and_primary_objects",
-            r##"(list
+    )
+}
+
+fn language_tables_cover_representative_types_constants_functions_and_primary_objects() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "language_tables_cover_representative_types_constants_functions_and_primary_objects",
+        r##"(list
                     (mapcar
                      (lambda (word)
                        (cons
@@ -154,14 +161,17 @@ fn editing_public_surface_batch() {
                            (c-lang-const
                             c-primary-expr-kwds arduino))))))
                      '("Serial" "Keyboard" "Mouse" "Wire")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("boolean" . t) ("unsigned long" . t) ("setup" . t) ("PROGMEM" . t) ("class")) (("HIGH" . t) ("INPUT_PULLUP" . t) ("LED_BUILTIN" . t) ("nullptr" . t)) (("digitalWrite" . t) ("pulseInLong" . t) ("isHexadecimalDigit" . t) ("releaseAll" . t) ("malloc")) (("Serial" . t) ("Keyboard" . t) ("Mouse" . t) ("Wire")))"#
     ]],
-        ),
-        (
-            "mode_activation_calls_optional_flycheck_setup_only_when_available",
-            r##"(list
+    )
+}
+
+fn mode_activation_calls_optional_flycheck_setup_only_when_available() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "mode_activation_calls_optional_flycheck_setup_only_when_available",
+        r##"(list
                     (let (events)
                       (cl-letf
                           (((symbol-function 'flycheck-mode)
@@ -188,12 +198,15 @@ fn editing_public_surface_batch() {
                           (arduino-mode)
                           (list
                            events major-mode)))))"##,
-            true,
-            expect!["OK (((:setup) arduino-mode) (nil arduino-mode))"],
-        ),
-        (
-            "new_sketch_uses_expanded_arduino_home_as_the_visit_directory",
-            r##"(let* ((root
+        true,
+        expect!["OK (((:setup) arduino-mode) (nil arduino-mode))"],
+    )
+}
+
+fn new_sketch_uses_expanded_arduino_home_as_the_visit_directory() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "new_sketch_uses_expanded_arduino_home_as_the_visit_directory",
+        r##"(let* ((root
                           (make-temp-file
                            "arduino-mode-home-" t))
                          (arduino-mode-home root)
@@ -215,12 +228,15 @@ fn editing_public_surface_batch() {
                             (cadr visited)
                             root)))
                       (delete-directory root t)))"##,
-            true,
-            expect![[r#"OK (:visited "Blink/Blink.ino" t)"#]],
-        ),
-        (
-            "include_path_generator_creates_real_default_content_then_visits_existing_file",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK (:visited "Blink/Blink.ino" t)"#]],
+    )
+}
+
+fn include_path_generator_creates_real_default_content_then_visits_existing_file() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "include_path_generator_creates_real_default_content_then_visits_existing_file",
+        r##"(let* ((root
                           (make-temp-file
                            "arduino-include-path-" t))
                          (arduino-mode-home root)
@@ -251,10 +267,23 @@ fn editing_public_surface_batch() {
                              (file-name-nondirectory visited)
                              (file-exists-p target))))
                       (delete-directory root t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil "-I/home/stardiviner/Arduino/libraries/" :editing ".clang_complete" t)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn editing_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        realistic_sketch_enters_arduino_mode_and_fontifies_language_semantics(),
+        practical_sketch_indentation_comments_and_cc_mode_state_match(),
+        syntax_table_parses_comments_strings_and_braces_like_real_arduino_code(),
+        language_tables_cover_representative_types_constants_functions_and_primary_objects(),
+        mode_activation_calls_optional_flycheck_setup_only_when_available(),
+        new_sketch_uses_expanded_arduino_home_as_the_visit_directory(),
+        include_path_generator_creates_real_default_content_then_visits_existing_file(),
+    ];
+    assert_arduino_mode_batch(&cases);
 }

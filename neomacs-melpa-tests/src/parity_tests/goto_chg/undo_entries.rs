@@ -1,37 +1,41 @@
 use expect_test::expect;
 
-use super::{assert_goto_chg_batch};
+use super::{ParityBatchCase, assert_goto_chg_batch};
 
-#[test]
-fn undo_entries_public_surface_batch() {
-    assert_goto_chg_batch(&[
-        (
-            "goto_chg_public_defaults_match_the_pinned_release",
-            r##"(list
+fn goto_chg_public_defaults_match_the_pinned_release() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_public_defaults_match_the_pinned_release",
+        r##"(list
                glc-default-span
                glc-current-span
                glc-probe-depth
                glc-direction
                (commandp 'goto-last-change)
                (commandp 'goto-last-change-reverse))"##,
-            true,
-            expect!["OK (8 8 0 1 t t)"],
-        ),
-        (
-            "goto_chg_center_ellipsis_covers_short_exact_even_odd_and_custom_markers",
-            r##"(list
+        true,
+        expect!["OK (8 8 0 1 t t)"],
+    )
+}
+
+fn goto_chg_center_ellipsis_covers_short_exact_even_odd_and_custom_markers() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_center_ellipsis_covers_short_exact_even_odd_and_custom_markers",
+        r##"(list
                (glc-center-ellipsis "short" 8)
                (glc-center-ellipsis "exactly" 7)
                (glc-center-ellipsis "abcdefghij" 8)
                (glc-center-ellipsis "abcdefghijk" 8)
                (glc-center-ellipsis "abcdefghij" 7 "..")
                (glc-center-ellipsis "abcdefghij" 6 "…"))"##,
-            true,
-            expect![[r#"OK ("short" "exactly" "ab...ij" "ab...jk" "ab..ij" "ab…ij")"#]],
-        ),
-        (
-            "goto_chg_fixup_edit_extracts_emacs_combined_undo_entries_only",
-            r##"(let ((combined
+        true,
+        expect![[r#"OK ("short" "exactly" "ab...ij" "ab...jk" "ab..ij" "ab…ij")"#]],
+    )
+}
+
+fn goto_chg_fixup_edit_extracts_emacs_combined_undo_entries_only() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_fixup_edit_extracts_emacs_combined_undo_entries_only",
+        r##"(let ((combined
                     '(apply 1 2 3
                       undo--wrap-and-run-primitive-undo
                       ((4 . 9))))
@@ -52,14 +56,17 @@ fn undo_entries_public_surface_batch() {
                 (glc-fixup-edit multiple)
                 (glc-fixup-edit '(2 . 7))
                 (glc-fixup-edit nil)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((4 . 9) (apply ignore 2 3 undo--wrap-and-run-primitive-undo ((4 . 9))) (apply 1 2 3 other-wrapper ((4 . 9))) (apply 1 2 3 undo--wrap-and-run-primitive-undo ((4 . 9) (10 . 12))) (2 . 7) nil)"
     ],
-        ),
-        (
-            "goto_chg_get_pos_classifies_every_supported_undo_entry_shape",
-            r##"(let ((marker (make-marker)))
+    )
+}
+
+fn goto_chg_get_pos_classifies_every_supported_undo_entry_shape() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_get_pos_classifies_every_supported_undo_entry_shape",
+        r##"(let ((marker (make-marker)))
                (list
                 (glc-get-pos 12)
                 (glc-get-pos nil)
@@ -73,12 +80,15 @@ fn undo_entries_public_surface_batch() {
                  '(apply 1 2 3
                    undo--wrap-and-run-primitive-undo
                    ((6 . 10))))))"##,
-            true,
-            expect!["OK (12 nil 8 15 15 11 nil nil 10)"],
-        ),
-        (
-            "goto_chg_descriptions_cover_position_insert_delete_property_and_metadata",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK (12 nil 8 15 15 11 nil nil 10)"],
+    )
+}
+
+fn goto_chg_descriptions_cover_position_insert_delete_property_and_metadata() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_descriptions_cover_position_insert_delete_property_and_metadata",
+        r##"(with-temp-buffer
                (insert
                 "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
                (list
@@ -95,20 +105,26 @@ fn undo_entries_public_surface_batch() {
                 (glc-get-descript '(nil face bold 2 . 8) 1)
                 (glc-get-descript '(nil face bold 2 . 8) 5)
                 (glc-get-descript '(t 1 2 3) 6)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("New position" nil "T-1: Inserted 5 chars \"bcdef\"" "T-2: Inserted 5 chars" "T-3: Deleted \"removed\"" "T-4: Deleted \"xxxxxxxxxxxxxxxxxxxxxxxxxxxx...xxxxxxxxxxxxxxxxxxxxxxxxxxxx\"" "T-1: Property change" "T-5: Property change" nil)"#
     ]],
-        ),
-        (
-            "goto_chg_description_rejects_an_omitted_numeric_depth",
-            r##"(glc-get-descript '(2 . 7))"##,
-            false,
-            expect![[r#"ERR (error "Format specifier doesn’t match argument type")"#]],
-        ),
-        (
-            "goto_chg_positionable_and_filetime_predicates_cover_all_entry_classes",
-            r##"(mapcar
+    )
+}
+
+fn goto_chg_description_rejects_an_omitted_numeric_depth() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_description_rejects_an_omitted_numeric_depth",
+        r##"(glc-get-descript '(2 . 7))"##,
+        false,
+        expect![[r#"ERR (error "Format specifier doesn’t match argument type")"#]],
+    )
+}
+
+fn goto_chg_positionable_and_filetime_predicates_cover_all_entry_classes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_positionable_and_filetime_predicates_cover_all_entry_classes",
+        r##"(mapcar
                (lambda (entry)
                  (list
                   (glc-is-positionable entry)
@@ -120,12 +136,15 @@ fn undo_entries_public_surface_batch() {
                  (nil face bold 4 . 11)
                  (t 1 2 3)
                  (marker . 2)))"##,
-            true,
-            expect!["OK ((nil nil) (nil nil) (8 nil) (15 nil) (11 nil) (nil t) (nil nil))"],
-        ),
-        (
-            "goto_chg_adjust_pos2_obeys_span_boundaries_and_edit_offsets",
-            r##"(list
+        true,
+        expect!["OK ((nil nil) (nil nil) (8 nil) (15 nil) (11 nil) (nil t) (nil nil))"],
+    )
+}
+
+fn goto_chg_adjust_pos2_obeys_span_boundaries_and_edit_offsets() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_adjust_pos2_obeys_span_boundaries_and_edit_offsets",
+        r##"(list
                (let ((glc-current-span 2))
                  (mapcar
                   (lambda (pos)
@@ -140,12 +159,15 @@ fn undo_entries_public_surface_batch() {
                  (list
                   (glc-adjust-pos2 2 10 10 7)
                   (glc-adjust-pos2 30 10 10 -4))))"##,
-            true,
-            expect!["OK ((1 8 nil nil nil nil 22 34) (9 10 10 10 13) (2 26))"],
-        ),
-        (
-            "goto_chg_adjust_pos_handles_insert_delete_property_marker_and_boundaries",
-            r##"(let ((glc-current-span 0)
+        true,
+        expect!["OK ((1 8 nil nil nil nil 22 34) (9 10 10 10 13) (2 26))"],
+    )
+}
+
+fn goto_chg_adjust_pos_handles_insert_delete_property_marker_and_boundaries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_adjust_pos_handles_insert_delete_property_marker_and_boundaries",
+        r##"(let ((glc-current-span 0)
                     (marker (make-marker)))
                (list
                 (glc-adjust-pos 20 nil)
@@ -157,12 +179,15 @@ fn undo_entries_public_surface_batch() {
                 (glc-adjust-pos 20 (cons marker 3))
                 (glc-adjust-pos 7 '(5 . 9))
                 (glc-adjust-pos 6 '("abc" . 5))))"##,
-            true,
-            expect!["OK (20 20 24 17 17 20 20 11 5)"],
-        ),
-        (
-            "goto_chg_adjust_list_tracks_an_old_edit_through_newer_coordinate_changes",
-            r##"(list
+        true,
+        expect!["OK (20 20 24 17 17 20 20 11 5)"],
+    )
+}
+
+fn goto_chg_adjust_list_tracks_an_old_edit_through_newer_coordinate_changes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_adjust_list_tracks_an_old_edit_through_newer_coordinate_changes",
+        r##"(list
                (let ((glc-current-span 0))
                  (glc-adjust-list
                   '((10 . 12)
@@ -181,8 +206,24 @@ fn undo_entries_public_surface_batch() {
                      undo--wrap-and-run-primitive-undo
                      ((4 . 9)))
                     (1 . 3)))))"##,
-            true,
-            expect!["OK (13 17 nil 11)"],
-        ),
-    ]);
+        true,
+        expect!["OK (13 17 nil 11)"],
+    )
+}
+
+#[test]
+fn undo_entries_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        goto_chg_public_defaults_match_the_pinned_release(),
+        goto_chg_center_ellipsis_covers_short_exact_even_odd_and_custom_markers(),
+        goto_chg_fixup_edit_extracts_emacs_combined_undo_entries_only(),
+        goto_chg_get_pos_classifies_every_supported_undo_entry_shape(),
+        goto_chg_descriptions_cover_position_insert_delete_property_and_metadata(),
+        goto_chg_description_rejects_an_omitted_numeric_depth(),
+        goto_chg_positionable_and_filetime_predicates_cover_all_entry_classes(),
+        goto_chg_adjust_pos2_obeys_span_boundaries_and_edit_offsets(),
+        goto_chg_adjust_pos_handles_insert_delete_property_marker_and_boundaries(),
+        goto_chg_adjust_list_tracks_an_old_edit_through_newer_coordinate_changes(),
+    ];
+    assert_goto_chg_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_pcmp_batch;
+use super::{ParityBatchCase, assert_auto_complete_pcmp_batch};
 
-#[test]
-fn advice_public_surface_batch() {
-    assert_auto_complete_pcmp_batch(&[
-        (
-            "auto_complete_pcmp_completions_advice_captures_non_nil_return_once",
-            r##"(let ((ac-pcmp--active-p t)
+fn auto_complete_pcmp_completions_advice_captures_non_nil_return_once() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_completions_advice_captures_non_nil_return_once",
+        r##"(let ((ac-pcmp--active-p t)
              (ac-pcmp--candidates nil)
              (pcomplete-index 0)
              (pcomplete-last 0)
@@ -23,12 +21,15 @@ fn advice_public_surface_batch() {
                 first
                 second
                 ac-pcmp--candidates)))))"##,
-            true,
-            expect![[r#"OK (#1=("alpha" "beta" "gamma") ("later" "ignored") #1#)"#]],
-        ),
-        (
-            "auto_complete_pcmp_completions_advice_ignores_inactive_requests",
-            r##"(let ((ac-pcmp--active-p nil)
+        true,
+        expect![[r#"OK (#1=("alpha" "beta" "gamma") ("later" "ignored") #1#)"#]],
+    )
+}
+
+fn auto_complete_pcmp_completions_advice_ignores_inactive_requests() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_completions_advice_ignores_inactive_requests",
+        r##"(let ((ac-pcmp--active-p nil)
              (ac-pcmp--candidates '("preserved"))
              (pcomplete-index 0)
              (pcomplete-last 0)
@@ -40,12 +41,15 @@ fn advice_public_surface_batch() {
             (pcomplete-completions)
             ac-pcmp--candidates
             ac-pcmp--status)))"##,
-            true,
-            expect![[r#"OK (("returned") ("preserved") nil)"#]],
-        ),
-        (
-            "auto_complete_pcmp_show_completions_advice_suppresses_ui_and_captures_input",
-            r##"(let ((ac-pcmp--active-p t)
+        true,
+        expect![[r#"OK (("returned") ("preserved") nil)"#]],
+    )
+}
+
+fn auto_complete_pcmp_show_completions_advice_suppresses_ui_and_captures_input() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_show_completions_advice_suppresses_ui_and_captures_input",
+        r##"(let ((ac-pcmp--active-p t)
              (ac-pcmp--candidates nil)
              (pcomplete-last-window-config :untouched)
              (pcomplete-window-restore-timer nil))
@@ -55,24 +59,30 @@ fn advice_public_surface_batch() {
           ac-pcmp--candidates
           pcomplete-last-window-config
           (get-buffer "*Completions*")))"##,
-            true,
-            expect![[r#"OK (nil ("zeta" "alpha" "middle") :untouched nil)"#]],
-        ),
-        (
-            "auto_complete_pcmp_show_completions_advice_preserves_first_capture",
-            r##"(let ((ac-pcmp--active-p t)
+        true,
+        expect![[r#"OK (nil ("zeta" "alpha" "middle") :untouched nil)"#]],
+    )
+}
+
+fn auto_complete_pcmp_show_completions_advice_preserves_first_capture() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_show_completions_advice_preserves_first_capture",
+        r##"(let ((ac-pcmp--active-p t)
              (ac-pcmp--candidates '("already")))
          (list
           (pcomplete-show-completions '("new" "ignored"))
           ac-pcmp--candidates
           (pcomplete-show-completions nil)
           ac-pcmp--candidates))"##,
-            true,
-            expect![[r#"OK (nil #1=("already") nil #1#)"#]],
-        ),
-        (
-            "auto_complete_pcmp_stub_advice_captures_original_candidate_collection",
-            r##"(let ((ac-pcmp--active-p t)
+        true,
+        expect![[r#"OK (nil #1=("already") nil #1#)"#]],
+    )
+}
+
+fn auto_complete_pcmp_stub_advice_captures_original_candidate_collection() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_stub_advice_captures_original_candidate_collection",
+        r##"(let ((ac-pcmp--active-p t)
              (ac-pcmp--candidates nil)
              (ac-pcmp--status 'none))
          (with-temp-buffer
@@ -87,12 +97,15 @@ fn advice_public_surface_batch() {
               ac-pcmp--status
               (buffer-string)
               (point)))))"##,
-            true,
-            expect![[r#"OK (nil ("cargo" "cache" "cat") nil "ca" 3)"#]],
-        ),
-        (
-            "auto_complete_pcmp_stub_advice_maps_real_completion_outcomes_to_status",
-            r##"(mapcar
+        true,
+        expect![[r#"OK (nil ("cargo" "cache" "cat") nil "ca" 3)"#]],
+    )
+}
+
+fn auto_complete_pcmp_stub_advice_maps_real_completion_outcomes_to_status() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_stub_advice_maps_real_completion_outcomes_to_status",
+        r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (insert (nth 0 case))
@@ -111,14 +124,17 @@ fn advice_public_surface_batch() {
            ("fo" ("foobar" "foobaz"))
            ("foo" ("foo" "foobar"))
            ("zz" ("alpha" "beta"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("fo" #1=("foo")) nil sole #1# "fo") (("fo" #2=("foobar" "foobaz")) nil nil #2# "fo") (("foo" #3=("foo" "foobar")) nil nil #3# "foo") (("zz" #4=("alpha" "beta")) nil nil #4# "zz"))"#
     ]],
-        ),
-        (
-            "auto_complete_pcmp_stub_advice_does_not_overwrite_existing_candidates",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_complete_pcmp_stub_advice_does_not_overwrite_existing_candidates() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_stub_advice_does_not_overwrite_existing_candidates",
+        r##"(with-temp-buffer
          (insert "al")
          (let ((ac-pcmp--active-p t)
                (ac-pcmp--candidates '("first" "capture"))
@@ -128,12 +144,15 @@ fn advice_public_surface_batch() {
             ac-pcmp--candidates
             ac-pcmp--status
             (buffer-string))))"##,
-            true,
-            expect![[r#"OK (nil ("first" "capture") nil "al")"#]],
-        ),
-        (
-            "auto_complete_pcmp_stub_advice_inactive_path_preserves_native_return_and_state",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK (nil ("first" "capture") nil "al")"#]],
+    )
+}
+
+fn auto_complete_pcmp_stub_advice_inactive_path_preserves_native_return_and_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_stub_advice_inactive_path_preserves_native_return_and_state",
+        r##"(with-temp-buffer
          (insert "fo")
          (let ((ac-pcmp--active-p nil)
                (ac-pcmp--candidates '("outer"))
@@ -146,8 +165,22 @@ fn advice_public_surface_batch() {
             ac-pcmp--status
             (buffer-string)
             (point))))"##,
-            true,
-            expect![[r#"OK ((sole . "foo") ("outer") outer "fo" 3)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK ((sole . "foo") ("outer") outer "fo" 3)"#]],
+    )
+}
+
+#[test]
+fn advice_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_pcmp_completions_advice_captures_non_nil_return_once(),
+        auto_complete_pcmp_completions_advice_ignores_inactive_requests(),
+        auto_complete_pcmp_show_completions_advice_suppresses_ui_and_captures_input(),
+        auto_complete_pcmp_show_completions_advice_preserves_first_capture(),
+        auto_complete_pcmp_stub_advice_captures_original_candidate_collection(),
+        auto_complete_pcmp_stub_advice_maps_real_completion_outcomes_to_status(),
+        auto_complete_pcmp_stub_advice_does_not_overwrite_existing_candidates(),
+        auto_complete_pcmp_stub_advice_inactive_path_preserves_native_return_and_state(),
+    ];
+    assert_auto_complete_pcmp_batch(&cases);
 }

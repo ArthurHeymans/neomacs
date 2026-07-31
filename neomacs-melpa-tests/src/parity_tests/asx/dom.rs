@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_asx_batch;
+use super::{ParityBatchCase, assert_asx_batch};
 
-#[test]
-fn dom_public_surface_batch() {
-    assert_asx_batch(&[
-        (
-            "asx_normalizes_a_realistic_question_page_into_the_complete_post_model",
-            r##"(let ((asx--posts
+fn asx_normalizes_a_realistic_question_page_into_the_complete_post_model() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_normalizes_a_realistic_question_page_into_the_complete_post_model",
+        r##"(let ((asx--posts
                 '(("First result"
                    .
                    "https://stackoverflow.com/questions/101/first")
@@ -18,14 +16,17 @@ fn dom_public_surface_batch() {
          (asx-test-post-summary
           (asx--normalize-post
            (asx-test-post-dom))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:url "https://stackoverflow.com/questions/101/first" :title "How to  ?" :body ((div ((class . "post-text")) (p nil "Question " (strong nil "body") ".") (pre ((class . "lang-emacs-lisp")) "(+ 1 2)"))) :score "12" :answers ((:body ((div ((class . "post-text")) (p nil "First answer."))) :score "7") (:body ((div ((class . "post-text")) (p nil "Second " (a ((href . "https://example.com")) "answer") "."))) :score "-1")) :tags ("emacs" "elisp"))"#
     ]],
-        ),
-        (
-            "asx_normalization_uses_the_selected_post_url_and_preserves_empty_collections",
-            r##"(let ((asx--posts
+    )
+}
+
+fn asx_normalization_uses_the_selected_post_url_and_preserves_empty_collections() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_normalization_uses_the_selected_post_url_and_preserves_empty_collections",
+        r##"(let ((asx--posts
                 '(("First" . "https://example.invalid/questions/1")
                   ("Selected" . "https://example.invalid/questions/2")))
                (asx--current-post-index 1)
@@ -47,14 +48,17 @@ fn dom_public_surface_batch() {
                     ((class . "post-taglist")))))))
          (asx-test-post-summary
           (asx--normalize-post dom)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:url "https://example.invalid/questions/2" :title "Question without answers" :body ((div ((class . "post-text")) (p nil "Only a body."))) :score "0" :answers nil :tags nil)"#
     ]],
-        ),
-        (
-            "asx_extracts_all_tags_in_dom_order_with_nested_text_and_duplicates_intact",
-            r##"(asx--get-tags
+    )
+}
+
+fn asx_extracts_all_tags_in_dom_order_with_nested_text_and_duplicates_intact() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_extracts_all_tags_in_dom_order_with_nested_text_and_duplicates_intact",
+        r##"(asx--get-tags
          '(div nil
            (div
             ((class . "post-taglist"))
@@ -76,12 +80,15 @@ fn dom_public_surface_batch() {
             (a
              ((class . "post-tag"))
              "org-mode"))))"##,
-            true,
-            expect![[r#"OK ("emacs" "common-" "emacs")"#]],
-        ),
-        (
-            "asx_extracts_answer_bodies_and_scores_from_each_answercell_parent",
-            r##"(let ((answers
+        true,
+        expect![[r#"OK ("emacs" "common-" "emacs")"#]],
+    )
+}
+
+fn asx_extracts_answer_bodies_and_scores_from_each_answercell_parent() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_extracts_answer_bodies_and_scores_from_each_answercell_parent",
+        r##"(let ((answers
                 (asx--get-answers
                  (asx-test-post-dom))))
          (list
@@ -105,14 +112,17 @@ fn dom_public_surface_batch() {
                 (plist-get answer :body)
                 'a))))
            answers)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (2 ((:score "7" :body-text ("First answer.") :links nil) (:score "-1" :body-text ("Second  answer .") :links (("https://example.com" "answer")))))"#
     ]],
-        ),
-        (
-            "asx_language_detection_handles_stackexchange_classes_and_non_language_classes",
-            r##"(mapcar
+    )
+}
+
+fn asx_language_detection_handles_stackexchange_classes_and_non_language_classes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_language_detection_handles_stackexchange_classes_and_non_language_classes",
+        r##"(mapcar
          (lambda (class)
            (list
             class
@@ -139,14 +149,17 @@ fn dom_public_surface_batch() {
            "lang-"
            ""
            nil))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("lang-emacs-lisp" "emacs" "emacs") ("prettyprint lang-python linenums" "python" "python") ("language-rust" nil nil) ("lang-c++ extra" "c" "c") ("lang-" nil nil) ("" nil nil) (nil (wrong-type-argument (stringp nil)) nil))"#
     ]],
-        ),
-        (
-            "asx_maps_text_links_to_org_links_but_keeps_image_links_as_dom",
-            r##"(list
+    )
+}
+
+fn asx_maps_text_links_to_org_links_but_keeps_image_links_as_dom() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_maps_text_links_to_org_links_but_keeps_image_links_as_dom",
+        r##"(list
          (asx--map-node
           '(a
             ((href . "https://example.com/a?x=1&y=2"))
@@ -161,14 +174,17 @@ fn dom_public_surface_batch() {
          (asx--map-node "literal text")
          (asx--map-node 17)
          (asx--map-node nil))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("[[https://example.com/a?x=1&y=2][Read  the answer]]" (a ((href . "https://example.com/full")) (img ((src . "https://example.com/image.png") (alt . "diagram")))) "literal text" 17 nil)"#
     ]],
-        ),
-        (
-            "asx_maps_pre_blocks_to_org_example_blocks_with_detected_or_fallback_language",
-            r##"(mapcar
+    )
+}
+
+fn asx_maps_pre_blocks_to_org_example_blocks_with_detected_or_fallback_language() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_maps_pre_blocks_to_org_example_blocks_with_detected_or_fallback_language",
+        r##"(mapcar
          #'asx--map-node
          '((pre
             ((class . "lang-rust"))
@@ -180,14 +196,17 @@ fn dom_public_surface_batch() {
            (pre
             ((class . "lang-python extra"))
             (code nil "print('nested')"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK ((pre nil "#+BEGIN_EXAMPLE " "rust" "\n" ("fn main() {\n    println!(\"hi\");\n}") "\n" "#+END_EXAMPLE") (pre nil "#+BEGIN_EXAMPLE " "prog" "\n" ("(message \"plain\")") nil "#+END_EXAMPLE") (pre nil "#+BEGIN_EXAMPLE " "prog" "\n" ("unclassified") "\n" "#+END_EXAMPLE") (pre nil "#+BEGIN_EXAMPLE " "python" "\n" ((code nil "print('nested')")) "\n" "#+END_EXAMPLE"))"##
     ]],
-        ),
-        (
-            "asx_recursively_maps_a_practical_mixed_post_body_without_losing_structure",
-            r##"(asx--map-node
+    )
+}
+
+fn asx_recursively_maps_a_practical_mixed_post_body_without_losing_structure() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_recursively_maps_a_practical_mixed_post_body_without_losing_structure",
+        r##"(asx--map-node
          '(div
            ((class . "post-text"))
            (p nil
@@ -206,10 +225,24 @@ fn dom_public_surface_batch() {
            (pre
             ((class . "lang-emacs-lisp"))
             "(mapcar #'1+ '(1 2 3))")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (div ((class . "post-text")) (p nil "See " "[[https://www.gnu.org/software/emacs/][GNU Emacs]]" " and compare:") (ul nil (li nil "first") (li nil "second " (code nil "(+ 1 2)"))) (blockquote nil (p nil "quoted advice")) (pre nil "#+BEGIN_EXAMPLE " "emacs" "\n" ("(mapcar #'1+ '(1 2 3))") "\n" "#+END_EXAMPLE"))"##
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn dom_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        asx_normalizes_a_realistic_question_page_into_the_complete_post_model(),
+        asx_normalization_uses_the_selected_post_url_and_preserves_empty_collections(),
+        asx_extracts_all_tags_in_dom_order_with_nested_text_and_duplicates_intact(),
+        asx_extracts_answer_bodies_and_scores_from_each_answercell_parent(),
+        asx_language_detection_handles_stackexchange_classes_and_non_language_classes(),
+        asx_maps_text_links_to_org_links_but_keeps_image_links_as_dom(),
+        asx_maps_pre_blocks_to_org_example_blocks_with_detected_or_fallback_language(),
+        asx_recursively_maps_a_practical_mixed_post_body_without_losing_structure(),
+    ];
+    assert_asx_batch(&cases);
 }

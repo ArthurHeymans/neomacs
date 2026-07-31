@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_audacious_autoload_batch, assert_audacious_batch};
+use super::{ParityBatchCase, assert_audacious_autoload_batch, assert_audacious_batch};
 
-#[test]
-fn registry_audacious_batch() {
-    assert_audacious_batch(&[
-        (
-            "audacious_descriptor_and_archive_sources_pin_exact_melpa_payload",
-            r##"(let* ((descriptor
+fn audacious_descriptor_and_archive_sources_pin_exact_melpa_payload() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "audacious_descriptor_and_archive_sources_pin_exact_melpa_payload",
+        r##"(let* ((descriptor
                 (cadr
                  (assq
                   'audacious
@@ -42,14 +40,17 @@ fn registry_audacious_batch() {
                  'sha256
                  (current-buffer)))))
            sources)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((audacious "20210917.51" "Emacs interface to control audacious." ((helm (3 6 2)) (emacs (24 4))) ((:maintainers ("Hitoshi Uchida" . "hitoshi.uchida@gmail.com")) (:authors ("Hitoshi Uchida" . "hitoshi.uchida@gmail.com")) (:revdesc . "65c37f12a5c7") (:commit . "65c37f12a5c774a0ae434beee27ff7737006dd2f") (:url . "https://github.com/shishimaru/audacious.el"))) (("audacious-pkg.el" 436 "450f8e945f2c93feefc07cd849b257ed885c1845104800b990e0f49756686583") ("audacious.el" 11019 "214cdcdbd41bba72c25fc53b4c1cb2d75116d39f91edb9394b411db543ee628f")))"#
     ]],
-        ),
-        (
-            "audacious_complete_callable_command_interactive_and_arglist_surface_matches",
-            r##"(mapcar
+    )
+}
+
+fn audacious_complete_callable_command_interactive_and_arglist_surface_matches() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "audacious_complete_callable_command_interactive_and_arglist_surface_matches",
+        r##"(mapcar
          (lambda (symbol)
            (list
             symbol
@@ -89,14 +90,17 @@ fn registry_audacious_batch() {
            audacious-volume
            audacious-volume-down
            audacious-volume-up))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((audacious-kill t t (interactive nil) nil "audacious.el") (audacious-pause t t (interactive nil) nil "audacious.el") (audacious-play t t (interactive nil) nil "audacious.el") (audacious-playlist t t (interactive nil) nil "audacious.el") (audacious-playlist--goto t nil nil (num) "audacious.el") (audacious-playlist-goto t t (interactive nil) nil "audacious.el") (audacious-playlist-next t t (interactive nil) nil "audacious.el") (audacious-playlist-prev t t (interactive nil) nil "audacious.el") (audacious-playlist-show-current-info t t (interactive nil) nil "audacious.el") (audacious-random-toggle t t (interactive nil) nil "audacious.el") (audacious-repeat-toggle t t (interactive nil) nil "audacious.el") (audacious-run t t (interactive nil) nil "audacious.el") (audacious-song-goto t t (interactive nil) nil "audacious.el") (audacious-song-goto-helm t t (interactive nil) nil "audacious.el") (audacious-song-next t t (interactive nil) nil "audacious.el") (audacious-song-prev t t (interactive nil) nil "audacious.el") (audacious-song-seek t t (interactive "MSeek +- sec: ") (time) "audacious.el") (audacious-song-seek-backward t t (interactive nil) nil "audacious.el") (audacious-song-seek-forward t t (interactive nil) nil "audacious.el") (audacious-song-show-current-info t t (interactive nil) nil "audacious.el") (audacious-status t t (interactive nil) nil "audacious.el") (audacious-stop t t (interactive nil) nil "audacious.el") (audacious-string-integer-p t nil nil (string) "audacious.el") (audacious-volume t t (interactive "M[+|-]percent: ") (vol) "audacious.el") (audacious-volume-down t t (interactive nil) nil "audacious.el") (audacious-volume-up t t (interactive nil) nil "audacious.el"))"#
     ]],
-        ),
-        (
-            "audacious_all_function_documentation_contracts_are_exact_and_readable",
-            r##"(mapcar
+    )
+}
+
+fn audacious_all_function_documentation_contracts_are_exact_and_readable() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "audacious_all_function_documentation_contracts_are_exact_and_readable",
+        r##"(mapcar
          (lambda (symbol)
            (list
             symbol
@@ -127,14 +131,17 @@ fn registry_audacious_batch() {
            audacious-playlist-next
            audacious-playlist-prev
            audacious-string-integer-p))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((audacious-run "Launch audacious with headless mode as daemon.") (audacious-kill "Shutdown audacious process.") (audacious-volume "Manually increase / decrease the volume by the specified VOL percent.") (audacious-volume-up "Increase the volume by 10%.") (audacious-volume-down "Decrease the volume by 10%.") (audacious-play "Start to play.") (audacious-pause "Pause the playback.") (audacious-stop "Stop the playback.") (audacious-status "Show the current status of audacious.") (audacious-song-next "Play the next song in the current playlist.") (audacious-song-prev "Play the previous song in the current playlist.") (audacious-song-goto "Select a song with an inputted number.") (audacious-song-goto-helm "Select a song with helm interface.") (audacious-song-seek "Seek the song by TIME in seconds.") (audacious-song-seek-backward "Seek backward by 10 seconds.") (audacious-song-seek-forward "Seek forward by 10 seconds.") (audacious-song-show-current-info "Show information of the current song.") (audacious-random-toggle "Toggle the random playback.") (audacious-repeat-toggle "Toggle the repeat playback.") (audacious-playlist "Show the songs of the current playlist.") (audacious-playlist-show-current-info "Show the name of the current playlist.") (audacious-playlist--goto "Select a playlist by NUM.") (audacious-playlist-goto "Select a playlist with an inputted number.") (audacious-playlist-next "Select a next playlist.") (audacious-playlist-prev "Select a previous playlist.") (audacious-string-integer-p "Test the STRING is number or not."))"#
     ]],
-        ),
-        (
-            "audacious_declared_variables_custom_schema_defaults_and_sources_are_exact",
-            r##"(list
+    )
+}
+
+fn audacious_declared_variables_custom_schema_defaults_and_sources_are_exact() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "audacious_declared_variables_custom_schema_defaults_and_sources_are_exact",
+        r##"(list
          (get
           'audacious
           'custom-group)
@@ -164,14 +171,17 @@ fn registry_audacious_batch() {
             audacious-song-title
             audacious-song-position
             audacious-song-length)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((audacious-command custom-variable)) ((audacious-command t "/fixture/bin/audtool" t t string ((executable-find "audtool")) "audacious.el") (audacious-msg t "" t nil nil nil "audacious.el") (audacious-playlist-position t nil t nil nil nil "audacious.el") (audacious-playlist-length t nil t nil nil nil "audacious.el") (audacious-playlist-name t nil t nil nil nil "audacious.el") (audacious-song-title t nil t nil nil nil "audacious.el") (audacious-song-position t nil t nil nil nil "audacious.el") (audacious-song-length t nil t nil nil nil "audacious.el")))"#
     ]],
-        ),
-        (
-            "audacious_exact_runtime_dependency_pin_is_activated_without_loading_real_helm",
-            r##"(let ((audacious-descriptor
+    )
+}
+
+fn audacious_exact_runtime_dependency_pin_is_activated_without_loading_real_helm() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "audacious_exact_runtime_dependency_pin_is_activated_without_loading_real_helm",
+        r##"(let ((audacious-descriptor
                 (package--get-activatable-pkg
                  'audacious))
                (helm-descriptor
@@ -215,14 +225,17 @@ fn registry_audacious_batch() {
           (fboundp 'helm)
           (fboundp
            'helm-build-sync-source)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((all (audacious "20210917.51") (helm "20260728.709")) ((audacious "20210917.51" t t "audacious-20210917.51") (helm "20260728.709" t t "helm-20260728.709")) t t nil)"#
     ]],
-        ),
-        (
-            "audacious_source_reload_preserves_runtime_state_and_customized_command",
-            r##"(let ((source
+    )
+}
+
+fn audacious_source_reload_preserves_runtime_state_and_customized_command() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "audacious_source_reload_preserves_runtime_state_and_customized_command",
+        r##"(let ((source
                 (getenv
                  "NEOMACS_PACKAGE_SOURCE")))
          (setq audacious-command
@@ -252,20 +265,17 @@ fn registry_audacious_batch() {
           audacious-song-position
           audacious-song-length
           (featurep 'audacious)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("/custom/bin/audtool" "queued rows\n" :playlist-position :playlist-length :playlist-name :song-title :song-position :song-length t)"#
     ]],
-        ),
-    ]);
+    )
 }
 
-#[test]
-fn registry_audacious_autoload_batch() {
-    assert_audacious_autoload_batch(&[
-        (
-            "audacious_generated_autoload_registers_only_prefix_and_feature",
-            r##"(let* ((file
+fn audacious_generated_autoload_registers_only_prefix_and_feature() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "audacious_generated_autoload_registers_only_prefix_and_feature",
+        r##"(let* ((file
                  (locate-library
                   "audacious-autoloads"))
                 (history
@@ -311,10 +321,30 @@ fn registry_audacious_autoload_batch() {
            '(audacious-run
              audacious-command
              audacious-song-goto-helm))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t nil ((provide audacious-autoloads)) ("audacious") ((audacious-run nil nil) (audacious-command nil nil) (audacious-song-goto-helm nil nil)))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn registry_audacious_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        audacious_descriptor_and_archive_sources_pin_exact_melpa_payload(),
+        audacious_complete_callable_command_interactive_and_arglist_surface_matches(),
+        audacious_all_function_documentation_contracts_are_exact_and_readable(),
+        audacious_declared_variables_custom_schema_defaults_and_sources_are_exact(),
+        audacious_exact_runtime_dependency_pin_is_activated_without_loading_real_helm(),
+        audacious_source_reload_preserves_runtime_state_and_customized_command(),
+    ];
+    assert_audacious_batch(&cases);
+}
+
+#[test]
+fn registry_audacious_autoload_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        audacious_generated_autoload_registers_only_prefix_and_feature(),
+    ];
+    assert_audacious_autoload_batch(&cases);
 }

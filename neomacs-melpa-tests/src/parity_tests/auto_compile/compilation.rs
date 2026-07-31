@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_compile_batch;
+use super::{ParityBatchCase, assert_auto_compile_batch};
 
-#[test]
-fn compilation_public_surface_batch() {
-    assert_auto_compile_batch(&[
-        (
-            "auto_compile_start_creates_loadable_bytecode_with_real_runtime_behavior",
-            r##"(let* ((source
+fn auto_compile_start_creates_loadable_bytecode_with_real_runtime_behavior() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_start_creates_loadable_bytecode_with_real_runtime_behavior",
+        r##"(let* ((source
                  (auto-compile-test-write
                   "compile/real-library.el"
                   "(defun auto-compile-real-value (x) (+ x 37))\n(provide 'auto-compile-real-library)\n"))
@@ -33,12 +31,15 @@ fn compilation_public_surface_batch() {
             (featurep
              'auto-compile-real-library)
             (auto-compile-real-value 5))))"##,
-            true,
-            expect!["OK (t t t t t 42)"],
-        ),
-        (
-            "auto_compile_without_start_does_not_create_missing_destination",
-            r##"(let* ((source
+        true,
+        expect!["OK (t t t t t 42)"],
+    )
+}
+
+fn auto_compile_without_start_does_not_create_missing_destination() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_without_start_does_not_create_missing_destination",
+        r##"(let* ((source
                  (auto-compile-test-write
                   "compile/not-enabled.el"
                   "(provide 'auto-compile-not-enabled)\n"))
@@ -49,12 +50,15 @@ fn compilation_public_surface_batch() {
           (auto-compile-byte-compile source)
           (file-exists-p dest)
           (get-file-buffer source)))"##,
-            true,
-            expect!["OK (nil nil nil nil)"],
-        ),
-        (
-            "auto_compile_existing_destination_is_rebuilt_to_run_new_source_behavior",
-            r##"(let* ((source
+        true,
+        expect!["OK (nil nil nil nil)"],
+    )
+}
+
+fn auto_compile_existing_destination_is_rebuilt_to_run_new_source_behavior() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_existing_destination_is_rebuilt_to_run_new_source_behavior",
+        r##"(let* ((source
                  (auto-compile-test-write
                   "compile/update.el"
                   "(defun auto-compile-update-value () 'old)\n(provide 'auto-compile-update)\n"))
@@ -79,12 +83,15 @@ fn compilation_public_surface_batch() {
             result
             (file-newer-than-file-p dest source)
             (auto-compile-update-value))))"##,
-            true,
-            expect!["OK (t t new)"],
-        ),
-        (
-            "auto_compile_after_save_rebuilds_enabled_visited_library_end_to_end",
-            r##"(let* ((source
+        true,
+        expect!["OK (t t new)"],
+    )
+}
+
+fn auto_compile_after_save_rebuilds_enabled_visited_library_end_to_end() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_after_save_rebuilds_enabled_visited_library_end_to_end",
+        r##"(let* ((source
                  (auto-compile-test-write
                   "compile/save-hook.el"
                   "(defun auto-compile-save-value () 1)\n(provide 'auto-compile-save-hook)\n"))
@@ -121,12 +128,15 @@ fn compilation_public_surface_batch() {
                  t)
                 (auto-compile-save-value)))
            (kill-buffer buffer)))"##,
-            true,
-            expect!["OK (t nil t 42)"],
-        ),
-        (
-            "auto_compile_no_byte_compile_cookie_returns_marker_without_destination",
-            r##"(let* ((source
+        true,
+        expect!["OK (t nil t 42)"],
+    )
+}
+
+fn auto_compile_no_byte_compile_cookie_returns_marker_without_destination() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_no_byte_compile_cookie_returns_marker_without_destination",
+        r##"(let* ((source
                  (auto-compile-test-write
                   "compile/no-byte.el"
                   ";;; -*- no-byte-compile: t -*-\n(provide 'auto-compile-no-byte)\n"))
@@ -136,12 +146,15 @@ fn compilation_public_surface_batch() {
           (auto-compile-byte-compile source t)
           (file-exists-p dest)
           (featurep 'auto-compile-no-byte)))"##,
-            true,
-            expect!["OK (no-byte-compile nil nil)"],
-        ),
-        (
-            "auto_compile_inhibit_hook_short_circuits_before_any_file_is_created",
-            r##"(let* ((source
+        true,
+        expect!["OK (no-byte-compile nil nil)"],
+    )
+}
+
+fn auto_compile_inhibit_hook_short_circuits_before_any_file_is_created() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_inhibit_hook_short_circuits_before_any_file_is_created",
+        r##"(let* ((source
                  (auto-compile-test-write
                   "compile/inhibited.el"
                   "(provide 'auto-compile-inhibited)\n"))
@@ -163,12 +176,15 @@ fn compilation_public_surface_batch() {
           (auto-compile-byte-compile source t)
           (nreverse events)
           (file-exists-p dest)))"##,
-            true,
-            expect!["OK (nil (first inhibit) nil)"],
-        ),
-        (
-            "auto_compile_unbalanced_visited_source_marks_retry_and_modified_state",
-            r##"(let* ((source
+        true,
+        expect!["OK (nil (first inhibit) nil)"],
+    )
+}
+
+fn auto_compile_unbalanced_visited_source_marks_retry_and_modified_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_unbalanced_visited_source_marks_retry_and_modified_state",
+        r##"(let* ((source
                  (auto-compile-test-write
                   "compile/unbalanced.el"
                   "(defun auto-compile-unbalanced ()\n  (list 1 2 3)\n"))
@@ -190,12 +206,15 @@ fn compilation_public_surface_batch() {
                 (current-message)))
            (set-buffer-modified-p nil)
            (kill-buffer buffer)))"##,
-            true,
-            expect!["OK (nil nil t t nil)"],
-        ),
-        (
-            "auto_compile_byte_compiler_nil_result_preserves_stale_destination_without_retry_state",
-            r##"(let* ((source
+        true,
+        expect!["OK (nil nil t t nil)"],
+    )
+}
+
+fn auto_compile_byte_compiler_nil_result_preserves_stale_destination_without_retry_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_byte_compiler_nil_result_preserves_stale_destination_without_retry_state",
+        r##"(let* ((source
                  (auto-compile-test-write
                   "compile/failure.el"
                   "(defun auto-compile-failure () 1)\n(provide 'auto-compile-failure)\n"))
@@ -220,12 +239,15 @@ fn compilation_public_surface_batch() {
                   (buffer-modified-p)
                   (current-message)))
              (kill-buffer buffer))))"##,
-            true,
-            expect!["OK (nil t nil nil nil)"],
-        ),
-        (
-            "auto_compile_delete_destination_clears_retry_marker_in_visiting_source_buffer",
-            r##"(let* ((source
+        true,
+        expect!["OK (nil t nil nil nil)"],
+    )
+}
+
+fn auto_compile_delete_destination_clears_retry_marker_in_visiting_source_buffer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_delete_destination_clears_retry_marker_in_visiting_source_buffer",
+        r##"(let* ((source
                  (auto-compile-test-write
                   "compile/delete.el"
                   "(provide 'auto-compile-delete)\n"))
@@ -246,12 +268,15 @@ fn compilation_public_surface_batch() {
                 auto-compile-pretend-byte-compiled
                 (current-message)))
            (kill-buffer buffer)))"##,
-            true,
-            expect!["OK (nil nil nil nil)"],
-        ),
-        (
-            "auto_compile_delete_failure_is_contained_and_dings_once",
-            r##"(let* ((directory
+        true,
+        expect!["OK (nil nil nil nil)"],
+    )
+}
+
+fn auto_compile_delete_failure_is_contained_and_dings_once() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_delete_failure_is_contained_and_dings_once",
+        r##"(let* ((directory
                  (auto-compile-test-path
                   "compile/not-a-file.elc"))
                 (dings 0)
@@ -265,14 +290,17 @@ fn compilation_public_surface_batch() {
             (file-directory-p directory)
             dings
             (current-message))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("Deleting [ORACLE-SANDBOX]/auto-compile-fixture/compile/not-a-file.elc...failed" t 1 nil)"#
     ]],
-        ),
-        (
-            "auto_compile_warning_advice_counts_real_byte_compiler_diagnostics_per_buffer",
-            r##"(let* ((source
+    )
+}
+
+fn auto_compile_warning_advice_counts_real_byte_compiler_diagnostics_per_buffer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_warning_advice_counts_real_byte_compiler_diagnostics_per_buffer",
+        r##"(let* ((source
                  (auto-compile-test-write
                   "compile/warning.el"
                   "(defun auto-compile-warning () (auto-compile-undefined-function 1))\n(provide 'auto-compile-warning)\n"))
@@ -291,12 +319,15 @@ fn compilation_public_surface_batch() {
                  (auto-compile-test-dest
                   source))))
            (kill-buffer buffer)))"##,
-            true,
-            expect!["OK (t t 2 t)"],
-        ),
-        (
-            "auto_compile_single_file_toggle_creates_then_removes_loadable_destination",
-            r##"(let* ((source
+        true,
+        expect!["OK (t t 2 t)"],
+    )
+}
+
+fn auto_compile_single_file_toggle_creates_then_removes_loadable_destination() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_single_file_toggle_creates_then_removes_loadable_destination",
+        r##"(let* ((source
                  (auto-compile-test-write
                   "compile/toggle.el"
                   "(defun auto-compile-toggle-value () 'ready)\n(provide 'auto-compile-toggle-library)\n"))
@@ -314,12 +345,15 @@ fn compilation_public_surface_batch() {
             after-start
             (file-exists-p dest)
             (current-message))))"##,
-            true,
-            expect!["OK ((t t) nil nil)"],
-        ),
-        (
-            "auto_compile_native_option_dispatches_only_after_successful_byte_compile",
-            r##"(let* ((source
+        true,
+        expect!["OK ((t t) nil nil)"],
+    )
+}
+
+fn auto_compile_native_option_dispatches_only_after_successful_byte_compile() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_native_option_dispatches_only_after_successful_byte_compile",
+        r##"(let* ((source
                  (auto-compile-test-write
                   "compile/native.el"
                   "(provide 'auto-compile-native)\n"))
@@ -359,8 +393,27 @@ fn compilation_public_surface_batch() {
              (setq features
                    (delq 'native-compile
                          features)))))"##,
-            true,
-            expect![[r#"OK (t ((byte "native.el") (native "native.el")))"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (t ((byte "native.el") (native "native.el")))"#]],
+    )
+}
+
+#[test]
+fn compilation_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_compile_start_creates_loadable_bytecode_with_real_runtime_behavior(),
+        auto_compile_without_start_does_not_create_missing_destination(),
+        auto_compile_existing_destination_is_rebuilt_to_run_new_source_behavior(),
+        auto_compile_after_save_rebuilds_enabled_visited_library_end_to_end(),
+        auto_compile_no_byte_compile_cookie_returns_marker_without_destination(),
+        auto_compile_inhibit_hook_short_circuits_before_any_file_is_created(),
+        auto_compile_unbalanced_visited_source_marks_retry_and_modified_state(),
+        auto_compile_byte_compiler_nil_result_preserves_stale_destination_without_retry_state(),
+        auto_compile_delete_destination_clears_retry_marker_in_visiting_source_buffer(),
+        auto_compile_delete_failure_is_contained_and_dings_once(),
+        auto_compile_warning_advice_counts_real_byte_compiler_diagnostics_per_buffer(),
+        auto_compile_single_file_toggle_creates_then_removes_loadable_destination(),
+        auto_compile_native_option_dispatches_only_after_successful_byte_compile(),
+    ];
+    assert_auto_compile_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_highlight_symbol_batch;
+use super::{ParityBatchCase, assert_auto_highlight_symbol_batch};
 
-#[test]
-fn navigation_public_surface_batch() {
-    assert_auto_highlight_symbol_batch(&[
-        (
-            "auto_highlight_symbol_forward_and_backward_navigation_wrap_real_matches",
-            r##"(save-window-excursion
+fn auto_highlight_symbol_forward_and_backward_navigation_wrap_real_matches() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_highlight_symbol_forward_and_backward_navigation_wrap_real_matches",
+        r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -41,12 +39,15 @@ fn navigation_public_surface_batch() {
                                     (ahs-current-overlay-window)))
                                   positions))
                                (nreverse positions))))"##,
-            true,
-            expect!["OK ((12 11) (22 21) (2 1) (12 11) (2 1) (22 21) (12 11) (2 1))"],
-        ),
-        (
-            "auto_highlight_symbol_definition_navigation_skips_ordinary_occurrences_and_wraps",
-            r##"(save-window-excursion
+        true,
+        expect!["OK ((12 11) (22 21) (2 1) (12 11) (2 1) (22 21) (12 11) (2 1))"],
+    )
+}
+
+fn auto_highlight_symbol_definition_navigation_skips_ordinary_occurrences_and_wraps() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_highlight_symbol_definition_navigation_skips_ordinary_occurrences_and_wraps",
+        r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -96,12 +97,15 @@ fn navigation_public_surface_batch() {
                                     (point)
                                     positions))
                                  (nreverse positions)))))"##,
-            true,
-            expect!["OK (20 20 20 14 14 14)"],
-        ),
-        (
-            "auto_highlight_symbol_back_to_start_restores_original_match_after_navigation",
-            r##"(save-window-excursion
+        true,
+        expect!["OK (20 20 20 14 14 14)"],
+    )
+}
+
+fn auto_highlight_symbol_back_to_start_restores_original_match_after_navigation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_highlight_symbol_back_to_start_restores_original_match_after_navigation",
+        r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -131,12 +135,15 @@ fn navigation_public_surface_batch() {
                                   (point)
                                   (overlay-start
                                    (ahs-current-overlay-window)))))))"##,
-            true,
-            expect!["OK ((7 8) 14 8 7)"],
-        ),
-        (
-            "auto_highlight_symbol_navigation_predicates_classify_position_definition_display_and_hidden",
-            r##"(save-window-excursion
+        true,
+        expect!["OK ((7 8) 14 8 7)"],
+    )
+}
+
+fn auto_highlight_symbol_navigation_predicates_classify_position_definition_display_and_hidden() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_highlight_symbol_navigation_predicates_classify_position_definition_display_and_hidden",
+        r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -203,14 +210,17 @@ fn navigation_public_surface_batch() {
                                  before
                                  current
                                  after)))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((1 nil t nil nil nil t nil) (7 nil nil nil nil t t nil) (13 t nil t t nil t t))"
     ],
-        ),
-        (
-            "auto_highlight_symbol_skip_invisible_policy_bypasses_hidden_match_during_navigation",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_highlight_symbol_skip_invisible_policy_bypasses_hidden_match_during_navigation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_highlight_symbol_skip_invisible_policy_bypasses_hidden_match_during_navigation",
+        r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -266,12 +276,15 @@ fn navigation_public_surface_batch() {
                                 (overlay-get
                                  fold
                                  'invisible)))))"##,
-            true,
-            expect!["OK (14 13 nil t)"],
-        ),
-        (
-            "auto_highlight_symbol_immediate_invisible_policy_opens_selected_fold_then_recloses_old_fold",
-            r##"(save-window-excursion
+        true,
+        expect!["OK (14 13 nil t)"],
+    )
+}
+
+fn auto_highlight_symbol_immediate_invisible_policy_opens_selected_fold_then_recloses_old_fold() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_highlight_symbol_immediate_invisible_policy_opens_selected_fold_then_recloses_old_fold",
+        r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -344,12 +357,15 @@ fn navigation_public_surface_batch() {
                                    second-fold
                                    'isearch-invisible)
                                   ahs-opened-overlay-list)))))"##,
-            true,
-            expect!["OK ((8 nil fixture-fold 1) 14 fixture-fold nil nil)"],
-        ),
-        (
-            "auto_highlight_symbol_temporary_and_open_invisible_policies_differ_on_cleanup",
-            r##"(save-window-excursion
+        true,
+        expect!["OK ((8 nil fixture-fold 1) 14 fixture-fold nil nil)"],
+    )
+}
+
+fn auto_highlight_symbol_temporary_and_open_invisible_policies_differ_on_cleanup() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_highlight_symbol_temporary_and_open_invisible_policies_differ_on_cleanup",
+        r##"(save-window-excursion
                            (mapcar
                             (lambda (policy)
                               (with-temp-buffer
@@ -433,14 +449,17 @@ fn navigation_public_surface_batch() {
                                       'invisible)
                                      ahs-opened-overlay-list)))))
                             '(temporary open)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((temporary (8 nil 1) ((:temporary nil) (:temporary t)) fixture nil) (open (8 nil 1) ((:temporary nil) :permanent-open) nil nil))"#
     ]],
-        ),
-        (
-            "auto_highlight_symbol_selection_preserves_intra_symbol_cursor_offset",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_highlight_symbol_selection_preserves_intra_symbol_cursor_offset() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_highlight_symbol_selection_preserves_intra_symbol_cursor_offset",
+        r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -471,8 +490,22 @@ fn navigation_public_surface_batch() {
                                 (current-column)
                                 (overlay-start current)
                                 (overlay-end current)))))"##,
-            true,
-            expect!["OK (10 9 7 12)"],
-        ),
-    ]);
+        true,
+        expect!["OK (10 9 7 12)"],
+    )
+}
+
+#[test]
+fn navigation_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_highlight_symbol_forward_and_backward_navigation_wrap_real_matches(),
+        auto_highlight_symbol_definition_navigation_skips_ordinary_occurrences_and_wraps(),
+        auto_highlight_symbol_back_to_start_restores_original_match_after_navigation(),
+        auto_highlight_symbol_navigation_predicates_classify_position_definition_display_and_hidden(),
+        auto_highlight_symbol_skip_invisible_policy_bypasses_hidden_match_during_navigation(),
+        auto_highlight_symbol_immediate_invisible_policy_opens_selected_fold_then_recloses_old_fold(),
+        auto_highlight_symbol_temporary_and_open_invisible_policies_differ_on_cleanup(),
+        auto_highlight_symbol_selection_preserves_intra_symbol_cursor_offset(),
+    ];
+    assert_auto_highlight_symbol_batch(&cases);
 }

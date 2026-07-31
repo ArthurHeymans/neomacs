@@ -6,7 +6,10 @@ use crate::{
 };
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod registry;
 mod workflow;
@@ -60,9 +63,9 @@ pub(crate) fn assert_alert_termux_autoload_parity(elisp_form: &str, expected: Ex
 
 
 /// Multi-probe batch for `assert_alert_termux_autoload_parity` cases (2a).
-pub(crate) fn assert_alert_termux_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_alert_termux_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         alert_termux_oracle("alert-termux-autoloads.el"),
         &name,
         "alert_termux_autoload_parity",
@@ -71,9 +74,9 @@ pub(crate) fn assert_alert_termux_autoload_batch(cases: &[(&str, &str, bool, Exp
 }
 
 /// Multi-probe batch for `assert_alert_termux_parity` cases (2a).
-pub(crate) fn assert_alert_termux_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_alert_termux_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         alert_termux_oracle("alert-termux.el"),
         &name,
         "alert_termux_parity",

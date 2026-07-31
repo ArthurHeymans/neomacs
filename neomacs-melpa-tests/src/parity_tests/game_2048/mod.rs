@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{CachedMelpaOracle, GAME_2048_MELPA_PIN};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod lifecycle;
 mod moves;
@@ -34,9 +37,9 @@ pub(crate) fn assert_game_2048_parity(form: &str, expected: Expect) {
 }
 
 /// Multi-probe batch for `assert_game_2048_parity` cases (2a).
-pub(crate) fn assert_game_2048_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_game_2048_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         game_2048_oracle(),
         &name,
         "game_2048_parity",

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_evil_batch;
+use super::{ParityBatchCase, assert_evil_batch};
 
-#[test]
-fn core_public_surface_batch() {
-    assert_evil_batch(&[
-        (
-            "evil_public_defaults_match_the_pinned_release",
-            r##"(list
+fn evil_public_defaults_match_the_pinned_release() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "evil_public_defaults_match_the_pinned_release",
+        r##"(list
                evil-auto-indent
                evil-shift-width
                evil-shift-round
@@ -41,14 +39,17 @@ fn core_public_surface_batch() {
                evil-ex-search-case
                evil-ex-substitute-global
                evil-mode)"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t 4 t t nil t nil t t nil nil t before "^ \11\15\n" nil t t t nil nil 0.01 always t t nil nil t "C-z" normal t smart nil nil)"#
     ]],
-        ),
-        (
-            "evil_builtin_states_publish_complete_mode_keymap_and_tag_properties",
-            r##"(mapcar
+    )
+}
+
+fn evil_builtin_states_publish_complete_mode_keymap_and_tag_properties() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "evil_builtin_states_publish_complete_mode_keymap_and_tag_properties",
+        r##"(mapcar
                (lambda (state)
                  (list
                   state
@@ -64,14 +65,17 @@ fn core_public_surface_batch() {
                     (and tag
                          (substring-no-properties tag)))))
                '(normal insert visual replace operator motion emacs))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((normal evil-normal-state-minor-mode evil-normal-state-local-minor-mode t nil " <N> ") (insert evil-insert-state-minor-mode evil-insert-state-local-minor-mode t nil " <I> ") (visual evil-visual-state-minor-mode evil-visual-state-local-minor-mode t nil nil) (replace evil-replace-state-minor-mode evil-replace-state-local-minor-mode t nil " <R> ") (operator evil-operator-state-minor-mode evil-operator-state-local-minor-mode t nil " <O> ") (motion evil-motion-state-minor-mode evil-motion-state-local-minor-mode t nil " <M> ") (emacs evil-emacs-state-minor-mode evil-emacs-state-local-minor-mode t nil " <E> "))"#
     ]],
-        ),
-        (
-            "evil_local_mode_enable_and_disable_manage_state_maps_and_buffer_local_state",
-            r##"(with-temp-buffer
+    )
+}
+
+fn evil_local_mode_enable_and_disable_manage_state_maps_and_buffer_local_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "evil_local_mode_enable_and_disable_manage_state_maps_and_buffer_local_state",
+        r##"(with-temp-buffer
                (let ((before
                       (list evil-local-mode evil-state
                             (local-variable-p 'evil-mode-map-alist))))
@@ -92,12 +96,15 @@ fn core_public_surface_batch() {
                     (list evil-local-mode evil-state
                           (evil-normal-state-p)
                           (evil-insert-state-p))))))"##,
-            true,
-            expect!["OK ((nil nil nil) (t normal t t t (evil-mode-map-alist)) (nil nil nil nil))"],
-        ),
-        (
-            "evil_state_transitions_track_previous_state_and_mode_line_tag",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK ((nil nil nil) (t normal t t t (evil-mode-map-alist)) (nil nil nil nil))"],
+    )
+}
+
+fn evil_state_transitions_track_previous_state_and_mode_line_tag() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "evil_state_transitions_track_previous_state_and_mode_line_tag",
+        r##"(with-temp-buffer
                (evil-local-mode 1)
                (let (states)
                  (dolist (state '(normal visual emacs replace normal))
@@ -110,14 +117,17 @@ fn core_public_surface_batch() {
                  (evil-change-to-previous-state)
                  (push (list evil-state evil-previous-state) states)
                  (nreverse states)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((normal nil " <N> ") (visual normal "nil") (emacs visual " <E> ") (replace emacs " <R> ") (normal replace " <N> ") (replace emacs))"#
     ]],
-        ),
-        (
-            "evil_initial_state_resolution_honors_mode_inheritance_and_buffer_regexps",
-            r##"(let ((evil-default-state 'normal)
+    )
+}
+
+fn evil_initial_state_resolution_honors_mode_inheritance_and_buffer_regexps() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "evil_initial_state_resolution_honors_mode_inheritance_and_buffer_regexps",
+        r##"(let ((evil-default-state 'normal)
                     (evil-emacs-state-modes '(special-mode))
                     (evil-insert-state-modes '(text-mode))
                     (evil-motion-state-modes '(help-mode))
@@ -135,12 +145,15 @@ fn core_public_surface_batch() {
                  "*neo-motion*" 'normal)
                 (evil-initial-state-for-buffer-name
                  "*ordinary*" 'insert)))"##,
-            true,
-            expect!["OK (emacs insert motion nil emacs motion insert)"],
-        ),
-        (
-            "evil_set_initial_state_updates_existing_modes_and_new_mode_entries",
-            r##"(let ((evil-emacs-state-modes '(alpha-mode shared-mode))
+        true,
+        expect!["OK (emacs insert motion nil emacs motion insert)"],
+    )
+}
+
+fn evil_set_initial_state_updates_existing_modes_and_new_mode_entries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "evil_set_initial_state_updates_existing_modes_and_new_mode_entries",
+        r##"(let ((evil-emacs-state-modes '(alpha-mode shared-mode))
                     (evil-insert-state-modes '(beta-mode))
                     (evil-motion-state-modes '(gamma-mode))
                     (evil-normal-state-modes nil))
@@ -155,14 +168,17 @@ fn core_public_surface_batch() {
                 (evil-initial-state 'shared-mode)
                 (evil-initial-state 'new-mode)
                 (evil-initial-state 'alpha-mode)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (nil (shared-mode beta-mode) (new-mode gamma-mode) (alpha-mode) insert motion normal)"
     ],
-        ),
-        (
-            "evil_define_state_creates_commands_predicates_maps_and_properties",
-            r##"(progn
+    )
+}
+
+fn evil_define_state_creates_commands_predicates_maps_and_properties() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "evil_define_state_creates_commands_predicates_maps_and_properties",
+        r##"(progn
                (evil-define-state neomacs-parity
                  "Neomacs parity state."
                  :tag " <N> "
@@ -184,10 +200,23 @@ fn core_public_surface_batch() {
                    evil-state
                    (evil-neomacs-parity-state-p)
                    evil-motion-state-minor-mode))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (t t t evil-neomacs-parity-state-tag evil-neomacs-parity-state-message evil-neomacs-parity-state-cursor (motion) (neomacs-parity t t))"
     ],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn core_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        evil_public_defaults_match_the_pinned_release(),
+        evil_builtin_states_publish_complete_mode_keymap_and_tag_properties(),
+        evil_local_mode_enable_and_disable_manage_state_maps_and_buffer_local_state(),
+        evil_state_transitions_track_previous_state_and_mode_line_tag(),
+        evil_initial_state_resolution_honors_mode_inheritance_and_buffer_regexps(),
+        evil_set_initial_state_updates_existing_modes_and_new_mode_entries(),
+        evil_define_state_creates_commands_predicates_maps_and_properties(),
+    ];
+    assert_evil_batch(&cases);
 }

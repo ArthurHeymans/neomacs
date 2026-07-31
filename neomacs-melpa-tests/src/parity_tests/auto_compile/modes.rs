@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_compile_batch;
+use super::{ParityBatchCase, assert_auto_compile_batch};
 
-#[test]
-fn modes_public_surface_batch() {
-    assert_auto_compile_batch(&[
-        (
-            "auto_compile_local_mode_adds_and_removes_only_its_buffer_local_save_hook",
-            r##"(with-temp-buffer
+fn auto_compile_local_mode_adds_and_removes_only_its_buffer_local_save_hook() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_local_mode_adds_and_removes_only_its_buffer_local_save_hook",
+        r##"(with-temp-buffer
          (emacs-lisp-mode)
          (let (baseline after-enable after-disable)
            (setq baseline
@@ -39,12 +37,15 @@ fn modes_public_surface_batch() {
                   (memq #'auto-compile-byte-compile
                         after-save-hook)))
            (list baseline after-enable after-disable)))"##,
-            true,
-            expect!["OK ((nil nil nil) (t t t 1) (nil nil nil))"],
-        ),
-        (
-            "auto_compile_local_mode_rejects_non_elisp_buffers_and_rolls_back_state",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK ((nil nil nil) (t t t 1) (nil nil nil))"],
+    )
+}
+
+fn auto_compile_local_mode_rejects_non_elisp_buffers_and_rolls_back_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_local_mode_rejects_non_elisp_buffers_and_rolls_back_state",
+        r##"(with-temp-buffer
          (fundamental-mode)
          (list
           major-mode
@@ -56,14 +57,17 @@ fn modes_public_surface_batch() {
            (memq #'auto-compile-byte-compile
                  after-save-hook)
            t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (fundamental-mode (:signal user-error ("‘auto-compile-mode’ only makes sense in ‘emacs-lisp-mode’")) nil nil)"#
     ]],
-        ),
-        (
-            "auto_compile_global_save_mode_updates_existing_eligible_buffers_and_cleans_up",
-            r##"(let ((elisp-buffer
+    )
+}
+
+fn auto_compile_global_save_mode_updates_existing_eligible_buffers_and_cleans_up() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_global_save_mode_updates_existing_eligible_buffers_and_cleans_up",
+        r##"(let ((elisp-buffer
                 (generate-new-buffer
                  " *auto-compile-elisp*"))
                (plain-buffer
@@ -102,12 +106,15 @@ fn modes_public_surface_batch() {
            (auto-compile-on-save-mode -1)
            (kill-buffer elisp-buffer)
            (kill-buffer plain-buffer)))"##,
-            true,
-            expect!["OK (((emacs-lisp-mode t t) (fundamental-mode nil nil)) nil (nil nil))"],
-        ),
-        (
-            "auto_compile_global_turn_on_requires_exact_emacs_lisp_mode_not_merely_derived_mode",
-            r##"(progn
+        true,
+        expect!["OK (((emacs-lisp-mode t t) (fundamental-mode nil nil)) nil (nil nil))"],
+    )
+}
+
+fn auto_compile_global_turn_on_requires_exact_emacs_lisp_mode_not_merely_derived_mode() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_global_turn_on_requires_exact_emacs_lisp_mode_not_merely_derived_mode",
+        r##"(progn
          (define-derived-mode
            auto-compile-test-derived-mode
            emacs-lisp-mode
@@ -127,14 +134,17 @@ fn modes_public_surface_batch() {
              major-mode
              (derived-mode-p 'emacs-lisp-mode)
              auto-compile-mode))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((emacs-lisp-mode emacs-lisp-mode t) (auto-compile-test-derived-mode emacs-lisp-mode nil))"
     ],
-        ),
-        (
-            "auto_compile_failed_modified_toggle_changes_option_and_reports_both_transitions",
-            r##"(let ((auto-compile-mark-failed-modified nil))
+    )
+}
+
+fn auto_compile_failed_modified_toggle_changes_option_and_reports_both_transitions() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_failed_modified_toggle_changes_option_and_reports_both_transitions",
+        r##"(let ((auto-compile-mark-failed-modified nil))
          (auto-compile-toggle-mark-failed-modified)
          (let ((enabled
                 (list
@@ -146,12 +156,15 @@ fn modes_public_surface_batch() {
             (list
              auto-compile-mark-failed-modified
              (current-message)))))"##,
-            true,
-            expect!["OK ((t nil) (nil nil))"],
-        ),
-        (
-            "auto_compile_custom_mode_line_setter_repositions_and_removes_control",
-            r##"(let ((original-format
+        true,
+        expect!["OK ((t nil) (nil nil))"],
+    )
+}
+
+fn auto_compile_custom_mode_line_setter_repositions_and_removes_control() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_custom_mode_line_setter_repositions_and_removes_control",
+        r##"(let ((original-format
                 (default-value 'mode-line-format))
                (original-option
                 (default-value
@@ -182,14 +195,17 @@ fn modes_public_surface_batch() {
            (set-default
             'auto-compile-use-mode-line
             original-option)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((mode-line-front-space mode-line-modified mode-line-auto-compile mode-line-buffer-identification) (mode-line-front-space mode-line-modified mode-line-buffer-identification) nil)"
     ],
-        ),
-        (
-            "auto_compile_on_load_mode_has_stable_global_toggle_lifecycle",
-            r##"(progn
+    )
+}
+
+fn auto_compile_on_load_mode_has_stable_global_toggle_lifecycle() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_on_load_mode_has_stable_global_toggle_lifecycle",
+        r##"(progn
          (auto-compile-on-load-mode -1)
          (let ((disabled
                 (list
@@ -216,12 +232,15 @@ fn modes_public_surface_batch() {
              (auto-compile-on-load-mode -1)
              (list disabled enabled
                    auto-compile-on-load-mode))))"##,
-            true,
-            expect![[r#"OK ((nil nil t t) (t t "") nil)"#]],
-        ),
-        (
-            "auto_compile_ding_obeys_option_without_leaking_terminal_side_effects",
-            r##"(let ((count 0))
+        true,
+        expect![[r#"OK ((nil nil t t) (t t "") nil)"#]],
+    )
+}
+
+fn auto_compile_ding_obeys_option_without_leaking_terminal_side_effects() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_ding_obeys_option_without_leaking_terminal_side_effects",
+        r##"(let ((count 0))
          (cl-letf (((symbol-function 'ding)
                     (lambda (&rest _)
                       (setq count (1+ count))
@@ -232,12 +251,15 @@ fn modes_public_surface_batch() {
              (auto-compile-ding)
              (auto-compile-ding))
            count))"##,
-            true,
-            expect!["OK 2"],
-        ),
-        (
-            "auto_compile_display_log_signals_when_absent_and_selects_existing_compile_log",
-            r##"(let ((existing
+        true,
+        expect!["OK 2"],
+    )
+}
+
+fn auto_compile_display_log_signals_when_absent_and_selects_existing_compile_log() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_compile_display_log_signals_when_absent_and_selects_existing_compile_log",
+        r##"(let ((existing
                 (get-buffer
                  byte-compile-log-buffer)))
          (when existing
@@ -259,10 +281,25 @@ fn modes_public_surface_batch() {
                 (with-current-buffer buffer
                   (buffer-string)))
              (kill-buffer buffer))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:signal user-error ("Buffer *Compile-Log* doesn’t exist")) "*Compile-Log*" "*Compile-Log*" "warning one\nwarning two\n")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn modes_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_compile_local_mode_adds_and_removes_only_its_buffer_local_save_hook(),
+        auto_compile_local_mode_rejects_non_elisp_buffers_and_rolls_back_state(),
+        auto_compile_global_save_mode_updates_existing_eligible_buffers_and_cleans_up(),
+        auto_compile_global_turn_on_requires_exact_emacs_lisp_mode_not_merely_derived_mode(),
+        auto_compile_failed_modified_toggle_changes_option_and_reports_both_transitions(),
+        auto_compile_custom_mode_line_setter_repositions_and_removes_control(),
+        auto_compile_on_load_mode_has_stable_global_toggle_lifecycle(),
+        auto_compile_ding_obeys_option_without_leaking_terminal_side_effects(),
+        auto_compile_display_log_signals_when_absent_and_selects_existing_compile_log(),
+    ];
+    assert_auto_compile_batch(&cases);
 }

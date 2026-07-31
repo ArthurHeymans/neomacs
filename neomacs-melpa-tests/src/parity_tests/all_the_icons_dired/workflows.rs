@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_all_the_icons_dired_batch;
+use super::{ParityBatchCase, assert_all_the_icons_dired_batch};
 
 /// Turning the mode on in a real Dired buffer.  Every file gets a three
 /// character `" X "` display property on the character before its name, with
@@ -8,12 +8,10 @@ use super::assert_all_the_icons_dired_batch;
 /// four space placeholder instead.  The buffer text itself is untouched --
 /// icons are display properties, not inserted characters.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_all_the_icons_dired_batch(&[
-        (
-            "turning_the_mode_on_puts_a_display_icon_before_every_filename",
-            r##"(atid-test-in-dired
+fn turning_the_mode_on_puts_a_display_icon_before_every_filename() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "turning_the_mode_on_puts_a_display_icon_before_every_filename",
+        r##"(atid-test-in-dired
  (let ((before-lines (atid-test-lines))
        (before-count (atid-test-display-count))
        (before-text (atid-test-text)))
@@ -26,14 +24,17 @@ fn workflows_public_surface_batch() {
          :after-count (atid-test-display-count)
          :after-lines (atid-test-lines)
          :text-unchanged (string= before-text (atid-test-text)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:mode-on t :lighter " all-the-icons-dired-mode" :before-count 1 :before-lines (("." none) (".." none) (".hidden-config" none) ("README.md" none) ("notes.org" none) ("script.py" none) ("subdir" none)) :after-count 7 :after-lines (("." (string 4 "    " plain)) (".." (string 4 "    " plain)) (".hidden-config" (string 3 "  " icon-props)) ("README.md" (string 3 "  " icon-props)) ("notes.org" (string 3 "  " icon-props)) ("script.py" (string 3 "  " icon-props)) ("subdir" (string 3 "  " icon-props))) :text-unchanged t)"#
     ]],
-        ),
-        (
-            "reverting_the_listing_reapplies_every_icon",
-            r##"(atid-test-in-dired
+    )
+}
+
+fn reverting_the_listing_reapplies_every_icon() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "reverting_the_listing_reapplies_every_icon",
+        r##"(atid-test-in-dired
  (all-the-icons-dired-mode 1)
  (font-lock-ensure)
  (let ((before (atid-test-lines)) (before-text (atid-test-text)))
@@ -43,14 +44,17 @@ fn workflows_public_surface_batch() {
          :count (atid-test-display-count)
          :same-as-before (equal before (atid-test-lines))
          :text-unchanged (string= before-text (atid-test-text)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:after-revert (("." (string 4 "    " plain)) (".." (string 4 "    " plain)) (".hidden-config" (string 3 "  " icon-props)) ("README.md" (string 3 "  " icon-props)) ("notes.org" (string 3 "  " icon-props)) ("script.py" (string 3 "  " icon-props)) ("subdir" (string 3 "  " icon-props))) :count 7 :same-as-before t :text-unchanged t)"#
     ]],
-        ),
-        (
-            "inserting_a_subdirectory_gets_icons_on_its_lines_and_its_dot_entries",
-            r##"(atid-test-in-dired
+    )
+}
+
+fn inserting_a_subdirectory_gets_icons_on_its_lines_and_its_dot_entries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "inserting_a_subdirectory_gets_icons_on_its_lines_and_its_dot_entries",
+        r##"(atid-test-in-dired
  (all-the-icons-dired-mode 1)
  (font-lock-ensure)
  (let ((before-count (length (atid-test-lines))))
@@ -61,14 +65,17 @@ fn workflows_public_surface_batch() {
    (list :before-count before-count
          :after (atid-test-lines)
          :display-count (atid-test-display-count))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:before-count 7 :after (("." (string 4 "    " plain)) (".." (string 4 "    " plain)) (".hidden-config" (string 3 "  " icon-props)) ("README.md" (string 3 "  " icon-props)) ("notes.org" (string 3 "  " icon-props)) ("script.py" (string 3 "  " icon-props)) ("subdir" (string 3 "  " icon-props)) ("subdir/." (string 3 "  " icon-props)) ("subdir/.." (string 3 "  " icon-props)) ("subdir/nested.el" (string 3 "  " icon-props))) :display-count 10)"#
     ]],
-        ),
-        (
-            "turning_the_mode_off_removes_every_display_property_including_dired_s_own",
-            r##"(atid-test-in-dired
+    )
+}
+
+fn turning_the_mode_off_removes_every_display_property_including_dired_s_own() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "turning_the_mode_off_removes_every_display_property_including_dired_s_own",
+        r##"(atid-test-in-dired
  (let ((pristine-text (atid-test-text))
        (pristine-count (atid-test-display-count)))
    (all-the-icons-dired-mode 1)
@@ -82,14 +89,17 @@ fn workflows_public_surface_batch() {
            :off-lines (atid-test-lines)
            :mode-off (and all-the-icons-dired-mode t)
            :text-identical (string= pristine-text (atid-test-text))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:pristine-count 1 :on-count 7 :off-count 0 :off-lines (("." none) (".." none) (".hidden-config" none) ("README.md" none) ("notes.org" none) ("script.py" none) ("subdir" none)) :mode-off nil :text-identical t)"#
     ]],
-        ),
-        (
-            "enabling_the_mode_outside_dired_changes_nothing_but_the_flag",
-            r##"(let ((buffer (generate-new-buffer "*nicht-dired*")))
+    )
+}
+
+fn enabling_the_mode_outside_dired_changes_nothing_but_the_flag() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "enabling_the_mode_outside_dired_changes_nothing_but_the_flag",
+        r##"(let ((buffer (generate-new-buffer "*nicht-dired*")))
   (unwind-protect
       (with-current-buffer buffer
         (fundamental-mode)
@@ -104,10 +114,21 @@ fn workflows_public_surface_batch() {
                 :display-count (atid-test-display-count)
                 :lighter (cdr (assq 'all-the-icons-dired-mode minor-mode-alist)))))
     (kill-buffer buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:mode-flag t :fontifier-unchanged t :extra-props nil :text-unchanged t :display-count 0 :lighter (all-the-icons-dired-lighter))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        turning_the_mode_on_puts_a_display_icon_before_every_filename(),
+        reverting_the_listing_reapplies_every_icon(),
+        inserting_a_subdirectory_gets_icons_on_its_lines_and_its_dot_entries(),
+        turning_the_mode_off_removes_every_display_property_including_dired_s_own(),
+        enabling_the_mode_outside_dired_changes_nothing_but_the_flag(),
+    ];
+    assert_all_the_icons_dired_batch(&cases);
 }

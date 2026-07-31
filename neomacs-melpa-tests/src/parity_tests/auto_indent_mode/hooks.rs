@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_indent_mode_batch;
+use super::{ParityBatchCase, assert_auto_indent_mode_batch};
 
-#[test]
-fn hooks_public_surface_batch() {
-    assert_auto_indent_mode_batch(&[
-        (
-            "auto_indent_mode_pre_command_records_position_and_orders_post_hooks",
-            r##"(with-temp-buffer
+fn auto_indent_mode_pre_command_records_position_and_orders_post_hooks() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_pre_command_records_position_and_orders_post_hooks",
+        r##"(with-temp-buffer
          (emacs-lisp-mode)
          (insert "(alpha\n  beta)")
          (goto-char 5)
@@ -25,14 +23,17 @@ fn hooks_public_surface_batch() {
           auto-indent-last-pre-command-hook-point
           auto-indent-last-pre-command-hook-minibufferp
           post-command-hook))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (1 5 nil (auto-indent-mode-post-command-hook fixture-before fixture-after auto-indent-mode-post-command-hook-last))"
     ],
-        ),
-        (
-            "auto_indent_mode_pre_command_expands_pair_region_around_nested_point",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_indent_mode_pre_command_expands_pair_region_around_nested_point() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_pre_command_expands_pair_region_around_nested_point",
+        r##"(with-temp-buffer
          (emacs-lisp-mode)
          (insert "(outer (inner value) tail)")
          (search-backward "value")
@@ -50,12 +51,15 @@ fn hooks_public_surface_batch() {
           (buffer-substring
            auto-indent-pairs-begin
            auto-indent-pairs-end)))"##,
-            true,
-            expect![[r#"OK (t 8 21 "(inner value)")"#]],
-        ),
-        (
-            "auto_indent_mode_point_inside_pairs_handles_code_strings_and_unbalanced_text",
-            r##"(mapcar
+        true,
+        expect![[r#"OK (t 8 21 "(inner value)")"#]],
+    )
+}
+
+fn auto_indent_mode_point_inside_pairs_handles_code_strings_and_unbalanced_text() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_point_inside_pairs_handles_code_strings_and_unbalanced_text",
+        r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (emacs-lisp-mode)
@@ -68,14 +72,17 @@ fn hooks_public_surface_batch() {
            ("\"(text)\"" . 5)
            ("(unclosed" . 6)
            ("plain" . 3)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("(alpha beta)" . 7) (1 1 2 nil nil nil 0 nil nil (1) nil) t) (("\"(text)\"" . 5) (0 nil nil 34 nil nil 0 nil 1 nil nil) nil) (("(unclosed" . 6) (1 1 2 nil nil nil 0 nil nil (1) nil) t) (("plain" . 3) (0 nil 1 nil nil nil 0 nil nil nil nil) nil))"#
     ]],
-        ),
-        (
-            "auto_indent_mode_post_command_routes_yank_to_yank_engine",
-            r##"(let (calls)
+    )
+}
+
+fn auto_indent_mode_post_command_routes_yank_to_yank_engine() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_post_command_routes_yank_to_yank_engine",
+        r##"(let (calls)
          (cl-letf (((symbol-function 'auto-indent-yank-post-command)
                     (lambda ()
                       (push 'yank calls))))
@@ -91,14 +98,17 @@ fn hooks_public_surface_batch() {
               (nreverse calls)
               (memq 'auto-indent-mode-pre-command-hook
                     pre-command-hook)))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((yank) (auto-indent-mode-pre-command-hook eldoc-pre-command-refresh-echo-area t))"
     ],
-        ),
-        (
-            "auto_indent_mode_post_command_handles_return_and_blank_line_motion",
-            r##"(mapcar
+    )
+}
+
+fn auto_indent_mode_post_command_handles_return_and_blank_line_motion() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_post_command_handles_return_and_blank_line_motion",
+        r##"(mapcar
          (lambda (case)
            (let (calls)
              (cl-letf (((symbol-function 'auto-indent-par-region)
@@ -128,14 +138,17 @@ fn hooks_public_surface_batch() {
          '(("line\n  " 8 1 newline 10)
            ("line\n  " 8 1 next-line nil)
            ("line\ntext" 8 2 next-line nil)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("line\n  " 8 1 newline 10) (pair (indent 8))) (("line\n  " 8 1 next-line nil) ((indent 8))) (("line\ntext" 8 2 next-line nil) nil))"#
     ]],
-        ),
-        (
-            "auto_indent_mode_post_command_last_schedules_pair_timer_deterministically",
-            r##"(let (calls)
+    )
+}
+
+fn auto_indent_mode_post_command_last_schedules_pair_timer_deterministically() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_post_command_last_schedules_pair_timer_deterministically",
+        r##"(let (calls)
          (cl-letf (((symbol-function 'run-with-timer)
                     (lambda (delay repeat function &rest arguments)
                       (push
@@ -166,14 +179,17 @@ fn hooks_public_surface_batch() {
               auto-indent-pairs-end
               auto-indent-par-region-timer
               (nreverse calls)))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (1 8 :fixture-timer ((:cancel :old-timer) (0.0 nil auto-indent-par-region nil)))"
     ],
-        ),
-        (
-            "auto_indent_mode_pair_region_indents_and_clears_when_point_leaves_region",
-            r##"(let (calls)
+    )
+}
+
+fn auto_indent_mode_pair_region_indents_and_clears_when_point_leaves_region() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_pair_region_indents_and_clears_when_point_leaves_region",
+        r##"(let (calls)
          (cl-letf (((symbol-function 'indent-region)
                     (lambda (begin end &rest _arguments)
                       (push (list begin end) calls)))
@@ -195,19 +211,36 @@ fn hooks_public_surface_batch() {
                 auto-indent-pairs-begin
                 auto-indent-pairs-end
                 (nreverse calls))))))"##,
-            true,
-            expect!["OK (nil nil nil ((1 13) (:interval t)))"],
-        ),
-        (
-            "auto_indent_mode_minibuffer_hook_sets_global_guard_flag",
-            r##"(progn
+        true,
+        expect!["OK (nil nil nil ((1 13) (:interval t)))"],
+    )
+}
+
+fn auto_indent_mode_minibuffer_hook_sets_global_guard_flag() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_minibuffer_hook_sets_global_guard_flag",
+        r##"(progn
          (setq auto-indent-last-pre-command-hook-minibufferp nil)
          (let ((result (auto-indent-minibuffer-hook)))
            (list
             result
             auto-indent-last-pre-command-hook-minibufferp)))"##,
-            true,
-            expect!["OK (t t)"],
-        ),
-    ]);
+        true,
+        expect!["OK (t t)"],
+    )
+}
+
+#[test]
+fn hooks_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_indent_mode_pre_command_records_position_and_orders_post_hooks(),
+        auto_indent_mode_pre_command_expands_pair_region_around_nested_point(),
+        auto_indent_mode_point_inside_pairs_handles_code_strings_and_unbalanced_text(),
+        auto_indent_mode_post_command_routes_yank_to_yank_engine(),
+        auto_indent_mode_post_command_handles_return_and_blank_line_motion(),
+        auto_indent_mode_post_command_last_schedules_pair_timer_deterministically(),
+        auto_indent_mode_pair_region_indents_and_clears_when_point_leaves_region(),
+        auto_indent_mode_minibuffer_hook_sets_global_guard_flag(),
+    ];
+    assert_auto_indent_mode_batch(&cases);
 }

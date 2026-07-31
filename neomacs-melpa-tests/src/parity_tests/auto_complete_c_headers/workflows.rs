@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_c_headers_batch;
+use super::{ParityBatchCase, assert_auto_complete_c_headers_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_auto_complete_c_headers_batch(&[
-        (
-            "auto_complete_c_headers_documentation_returns_path_separator_and_exact_file_content",
-            r##"(let* ((root
+fn auto_complete_c_headers_documentation_returns_path_separator_and_exact_file_content() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_documentation_returns_path_separator_and_exact_file_content",
+        r##"(let* ((root
                  (expand-file-name
                   "achead-document"
                   default-directory))
@@ -27,14 +25,17 @@ fn workflows_public_surface_batch() {
                  (achead:documentation-for-candidate
                   "api.h")))
            (delete-directory root t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK "[ORACLE-SANDBOX]/achead-document/api.h\n--------------------------\n#ifndef API_H\n#define API_H\nint api(void);\n#endif\n""#
     ]],
-        ),
-        (
-            "auto_complete_c_headers_directory_documentation_is_only_the_resolved_path",
-            r##"(let* ((root
+    )
+}
+
+fn auto_complete_c_headers_directory_documentation_is_only_the_resolved_path() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_directory_documentation_is_only_the_resolved_path",
+        r##"(let* ((root
                  (expand-file-name
                   "achead-directory-document"
                   default-directory))
@@ -60,12 +61,15 @@ fn workflows_public_surface_batch() {
                    (achead:documentation-for-candidate
                     "nested/")))))
            (delete-directory root t)))"##,
-            true,
-            expect![[r#"OK ("nested" nil)"#]],
-        ),
-        (
-            "auto_complete_c_headers_documentation_uses_first_duplicate_and_suppresses_missing_candidates",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK ("nested" nil)"#]],
+    )
+}
+
+fn auto_complete_c_headers_documentation_uses_first_duplicate_and_suppresses_missing_candidates() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_documentation_uses_first_duplicate_and_suppresses_missing_candidates",
+        r##"(let* ((root
                  (expand-file-name
                   "achead-document-shadow"
                   default-directory))
@@ -98,14 +102,17 @@ fn workflows_public_surface_batch() {
                   (achead:documentation-for-candidate
                    "gone.h"))))
            (delete-directory root t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("[ORACLE-SANDBOX]/achead-document-shadow/first.h\n--------------------------\nFIRST" nil nil)"#
     ]],
-        ),
-        (
-            "auto_complete_c_headers_documentation_preserves_unicode_and_no_trailing_newline",
-            r##"(let* ((root
+    )
+}
+
+fn auto_complete_c_headers_documentation_preserves_unicode_and_no_trailing_newline() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_documentation_preserves_unicode_and_no_trailing_newline",
+        r##"(let* ((root
                  (expand-file-name
                   "achead-unicode-document"
                   default-directory))
@@ -126,14 +133,17 @@ fn workflows_public_surface_batch() {
                  (achead:documentation-for-candidate
                   "unicode.hpp")))
            (delete-directory root t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK "[ORACLE-SANDBOX]/achead-unicode-document/unicode.hpp\n--------------------------\n// café 日本語\nconst char* greeting = \"héllo\";""#
     ]],
-        ),
-        (
-            "auto_complete_c_headers_ac_candidates_scans_prefix_directory_and_updates_latest_alist",
-            r##"(let* ((root
+    )
+}
+
+fn auto_complete_c_headers_ac_candidates_scans_prefix_directory_and_updates_latest_alist() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_ac_candidates_scans_prefix_directory_and_updates_latest_alist",
+        r##"(let* ((root
                  (expand-file-name
                   "achead-ac-candidates"
                   default-directory))
@@ -164,14 +174,17 @@ fn workflows_public_surface_batch() {
                   (achead:documentation-for-candidate
                    "project/api.h"))))
            (delete-directory root t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("project/api.h" "project/application.hpp") (("project/api.h" . "project/api.h") ("project/application.hpp" . "project/application.hpp")) "[ORACLE-SANDBOX]/achead-ac-candidates/project/api.h\n--------------------------\napi")"#
     ]],
-        ),
-        (
-            "auto_complete_c_headers_ac_candidates_with_root_prefix_scans_include_root",
-            r##"(let* ((root
+    )
+}
+
+fn auto_complete_c_headers_ac_candidates_with_root_prefix_scans_include_root() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_ac_candidates_with_root_prefix_scans_include_root",
+        r##"(let* ((root
                  (expand-file-name
                   "achead-ac-root-prefix"
                   default-directory))
@@ -193,12 +206,15 @@ fn workflows_public_surface_batch() {
                  #'car
                  achead:ac-latest-results-alist)))
            (delete-directory root t)))"##,
-            true,
-            expect![[r#"OK (("api.h" "vector") ("api.h" "vector"))"#]],
-        ),
-        (
-            "auto_complete_c_headers_ac_candidates_suppresses_scan_errors_and_preserves_previous_results",
-            r##"(let ((ac-prefix "pkg/")
+        true,
+        expect![[r#"OK (("api.h" "vector") ("api.h" "vector"))"#]],
+    )
+}
+
+fn auto_complete_c_headers_ac_candidates_suppresses_scan_errors_and_preserves_previous_results() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_ac_candidates_suppresses_scan_errors_and_preserves_previous_results",
+        r##"(let ((ac-prefix "pkg/")
                (achead:ac-latest-results-alist
                 '(("previous.h"
                    . "/previous.h"))))
@@ -210,12 +226,15 @@ fn workflows_public_surface_batch() {
            (list
             (achead:ac-candidates)
             achead:ac-latest-results-alist)))"##,
-            true,
-            expect![[r#"OK (nil (("previous.h" . "/previous.h")))"#]],
-        ),
-        (
-            "auto_complete_c_headers_source_init_clears_cache_then_candidates_and_document_form_work",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK (nil (("previous.h" . "/previous.h")))"#]],
+    )
+}
+
+fn auto_complete_c_headers_source_init_clears_cache_then_candidates_and_document_form_work() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_source_init_clears_cache_then_candidates_and_document_form_work",
+        r##"(let* ((root
                  (expand-file-name
                   "achead-source-forms"
                   default-directory))
@@ -254,14 +273,17 @@ fn workflows_public_surface_batch() {
                    document-function
                    "sdk/api.h"))))
            (delete-directory root t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("[ORACLE-SANDBOX]/achead-source-forms/sdk/" "api.h")) ("sdk/api.h") "[ORACLE-SANDBOX]/achead-source-forms/sdk/api.h\n--------------------------\nint api(void);")"#
     ]],
-        ),
-        (
-            "auto_complete_c_headers_source_action_invokes_real_ac_start_entry_point",
-            r##"(let ((calls nil)
+    )
+}
+
+fn auto_complete_c_headers_source_action_invokes_real_ac_start_entry_point() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_source_action_invokes_real_ac_start_entry_point",
+        r##"(let ((calls nil)
                (action
                 (cdr
                  (assq 'action
@@ -277,12 +299,15 @@ fn workflows_public_surface_batch() {
             (funcall action
                      'manual "candidate")
             (nreverse calls))))"##,
-            true,
-            expect![[r#"OK (ac-start started started (nil (manual "candidate")))"#]],
-        ),
-        (
-            "auto_complete_c_headers_practical_include_completion_refreshes_after_source_init",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK (ac-start started started (nil (manual "candidate")))"#]],
+    )
+}
+
+fn auto_complete_c_headers_practical_include_completion_refreshes_after_source_init() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_practical_include_completion_refreshes_after_source_init",
+        r##"(let* ((root
                  (expand-file-name
                   "achead-practical-refresh"
                   default-directory))
@@ -317,10 +342,26 @@ fn workflows_public_surface_batch() {
                         (achead:documentation-for-candidate
                          "library/new.hpp")))))))
            (delete-directory root t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("library/old.h") ("library/old.h") ("library/new.hpp" "library/old.h") "[ORACLE-SANDBOX]/achead-practical-refresh/library/new.hpp\n--------------------------\nNEW")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_c_headers_documentation_returns_path_separator_and_exact_file_content(),
+        auto_complete_c_headers_directory_documentation_is_only_the_resolved_path(),
+        auto_complete_c_headers_documentation_uses_first_duplicate_and_suppresses_missing_candidates(),
+        auto_complete_c_headers_documentation_preserves_unicode_and_no_trailing_newline(),
+        auto_complete_c_headers_ac_candidates_scans_prefix_directory_and_updates_latest_alist(),
+        auto_complete_c_headers_ac_candidates_with_root_prefix_scans_include_root(),
+        auto_complete_c_headers_ac_candidates_suppresses_scan_errors_and_preserves_previous_results(),
+        auto_complete_c_headers_source_init_clears_cache_then_candidates_and_document_form_work(),
+        auto_complete_c_headers_source_action_invokes_real_ac_start_entry_point(),
+        auto_complete_c_headers_practical_include_completion_refreshes_after_source_init(),
+    ];
+    assert_auto_complete_c_headers_batch(&cases);
 }

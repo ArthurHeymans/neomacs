@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_auctex_batch;
+use super::{ParityBatchCase, assert_auto_complete_auctex_batch};
 
-#[test]
-fn candidates_public_surface_batch() {
-    assert_auto_complete_auctex_batch(&[
-        (
-            "auto_complete_auctex_macro_candidates_normalize_real_auctex_entries_and_filter_prefix",
-            r##"(let ((TeX-symbol-list
+fn auto_complete_auctex_macro_candidates_normalize_real_auctex_entries_and_filter_prefix() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_auctex_macro_candidates_normalize_real_auctex_entries_and_filter_prefix",
+        r##"(let ((TeX-symbol-list
                                 '(("alpha" "Required")
                                   (("alphabet" 1) ["Optional"])
                                   ("beta")
@@ -15,12 +13,15 @@ fn candidates_public_surface_batch() {
                                (ac-prefix
                                 "alp"))
           (ac-auctex-macro-candidates))"##,
-            true,
-            expect![[r#"OK ("alpha" "alphabet" "alpine")"#]],
-        ),
-        (
-            "auto_complete_auctex_macro_candidates_preserve_source_order_duplicates_and_case_rules",
-            r##"(let ((TeX-symbol-list
+        true,
+        expect![[r#"OK ("alpha" "alphabet" "alpine")"#]],
+    )
+}
+
+fn auto_complete_auctex_macro_candidates_preserve_source_order_duplicates_and_case_rules() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_auctex_macro_candidates_preserve_source_order_duplicates_and_case_rules",
+        r##"(let ((TeX-symbol-list
                                 '(("alpha")
                                   ("Alpha")
                                   (("alphabet" 1))
@@ -36,14 +37,17 @@ fn candidates_public_surface_batch() {
                 prefix
                 (ac-auctex-macro-candidates))))
            '("al" "Al" "alpha" "z")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("al" ("alpha" "alphabet" "alpha" "alpine")) ("Al" ("Alpha")) ("alpha" ("alpha" "alphabet" "alpha")) ("z" nil))"#
     ]],
-        ),
-        (
-            "auto_complete_auctex_symbol_candidates_filter_real_math_command_names",
-            r##"(let ((LaTeX-math-default
+    )
+}
+
+fn auto_complete_auctex_symbol_candidates_filter_real_math_command_names() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_auctex_symbol_candidates_filter_real_math_command_names",
+        r##"(let ((LaTeX-math-default
                                 '((?a "alpha" "Greek alpha" 945)
                                   (?b "beta" "Greek beta" 946)
                                   (?l "leq" ("AMS" "less or equal") 8804)
@@ -57,14 +61,17 @@ fn candidates_public_surface_batch() {
                 prefix
                 (ac-auctex-symbol-candidates))))
            '("" "al" "le" "L" "missing")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("" ("alpha" "beta" "leq" "Leftarrow")) ("al" ("alpha")) ("le" ("leq")) ("L" ("Leftarrow")) ("missing" nil))"#
     ]],
-        ),
-        (
-            "auto_complete_auctex_symbol_document_formats_strings_lists_unicode_and_missing_entries",
-            r##"(let ((LaTeX-math-default
+    )
+}
+
+fn auto_complete_auctex_symbol_document_formats_strings_lists_unicode_and_missing_entries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_auctex_symbol_document_formats_strings_lists_unicode_and_missing_entries",
+        r##"(let ((LaTeX-math-default
                                 '((?a "alpha" "Greek alpha" 945)
                                   (?l "leq" ("AMS" "less or equal") 8804)
                                   (?n "nexists" "does not exist")
@@ -80,14 +87,17 @@ fn candidates_public_surface_batch() {
              "nexists"
              "empty"
              "unknown")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("alpha" "Greek alpha == α") ("leq" "AMS less or equal == ≤") ("nexists" "does not exist == ") ("empty" " == ") ("unknown" " == "))"#
     ]],
-        ),
-        (
-            "auto_complete_auctex_environment_candidates_add_beg_prefix_before_filtering",
-            r##"(let ((LaTeX-environment-list
+    )
+}
+
+fn auto_complete_auctex_environment_candidates_add_beg_prefix_before_filtering() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_auctex_environment_candidates_add_beg_prefix_before_filtering",
+        r##"(let ((LaTeX-environment-list
                                 '(("document")
                                   ("description" LaTeX-env-item)
                                   ("figure" ["htbp!"])
@@ -103,14 +113,17 @@ fn candidates_public_surface_batch() {
                 prefix
                 (ac-auctex-environment-candidates))))
            '("beg" "begf" "begfigure" "figure" "begz")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("beg" ("begdocument" "begdescription" "begfigure" "begfigure*" "begframe" "begtable")) ("begf" ("begfigure" "begfigure*" "begframe")) ("begfigure" ("begfigure" "begfigure*")) ("figure" nil) ("begz" nil))"#
     ]],
-        ),
-        (
-            "auto_complete_auctex_environment_candidates_honor_custom_prefix_and_duplicate_entries",
-            r##"(let ((LaTeX-environment-list
+    )
+}
+
+fn auto_complete_auctex_environment_candidates_honor_custom_prefix_and_duplicate_entries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_auctex_environment_candidates_honor_custom_prefix_and_duplicate_entries",
+        r##"(let ((LaTeX-environment-list
                                 '(("itemize")
                                   ("itemize")
                                   ("enumerate")
@@ -120,12 +133,15 @@ fn candidates_public_surface_batch() {
                                (ac-prefix
                                 "begin:i"))
           (ac-auctex-environment-candidates))"##,
-            true,
-            expect![[r#"OK ("begin:itemize" "begin:itemize")"#]],
-        ),
-        (
-            "auto_complete_auctex_label_candidates_filter_real_cross_reference_records",
-            r##"(let ((LaTeX-label-list
+        true,
+        expect![[r#"OK ("begin:itemize" "begin:itemize")"#]],
+    )
+}
+
+fn auto_complete_auctex_label_candidates_filter_real_cross_reference_records() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_auctex_label_candidates_filter_real_cross_reference_records",
+        r##"(let ((LaTeX-label-list
                                 '(("sec:introduction" "main.tex" 12)
                                   ("sec:implementation" "impl.tex" 48)
                                   ("fig:architecture" "figures.tex" 7)
@@ -134,12 +150,15 @@ fn candidates_public_surface_batch() {
                                (ac-prefix
                                 "sec:i"))
           (ac-auctex-label-candidates))"##,
-            true,
-            expect![[r#"OK ("sec:introduction" "sec:implementation" "sec:introduction")"#]],
-        ),
-        (
-            "auto_complete_auctex_bibliography_candidates_filter_keys_and_preserve_metadata_order",
-            r##"(let ((LaTeX-bibitem-list
+        true,
+        expect![[r#"OK ("sec:introduction" "sec:implementation" "sec:introduction")"#]],
+    )
+}
+
+fn auto_complete_auctex_bibliography_candidates_filter_keys_and_preserve_metadata_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_auctex_bibliography_candidates_filter_keys_and_preserve_metadata_order",
+        r##"(let ((LaTeX-bibitem-list
                                 '(("knuth1984" "The TeXbook")
                                   ("knuth1992" "Literate Programming")
                                   ("lamport1994" "LaTeX")
@@ -147,12 +166,15 @@ fn candidates_public_surface_batch() {
                                (ac-prefix
                                 "knuth"))
           (ac-auctex-bib-candidates))"##,
-            true,
-            expect![[r#"OK ("knuth1984" "knuth1992" "knuth1984")"#]],
-        ),
-        (
-            "auto_complete_auctex_source_prefix_regexps_extract_practical_macro_ref_and_cite_prefixes",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ("knuth1984" "knuth1992" "knuth1984")"#]],
+    )
+}
+
+fn auto_complete_auctex_source_prefix_regexps_extract_practical_macro_ref_and_cite_prefixes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_auctex_source_prefix_regexps_extract_practical_macro_ref_and_cite_prefixes",
+        r##"(with-temp-buffer
           (mapcar
            (lambda (fixture)
              (erase-buffer)
@@ -194,10 +216,25 @@ fn candidates_public_surface_batch() {
               "\\cite[p. 42]{knuth19")
              (ac-source-auctex-bibs
               "\\cite{first,knuth19"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((ac-source-auctex-macros "\\includegr" "\\\\\\([a-zA-Z]*\\)\\=" ("\\\\\\([a-zA-Z]*\\)\\=" 2 (((init . TeX-symbol-list) (candidates . ac-auctex-macro-candidates) (action . ac-auctex-macro-action) (requires . 0) (symbol . "m") (prefix . "\\\\\\([a-zA-Z]*\\)\\=")))) "includegr") (ac-source-auctex-symbols "formula: \\alp" "\\\\\\([a-zA-Z]*\\)\\=" ("\\\\\\([a-zA-Z]*\\)\\=" 11 (((init . LaTeX-math-mode) (candidates . ac-auctex-symbol-candidates) (document . ac-auctex-symbol-document) (action . ac-auctex-symbol-action) (requires . 0) (symbol . "s") (prefix . "\\\\\\([a-zA-Z]*\\)\\=")))) "alp") (ac-source-auctex-environments "\\begfig" "\\\\\\([a-zA-Z]*\\)\\=" ("\\\\\\([a-zA-Z]*\\)\\=" 2 (((init . LaTeX-environment-list) (candidates . ac-auctex-environment-candidates) (action . ac-auctex-environment-action) (requires . 0) (symbol . "e") (prefix . "\\\\\\([a-zA-Z]*\\)\\=")))) "begfig") (ac-source-auctex-labels "See \\ref{sec:impl" "\\\\ref{\\([^}]*\\)\\=" ("\\\\ref{\\([^}]*\\)\\=" 10 (((init . LaTeX-label-list) (candidates . ac-auctex-label-candidates) (requires . 0) (symbol . "r") (prefix . "\\\\ref{\\([^}]*\\)\\=")))) "sec:impl") (ac-source-auctex-bibs "\\cite[p. 42]{knuth19" "\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=" ("\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=" 14 (((init . LaTeX-bibitem-list) (candidates . ac-auctex-bib-candidates) (requires . 0) (symbol . "b") (prefix . "\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=")))) "knuth19") (ac-source-auctex-bibs "\\cite{first,knuth19" "\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=" nil nil))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn candidates_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_auctex_macro_candidates_normalize_real_auctex_entries_and_filter_prefix(),
+        auto_complete_auctex_macro_candidates_preserve_source_order_duplicates_and_case_rules(),
+        auto_complete_auctex_symbol_candidates_filter_real_math_command_names(),
+        auto_complete_auctex_symbol_document_formats_strings_lists_unicode_and_missing_entries(),
+        auto_complete_auctex_environment_candidates_add_beg_prefix_before_filtering(),
+        auto_complete_auctex_environment_candidates_honor_custom_prefix_and_duplicate_entries(),
+        auto_complete_auctex_label_candidates_filter_real_cross_reference_records(),
+        auto_complete_auctex_bibliography_candidates_filter_keys_and_preserve_metadata_order(),
+        auto_complete_auctex_source_prefix_regexps_extract_practical_macro_ref_and_cite_prefixes(),
+    ];
+    assert_auto_complete_auctex_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_which_key_batch;
+use super::{ParityBatchCase, assert_which_key_batch};
 
-#[test]
-fn defaults_public_surface_batch() {
-    assert_which_key_batch(&[
-        (
-            "which_key_public_defaults_match_the_pinned_release",
-            r##"(list
+fn which_key_public_defaults_match_the_pinned_release() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "which_key_public_defaults_match_the_pinned_release",
+        r##"(list
                which-key-idle-delay
                which-key-idle-secondary-delay
                which-key-max-description-length
@@ -42,14 +40,17 @@ fn defaults_public_surface_batch() {
                which-key-lighter
                which-key-inhibit
                which-key-mode)"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (1.0 nil 27 0 0 3 t " : " ".." "+" nil nil nil " *which-key*" echo side-window bottom 0 0.333 0.25 60 20 nil which-key-key-order t "<f5>" t nil nil t nil " WK" nil nil)"#
     ]],
-        ),
-        (
-            "which_key_setup_commands_apply_their_complete_configuration_profiles",
-            r##"(let ((echo-keystrokes 9)
+    )
+}
+
+fn which_key_setup_commands_apply_their_complete_configuration_profiles() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "which_key_setup_commands_apply_their_complete_configuration_profiles",
+        r##"(let ((echo-keystrokes 9)
                     (which-key-idle-delay 1.0)
                     (which-key-echo-keystrokes 0.02))
                (which-key-setup-side-window-right)
@@ -80,14 +81,17 @@ fn defaults_public_surface_batch() {
                                  which-key-side-window-location
                                  which-key-show-prefix
                                  echo-keystrokes))))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((side-window right top 9) (side-window (right bottom) top 9) (side-window bottom echo 0.02) (minibuffer bottom left 0.02))"
     ],
-        ),
-        (
-            "which_key_echo_keystroke_setup_covers_long_short_and_nil_delays",
-            r##"(list
+    )
+}
+
+fn which_key_echo_keystroke_setup_covers_long_short_and_nil_delays() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "which_key_echo_keystroke_setup_covers_long_short_and_nil_delays",
+        r##"(list
                (let ((echo-keystrokes 3)
                      (which-key-idle-delay 1.0)
                      (which-key-echo-keystrokes 0.02))
@@ -103,12 +107,15 @@ fn defaults_public_surface_batch() {
                      (which-key-echo-keystrokes 0.02))
                  (which-key--setup-echo-keystrokes)
                  (list echo-keystrokes which-key-echo-keystrokes)))"##,
-            true,
-            expect!["OK ((0.02 0.02) (0.0025 0.0025) (nil 0.02))"],
-        ),
-        (
-            "which_key_unicode_cleanup_only_replaces_the_default_arrow_separator",
-            r##"(list
+        true,
+        expect!["OK ((0.02 0.02) (0.0025 0.0025) (nil 0.02))"],
+    )
+}
+
+fn which_key_unicode_cleanup_only_replaces_the_default_arrow_separator() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "which_key_unicode_cleanup_only_replaces_the_default_arrow_separator",
+        r##"(list
                (let ((which-key-separator " → "))
                  (which-key-remove-default-unicode-chars)
                  which-key-separator)
@@ -118,12 +125,15 @@ fn defaults_public_surface_batch() {
                (let ((which-key-separator " : "))
                  (which-key-remove-default-unicode-chars)
                  which-key-separator))"##,
-            true,
-            expect![[r#"OK (" : " " ⇒ " " : ")"#]],
-        ),
-        (
-            "which_key_mode_enable_and_disable_restore_state_and_hooks",
-            r##"(let ((which-key-mode nil)
+        true,
+        expect![[r#"OK (" : " " ⇒ " " : ")"#]],
+    )
+}
+
+fn which_key_mode_enable_and_disable_restore_state_and_hooks() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "which_key_mode_enable_and_disable_restore_state_and_hooks",
+        r##"(let ((which-key-mode nil)
                     (which-key-show-prefix 'echo)
                     (which-key-popup-type 'side-window)
                     (which-key-show-remaining-keys t)
@@ -165,14 +175,17 @@ fn defaults_public_surface_batch() {
                      (memq #'which-key--hide-popup-on-frame-size-change
                            window-size-change-functions)
                      events)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((t 0.25 which-key-C-h-dispatch #1=(which-key--lighter-restore) (which-key--hide-popup . #1#) (which-key--hide-popup-on-frame-size-change) ((start))) (nil 4 describe-prefix-bindings nil nil nil (stop (start))))"#
     ]],
-        ),
-        (
-            "which_key_buffer_initialization_sets_exact_local_display_state_and_hook",
-            r##"(let ((which-key--buffer nil)
+    )
+}
+
+fn which_key_buffer_initialization_sets_exact_local_display_state_and_hook() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "which_key_buffer_initialization_sets_exact_local_display_state_and_hook",
+        r##"(let ((which-key--buffer nil)
                     (which-key-buffer-name " *neomacs-which-key-test*")
                     (which-key-init-buffer-hook
                      (list
@@ -194,8 +207,20 @@ fn defaults_public_surface_batch() {
                         neomacs-which-key-hook-ran)))
                  (when (buffer-live-p which-key--buffer)
                    (kill-buffer which-key--buffer))))"##,
-            true,
-            expect![[r#"OK (" *neomacs-which-key-test*" t nil nil nil nil nil nil t)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (" *neomacs-which-key-test*" t nil nil nil nil nil nil t)"#]],
+    )
+}
+
+#[test]
+fn defaults_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        which_key_public_defaults_match_the_pinned_release(),
+        which_key_setup_commands_apply_their_complete_configuration_profiles(),
+        which_key_echo_keystroke_setup_covers_long_short_and_nil_delays(),
+        which_key_unicode_cleanup_only_replaces_the_default_arrow_separator(),
+        which_key_mode_enable_and_disable_restore_state_and_hooks(),
+        which_key_buffer_initialization_sets_exact_local_display_state_and_hook(),
+    ];
+    assert_which_key_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auth_source_keytar_batch;
+use super::{ParityBatchCase, assert_auth_source_keytar_batch};
 
-#[test]
-fn enable_public_surface_batch() {
-    assert_auth_source_keytar_batch(&[
-        (
-            "auth_source_keytar_enable_adds_keytar_to_front_and_forgets_cached_credentials",
-            r##"(let ((auth-sources
+fn auth_source_keytar_enable_adds_keytar_to_front_and_forgets_cached_credentials() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_enable_adds_keytar_to_front_and_forgets_cached_credentials",
+        r##"(let ((auth-sources
                                 '("~/.authinfo"
                                   "~/.netrc"))
                                calls)
@@ -23,14 +21,17 @@ fn enable_public_surface_batch() {
              (auth-source-keytar-enable)
              auth-sources
              (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:cache-cleared (keytar "~/.authinfo" "~/.netrc") ((keytar "~/.authinfo" "~/.netrc")))"#
     ]],
-        ),
-        (
-            "auth_source_keytar_enable_is_idempotent_for_source_membership_but_clears_cache_each_time",
-            r##"(let ((auth-sources
+    )
+}
+
+fn auth_source_keytar_enable_is_idempotent_for_source_membership_but_clears_cache_each_time() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_enable_is_idempotent_for_source_membership_but_clears_cache_each_time",
+        r##"(let ((auth-sources
                                 '("first-source"))
                                calls)
           (cl-letf
@@ -47,14 +48,17 @@ fn enable_public_surface_batch() {
              (auth-source-keytar-enable)
              auth-sources
              (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (1 2 3 (keytar "first-source") ((keytar "first-source") (keytar "first-source") (keytar "first-source")))"#
     ]],
-        ),
-        (
-            "auth_source_keytar_enable_preserves_existing_keytar_position_in_auth_sources",
-            r##"(let ((auth-sources
+    )
+}
+
+fn auth_source_keytar_enable_preserves_existing_keytar_position_in_auth_sources() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_enable_preserves_existing_keytar_position_in_auth_sources",
+        r##"(let ((auth-sources
                                 '("first"
                                   keytar
                                   "last"))
@@ -70,12 +74,15 @@ fn enable_public_surface_batch() {
              (auth-source-keytar-enable)
              auth-sources
              calls)))"##,
-            true,
-            expect![[r#"OK (:cleared ("first" keytar "last") 1)"#]],
-        ),
-        (
-            "auth_source_keytar_enable_distinguishes_symbolic_source_from_similarly_named_entries",
-            r##"(let ((auth-sources
+        true,
+        expect![[r#"OK (:cleared ("first" keytar "last") 1)"#]],
+    )
+}
+
+fn auth_source_keytar_enable_distinguishes_symbolic_source_from_similarly_named_entries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_enable_distinguishes_symbolic_source_from_similarly_named_entries",
+        r##"(let ((auth-sources
                                 '("keytar"
                                   (keytar)
                                   keytar-config
@@ -88,12 +95,15 @@ fn enable_public_surface_batch() {
             (list
              (auth-source-keytar-enable)
              auth-sources)))"##,
-            true,
-            expect![[r#"OK (:cleared (keytar "keytar" (keytar) keytar-config (:source keytar)))"#]],
-        ),
-        (
-            "auth_source_keytar_enable_propagates_cache_clear_failure_after_registering_source",
-            r##"(let ((auth-sources
+        true,
+        expect![[r#"OK (:cleared (keytar "keytar" (keytar) keytar-config (:source keytar)))"#]],
+    )
+}
+
+fn auth_source_keytar_enable_propagates_cache_clear_failure_after_registering_source() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_enable_propagates_cache_clear_failure_after_registering_source",
+        r##"(let ((auth-sources
                                 '("existing")))
           (cl-letf
               (((symbol-function
@@ -105,12 +115,15 @@ fn enable_public_surface_batch() {
              (auth-source-keytar-test-error-data
               #'auth-source-keytar-enable)
              auth-sources)))"##,
-            true,
-            expect![[r#"OK ((:error error ("fixture cache failure")) (keytar "existing"))"#]],
-        ),
-        (
-            "auth_source_keytar_enable_returns_exact_cache_clear_result",
-            r##"(mapcar
+        true,
+        expect![[r#"OK ((:error error ("fixture cache failure")) (keytar "existing"))"#]],
+    )
+}
+
+fn auth_source_keytar_enable_returns_exact_cache_clear_result() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_enable_returns_exact_cache_clear_result",
+        r##"(mapcar
           (lambda (result)
             (let ((auth-sources nil))
               (cl-letf
@@ -128,14 +141,17 @@ fn enable_public_surface_batch() {
             17
             "done"
             (:cache "result")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil nil (keytar)) (t t (keytar)) (:cleared :cleared (keytar)) (17 17 (keytar)) ("done" "done" (keytar)) (#1=(:cache "result") #1# (keytar)))"#
     ]],
-        ),
-        (
-            "auth_source_keytar_enable_respects_dynamic_auth_sources_binding_without_mutating_global_default",
-            r##"(let ((global-before
+    )
+}
+
+fn auth_source_keytar_enable_respects_dynamic_auth_sources_binding_without_mutating_global_default() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_enable_respects_dynamic_auth_sources_binding_without_mutating_global_default",
+        r##"(let ((global-before
                                 (copy-tree
                                  (default-value
                                   'auth-sources)))
@@ -161,14 +177,17 @@ fn enable_public_surface_batch() {
             global-before
             (default-value
              'auth-sources))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:cleared #1=(keytar "sandbox-authinfo") #1#) ("~/.authinfo" "~/.authinfo.gpg" "~/.netrc") t)"#
     ]],
-        ),
-        (
-            "auth_source_keytar_enable_uses_structural_membership_for_preexisting_keytar_symbol",
-            r##"(let ((auth-sources
+    )
+}
+
+fn auth_source_keytar_enable_uses_structural_membership_for_preexisting_keytar_symbol() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_enable_uses_structural_membership_for_preexisting_keytar_symbol",
+        r##"(let ((auth-sources
                                 (list
                                  (copy-sequence "first")
                                  (intern
@@ -189,8 +208,22 @@ fn enable_public_surface_batch() {
                (lambda (entry)
                  (eq entry 'keytar))
                auth-sources)))))"##,
-            true,
-            expect![[r#"OK (:cleared ("first" keytar "last") 1)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (:cleared ("first" keytar "last") 1)"#]],
+    )
+}
+
+#[test]
+fn enable_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auth_source_keytar_enable_adds_keytar_to_front_and_forgets_cached_credentials(),
+        auth_source_keytar_enable_is_idempotent_for_source_membership_but_clears_cache_each_time(),
+        auth_source_keytar_enable_preserves_existing_keytar_position_in_auth_sources(),
+        auth_source_keytar_enable_distinguishes_symbolic_source_from_similarly_named_entries(),
+        auth_source_keytar_enable_propagates_cache_clear_failure_after_registering_source(),
+        auth_source_keytar_enable_returns_exact_cache_clear_result(),
+        auth_source_keytar_enable_respects_dynamic_auth_sources_binding_without_mutating_global_default(),
+        auth_source_keytar_enable_uses_structural_membership_for_preexisting_keytar_symbol(),
+    ];
+    assert_auth_source_keytar_batch(&cases);
 }

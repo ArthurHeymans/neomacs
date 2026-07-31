@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_airline_themes_batch;
+use super::{ParityBatchCase, assert_airline_themes_batch};
 
 /// What enabling an airline theme takes away from the stock faces it reuses.
 ///
@@ -31,12 +31,10 @@ use super::assert_airline_themes_batch;
 /// together and read as far more alarming than the truth.  Restoration on
 /// disable is asserted too, so a loss is known to be temporary.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_airline_themes_batch(&[
-        (
-            "enabling_a_theme_drops_stock_attributes_from_the_mode_line_faces_it_reuses",
-            r##"(let* ((stock '(mode-line mode-line-inactive mode-line-buffer-id
+fn enabling_a_theme_drops_stock_attributes_from_the_mode_line_faces_it_reuses() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "enabling_a_theme_drops_stock_attributes_from_the_mode_line_faces_it_reuses",
+        r##"(let* ((stock '(mode-line mode-line-inactive mode-line-buffer-id
                     minibuffer-prompt tab-bar tab-bar-tab tab-bar-tab-inactive))
        (before (airline-test-capture stock))
        (during nil)
@@ -50,14 +48,17 @@ fn workflows_public_surface_batch() {
         :losses (airline-test-losses before during)
         :changed (airline-test-changes before during)
         :restored-on-disable (equal before restored)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (:all-exist-before-the-theme (t t t t t t t) :losses ((mode-line (:inverse-video) ((((class color grayscale) (min-colors 88) (background light)) :box (:line-width -1 :style released-button) :background "grey75" :foreground "black") (((class color grayscale) (min-colors 88) (background dark)) :box (:line-width -1 :style released-button) :background "grey20" :foreground "white") (t :inverse-video t))) (mode-line-inactive (:inverse-video :inherit) ((default :inherit mode-line) (((class color grayscale) (min-colors 88) (background light)) :weight light :box (:line-width -1 :color "grey75" :style nil) :foreground "grey20" :background "grey90") (((class color grayscale) (min-colors 88) (background dark)) :weight light :box (:line-width -1 :color "grey40" :style nil) :foreground "grey80" :background "grey30"))) (tab-bar-tab (:inherit) ((default :inherit tab-bar) (((class color) (min-colors 88) (background light)) :box (:line-width 1 :style released-button)) (((class color) (min-colors 88) (background dark)) :box (:line-width 1 :style released-button) :background "grey40" :foreground "white") (t :inverse-video nil))) (tab-bar-tab-inactive (:inverse-video :inherit) ((default :inherit tab-bar-tab) (((class color) (min-colors 88) (background light)) :background "grey75") (((class color) (min-colors 88) (background dark)) :background "grey20") (t :inverse-video t)))) :changed ((mode-line-buffer-id :weight bold normal) (minibuffer-prompt :foreground "cyan" "#1B2229") (tab-bar :background "grey" "#21242b") (tab-bar-tab :background "grey" "#21242b") (tab-bar-tab-inactive :background "grey" "#23272e")) :restored-on-disable t)"##
     ]],
-        ),
-        (
-            "the_tab_bar_faces_take_their_colours_from_each_themes_own_palette",
-            r##"(mapcar
+    )
+}
+
+fn the_tab_bar_faces_take_their_colours_from_each_themes_own_palette() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_tab_bar_faces_take_their_colours_from_each_themes_own_palette",
+        r##"(mapcar
  (lambda (theme)
    (let (observed)
      (airline-test-with-theme
@@ -72,10 +73,18 @@ fn workflows_public_surface_batch() {
                         airline-normal-center airline-normal-inner)))))
      (list theme observed)))
  '(airline-doom-one airline-light))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK ((airline-doom-one ((tab-bar "#bbc2cf" "#21242b") (tab-bar-tab "#bbc2cf" "#21242b") (tab-bar-tab-inactive "#5B6268" "#23272e") (airline-normal-center "#bbc2cf" "#21242b") (airline-normal-inner "#bbc2cf" "#21242b"))) (airline-light ((tab-bar "#005fff" "#afffff") (tab-bar-tab "#000087" "#00dfff") (tab-bar-tab-inactive "#666666" "#b2b2b2") (airline-normal-center "#005fff" "#afffff") (airline-normal-inner "#000087" "#00dfff"))))"##
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        enabling_a_theme_drops_stock_attributes_from_the_mode_line_faces_it_reuses(),
+        the_tab_bar_faces_take_their_colours_from_each_themes_own_palette(),
+    ];
+    assert_airline_themes_batch(&cases);
 }

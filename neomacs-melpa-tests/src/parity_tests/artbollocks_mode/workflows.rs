@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_artbollocks_mode_batch;
+use super::{ParityBatchCase, assert_artbollocks_mode_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_artbollocks_mode_batch(&[
-        (
-            "documented_text_mode_hook_reviews_a_selected_draft_with_the_bound_metric_commands",
-            r##"(let ((text-mode-hook nil))
+fn documented_text_mode_hook_reviews_a_selected_draft_with_the_bound_metric_commands() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "documented_text_mode_hook_reviews_a_selected_draft_with_the_bound_metric_commands",
+        r##"(let ((text-mode-hook nil))
          (add-hook 'text-mode-hook #'artbollocks-mode)
          (with-temp-buffer
            (text-mode)
@@ -52,14 +50,17 @@ fn workflows_public_surface_batch() {
                 outside-face
                 (get-text-property (match-beginning 0) 'face)
                 (buffer-modified-p))))))"##,
-            true,
-            expect![
+        true,
+        expect![
         r#"OK (text-mode t (artbollocks-mode " AB") (("C-c [" artbollocks-word-count 8) ("C-c ]" artbollocks-sentence-count 2) ("C-c \\" artbollocks-readability-index "Readability index: 7.063749999999999") ("C-c /" artbollocks-reading-ease "Reading ease: 44.149") ("C-c =" artbollocks-grade-level "Grade level: 8.094999999999999")) (43 97) "The installation fills the room. Visitors move slowly." nil nil t)"#
     ],
-        ),
-        (
-            "editing_lisp_prose_marks_real_writing_problems_but_not_matching_code",
-            r##"(with-temp-buffer
+    )
+}
+
+fn editing_lisp_prose_marks_real_writing_problems_but_not_matching_code() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "editing_lisp_prose_marks_real_writing_problems_but_not_matching_code",
+        r##"(with-temp-buffer
          (emacs-lisp-mode)
          (insert
           "(defun review-installation (narrative very contextual discourse)\n"
@@ -109,14 +110,17 @@ fn workflows_public_surface_batch() {
              (point-min)
              (point-max))
             (buffer-modified-p))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("the" artbollocks-lexical-illusions-face 73 76) ("narrative" artbollocks-face 77 86) ("was written" artbollocks-passive-voice-face 87 98) ("very" artbollocks-weasel-words-face 104 108) ("contextual" artbollocks-face 109 119) ("discourse" artbollocks-face 120 129) ("Many" artbollocks-weasel-words-face 181 185) ("works" artbollocks-face 186 191) ("fairly" artbollocks-weasel-words-face 212 218) ("normative" artbollocks-face 219 228) ("paradigm" artbollocks-face 229 237)) t "(defun review-installation (narrative very contextual discourse)\n  \"The the narrative was written in a very contextual discourse.\"\n  (list narrative very contextual discourse))\n;; Many works were completed by a fairly normative paradigm.\n" t)"#
     ]],
-        ),
-        (
-            "a_team_customizes_its_editorial_policy_and_refontifies_the_open_review",
-            r##"(with-temp-buffer
+    )
+}
+
+fn a_team_customizes_its_editorial_policy_and_refontifies_the_open_review() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "a_team_customizes_its_editorial_policy_and_refontifies_the_open_review",
+        r##"(with-temp-buffer
          (emacs-lisp-mode)
          (insert
           ";; Perhaps the release was shipped around the north star.\n"
@@ -175,10 +179,19 @@ fn workflows_public_surface_batch() {
                (point-max))
               artbollocks-mode
               (buffer-modified-p)))))"##,
-            true,
-            expect![
+        true,
+        expect![
         r#"OK ((("Perhaps" artbollocks-weasel-words-face) ("was shipped" artbollocks-passive-voice-face) ("north star" artbollocks-face) ("sort of" artbollocks-weasel-words-face) ("synergy" artbollocks-face)) (("around" artbollocks-weasel-words-face) ("launch narrative" artbollocks-face)) ";; Perhaps the release was shipped around the north star.\n;; The team found sort of synergy in the launch narrative.\n" t t)"#
     ],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        documented_text_mode_hook_reviews_a_selected_draft_with_the_bound_metric_commands(),
+        editing_lisp_prose_marks_real_writing_problems_but_not_matching_code(),
+        a_team_customizes_its_editorial_policy_and_refontifies_the_open_review(),
+    ];
+    assert_artbollocks_mode_batch(&cases);
 }

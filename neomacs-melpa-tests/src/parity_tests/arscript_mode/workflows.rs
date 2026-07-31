@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_arscript_mode_batch;
+use super::{ParityBatchCase, assert_arscript_mode_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_arscript_mode_batch(&[
-        (
-            "opening_formatting_extending_and_saving_a_real_arscript_file",
-            r##"(let* ((directory (make-temp-file "arscript-project-" t))
+fn opening_formatting_extending_and_saving_a_real_arscript_file() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "opening_formatting_extending_and_saving_a_real_arscript_file",
+        r##"(let* ((directory (make-temp-file "arscript-project-" t))
        (script (expand-file-name "willow.arscript" directory))
        buffer)
   (with-temp-file script
@@ -54,14 +52,17 @@ fn workflows_public_surface_batch() {
                (insert-file-contents script)
                (buffer-string))))))
     (kill-buffer buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("willow.arscript" fundamental-mode "Fundamental" t nil "//" nil) (t 8 2 "<Version>\n  ArtRage Version: ArtRage 3 4\n  ArtRage Build: 4.5.3\n</Version>\n<Header>\n  Painting Name: \"Willow\"\n  Painting Width: 2456\n  Painting Height: 2206\n</Header>\n") nil "<Version>\n  ArtRage Version: ArtRage 3 4\n  ArtRage Build: 4.5.3\n</Version>\n<Header>\n  Painting Name: \"Willow\"\n  Painting Width: 2456\n  Painting Height: 2206\n</Header>\n")"#
     ]],
-        ),
-        (
-            "formatting_a_pasted_recording_produces_stable_nested_art_script_structure",
-            r##"(with-temp-buffer
+    )
+}
+
+fn formatting_a_pasted_recording_produces_stable_nested_art_script_structure() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "formatting_a_pasted_recording_produces_stable_nested_art_script_structure",
+        r##"(with-temp-buffer
   (insert
    "<Events>\n"
    " <StrokeEvent>\n"
@@ -95,14 +96,17 @@ fn workflows_public_surface_batch() {
      first-pass
      first-indentations
      (equal first-pass (buffer-string)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("<Events>\n  <StrokeEvent>\n    <StrokeHeader>\n      <EventPt>\n        Wait: 0.018s Loc: (1086.56, 559.258) Pr: 0.156599 Rv: NO Iv: NO\n      </EventPt>\n      <Recorded> Yes </Recorded>\n    </StrokeHeader>\n  </StrokeEvent>\n  EvType: Command CommandID: Undo\n  <StrokeEvent>\n    <StrokeHeader>\n      Loc: (-679.912, 774.652) Dr: (-0.99682, -0.0796825)\n    </StrokeHeader>\n  </StrokeEvent>\n</Events>\n" (0 2 4 6 8 6 6 4 2 2 2 4 6 4 2 0) t)"#
     ]],
-        ),
-        (
-            "disabling_reenabling_and_rewriting_recorded_actions_preserves_the_document",
-            r##"(with-temp-buffer
+    )
+}
+
+fn disabling_reenabling_and_rewriting_recorded_actions_preserves_the_document() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "disabling_reenabling_and_rewriting_recorded_actions_preserves_the_document",
+        r##"(with-temp-buffer
   (insert
    "<Events>\n"
    "EvType: Command CommandID: CID_SetClearCanvas ParamType: flag Value: { true }\n"
@@ -133,14 +137,17 @@ fn workflows_public_surface_batch() {
        (line-number-at-pos)
        (current-indentation)
        (buffer-modified-p)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("<Events>\n  // EvType: Command CommandID: CID_SetClearCanvas ParamType: flag Value: { true }\n  // EvType: Command CommandID: Undo\n  EvType: Command CommandID: ExportLayer Path: \"willow.png\"\n</Events>\n" "<Events>\n  EvType: Command CommandID: CID_SetClearCanvas ParamType: flag Value: { true }\n  EvType: Command CommandID: SetForeColour ParamType: Pixel Value: { 0x0FFCCA38F }\n  EvType: Command CommandID: ExportLayer Path: \"willow.png\"\n</Events>\n" 3 2 t)"#
     ]],
-        ),
-        (
-            "editing_and_refontifying_a_header_and_paint_event_updates_visible_semantics",
-            r##"(with-temp-buffer
+    )
+}
+
+fn editing_and_refontifying_a_header_and_paint_event_updates_visible_semantics() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "editing_and_refontifying_a_header_and_paint_event_updates_visible_semantics",
+        r##"(with-temp-buffer
   (insert
    "// Willow export workflow\n"
    "<Header>\n"
@@ -181,14 +188,17 @@ fn workflows_public_surface_batch() {
     (list
      (buffer-substring-no-properties (point-min) (point-max))
      (nreverse visible-runs))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("// Willow export workflow\n<Header>\nPainting Name: \"Willow\"\nPainting Height: 2206\nScript Feature Flags: 0x000000034\n</Header>\n<Events>\nEvType: Command CommandID: SetForeColor ParamType: Pixel Value: { 0x0FF7386A0 }\n<EventPt> Wait: 0.018s Loc: (1086.56, 559.258) Pr: 0.156599 </EventPt>\n</Events>\n" (("// Willow export workflow" font-lock-comment-face) ("<Header>" font-lock-type-face) ("Painting Name" font-lock-keyword-face) ("\"Willow\"" font-lock-string-face) ("Painting Height" font-lock-keyword-face) ("2206" font-lock-constant-face) ("Script Feature Flags" font-lock-keyword-face) ("0x000000034" font-lock-string-face) ("</Header>" font-lock-type-face) ("<Events>" font-lock-type-face) ("EvType" font-lock-keyword-face) ("Command" font-lock-constant-face) ("CommandID" font-lock-keyword-face) ("SetForeColor" font-lock-constant-face) ("ParamType" font-lock-keyword-face) ("Pixel" font-lock-constant-face) ("Value" font-lock-keyword-face) ("0x0FF7386A0" font-lock-string-face) ("<EventPt>" font-lock-type-face) ("Wait:" font-lock-string-face) ("0.018s" font-lock-constant-face) ("Loc:" font-lock-keyword-face) ("1086.56" font-lock-constant-face) ("559.258" font-lock-constant-face) ("Pr:" font-lock-keyword-face) ("0.156599" font-lock-constant-face) ("</EventPt>" font-lock-type-face) ("</Events>" font-lock-type-face)))"#
     ]],
-        ),
-        (
-            "composing_a_header_and_stroke_with_editor_commands_tracks_point_and_indentation",
-            r##"(with-temp-buffer
+    )
+}
+
+fn composing_a_header_and_stroke_with_editor_commands_tracks_point_and_indentation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "composing_a_header_and_stroke_with_editor_commands_tracks_point_and_indentation",
+        r##"(with-temp-buffer
   (arscript-mode)
   (setq-local tab-width 3)
   (insert "<Header>")
@@ -230,10 +240,21 @@ fn workflows_public_surface_batch() {
       (forward-line (1- line))
       (current-indentation))
     (number-sequence 1 11))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("<Header>\n   Painting Name: \"Willow\"\n   Painting DPI: 200\n</Header>\n<Events>\n   <StrokeEvent>\n      <StrokeHeader>\n         Loc: (1054.6, 527.3) Dr: (-0.919609, -0.392834)\n      </StrokeHeader>\n   </StrokeEvent>\n</Events>" 212 11 0 (0 3 3 0 0 3 6 9 6 3 0))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        opening_formatting_extending_and_saving_a_real_arscript_file(),
+        formatting_a_pasted_recording_produces_stable_nested_art_script_structure(),
+        disabling_reenabling_and_rewriting_recorded_actions_preserves_the_document(),
+        editing_and_refontifying_a_header_and_paint_event_updates_visible_semantics(),
+        composing_a_header_and_stroke_with_editor_commands_tracks_point_and_indentation(),
+    ];
+    assert_arscript_mode_batch(&cases);
 }

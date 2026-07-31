@@ -6,7 +6,10 @@ use crate::{
 };
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod candidates;
 mod discovery;
@@ -129,9 +132,9 @@ pub(crate) fn assert_auto_complete_exuberant_ctags_autoload_parity(
 
 
 /// Multi-probe batch for `assert_auto_complete_exuberant_ctags_autoload_parity` cases (2a).
-pub(crate) fn assert_auto_complete_exuberant_ctags_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_auto_complete_exuberant_ctags_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         auto_complete_exuberant_ctags_oracle("auto-complete-exuberant-ctags-autoloads.el"),
         &name,
         "auto_complete_exuberant_ctags_autoload_parity",
@@ -140,9 +143,9 @@ pub(crate) fn assert_auto_complete_exuberant_ctags_autoload_batch(cases: &[(&str
 }
 
 /// Multi-probe batch for `assert_auto_complete_exuberant_ctags_parity` cases (2a).
-pub(crate) fn assert_auto_complete_exuberant_ctags_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_auto_complete_exuberant_ctags_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         auto_complete_exuberant_ctags_oracle("auto-complete-exuberant-ctags.el"),
         &name,
         "auto_complete_exuberant_ctags_parity",

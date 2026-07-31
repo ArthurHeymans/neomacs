@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{CachedMelpaOracle, TWO_BIT_MELPA_PIN};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod binary;
 mod commands;
@@ -97,9 +100,9 @@ pub(crate) fn assert_two_bit_signal_parity(form: &str, expected: Expect) {
 }
 
 /// Multi-probe batch for `assert_two_bit_parity` cases (2a).
-pub(crate) fn assert_two_bit_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_two_bit_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         two_bit_oracle(),
         &name,
         "two_bit_parity",

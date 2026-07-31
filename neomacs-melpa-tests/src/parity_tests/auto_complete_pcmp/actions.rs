@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_pcmp_batch;
+use super::{ParityBatchCase, assert_auto_complete_pcmp_batch};
 
-#[test]
-fn actions_public_surface_batch() {
-    assert_auto_complete_pcmp_batch(&[
-        (
-            "auto_complete_pcmp_action_appends_termination_for_sole_completion",
-            r##"(with-temp-buffer
+fn auto_complete_pcmp_action_appends_termination_for_sole_completion() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_action_appends_termination_for_sole_completion",
+        r##"(with-temp-buffer
          (insert "git checkout")
          (let ((ac-pcmp--status 'sole)
                (ac-pcmp--point 5)
@@ -21,12 +19,15 @@ fn actions_public_surface_batch() {
             (point)
             pcomplete-last-completion-length
             pcomplete-last-completion-stub)))"##,
-            true,
-            expect![[r#"OK ("git checkout " 14 9 "ch")"#]],
-        ),
-        (
-            "auto_complete_pcmp_action_appends_termination_for_shortest_completion",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ("git checkout " 14 9 "ch")"#]],
+    )
+}
+
+fn auto_complete_pcmp_action_appends_termination_for_shortest_completion() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_action_appends_termination_for_shortest_completion",
+        r##"(with-temp-buffer
          (insert "cargo ch")
          (let ((ac-pcmp--status 'shortest)
                (ac-pcmp--point 7)
@@ -39,12 +40,15 @@ fn actions_public_surface_batch() {
             (buffer-string)
             pcomplete-last-completion-length
             pcomplete-last-completion-stub)))"##,
-            true,
-            expect![[r#"OK ("cargo ch::" 4 "c")"#]],
-        ),
-        (
-            "auto_complete_pcmp_action_does_not_append_for_partial_none_or_unknown_status",
-            r##"(mapcar
+        true,
+        expect![[r#"OK ("cargo ch::" 4 "c")"#]],
+    )
+}
+
+fn auto_complete_pcmp_action_does_not_append_for_partial_none_or_unknown_status() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_action_does_not_append_for_partial_none_or_unknown_status",
+        r##"(mapcar
          (lambda (status)
            (with-temp-buffer
              (insert "tool candidate")
@@ -61,14 +65,17 @@ fn actions_public_surface_batch() {
                 pcomplete-last-completion-length
                 pcomplete-last-completion-stub))))
          '(partial none exact nil custom))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((partial "tool candidate" 9 "ca") (none "tool candidate" 9 "ca") (exact "tool candidate" 9 "ca") (nil "tool candidate" 9 "ca") (custom "tool candidate" 9 "ca"))"#
     ]],
-        ),
-        (
-            "auto_complete_pcmp_action_respects_existing_suffix_characters",
-            r##"(mapcar
+    )
+}
+
+fn auto_complete_pcmp_action_respects_existing_suffix_characters() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_action_respects_existing_suffix_characters",
+        r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (insert (car case))
@@ -86,14 +93,17 @@ fn actions_public_surface_batch() {
            ("host:" . colon)
            ("option=" . equals)
            ("word" . ordinary)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("directory/" . slash) "directory/" 10) (("host:" . colon) "host:" 5) (("option=" . equals) "option=" 7) (("word" . ordinary) "word " 5))"#
     ]],
-        ),
-        (
-            "auto_complete_pcmp_action_measures_inserted_span_from_saved_candidate_point",
-            r##"(mapcar
+    )
+}
+
+fn auto_complete_pcmp_action_measures_inserted_span_from_saved_candidate_point() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_action_measures_inserted_span_from_saved_candidate_point",
+        r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (insert (nth 0 case))
@@ -113,14 +123,17 @@ fn actions_public_surface_batch() {
            ("prefix-value" partial 8 "val")
            ("x" sole 2 "x")
            ("command/" sole 4 "mand")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("abc" partial 1 "") 4 3 "") (("prefix-value" partial 8 "val") 13 5 "val") (("x" sole 2 "x") 3 1 "x") (("command/" sole 4 "mand") 9 5 "mand"))"#
     ]],
-        ),
-        (
-            "auto_complete_pcmp_action_preserves_stub_object_without_copying",
-            r##"(let ((stub (propertize "ca" 'face 'bold 'origin '(1 2))))
+    )
+}
+
+fn auto_complete_pcmp_action_preserves_stub_object_without_copying() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_action_preserves_stub_object_without_copying",
+        r##"(let ((stub (propertize "ca" 'face 'bold 'origin '(1 2))))
          (with-temp-buffer
            (insert "candidate")
            (let ((ac-pcmp--status 'partial)
@@ -136,12 +149,15 @@ fn actions_public_surface_batch() {
               (text-properties-at
                0 pcomplete-last-completion-stub)
               pcomplete-last-completion-length))))"##,
-            true,
-            expect![[r#"OK (t #("ca" 0 2 (face bold origin (1 2))) (face bold origin (1 2)) 9)"#]],
-        ),
-        (
-            "auto_complete_pcmp_action_raw_flag_does_not_change_bookkeeping_contract",
-            r##"(mapcar
+        true,
+        expect![[r#"OK (t #("ca" 0 2 (face bold origin (1 2))) (face bold origin (1 2)) 9)"#]],
+    )
+}
+
+fn auto_complete_pcmp_action_raw_flag_does_not_change_bookkeeping_contract() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_action_raw_flag_does_not_change_bookkeeping_contract",
+        r##"(mapcar
          (lambda (raw)
            (with-temp-buffer
              (insert "quoted value")
@@ -158,14 +174,17 @@ fn actions_public_surface_batch() {
                 pcomplete-last-completion-length
                 pcomplete-last-completion-stub))))
          '(nil t raw-marker))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil "quoted value" 5 "va") (t "quoted value" 5 "va") (raw-marker "quoted value" 5 "va"))"#
     ]],
-        ),
-        (
-            "auto_complete_pcmp_action_errors_are_reported_without_partial_bookkeeping",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_complete_pcmp_action_errors_are_reported_without_partial_bookkeeping() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_action_errors_are_reported_without_partial_bookkeeping",
+        r##"(with-temp-buffer
          (insert "candidate")
          (let ((ac-pcmp--status 'partial)
                (ac-pcmp--point "not-a-position")
@@ -182,12 +201,15 @@ fn actions_public_surface_batch() {
               pcomplete-last-completion-length
               pcomplete-last-completion-stub
               (buffer-string)))))"##,
-            true,
-            expect![[r#"OK (nil nil :old-length :old-stub "candidate")"#]],
-        ),
-        (
-            "auto_complete_pcmp_self_insert_command_forwards_count_and_trigger_metadata",
-            r##"(let (events)
+        true,
+        expect![[r#"OK (nil nil :old-length :old-stub "candidate")"#]],
+    )
+}
+
+fn auto_complete_pcmp_self_insert_command_forwards_count_and_trigger_metadata() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_self_insert_command_forwards_count_and_trigger_metadata",
+        r##"(let (events)
          (cl-letf (((symbol-function 'self-insert-command)
                     (lambda (count)
                       (push (list :insert count) events)
@@ -203,12 +225,15 @@ fn actions_public_surface_batch() {
                 result
                 (buffer-string)
                 (nreverse events))))))"##,
-            true,
-            expect![[r#"OK (:started "xxxx" ((:insert 4) (:complete :triggered trigger-key)))"#]],
-        ),
-        (
-            "auto_complete_pcmp_candidate_then_action_models_real_auto_complete_lifecycle",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK (:started "xxxx" ((:insert 4) (:complete :triggered trigger-key)))"#]],
+    )
+}
+
+fn auto_complete_pcmp_candidate_then_action_models_real_auto_complete_lifecycle() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_candidate_then_action_models_real_auto_complete_lifecycle",
+        r##"(with-temp-buffer
          (insert "git che")
          (let ((pcomplete-termination-string " ")
                (pcomplete-suffix-list '(?/ ?:))
@@ -228,8 +253,24 @@ fn actions_public_surface_batch() {
                 (buffer-string)
                 pcomplete-last-completion-length
                 pcomplete-last-completion-stub)))))"##,
-            true,
-            expect![[r#"OK (("checkout") sole "git che " 1 "che")"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (("checkout") sole "git che " 1 "che")"#]],
+    )
+}
+
+#[test]
+fn actions_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_pcmp_action_appends_termination_for_sole_completion(),
+        auto_complete_pcmp_action_appends_termination_for_shortest_completion(),
+        auto_complete_pcmp_action_does_not_append_for_partial_none_or_unknown_status(),
+        auto_complete_pcmp_action_respects_existing_suffix_characters(),
+        auto_complete_pcmp_action_measures_inserted_span_from_saved_candidate_point(),
+        auto_complete_pcmp_action_preserves_stub_object_without_copying(),
+        auto_complete_pcmp_action_raw_flag_does_not_change_bookkeeping_contract(),
+        auto_complete_pcmp_action_errors_are_reported_without_partial_bookkeeping(),
+        auto_complete_pcmp_self_insert_command_forwards_count_and_trigger_metadata(),
+        auto_complete_pcmp_candidate_then_action_models_real_auto_complete_lifecycle(),
+    ];
+    assert_auto_complete_pcmp_batch(&cases);
 }

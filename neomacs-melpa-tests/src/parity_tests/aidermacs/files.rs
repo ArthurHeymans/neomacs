@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_aidermacs_batch;
+use super::{ParityBatchCase, assert_aidermacs_batch};
 
-#[test]
-fn files_public_surface_batch() {
-    assert_aidermacs_batch(&[
-        (
-            "aidermacs_file_command_builder_quotes_localizes_and_handles_empty_inputs",
-            r##"(list
+fn aidermacs_file_command_builder_quotes_localizes_and_handles_empty_inputs() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidermacs_file_command_builder_quotes_localizes_and_handles_empty_inputs",
+        r##"(list
                       (aidermacs--prepare-file-paths-for-command
                        "/add"
                        '("/work/src/main.el" "/work/docs/user guide.md" nil))
@@ -15,14 +13,17 @@ fn files_public_surface_batch() {
                       (aidermacs--localize-tramp-path
                        "/ssh:user@example.test:/srv/app/main.py")
                       (aidermacs--localize-tramp-path "/local/app.el"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("/add \"/work/src/main.el\" \"/work/docs/user guide.md\"" "/drop" "/srv/app/main.py" "/local/app.el")"#
     ]],
-        ),
-        (
-            "aidermacs_ls_parser_tracks_real_editable_and_read_only_files_in_order",
-            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    )
+}
+
+fn aidermacs_ls_parser_tracks_real_editable_and_read_only_files_in_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidermacs_ls_parser_tracks_real_editable_and_read_only_files_in_order",
+        r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                           (root (file-name-as-directory
                                  (expand-file-name "repo" sandbox)))
                           (default-directory root)
@@ -46,12 +47,15 @@ fn files_public_surface_batch() {
                          "  missing.el\n"
                          "\nTokens: 60\n"))
                        aidermacs--tracked-files))"##,
-            true,
-            expect![[r#"OK (("docs/guide.md (read-only)" "src/main.el" "docs/guide.md") nil)"#]],
-        ),
-        (
-            "aidermacs_output_parser_applies_real_chat_file_state_transitions_and_udiffs",
-            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+        true,
+        expect![[r#"OK (("docs/guide.md (read-only)" "src/main.el" "docs/guide.md") nil)"#]],
+    )
+}
+
+fn aidermacs_output_parser_applies_real_chat_file_state_transitions_and_udiffs() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidermacs_output_parser_applies_real_chat_file_state_transitions_and_udiffs",
+        r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                           (root (file-name-as-directory
                                  (expand-file-name "repo" sandbox)))
                           (default-directory root)
@@ -82,12 +86,15 @@ fn files_public_surface_batch() {
                           (expand-file-name "src/lib/tool.el" root))
                          (aidermacs--find-tracked-file "tool.el")
                          (aidermacs--find-tracked-file "missing.el"))))"##,
-            true,
-            expect![[r#"OK (("README.md") ("README.md (read-only)") nil nil nil)"#]],
-        ),
-        (
-            "aidermacs_file_tracking_requires_unambiguous_basename_matches",
-            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+        true,
+        expect![[r#"OK (("README.md") ("README.md (read-only)") nil nil nil)"#]],
+    )
+}
+
+fn aidermacs_file_tracking_requires_unambiguous_basename_matches() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidermacs_file_tracking_requires_unambiguous_basename_matches",
+        r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                           (root (file-name-as-directory
                                  (expand-file-name "repo" sandbox)))
                           (default-directory root)
@@ -103,14 +110,17 @@ fn files_public_surface_batch() {
                        (aidermacs--find-tracked-file "tool.el")
                        (aidermacs--find-tracked-file "main.el")
                        (aidermacs--find-tracked-file "src/../src/main.el")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("src/main.el" "docs/guide.md (read-only)" "lib/tool.el" "src/main.el" "src/main.el")"#
     ]],
-        ),
-        (
-            "aidermacs_pre_edit_capture_detects_real_changes_and_cleanup_is_idempotent",
-            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    )
+}
+
+fn aidermacs_pre_edit_capture_detects_real_changes_and_cleanup_is_idempotent() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidermacs_pre_edit_capture_detects_real_changes_and_cleanup_is_idempotent",
+        r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                           (root (file-name-as-directory
                                  (expand-file-name "repo" sandbox)))
                           (default-directory root)
@@ -155,14 +165,17 @@ fn files_public_surface_batch() {
                                    aidermacs--pre-edit-prepared)))))
                         (when (buffer-live-p session)
                           (kill-buffer session))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("src/one.el" "before one\n" t) ("src/two.el" "before two\n" t)) ("src/one.el" "src/two.el") nil nil)"#
     ]],
-        ),
-        (
-            "aidermacs_add_and_drop_helpers_build_batched_commands_and_user_messages",
-            r##"(let (commands messages)
+    )
+}
+
+fn aidermacs_add_and_drop_helpers_build_batched_commands_and_user_messages() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidermacs_add_and_drop_helpers_build_batched_commands_and_user_messages",
+        r##"(let (commands messages)
                       (cl-letf
                           (((symbol-function 'aidermacs--send-command)
                             (lambda (command &rest _)
@@ -181,10 +194,22 @@ fn files_public_surface_batch() {
                          '("/repo/src/a.el" "/repo/src/b b.el"))
                         (aidermacs--drop-files-helper nil)
                         (list (nreverse commands) (nreverse messages))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("/add \"/repo/src/a.el\" \"/repo/src/b b.el\"" "/read-only \"/repo/README.md\"" "/drop \"/repo/src/a.el\" \"/repo/src/b b.el\"") ("Added 2 files as editable" "Reference added" "No files to add." "Dropped 2 files" "No files to drop."))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn files_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        aidermacs_file_command_builder_quotes_localizes_and_handles_empty_inputs(),
+        aidermacs_ls_parser_tracks_real_editable_and_read_only_files_in_order(),
+        aidermacs_output_parser_applies_real_chat_file_state_transitions_and_udiffs(),
+        aidermacs_file_tracking_requires_unambiguous_basename_matches(),
+        aidermacs_pre_edit_capture_detects_real_changes_and_cleanup_is_idempotent(),
+        aidermacs_add_and_drop_helpers_build_batched_commands_and_user_messages(),
+    ];
+    assert_aidermacs_batch(&cases);
 }

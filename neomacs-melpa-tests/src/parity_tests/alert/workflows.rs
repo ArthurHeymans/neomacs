@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_alert_batch;
+use super::{ParityBatchCase, assert_alert_batch};
 
 /// The default path: three alerts of different severity through the `message'
 /// style.  Each reaches the echo area with its `%' left alone, each is written
@@ -9,12 +9,10 @@ use super::assert_alert_batch;
 /// the style, and each stays on `alert-active-alerts' with a fade timer holding
 /// its remover.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_alert_batch(&[
-        (
-            "alerting_shows_the_message_and_logs_every_severity",
-            r##"(let ((alert-default-style 'message)
+fn alerting_shows_the_message_and_logs_every_severity() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alerting_shows_the_message_and_logs_every_severity",
+        r##"(let ((alert-default-style 'message)
       (alert-user-configuration nil)
       (alert-internal-configuration nil)
       (alert-active-alerts nil)
@@ -36,14 +34,17 @@ fn workflows_public_surface_batch() {
               (al-test-pending-fades)
               alert-log-level))
     (kill-buffer buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("Build finished" "Disk almost full" "100% done") "<TIME> [INFO ] Build finished\n<TIME> [ERROR] Disk almost full\n<TIME> [TRACE] 100% done\n" (("*alert-origin*" "100% done" alert-message-remove) ("*alert-origin*" "Disk almost full" alert-message-remove) ("*alert-origin*" "Build finished" alert-message-remove)) ("100% done" "Build finished" "Disk almost full") normal)"#
     ]],
-        ),
-        (
-            "a_custom_style_receives_the_complete_alert_plist",
-            r##"(let ((alert-default-style 'al-test-recorder)
+    )
+}
+
+fn a_custom_style_receives_the_complete_alert_plist() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "a_custom_style_receives_the_complete_alert_plist",
+        r##"(let ((alert-default-style 'al-test-recorder)
       (alert-user-configuration nil)
       (alert-internal-configuration nil)
       (alert-active-alerts nil)
@@ -73,14 +74,17 @@ fn workflows_public_surface_batch() {
                 (and (memq #'alert-remove-on-command post-command-hook) t)
                 (buffer-string))))
     (kill-buffer buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((al-test-recorder "Recorder al-test-recorder" t t) (((:message . "Nightly build failed") (:title . "CI") (:severity . urgent) (:category . build) (:mode . text-mode) (:buffer . "*alert-origin*") (:data job 42) (:id . nightly) (:persistent . t) (:never-persist) (:style))) (((:message . "Nightly build failed") (:severity . urgent))) 0 t "x")"#
     ]],
-        ),
-        (
-            "user_configuration_rules_route_each_alert_to_a_style",
-            r##"(let ((alert-default-style 'al-test-fallback)
+    )
+}
+
+fn user_configuration_rules_route_each_alert_to_a_style() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "user_configuration_rules_route_each_alert_to_a_style",
+        r##"(let ((alert-default-style 'al-test-fallback)
       (alert-internal-configuration nil)
       (alert-active-alerts nil)
       (alert-hide-all-notifications nil)
@@ -106,14 +110,17 @@ fn workflows_public_surface_batch() {
               (cons (car entry)
                     (al-test-info (cdr entry) :message :severity :category)))
             (al-test-captured-infos :notify))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((al-test-urgent (:message . "server on fire") (:severity . urgent) (:category)) (al-test-chat (:message . "ping from audit team") (:severity . normal) (:category . chat)) (al-test-fallback (:message . "ping from audit team") (:severity . normal) (:category . chat)) (al-test-fallback (:message . "nothing matches me") (:severity . low) (:category . misc)))"#
     ]],
-        ),
-        (
-            "hiding_all_notifications_still_delivers_the_default_style",
-            r##"(let ((alert-internal-configuration nil)
+    )
+}
+
+fn hiding_all_notifications_still_delivers_the_default_style() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "hiding_all_notifications_still_delivers_the_default_style",
+        r##"(let ((alert-internal-configuration nil)
       (alert-active-alerts nil)
       (alert-log-messages t)
       (al-test-captured nil))
@@ -148,14 +155,17 @@ fn workflows_public_surface_batch() {
                                 (al-test-info (cdr entry) :message :severity :never-persist)))
                         (al-test-captured-infos :notify))
                 (al-test-buffer-text " *log4e-alert*")))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((al-test-default (:message . "hidden with a default style") (:persistent) (:never-persist))) nil ((al-test-rule (:message . "shown through the rule") (:severity . urgent) (:never-persist)) (al-test-forced (:message . "forced past the rules") (:severity . low) (:never-persist))) "<TIME> [FATAL] hidden with a default style\n<TIME> [FATAL] hidden with no default style\n<TIME> [FATAL] shown through the rule\n<TIME> [DEBUG] forced past the rules\n")"#
     ]],
-        ),
-        (
-            "programmatic_rules_control_persistence_and_ordering",
-            r##"(let ((alert-default-style 'al-test-default)
+    )
+}
+
+fn programmatic_rules_control_persistence_and_ordering() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "programmatic_rules_control_persistence_and_ordering",
+        r##"(let ((alert-default-style 'al-test-default)
       (alert-user-configuration nil)
       (alert-internal-configuration nil)
       (alert-active-alerts nil)
@@ -188,14 +198,17 @@ fn workflows_public_surface_batch() {
                   (al-test-captured-infos :notify))
           (length alert-active-alerts)
           (al-test-pending-fades))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((:selectors ((:severity urgent high) (:mode . "\\`text-mode\\'")) :style al-test-chat :options ((:persistent . :function) (:continue . t))) (:selectors ((:category . "audit")) :style al-test-audit :options ((:never-persist . t)))) ((:selectors ((:severity urgent high) (:mode . "\\`text-mode\\'")) :style al-test-chat :options ((:persistent . :function) (:continue . t))) (:selectors ((:category . "audit")) :style al-test-audit :options ((:never-persist . t)))) ((al-test-chat (:message . "urgent audit finding") (:severity . urgent) (:persistent) (:never-persist)) (al-test-audit (:message . "urgent audit finding") (:severity . urgent) (:persistent) (:never-persist . t)) (al-test-chat (:message . "routine note") (:severity . high) (:persistent) (:never-persist))) 3 ("routine note" "urgent audit finding"))"#
     ]],
-        ),
-        (
-            "an_unavailable_backend_falls_back_to_the_message_style",
-            r##"(let ((alert-user-configuration nil)
+    )
+}
+
+fn an_unavailable_backend_falls_back_to_the_message_style() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "an_unavailable_backend_falls_back_to_the_message_style",
+        r##"(let ((alert-user-configuration nil)
       (alert-internal-configuration nil)
       (alert-log-messages nil)
       (alert-active-alerts nil)
@@ -218,10 +231,22 @@ fn workflows_public_surface_batch() {
        (alert "Coffee ready" :severity 'trivial))
      (list (al-test-commands)
            (al-test-messages-since mark)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil nil) (("Growl is not installed") no-command-ran) (("growlnotify --appIcon Emacs --name Emacs --title CI --priority 2 --sticky --message Build finished" "growlnotify --appIcon Emacs --name Emacs --title *alert-origin* --priority -2 --message Coffee ready") ("Growl is not installed")))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        alerting_shows_the_message_and_logs_every_severity(),
+        a_custom_style_receives_the_complete_alert_plist(),
+        user_configuration_rules_route_each_alert_to_a_style(),
+        hiding_all_notifications_still_delivers_the_default_style(),
+        programmatic_rules_control_persistence_and_ordering(),
+        an_unavailable_backend_falls_back_to_the_message_style(),
+    ];
+    assert_alert_batch(&cases);
 }

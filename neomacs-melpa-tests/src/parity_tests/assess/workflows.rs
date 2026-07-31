@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_assess_batch;
+use super::{ParityBatchCase, assert_assess_batch};
 
 /// The library's whole reason to exist: a test that compares a string against
 /// a file, and what the author is shown when it does not match.
@@ -16,12 +16,10 @@ use super::assert_assess_batch;
 /// assess still shells out to diff, and the "No newline at end of file" marker
 /// in the output is a real consequence of how it writes them.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_assess_batch(&[
-        (
-            "a_failing_comparison_explains_itself_with_a_real_diff",
-            r##"
+fn a_failing_comparison_explains_itself_with_a_real_diff() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "a_failing_comparison_explains_itself_with_a_real_diff",
+        r##"
 (let ((path (assess-test-path "greeting.txt")))
   (with-temp-buffer
     (insert "Grüße\nzweite Zeile\n")
@@ -35,14 +33,17 @@ fn workflows_public_surface_batch() {
         :explain-when-equal (assess-explain= "same" "same")
         :explain-short-strings (assess-test-scrub (assess-explain= "a" "b"))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:passing (:name assess-probe-pass :passed t) :failing (:name assess-probe-fail :passed nil :error ert-test-failed :explanation "Strings:\nGrüße\nandere Zeile\n\nand\nGrüße\nzweite Zeile\n\nDiffer at:*** <FILE> <TIME>\n--- <FILE> <TIME>\n***************\n*** 1,2 ****\n  Grüße\n! andere Zeile\n--- 1,2 ----\n  Grüße\n! zweite Zeile\n\n" :value nil) :explain-when-equal t :explain-short-strings "Strings:\na\nand\nb\nDiffer at:*** <FILE> <TIME>\n--- <FILE> <TIME>\n***************\n*** 1 ****\n! a\n\\ No newline at end of file\n--- 1 ----\n! b\n\\ No newline at end of file\n\n")"#
     ]],
-        ),
-        (
-            "the_filesystem_macro_builds_the_described_tree_and_removes_it_afterwards",
-            r##"
+    )
+}
+
+fn the_filesystem_macro_builds_the_described_tree_and_removes_it_afterwards() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_filesystem_macro_builds_the_described_tree_and_removes_it_afterwards",
+        r##"
 (let (inside root)
   (assess-with-filesystem
    '("leer.txt"
@@ -67,14 +68,17 @@ fn workflows_public_surface_batch() {
   (list :inside inside
         :removed-afterwards (not (file-exists-p root))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:inside (:directory-name-prefix t :tree ("leer.txt" "notiz mit leerzeichen.txt" "paket" "paket/a.txt" "paket/b.txt" "paket/c" "paket/c/d.txt" "unter" "unter/tief" "unter/tief/inhalt.txt" "unter/verzeichnis") :file-with-a-space "Grüße aus München\n" :nested-file "zweite Datei\n" :file-in-recursive-spec "b hat Inhalt\n" :empty-file "") :removed-afterwards t)"#
     ]],
-        ),
-        (
-            "temp_buffers_carry_their_own_contents_and_die_even_when_the_body_signals",
-            r##"
+    )
+}
+
+fn temp_buffers_carry_their_own_contents_and_die_even_when_the_body_signals() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "temp_buffers_carry_their_own_contents_and_die_even_when_the_body_signals",
+        r##"
 (let ((before (assess-test-buffers)) contents)
   (assess-with-temp-buffers
    ((one (insert "erste"))
@@ -93,14 +97,17 @@ fn workflows_public_surface_batch() {
           :as-temp-buffer (assess-as-temp-buffer "Zeile eins\nZeile zwei\n"
                             (list (buffer-string) (point) (buffer-name))))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:contents ("erste" "zweite" " *assess-with-temp-buffers*") :restored-after-normal-exit t :signal (:error error ("boom")) :restored-after-signal t :as-temp-buffer ("Zeile eins\nZeile zwei\n" 23 " *temp*"))"#
     ]],
-        ),
-        (
-            "indentation_is_checked_against_the_mode_and_the_mismatch_shows_the_line",
-            r##"
+    )
+}
+
+fn indentation_is_checked_against_the_mode_and_the_mismatch_shows_the_line() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "indentation_is_checked_against_the_mode_and_the_mismatch_shows_the_line",
+        r##"
 (let ((unindented "(defun greet (name)\n(message \"Hallo\"))\n")
       (indented "(defun greet (name)\n  (message \"Hallo\"))\n"))
   (list :matches (assess-indentation= 'emacs-lisp-mode unindented indented)
@@ -110,14 +117,17 @@ fn workflows_public_surface_batch() {
         :roundtrip-of-indented (assess-roundtrip-indentation= 'emacs-lisp-mode indented)
         :roundtrip-of-unindented (assess-roundtrip-indentation= 'emacs-lisp-mode unindented)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:matches t :does-not-match nil :explanation "Strings:\n(defun greet (name)\n  (message \"Hallo\"))\n\nand\n(defun greet (name)\n(message \"Hallo\"))\n\nDiffer at:*** <FILE> <TIME>\n--- <FILE> <TIME>\n***************\n*** 1,2 ****\n  (defun greet (name)\n!   (message \"Hallo\"))\n--- 1,2 ----\n  (defun greet (name)\n! (message \"Hallo\"))\n\n" :roundtrip-of-indented t :roundtrip-of-unindented nil)"#
     ]],
-        ),
-        (
-            "faces_are_checked_at_named_locations_and_a_mismatch_names_both_faces",
-            r##"
+    )
+}
+
+fn faces_are_checked_at_named_locations_and_a_mismatch_names_both_faces() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "faces_are_checked_at_named_locations_and_a_mismatch_names_both_faces",
+        r##"
 (let ((source "(defun greet (name)\n  ;; a comment\n  (message \"Hallo %s\" name))\n"))
   (list :all-three-match
         (assess-face-at= source 'emacs-lisp-mode
@@ -132,14 +142,17 @@ fn workflows_public_surface_batch() {
          (assess-explain-face-at= source 'emacs-lisp-mode
                                   '("greet") '(font-lock-string-face)))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:all-three-match t :wrong-face nil :explanation "Face does not match expected value\n\11Expected: font-lock-string-face\n\11Actual: font-lock-function-name-face\n\11Location: 8\n\11Line Context:   (message \"Hallo %s\" name))\n\n\11bol Position: 1\n")"#
     ]],
-        ),
-        (
-            "a_related_file_is_edited_and_saved_without_touching_the_original",
-            r##"
+    )
+}
+
+fn a_related_file_is_edited_and_saved_without_touching_the_original() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "a_related_file_is_edited_and_saved_without_touching_the_original",
+        r##"
 (let ((original (assess-test-path "quelle.el")))
   (with-temp-buffer
     (insert "(defun greet (name)\n(message \"Hallo %s\" name))\n")
@@ -162,10 +175,22 @@ fn workflows_public_surface_batch() {
           :original-on-disk (assess-test-read original)
           :no-buffer-left-behind (equal before (assess-test-buffers)))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:keeps-the-extension t :keeps-the-base-name nil :lives-elsewhere t :buffer-contents "(defun greet (name)\n(message \"Hallo %s\" name))\n;; angehängt\n" :copy-on-disk "(defun greet (name)\n(message \"Hallo %s\" name))\n;; angehängt\n" :original-on-disk "(defun greet (name)\n(message \"Hallo %s\" name))\n" :no-buffer-left-behind t)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        a_failing_comparison_explains_itself_with_a_real_diff(),
+        the_filesystem_macro_builds_the_described_tree_and_removes_it_afterwards(),
+        temp_buffers_carry_their_own_contents_and_die_even_when_the_body_signals(),
+        indentation_is_checked_against_the_mode_and_the_mismatch_shows_the_line(),
+        faces_are_checked_at_named_locations_and_a_mismatch_names_both_faces(),
+        a_related_file_is_edited_and_saved_without_touching_the_original(),
+    ];
+    assert_assess_batch(&cases);
 }

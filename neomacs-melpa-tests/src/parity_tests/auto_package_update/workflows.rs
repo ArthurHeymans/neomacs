@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_package_update_batch;
+use super::{ParityBatchCase, assert_auto_package_update_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_auto_package_update_batch(&[
-        (
-            "auto_package_update_real_local_archive_upgrades_package_and_removes_old_version",
-            r##"(let*
+fn auto_package_update_real_local_archive_upgrades_package_and_removes_old_version() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_package_update_real_local_archive_upgrades_package_and_removes_old_version",
+        r##"(let*
                              ((world
                                (auto-package-update-test-configure-local-world
                                 "real-local-upgrade"))
@@ -141,14 +139,17 @@ fn workflows_public_surface_batch() {
                                             package-user-dir))))))
                                  (auto-package-update-test-kill-buffers
                                   auto-package-update-buffer-name)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("2.0" nil t :new-source "4242" "[PACKAGES UPDATED]:\napu-alpha up to date." t t ((:before "1.0")) ((:after "2.0")) ("2.0" "1.0") t)"#
     ]],
-        ),
-        (
-            "auto_package_update_real_local_archive_installs_transitive_dependency_and_runs_new_code",
-            r##"(let*
+    )
+}
+
+fn auto_package_update_real_local_archive_installs_transitive_dependency_and_runs_new_code() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_package_update_real_local_archive_installs_transitive_dependency_and_runs_new_code",
+        r##"(let*
                              ((world
                                (auto-package-update-test-configure-local-world
                                 "real-local-dependency"))
@@ -239,14 +240,17 @@ fn workflows_public_surface_batch() {
                                       archive)))))
                              (auto-package-update-test-kill-buffers
                               auto-package-update-buffer-name)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("2.0" "1.0" (:app 41) :app-requires-dependency :dependency-source nil "5151" "[PACKAGES UPDATED]:\napu-app up to date." (apu-dep apu-app dash) t t)"#
     ]],
-        ),
-        (
-            "auto_package_update_real_local_archive_respects_exclusion_and_leaves_package_untouched",
-            r##"(let*
+    )
+}
+
+fn auto_package_update_real_local_archive_respects_exclusion_and_leaves_package_untouched() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_package_update_real_local_archive_respects_exclusion_and_leaves_package_untouched",
+        r##"(let*
                              ((world
                                (auto-package-update-test-configure-local-world
                                 "real-local-exclusion"))
@@ -342,14 +346,17 @@ fn workflows_public_surface_batch() {
                                        package-alist))))))
                              (auto-package-update-test-kill-buffers
                               auto-package-update-buffer-name)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("2.0" "1.0" :alpha-new :beta-old nil t "6262" "[PACKAGES UPDATED]:\napu-alpha up to date." ("1.0"))"#
     ]],
-        ),
-        (
-            "auto_package_update_real_prompt_denial_preserves_old_package_then_acceptance_updates_it",
-            r##"(let*
+    )
+}
+
+fn auto_package_update_real_prompt_denial_preserves_old_package_then_acceptance_updates_it() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_package_update_real_prompt_denial_preserves_old_package_then_acceptance_updates_it",
+        r##"(let*
                              ((world
                                (auto-package-update-test-configure-local-world
                                 "real-local-prompt"))
@@ -459,14 +466,17 @@ fn workflows_public_surface_batch() {
                              (auto-package-update-test-kill-buffers
                               auto-package-preview-buffer-name
                               auto-package-update-buffer-name)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("1.0" :old-source nil nil nil t) ("2.0" :new-source nil "7373" "[PACKAGES UPDATED]:\napu-alpha up to date." t nil) ("Auto-update packages now?" "Auto-update packages now?"))"#
     ]],
-        ),
-        (
-            "auto_package_update_real_missing_archive_payload_reports_failure_and_preserves_installed_package",
-            r##"(let*
+    )
+}
+
+fn auto_package_update_real_missing_archive_payload_reports_failure_and_preserves_installed_package() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_package_update_real_missing_archive_payload_reports_failure_and_preserves_installed_package",
+        r##"(let*
                              ((world
                                (auto-package-update-test-configure-local-world
                                 "real-local-failure"))
@@ -567,14 +577,17 @@ fn workflows_public_surface_batch() {
                                         package-user-dir))))
                                  (auto-package-update-test-kill-buffers
                                   auto-package-update-buffer-name)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:value nil) "1.0" :old-source t nil "8484" "[PACKAGES UPDATED]:\nError installing apu-alpha" (:before :after) t)"#
     ]],
-        ),
-        (
-            "auto_package_update_real_schedule_skips_before_interval_then_updates_at_due_boundary",
-            r##"(let*
+    )
+}
+
+fn auto_package_update_real_schedule_skips_before_interval_then_updates_at_due_boundary() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_package_update_real_schedule_skips_before_interval_then_updates_at_due_boundary",
+        r##"(let*
                              ((world
                                (auto-package-update-test-configure-local-world
                                 "real-local-schedule"))
@@ -665,10 +678,22 @@ fn workflows_public_surface_batch() {
                                  (list before-due at-due))
                              (auto-package-update-test-kill-buffers
                               auto-package-update-buffer-name)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("1.0" :waiting nil "100" nil) ("2.0" :updated t "107" "[PACKAGES UPDATED]:\napu-alpha up to date."))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_package_update_real_local_archive_upgrades_package_and_removes_old_version(),
+        auto_package_update_real_local_archive_installs_transitive_dependency_and_runs_new_code(),
+        auto_package_update_real_local_archive_respects_exclusion_and_leaves_package_untouched(),
+        auto_package_update_real_prompt_denial_preserves_old_package_then_acceptance_updates_it(),
+        auto_package_update_real_missing_archive_payload_reports_failure_and_preserves_installed_package(),
+        auto_package_update_real_schedule_skips_before_interval_then_updates_at_due_boundary(),
+    ];
+    assert_auto_package_update_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_apiwrap_batch;
+use super::{ParityBatchCase, assert_apiwrap_batch};
 
-#[test]
-fn practical_public_surface_batch() {
-    assert_apiwrap_batch(&[
-        (
-            "generated_repository_client_runs_a_complete_issue_lifecycle",
-            r##"(progn
+fn generated_repository_client_runs_a_complete_issue_lifecycle() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "generated_repository_client_runs_a_complete_issue_lifecycle",
+        r##"(progn
   (defvar aw-lifecycle-requests nil)
   (defun aw-lifecycle-request (method resource params data)
     (push
@@ -94,14 +92,17 @@ fn practical_public_surface_batch() {
     (list
      :responses responses
      :requests (nreverse aw-lifecycle-requests))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:responses (:list (:status 200 :method get :resource "/repos/GNU%20Project/neomacs%20core/issues") :create (:status 201 :method post :resource "/repos/GNU%20Project/neomacs%20core/issues") :exists (:status 200 :method head :resource "/repos/GNU%20Project/neomacs%20core/issues/163") :update (:status 200 :method patch :resource "/repos/GNU%20Project/neomacs%20core/issues/163") :lock (:status 200 :method put :resource "/repos/GNU%20Project/neomacs%20core/issues/163/lock") :unlock (:status 204 :method delete :resource "/repos/GNU%20Project/neomacs%20core/issues/163/lock")) :requests ((:method get :resource "/repos/GNU%20Project/neomacs%20core/issues" :params (:state "open" :labels ("bug" "help wanted") :page 2) :data nil) (:method post :resource "/repos/GNU%20Project/neomacs%20core/issues" :params (:notify "maintainers") :data ((title . "Parity failure") (body . "Reproduce on GNU and Neomacs") (labels . ["compatibility" "elisp"]))) (:method head :resource "/repos/GNU%20Project/neomacs%20core/issues/163" :params (:cache-control "no-cache") :data nil) (:method patch :resource "/repos/GNU%20Project/neomacs%20core/issues/163" :params nil :data ((state . "closed") (milestone . 7))) (:method put :resource "/repos/GNU%20Project/neomacs%20core/issues/163/lock" :params nil :data ((lock-reason . "resolved"))) (:method delete :resource "/repos/GNU%20Project/neomacs%20core/issues/163/lock" :params nil :data nil)))"#
     ]],
-        ),
-        (
-            "backend_policies_transform_requests_and_allow_endpoint_specific_overrides",
-            r##"(progn
+    )
+}
+
+fn backend_policies_transform_requests_and_allow_endpoint_specific_overrides() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "backend_policies_transform_requests_and_allow_endpoint_specific_overrides",
+        r##"(progn
   (defvar aw-policy-events nil)
   (defun aw-policy-default-params (params)
     (push
@@ -198,14 +199,17 @@ fn practical_public_surface_batch() {
      :created created
      :retried retried
      :events (nreverse aw-policy-events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:created (:accepted t :resource "/projects/GNU%20Team/neomacs%20runner/deployments" :params #4=((dry-run) (labels . #1=("compatibility" "nightly"))) :data #5=(#2=(revision . "abc123") #3=(environment . "staging") (client . "parity-suite"))) :retried (:accepted t :resource "/projects/GNU%20Team/neomacs%20runner/deployments/42/retry" :params #6=((retry-count . 3) (priority . "URGENT")) :data #7=((reason . "transient network failure"))) :events ((:phase policy-enter) (:phase default-params :input (:dry-run nil :labels #1#)) (:phase data :input (#2# #3#)) (:phase transport :method post :resource "/projects/GNU%20Team/neomacs%20runner/deployments" :params #4# :data #5#) (:phase policy-leave) (:phase policy-enter) (:phase retry-params :input (:retry-count 3 :priority "urgent")) (:phase transport :method post :resource "/projects/GNU%20Team/neomacs%20runner/deployments/42/retry" :params #6# :data #7#) (:phase policy-leave)))"#
     ]],
-        ),
-        (
-            "endpoint_error_policy_recovers_missing_resources_but_propagates_auth_failures",
-            r##"(progn
+    )
+}
+
+fn endpoint_error_policy_recovers_missing_resources_but_propagates_auth_failures() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "endpoint_error_policy_recovers_missing_resources_but_propagates_auth_failures",
+        r##"(progn
   (define-error 'aw-resource-missing "API resource is missing")
   (define-error 'aw-auth-expired "API authentication expired")
   (defvar aw-errors-behavior 'present)
@@ -282,14 +286,17 @@ fn practical_public_surface_batch() {
      :present present
      :unauthorized unauthorized
      :requests (nreverse aw-errors-requests))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:missing (:status not-found :details (:status 404 :resource "/repos/GNU%20Project/neomacs%20core" :request-id "request-404")) :present (:status 200 :repository ((owner . "GNU Project") (name . "neomacs core")) :resource "/repos/GNU%20Project/neomacs%20core") :unauthorized (:condition aw-auth-expired :details (:status 401 :scope "repository:read" :request-id "request-401")) :requests ((:method get :resource "/repos/GNU%20Project/neomacs%20core" :params (:include ("owner" "permissions")) :data nil) (:method get :resource "/repos/GNU%20Project/neomacs%20core" :params (:include ("owner" "permissions")) :data nil) (:method get :resource "/repos/GNU%20Project/neomacs%20core" :params (:include ("owner" "permissions")) :data nil)))"#
     ]],
-        ),
-        (
-            "endpoint_catalog_selects_and_runs_a_wrapper_from_each_backend",
-            r##"(progn
+    )
+}
+
+fn endpoint_catalog_selects_and_runs_a_wrapper_from_each_backend() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "endpoint_catalog_selects_and_runs_a_wrapper_from_each_backend",
+        r##"(progn
   (defvar aw-catalog-requests nil)
   (defun aw-catalog-request (method resource params data)
     (push
@@ -370,10 +377,20 @@ fn practical_public_surface_batch() {
      (list catalog-selected foreign-selected)
      :responses responses
      :requests (nreverse aw-catalog-requests))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:selected (aw-catalog-get-repos-owner-repo-issues-open aw-foreign-get-repos-owner-repo-issues-open) :responses (:catalog (:source catalog :items #1=(((number . 17) (title . "Fix evaluator parity")) ((number . 42) (title . "Stabilize package tests"))) :resource "/repos/GNU%20Project/neomacs%20core/issues/open") :foreign (:source foreign :items #1# :resource "/mirror/GNU%20Project/neomacs%20core/issues/open")) :requests ((:method get :resource "/repos/GNU%20Project/neomacs%20core/issues/open" :params (:assignee "alice" :labels ("compatibility" "high priority")) :data nil) (:method get :resource "/mirror/GNU%20Project/neomacs%20core/issues/open" :params (:assignee "bob" :labels ("mirror" "triage")) :data nil)))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn practical_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        generated_repository_client_runs_a_complete_issue_lifecycle(),
+        backend_policies_transform_requests_and_allow_endpoint_specific_overrides(),
+        endpoint_error_policy_recovers_missing_resources_but_propagates_auth_failures(),
+        endpoint_catalog_selects_and_runs_a_wrapper_from_each_backend(),
+    ];
+    assert_apiwrap_batch(&cases);
 }

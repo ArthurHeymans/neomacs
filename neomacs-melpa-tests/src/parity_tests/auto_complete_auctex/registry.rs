@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_auctex_batch;
+use super::{ParityBatchCase, assert_auto_complete_auctex_batch};
 
-#[test]
-fn registry_public_surface_batch() {
-    assert_auto_complete_auctex_batch(&[
-        (
-            "auto_complete_auctex_exact_descriptor_dependency_versions_and_payload_bytes_match",
-            r##"(let* ((descriptor
+fn auto_complete_auctex_exact_descriptor_dependency_versions_and_payload_bytes_match() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_auctex_exact_descriptor_dependency_versions_and_payload_bytes_match",
+        r##"(let* ((descriptor
                                  (cadr
                                   (assq
                                    'auto-complete-auctex
@@ -54,14 +52,17 @@ fn registry_public_surface_batch() {
                     (current-buffer))))))
             '("auto-complete-auctex-pkg.el"
               "auto-complete-auctex.el"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (auto-complete-auctex "20140223.1758" "Auto-completion for auctex." ((yasnippet (0 6 1)) (auto-complete (1 4))) nil ((:maintainers ("Christopher Monsanto" . "chris@monsan.to")) (:authors ("Christopher Monsanto" . "chris@monsan.to")) (:revdesc . "855633f668bc") (:commit . "855633f668bcc4b9408396742a7cb84e0c4a2f77") (:url . "https://github.com/emacsattic/auto-complete-auctex")) ((auto-complete "20251231.1622" "auto-complete-20251231.1622") (popup "20251231.1622" "popup-20251231.1622") (yasnippet "20250602.1342" "yasnippet-20250602.1342") (auctex "14.1.2" "auctex-14.1.2")) (("auto-complete-auctex-pkg.el" 456 "3908112169feb50751557f71d269c9ef4d50c60797a3a41375a6b8f4b823ce24") ("auto-complete-auctex.el" 7453 "e943b5613b8fdafecce3b2ff5025962171548022a73121fcb38ad2184824304f")))"#
     ]],
-        ),
-        (
-            "auto_complete_auctex_complete_public_and_private_symbol_surface_matches",
-            r##"(let (symbols)
+    )
+}
+
+fn auto_complete_auctex_complete_public_and_private_symbol_surface_matches() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_auctex_complete_public_and_private_symbol_surface_matches",
+        r##"(let (symbols)
           (mapatoms
            (lambda (symbol)
              (when
@@ -93,14 +94,17 @@ fn registry_public_surface_batch() {
                (car left))
               (symbol-name
                (car right))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((ac-auctex-arg-lookup-table nil t nil "auto-complete-auctex") (ac-auctex-bib-candidates t nil nil "auto-complete-auctex") (ac-auctex-environment-action t nil nil "auto-complete-auctex") (ac-auctex-environment-candidates t nil nil "auto-complete-auctex") (ac-auctex-environment-prefix nil t nil "auto-complete-auctex") (ac-auctex-expand-arg-info t nil nil "auto-complete-auctex") (ac-auctex-expand-args t nil nil "auto-complete-auctex") (ac-auctex-label-candidates t nil nil "auto-complete-auctex") (ac-auctex-macro-action t nil nil "auto-complete-auctex") (ac-auctex-macro-candidates t nil nil "auto-complete-auctex") (ac-auctex-macro-snippet t nil nil "auto-complete-auctex") (ac-auctex-setup t nil nil "auto-complete-auctex") (ac-auctex-snippet-arg t nil nil "auto-complete-auctex") (ac-auctex-symbol-action t nil nil "auto-complete-auctex") (ac-auctex-symbol-candidates t nil nil "auto-complete-auctex") (ac-auctex-symbol-document t nil nil "auto-complete-auctex"))"#
     ]],
-        ),
-        (
-            "auto_complete_auctex_every_callable_arglist_and_source_match",
-            r##"(mapcar
+    )
+}
+
+fn auto_complete_auctex_every_callable_arglist_and_source_match() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_auctex_every_callable_arglist_and_source_match",
+        r##"(mapcar
           (lambda (symbol)
             (list
              symbol
@@ -126,28 +130,34 @@ fn registry_public_surface_batch() {
             ac-auctex-label-candidates
             ac-auctex-bib-candidates
             ac-auctex-setup))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((ac-auctex-expand-arg-info (arg-info) nil "auto-complete-auctex") (ac-auctex-snippet-arg (n arg) nil "auto-complete-auctex") (ac-auctex-expand-args (str env) nil "auto-complete-auctex") (ac-auctex-macro-snippet (arg-info) nil "auto-complete-auctex") (ac-auctex-macro-candidates nil nil "auto-complete-auctex") (ac-auctex-macro-action nil nil "auto-complete-auctex") (ac-auctex-symbol-candidates nil nil "auto-complete-auctex") (ac-auctex-symbol-action nil nil "auto-complete-auctex") (ac-auctex-symbol-document (c) nil "auto-complete-auctex") (ac-auctex-environment-candidates nil nil "auto-complete-auctex") (ac-auctex-environment-action nil nil "auto-complete-auctex") (ac-auctex-label-candidates nil nil "auto-complete-auctex") (ac-auctex-bib-candidates nil nil "auto-complete-auctex") (ac-auctex-setup nil nil "auto-complete-auctex"))"#
     ]],
-        ),
-        (
-            "auto_complete_auctex_argument_lookup_table_exact_keys_values_and_digest_match",
-            r##"(list
+    )
+}
+
+fn auto_complete_auctex_argument_lookup_table_exact_keys_values_and_digest_match() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_auctex_argument_lookup_table_exact_keys_values_and_digest_match",
+        r##"(list
           (length ac-auctex-arg-lookup-table)
           ac-auctex-arg-lookup-table
           (secure-hash
            'sha256
            (prin1-to-string
             ac-auctex-arg-lookup-table)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (35 ((TeX-arg-define-macro "\\MacroName") (TeX-arg-counter "Counter") (TeX-arg-define-counter "\\CounterName") (TeX-arg-file "Filename") (TeX-arg-bibliography "Filename") (TeX-arg-bibstyle "Style") (TeX-arg-environment "Environment") (TeX-arg-define-environment "EnvironmentName") (TeX-arg-size "(w, h)") (TeX-arg-ref "Name") (TeX-arg-index "Index") (TeX-arg-define-label "Label") (LaTeX-arg-usepackage ["opt1,..."] "Package") (LaTeX-env-label) (LaTeX-amsmath-env-aligned ["htbp!"]) (LaTeX-amsmath-env-alignat ["# Columns"]) (LaTeX-env-array ["bct"] "lcrpmb|") (LaTeX-env-item) (LaTeX-env-document) (LaTeX-env-figure ["htbp!"]) (LaTeX-env-contents "Filename") (LaTeX-env-minipage ["htbp!"] "Width") (LaTeX-env-list "Label" "\\itemsep,\\labelsep,...") (LaTeX-env-picture "(w, h)" "(x, y)") (LaTeX-env-tabular* "Width" ["htbp!"] "lcrpmb|><") (LaTeX-env-bib "WidestLabel") (TeX-arg-conditional [""]) (2 "" "") (3 "" "" "") (4 "" "" "" "") (5 "" "" "" "" "") (6 "" "" "" "" "" "") (7 "" "" "" "" "" "" "") (8 "" "" "" "" "" "" "" "") (9 "" "" "" "" "" "" "" "" "")) "7a0689fec2cffe6ad228df562f2b0bce8629fd5f6339a8b6f87db8a45880b97b")"##
     ]],
-        ),
-        (
-            "auto_complete_auctex_generated_sources_have_exact_completion_contracts",
-            r##"(mapcar
+    )
+}
+
+fn auto_complete_auctex_generated_sources_have_exact_completion_contracts() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_auctex_generated_sources_have_exact_completion_contracts",
+        r##"(mapcar
           (lambda (source)
             (list
              source
@@ -162,14 +172,17 @@ fn registry_public_surface_batch() {
             ac-source-auctex-environments
             ac-source-auctex-labels
             ac-source-auctex-bibs))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((ac-source-auctex-macros ((init . TeX-symbol-list) (candidates . ac-auctex-macro-candidates) (action . ac-auctex-macro-action) (requires . 0) (symbol . "m") (prefix . "\\\\\\([a-zA-Z]*\\)\\=")) nil) (ac-source-auctex-symbols ((init . LaTeX-math-mode) (candidates . ac-auctex-symbol-candidates) (document . ac-auctex-symbol-document) (action . ac-auctex-symbol-action) (requires . 0) (symbol . "s") (prefix . "\\\\\\([a-zA-Z]*\\)\\=")) nil) (ac-source-auctex-environments ((init . LaTeX-environment-list) (candidates . ac-auctex-environment-candidates) (action . ac-auctex-environment-action) (requires . 0) (symbol . "e") (prefix . "\\\\\\([a-zA-Z]*\\)\\=")) nil) (ac-source-auctex-labels ((init . LaTeX-label-list) (candidates . ac-auctex-label-candidates) (requires . 0) (symbol . "r") (prefix . "\\\\ref{\\([^}]*\\)\\=")) nil) (ac-source-auctex-bibs ((init . LaTeX-bibitem-list) (candidates . ac-auctex-bib-candidates) (requires . 0) (symbol . "b") (prefix . "\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=")) nil))"#
     ]],
-        ),
-        (
-            "auto_complete_auctex_load_registers_feature_mode_and_auctex_hook_exactly_once",
-            r##"(list
+    )
+}
+
+fn auto_complete_auctex_load_registers_feature_mode_and_auctex_hook_exactly_once() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_auctex_load_registers_feature_mode_and_auctex_hook_exactly_once",
+        r##"(list
           (featurep 'auto-complete-auctex)
           (memq 'latex-mode ac-modes)
           (length
@@ -193,14 +206,17 @@ fn registry_public_surface_batch() {
                  (cdr entry))
                 (car entry)))
              load-history))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t (latex-mode emacs-lisp-mode lisp-mode lisp-interaction-mode slime-repl-mode nim-mode c-mode cc-mode c++-mode objc-mode swift-mode go-mode java-mode malabar-mode clojure-mode clojurescript-mode scala-mode scheme-mode ocaml-mode tuareg-mode coq-mode haskell-mode agda-mode agda2-mode perl-mode cperl-mode python-mode ruby-mode lua-mode tcl-mode ecmascript-mode javascript-mode js-mode js-jsx-mode js2-mode js2-jsx-mode coffee-mode php-mode css-mode scss-mode less-css-mode elixir-mode makefile-mode sh-mode fortran-mode f90-mode ada-mode xml-mode sgml-mode web-mode ts-mode sclang-mode verilog-mode qml-mode apples-mode) 1 "auto-complete-auctex" nil)"#
     ]],
-        ),
-        (
-            "auto_complete_auctex_current_yasnippet_dependency_retains_the_legacy_entry_point_alias",
-            r##"(list
+    )
+}
+
+fn auto_complete_auctex_current_yasnippet_dependency_retains_the_legacy_entry_point_alias() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_auctex_current_yasnippet_dependency_retains_the_legacy_entry_point_alias",
+        r##"(list
           (fboundp 'yas/expand-snippet)
           (fboundp 'yas-expand-snippet)
           (symbol-function
@@ -216,10 +232,23 @@ fn registry_public_surface_batch() {
             (ac-auctex-test-error-data
              (lambda ()
                (ac-auctex-macro-action)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t t yas-expand-snippet "yasnippet" (:signal error ("[yas] ‘yas-expand-snippet’ needs properly setup ‘yas-minor-mode’")))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn registry_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_auctex_exact_descriptor_dependency_versions_and_payload_bytes_match(),
+        auto_complete_auctex_complete_public_and_private_symbol_surface_matches(),
+        auto_complete_auctex_every_callable_arglist_and_source_match(),
+        auto_complete_auctex_argument_lookup_table_exact_keys_values_and_digest_match(),
+        auto_complete_auctex_generated_sources_have_exact_completion_contracts(),
+        auto_complete_auctex_load_registers_feature_mode_and_auctex_hook_exactly_once(),
+        auto_complete_auctex_current_yasnippet_dependency_retains_the_legacy_entry_point_alias(),
+    ];
+    assert_auto_complete_auctex_batch(&cases);
 }

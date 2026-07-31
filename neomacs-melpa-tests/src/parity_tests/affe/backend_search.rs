@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_affe_backend_batch;
+use super::{ParityBatchCase, assert_affe_backend_batch};
 
-#[test]
-fn backend_search_public_surface_batch() {
-    assert_affe_backend_batch(&[
-        (
-            "affe_backend_append_producer_handles_empty_queue_then_splices_and_resets_nonempty_queue",
-            r##"(let* ((affe-backend--search-head
+fn affe_backend_append_producer_handles_empty_queue_then_splices_and_resets_nonempty_queue() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "affe_backend_append_producer_handles_empty_queue_then_splices_and_resets_nonempty_queue",
+        r##"(let* ((affe-backend--search-head
                       (list nil "old"))
                      (affe-backend--search-tail
                       (last
@@ -47,12 +45,15 @@ fn backend_search_public_surface_batch() {
                     (eq
                      affe-backend--producer-head
                      affe-backend--producer-tail)))))"##,
-            true,
-            expect![[r#"OK (nil (nil "old") (nil) #1=(nil) ("old" "new-1" "new-2") t #1# t)"#]],
-        ),
-        (
-            "affe_backend_search_match_found_sends_properties_increments_and_throws_at_limit",
-            r##"(let ((affe-backend--client 'client)
+        true,
+        expect![[r#"OK (nil (nil "old") (nil) #1=(nil) ("old" "new-1" "new-2") t #1# t)"#]],
+    )
+}
+
+fn affe_backend_search_match_found_sends_properties_increments_and_throws_at_limit() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "affe_backend_search_match_found_sends_properties_increments_and_throws_at_limit",
+        r##"(let ((affe-backend--client 'client)
                     (affe-backend--search-found 0)
                     (affe-backend--search-limit 3)
                     writes)
@@ -93,14 +94,17 @@ fn backend_search_public_surface_batch() {
                         limit-result
                         affe-backend--search-found
                         (nreverse writes)))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil 1 ("(search t)\n" "flush\n" "(match \"pre:\" \"body\" \":post\")\n") nil 3 ("(search t)\n" "(match nil \"last\" nil)\n"))"#
     ]],
-        ),
-        (
-            "affe_backend_search_filters_case_insensitively_by_all_regexps_and_stops_at_limit",
-            r##"(let* ((affe-backend--client 'client)
+    )
+}
+
+fn affe_backend_search_filters_case_insensitively_by_all_regexps_and_stops_at_limit() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "affe_backend_search_filters_case_insensitively_by_all_regexps_and_stops_at_limit",
+        r##"(let* ((affe-backend--client 'client)
                      (affe-backend--search-head
                       (list nil))
                      (affe-backend--search-tail
@@ -134,14 +138,17 @@ fn backend_search_public_surface_batch() {
                   (cdr
                    affe-backend--producer-head)
                   (nreverse writes))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (2 0 ("Alpha beta" "ALPHA" "beta alpha" "gamma") nil ("(search t)\n" "(search t)\n" "flush\n" "(match nil \"Alpha beta\" nil)\n" "(search t)\n" "(match nil \"beta alpha\" nil)\n" "(search nil)\n"))"#
     ]],
-        ),
-        (
-            "affe_backend_search_done_without_matches_flushes_and_deactivates",
-            r##"(let* ((affe-backend--client 'client)
+    )
+}
+
+fn affe_backend_search_done_without_matches_flushes_and_deactivates() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "affe_backend_search_done_without_matches_flushes_and_deactivates",
+        r##"(let* ((affe-backend--client 'client)
                      (affe-backend--search-head
                       (list nil))
                      (affe-backend--search-tail
@@ -169,12 +176,15 @@ fn backend_search_public_surface_batch() {
                   (cdr
                    affe-backend--search-head)
                   (nreverse writes))))"##,
-            true,
-            expect![[r#"OK (0 0 ("alpha" "beta") ("(search t)\n" "flush\n" "(search nil)\n"))"#]],
-        ),
-        (
-            "affe_backend_search_waits_for_incomplete_producer_then_finishes_empty_stream",
-            r##"(let* ((affe-backend--client 'client)
+        true,
+        expect![[r#"OK (0 0 ("alpha" "beta") ("(search t)\n" "flush\n" "(search nil)\n"))"#]],
+    )
+}
+
+fn affe_backend_search_waits_for_incomplete_producer_then_finishes_empty_stream() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "affe_backend_search_waits_for_incomplete_producer_then_finishes_empty_stream",
+        r##"(let* ((affe-backend--client 'client)
                      (affe-backend--search-head
                       (list nil))
                      (affe-backend--search-tail
@@ -207,10 +217,21 @@ fn backend_search_public_surface_batch() {
                     active-state
                     affe-backend--search-limit
                     (nreverse writes)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((4 ("(search t)\n" "(search t)\n")) 0 ("(search t)\n" "flush\n" "(search nil)\n"))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn backend_search_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        affe_backend_append_producer_handles_empty_queue_then_splices_and_resets_nonempty_queue(),
+        affe_backend_search_match_found_sends_properties_increments_and_throws_at_limit(),
+        affe_backend_search_filters_case_insensitively_by_all_regexps_and_stops_at_limit(),
+        affe_backend_search_done_without_matches_flushes_and_deactivates(),
+        affe_backend_search_waits_for_incomplete_producer_then_finishes_empty_stream(),
+    ];
+    assert_affe_backend_batch(&cases);
 }

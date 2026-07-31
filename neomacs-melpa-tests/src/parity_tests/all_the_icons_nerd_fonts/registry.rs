@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_all_the_icons_nerd_fonts_autoload_batch, assert_all_the_icons_nerd_fonts_batch};
+use super::{ParityBatchCase, assert_all_the_icons_nerd_fonts_autoload_batch, assert_all_the_icons_nerd_fonts_batch};
 
-#[test]
-fn registry_all_the_icons_nerd_fonts_batch() {
-    assert_all_the_icons_nerd_fonts_batch(&[
-        (
-            "package_loads_real_dependencies_and_immediately_renders_a_nerd_font_icon",
-            r##"(let ((icon
+fn package_loads_real_dependencies_and_immediately_renders_a_nerd_font_icon() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "package_loads_real_dependencies_and_immediately_renders_a_nerd_font_icon",
+        r##"(let ((icon
                       (all-the-icons-nerd-fa
                        "github"
                        :face 'font-lock-constant-face)))
@@ -21,20 +19,17 @@ fn registry_all_the_icons_nerd_fonts_batch() {
                 (all-the-icons-icon-family icon)
                 (get-text-property 0 'face icon)
                 (get-text-property 0 'display icon)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t t t "" (61595) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-constant-face) (raise -0.24))"#
     ]],
-        ),
-    ]);
+    )
 }
 
-#[test]
-fn registry_all_the_icons_nerd_fonts_autoload_batch() {
-    assert_all_the_icons_nerd_fonts_autoload_batch(&[
-        (
-            "autoloaded_commands_run_a_complete_prefer_render_and_restore_workflow",
-            r##"(progn
+fn autoloaded_commands_run_a_complete_prefer_render_and_restore_workflow() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "autoloaded_commands_run_a_complete_prefer_render_and_restore_workflow",
+        r##"(progn
          (require 'all-the-icons)
          (let* ((history
                       (seq-find
@@ -103,10 +98,25 @@ fn registry_all_the_icons_nerd_fonts_autoload_batch() {
              (when
                  (featurep 'all-the-icons-nerd-fonts)
                (all-the-icons-nerd-fonts-unprefer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t t ("" (61595) "FontAwesome" (:family "FontAwesome" :height 1.2 :inherit success)) ("" (60036) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit success)) ("" (61595) "FontAwesome" (:family "FontAwesome" :height 1.2 :inherit success)) t nil ((defun . all-the-icons-nerd-fonts-prefer) (defun . all-the-icons-nerd-fonts-unprefer) (provide . all-the-icons-nerd-fonts-autoloads)))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn registry_all_the_icons_nerd_fonts_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        package_loads_real_dependencies_and_immediately_renders_a_nerd_font_icon(),
+    ];
+    assert_all_the_icons_nerd_fonts_batch(&cases);
+}
+
+#[test]
+fn registry_all_the_icons_nerd_fonts_autoload_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        autoloaded_commands_run_a_complete_prefer_render_and_restore_workflow(),
+    ];
+    assert_all_the_icons_nerd_fonts_autoload_batch(&cases);
 }

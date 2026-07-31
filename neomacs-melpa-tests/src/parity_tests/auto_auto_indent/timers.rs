@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_auto_indent_batch;
+use super::{ParityBatchCase, assert_auto_auto_indent_batch};
 
-#[test]
-fn timers_public_surface_batch() {
-    assert_auto_auto_indent_batch(&[
-        (
-            "auto_auto_indent_timer_callback_indents_at_marker_then_surfaces_upstream_setq_failure",
-            r##"(let ((target
+fn auto_auto_indent_timer_callback_indents_at_marker_then_surfaces_upstream_setq_failure() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_auto_indent_timer_callback_indents_at_marker_then_surfaces_upstream_setq_failure",
+        r##"(let ((target
                                 (generate-new-buffer
                                  " *aai-timer-target*"))
                                events)
@@ -43,14 +41,17 @@ fn timers_public_surface_batch() {
                      (point)))))
             (when (buffer-live-p target)
               (kill-buffer target))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error wrong-number-of-arguments (setq 1)) :pending ((" *aai-timer-target*" 7 2)) 7)"#
     ]],
-        ),
-        (
-            "auto_auto_indent_timer_modified_check_uses_calling_buffer_before_final_setq_failure",
-            r##"(mapcar
+    )
+}
+
+fn auto_auto_indent_timer_modified_check_uses_calling_buffer_before_final_setq_failure() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_auto_indent_timer_modified_check_uses_calling_buffer_before_final_setq_failure",
+        r##"(mapcar
           (lambda (states)
             (let ((target
                    (generate-new-buffer
@@ -91,14 +92,17 @@ fn timers_public_surface_batch() {
             (t nil)
             (nil nil)
             (t t)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (((nil t) (:error wrong-number-of-arguments #1=(setq 1)) :pending nil) ((t nil) (:error wrong-number-of-arguments #1#) :pending ((:indented nil))) ((nil nil) (:error wrong-number-of-arguments #1#) :pending nil) ((t t) (:error wrong-number-of-arguments #1#) :pending ((:indented t))))"
     ],
-        ),
-        (
-            "auto_auto_indent_timer_dead_marker_error_leaves_pending_timer_state",
-            r##"(let* ((target
+    )
+}
+
+fn auto_auto_indent_timer_dead_marker_error_leaves_pending_timer_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_auto_indent_timer_dead_marker_error_leaves_pending_timer_state",
+        r##"(let* ((target
                                  (generate-new-buffer
                                   " *aai-dead-marker*"))
                                 (marker
@@ -115,12 +119,15 @@ fn timers_public_surface_batch() {
                 (lambda ()
                   (aai-on-timer marker)))
                aai--timer))))"##,
-            true,
-            expect!["OK (nil (:error wrong-type-argument (stringp nil)) :still-pending)"],
-        ),
-        (
-            "auto_auto_indent_scheduled_idle_callback_indents_then_surfaces_upstream_setq_failure",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK (nil (:error wrong-type-argument (stringp nil)) :still-pending)"],
+    )
+}
+
+fn auto_auto_indent_scheduled_idle_callback_indents_then_surfaces_upstream_setq_failure() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_auto_indent_scheduled_idle_callback_indents_then_surfaces_upstream_setq_failure",
+        r##"(with-temp-buffer
           (emacs-lisp-mode)
           (insert
            "(defun delayed ()\n"
@@ -163,14 +170,17 @@ fn timers_public_surface_batch() {
                  before
                  (buffer-string)
                  (point))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((0.5 nil t) :deterministic-timer (:error wrong-number-of-arguments (setq 1)) :deterministic-timer "(defun delayed ()\n(let ((value 3))\n(message \"%s\" value)))\n" "(defun delayed ()\n(let ((value 3))\n  (message \"%s\" value)))\n" 19)"#
     ]],
-        ),
-        (
-            "auto_auto_indent_scheduled_marker_tracks_buffer_edits_before_callback",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_auto_indent_scheduled_marker_tracks_buffer_edits_before_callback() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_auto_indent_scheduled_marker_tracks_buffer_edits_before_callback",
+        r##"(with-temp-buffer
           (insert "first\nsecond\n")
           (goto-char (point-min))
           (forward-line 1)
@@ -207,8 +217,19 @@ fn timers_public_surface_batch() {
             (list
              (buffer-string)
              observed)))"##,
-            true,
-            expect![[r#"OK ("prefix\nfirst\nsecond\n" (14 3 t))"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK ("prefix\nfirst\nsecond\n" (14 3 t))"#]],
+    )
+}
+
+#[test]
+fn timers_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_auto_indent_timer_callback_indents_at_marker_then_surfaces_upstream_setq_failure(),
+        auto_auto_indent_timer_modified_check_uses_calling_buffer_before_final_setq_failure(),
+        auto_auto_indent_timer_dead_marker_error_leaves_pending_timer_state(),
+        auto_auto_indent_scheduled_idle_callback_indents_then_surfaces_upstream_setq_failure(),
+        auto_auto_indent_scheduled_marker_tracks_buffer_edits_before_callback(),
+    ];
+    assert_auto_auto_indent_batch(&cases);
 }

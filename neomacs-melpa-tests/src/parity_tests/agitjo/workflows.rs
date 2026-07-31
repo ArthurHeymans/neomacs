@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_agitjo_batch;
+use super::{ParityBatchCase, assert_agitjo_batch};
 
 /// The block the Commentary documents for installation:
 ///
@@ -18,12 +18,10 @@ use super::assert_agitjo_batch;
 /// The `agitjo-push' menu's own layout is pinned whole beside it, because that
 /// is the surface steps 3 and 4 of the documented workflow are performed on.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_agitjo_batch(&[
-        (
-            "the_documented_setup_block_adds_one_key_to_magit_status_and_magit_dispatch",
-            r##"(let* ((before (agitjo-test-transient-keys 'magit-dispatch))
+fn the_documented_setup_block_adds_one_key_to_magit_status_and_magit_dispatch() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_documented_setup_block_adds_one_key_to_magit_status_and_magit_dispatch",
+        r##"(let* ((before (agitjo-test-transient-keys 'magit-dispatch))
        (observed nil))
   (push (list :before
               (list :status-key (keymap-lookup magit-status-mode-map "#")
@@ -46,14 +44,17 @@ fn workflows_public_surface_batch() {
   (push (list :agitjo-push-menu (agitjo-test-transient-keys 'agitjo-push))
         observed)
   (nreverse observed))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK ((:before (:status-key nil :dispatch-entry nil :dispatch-keys 51)) (:after (:status-key agitjo-push :dispatch-entry ("#" . agitjo-push) :dispatch-keys 52 :added (("#" . agitjo-push)) :nothing-else-changed t)) (:agitjo-push-menu (("-f" . agitjo-force-push-switch) ("-s" . agitjo-topic-variable) ("-t" . agitjo-title-option) ("+" . agitjo--pullreq-type-switches) ("u" . agitjo-push-pullreq-current-to-upstream) ("e" . agitjo-push-pullreq-current) ("l" . agitjo-push-pullreq-local-branch) ("r" . agitjo-push-pullreq-local-branch-or-ref) ("C" . magit-branch-configure) ("V" . agitjo-visit-last-pushed-pullreq))))"##
     ]],
-        ),
-        (
-            "without_a_session_topic_the_refspec_falls_back_to_each_projects_source_branch",
-            r##"(let* ((agitjo--current-topics nil)
+    )
+}
+
+fn without_a_session_topic_the_refspec_falls_back_to_each_projects_source_branch() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "without_a_session_topic_the_refspec_falls_back_to_each_projects_source_branch",
+        r##"(let* ((agitjo--current-topics nil)
        (agitjo-test-push-requests nil)
        (agitjo-test-sentinel-events nil)
        (observed nil))
@@ -88,14 +89,17 @@ fn workflows_public_surface_batch() {
                         :refspec (nth 3 (car (last (agitjo-test-requests))))))
             observed)))
   (nreverse observed))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:untopiced (:topic nil :refspec "feature/parser-recovery:refs/for/main/feature/parser-recovery")) (:topiced (:topic "team/handbook-42" :refspec "feature/handbook:refs/for/main/team/handbook-42")))"#
     ]],
-        ),
-        (
-            "the_draft_switch_titles_the_request_wip_from_the_commit_subject_when_none_is_given",
-            r##"(let* ((agitjo--current-topics nil)
+    )
+}
+
+fn the_draft_switch_titles_the_request_wip_from_the_commit_subject_when_none_is_given() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_draft_switch_titles_the_request_wip_from_the_commit_subject_when_none_is_given",
+        r##"(let* ((agitjo--current-topics nil)
        (agitjo-test-push-requests nil)
        (agitjo-test-sentinel-events nil)
        (root (agitjo-test-repo "titles-repo" '(("README.md" . "# Project\n"))))
@@ -135,14 +139,17 @@ fn workflows_public_surface_batch() {
             observed)))
   (push (list :commit-subject (magit-rev-format "%s" branch)) observed)
   (nreverse observed))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:draft-with-an-explicit-title ("--push-option=title=WIP: Parser recovery")) (:draft-without-a-title ("--push-option=title=WIP: Recover parser transitions after lookahead reset")) (:normal-with-an-explicit-title ("--push-option=title=Parser recovery")) (:commit-subject "Recover parser transitions after lookahead reset"))"#
     ]],
-        ),
-        (
-            "visiting_the_last_pushed_pull_request_takes_the_most_recent_link_from_git_output",
-            r##"(let* ((agitjo--current-topics nil)
+    )
+}
+
+fn visiting_the_last_pushed_pull_request_takes_the_most_recent_link_from_git_output() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "visiting_the_last_pushed_pull_request_takes_the_most_recent_link_from_git_output",
+        r##"(let* ((agitjo--current-topics nil)
        (agitjo-test-push-requests nil)
        (agitjo-test-sentinel-events nil)
        (root (agitjo-test-repo "visit-repo" '(("README.md" . "# Project\n"))))
@@ -191,14 +198,17 @@ fn workflows_public_surface_batch() {
                 :opened (reverse visited))
           observed))
   (nreverse observed))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:before-any-push (user-error "No pull request link could be found") :opened nil) (:after-two-pushes opened :opened ("https://forge.invalid/halvin/agitjo/pulls/42")))"#
     ]],
-        ),
-        (
-            "the_draft_template_comes_from_the_remote_main_branch_and_prefers_forgejo",
-            r####"(let* ((agitjo--current-topics nil)
+    )
+}
+
+fn the_draft_template_comes_from_the_remote_main_branch_and_prefers_forgejo() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_draft_template_comes_from_the_remote_main_branch_and_prefers_forgejo",
+        r####"(let* ((agitjo--current-topics nil)
        (observed nil))
   ;; A template on origin/main, a different one committed on the feature
   ;; branch, and a third one only in the working tree.
@@ -248,14 +258,17 @@ fn workflows_public_surface_batch() {
       (with-current-buffer buffer (set-buffer-modified-p nil))
       (kill-buffer buffer)))
   (nreverse observed))"####,
-            true,
-            expect![[
+        true,
+        expect![[
         r###"OK ((:three-candidate-templates (:draft "## From origin main\n\nDescribe the change.\n" :draft-file "template-origin/.git/agitjo/pullreq-draft")) (:forgejo-and-github-templates (:draft "## Forgejo template\n")))"###
     ]],
-        ),
-        (
-            "confirming_from_an_unrelated_buffer_refuses_and_pushes_nothing",
-            r##"(let* ((agitjo--current-topics nil)
+    )
+}
+
+fn confirming_from_an_unrelated_buffer_refuses_and_pushes_nothing() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "confirming_from_an_unrelated_buffer_refuses_and_pushes_nothing",
+        r##"(let* ((agitjo--current-topics nil)
        (agitjo-test-push-requests nil)
        (root (agitjo-test-repo "guard-repo" '(("README.md" . "# Project\n"))))
        (default-directory root)
@@ -285,10 +298,22 @@ fn workflows_public_surface_batch() {
                            (with-current-buffer scratch (buffer-string))))
         observed)
   (nreverse observed))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:before (:draft-directory-exists nil :draft no-draft-file)) (:refusal (user-error "Function called outside AGitjo post buffer")) (:after (:draft-directory-exists t :draft no-draft-file :pushes nil :unrelated-buffer-text "not a pull request draft\n")))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        the_documented_setup_block_adds_one_key_to_magit_status_and_magit_dispatch(),
+        without_a_session_topic_the_refspec_falls_back_to_each_projects_source_branch(),
+        the_draft_switch_titles_the_request_wip_from_the_commit_subject_when_none_is_given(),
+        visiting_the_last_pushed_pull_request_takes_the_most_recent_link_from_git_output(),
+        the_draft_template_comes_from_the_remote_main_branch_and_prefers_forgejo(),
+        confirming_from_an_unrelated_buffer_refuses_and_pushes_nothing(),
+    ];
+    assert_agitjo_batch(&cases);
 }

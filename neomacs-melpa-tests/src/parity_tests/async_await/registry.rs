@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_async_await_autoload_batch, assert_async_await_batch};
+use super::{ParityBatchCase, assert_async_await_autoload_batch, assert_async_await_batch};
 
-#[test]
-fn registry_async_await_batch() {
-    assert_async_await_batch(&[
-        (
-            "package_descriptor_records_exact_pin_dependencies_and_payload",
-            r##"(let* ((desc
+fn package_descriptor_records_exact_pin_dependencies_and_payload() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "package_descriptor_records_exact_pin_dependencies_and_payload",
+        r##"(let* ((desc
                  (cadr
                   (assq 'async-await package-alist)))
                 (dir (package-desc-dir desc)))
@@ -19,14 +17,17 @@ fn registry_async_await_batch() {
             (mapcar #'file-name-nondirectory
                     (directory-files dir t "^[^.].*"))
             #'string<)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("20220827.437" ((emacs (25 1)) (promise (1 1)) (iter2 (0 9 10))) ("async-await-autoloads.el" "async-await-pkg.el" "async-await.el" "async-await.elc"))"#
     ]],
-        ),
-        (
-            "installed_source_has_exact_hash_features_and_dependency_versions",
-            r##"(let* ((desc
+    )
+}
+
+fn installed_source_has_exact_hash_features_and_dependency_versions() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "installed_source_has_exact_hash_features_and_dependency_versions",
+        r##"(let* ((desc
                  (cadr
                   (assq 'async-await package-alist)))
                 (dir (package-desc-dir desc))
@@ -59,14 +60,17 @@ fn registry_async_await_batch() {
                  (package-version-join
                   (package-desc-version installed)))))
             '(async-await promise iter2))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("85797e62ef3e734a5d92c65cd0a4379dd4f07588a3abfc40221aa6fd0ae1d3d6" t t t ((async-await "20220827.437") (promise "20210307.727") (iter2 "20250209.1516")))"#
     ]],
-        ),
-        (
-            "complete_declared_callable_surface_has_exact_kinds_arities_and_docs",
-            r##"(mapcar
+    )
+}
+
+fn complete_declared_callable_surface_has_exact_kinds_arities_and_docs() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "complete_declared_callable_surface_has_exact_kinds_arities_and_docs",
+        r##"(mapcar
           (lambda (symbol)
             (list
              symbol
@@ -83,14 +87,17 @@ fn registry_async_await_batch() {
             async-defun
             async-lambda
             async-await-advice-make-autoload))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((async-await--iter-throw t nil nil (iterator value) "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") (async-await--awaiter t nil nil (iterator) "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") (async-await--check-return-value t nil nil (value) "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") (async-defun t t nil (name arglist &rest body) "ee8bc677c4c77477c2c7aca62b7ad18ca0e7e85635b917bc499bdf7d302cc6d3") (async-lambda t t nil (arglist &rest body) "57495079dedc09b3eff5d831592053380821dfdc3ef3c499d9cba2699bd46522") (async-await-advice-make-autoload t nil nil (fn &rest args) "577695d7ac683e087ec4b6797940e6e77e4585d14106a6f143297511cb1262cd"))"#
     ]],
-        ),
-        (
-            "complete_declared_variable_surface_has_exact_values_and_properties",
-            r##"(list
+    )
+}
+
+fn complete_declared_variable_surface_has_exact_values_and_properties() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "complete_declared_variable_surface_has_exact_values_and_properties",
+        r##"(list
           (list
            'async-await--is-error
            (boundp 'async-await--is-error)
@@ -112,14 +119,17 @@ fn registry_async_await_batch() {
               (get symbol 'lisp-indent-function)
               (get symbol 'edebug-form-spec)))
            '(async-defun async-lambda)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((async-await--is-error t t t t) (async-await-font-lock-keywords t (("(\\(async-defun\\)\\_>[ \11']*\\(\\(?:\\sw\\|\\s_\\)+\\)?" (1 font-lock-keyword-face) (2 font-lock-function-name-face nil t)))) ((async-defun 3 2 nil) (async-lambda 2 defun nil)))"#
     ]],
-        ),
-        (
-            "loading_source_registers_advice_font_lock_and_imenu_once",
-            r##"(let ((advice-count 0)
+    )
+}
+
+fn loading_source_registers_advice_font_lock_and_imenu_once() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "loading_source_registers_advice_font_lock_and_imenu_once",
+        r##"(let ((advice-count 0)
               (font-lock-count 0)
               (imenu-count 0)
               (imenu-entry
@@ -163,12 +173,15 @@ fn registry_async_await_batch() {
              (advice-member-p
               #'async-await-advice-make-autoload
               'make-autoload)))))"##,
-            true,
-            expect!["OK (1 1 1 t)"],
-        ),
-        (
-            "repeated_source_loading_accumulates_font_lock_specs_but_not_advice_or_imenu",
-            r##"(let* ((desc
+        true,
+        expect!["OK (1 1 1 t)"],
+    )
+}
+
+fn repeated_source_loading_accumulates_font_lock_specs_but_not_advice_or_imenu() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "repeated_source_loading_accumulates_font_lock_specs_but_not_advice_or_imenu",
+        r##"(let* ((desc
                   (cadr
                    (assq 'async-await package-alist)))
                  (source
@@ -219,12 +232,15 @@ fn registry_async_await_batch() {
              advice-count
              font-lock-count
              imenu-count)))"##,
-            true,
-            expect!["OK (t 1 4 1)"],
-        ),
-        (
-            "make_autoload_advice_expands_async_defun_and_delegates_other_forms",
-            r##"(let* ((lexical-binding t)
+        true,
+        expect!["OK (t 1 4 1)"],
+    )
+}
+
+fn make_autoload_advice_expands_async_defun_and_delegates_other_forms() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "make_autoload_advice_expands_async_defun_and_delegates_other_forms",
+        r##"(let* ((lexical-binding t)
                  (async-result
                   (make-autoload
                    '(async-defun generated-async (value)
@@ -244,14 +260,17 @@ fn registry_async_await_batch() {
            (nth 2 async-result)
            (nth 4 async-result)
            delegated))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (autoload 'generated-async "fixture.el" nil (:delegated (defun ordinary (x) x) "ordinary.el" nil))"#
     ]],
-        ),
-        (
-            "font_lock_and_imenu_recognize_real_async_definitions_without_false_positives",
-            r##"(with-temp-buffer
+    )
+}
+
+fn font_lock_and_imenu_recognize_real_async_definitions_without_false_positives() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "font_lock_and_imenu_recognize_real_async_definitions_without_false_positives",
+        r##"(with-temp-buffer
           (emacs-lisp-mode)
           (insert
            "(async-defun fetch-value (x)\\n"
@@ -278,20 +297,17 @@ fn registry_async_await_batch() {
              faces
              (mapcar #'car
                      (imenu--make-index-alist t)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("async-defun" font-lock-keyword-face) ("fetch-value" font-lock-function-name-face) ("ordinary-value" font-lock-function-name-face) ("comment-only" font-lock-comment-face)) ("*Rescan*" "fetch-value"))"#
     ]],
-        ),
-    ]);
+    )
 }
 
-#[test]
-fn registry_async_await_autoload_batch() {
-    assert_async_await_autoload_batch(&[
-        (
-            "autoload_file_exposes_macros_advice_and_exact_source_ownership",
-            r##"(list
+fn autoload_file_exposes_macros_advice_and_exact_source_ownership() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "autoload_file_exposes_macros_advice_and_exact_source_ownership",
+        r##"(list
           (featurep 'async-await)
           (featurep 'async-await-autoloads)
           (mapcar
@@ -317,10 +333,32 @@ fn registry_async_await_autoload_batch() {
             (advice-member-p
              #'async-await-advice-make-autoload
              'make-autoload))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil t ((async-defun t #1=(t) "async-await" t 3) (async-lambda t #1# "async-await" t 2)) (t "async-await") t)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn registry_async_await_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        package_descriptor_records_exact_pin_dependencies_and_payload(),
+        installed_source_has_exact_hash_features_and_dependency_versions(),
+        complete_declared_callable_surface_has_exact_kinds_arities_and_docs(),
+        complete_declared_variable_surface_has_exact_values_and_properties(),
+        loading_source_registers_advice_font_lock_and_imenu_once(),
+        repeated_source_loading_accumulates_font_lock_specs_but_not_advice_or_imenu(),
+        make_autoload_advice_expands_async_defun_and_delegates_other_forms(),
+        font_lock_and_imenu_recognize_real_async_definitions_without_false_positives(),
+    ];
+    assert_async_await_batch(&cases);
+}
+
+#[test]
+fn registry_async_await_autoload_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        autoload_file_exposes_macros_advice_and_exact_source_ownership(),
+    ];
+    assert_async_await_autoload_batch(&cases);
 }

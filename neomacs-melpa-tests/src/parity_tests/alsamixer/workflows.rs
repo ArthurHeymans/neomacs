@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_alsamixer_batch;
+use super::{ParityBatchCase, assert_alsamixer_batch};
 
 /// What the package is bound to a volume key for.  `alsamixer-up-volume' reads
 /// the current level out of amixer's output, adds the configured step and
@@ -10,12 +10,10 @@ use super::assert_alsamixer_batch;
 /// user sees is the command's return value, and it deliberately never reaches
 /// *Messages*, because `alsamixer-set-volume' binds `message-log-max' to nil.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_alsamixer_batch(&[
-        (
-            "raises_and_lowers_the_volume_through_amixer",
-            r##"
+fn raises_and_lowers_the_volume_through_amixer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "raises_and_lowers_the_volume_through_amixer",
+        r##"
         (progn
           (als-test-install-amixer 40 "on")
           (list
@@ -31,14 +29,17 @@ fn workflows_public_surface_batch() {
                              :mixer (als-test-state))
            :commands (als-test-commands)))
     "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:defaults (:command "amixer" :control "Master" :step 5) :starting-volume 40 :up (:shown "Volume set to 45%" :logged-to-messages nil) :after-up (:reported 45 :mixer (45 "on")) :down (:shown "Volume set to 40%" :logged-to-messages nil) :after-down (:reported 40 :mixer (40 "on")) :commands ("amixer sget Master playback" "amixer sget Master playback" "amixer sset Master playback 45%" "amixer sget Master playback" "amixer sget Master playback" "amixer sset Master playback 40%" "amixer sget Master playback"))"#
     ]],
-        ),
-        (
-            "toggles_mute_but_can_only_ever_report_the_volume",
-            r##"
+    )
+}
+
+fn toggles_mute_but_can_only_ever_report_the_volume() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "toggles_mute_but_can_only_ever_report_the_volume",
+        r##"
         (progn
           (als-test-install-amixer 40 "on")
           (list
@@ -51,14 +52,17 @@ fn workflows_public_surface_batch() {
                           :volume-still-reported (alsamixer-get-volume))
            :commands (als-test-commands)))
     "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:before (40 "on") :muted (:returned "Simple mixer control 'Master',0\n  Capabilities: pvolume pswitch pswitch-joined\n  Playback channels: Front Left - Front Right\n  Limits: Playback 0 - 65536\n  Mono:\n  Front Left: Playback 26214 [40%] [-20.00dB] [off]\n  Front Right: Playback 26214 [40%] [-20.00dB] [off]\n" :mixer (40 "off") :volume-still-reported 40) :unmuted (:returned "Simple mixer control 'Master',0\n  Capabilities: pvolume pswitch pswitch-joined\n  Playback channels: Front Left - Front Right\n  Limits: Playback 0 - 65536\n  Mono:\n  Front Left: Playback 26214 [40%] [-20.00dB] [on]\n  Front Right: Playback 26214 [40%] [-20.00dB] [on]\n" :mixer (40 "on") :volume-still-reported 40) :commands ("amixer set Master toggle" "amixer sget Master playback" "amixer set Master toggle" "amixer sget Master playback"))"#
     ]],
-        ),
-        (
-            "clamps_out_of_range_percentages_and_honours_a_prefix_step",
-            r##"
+    )
+}
+
+fn clamps_out_of_range_percentages_and_honours_a_prefix_step() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "clamps_out_of_range_percentages_and_honours_a_prefix_step",
+        r##"
         (progn
           (als-test-install-amixer 50 "on")
           (list
@@ -73,14 +77,17 @@ fn workflows_public_surface_batch() {
                         :mixer (als-test-state))
            :commands (als-test-commands)))
     "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:below-zero (:shown "Volume set to 0%" :logged-to-messages nil) :after-below (0 "on") :above-hundred (:shown "Volume set to 100%" :logged-to-messages nil) :after-above (100 "on") :prefix-up (:shown "Volume set to 70%" :logged-to-messages nil) :prefix-down (:shown "Volume set to 40%" :logged-to-messages nil) :final (:reported 40 :mixer (40 "on")) :commands ("amixer sset Master playback 0%" "amixer sset Master playback 100%" "amixer sset Master playback 50%" "amixer sget Master playback" "amixer sset Master playback 70%" "amixer sget Master playback" "amixer sset Master playback 40%" "amixer sget Master playback"))"#
     ]],
-        ),
-        (
-            "control_card_device_and_step_customizations_change_the_command_line",
-            r##"
+    )
+}
+
+fn control_card_device_and_step_customizations_change_the_command_line() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "control_card_device_and_step_customizations_change_the_command_line",
+        r##"
         (progn
           (als-test-install-amixer 40 "on")
           (list
@@ -102,14 +109,17 @@ fn workflows_public_surface_batch() {
              (als-test-attempt (lambda () (alsamixer-command "sget %C playback"))))
            :declared-card-type (get 'alsamixer-card 'custom-type)))
     "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:stock "amixer sget Master playback" :control-only "amixer sget PCM playback" :card-and-device "amixer -c 1 -D hw:0 sget Master playback" :all (:built "amixer -c 1 -D hw:0 sget PCM playback" :up (:shown "Volume set to 50%" :logged-to-messages nil) :commands ("amixer -c 1 -D hw:0 sget PCM playback" "amixer -c 1 -D hw:0 sset PCM playback 50%")) :string-card-signals (:signal error :message "Format specifier doesn’t match argument type") :declared-card-type string)"#
     ]],
-        ),
-        (
-            "signals_when_amixer_cannot_be_read_but_never_when_setting",
-            r##"
+    )
+}
+
+fn signals_when_amixer_cannot_be_read_but_never_when_setting() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "signals_when_amixer_cannot_be_read_but_never_when_setting",
+        r##"
         (progn
           (als-test-install-amixer 40 "on")
           (list
@@ -135,10 +145,21 @@ fn workflows_public_surface_batch() {
                    :toggle (als-test-attempt (lambda () (alsamixer-toggle-mute)))
                    :commands (als-test-commands)))))
     "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:non-zero-exit (:get (:signal error :message "Unexpected output from amixer: amixer: Unable to find simple control 'Master',0\n") :up (:signal error :message "Unexpected output from amixer: amixer: Unable to find simple control 'Master',0\n") :set (:returned "Volume set to 55%")) :no-percentage-in-output (:signal error :message "Unexpected output from amixer: Simple mixer control 'Master',0\n  Capabilities: pvolume\n") :binary-missing (:found nil :get (:signal error :message "Unexpected output from amixer: [SHELL]: line 1: amixer: command not found\n") :set (:returned "Volume set to 55%") :toggle (:returned "[SHELL]: line 1: amixer: command not found\n") :commands nil))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        raises_and_lowers_the_volume_through_amixer(),
+        toggles_mute_but_can_only_ever_report_the_volume(),
+        clamps_out_of_range_percentages_and_honours_a_prefix_step(),
+        control_card_device_and_step_customizations_change_the_command_line(),
+        signals_when_amixer_cannot_be_read_but_never_when_setting(),
+    ];
+    assert_alsamixer_batch(&cases);
 }

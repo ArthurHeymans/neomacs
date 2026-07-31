@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{CachedMelpaOracle, PROJECTILE_MELPA_PIN};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod async_process;
 mod core;
@@ -45,9 +48,9 @@ pub(crate) fn assert_projectile_signal_parity(form: &str, expected: Expect) {
 }
 
 /// Multi-probe batch for `assert_projectile_parity` cases (2a).
-pub(crate) fn assert_projectile_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_projectile_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         projectile_oracle(),
         &name,
         "projectile_parity",

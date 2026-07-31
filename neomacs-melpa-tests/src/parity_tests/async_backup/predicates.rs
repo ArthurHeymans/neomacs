@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_async_backup_batch;
+use super::{ParityBatchCase, assert_async_backup_batch};
 
-#[test]
-fn predicates_public_surface_batch() {
-    assert_async_backup_batch(&[
-        (
-            "async_backup_predicates_receive_expanded_file_in_order_before_process_launch",
-            r##"(let* ((work
+fn async_backup_predicates_receive_expanded_file_in_order_before_process_launch() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_predicates_receive_expanded_file_in_order_before_process_launch",
+        r##"(let* ((work
                 (async-backup-test-path "predicates/work/"))
                (default-directory work)
                (file
@@ -61,14 +59,17 @@ fn predicates_public_surface_batch() {
                       (cadr event))
                      (nth 2 event))))
                 (nreverse events))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:process t ((:first "$ROOT//predicates/work/input.org" t) (:second "$ROOT//predicates/work/input.org" t) (:start ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//predicates/work/input.org\" \"$ROOT//predicates/backups$ROOT//predicates/work/input-PRED.org\")"))))"#
     ]],
-        ),
-        (
-            "async_backup_false_predicate_short_circuits_later_predicates_and_process",
-            r##"(let* ((file
+    )
+}
+
+fn async_backup_false_predicate_short_circuits_later_predicates_and_process() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_false_predicate_short_circuits_later_predicates_and_process",
+        r##"(let* ((file
                 (async-backup-test-write-file
                  "predicate-false/input.txt"
                  "input\n"))
@@ -96,12 +97,15 @@ fn predicates_public_surface_batch() {
                  (directory-file-name
                   async-backup-location)
                  (file-name-directory file)))))))"##,
-            true,
-            expect!["OK (nil (:first) t)"],
-        ),
-        (
-            "async_backup_empty_predicate_list_vacuously_launches_backup",
-            r##"(let* ((file
+        true,
+        expect!["OK (nil (:first) t)"],
+    )
+}
+
+fn async_backup_empty_predicate_list_vacuously_launches_backup() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_empty_predicate_list_vacuously_launches_backup",
+        r##"(let* ((file
                 (async-backup-test-write-file
                  "predicate-empty/input"
                  "input\n"))
@@ -119,14 +123,17 @@ fn predicates_public_surface_batch() {
             (list
              (async-backup file)
              (async-backup-test-normalize-command captured))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:launched ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//predicate-empty/input\" \"$ROOT//predicate-empty/backups$ROOT//predicate-empty/input-EMPTY\")"))"#
     ]],
-        ),
-        (
-            "async_backup_default_identity_predicate_accepts_any_non_nil_expanded_path",
-            r##"(let* ((file
+    )
+}
+
+fn async_backup_default_identity_predicate_accepts_any_non_nil_expanded_path() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_default_identity_predicate_accepts_any_non_nil_expanded_path",
+        r##"(let* ((file
                 (async-backup-test-path
                  "identity/missing-but-non-nil.txt"))
                (async-backup-location
@@ -144,14 +151,17 @@ fn predicates_public_surface_batch() {
              (file-exists-p file)
              (async-backup file)
              (async-backup-test-normalize-command captured))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((identity) nil :launched ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//identity/missing-but-non-nil.txt\" \"$ROOT//identity/backups$ROOT//identity/missing-but-non-nil-IDENTITY.txt\")"))"#
     ]],
-        ),
-        (
-            "async_backup_predicate_signal_propagates_after_directory_creation_without_process",
-            r##"(let* ((file
+    )
+}
+
+fn async_backup_predicate_signal_propagates_after_directory_creation_without_process() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_predicate_signal_propagates_after_directory_creation_without_process",
+        r##"(let* ((file
                 (async-backup-test-write-file
                  "predicate-error/input.txt"
                  "input\n"))
@@ -178,12 +188,15 @@ fn predicates_public_surface_batch() {
                  (directory-file-name
                   async-backup-location)
                  (file-name-directory file)))))))"##,
-            true,
-            expect![[r#"OK ((:error error ("predicate rejected input.txt")) nil t)"#]],
-        ),
-        (
-            "async_backup_non_function_predicate_signals_without_process",
-            r##"(let* ((file
+        true,
+        expect![[r#"OK ((:error error ("predicate rejected input.txt")) nil t)"#]],
+    )
+}
+
+fn async_backup_non_function_predicate_signals_without_process() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_non_function_predicate_signals_without_process",
+        r##"(let* ((file
                 (async-backup-test-write-file
                  "predicate-type/input.txt"
                  "input\n"))
@@ -202,12 +215,15 @@ fn predicates_public_surface_batch() {
               (lambda ()
                 (async-backup file)))
              started)))"##,
-            true,
-            expect!["OK ((:error invalid-function (42)) nil)"],
-        ),
-        (
-            "async_backup_predicate_can_filter_by_real_file_size_and_extension",
-            r##"(let* ((small
+        true,
+        expect!["OK ((:error invalid-function (42)) nil)"],
+    )
+}
+
+fn async_backup_predicate_can_filter_by_real_file_size_and_extension() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_predicate_can_filter_by_real_file_size_and_extension",
+        r##"(let* ((small
                 (async-backup-test-write-file
                  "predicate-real/small.log"
                  "abc"))
@@ -245,14 +261,17 @@ fn predicates_public_surface_batch() {
                 #'async-backup
                 (list small large wrong-extension))
                (nreverse launched)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil :started nil) (("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//predicate-real/large.log\" \"$ROOT//predicate-real/backups$ROOT//predicate-real/large-FILTER.log\")")))"#
     ]],
-        ),
-        (
-            "async_backup_predicates_observe_symlink_path_and_can_reject_it",
-            r##"(let* ((target
+    )
+}
+
+fn async_backup_predicates_observe_symlink_path_and_can_reject_it() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_predicates_observe_symlink_path_and_can_reject_it",
+        r##"(let* ((target
                 (async-backup-test-write-file
                  "predicate-symlink/real.txt"
                  "real\n"))
@@ -296,14 +315,17 @@ fn predicates_public_surface_batch() {
                  "$ROOT/"
                  (nth 2 seen)))
                started))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil ("$ROOT//predicate-symlink/link.txt" "real.txt" "$ROOT//predicate-symlink/real.txt") nil)"#
     ]],
-        ),
-        (
-            "async_backup_predicate_mutation_affects_later_predicate_in_same_call",
-            r##"(let* ((file
+    )
+}
+
+fn async_backup_predicate_mutation_affects_later_predicate_in_same_call() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_predicate_mutation_affects_later_predicate_in_same_call",
+        r##"(let* ((file
                 (async-backup-test-write-file
                  "predicate-mutation/input.txt"
                  "before\n"))
@@ -335,8 +357,23 @@ fn predicates_public_surface_batch() {
                (nreverse observations)
                (async-backup-test-read-file file)
                started))))"##,
-            true,
-            expect![[r#"OK (:started (:mutated "after\n") "after\n" t)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (:started (:mutated "after\n") "after\n" t)"#]],
+    )
+}
+
+#[test]
+fn predicates_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        async_backup_predicates_receive_expanded_file_in_order_before_process_launch(),
+        async_backup_false_predicate_short_circuits_later_predicates_and_process(),
+        async_backup_empty_predicate_list_vacuously_launches_backup(),
+        async_backup_default_identity_predicate_accepts_any_non_nil_expanded_path(),
+        async_backup_predicate_signal_propagates_after_directory_creation_without_process(),
+        async_backup_non_function_predicate_signals_without_process(),
+        async_backup_predicate_can_filter_by_real_file_size_and_extension(),
+        async_backup_predicates_observe_symlink_path_and_can_reject_it(),
+        async_backup_predicate_mutation_affects_later_predicate_in_same_call(),
+    ];
+    assert_async_backup_batch(&cases);
 }

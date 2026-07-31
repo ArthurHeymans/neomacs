@@ -22,7 +22,7 @@
 
 use expect_test::expect;
 
-use super::assert_auto_dark_batch;
+use super::{ParityBatchCase, assert_auto_dark_batch};
 
 /// Run the osascript and termux detectors against real programs.
 ///
@@ -49,12 +49,10 @@ use super::assert_auto_dark_batch;
 /// obvious one -- a reader who assumes the redirect is load-bearing would also
 /// assume a detector could be broken by removing it.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_auto_dark_batch(&[
-        (
-            "the_shell_detectors_reach_real_programs_with_one_argument_vector_each",
-            r##"(let* ((root (file-name-as-directory
+fn the_shell_detectors_reach_real_programs_with_one_argument_vector_each() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_shell_detectors_reach_real_programs_with_one_argument_vector_each",
+        r##"(let* ((root (file-name-as-directory
                      (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
                (bin (expand-file-name "auto-dark-bin" root))
                (argv (expand-file-name "argv" root))
@@ -105,10 +103,17 @@ fn workflows_public_surface_batch() {
              :with-the-redirect
              (shell-command-to-string
               "cmd uimode night 2>&1 </dev/null"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:osascript-said t :osascript-argv ("-e" "tell application \"System Events\" to tell appearance preferences to return dark mode") :termux-said t :termux-argv ("uimode" "night") :without-the-redirect "Night mode: yes" :with-the-redirect "Night mode: yes")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        the_shell_detectors_reach_real_programs_with_one_argument_vector_each(),
+    ];
+    assert_auto_dark_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_aria2_batch;
+use super::{ParityBatchCase, assert_aria2_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_aria2_batch(&[
-        (
-            "aria2_opens_a_live_dashboard_with_active_paused_and_failed_transfers",
-            r##"(save-window-excursion
+fn aria2_opens_a_live_dashboard_with_active_paused_and_failed_transfers() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aria2_opens_a_live_dashboard_with_active_paused_and_failed_transfers",
+        r##"(save-window-excursion
          (neomacs-aria2-test-cleanup)
          (let* ((aria2-executable
                  (executable-find "true"))
@@ -106,14 +104,17 @@ fn workflows_public_surface_batch() {
                             (nreverse requests))))))
              (neomacs-aria2-test-cleanup))
            result))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (aria2-mode "Aria2" t aria2-toggle-pause aria2-move-up-in-list aria2-remove-download "manual.pdf                               error   ftp           0%   0.00 kB      0.00 kB      8.00 kB    A resource was not found\nRust Course Videos                       paused  bittorrent    25%  0.00 kB      0.00 kB      2.00 GB     - \nubuntu.iso                               active  https         50%  2048.00 kB   0.00 kB      100.00 MB   - \n" ((1 "aria2.tellActive" ("token:dashboard-secret" ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (2 "aria2.tellWaiting" ("token:dashboard-secret" 0 2305843009213693951 ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (3 "aria2.tellStopped" ("token:dashboard-secret" 0 2305843009213693951 ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"]))))"#
     ]],
-        ),
-        (
-            "aria2_resumes_reprioritizes_and_removes_a_transfer_from_the_live_list",
-            r##"(save-window-excursion
+    )
+}
+
+fn aria2_resumes_reprioritizes_and_removes_a_transfer_from_the_live_list() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aria2_resumes_reprioritizes_and_removes_a_transfer_from_the_live_list",
+        r##"(save-window-excursion
          (neomacs-aria2-test-cleanup)
          (let* ((aria2-executable
                  (executable-find "true"))
@@ -230,14 +231,17 @@ fn workflows_public_surface_batch() {
                             (nreverse requests))))))
              (neomacs-aria2-test-cleanup))
            result))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (aria2-toggle-pause aria2-move-up-in-list aria2-remove-download removed "" ((1 "aria2.tellActive" ("token:control-secret" ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (2 "aria2.tellWaiting" ("token:control-secret" 0 2305843009213693951 ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (3 "aria2.tellStopped" ("token:control-secret" 0 2305843009213693951 ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (4 "aria2.unpause" ("token:control-secret" "release-image")) (5 "aria2.tellActive" ("token:control-secret" ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (6 "aria2.tellWaiting" ("token:control-secret" 0 2305843009213693951 ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (7 "aria2.tellStopped" ("token:control-secret" 0 2305843009213693951 ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (8 "aria2.changePosition" ("token:control-secret" "release-image" 0 "POS_SET")) (9 "aria2.tellActive" ("token:control-secret" ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (10 "aria2.tellWaiting" ("token:control-secret" 0 2305843009213693951 ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (11 "aria2.tellStopped" ("token:control-secret" 0 2305843009213693951 ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (12 "aria2.remove" ("token:control-secret" "release-image"))))"#
     ]],
-        ),
-        (
-            "aria2_submits_a_magnet_link_through_the_widget_dialog_and_refreshes_the_dashboard",
-            r##"(save-window-excursion
+    )
+}
+
+fn aria2_submits_a_magnet_link_through_the_widget_dialog_and_refreshes_the_dashboard() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aria2_submits_a_magnet_link_through_the_widget_dialog_and_refreshes_the_dashboard",
+        r##"(save-window-excursion
          (neomacs-aria2-test-cleanup)
          (let* ((aria2-executable
                  (executable-find "true"))
@@ -339,14 +343,17 @@ fn workflows_public_surface_batch() {
                             (nreverse requests))))))
              (neomacs-aria2-test-cleanup))
            result))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (aria2-add-uris aria2-dialog-mode "Add urls, then download with ‘C-c C-c’, or cancel with ‘C-c C-k’" aria2-dialog-submit nil "Release Sources                          active  bittorrent    25%  0.00 kB      0.00 kB      4.00 kB     - \n" ((1 "aria2.tellActive" ("token:magnet-secret" ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (2 "aria2.tellWaiting" ("token:magnet-secret" 0 2305843009213693951 ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (3 "aria2.tellStopped" ("token:magnet-secret" 0 2305843009213693951 ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (4 "aria2.addUri" ("token:magnet-secret" ["magnet:?xt=urn:btih:0123456789abcdef&dn=Release"])) (5 "aria2.tellActive" ("token:magnet-secret" ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (6 "aria2.tellWaiting" ("token:magnet-secret" 0 2305843009213693951 ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (7 "aria2.tellStopped" ("token:magnet-secret" 0 2305843009213693951 ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"]))))"#
     ]],
-        ),
-        (
-            "aria2_selects_a_real_torrent_and_imports_its_exact_payload",
-            r##"(save-window-excursion
+    )
+}
+
+fn aria2_selects_a_real_torrent_and_imports_its_exact_payload() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aria2_selects_a_real_torrent_and_imports_its_exact_payload",
+        r##"(save-window-excursion
          (neomacs-aria2-test-cleanup)
          (let* ((torrent
                  (expand-file-name
@@ -449,14 +456,17 @@ fn workflows_public_surface_batch() {
              (when (file-exists-p torrent)
                (delete-file torrent)))
            result))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (aria2-add-file "release.iso                              active  bittorrent    0%   0.00 kB      0.00 kB      1.00 GB     - \n" "d8:announce32:https://tracker.example/announce4:infod6:lengthi1073741824e4:name11:release.iso12:piece lengthi262144e6:pieces20:01234567890123456789ee" ((1 "aria2.tellActive" ("token:torrent-secret" ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (2 "aria2.tellWaiting" ("token:torrent-secret" 0 2305843009213693951 ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (3 "aria2.tellStopped" ("token:torrent-secret" 0 2305843009213693951 ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (4 "aria2.addTorrent" ("token:torrent-secret" "ZDg6YW5ub3VuY2UzMjpodHRwczovL3RyYWNrZXIuZXhhbXBsZS9hbm5vdW5jZTQ6aW5mb2Q2Omxlbmd0aGkxMDczNzQxODI0ZTQ6bmFtZTExOnJlbGVhc2UuaXNvMTI6cGllY2UgbGVuZ3RoaTI2MjE0NGU2OnBpZWNlczIwOjAxMjM0NTY3ODkwMTIzNDU2Nzg5ZWU=" [])) (5 "aria2.tellActive" ("token:torrent-secret" ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (6 "aria2.tellWaiting" ("token:torrent-secret" 0 2305843009213693951 ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"])) (7 "aria2.tellStopped" ("token:torrent-secret" 0 2305843009213693951 ["gid" "status" "totalLength" "completedLength" "downloadSpeed" "uploadSpeed" "files" "dir" "bittorrent" "errorCode"]))))"#
     ]],
-        ),
-        (
-            "aria2_reports_the_public_setup_failure_when_aria2c_is_not_installed",
-            r##"(save-window-excursion
+    )
+}
+
+fn aria2_reports_the_public_setup_failure_when_aria2c_is_not_installed() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aria2_reports_the_public_setup_failure_when_aria2c_is_not_installed",
+        r##"(save-window-excursion
          (neomacs-aria2-test-cleanup)
          (let* ((aria2-executable
                  (expand-file-name
@@ -487,10 +497,21 @@ fn workflows_public_surface_batch() {
                                   major-mode)))))))
              (neomacs-aria2-test-cleanup))
            outcome))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:error aria2-err-no-executable nil "Couldn’t find ‘aria2c’ executable, aborting" t aria2-mode)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        aria2_opens_a_live_dashboard_with_active_paused_and_failed_transfers(),
+        aria2_resumes_reprioritizes_and_removes_a_transfer_from_the_live_list(),
+        aria2_submits_a_magnet_link_through_the_widget_dialog_and_refreshes_the_dashboard(),
+        aria2_selects_a_real_torrent_and_imports_its_exact_payload(),
+        aria2_reports_the_public_setup_failure_when_aria2c_is_not_installed(),
+    ];
+    assert_aria2_batch(&cases);
 }

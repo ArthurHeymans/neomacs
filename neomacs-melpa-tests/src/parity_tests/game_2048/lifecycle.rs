@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_game_2048_batch;
+use super::{ParityBatchCase, assert_game_2048_batch};
 
-#[test]
-fn lifecycle_public_surface_batch() {
-    assert_game_2048_batch(&[
-        (
-            "game_2048_init_resets_state_and_inserts_two_deterministic_tiles",
-            r##"(let ((*2048-columns* 2)
+fn game_2048_init_resets_state_and_inserts_two_deterministic_tiles() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "game_2048_init_resets_state_and_inserts_two_deterministic_tiles",
+        r##"(let ((*2048-columns* 2)
                      (*2048-rows* 2)
                      (*2048-board*
                       (vector 8))
@@ -56,14 +54,17 @@ fn lifecycle_public_surface_batch() {
                   *2048-game-has-been-added-to-history*
                   *2048-game-epoch*
                   (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("Good luck!" [2 2 0 0] [nil nil nil nil] 0 2 32 nil (123 456 0 0) (tiles print (message "Good luck!")))"#
     ]],
-        ),
-        (
-            "game_2048_entry_command_switches_disables_undo_sets_mode_and_initializes",
-            r##"(let (events)
+    )
+}
+
+fn game_2048_entry_command_switches_disables_undo_sets_mode_and_initializes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "game_2048_entry_command_switches_disables_undo_sets_mode_and_initializes",
+        r##"(let (events)
                (cl-letf (((symbol-function
                            'switch-to-buffer)
                           (lambda (buffer &rest _)
@@ -88,12 +89,15 @@ fn lifecycle_public_surface_batch() {
                  (list
                   (2048-game)
                   (nreverse events))))"##,
-            true,
-            expect![[r#"OK (initialized ((switch "2048") (disable-undo "2048") mode init))"#]],
-        ),
-        (
-            "game_2048_history_sorts_truncates_and_uses_current_global_score_values",
-            r##"(let ((*2048-score* 42)
+        true,
+        expect![[r#"OK (initialized ((switch "2048") (disable-undo "2048") mode init))"#]],
+    )
+}
+
+fn game_2048_history_sorts_truncates_and_uses_current_global_score_values() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "game_2048_history_sorts_truncates_and_uses_current_global_score_values",
+        r##"(let ((*2048-score* 42)
                      (*2048-hi-tile* 8)
                      (*2048-history*
                       '((100 16 "old-a" 1)
@@ -107,12 +111,15 @@ fn lifecycle_public_surface_batch() {
                  0 0 0 2 1 2020 t)
                 65)
                *2048-history*)"##,
-            true,
-            expect![[r#"OK ((100 16 "old-a" 1) (80 8 "old-c" 3) (42 8 "2020-01-02" 65))"#]],
-        ),
-        (
-            "game_2048_winning_continue_doubles_the_next_victory_target",
-            r##"(let ((*2048-score* 100)
+        true,
+        expect![[r#"OK ((100 16 "old-a" 1) (80 8 "old-c" 3) (42 8 "2020-01-02" 65))"#]],
+    )
+}
+
+fn game_2048_winning_continue_doubles_the_next_victory_target() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "game_2048_winning_continue_doubles_the_next_victory_target",
+        r##"(let ((*2048-score* 100)
                      (*2048-hi-tile* 2048)
                      (*2048-victory-value* 2048)
                      events)
@@ -138,14 +145,17 @@ fn lifecycle_public_surface_batch() {
                   (2048-check-game-end)
                   *2048-victory-value*
                   (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (4096 4096 (print (prompt "Yay! You beat the game!  y to start again; n to continue.  Start again? ")))"#
     ]],
-        ),
-        (
-            "game_2048_winning_restart_records_history_then_initializes",
-            r##"(let ((*2048-score* 100)
+    )
+}
+
+fn game_2048_winning_restart_records_history_then_initializes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "game_2048_winning_restart_records_history_then_initializes",
+        r##"(let ((*2048-score* 100)
                      (*2048-hi-tile* 2048)
                      (*2048-game-epoch* '(1 0 0 0))
                      (times
@@ -179,12 +189,15 @@ fn lifecycle_public_surface_batch() {
                  (list
                   (2048-check-game-end)
                   (nreverse events))))"##,
-            true,
-            expect!["OK (initialized ((history 100 2048 (2 0 0 0) (2 0 0 0)) init))"],
-        ),
-        (
-            "game_2048_loss_records_history_only_once_without_restart",
-            r##"(let ((*2048-score* 50)
+        true,
+        expect!["OK (initialized ((history 100 2048 (2 0 0 0) (2 0 0 0)) init))"],
+    )
+}
+
+fn game_2048_loss_records_history_only_once_without_restart() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "game_2048_loss_records_history_only_once_without_restart",
+        r##"(let ((*2048-score* 50)
                      (*2048-hi-tile* 128)
                      (*2048-game-epoch* '(1 0 0 0))
                      (*2048-game-has-been-added-to-history*
@@ -220,14 +233,17 @@ fn lifecycle_public_surface_batch() {
                  (list
                   *2048-game-has-been-added-to-history*
                   (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t ((history 50 128 (2 0 0 0) (1 0 0 0)) print (prompt "Aw, too bad.  You lost.  Want to play again? ") print (prompt "Aw, too bad.  You lost.  Want to play again? ")))"#
     ]],
-        ),
-        (
-            "game_2048_board_renderer_outputs_grid_score_help_and_history",
-            r##"(let ((*2048-columns* 2)
+    )
+}
+
+fn game_2048_board_renderer_outputs_grid_score_help_and_history() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "game_2048_board_renderer_outputs_grid_score_help_and_history",
+        r##"(let ((*2048-columns* 2)
                      (*2048-rows* 1)
                      (*2048-board*
                       (vector 2 0))
@@ -244,10 +260,23 @@ fn lifecycle_public_surface_batch() {
                     (get-text-property
                      19 'font-lock-face
                      text)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (1 "+-------+-------+\n|       |       |\n|    2  |       |\n|       |       |\n+-------+-------+\n\n         /==========\\\n         | Score: 4 |\n         \\==========/\n\nThe goal is to create a tile with value 2048.\nUse the arrow keys, p/n/b/f, or C-p/C-n/C-b/C-f\nto move the tiles around. Press r to move randomly.\n\nIf two tiles of the same value collide, the tiles\ncombine into a tile with twice the value.\n\n         /=============\\\n         | HIGH SCORES |\n         \\=============/\n\n   Score  Hi-Tile     Date     Duration\n" twentyfortyeight-face-2)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn lifecycle_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        game_2048_init_resets_state_and_inserts_two_deterministic_tiles(),
+        game_2048_entry_command_switches_disables_undo_sets_mode_and_initializes(),
+        game_2048_history_sorts_truncates_and_uses_current_global_score_values(),
+        game_2048_winning_continue_doubles_the_next_victory_target(),
+        game_2048_winning_restart_records_history_then_initializes(),
+        game_2048_loss_records_history_only_once_without_restart(),
+        game_2048_board_renderer_outputs_grid_score_help_and_history(),
+    ];
+    assert_game_2048_batch(&cases);
 }

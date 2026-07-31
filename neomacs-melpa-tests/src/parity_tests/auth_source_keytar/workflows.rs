@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auth_source_keytar_batch;
+use super::{ParityBatchCase, assert_auth_source_keytar_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_auth_source_keytar_batch(&[
-        (
-            "auth_source_keytar_enabled_backend_dispatches_real_host_user_lookup_through_search_function",
-            r##"(let ((auth-sources nil)
+fn auth_source_keytar_enabled_backend_dispatches_real_host_user_lookup_through_search_function() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_enabled_backend_dispatches_real_host_user_lookup_through_search_function",
+        r##"(let ((auth-sources nil)
                                calls)
           (cl-letf
               (((symbol-function
@@ -37,14 +35,17 @@ fn workflows_public_surface_batch() {
                 :host "git.internal"
                 :user "deploy")
                (nreverse calls)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((keytar) ("Keytar" keytar auth-source-keytar-search) "workflow-secret" (("git.internal" "deploy")))"#
     ]],
-        ),
-        (
-            "auth_source_keytar_real_auth_source_search_exposes_direct_password_result_contract",
-            r##"(let ((auth-sources
+    )
+}
+
+fn auth_source_keytar_real_auth_source_search_exposes_direct_password_result_contract() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_real_auth_source_search_exposes_direct_password_result_contract",
+        r##"(let ((auth-sources
                                 '(keytar))
                                calls)
           (auth-source-forget-all-cached)
@@ -64,12 +65,15 @@ fn workflows_public_surface_batch() {
                  :max 1
                  :require '(:secret))))
              (nreverse calls))))"##,
-            true,
-            expect![[r#"OK ((:ok "direct-secret") (("registry.internal" "release")))"#]],
-        ),
-        (
-            "auth_source_keytar_real_auth_source_search_handles_service_wide_credential_listing",
-            r##"(let ((auth-sources
+        true,
+        expect![[r#"OK ((:ok "direct-secret") (("registry.internal" "release")))"#]],
+    )
+}
+
+fn auth_source_keytar_real_auth_source_search_handles_service_wide_credential_listing() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_real_auth_source_search_handles_service_wide_credential_listing",
+        r##"(let ((auth-sources
                                 '(keytar))
                                calls)
           (auth-source-forget-all-cached)
@@ -87,12 +91,15 @@ fn workflows_public_surface_batch() {
                  :max 10
                  :require '(:secret))))
              (nreverse calls))))"##,
-            true,
-            expect![[r#"OK ((:ok ((:secret "beta") (:secret "alpha"))) ("artifact-service"))"#]],
-        ),
-        (
-            "auth_source_keytar_real_pick_first_password_workflow_surfaces_backend_result_shape",
-            r##"(let ((auth-sources
+        true,
+        expect![[r#"OK ((:ok ((:secret "beta") (:secret "alpha"))) ("artifact-service"))"#]],
+    )
+}
+
+fn auth_source_keytar_real_pick_first_password_workflow_surfaces_backend_result_shape() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_real_pick_first_password_workflow_surfaces_backend_result_shape",
+        r##"(let ((auth-sources
                                 '(keytar))
                                calls)
           (auth-source-forget-all-cached)
@@ -110,14 +117,17 @@ fn workflows_public_surface_batch() {
                  :host "database.internal"
                  :user "backup")))
              (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error wrong-type-argument (listp "picked-secret")) (("database.internal" "backup")))"#
     ]],
-        ),
-        (
-            "auth_source_keytar_repeated_real_search_and_enable_exercise_auth_source_cache_invalidation",
-            r##"(let ((auth-sources
+    )
+}
+
+fn auth_source_keytar_repeated_real_search_and_enable_exercise_auth_source_cache_invalidation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_repeated_real_search_and_enable_exercise_auth_source_cache_invalidation",
+        r##"(let ((auth-sources
                                 '(keytar))
                                (calls 0))
           (auth-source-forget-all-cached)
@@ -157,14 +167,17 @@ fn workflows_public_surface_batch() {
                  third
                  calls
                  auth-sources)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:ok "\0\0\0\0\0\0\0\0") (:ok "\0\0\0\0\0\0\0\0") (:ok "secret-2") 2 (keytar))"#
     ]],
-        ),
-        (
-            "auth_source_keytar_two_independent_services_keep_provider_arguments_and_secrets_separate",
-            r##"(let (calls)
+    )
+}
+
+fn auth_source_keytar_two_independent_services_keep_provider_arguments_and_secrets_separate() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_two_independent_services_keep_provider_arguments_and_secrets_separate",
+        r##"(let (calls)
           (cl-letf
               (((symbol-function 'keytar-get-password)
                 (lambda (service account)
@@ -186,14 +199,17 @@ fn workflows_public_surface_batch() {
               :service "git"
               :account "bob")
              (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("git::alice" "database::reader" "git::bob" (("git" "alice") ("database" "reader") ("git" "bob")))"#
     ]],
-        ),
-        (
-            "auth_source_keytar_listing_to_selection_workflow_preserves_provider_reverse_order",
-            r##"(cl-letf
+    )
+}
+
+fn auth_source_keytar_listing_to_selection_workflow_preserves_provider_reverse_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_listing_to_selection_workflow_preserves_provider_reverse_order",
+        r##"(cl-letf
           (((symbol-function
              'keytar-find-credentials)
             (lambda (_)
@@ -215,14 +231,17 @@ fn workflows_public_surface_batch() {
                  entry
                  :secret))
               entries))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((#1=(:secret "current-secret") (:secret "old-secret")) #1# "current-secret" ("current-secret" "old-secret"))"#
     ]],
-        ),
-        (
-            "auth_source_keytar_provider_rotation_is_observed_by_uncached_direct_searches",
-            r##"(let ((passwords
+    )
+}
+
+fn auth_source_keytar_provider_rotation_is_observed_by_uncached_direct_searches() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_provider_rotation_is_observed_by_uncached_direct_searches",
+        r##"(let ((passwords
                                 '("version-one"
                                   "version-two"
                                   "version-three"))
@@ -246,10 +265,24 @@ fn workflows_public_surface_batch() {
               :user "service")
              passwords
              (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("version-one" "version-two" "version-three" nil (("rotating.internal" "service") ("rotating.internal" "service") ("rotating.internal" "service")))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auth_source_keytar_enabled_backend_dispatches_real_host_user_lookup_through_search_function(),
+        auth_source_keytar_real_auth_source_search_exposes_direct_password_result_contract(),
+        auth_source_keytar_real_auth_source_search_handles_service_wide_credential_listing(),
+        auth_source_keytar_real_pick_first_password_workflow_surfaces_backend_result_shape(),
+        auth_source_keytar_repeated_real_search_and_enable_exercise_auth_source_cache_invalidation(),
+        auth_source_keytar_two_independent_services_keep_provider_arguments_and_secrets_separate(),
+        auth_source_keytar_listing_to_selection_workflow_preserves_provider_reverse_order(),
+        auth_source_keytar_provider_rotation_is_observed_by_uncached_direct_searches(),
+    ];
+    assert_auth_source_keytar_batch(&cases);
 }

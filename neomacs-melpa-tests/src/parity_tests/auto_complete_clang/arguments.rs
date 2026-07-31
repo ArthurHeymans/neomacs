@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_clang_batch;
+use super::{ParityBatchCase, assert_auto_complete_clang_batch};
 
-#[test]
-fn arguments_public_surface_batch() {
-    assert_auto_complete_clang_batch(&[
-        (
-            "auto_complete_clang_prefix_header_setter_clears_whitespace_and_preserves_nonblank_input",
-            r##"(let ((ac-clang-prefix-header
+fn auto_complete_clang_prefix_header_setter_clears_whitespace_and_preserves_nonblank_input() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_prefix_header_setter_clears_whitespace_and_preserves_nonblank_input",
+        r##"(let ((ac-clang-prefix-header
                 "old.pch"))
          (list
           (progn
@@ -25,12 +23,15 @@ fn arguments_public_surface_batch() {
             (ac-clang-set-prefix-header
              "  named.pch  ")
             ac-clang-prefix-header)))"##,
-            true,
-            expect![[r#"OK (nil nil "prefix.pch" "  named.pch  ")"#]],
-        ),
-        (
-            "auto_complete_clang_cflags_command_splits_interactive_input_using_emacs_word_rules",
-            r##"(let ((ac-clang-flags
+        true,
+        expect![[r#"OK (nil nil "prefix.pch" "  named.pch  ")"#]],
+    )
+}
+
+fn auto_complete_clang_cflags_command_splits_interactive_input_using_emacs_word_rules() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_cflags_command_splits_interactive_input_using_emacs_word_rules",
+        r##"(let ((ac-clang-flags
                 '("-DOLD"))
                (prompts nil))
          (cl-letf
@@ -44,12 +45,15 @@ fn arguments_public_surface_batch() {
             #'ac-clang-set-cflags)
            (list ac-clang-flags
                  (nreverse prompts))))"##,
-            true,
-            expect![[r#"OK (("-Iinclude" "-DNAME=hello\\" "world" "-std=c++20") ("New cflags: "))"#]],
-        ),
-        (
-            "auto_complete_clang_shell_cflags_command_passes_current_file_default_and_splits_output",
-            r##"(let ((buffer-file-name
+        true,
+        expect![[r#"OK (("-Iinclude" "-DNAME=hello\\" "world" "-std=c++20") ("New cflags: "))"#]],
+    )
+}
+
+fn auto_complete_clang_shell_cflags_command_passes_current_file_default_and_splits_output() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_shell_cflags_command_passes_current_file_default_and_splits_output",
+        r##"(let ((buffer-file-name
                 (expand-file-name
                  "src/main.cpp"
                  default-directory))
@@ -79,14 +83,17 @@ fn arguments_public_surface_batch() {
             ac-clang-flags
             (nreverse reads)
             (nreverse commands))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("-I/opt/demo" "-DDEMO=1" "-pthread") (("Shell command: " nil nil "src/main.cpp")) ("pkg-config --cflags demo"))"#
     ]],
-        ),
-        (
-            "auto_complete_clang_build_location_tracks_stdin_or_saved_file_line_and_column",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_complete_clang_build_location_tracks_stdin_or_saved_file_line_and_column() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_build_location_tracks_stdin_or_saved_file_line_and_column",
+        r##"(with-temp-buffer
          (insert "one\n  alpha beta\nlast")
          (setq buffer-file-name
                (expand-file-name
@@ -101,14 +108,17 @@ fn arguments_public_surface_batch() {
             (mapcar
              #'ac-clang-build-location
              '(1 5 7 15 24)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("-:1:1" "-:2:1" "-:2:3" "-:2:11" "-:3:5") ("[ORACLE-SANDBOX]/source.cpp:1:1" "[ORACLE-SANDBOX]/source.cpp:2:1" "[ORACLE-SANDBOX]/source.cpp:2:3" "[ORACLE-SANDBOX]/source.cpp:2:11" "[ORACLE-SANDBOX]/source.cpp:3:5"))"#
     ]],
-        ),
-        (
-            "auto_complete_clang_language_option_covers_c_cpp_objc_extensions_and_fallback",
-            r##"(mapcar
+    )
+}
+
+fn auto_complete_clang_language_option_covers_c_cpp_objc_extensions_and_fallback() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_language_option_covers_c_cpp_objc_extensions_and_fallback",
+        r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (setq major-mode (car case))
@@ -128,14 +138,17 @@ fn arguments_public_surface_batch() {
            (objc-mode nil)
            (rust-mode "/work/main.rs")
            (fundamental-mode nil)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((c-mode "/work/main.c" (:value "c")) (c++-mode "/work/main.cc" (:value "c++")) (objc-mode "/work/object.m" (:value "objective-c")) (objc-mode "/work/object.mm" (:value "objective-c++")) (objc-mode nil (:signal wrong-type-argument (stringp nil))) (rust-mode "/work/main.rs" (:value "c++")) (fundamental-mode nil (:value "c++")))"#
     ]],
-        ),
-        (
-            "auto_complete_clang_custom_language_option_has_priority_and_is_called_each_time",
-            r##"(let* ((calls 0)
+    )
+}
+
+fn auto_complete_clang_custom_language_option_has_priority_and_is_called_each_time() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_custom_language_option_has_priority_and_is_called_each_time",
+        r##"(let* ((calls 0)
                (major-mode 'c-mode)
                (ac-clang-lang-option-function
                 (lambda ()
@@ -147,12 +160,15 @@ fn arguments_public_surface_batch() {
           (ac-clang-lang-option)
           (ac-clang-lang-option)
           calls))"##,
-            true,
-            expect![[r#"OK ("cuda" "c" 2)"#]],
-        ),
-        (
-            "auto_complete_clang_unsaved_complete_args_include_language_flags_prefix_header_location_and_stdin",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ("cuda" "c" 2)"#]],
+    )
+}
+
+fn auto_complete_clang_unsaved_complete_args_include_language_flags_prefix_header_location_and_stdin() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_unsaved_complete_args_include_language_flags_prefix_header_location_and_stdin",
+        r##"(with-temp-buffer
          (let ((default-directory
                  (file-name-as-directory
                   (expand-file-name
@@ -168,14 +184,17 @@ fn arguments_public_surface_batch() {
            (insert "int main() {\n  ret")
            (ac-clang-build-complete-args
             (point))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("-cc1" "-fsyntax-only" "-x" "c++" "-Iinclude" "-DNAME=two words" "-include-pch" "[ORACLE-SANDBOX]/clang-args/precompiled.pch" "-code-completion-at" "-:2:6" "-")"#
     ]],
-        ),
-        (
-            "auto_complete_clang_saved_complete_args_omit_language_and_use_file_for_location_and_input",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_complete_clang_saved_complete_args_omit_language_and_use_file_for_location_and_input() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_saved_complete_args_omit_language_and_use_file_for_location_and_input",
+        r##"(with-temp-buffer
          (let ((buffer-file-name
                  (expand-file-name
                   "saved.c"
@@ -188,14 +207,17 @@ fn arguments_public_surface_batch() {
            (insert "int value;\nval")
            (ac-clang-build-complete-args
             (- (point) 3))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("-cc1" "-fsyntax-only" "-Wall" "-code-completion-at" "[ORACLE-SANDBOX]/saved.c:2:1" "[ORACLE-SANDBOX]/saved.c")"#
     ]],
-        ),
-        (
-            "auto_complete_clang_document_cleanup_removes_placeholders_and_normalizes_optional_markers",
-            r##"(mapcar
+    )
+}
+
+fn auto_complete_clang_document_cleanup_removes_placeholders_and_normalizes_optional_markers() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_document_cleanup_removes_placeholders_and_normalizes_optional_markers",
+        r##"(mapcar
          #'ac-clang-clean-document
          '(nil
            ""
@@ -203,14 +225,17 @@ fn arguments_public_surface_batch() {
            "void log([#int level#], <#const char *fmt#>, ...)"
            "[#only#]"
            "nested <#std::vector<int>#> [#tail#]"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil "" "int fn(int x, const char *name)" "void log(int level , const char *fmt, ...)" "only " "nested std::vector<int> tail ")"#
     ]],
-        ),
-        (
-            "auto_complete_clang_document_reads_help_property_only_from_string_candidates",
-            r##"(let ((candidate
+    )
+}
+
+fn auto_complete_clang_document_reads_help_property_only_from_string_candidates() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_document_reads_help_property_only_from_string_candidates",
+        r##"(let ((candidate
                 (propertize
                  "function"
                  'ac-clang-help
@@ -223,12 +248,15 @@ fn arguments_public_surface_batch() {
           (ac-clang-document nil)
           (ac-clang-document
            '(not a string))))"##,
-            true,
-            expect![[r#"OK ("int function(int value)" nil nil nil)"#]],
-        ),
-        (
-            "auto_complete_clang_balance_counter_and_argument_splitter_handle_nested_types",
-            r##"(list
+        true,
+        expect![[r#"OK ("int function(int value)" nil nil nil)"#]],
+    )
+}
+
+fn auto_complete_clang_balance_counter_and_argument_splitter_handle_nested_types() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_balance_counter_and_argument_splitter_handle_nested_types",
+        r##"(list
          (mapcar
           (lambda (string)
             (list
@@ -248,10 +276,27 @@ fn arguments_public_surface_batch() {
             "map<string, vector<pair<int, int>>> data, bool ok"
             ""
             "single")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("" t t) ("(x)" t t) ("(x" nil t) ("std::vector<int>" t t) ("map<string, vector<int>>" t t) ("fn(a, pair<int, int>)" t t)) (("int a" "char b") ("std::pair<int, int> value" "double scale") ("void (*callback)(int, char)" "int flags") ("map<string, vector<pair<int, int>>> data" "bool ok") ("") ("single")))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn arguments_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_clang_prefix_header_setter_clears_whitespace_and_preserves_nonblank_input(),
+        auto_complete_clang_cflags_command_splits_interactive_input_using_emacs_word_rules(),
+        auto_complete_clang_shell_cflags_command_passes_current_file_default_and_splits_output(),
+        auto_complete_clang_build_location_tracks_stdin_or_saved_file_line_and_column(),
+        auto_complete_clang_language_option_covers_c_cpp_objc_extensions_and_fallback(),
+        auto_complete_clang_custom_language_option_has_priority_and_is_called_each_time(),
+        auto_complete_clang_unsaved_complete_args_include_language_flags_prefix_header_location_and_stdin(),
+        auto_complete_clang_saved_complete_args_omit_language_and_use_file_for_location_and_input(),
+        auto_complete_clang_document_cleanup_removes_placeholders_and_normalizes_optional_markers(),
+        auto_complete_clang_document_reads_help_property_only_from_string_candidates(),
+        auto_complete_clang_balance_counter_and_argument_splitter_handle_nested_types(),
+    ];
+    assert_auto_complete_clang_batch(&cases);
 }

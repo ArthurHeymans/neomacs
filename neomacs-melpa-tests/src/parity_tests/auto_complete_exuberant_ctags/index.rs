@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_exuberant_ctags_batch;
+use super::{ParityBatchCase, assert_auto_complete_exuberant_ctags_batch};
 
-#[test]
-fn index_public_surface_batch() {
-    assert_auto_complete_exuberant_ctags_batch(&[
-        (
-            "auto_complete_exuberant_ctags_builds_practical_multilanguage_index",
-            r##"(let* ((root
+fn auto_complete_exuberant_ctags_builds_practical_multilanguage_index() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_builds_practical_multilanguage_index",
+        r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "multilanguage-index"))
                                 (default-directory root))
@@ -19,12 +17,15 @@ fn index_public_surface_batch() {
                              "Widget\twidget.hpp\t/^class Widget/;\"\tkind:c\tlanguage:C++\n"
                              "save!\tmodel.rb\t/^  def save!/;\"\tkind:m\tlanguage:Ruby\n"))
                            (ac-exuberant-ctags-build-index))"##,
-            true,
-            expect![[r#"OK ("save! m Ruby" "Widget c C++" "render_frame f Rust")"#]],
-        ),
-        (
-            "auto_complete_exuberant_ctags_missing_database_clears_stale_index",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK ("save! m Ruby" "Widget c C++" "render_frame f Rust")"#]],
+    )
+}
+
+fn auto_complete_exuberant_ctags_missing_database_clears_stale_index() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_missing_database_clears_stale_index",
+        r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "missing-index"))
                                 (default-directory root)
@@ -35,12 +36,15 @@ fn index_public_surface_batch() {
                            (list
                             (ac-exuberant-ctags-build-index)
                             ac-exuberant-ctags-index))"##,
-            true,
-            expect!["OK (nil nil)"],
-        ),
-        (
-            "auto_complete_exuberant_ctags_empty_database_clears_stale_index",
-            r##"(let* ((root
+        true,
+        expect!["OK (nil nil)"],
+    )
+}
+
+fn auto_complete_exuberant_ctags_empty_database_clears_stale_index() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_empty_database_clears_stale_index",
+        r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "empty-index"))
                                 (default-directory root)
@@ -52,12 +56,15 @@ fn index_public_surface_batch() {
                            (list
                             (ac-exuberant-ctags-build-index)
                             ac-exuberant-ctags-index))"##,
-            true,
-            expect!["OK (nil nil)"],
-        ),
-        (
-            "auto_complete_exuberant_ctags_parser_filters_blank_header_and_malformed_rows",
-            r##"(let* ((root
+        true,
+        expect!["OK (nil nil)"],
+    )
+}
+
+fn auto_complete_exuberant_ctags_parser_filters_blank_header_and_malformed_rows() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_parser_filters_blank_header_and_malformed_rows",
+        r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "filtered-index"))
                                 (default-directory root))
@@ -71,12 +78,15 @@ fn index_public_surface_batch() {
                              "good\tfile.c\t/^x$/;\"\tkind:f\tlanguage:C\n"
                              "language-before-kind\tfile.c\t/^x$/;\"\tlanguage:C\tkind:f\n"))
                            (ac-exuberant-ctags-build-index))"##,
-            true,
-            expect![[r#"OK ("good f C")"#]],
-        ),
-        (
-            "auto_complete_exuberant_ctags_parser_preserves_duplicates_and_reverse_file_order",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK ("good f C")"#]],
+    )
+}
+
+fn auto_complete_exuberant_ctags_parser_preserves_duplicates_and_reverse_file_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_parser_preserves_duplicates_and_reverse_file_order",
+        r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "duplicate-index"))
                                 (default-directory root))
@@ -87,12 +97,15 @@ fn index_public_surface_batch() {
                              "middle\tb.rs\t/^x$/;\"\tkind:m\tlanguage:Rust\n"
                              "same\tc.cpp\t/^x$/;\"\tkind:p\tlanguage:C++\n"))
                            (ac-exuberant-ctags-build-index))"##,
-            true,
-            expect![[r#"OK ("same p C++" "middle m Rust" "same f C")"#]],
-        ),
-        (
-            "auto_complete_exuberant_ctags_parser_observes_line_length_limit",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK ("same p C++" "middle m Rust" "same f C")"#]],
+    )
+}
+
+fn auto_complete_exuberant_ctags_parser_observes_line_length_limit() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_parser_observes_line_length_limit",
+        r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "line-limit-index"))
                                 (default-directory root)
@@ -109,12 +122,15 @@ fn index_public_surface_batch() {
                             (length short)
                             (length long)
                             (ac-exuberant-ctags-build-index)))"##,
-            true,
-            expect![[r#"OK (22 28 ("ok f C"))"#]],
-        ),
-        (
-            "auto_complete_exuberant_ctags_build_index_queries_tag_path_twice",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK (22 28 ("ok f C"))"#]],
+    )
+}
+
+fn auto_complete_exuberant_ctags_build_index_queries_tag_path_twice() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_build_index_queries_tag_path_twice",
+        r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "query-count"))
                                 (tags
@@ -133,12 +149,15 @@ fn index_public_surface_batch() {
                              (list
                               (ac-exuberant-ctags-build-index)
                               calls)))"##,
-            true,
-            expect![[r#"OK (("entry v C") 2)"#]],
-        ),
-        (
-            "auto_complete_exuberant_ctags_custom_database_name_builds_same_index",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK (("entry v C") 2)"#]],
+    )
+}
+
+fn auto_complete_exuberant_ctags_custom_database_name_builds_same_index() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_custom_database_name_builds_same_index",
+        r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "custom-index"))
                                 (default-directory root)
@@ -151,8 +170,22 @@ fn index_public_surface_batch() {
                             (ac-exuberant-ctags-build-index)
                             (file-name-nondirectory
                              (ac-exuberant-ctags-get-tag-file))))"##,
-            true,
-            expect![[r#"OK (("dispatch f C") ".ctags-index")"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (("dispatch f C") ".ctags-index")"#]],
+    )
+}
+
+#[test]
+fn index_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_exuberant_ctags_builds_practical_multilanguage_index(),
+        auto_complete_exuberant_ctags_missing_database_clears_stale_index(),
+        auto_complete_exuberant_ctags_empty_database_clears_stale_index(),
+        auto_complete_exuberant_ctags_parser_filters_blank_header_and_malformed_rows(),
+        auto_complete_exuberant_ctags_parser_preserves_duplicates_and_reverse_file_order(),
+        auto_complete_exuberant_ctags_parser_observes_line_length_limit(),
+        auto_complete_exuberant_ctags_build_index_queries_tag_path_twice(),
+        auto_complete_exuberant_ctags_custom_database_name_builds_same_index(),
+    ];
+    assert_auto_complete_exuberant_ctags_batch(&cases);
 }

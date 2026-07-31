@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_flycheck_arduino_batch;
+use super::{ParityBatchCase, assert_flycheck_arduino_batch};
 
-#[test]
-fn flycheck_public_surface_batch() {
-    assert_flycheck_arduino_batch(&[
-        (
-            "optional_module_loads_real_pinned_flycheck_and_registers_complete_checker_definition",
-            r##"(let* ((descriptor
+fn optional_module_loads_real_pinned_flycheck_and_registers_complete_checker_definition() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "optional_module_loads_real_pinned_flycheck_and_registers_complete_checker_definition",
+        r##"(let* ((descriptor
                           (cadr
                            (assq 'flycheck package-alist)))
                          (command
@@ -29,14 +27,17 @@ fn flycheck_public_surface_batch() {
                      (documentation
                       'flycheck-arduino-setup)
                      flycheck-arduino-board))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t t "20260728.931" ("arduino" "--verify" source) (arduino-mode) 2 (warning error) "Setup Flycheck Arduino.\nAdd ‘arduino’ to ‘flycheck-checkers’." nil)"#
     ]],
-        ),
-        (
-            "setup_adds_arduino_checker_once_and_keeps_existing_checker_order_stable",
-            r##"(let ((flycheck-checkers
+    )
+}
+
+fn setup_adds_arduino_checker_once_and_keeps_existing_checker_order_stable() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "setup_adds_arduino_checker_once_and_keeps_existing_checker_order_stable",
+        r##"(let ((flycheck-checkers
                          '(emacs-lisp
                            c/c++-clang
                            emacs-lisp-checkdoc)))
@@ -49,12 +50,15 @@ fn flycheck_public_surface_batch() {
                        (lambda (checker)
                          (eq checker 'arduino))
                        flycheck-checkers))))"##,
-            true,
-            expect!["OK ((arduino emacs-lisp c/c++-clang emacs-lisp-checkdoc) 1)"],
-        ),
-        (
-            "realistic_compiler_warning_and_fatal_error_parse_into_precise_flycheck_objects",
-            r##"(let ((buffer
+        true,
+        expect!["OK ((arduino emacs-lisp c/c++-clang emacs-lisp-checkdoc) 1)"],
+    )
+}
+
+fn realistic_compiler_warning_and_fatal_error_parse_into_precise_flycheck_objects() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "realistic_compiler_warning_and_fatal_error_parse_into_precise_flycheck_objects",
+        r##"(let ((buffer
                          (get-buffer-create
                           " *arduino-flycheck-source*")))
                     (unwind-protect
@@ -85,14 +89,17 @@ fn flycheck_public_surface_batch() {
                              "collect2: unrelated noise\n")
                             'arduino buffer)))
                       (kill-buffer buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("/workspace/Blink/Blink.ino" 12 7 warning "unused variable 'reading'" arduino t) ("/workspace/Blink/Blink.ino" 18 3 error "Servo.h: No such file or directory" arduino t))"#
     ]],
-        ),
-        (
-            "checker_supports_only_arduino_mode_and_substitutes_real_source_argument",
-            r##"(let ((source
+    )
+}
+
+fn checker_supports_only_arduino_mode_and_substitutes_real_source_argument() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "checker_supports_only_arduino_mode_and_substitutes_real_source_argument",
+        r##"(let ((source
                          (make-temp-file
                           "arduino-flycheck-" nil ".ino")))
                     (unwind-protect
@@ -125,8 +132,18 @@ fn flycheck_public_surface_batch() {
                             (flycheck-checker-get
                              'arduino 'command))))
                       (delete-file source)))"##,
-            true,
-            expect![[r#"OK ((arduino-mode) nil ("arduino" "--verify" (t t)))"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK ((arduino-mode) nil ("arduino" "--verify" (t t)))"#]],
+    )
+}
+
+#[test]
+fn flycheck_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        optional_module_loads_real_pinned_flycheck_and_registers_complete_checker_definition(),
+        setup_adds_arduino_checker_once_and_keeps_existing_checker_order_stable(),
+        realistic_compiler_warning_and_fatal_error_parse_into_precise_flycheck_objects(),
+        checker_supports_only_arduino_mode_and_substitutes_real_source_argument(),
+    ];
+    assert_flycheck_arduino_batch(&cases);
 }

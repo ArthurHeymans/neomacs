@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_indent_mode_batch;
+use super::{ParityBatchCase, assert_auto_indent_mode_batch};
 
-#[test]
-fn lifecycle_public_surface_batch() {
-    assert_auto_indent_mode_batch(&[
-        (
-            "auto_indent_mode_default_engine_installs_local_hooks_and_activates_advices",
-            r##"(with-temp-buffer
+fn auto_indent_mode_default_engine_installs_local_hooks_and_activates_advices() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_default_engine_installs_local_hooks_and_activates_advices",
+        r##"(with-temp-buffer
          (emacs-lisp-mode)
          (let ((auto-indent-on-save-file nil)
                (auto-indent-untabify-on-save-file nil)
@@ -28,14 +26,17 @@ fn lifecycle_public_surface_batch() {
              '(delete-char kill-line kill-region
                backward-delete-char-untabify
                move-beginning-of-line)))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (t (auto-indent-mode-pre-command-hook eldoc-pre-command-refresh-echo-area t) (auto-indent-mode-post-command-hook eldoc-schedule-timer t . #1=(auto-indent-mode-post-command-hook-last)) #1# (auto-indent-mode-post-command-hook t) ((delete-char t t) (kill-line t t) (kill-region t t) (backward-delete-char-untabify t t) (move-beginning-of-line t t)))"
     ],
-        ),
-        (
-            "auto_indent_mode_disable_removes_primary_hooks_and_preserves_source_quirks",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_indent_mode_disable_removes_primary_hooks_and_preserves_source_quirks() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_disable_removes_primary_hooks_and_preserves_source_quirks",
+        r##"(with-temp-buffer
          (emacs-lisp-mode)
          (let ((auto-indent-on-save-file t)
                (auto-indent-untabify-on-save-file t)
@@ -66,14 +67,17 @@ fn lifecycle_public_surface_batch() {
                     post-command-hook)
               (memq 'auto-indent-mode-pre-command-hook
                     pre-command-hook)))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((#2=(auto-indent-file-when-save) (auto-indent-file-when-visit url-handlers-set-buffer-mode vc-refresh-state epa-file-find-file-hook) (auto-indent-mode-post-command-hook eldoc-schedule-timer t . #1=(auto-indent-mode-post-command-hook-last)) #1#) nil #2# nil nil #1# nil)"
     ],
-        ),
-        (
-            "auto_indent_mode_keys_engine_remaps_editing_commands_without_hooks",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_indent_mode_keys_engine_remaps_editing_commands_without_hooks() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_keys_engine_remaps_editing_commands_without_hooks",
+        r##"(with-temp-buffer
          (emacs-lisp-mode)
          (let ((auto-indent-engine 'keys)
                (auto-indent-newline-function
@@ -89,12 +93,15 @@ fn lifecycle_public_surface_batch() {
             (memq 'auto-indent-mode-post-command-hook
                   post-command-hook))
            ))"##,
-            true,
-            expect!["OK (t newline-and-indent auto-indent-delete-char auto-indent-kill-line nil nil)"],
-        ),
-        (
-            "auto_indent_mode_on_respects_disabled_major_modes",
-            r##"(mapcar
+        true,
+        expect!["OK (t newline-and-indent auto-indent-delete-char auto-indent-kill-line nil nil)"],
+    )
+}
+
+fn auto_indent_mode_on_respects_disabled_major_modes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_on_respects_disabled_major_modes",
+        r##"(mapcar
          (lambda (mode)
            (with-temp-buffer
              (funcall mode)
@@ -104,14 +111,17 @@ fn lifecycle_public_surface_batch() {
                (auto-indent-mode-on)
                (list mode major-mode auto-indent-mode))))
          '(fundamental-mode text-mode emacs-lisp-mode))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((fundamental-mode fundamental-mode nil) (text-mode text-mode nil) (emacs-lisp-mode emacs-lisp-mode t))"
     ],
-        ),
-        (
-            "auto_indent_global_mode_enables_eligible_existing_buffers_only",
-            r##"(let ((code
+    )
+}
+
+fn auto_indent_global_mode_enables_eligible_existing_buffers_only() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_global_mode_enables_eligible_existing_buffers_only",
+        r##"(let ((code
                                 (generate-new-buffer
                                  " *auto-indent-code*"))
              (text
@@ -145,12 +155,15 @@ fn lifecycle_public_surface_batch() {
              (auto-indent-global-mode -1))
            (kill-buffer code)
            (kill-buffer text)))"##,
-            true,
-            expect!["OK ((t t nil) nil nil nil)"],
-        ),
-        (
-            "auto_indent_mode_assigns_known_and_derived_indent_variables",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK ((t t nil) nil nil nil)"],
+    )
+}
+
+fn auto_indent_mode_assigns_known_and_derived_indent_variables() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_assigns_known_and_derived_indent_variables",
+        r##"(with-temp-buffer
          (setq major-mode 'fixture-mode
                auto-indent-known-indent-level-variables
                '(fixture-offset shared-offset)
@@ -165,12 +178,15 @@ fn lifecycle_public_surface_batch() {
           (symbol-value 'fixture-mode-indent-level)
           (local-variable-p 'auto-indent-mode)
           auto-indent-mode))"##,
-            true,
-            expect!["OK (6 6 6 t t)"],
-        ),
-        (
-            "auto_indent_deactivate_advices_disables_every_available_editing_advice",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK (6 6 6 t t)"],
+    )
+}
+
+fn auto_indent_deactivate_advices_disables_every_available_editing_advice() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_deactivate_advices_disables_every_available_editing_advice",
+        r##"(with-temp-buffer
          (emacs-lisp-mode)
          (auto-indent-mode 1)
          (let ((before
@@ -189,14 +205,17 @@ fn lifecycle_public_surface_batch() {
                kill-ring-save
                backward-delete-char-untabify
                move-beginning-of-line)))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (((delete-char t t) (kill-line t t) (kill-region t t) (kill-ring-save t t) (backward-delete-char-untabify t t) (move-beginning-of-line t t)) ((delete-char t nil) (kill-line t nil) (kill-region t nil) (kill-ring-save t nil) (backward-delete-char-untabify t nil) (move-beginning-of-line t nil)))"
     ],
-        ),
-        (
-            "auto_indent_eol_newline_uses_alternate_return_at_physical_line_end",
-            r##"(let (calls)
+    )
+}
+
+fn auto_indent_eol_newline_uses_alternate_return_at_physical_line_end() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_eol_newline_uses_alternate_return_at_physical_line_end",
+        r##"(let (calls)
          (fset
           'auto-indent-test-return
           (lambda ()
@@ -213,12 +232,15 @@ fn lifecycle_public_surface_batch() {
               (buffer-string)
               (point)
               (nreverse calls)))))"##,
-            true,
-            expect![[r#"OK ("first line\n<return>\nsecond line" 20 (11))"#]],
-        ),
-        (
-            "auto_indent_eol_char_newline_inserts_configured_character_once",
-            r##"(let (calls)
+        true,
+        expect![[r#"OK ("first line\n<return>\nsecond line" 20 (11))"#]],
+    )
+}
+
+fn auto_indent_eol_char_newline_inserts_configured_character_once() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_eol_char_newline_inserts_configured_character_once",
+        r##"(let (calls)
          (fset
           'auto-indent-test-return
           (lambda ()
@@ -238,14 +260,17 @@ fn lifecycle_public_surface_batch() {
                       (buffer-string)
                       (point)))))
           '("statement" "statement;" "statement;   ")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("statement" "statement:\n" 12) ("statement;" "statement;\n" 12) ("statement;   " "statement;   \n" 15))"#
     ]],
-        ),
-        (
-            "auto_indent_disable_electric_mirrors_mode_state_and_calls_local_mode",
-            r##"(let (calls)
+    )
+}
+
+fn auto_indent_disable_electric_mirrors_mode_state_and_calls_local_mode() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_disable_electric_mirrors_mode_state_and_calls_local_mode",
+        r##"(let (calls)
          (cl-letf (((symbol-function 'electric-indent-local-mode)
                     (lambda (argument)
                       (push argument calls))))
@@ -259,8 +284,24 @@ fn lifecycle_public_surface_batch() {
                  electric-indent-inhibit
                  (nreverse calls))))
             '(nil t t nil))))"##,
-            true,
-            expect!["OK ((nil nil nil) (t t #1=(0 . #2=(0))) (t t #1#) (nil nil #2#))"],
-        ),
-    ]);
+        true,
+        expect!["OK ((nil nil nil) (t t #1=(0 . #2=(0))) (t t #1#) (nil nil #2#))"],
+    )
+}
+
+#[test]
+fn lifecycle_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_indent_mode_default_engine_installs_local_hooks_and_activates_advices(),
+        auto_indent_mode_disable_removes_primary_hooks_and_preserves_source_quirks(),
+        auto_indent_mode_keys_engine_remaps_editing_commands_without_hooks(),
+        auto_indent_mode_on_respects_disabled_major_modes(),
+        auto_indent_global_mode_enables_eligible_existing_buffers_only(),
+        auto_indent_mode_assigns_known_and_derived_indent_variables(),
+        auto_indent_deactivate_advices_disables_every_available_editing_advice(),
+        auto_indent_eol_newline_uses_alternate_return_at_physical_line_end(),
+        auto_indent_eol_char_newline_inserts_configured_character_once(),
+        auto_indent_disable_electric_mirrors_mode_state_and_calls_local_mode(),
+    ];
+    assert_auto_indent_mode_batch(&cases);
 }

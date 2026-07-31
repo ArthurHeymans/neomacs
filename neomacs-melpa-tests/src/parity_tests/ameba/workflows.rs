@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_ameba_batch;
+use super::{ParityBatchCase, assert_ameba_batch};
 
 /// The package's headline use, run through the key the minor mode binds: open a
 /// Crystal file, press `C-c C-r f', and read the linter's findings in a
@@ -20,12 +20,10 @@ use super::assert_ameba_batch;
 /// Line 14 is followed first because that is the order ameba prints, not the
 /// order the file is written in.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_ameba_batch(&[
-        (
-            "linting_the_current_file_gives_a_compilation_buffer_you_can_navigate",
-            r##"(let* ((root (ameba-test-project "check-file" ".projectile"))
+fn linting_the_current_file_gives_a_compilation_buffer_you_can_navigate() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "linting_the_current_file_gives_a_compilation_buffer_you_can_navigate",
+        r##"(let* ((root (ameba-test-project "check-file" ".projectile"))
        (file (expand-file-name "src/greeter.cr" root)))
   (ameba-test-install-linter root (ameba-test-file-diagnostics file) 1)
   (let ((buffer (find-file-noselect file)))
@@ -42,14 +40,17 @@ fn workflows_public_surface_batch() {
             (ameba-test-compilation-text compilation root)
             (ameba-test-jump compilation)
             (ameba-test-jump compilation)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("--format" "flycheck" "PROJECT/src/greeter.cr") "*Ameba PROJECT/src/greeter.cr*" compilation-mode "-*- mode: compilation; default-directory: \"PROJECT/\" -*-\nCompilation started at [TIME]\n\nameba --format flycheck PROJECT/src/greeter.cr\nPROJECT/src/greeter.cr:14:5: W: [Lint/LiteralInCondition] Literal value found in conditional\nPROJECT/src/greeter.cr:6:5: W: [Lint/UselessAssign] Useless assignment to variable `unused`\n\nCompilation exited abnormally with code 1 at [TIME], duration [DURATION]\n" ("greeter.cr" 14 4 "    if true") ("greeter.cr" 6 4 "    unused = \"not used anywhere\""))"#
     ]],
-        ),
-        (
-            "checking_the_project_asks_the_linter_to_skip_the_vendored_lib_directory",
-            r##"(let* ((root (ameba-test-project "check-project" ".projectile"))
+    )
+}
+
+fn checking_the_project_asks_the_linter_to_skip_the_vendored_lib_directory() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "checking_the_project_asks_the_linter_to_skip_the_vendored_lib_directory",
+        r##"(let* ((root (ameba-test-project "check-project" ".projectile"))
        (file (expand-file-name "src/greeter.cr" root))
        (argument (concat root " !" root "lib")))
   (ameba-test-install-linter root (ameba-test-project-diagnostics root) 1)
@@ -65,14 +66,17 @@ fn workflows_public_surface_batch() {
             (ameba-test-relative (buffer-name compilation) root)
             (ameba-test-compilation-text compilation root)
             (ameba-test-jump compilation)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("--format" "flycheck" "PROJECT/" "!PROJECT/lib") "*Ameba PROJECT/ !PROJECT/lib*" "*Ameba PROJECT/ !PROJECT/lib*" "-*- mode: compilation; default-directory: \"PROJECT/\" -*-\nCompilation started at [TIME]\n\nameba --format flycheck PROJECT/ !PROJECT/lib\nPROJECT/src/greeter.cr:14:5: W: [Lint/LiteralInCondition] Literal value found in conditional\nPROJECT/src/greeter.cr:6:5: W: [Lint/UselessAssign] Useless assignment to variable `unused`\nPROJECT/src/util.cr:3:5: W: [Lint/UselessAssign] Useless assignment to variable `x`\n\nCompilation exited abnormally with code 1 at [TIME], duration [DURATION]\n" ("greeter.cr" 14 4 "    if true"))"#
     ]],
-        ),
-        (
-            "the_project_root_is_the_first_marker_in_the_list_not_the_nearest_one",
-            r##"(let* ((root (ameba-test-project "roots"))
+    )
+}
+
+fn the_project_root_is_the_first_marker_in_the_list_not_the_nearest_one() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_project_root_is_the_first_marker_in_the_list_not_the_nearest_one",
+        r##"(let* ((root (ameba-test-project "roots"))
        (file (expand-file-name "src/greeter.cr" root))
        (buffer (find-file-noselect file)))
   (with-current-buffer buffer
@@ -92,14 +96,17 @@ fn workflows_public_surface_batch() {
               (write-region "" nil (expand-file-name ".projectile" root) nil 'silent)
               (list :with-projectile (funcall describe (ameba-project-root))
                     :lib (funcall describe (ameba-project-lib))))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:markers (".projectile" ".git" ".hg" ".ameba.yml" "shard.yml") :default :above-the-sandbox :lib "![ORACLE-WORKSPACE]/lib") (:only-shard :the-shard) (:with-projectile :the-shard :lib "!PROJECT/lib"))"#
     ]],
-        ),
-        (
-            "the_commands_refuse_without_a_linter_a_file_or_a_project",
-            r##"(let* ((root (ameba-test-project "refusals" ".projectile"))
+    )
+}
+
+fn the_commands_refuse_without_a_linter_a_file_or_a_project() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_commands_refuse_without_a_linter_a_file_or_a_project",
+        r##"(let* ((root (ameba-test-project "refusals" ".projectile"))
        (file (expand-file-name "src/greeter.cr" root))
        (buffer (find-file-noselect file))
        (compilation-buffers
@@ -131,10 +138,20 @@ fn workflows_public_surface_batch() {
          :binding (key-description
                    (where-is-internal 'ameba-check-current-file ameba-mode-map t))
          :command ameba-check-command)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((error "Ameba is not installed") nil) ((error "Buffer is not visiting a file") nil) ((error "You’re not into a project") nil nil) (:keymap-prefix "C-c C-r" :binding "C-c C-r f" :command "ameba --format flycheck"))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        linting_the_current_file_gives_a_compilation_buffer_you_can_navigate(),
+        checking_the_project_asks_the_linter_to_skip_the_vendored_lib_directory(),
+        the_project_root_is_the_first_marker_in_the_list_not_the_nearest_one(),
+        the_commands_refuse_without_a_linter_a_file_or_a_project(),
+    ];
+    assert_ameba_batch(&cases);
 }

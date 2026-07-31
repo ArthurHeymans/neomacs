@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_astro_ts_mode_batch;
+use super::{ParityBatchCase, assert_astro_ts_mode_batch};
 
-#[test]
-fn editing_public_surface_batch() {
-    assert_astro_ts_mode_batch(&[
-        (
-            "parser_builds_a_complete_realistic_mixed_language_astro_tree",
-            r##"(with-temp-buffer
+fn parser_builds_a_complete_realistic_mixed_language_astro_tree() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "parser_builds_a_complete_realistic_mixed_language_astro_tree",
+        r##"(with-temp-buffer
           (insert "---\n")
           (insert "import Card from './Card.astro';\n")
           (insert "const title = 'Parity';\n")
@@ -39,14 +37,17 @@ fn editing_public_surface_batch() {
                        (treesit-parser-language right)
                        (treesit-parser-included-ranges
                         right)))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((astro nil nil nil "(document (frontmatter (frontmatter_js_block)) (element (start_tag (tag_name) (attribute (attribute_name) (quoted_attribute_value (attribute_value)))) (element (self_closing_tag (tag_name) (attribute (attribute_name) (attribute_interpolation (attribute_js_expr))))) (script_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name))) (style_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name))) (end_tag (tag_name))))") (css embedded 1 ((159 . 183)) "(stylesheet (rule_set (selectors (class_selector (class_name (identifier)))) (block (declaration (property_name) (plain_value)))))") (tsx embedded 1 ((101 . 106)) "(program (expression_statement (identifier)))") (tsx embedded 1 ((121 . 140)) "(program (expression_statement (call_expression function: (member_expression object: (identifier) property: (property_identifier)) arguments: (arguments (identifier)))))") (tsx embedded 1 ((4 . 61)) "(program (import_statement (import_clause (identifier)) source: (string (string_fragment))) (lexical_declaration (variable_declarator name: (identifier) value: (string (string_fragment)))))"))"#
     ]],
-        ),
-        (
-            "font_lock_marks_astro_tags_attributes_brackets_tsx_and_css_practically",
-            r##"(with-temp-buffer
+    )
+}
+
+fn font_lock_marks_astro_tags_attributes_brackets_tsx_and_css_practically() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "font_lock_marks_astro_tags_attributes_brackets_tsx_and_css_practically",
+        r##"(with-temp-buffer
           (insert "---\nconst count = 3;\n---\n")
           (insert "<button class=\"primary\" disabled={count > 0}>")
           (insert "{count}</button>\n")
@@ -67,14 +68,17 @@ fn editing_public_surface_batch() {
                    runs))
                 (setq position next)))
             (nreverse runs)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("---" font-lock-comment-face) ("---" font-lock-comment-face) ("button" font-lock-function-name-face) ("class" font-lock-constant-face) ("\"primary\"" font-lock-string-face) ("disabled" font-lock-constant-face) ("button" font-lock-function-name-face) ("style" font-lock-function-name-face) ("style" font-lock-function-name-face))"#
     ]],
-        ),
-        (
-            "indentation_formats_nested_elements_attributes_and_interpolations",
-            r##"(with-temp-buffer
+    )
+}
+
+fn indentation_formats_nested_elements_attributes_and_interpolations() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "indentation_formats_nested_elements_attributes_and_interpolations",
+        r##"(with-temp-buffer
           (insert "<main>\n")
           (insert "<section class=\"hero\">\n")
           (insert "<h1>{title}</h1>\n")
@@ -87,14 +91,17 @@ fn editing_public_surface_batch() {
           (astro-ts-mode)
           (indent-region (point-min) (point-max))
           (buffer-string))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK "<main>\n  <section class=\"hero\">\n    <h1>{title}</h1>\n    <Card\n      title={title}\n      featured={true}\n    />\n  </section>\n</main>\n""#
     ]],
-        ),
-        (
-            "indentation_routes_frontmatter_script_and_style_blocks_to_embedded_languages",
-            r##"(with-temp-buffer
+    )
+}
+
+fn indentation_routes_frontmatter_script_and_style_blocks_to_embedded_languages() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "indentation_routes_frontmatter_script_and_style_blocks_to_embedded_languages",
+        r##"(with-temp-buffer
           (insert "---\n")
           (insert "const items = [1, 2, 3].map((value) => ({\n")
           (insert "value,\n")
@@ -115,14 +122,17 @@ fn editing_public_surface_batch() {
           (astro-ts-mode)
           (indent-region (point-min) (point-max))
           (buffer-string))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK #("---\nconst items = [1, 2, 3].map((value) => ({\n  value,\n  label: `Item ${value}`,\n}));\n---\n<script>\nfunction announce(message) {\n  console.log(message);\n}\n</script>\n<style>\n.card {\n  display: grid;\n  color: red;\n}\n</style>\n" 41 42 (syntax-table (1)))"#
     ]],
-        ),
-        (
-            "custom_indent_offset_changes_real_nested_markup_and_css_indentation",
-            r##"(let ((astro-ts-mode-indent-offset 4))
+    )
+}
+
+fn custom_indent_offset_changes_real_nested_markup_and_css_indentation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "custom_indent_offset_changes_real_nested_markup_and_css_indentation",
+        r##"(let ((astro-ts-mode-indent-offset 4))
           (with-temp-buffer
             (insert "<article>\n")
             (insert "<div>\n")
@@ -137,14 +147,17 @@ fn editing_public_surface_batch() {
             (astro-ts-mode)
             (indent-region (point-min) (point-max))
             (list css-indent-offset (buffer-string))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (4 "<article>\n    <div>\n\11<span>{label}</span>\n    </div>\n    <style>\n.item {\n    color: blue;\n}\n    </style>\n</article>\n")"#
     ]],
-        ),
-        (
-            "incremental_edit_reparses_tag_name_attributes_and_interpolation_expression",
-            r##"(with-temp-buffer
+    )
+}
+
+fn incremental_edit_reparses_tag_name_attributes_and_interpolation_expression() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "incremental_edit_reparses_tag_name_attributes_and_interpolation_expression",
+        r##"(with-temp-buffer
           (insert "<Card title={oldTitle}>{oldTitle}</Card>")
           (astro-ts-mode)
           (font-lock-ensure)
@@ -174,14 +187,17 @@ fn editing_public_surface_batch() {
                 (get-text-property
                  (- (point) (length needle)) 'face))
               '("Panel" "title" "newTitle")))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("(document (element (start_tag (tag_name) (attribute (attribute_name) (attribute_interpolation (attribute_js_expr)))) (html_interpolation (permissible_text)) (end_tag (tag_name))))" #("<Panel title={newTitle}>{newTitle}</Panel>" 1 6 (face font-lock-function-name-face) 7 12 (face font-lock-constant-face) 36 41 (face font-lock-function-name-face)) "(document (element (start_tag (tag_name) (attribute (attribute_name) (attribute_interpolation (attribute_js_expr)))) (html_interpolation (permissible_text)) (end_tag (tag_name))))" (font-lock-function-name-face font-lock-constant-face nil))"#
     ]],
-        ),
-        (
-            "adding_and_removing_embedded_blocks_updates_parser_ranges_without_stale_state",
-            r##"(cl-labels
+    )
+}
+
+fn adding_and_removing_embedded_blocks_updates_parser_ranges_without_stale_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "adding_and_removing_embedded_blocks_updates_parser_ranges_without_stale_state",
+        r##"(cl-labels
           ((snapshot
             ()
             (mapcar
@@ -222,14 +238,17 @@ fn editing_public_surface_batch() {
                 (font-lock-flush)
                 (font-lock-ensure)
                 (list initial added (snapshot))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((astro nil nil nil "(document (element (start_tag (tag_name)) (html_interpolation (permissible_text)) (end_tag (tag_name))))") (tsx embedded 1 #1=((7 . 12)) "(program (expression_statement (identifier)))")) ((astro nil nil nil "(document (element (start_tag (tag_name)) (html_interpolation (permissible_text)) (end_tag (tag_name))) (script_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name))) (style_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name))))") (css embedded 1 ((61 . 80)) "(stylesheet (rule_set (selectors (tag_name)) (block (declaration (property_name) (plain_value)))))") (tsx embedded 1 ((28 . 44)) "(program (lexical_declaration (variable_declarator name: (identifier) value: (number))))") (tsx embedded 1 #1# "(program (expression_statement (identifier)))")) ((astro nil nil nil "(document (element (start_tag (tag_name)) (html_interpolation (permissible_text)) (end_tag (tag_name))))") (tsx embedded 1 #1# "(program (expression_statement (identifier)))")))"#
     ]],
-        ),
-        (
-            "malformed_template_keeps_error_nodes_and_recovers_after_closing_edit",
-            r##"(with-temp-buffer
+    )
+}
+
+fn malformed_template_keeps_error_nodes_and_recovers_after_closing_edit() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "malformed_template_keeps_error_nodes_and_recovers_after_closing_edit",
+        r##"(with-temp-buffer
           (insert "<main><section>{value</main>")
           (astro-ts-mode)
           (font-lock-ensure)
@@ -252,14 +271,17 @@ fn editing_public_surface_batch() {
              (buffer-string)
              (treesit-node-check root 'has-error)
              (treesit-node-string root))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((t "(document (ERROR (start_tag (tag_name)) (start_tag (tag_name)) (permissible_text) (attribute_js_expr)))") #("<main><section>{value}</section></main>" 1 5 (face font-lock-function-name-face) 7 14 (face font-lock-function-name-face) 24 31 (face font-lock-function-name-face) 34 38 (face font-lock-function-name-face)) nil "(document (element (start_tag (tag_name)) (element (start_tag (tag_name)) (html_interpolation (permissible_text)) (end_tag (tag_name))) (end_tag (tag_name))))")"#
     ]],
-        ),
-        (
-            "unicode_text_attributes_and_expressions_keep_character_positions_and_faces",
-            r##"(with-temp-buffer
+    )
+}
+
+fn unicode_text_attributes_and_expressions_keep_character_positions_and_faces() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "unicode_text_attributes_and_expressions_keep_character_positions_and_faces",
+        r##"(with-temp-buffer
           (insert "---\nconst greeting = \"λ café 東京\";\n---\n")
           (insert "<p title=\"naïve\">{greeting} — 😀</p>\n")
           (astro-ts-mode)
@@ -275,14 +297,17 @@ fn editing_public_surface_batch() {
                      (get-text-property start 'face))))
            '("λ" "café" "東京" "title" "naïve"
              "greeting" "😀")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("λ" 23 24 "frontmatter_js_block" nil) ("café" 25 29 "frontmatter_js_block" nil) ("東京" 30 32 "frontmatter_js_block" nil) ("title" 42 47 "attribute_name" font-lock-constant-face) ("naïve" 49 54 "attribute_value" font-lock-string-face) ("greeting" 11 19 "frontmatter_js_block" nil) ("😀" 69 70 "text" nil))"#
     ]],
-        ),
-        (
-            "empty_and_comment_only_buffers_have_stable_roots_and_fontification",
-            r##"(mapcar
+    )
+}
+
+fn empty_and_comment_only_buffers_have_stable_roots_and_fontification() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "empty_and_comment_only_buffers_have_stable_roots_and_fontification",
+        r##"(mapcar
           (lambda (contents)
             (with-temp-buffer
               (insert contents)
@@ -298,10 +323,26 @@ fn editing_public_surface_batch() {
                  (buffer-string)
                  (get-text-property (point-min) 'face)))))
           '("" "<!-- package parity -->" "---\n// note\n---\n"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("" "document" nil "(document)" "" nil) ("<!-- package parity -->" "document" nil "(document (comment))" #("<!-- package parity -->" 0 23 (face font-lock-comment-face)) font-lock-comment-face) ("---\n// note\n---\n" "document" nil "(document (frontmatter (frontmatter_js_block)))" #("---\n// note\n---\n" 0 3 (face font-lock-comment-face) 12 15 (face font-lock-comment-face)) font-lock-comment-face))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn editing_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        parser_builds_a_complete_realistic_mixed_language_astro_tree(),
+        font_lock_marks_astro_tags_attributes_brackets_tsx_and_css_practically(),
+        indentation_formats_nested_elements_attributes_and_interpolations(),
+        indentation_routes_frontmatter_script_and_style_blocks_to_embedded_languages(),
+        custom_indent_offset_changes_real_nested_markup_and_css_indentation(),
+        incremental_edit_reparses_tag_name_attributes_and_interpolation_expression(),
+        adding_and_removing_embedded_blocks_updates_parser_ranges_without_stale_state(),
+        malformed_template_keeps_error_nodes_and_recovers_after_closing_edit(),
+        unicode_text_attributes_and_expressions_keep_character_positions_and_faces(),
+        empty_and_comment_only_buffers_have_stable_roots_and_fontification(),
+    ];
+    assert_astro_ts_mode_batch(&cases);
 }

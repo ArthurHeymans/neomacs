@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{AUTO_PACKAGE_UPDATE_MELPA_PIN, CachedMelpaOracle, DASH_MELPA_PIN};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod buffers;
 mod install;
@@ -262,9 +265,9 @@ pub(crate) fn assert_auto_package_update_autoload_parity(elisp_form: &str, expec
 
 
 /// Multi-probe batch for `assert_auto_package_update_autoload_parity` cases (2a).
-pub(crate) fn assert_auto_package_update_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_auto_package_update_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         auto_package_update_oracle("auto-package-update-autoloads.el"),
         &name,
         "auto_package_update_autoload_parity",
@@ -273,9 +276,9 @@ pub(crate) fn assert_auto_package_update_autoload_batch(cases: &[(&str, &str, bo
 }
 
 /// Multi-probe batch for `assert_auto_package_update_parity` cases (2a).
-pub(crate) fn assert_auto_package_update_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_auto_package_update_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         auto_package_update_oracle("auto-package-update.el"),
         &name,
         "auto_package_update_parity",

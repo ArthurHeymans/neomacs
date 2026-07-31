@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_audacious_batch;
+use super::{ParityBatchCase, assert_audacious_batch};
 
-#[test]
-fn playlists_public_surface_batch() {
-    assert_audacious_batch(&[
-        (
-            "audacious_playlist_filters_only_pipe_rows_and_resets_prior_message_state",
-            r##"(let ((audacious-msg
+fn audacious_playlist_filters_only_pipe_rows_and_resets_prior_message_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "audacious_playlist_filters_only_pipe_rows_and_resets_prior_message_state",
+        r##"(let ((audacious-msg
                 "stale-data")
                messages)
          (cl-letf
@@ -30,14 +28,17 @@ fn playlists_public_surface_batch() {
             (audacious-playlist)
             audacious-msg
             (nreverse messages))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (" 1 | First\n 2 || Second\n" " 1 | First\n 2 || Second\n" (" 1 | First\n 2 || Second\n"))"#
     ]],
-        ),
-        (
-            "audacious_playlist_current_info_trims_queries_updates_state_and_formats_message",
-            r##"(let (events)
+    )
+}
+
+fn audacious_playlist_current_info_trims_queries_updates_state_and_formats_message() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "audacious_playlist_current_info_trims_queries_updates_state_and_formats_message",
+        r##"(let (events)
          (audacious-test-reset-state)
          (cl-letf
              (((symbol-function
@@ -67,14 +68,17 @@ fn playlists_public_surface_batch() {
              audacious-playlist-length
              audacious-playlist-name)
             (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("[2/5] \"Focus Mix\"" ("2" "5" "Focus Mix") ("audtool --current-playlist-name" "audtool --current-playlist" "audtool --number-of-playlists" "[2/5] \"Focus Mix\""))"#
     ]],
-        ),
-        (
-            "audacious_private_playlist_goto_switches_waits_plays_and_refreshes_in_order",
-            r##"(let (events)
+    )
+}
+
+fn audacious_private_playlist_goto_switches_waits_plays_and_refreshes_in_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "audacious_private_playlist_goto_switches_waits_plays_and_refreshes_in_order",
+        r##"(let (events)
          (cl-letf
              (((symbol-function 'call-process)
                (lambda (&rest arguments)
@@ -96,14 +100,17 @@ fn playlists_public_surface_batch() {
            (list
             (audacious-playlist--goto "+02")
             (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:refreshed ((:call "/fixture/bin/audtool" nil nil nil "--set-current-playlist" "+02") (:sleep 0 20) (:call "/fixture/bin/audtool" nil nil nil "--play-current-playlist") :refresh))"#
     ]],
-        ),
-        (
-            "audacious_public_playlist_goto_reads_live_length_and_executes_numeric_selection",
-            r##"(let (events prompts)
+    )
+}
+
+fn audacious_public_playlist_goto_reads_live_length_and_executes_numeric_selection() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "audacious_public_playlist_goto_reads_live_length_and_executes_numeric_selection",
+        r##"(let (events prompts)
          (audacious-test-reset-state)
          (cl-letf
              (((symbol-function
@@ -139,14 +146,17 @@ fn playlists_public_surface_batch() {
             audacious-playlist-length
             (nreverse prompts)
             (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:refreshed "003" "4" ("Playlist No. [1 - 4]: ") ((:shell "audtool --number-of-playlists") (:call "/fixture/bin/audtool" nil nil nil "--set-current-playlist" "003") (:sleep 0 20) (:call "/fixture/bin/audtool" nil nil nil "--play-current-playlist") :refresh))"#
     ]],
-        ),
-        (
-            "audacious_public_playlist_goto_invalid_value_reports_without_process_or_sleep",
-            r##"(let (events)
+    )
+}
+
+fn audacious_public_playlist_goto_invalid_value_reports_without_process_or_sleep() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "audacious_public_playlist_goto_invalid_value_reports_without_process_or_sleep",
+        r##"(let (events)
          (cl-letf
              (((symbol-function
                 'shell-command-to-string)
@@ -179,14 +189,17 @@ fn playlists_public_surface_batch() {
             audacious-playlist-position
             audacious-playlist-length
             (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("\"two\" is not number." "two" "9" ((:prompt "Playlist No. [1 - 9]: ") (:message "\"two\" is not number.")))"#
     ]],
-        ),
-        (
-            "audacious_playlist_next_and_prev_boundaries_report_without_switching",
-            r##"(mapcar
+    )
+}
+
+fn audacious_playlist_next_and_prev_boundaries_report_without_switching() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "audacious_playlist_next_and_prev_boundaries_report_without_switching",
+        r##"(mapcar
          (lambda (case)
            (pcase-let
                ((`(,direction
@@ -227,14 +240,17 @@ fn playlists_public_surface_batch() {
            (audacious-playlist-prev
             "1\n"
             "4\n")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((audacious-playlist-next "Last playlist" 4 4 ("Last playlist")) (audacious-playlist-prev "First playlist" 1 4 ("First playlist")))"#
     ]],
-        ),
-        (
-            "audacious_playlist_next_runs_complete_switch_refresh_and_song_workflow",
-            r##"(let ((answers
+    )
+}
+
+fn audacious_playlist_next_runs_complete_switch_refresh_and_song_workflow() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "audacious_playlist_next_runs_complete_switch_refresh_and_song_workflow",
+        r##"(let ((answers
                 '(("audtool --current-playlist-name"
                    . "Old Mix\n")
                   ("audtool --current-playlist"
@@ -304,14 +320,17 @@ fn playlists_public_surface_batch() {
              audacious-playlist-name)
             answers
             (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:song-refreshed ("3" "4" "New Mix") nil ((:shell "audtool --current-playlist-name") (:shell "audtool --current-playlist") (:shell "audtool --number-of-playlists") (:call "/fixture/bin/audtool" nil nil nil "--set-current-playlist" "3") (:sleep 0 20) (:call "/fixture/bin/audtool" nil nil nil "--play-current-playlist") (:shell "audtool --current-playlist-name") (:shell "audtool --current-playlist") (:shell "audtool --number-of-playlists") (:message "[3/4] \"New Mix\"") (:message "[3/4] \"New Mix\"") (:sit 2) :song-refresh))"#
     ]],
-        ),
-        (
-            "audacious_playlist_prev_runs_complete_switch_refresh_and_song_workflow",
-            r##"(let ((answers
+    )
+}
+
+fn audacious_playlist_prev_runs_complete_switch_refresh_and_song_workflow() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "audacious_playlist_prev_runs_complete_switch_refresh_and_song_workflow",
+        r##"(let ((answers
                 '(("Old Mix\n"
                    "3\n"
                    "5\n")
@@ -378,10 +397,24 @@ fn playlists_public_surface_batch() {
             phase
             field
             (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:song-refreshed ("2" "5" "Previous Mix") 2 0 ((:call "/fixture/bin/audtool" nil nil nil "--set-current-playlist" "2") (:sleep 0 20) (:call "/fixture/bin/audtool" nil nil nil "--play-current-playlist") (:message "[2/5] \"Previous Mix\"") (:message "[2/5] \"Previous Mix\"") (:sit 2) :song-refresh))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn playlists_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        audacious_playlist_filters_only_pipe_rows_and_resets_prior_message_state(),
+        audacious_playlist_current_info_trims_queries_updates_state_and_formats_message(),
+        audacious_private_playlist_goto_switches_waits_plays_and_refreshes_in_order(),
+        audacious_public_playlist_goto_reads_live_length_and_executes_numeric_selection(),
+        audacious_public_playlist_goto_invalid_value_reports_without_process_or_sleep(),
+        audacious_playlist_next_and_prev_boundaries_report_without_switching(),
+        audacious_playlist_next_runs_complete_switch_refresh_and_song_workflow(),
+        audacious_playlist_prev_runs_complete_switch_refresh_and_song_workflow(),
+    ];
+    assert_audacious_batch(&cases);
 }

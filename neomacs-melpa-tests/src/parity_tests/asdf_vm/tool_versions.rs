@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_asdf_vm_batch;
+use super::{ParityBatchCase, assert_asdf_vm_batch};
 
-#[test]
-fn tool_versions_public_surface_batch() {
-    assert_asdf_vm_batch(&[
-        (
-            "asdf_vm_tool_versions_row_decodes_and_encodes_real_version_selectors",
-            r##"(mapcar
+fn asdf_vm_tool_versions_row_decodes_and_encodes_real_version_selectors() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_tool_versions_row_decodes_and_encodes_real_version_selectors",
+        r##"(mapcar
                (lambda (line)
                  (let ((row
                         (asdf-vm-ui--decode
@@ -25,14 +23,17 @@ fn tool_versions_public_surface_batch() {
                  "資料 λ-version latest"
                  "single"
                  " spaced\t20.1   system "))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("ruby" ("3.3.1" "system") "ruby 3.3.1 system") ("nodejs" ("ref:feature/lts" "path:/work/node") "nodejs ref:feature/lts path:/work/node") ("資料" ("λ-version" "latest") "資料 λ-version latest") ("single" nil "single") ("spaced" ("20.1" "system") "spaced 20.1 system"))"#
     ]],
-        ),
-        (
-            "asdf_vm_tool_versions_file_decodes_and_reencodes_ordered_rows",
-            r##"(let* ((text
+    )
+}
+
+fn asdf_vm_tool_versions_file_decodes_and_reencodes_ordered_rows() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_tool_versions_file_decodes_and_reencodes_ordered_rows",
+        r##"(let* ((text
                      (concat
                       "ruby 3.3.1 system\n"
                       "nodejs 20.11.0 lts\n"
@@ -54,14 +55,17 @@ fn tool_versions_public_surface_batch() {
                              'rows))
                 (asdf-vm-ui--encode
                  object)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("ruby" ("3.3.1" "system")) ("nodejs" ("20.11.0" "lts")) ("python" ("path:/work/python" "ref:main")) ("資料" ("λ-version"))) "ruby 3.3.1 system\nnodejs 20.11.0 lts\npython path:/work/python ref:main\n資料 λ-version")"#
     ]],
-        ),
-        (
-            "asdf_vm_tool_versions_file_exposes_comment_blank_and_empty_input_behavior",
-            r##"(mapcar
+    )
+}
+
+fn asdf_vm_tool_versions_file_exposes_comment_blank_and_empty_input_behavior() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_tool_versions_file_exposes_comment_blank_and_empty_input_behavior",
+        r##"(mapcar
                (lambda (text)
                  (asdf-vm-test-error-data
                   (lambda ()
@@ -78,14 +82,17 @@ fn tool_versions_public_surface_batch() {
                  "ruby 3.3.1\n\nnodejs 20.0\n"
                  ""
                  "   \n"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:ok ("ruby 3.3.1")) (:error wrong-type-argument (stringp nil)) (:error wrong-type-argument (stringp nil)) (:error wrong-type-argument (stringp nil)) (:error invalid-slot-type (asdf-vm-tool-versions--file-row tool string nil)))"#
     ]],
-        ),
-        (
-            "asdf_vm_tool_versions_real_file_round_trip_preserves_row_order_and_writes_mutations",
-            r##"(let* ((input
+    )
+}
+
+fn asdf_vm_tool_versions_real_file_round_trip_preserves_row_order_and_writes_mutations() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_tool_versions_real_file_round_trip_preserves_row_order_and_writes_mutations",
+        r##"(let* ((input
                      (asdf-vm-test-path
                       "tool-versions/input"))
                     (output
@@ -120,14 +127,17 @@ fn tool_versions_public_surface_batch() {
                    rows)
                   (asdf-vm-test-read-file
                    output))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("[ORACLE-SANDBOX]/tool-versions/input" ("ruby 3.3.1 system" "nodejs 20.0 system") "ruby 3.3.1 system\nnodejs 20.0 system\n")"#
     ]],
-        ),
-        (
-            "asdf_vm_tool_versions_location_prefers_deepest_readable_dominating_file",
-            r##"(let* ((home
+    )
+}
+
+fn asdf_vm_tool_versions_location_prefers_deepest_readable_dominating_file() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_tool_versions_location_prefers_deepest_readable_dominating_file",
+        r##"(let* ((home
                      (file-name-as-directory
                       (asdf-vm-test-path
                        "location/home")))
@@ -170,14 +180,17 @@ fn tool_versions_public_surface_batch() {
                   (asdf-vm-tool-versions--locate-dominating-file)
                   project-file
                   default-file)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("[ORACLE-SANDBOX]/location/project/.tool-versions" "[ORACLE-SANDBOX]/location/project/.tool-versions" "[ORACLE-SANDBOX]/location/home/.tool-versions")"#
     ]],
-        ),
-        (
-            "asdf_vm_tool_versions_location_uses_project_then_home_fallbacks_and_skips_unreadable_candidates",
-            r##"(let ((buffer-file-name
+    )
+}
+
+fn asdf_vm_tool_versions_location_uses_project_then_home_fallbacks_and_skips_unreadable_candidates() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_tool_versions_location_uses_project_then_home_fallbacks_and_skips_unreadable_candidates",
+        r##"(let ((buffer-file-name
                     "/work/src/main.ex")
                    (calls nil))
                (cl-letf
@@ -224,14 +237,17 @@ fn tool_versions_public_surface_batch() {
                  (list
                   (asdf-vm-tool-versions--locate-dominating-file)
                   (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("/work/project/.tool-versions" ((:locate "/work/src/main.ex" ".tool-versions") (:readable "/work/project/.tool-versions")))"#
     ]],
-        ),
-        (
-            "asdf_vm_tool_versions_widget_completers_transform_tool_ref_path_and_version_choices",
-            r##"(let ((version-results
+    )
+}
+
+fn asdf_vm_tool_versions_widget_completers_transform_tool_ref_path_and_version_choices() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_tool_versions_widget_completers_transform_tool_ref_path_and_version_choices",
+        r##"(let ((version-results
                     '("ref:"
                       "path"
                       "3.3.1"))
@@ -316,14 +332,17 @@ fn tool_versions_public_surface_batch() {
                   (asdf-vm-tool-versions--file-row-versions-complete
                    'version-widget)
                   (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("ruby" "ref:feature/λ" "path:/work/local tool/" "3.3.1" ((:get tool-widget) (:tool-completion nil t "rub") (:set tool-widget "ruby") (:get tool-name-widget) (:version-completion "ruby" nil t) (:read-string "Tool git ref: ") (:set version-widget "ref:feature/λ") (:get tool-name-widget) (:version-completion "ruby" nil t) (:read-file "Tool path: " nil nil t) (:set version-widget "path:/work/local tool/") (:get tool-name-widget) (:version-completion "ruby" nil t) (:set version-widget "3.3.1")))"#
     ]],
-        ),
-        (
-            "asdf_vm_tool_versions_edit_reads_existing_or_constructs_missing_file_object",
-            r##"(let* ((existing
+    )
+}
+
+fn asdf_vm_tool_versions_edit_reads_existing_or_constructs_missing_file_object() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_tool_versions_edit_reads_existing_or_constructs_missing_file_object",
+        r##"(let* ((existing
                      (asdf-vm-test-path
                       "tool-edit/existing"))
                     (missing
@@ -355,10 +374,24 @@ fn tool_versions_public_surface_batch() {
                   (asdf-vm-tool-versions-edit
                    missing)
                   (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:customized :customized ((asdf-vm-tool-versions--file "[ORACLE-SANDBOX]/tool-edit/existing" ("ruby 3.3.1")) (asdf-vm-tool-versions--file "[ORACLE-SANDBOX]/tool-edit/missing" nil)))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn tool_versions_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        asdf_vm_tool_versions_row_decodes_and_encodes_real_version_selectors(),
+        asdf_vm_tool_versions_file_decodes_and_reencodes_ordered_rows(),
+        asdf_vm_tool_versions_file_exposes_comment_blank_and_empty_input_behavior(),
+        asdf_vm_tool_versions_real_file_round_trip_preserves_row_order_and_writes_mutations(),
+        asdf_vm_tool_versions_location_prefers_deepest_readable_dominating_file(),
+        asdf_vm_tool_versions_location_uses_project_then_home_fallbacks_and_skips_unreadable_candidates(),
+        asdf_vm_tool_versions_widget_completers_transform_tool_ref_path_and_version_choices(),
+        asdf_vm_tool_versions_edit_reads_existing_or_constructs_missing_file_object(),
+    ];
+    assert_asdf_vm_batch(&cases);
 }

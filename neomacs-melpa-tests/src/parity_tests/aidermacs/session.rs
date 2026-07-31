@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_aidermacs_batch;
+use super::{ParityBatchCase, assert_aidermacs_batch};
 
-#[test]
-fn session_public_surface_batch() {
-    assert_aidermacs_batch(&[
-        (
-            "aidermacs_fake_cli_version_boundary_is_cached_per_workspace_and_clearable",
-            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+fn aidermacs_fake_cli_version_boundary_is_cached_per_workspace_and_clearable() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidermacs_fake_cli_version_boundary_is_cached_per_workspace_and_clearable",
+        r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                           (root (file-name-as-directory
                                  (expand-file-name "project" sandbox)))
                           (bin (expand-file-name "bin/aider-fixture" sandbox))
@@ -39,12 +37,15 @@ fn session_public_surface_batch() {
                          (with-temp-buffer
                            (insert-file-contents count-file)
                            (buffer-string)))))"##,
-            true,
-            expect![[r#"OK ("1.2.3" "1.2.3" "x" "1.2.3" "xx")"#]],
-        ),
-        (
-            "aidermacs_program_resolution_uses_ordered_fallbacks_and_workspace_cache",
-            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+        true,
+        expect![[r#"OK ("1.2.3" "1.2.3" "x" "1.2.3" "xx")"#]],
+    )
+}
+
+fn aidermacs_program_resolution_uses_ordered_fallbacks_and_workspace_cache() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidermacs_program_resolution_uses_ordered_fallbacks_and_workspace_cache",
+        r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                           (root (file-name-as-directory
                                  (expand-file-name "repo" sandbox)))
                           (bin-dir (file-name-as-directory
@@ -69,12 +70,15 @@ fn session_public_surface_batch() {
                          (aidermacs--get-cache-key)
                          (hash-table-count
                           aidermacs--resolved-programs))))"##,
-            true,
-            expect![[r#"OK ("aider-fallback" t "local::[ORACLE-SANDBOX]/repo/" 1)"#]],
-        ),
-        (
-            "aidermacs_run_builds_code_architect_config_and_subtree_cli_contracts",
-            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+        true,
+        expect![[r#"OK ("aider-fallback" t "local::[ORACLE-SANDBOX]/repo/" 1)"#]],
+    )
+}
+
+fn aidermacs_run_builds_code_architect_config_and_subtree_cli_contracts() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidermacs_run_builds_code_architect_config_and_subtree_cli_contracts",
+        r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                           (root (file-name-as-directory
                                  (expand-file-name "repo" sandbox)))
                           (bin (expand-file-name "bin/aider-ce" sandbox))
@@ -166,14 +170,17 @@ fn session_public_surface_batch() {
                                    (string-prefix-p
                                     "*aidermacs:"
                                     (buffer-name buffer))))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("aider-ce" ("--model" "code-model" "--no-auto-commits" "--no-auto-accept-architect" "--watch-files" "--weak-model" "weak-model" "--linear-output" "--read" "[ORACLE-SANDBOX]/rules.md" "--read" "[ORACLE-SANDBOX]/repo/docs/guide.md" "--verbose" "--thinking-tokens 8k") "*aidermacs:[ORACLE-SANDBOX]/repo/*") ("aider-ce" ("--chat-mode" "architect" "--model" "reasoner" "--editor-model" "editor" "--linear-output" "--subtree-only") "*aidermacs:[ORACLE-SANDBOX]/repo/*") ("aider-ce" ("--config" "[ORACLE-SANDBOX]/aider.yml" "--subtree-only" "--debug") "*aidermacs:[ORACLE-SANDBOX]/repo/*"))"#
     ]],
-        ),
-        (
-            "aidermacs_system_notification_dispatches_linux_windows_and_fallback_boundaries",
-            r##"(let ((aidermacs-enable-notifications t)
+    )
+}
+
+fn aidermacs_system_notification_dispatches_linux_windows_and_fallback_boundaries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidermacs_system_notification_dispatches_linux_windows_and_fallback_boundaries",
+        r##"(let ((aidermacs-enable-notifications t)
                           (original-featurep
                            (symbol-function 'featurep))
                           calls)
@@ -196,10 +203,20 @@ fn session_public_surface_batch() {
                           (aidermacs--send-notification
                            "Ignored" "No backend"))
                         (nreverse calls)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("notify-send" nil nil nil "Build" "Tests finished" "-t" "0") ("powershell" nil nil nil "-Command" "[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms'); [System.Windows.Forms.MessageBox]::Show('Needs attention', 'Review', [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)"))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn session_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        aidermacs_fake_cli_version_boundary_is_cached_per_workspace_and_clearable(),
+        aidermacs_program_resolution_uses_ordered_fallbacks_and_workspace_cache(),
+        aidermacs_run_builds_code_architect_config_and_subtree_cli_contracts(),
+        aidermacs_system_notification_dispatches_linux_windows_and_fallback_boundaries(),
+    ];
+    assert_aidermacs_batch(&cases);
 }

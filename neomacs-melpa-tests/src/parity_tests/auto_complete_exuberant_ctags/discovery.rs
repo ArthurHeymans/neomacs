@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_exuberant_ctags_batch;
+use super::{ParityBatchCase, assert_auto_complete_exuberant_ctags_batch};
 
-#[test]
-fn discovery_public_surface_batch() {
-    assert_auto_complete_exuberant_ctags_batch(&[
-        (
-            "auto_complete_exuberant_ctags_finds_tags_in_current_project_directory",
-            r##"(let* ((root
+fn auto_complete_exuberant_ctags_finds_tags_in_current_project_directory() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_finds_tags_in_current_project_directory",
+        r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "current-project"))
                                 (tags
@@ -18,12 +16,15 @@ fn discovery_public_surface_batch() {
                            (auto-complete-exuberant-ctags-test-relative
                             (ac-exuberant-ctags-find-tag-file root)
                             root))"##,
-            true,
-            expect![[r#"OK "./""#]],
-        ),
-        (
-            "auto_complete_exuberant_ctags_walks_multiple_ancestors_to_project_root",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK "./""#]],
+    )
+}
+
+fn auto_complete_exuberant_ctags_walks_multiple_ancestors_to_project_root() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_walks_multiple_ancestors_to_project_root",
+        r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "ancestor-project"))
                                 (nested
@@ -37,12 +38,15 @@ fn discovery_public_surface_batch() {
                            (auto-complete-exuberant-ctags-test-relative
                             (ac-exuberant-ctags-find-tag-file nested)
                             root))"##,
-            true,
-            expect![[r#"OK "./""#]],
-        ),
-        (
-            "auto_complete_exuberant_ctags_search_limit_includes_exact_boundary_only",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK "./""#]],
+    )
+}
+
+fn auto_complete_exuberant_ctags_search_limit_includes_exact_boundary_only() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_search_limit_includes_exact_boundary_only",
+        r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "search-boundary"))
                                 (nested
@@ -59,12 +63,15 @@ fn discovery_public_surface_batch() {
                                  (ac-exuberant-ctags-find-tag-file nested)
                                  root)))
                             '(0 1 2 3 4)))"##,
-            true,
-            expect![[r#"OK (nil nil nil "./" "./")"#]],
-        ),
-        (
-            "auto_complete_exuberant_ctags_custom_filename_selects_only_requested_database",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK (nil nil nil "./" "./")"#]],
+    )
+}
+
+fn auto_complete_exuberant_ctags_custom_filename_selects_only_requested_database() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_custom_filename_selects_only_requested_database",
+        r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "custom-name"))
                                 (nested
@@ -81,12 +88,15 @@ fn discovery_public_surface_batch() {
                            (auto-complete-exuberant-ctags-test-relative
                             (ac-exuberant-ctags-find-tag-file nested)
                             root))"##,
-            true,
-            expect![[r#"OK "./""#]],
-        ),
-        (
-            "auto_complete_exuberant_ctags_get_tag_file_returns_path_and_records_directory",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK "./""#]],
+    )
+}
+
+fn auto_complete_exuberant_ctags_get_tag_file_returns_path_and_records_directory() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_get_tag_file_returns_path_and_records_directory",
+        r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "get-tag-file"))
                                 (nested
@@ -105,12 +115,15 @@ fn discovery_public_surface_batch() {
                             (auto-complete-exuberant-ctags-test-relative
                              ac-exuberant-ctags-tag-file-dir
                              root)))"##,
-            true,
-            expect![[r#"OK ("tags" "./")"#]],
-        ),
-        (
-            "auto_complete_exuberant_ctags_missing_file_preserves_stale_directory_state",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK ("tags" "./")"#]],
+    )
+}
+
+fn auto_complete_exuberant_ctags_missing_file_preserves_stale_directory_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_missing_file_preserves_stale_directory_state",
+        r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "missing-tag-file"))
                                 (empty
@@ -124,12 +137,15 @@ fn discovery_public_surface_batch() {
                            (list
                             (ac-exuberant-ctags-get-tag-file)
                             ac-exuberant-ctags-tag-file-dir))"##,
-            true,
-            expect![[r#"OK (nil "stale-project/")"#]],
-        ),
-        (
-            "auto_complete_exuberant_ctags_ignores_unrelated_sibling_tag_files",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK (nil "stale-project/")"#]],
+    )
+}
+
+fn auto_complete_exuberant_ctags_ignores_unrelated_sibling_tag_files() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_exuberant_ctags_ignores_unrelated_sibling_tag_files",
+        r##"(let* ((root
                                  (auto-complete-exuberant-ctags-test-root
                                   "sibling-projects"))
                                 (left
@@ -148,8 +164,21 @@ fn discovery_public_surface_batch() {
                              (ac-exuberant-ctags-find-tag-file left)
                              root)
                             (ac-exuberant-ctags-find-tag-file right)))"##,
-            true,
-            expect![[r#"OK ("left/" nil)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK ("left/" nil)"#]],
+    )
+}
+
+#[test]
+fn discovery_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_exuberant_ctags_finds_tags_in_current_project_directory(),
+        auto_complete_exuberant_ctags_walks_multiple_ancestors_to_project_root(),
+        auto_complete_exuberant_ctags_search_limit_includes_exact_boundary_only(),
+        auto_complete_exuberant_ctags_custom_filename_selects_only_requested_database(),
+        auto_complete_exuberant_ctags_get_tag_file_returns_path_and_records_directory(),
+        auto_complete_exuberant_ctags_missing_file_preserves_stale_directory_state(),
+        auto_complete_exuberant_ctags_ignores_unrelated_sibling_tag_files(),
+    ];
+    assert_auto_complete_exuberant_ctags_batch(&cases);
 }

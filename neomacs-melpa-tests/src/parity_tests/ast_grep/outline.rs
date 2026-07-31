@@ -1,26 +1,27 @@
 use expect_test::expect;
 
-use super::assert_ast_grep_batch;
+use super::{ParityBatchCase, assert_ast_grep_batch};
 
-#[test]
-fn outline_public_surface_batch() {
-    assert_ast_grep_batch(&[
-        (
-            "ast_grep_outline_title_mapping_covers_canonical_and_unknown_symbol_types",
-            r##"(list
+fn ast_grep_outline_title_mapping_covers_canonical_and_unknown_symbol_types() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_outline_title_mapping_covers_canonical_and_unknown_symbol_types",
+        r##"(list
           ast-grep--outline-type-titles
           (mapcar
            #'ast-grep--outline-group-title
            '("class" "interface" "function" "method"
              "constant" "macro" "event-handler" "" nil)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("class" . "Classes") ("interface" . "Interfaces") ("struct" . "Structs") ("enum" . "Enums") ("trait" . "Traits") ("object" . "Objects") ("module" . "Modules") ("namespace" . "Namespaces") ("function" . "Functions") ("method" . "Methods") ("constructor" . "Constructors") ("field" . "Fields") ("property" . "Properties") ("constant" . "Constants") ("variable" . "Variables") ("type" . "Types") ("macro" . "Macros")) ("Classes" "Interfaces" "Functions" "Methods" "Constants" "Macros" "Event-Handler" "" "Other"))"#
     ]],
-        ),
-        (
-            "ast_grep_outline_command_and_real_process_use_expanded_file_and_outline_label",
-            r##"(let* ((file
+    )
+}
+
+fn ast_grep_outline_command_and_real_process_use_expanded_file_and_outline_label() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_outline_command_and_real_process_use_expanded_file_and_outline_label",
+        r##"(let* ((file
                 (ast-grep-test-write-file
                  "outline/src/demo.ts"
                  "function run() {}\n"))
@@ -41,14 +42,17 @@ fn outline_public_surface_batch() {
            (replace-regexp-in-string
             (regexp-quote file) "$FILE"
             (ast-grep-test-read-file log))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("[ORACLE-SANDBOX]/bin/sg-outline" "outline" "--json=stream" "$FILE") "{\"items\":[]}\n" "outline\n--json=stream\n$FILE\n")"#
     ]],
-        ),
-        (
-            "ast_grep_outline_parse_flattens_multi_file_stream_and_skips_malformed_lines",
-            r##"(let ((output
+    )
+}
+
+fn ast_grep_outline_parse_flattens_multi_file_stream_and_skips_malformed_lines() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_outline_parse_flattens_multi_file_stream_and_skips_malformed_lines",
+        r##"(let ((output
                (concat
                 "{\"file\":\"a.ts\",\"items\":[{\"name\":\"A\",\"symbolType\":\"class\",\"range\":{\"start\":{\"line\":0,\"column\":0}},\"members\":[]}]}\n"
                 "malformed\n"
@@ -58,14 +62,17 @@ fn outline_public_surface_batch() {
            (ast-grep--outline-parse output)
            (ast-grep--outline-parse "")
            (ast-grep--outline-parse nil)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((:name "A" :symbolType "class" :range (:start (:line 0 :column 0)) :members nil) (:name "run" :symbolType "function" :range (:start (:line 3 :column 2)) :members nil) (:name "value" :symbolType "variable" :range (:start (:line 5 :column 1)) :members nil)) nil nil)"#
     ]],
-        ),
-        (
-            "ast_grep_outline_flatten_builds_qualified_nested_names_at_character_positions",
-            r##"(with-temp-buffer
+    )
+}
+
+fn ast_grep_outline_flatten_builds_qualified_nested_names_at_character_positions() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_outline_flatten_builds_qualified_nested_names_at_character_positions",
+        r##"(with-temp-buffer
           (insert
            "class Widget {\n"
            "\tmethod render() {\n"
@@ -99,14 +106,17 @@ fn outline_public_surface_batch() {
                 (nth 2 entry)
                 (char-after (nth 2 entry))))
              (ast-grep--outline-flatten items nil))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("class" "Widget" 7 87) ("method" "Widget.render" 24 114) ("function" "Widget.render.inner" 46 105))"#
     ]],
-        ),
-        (
-            "ast_grep_outline_group_orders_types_and_deduplicates_reachable_names",
-            r##"(let ((entries
+    )
+}
+
+fn ast_grep_outline_group_orders_types_and_deduplicates_reachable_names() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_outline_group_orders_types_and_deduplicates_reachable_names",
+        r##"(let ((entries
                '(("variable" "item" 80)
                  ("function" "run" 10)
                  ("method" "Widget.run" 30)
@@ -120,14 +130,17 @@ fn outline_public_surface_batch() {
             '(("same" . 1) ("other" . 2)
               ("same" . 3) ("same" . 4)))
            (ast-grep--outline-group entries)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("same" . 1) ("other" . 2) ("same<2>" . 3) ("same<3>" . 4)) (("Classes" ("Widget" . 1) ("Gadget" . 50)) ("Functions" ("run" . 10) ("run<2>" . 20) ("run<3>" . 25)) ("Methods" ("Widget.run" . 30)) ("Variables" ("item" . 80)) ("Event-Handler" ("on-click" . 90))))"#
     ]],
-        ),
-        (
-            "ast_grep_outline_imenu_index_runs_real_stub_cli_and_returns_jumpable_groups",
-            r##"(let* ((file
+    )
+}
+
+fn ast_grep_outline_imenu_index_runs_real_stub_cli_and_returns_jumpable_groups() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_outline_imenu_index_runs_real_stub_cli_and_returns_jumpable_groups",
+        r##"(let* ((file
                 (ast-grep-test-write-file
                  "outline/real.ts"
                  "class Widget {}\nfunction run() {}\n"))
@@ -152,14 +165,17 @@ fn outline_public_surface_batch() {
                        (cdr group)))
                     index))))
             (ast-grep-test-kill-file-buffer file)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("Classes" ("Widget" . 7)) ("Functions" ("run" . 26))) ((("Widget" 7 87)) (("run" 26 114))))"#
     ]],
-        ),
-        (
-            "ast_grep_outline_imenu_index_degrades_cli_failure_to_message_and_empty_index",
-            r##"(let* ((file
+    )
+}
+
+fn ast_grep_outline_imenu_index_degrades_cli_failure_to_message_and_empty_index() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_outline_imenu_index_degrades_cli_failure_to_message_and_empty_index",
+        r##"(let* ((file
                 (ast-grep-test-write-file
                  "outline/failure.ts"
                  "function nope() {}\n"))
@@ -178,12 +194,15 @@ fn outline_public_surface_batch() {
                    (ast-grep--outline-imenu-index)
                    (nreverse messages))))
             (ast-grep-test-kill-file-buffer file)))"##,
-            true,
-            expect![[r#"OK (nil ("ast-grep outline failed: unsupported outline version"))"#]],
-        ),
-        (
-            "ast_grep_outline_mode_restores_prior_imenu_function_and_invalidates_all_caches",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK (nil ("ast-grep outline failed: unsupported outline version"))"#]],
+    )
+}
+
+fn ast_grep_outline_mode_restores_prior_imenu_function_and_invalidates_all_caches() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_outline_mode_restores_prior_imenu_function_and_invalidates_all_caches",
+        r##"(with-temp-buffer
           (setq-local imenu-create-index-function #'ignore)
           (setq-local imenu--index-alist '((old . 1)))
           (setq-local consult-imenu--cache 'consult-old)
@@ -223,14 +242,17 @@ fn outline_public_surface_batch() {
                 imenu--index-alist
                 (local-variable-p 'consult-imenu--cache)
                 (local-variable-p 'helm-cached-imenu-alist))))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((ignore ((old . 1)) consult-old helm-alist helm-candidates 42 unset) (t ast-grep--outline-imenu-index nil nil nil nil nil ignore) (nil ignore unset nil nil nil))"
     ],
-        ),
-        (
-            "ast_grep_outline_mode_without_prior_local_function_restores_global_binding",
-            r##"(with-temp-buffer
+    )
+}
+
+fn ast_grep_outline_mode_without_prior_local_function_restores_global_binding() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_outline_mode_without_prior_local_function_restores_global_binding",
+        r##"(with-temp-buffer
           (kill-local-variable 'imenu-create-index-function)
           (let ((global (default-value 'imenu-create-index-function)))
             (ast-grep-outline-mode 1)
@@ -245,12 +267,15 @@ fn outline_public_surface_batch() {
                (local-variable-p 'imenu-create-index-function)
                (eq imenu-create-index-function global)
                ast-grep--outline-saved-imenu-function))))"##,
-            true,
-            expect!["OK ((t ast-grep--outline-imenu-index unset) nil t unset)"],
-        ),
-        (
-            "ast_grep_outline_picker_dispatch_respects_active_ivy_helm_consult_priority",
-            r##"(let* ((file
+        true,
+        expect!["OK ((t ast-grep--outline-imenu-index unset) nil t unset)"],
+    )
+}
+
+fn ast_grep_outline_picker_dispatch_respects_active_ivy_helm_consult_priority() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_outline_picker_dispatch_respects_active_ivy_helm_consult_priority",
+        r##"(let* ((file
                 (ast-grep-test-write-file
                  "outline/picker.el"
                  "(defun sample () t)\n"))
@@ -290,12 +315,15 @@ fn outline_public_surface_batch() {
                     (ast-grep-outline))
                   (nreverse calls)))
             (ast-grep-test-kill-file-buffer file)))"##,
-            true,
-            expect!["OK (counsel helm consult)"],
-        ),
-        (
-            "ast_grep_outline_one_shot_restores_origin_state_when_picker_switches_buffers",
-            r##"(let* ((file
+        true,
+        expect!["OK (counsel helm consult)"],
+    )
+}
+
+fn ast_grep_outline_one_shot_restores_origin_state_when_picker_switches_buffers() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_outline_one_shot_restores_origin_state_when_picker_switches_buffers",
+        r##"(let* ((file
                 (ast-grep-test-write-file
                  "outline/origin.el"
                  "(defun origin () t)\n"))
@@ -328,12 +356,15 @@ fn outline_public_surface_batch() {
             (ast-grep-test-kill-file-buffer file)
             (when (buffer-live-p other)
               (kill-buffer other))))"##,
-            true,
-            expect![[r#"OK (ignore ((saved . 17)) saved-consult t "origin.el")"#]],
-        ),
-        (
-            "ast_grep_outline_command_rejects_missing_executable_and_non_file_buffers",
-            r##"(list
+        true,
+        expect![[r#"OK (ignore ((saved . 17)) saved-consult t "origin.el")"#]],
+    )
+}
+
+fn ast_grep_outline_command_rejects_missing_executable_and_non_file_buffers() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_outline_command_rejects_missing_executable_and_non_file_buffers",
+        r##"(list
           (let ((ast-grep-executable "definitely-no-such-sg"))
             (ast-grep-test-error-data #'ast-grep-outline))
           (let* ((program
@@ -343,10 +374,28 @@ fn outline_public_surface_batch() {
                  (ast-grep-executable program))
             (with-temp-buffer
               (ast-grep-test-error-data #'ast-grep-outline))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error error ("The ast-grep executable not found. Please install ast-grep")) (:error user-error ("Current buffer is not visiting a file")))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn outline_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        ast_grep_outline_title_mapping_covers_canonical_and_unknown_symbol_types(),
+        ast_grep_outline_command_and_real_process_use_expanded_file_and_outline_label(),
+        ast_grep_outline_parse_flattens_multi_file_stream_and_skips_malformed_lines(),
+        ast_grep_outline_flatten_builds_qualified_nested_names_at_character_positions(),
+        ast_grep_outline_group_orders_types_and_deduplicates_reachable_names(),
+        ast_grep_outline_imenu_index_runs_real_stub_cli_and_returns_jumpable_groups(),
+        ast_grep_outline_imenu_index_degrades_cli_failure_to_message_and_empty_index(),
+        ast_grep_outline_mode_restores_prior_imenu_function_and_invalidates_all_caches(),
+        ast_grep_outline_mode_without_prior_local_function_restores_global_binding(),
+        ast_grep_outline_picker_dispatch_respects_active_ivy_helm_consult_priority(),
+        ast_grep_outline_one_shot_restores_origin_state_when_picker_switches_buffers(),
+        ast_grep_outline_command_rejects_missing_executable_and_non_file_buffers(),
+    ];
+    assert_ast_grep_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_alert_termux_batch;
+use super::{ParityBatchCase, assert_alert_termux_batch};
 
-#[test]
-fn workflow_public_surface_batch() {
-    assert_alert_termux_batch(&[
-        (
-            "alert_termux_notify_builds_title_content_unicode_and_output_capture_arguments",
-            r##"(let ((alert-termux-command
+fn alert_termux_notify_builds_title_content_unicode_and_output_capture_arguments() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alert_termux_notify_builds_title_content_unicode_and_output_capture_arguments",
+        r##"(let ((alert-termux-command
                 "/data/data/com.termux/files/usr/bin/termux-notification")
                calls)
          (cl-letf
@@ -31,14 +29,17 @@ fn workflow_public_surface_batch() {
                 (nreverse calls))
              (when (get-buffer " *termux-notification output*")
                (kill-buffer " *termux-notification output*")))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (0 (("/data/data/com.termux/files/usr/bin/termux-notification" nil " *termux-notification output*" t nil ("-t" "<encoded>Deploy ✓" "-c" "<encoded>Finished 100% — 成功"))))"#
     ]],
-        ),
-        (
-            "alert_termux_notify_without_title_emits_only_content_switch",
-            r##"(let ((alert-termux-command "termux-notification")
+    )
+}
+
+fn alert_termux_notify_without_title_emits_only_content_switch() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alert_termux_notify_without_title_emits_only_content_switch",
+        r##"(let ((alert-termux-command "termux-notification")
                 calls)
          (cl-letf
              (((symbol-function 'alert-encode-string)
@@ -55,12 +56,15 @@ fn workflow_public_surface_batch() {
                 (nreverse calls))
              (when (get-buffer " *termux-notification output*")
                (kill-buffer " *termux-notification output*")))))"##,
-            true,
-            expect![[r#"OK (23 (("-c" "[Background task]")))"#]],
-        ),
-        (
-            "alert_termux_missing_command_delegates_complete_info_to_message_backend",
-            r##"(let ((alert-termux-command nil)
+        true,
+        expect![[r#"OK (23 (("-c" "[Background task]")))"#]],
+    )
+}
+
+fn alert_termux_missing_command_delegates_complete_info_to_message_backend() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alert_termux_missing_command_delegates_complete_info_to_message_backend",
+        r##"(let ((alert-termux-command nil)
                 received)
          (cl-letf
              (((symbol-function 'alert-message-notify)
@@ -79,14 +83,17 @@ fn workflow_public_surface_batch() {
               (alert-termux-notify info)
               (eq received info)
               received))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (fallback t (:title "No API" :message "Show in minibuffer" :severity moderate :data (:source timer)))"#
     ]],
-        ),
-        (
-            "alert_termux_reuses_hidden_output_buffer_across_multiple_notifications",
-            r##"(let ((alert-termux-command "termux-notification")
+    )
+}
+
+fn alert_termux_reuses_hidden_output_buffer_across_multiple_notifications() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alert_termux_reuses_hidden_output_buffer_across_multiple_notifications",
+        r##"(let ((alert-termux-command "termux-notification")
                 buffers)
          (cl-letf
              (((symbol-function 'alert-encode-string) #'identity)
@@ -108,12 +115,15 @@ fn workflow_public_surface_batch() {
                   (buffer-live-p (car buffers))))
              (when (get-buffer " *termux-notification output*")
                (kill-buffer " *termux-notification output*")))))"##,
-            true,
-            expect![[r#"OK (2 t " *termux-notification output*" t)"#]],
-        ),
-        (
-            "alert_termux_runtime_command_override_is_used_for_each_delivery",
-            r##"(let (programs)
+        true,
+        expect![[r#"OK (2 t " *termux-notification output*" t)"#]],
+    )
+}
+
+fn alert_termux_runtime_command_override_is_used_for_each_delivery() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alert_termux_runtime_command_override_is_used_for_each_delivery",
+        r##"(let (programs)
          (cl-letf
              (((symbol-function 'alert-encode-string) #'identity)
               ((symbol-function 'call-process)
@@ -131,12 +141,15 @@ fn workflow_public_surface_batch() {
                  (nreverse programs))
              (when (get-buffer " *termux-notification output*")
                (kill-buffer " *termux-notification output*")))))"##,
-            true,
-            expect![[r#"OK ("/custom/first" "/custom/second")"#]],
-        ),
-        (
-            "alert_termux_end_to_end_explicit_style_dispatches_and_tracks_origin",
-            r##"(let ((alert-termux-command "termux-notification")
+        true,
+        expect![[r#"OK ("/custom/first" "/custom/second")"#]],
+    )
+}
+
+fn alert_termux_end_to_end_explicit_style_dispatches_and_tracks_origin() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alert_termux_end_to_end_explicit_style_dispatches_and_tracks_origin",
+        r##"(let ((alert-termux-command "termux-notification")
                 (alert-active-alerts nil)
                 (alert-log-messages nil)
                 calls)
@@ -168,14 +181,17 @@ fn workflow_public_surface_batch() {
                           post-command-hook))))
              (when (get-buffer " *termux-notification output*")
                (kill-buffer " *termux-notification output*")))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil (("termux-notification" ("-t" "Termux" "-c" "Battery low"))) ((t "Battery low" nil)) (alert-remove-on-command t))"#
     ]],
-        ),
-        (
-            "alert_termux_encode_boundary_receives_title_before_message_exactly_once",
-            r##"(let ((alert-termux-command "termux-notification")
+    )
+}
+
+fn alert_termux_encode_boundary_receives_title_before_message_exactly_once() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alert_termux_encode_boundary_receives_title_before_message_exactly_once",
+        r##"(let ((alert-termux-command "termux-notification")
                 encoded)
          (cl-letf
              (((symbol-function 'alert-encode-string)
@@ -191,12 +207,15 @@ fn workflow_public_surface_batch() {
                  (nreverse encoded))
              (when (get-buffer " *termux-notification output*")
                (kill-buffer " *termux-notification output*")))))"##,
-            true,
-            expect![[r#"OK ("title" "message")"#]],
-        ),
-        (
-            "alert_termux_process_exit_status_is_returned_to_caller",
-            r##"(let ((alert-termux-command "termux-notification"))
+        true,
+        expect![[r#"OK ("title" "message")"#]],
+    )
+}
+
+fn alert_termux_process_exit_status_is_returned_to_caller() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "alert_termux_process_exit_status_is_returned_to_caller",
+        r##"(let ((alert-termux-command "termux-notification"))
          (cl-letf
              (((symbol-function 'alert-encode-string) #'identity)
               ((symbol-function 'call-process)
@@ -206,8 +225,22 @@ fn workflow_public_surface_batch() {
                 '(:title "Failure" :message "API unavailable"))
              (when (get-buffer " *termux-notification output*")
                (kill-buffer " *termux-notification output*")))))"##,
-            true,
-            expect!["OK 17"],
-        ),
-    ]);
+        true,
+        expect!["OK 17"],
+    )
+}
+
+#[test]
+fn workflow_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        alert_termux_notify_builds_title_content_unicode_and_output_capture_arguments(),
+        alert_termux_notify_without_title_emits_only_content_switch(),
+        alert_termux_missing_command_delegates_complete_info_to_message_backend(),
+        alert_termux_reuses_hidden_output_buffer_across_multiple_notifications(),
+        alert_termux_runtime_command_override_is_used_for_each_delivery(),
+        alert_termux_end_to_end_explicit_style_dispatches_and_tracks_origin(),
+        alert_termux_encode_boundary_receives_title_before_message_exactly_once(),
+        alert_termux_process_exit_status_is_returned_to_caller(),
+    ];
+    assert_alert_termux_batch(&cases);
 }

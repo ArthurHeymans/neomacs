@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_at_batch};
+use super::{ParityBatchCase, assert_at_batch};
 
-#[test]
-fn core_public_surface_batch() {
-    assert_at_batch(&[
-        (
-            "at_root_object_core_methods_features_and_help_binding_match_the_pin",
-            r##"(list
+fn at_root_object_core_methods_features_and_help_binding_match_the_pin() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "at_root_object_core_methods_features_and_help_binding_match_the_pin",
+        r##"(list
               (@p @)
               (aref @ 0)
               (plist-get
@@ -25,14 +23,17 @@ fn core_public_surface_batch() {
               (lookup-key
                global-map
                (kbd "C-h @")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t @ nil (:proto :set :get :init :new :is :keys) (t t t t t t) t t describe-@)"#
     ]],
-        ),
-        (
-            "at_predicate_and_extend_cover_root_default_multiple_prototypes_and_properties",
-            r##"(let* ((left
+    )
+}
+
+fn at_predicate_and_extend_cover_root_default_multiple_prototypes_and_properties() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "at_predicate_and_extend_cover_root_default_multiple_prototypes_and_properties",
+        r##"(let* ((left
                       (@extend :side 'left))
                      (right
                       (@extend :side 'right))
@@ -68,18 +69,24 @@ fn core_public_surface_batch() {
                 (@ child :name)
                 (@ child :nil-value)
                 (@ child :side)))"##,
-            true,
-            expect!["OK ((t t t nil t nil nil) t (left right) \"child\" nil left)"],
-        ),
-        (
-            "at_predicate_on_an_empty_vector_signals_the_exact_slot_error",
-            r##"(@p [])"##,
-            false,
-            expect!["ERR (args-out-of-range [] 0)"],
-        ),
-        (
-            "at_precedence_flattens_diamond_inheritance_and_removes_first_duplicate",
-            r##"(let* ((root
+        true,
+        expect!["OK ((t t t nil t nil nil) t (left right) \"child\" nil left)"],
+    )
+}
+
+fn at_predicate_on_an_empty_vector_signals_the_exact_slot_error() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "at_predicate_on_an_empty_vector_signals_the_exact_slot_error",
+        r##"(@p [])"##,
+        false,
+        expect!["ERR (args-out-of-range [] 0)"],
+    )
+}
+
+fn at_precedence_flattens_diamond_inheritance_and_removes_first_duplicate() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "at_precedence_flattens_diamond_inheritance_and_removes_first_duplicate",
+        r##"(let* ((root
                       (@extend :id 'root))
                      (left
                       (@extend root :id 'left))
@@ -99,12 +106,15 @@ fn core_public_surface_batch() {
                    ((eq object @) '@)
                    (t 'unknown)))
                 (@precedence top)))"##,
-            true,
-            expect!["OK (left right root @)"],
-        ),
-        (
-            "at_instance_checks_cover_identity_ancestors_unrelated_and_non_objects",
-            r##"(let* ((parent (@extend))
+        true,
+        expect!["OK (left right root @)"],
+    )
+}
+
+fn at_instance_checks_cover_identity_ancestors_unrelated_and_non_objects() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "at_instance_checks_cover_identity_ancestors_unrelated_and_non_objects",
+        r##"(let* ((parent (@extend))
                      (child (@extend parent))
                      (unrelated (@extend)))
                (list
@@ -117,12 +127,15 @@ fn core_public_surface_batch() {
                 (@is @ t)
                 (@! child :is parent)
                 (@! parent :is child)))"##,
-            true,
-            expect!["OK (t t t nil nil nil nil t nil)"],
-        ),
-        (
-            "at_internal_queue_preserves_fifo_head_and_empty_reset_contract",
-            r##"(let ((queue
+        true,
+        expect!["OK (t t t nil nil nil nil t nil)"],
+    )
+}
+
+fn at_internal_queue_preserves_fifo_head_and_empty_reset_contract() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "at_internal_queue_preserves_fifo_head_and_empty_reset_contract",
+        r##"(let ((queue
                     (@--queue-create)))
                (list
                 (@--queue-head queue)
@@ -140,14 +153,17 @@ fn core_public_surface_batch() {
                 (@--queue-dequeue queue)
                 (@--queue-head queue)
                 queue))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil first (first) second (first second) first (second) second nil (nil))"#
     ]],
-        ),
-        (
-            "at_lookup_uses_breadth_first_inheritance_and_counts_super_matches",
-            r##"(let* ((root
+    )
+}
+
+fn at_lookup_uses_breadth_first_inheritance_and_counts_super_matches() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "at_lookup_uses_breadth_first_inheritance_and_counts_super_matches",
+        r##"(let* ((root
                       (@extend :name 'root))
                      (left
                       (@extend root :name 'left))
@@ -166,12 +182,15 @@ fn core_public_surface_batch() {
                 (@ top :name :super 2)
                 (@ top :name :super 3)
                 (@ right-only :name)))"##,
-            true,
-            expect!["OK (top left right root right)"],
-        ),
-        (
-            "at_lookup_distinguishes_implicit_error_explicit_nil_and_non_nil_defaults",
-            r##"(let ((object (@extend)))
+        true,
+        expect!["OK (top left right root right)"],
+    )
+}
+
+fn at_lookup_distinguishes_implicit_error_explicit_nil_and_non_nil_defaults() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "at_lookup_distinguishes_implicit_error_explicit_nil_and_non_nil_defaults",
+        r##"(let ((object (@extend)))
                (list
                 (@ object :missing
                    :default nil)
@@ -180,18 +199,24 @@ fn core_public_surface_batch() {
                 (@ object :missing
                    :super 10
                    :default 'past-end)))"##,
-            true,
-            expect!["OK (nil fallback past-end)"],
-        ),
-        (
-            "at_lookup_without_property_or_default_signals_exact_dynamic_getter_error",
-            r##"(@ (@extend) :missing)"##,
-            false,
-            expect![[r#"ERR (error "Property unbound: :missing")"#]],
-        ),
-        (
-            "at_setf_assigns_only_the_immediate_object_and_returns_the_new_value",
-            r##"(let* ((parent
+        true,
+        expect!["OK (nil fallback past-end)"],
+    )
+}
+
+fn at_lookup_without_property_or_default_signals_exact_dynamic_getter_error() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "at_lookup_without_property_or_default_signals_exact_dynamic_getter_error",
+        r##"(@ (@extend) :missing)"##,
+        false,
+        expect![[r#"ERR (error "Property unbound: :missing")"#]],
+    )
+}
+
+fn at_setf_assigns_only_the_immediate_object_and_returns_the_new_value() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "at_setf_assigns_only_the_immediate_object_and_returns_the_new_value",
+        r##"(let* ((parent
                       (@extend :value 'parent))
                      (child (@extend parent)))
                (list
@@ -203,12 +228,15 @@ fn core_public_surface_batch() {
                 (@ parent :value)
                 (@! child :keys)
                 (@! parent :keys)))"##,
-            true,
-            expect![[r#"OK (parent child child parent (:proto :value) (:proto :value))"#]],
-        ),
-        (
-            "at_method_calls_and_super_method_dsl_chain_through_each_matching_prototype",
-            r##"(let* ((a (@extend))
+        true,
+        expect![[r#"OK (parent child child parent (:proto :value) (:proto :value))"#]],
+    )
+}
+
+fn at_method_calls_and_super_method_dsl_chain_through_each_matching_prototype() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "at_method_calls_and_super_method_dsl_chain_through_each_matching_prototype",
+        r##"(let* ((a (@extend))
                      (b (@extend a))
                      (c (@extend b)))
                (def@ a :chain (value)
@@ -224,12 +252,15 @@ fn core_public_surface_batch() {
                 (@--super! c :chain 8)
                 (with-@@ c
                   (@^:chain 9))))"##,
-            true,
-            expect!["OK ((c b a 7) (b a 8) (b a 9))"],
-        ),
-        (
-            "at_property_super_dsl_reads_each_next_matching_value",
-            r##"(let* ((a
+        true,
+        expect!["OK ((c b a 7) (b a 8) (b a 9))"],
+    )
+}
+
+fn at_property_super_dsl_reads_each_next_matching_value() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "at_property_super_dsl_reads_each_next_matching_value",
+        r##"(let* ((a
                       (@extend :value 'a))
                      (b
                       (@extend a :value 'b))
@@ -239,12 +270,15 @@ fn core_public_surface_batch() {
                 (with-@@ c @:value)
                 (with-@@ c @^:value)
                 (@ c :value :super 2)))"##,
-            true,
-            expect!["OK (c b a)"],
-        ),
-        (
-            "at_new_calls_initializer_and_core_keys_and_is_methods_observe_the_child",
-            r##"(let ((rectangle
+        true,
+        expect!["OK (c b a)"],
+    )
+}
+
+fn at_new_calls_initializer_and_core_keys_and_is_methods_observe_the_child() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "at_new_calls_initializer_and_core_keys_and_is_methods_observe_the_child",
+        r##"(let ((rectangle
                     (@extend
                      :width nil
                      :height nil)))
@@ -267,12 +301,15 @@ fn core_public_surface_batch() {
                   (@! instance :is @)
                   (@! instance :keys)
                   (@! rectangle :keys))))"##,
-            true,
-            expect![[r#"OK (42 6 7 t t (:proto :width :height) (:proto :width :height :init :area))"#]],
-        ),
-        (
-            "at_dynamic_getter_receives_missing_property_but_explicit_default_bypasses_it",
-            r##"(let ((object
+        true,
+        expect![[r#"OK (42 6 7 t t (:proto :width :height) (:proto :width :height :init :area))"#]],
+    )
+}
+
+fn at_dynamic_getter_receives_missing_property_but_explicit_default_bypasses_it() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "at_dynamic_getter_receives_missing_property_but_explicit_default_bypasses_it",
+        r##"(let ((object
                     (@extend
                      :prefix "got")))
                (def@ object :get (property)
@@ -282,12 +319,15 @@ fn core_public_surface_batch() {
                 (@ object :missing)
                 (@ object :other
                    :default 'explicit)))"##,
-            true,
-            expect!["OK ((\"got\" :missing) explicit)"],
-        ),
-        (
-            "at_walk_replace_and_with_object_preserve_quote_and_expand_property_positions",
-            r##"(list
+        true,
+        expect!["OK ((\"got\" :missing) explicit)"],
+    )
+}
+
+fn at_walk_replace_and_with_object_preserve_quote_and_expand_property_positions() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "at_walk_replace_and_with_object_preserve_quote_and_expand_property_positions",
+        r##"(list
               (@--walk
                '(setf @:name 10)
                '(quote)
@@ -308,14 +348,17 @@ fn core_public_surface_batch() {
               (with-@@
                   (@extend :value 'ok)
                 @:value))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((setf (@ @@ :name) 10) (setf '@:name 10) (@! @@ :method (@ @@ :argument)) (let ((@@ object)) (list (@ @@ :value) (@! @@ :method 1) (@--super @@ :parent))) ok)"#
     ]],
-        ),
-        (
-            "at_definer_returns_property_preserves_docstring_and_binds_self_before_arguments",
-            r##"(let ((object
+    )
+}
+
+fn at_definer_returns_property_preserves_docstring_and_binds_self_before_arguments() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "at_definer_returns_property_preserves_docstring_and_binds_self_before_arguments",
+        r##"(let ((object
                     (@extend :base 10)))
                (list
                 (def@ object :sum (left
@@ -330,10 +373,32 @@ fn core_public_surface_batch() {
                 (help-function-arglist
                  (@ object :sum)
                  t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:sum 15 17 "Add values to the base.\n\n(fn @@ LEFT &optional (RIGHT 2))" (@@ left &rest --cl-rest--))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn core_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        at_root_object_core_methods_features_and_help_binding_match_the_pin(),
+        at_predicate_and_extend_cover_root_default_multiple_prototypes_and_properties(),
+        at_predicate_on_an_empty_vector_signals_the_exact_slot_error(),
+        at_precedence_flattens_diamond_inheritance_and_removes_first_duplicate(),
+        at_instance_checks_cover_identity_ancestors_unrelated_and_non_objects(),
+        at_internal_queue_preserves_fifo_head_and_empty_reset_contract(),
+        at_lookup_uses_breadth_first_inheritance_and_counts_super_matches(),
+        at_lookup_distinguishes_implicit_error_explicit_nil_and_non_nil_defaults(),
+        at_lookup_without_property_or_default_signals_exact_dynamic_getter_error(),
+        at_setf_assigns_only_the_immediate_object_and_returns_the_new_value(),
+        at_method_calls_and_super_method_dsl_chain_through_each_matching_prototype(),
+        at_property_super_dsl_reads_each_next_matching_value(),
+        at_new_calls_initializer_and_core_keys_and_is_methods_observe_the_child(),
+        at_dynamic_getter_receives_missing_property_but_explicit_default_bypasses_it(),
+        at_walk_replace_and_with_object_preserve_quote_and_expand_property_positions(),
+        at_definer_returns_property_preserves_docstring_and_binds_self_before_arguments(),
+    ];
+    assert_at_batch(&cases);
 }

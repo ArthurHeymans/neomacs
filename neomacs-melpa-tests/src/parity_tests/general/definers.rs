@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_general_batch};
+use super::{ParityBatchCase, assert_general_batch};
 
-#[test]
-fn definers_public_surface_batch() {
-    assert_general_batch(&[
-        (
-            "general_emacs_define_key_accepts_direct_quoted_and_multiple_keymaps",
-            r##"(progn
+fn general_emacs_define_key_accepts_direct_quoted_and_multiple_keymaps() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_emacs_define_key_accepts_direct_quoted_and_multiple_keymaps",
+        r##"(progn
                (defvar
                  neomacs-general-emacs-map-a
                  (make-sparse-keymap))
@@ -42,12 +40,15 @@ fn definers_public_surface_batch() {
                 (lookup-key
                  neomacs-general-emacs-map-b
                  (kbd "c"))))"##,
-            true,
-            expect![[r#"OK (forward-char backward-char next-line next-line)"#]],
-        ),
-        (
-            "general_def_dispatches_zero_and_one_positional_arguments",
-            r##"(progn
+        true,
+        expect![[r#"OK (forward-char backward-char next-line next-line)"#]],
+    )
+}
+
+fn general_def_dispatches_zero_and_one_positional_arguments() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_def_dispatches_zero_and_one_positional_arguments",
+        r##"(progn
                (defvar
                  neomacs-general-def-map
                  (make-sparse-keymap))
@@ -68,12 +69,15 @@ fn definers_public_surface_batch() {
                 (lookup-key
                  neomacs-general-def-map
                  (kbd "b"))))"##,
-            true,
-            expect![[r#"OK (forward-char backward-char)"#]],
-        ),
-        (
-            "general_defs_splits_independent_positional_and_keyword_sections",
-            r##"(progn
+        true,
+        expect![[r#"OK (forward-char backward-char)"#]],
+    )
+}
+
+fn general_defs_splits_independent_positional_and_keyword_sections() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_defs_splits_independent_positional_and_keyword_sections",
+        r##"(progn
                (defvar
                  neomacs-general-defs-map-a
                  (make-sparse-keymap))
@@ -110,12 +114,15 @@ fn definers_public_surface_batch() {
                 (lookup-key
                  neomacs-general-defs-map-b
                  (kbd "d"))))"##,
-            true,
-            expect![[r#"OK (forward-char backward-char next-line previous-line nil)"#]],
-        ),
-        (
-            "general_unbind_supports_nil_ignore_and_positional_keymap_forms",
-            r##"(progn
+        true,
+        expect![[r#"OK (forward-char backward-char next-line previous-line nil)"#]],
+    )
+}
+
+fn general_unbind_supports_nil_ignore_and_positional_keymap_forms() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_unbind_supports_nil_ignore_and_positional_keymap_forms",
+        r##"(progn
                (defvar
                  neomacs-general-unbind-map
                  (make-sparse-keymap))
@@ -146,12 +153,15 @@ fn definers_public_surface_batch() {
                 (lookup-key
                  neomacs-general-unbind-map
                  (kbd "c"))))"##,
-            true,
-            expect![[r#"OK (nil nil ignore)"#]],
-        ),
-        (
-            "general_create_definer_applies_defaults_and_allows_local_overrides",
-            r##"(progn
+        true,
+        expect![[r#"OK (nil nil ignore)"#]],
+    )
+}
+
+fn general_create_definer_applies_defaults_and_allows_local_overrides() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_create_definer_applies_defaults_and_allows_local_overrides",
+        r##"(progn
                (defvar
                  neomacs-general-created-map
                  (make-sparse-keymap))
@@ -184,12 +194,15 @@ fn definers_public_surface_batch() {
                 (lookup-key
                  neomacs-general-created-map
                  (kbd "C-c b"))))"##,
-            true,
-            expect![[r#"OK (t 72 forward-char backward-char nil)"#]],
-        ),
-        (
-            "general_public_definer_macros_expand_to_the_exact_primary_definer_calls",
-            r##"(list
+        true,
+        expect![[r#"OK (t 72 forward-char backward-char nil)"#]],
+    )
+}
+
+fn general_public_definer_macros_expand_to_the_exact_primary_definer_calls() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_public_definer_macros_expand_to_the_exact_primary_definer_calls",
+        r##"(list
                (macroexpand
                 '(general-emacs-define-key
                      neomacs-general-map
@@ -204,14 +217,17 @@ fn definers_public_surface_batch() {
                    :keymaps
                    'neomacs-general-map
                    "c" #'next-line)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((general-define-key :keymaps 'neomacs-general-map "a" #'forward-char) (general-define-key :states '(normal visual) :keymaps 'neomacs-general-map "b" #'backward-char) (general-define-key :keymaps 'neomacs-general-map "c" #'next-line))"#
     ]],
-        ),
-        (
-            "general_evil_setup_creates_the_documented_long_and_short_definer_macros",
-            r##"(progn
+    )
+}
+
+fn general_evil_setup_creates_the_documented_long_and_short_definer_macros() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_evil_setup_creates_the_documented_long_and_short_definer_macros",
+        r##"(progn
                (general-evil-setup t)
                (mapcar
                 (lambda (symbol)
@@ -236,14 +252,17 @@ fn definers_public_surface_batch() {
                   imap emap nmap vmap mmap
                   omap rmap iemap nvmap
                   itomap otomap tomap)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((general-imap t t) (general-emap t t) (general-nmap t t) (general-vmap t t) (general-mmap t t) (general-omap t t) (general-rmap t t) (general-iemap t t) (general-nvmap t t) (general-itomap t t) (general-otomap t t) (general-tomap t t) (imap t t) (emap t t) (nmap t t) (vmap t t) (mmap t t) (omap t t) (rmap t t) (iemap t t) (nvmap t t) (itomap t t) (otomap t t) (tomap t t))"#
     ]],
-        ),
-        (
-            "general_lambda_builds_an_interactive_command_and_preserves_body_values",
-            r##"(let ((command
+    )
+}
+
+fn general_lambda_builds_an_interactive_command_and_preserves_body_values() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_lambda_builds_an_interactive_command_and_preserves_body_values",
+        r##"(let ((command
                      (general-lambda
                        (list 'result 42))))
                (list
@@ -254,26 +273,48 @@ fn definers_public_surface_batch() {
                   'general-l)
                  (indirect-function
                   'general-lambda))))"##,
-            true,
-            expect![[r#"OK (t (result 42) t)"#]],
-        ),
-        (
-            "general_chord_encodes_ascii_and_multibyte_pairs_exactly",
-            r##"(list
+        true,
+        expect![[r#"OK (t (result 42) t)"#]],
+    )
+}
+
+fn general_chord_encodes_ascii_and_multibyte_pairs_exactly() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_chord_encodes_ascii_and_multibyte_pairs_exactly",
+        r##"(list
                (general-chord "ab")
                (general-chord "ba")
                (general-chord "λλ")
                (equal
                 (general-chord "ab")
                 (general-chord "ba")))"##,
-            true,
-            expect![[r#"OK ([key-chord 97 98] [key-chord 98 97] [key-chord 187 187] nil)"#]],
-        ),
-        (
-            "general_chord_rejects_any_key_count_other_than_two",
-            r##"(general-chord "a")"##,
-            false,
-            expect![[r#"ERR (error "Key-chord keys must have two elements")"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK ([key-chord 97 98] [key-chord 98 97] [key-chord 187 187] nil)"#]],
+    )
+}
+
+fn general_chord_rejects_any_key_count_other_than_two() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_chord_rejects_any_key_count_other_than_two",
+        r##"(general-chord "a")"##,
+        false,
+        expect![[r#"ERR (error "Key-chord keys must have two elements")"#]],
+    )
+}
+
+#[test]
+fn definers_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        general_emacs_define_key_accepts_direct_quoted_and_multiple_keymaps(),
+        general_def_dispatches_zero_and_one_positional_arguments(),
+        general_defs_splits_independent_positional_and_keyword_sections(),
+        general_unbind_supports_nil_ignore_and_positional_keymap_forms(),
+        general_create_definer_applies_defaults_and_allows_local_overrides(),
+        general_public_definer_macros_expand_to_the_exact_primary_definer_calls(),
+        general_evil_setup_creates_the_documented_long_and_short_definer_macros(),
+        general_lambda_builds_an_interactive_command_and_preserves_body_values(),
+        general_chord_encodes_ascii_and_multibyte_pairs_exactly(),
+        general_chord_rejects_any_key_count_other_than_two(),
+    ];
+    assert_general_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_agda_editor_tactics_batch;
+use super::{ParityBatchCase, assert_agda_editor_tactics_batch};
 
-#[test]
-fn parsing_public_surface_batch() {
-    assert_agda_editor_tactics_batch(&[
-        (
-            "agda_editor_tactics_record_info_parses_the_documented_full_record",
-            r##"(agda-editor-tactics-record-info
+fn agda_editor_tactics_record_info_parses_the_documented_full_record() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agda_editor_tactics_record_info_parses_the_documented_full_record",
+        r##"(agda-editor-tactics-record-info
          "record R (X : Set) (x : X) (y : Y x) : Set where
 
      w : Set
@@ -23,14 +21,17 @@ fn parsing_public_surface_batch() {
 
      field
        c : Y a")"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:name "R" :level "" :body ((:param "X : Set") (:param "x : X") (:param "y : Y x") (:local "w : Set") (:local "w = X") (:local "m = w") (:field "a : X") (:local "b : X") (:local "b = X") (:field "c : Y a")))"#
     ]],
-        ),
-        (
-            "agda_editor_tactics_record_info_preserves_parameters_and_universe_level",
-            r##"(mapcar
+    )
+}
+
+fn agda_editor_tactics_record_info_preserves_parameters_and_universe_level() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agda_editor_tactics_record_info_preserves_parameters_and_universe_level",
+        r##"(mapcar
          #'agda-editor-tactics-record-info
          '("record Box (ℓ : Level) (A : Set ℓ) : Set (lsuc ℓ) where
   field
@@ -38,14 +39,17 @@ fn parsing_public_surface_batch() {
            "record Relation (a b : Level) (A : Set a) : Set (a ⊔ lsuc b) where
     field
       _≈_ : A → A → Set b"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:name "Box" :level " (lsuc ℓ)" :body ((:param "ℓ : Level") (:param "A : Set ℓ") (:field "value : A"))) (:name "Relation" :level " (a ⊔ lsuc b)" :body ((:param "a b : Level") (:param "A : Set a") (:field "_≈_ : A → A → Set b"))))"#
     ]],
-        ),
-        (
-            "agda_editor_tactics_record_info_classifies_preamble_locals_and_fields",
-            r##"(agda-editor-tactics-record-info
+    )
+}
+
+fn agda_editor_tactics_record_info_classifies_preamble_locals_and_fields() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agda_editor_tactics_record_info_classifies_preamble_locals_and_fields",
+        r##"(agda-editor-tactics-record-info
          "record Computed (A : Set) : Set where
   Alias : Set
   Alias = A
@@ -56,14 +60,17 @@ fn parsing_public_surface_batch() {
     step : Alias → Alias
   twice : Alias → Alias
   twice x = step (step x)")"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:name "Computed" :level "" :body ((:param "A : Set") (:local "Alias : Set") (:local "Alias = A") (:local "identity : Alias → Alias") (:local "identity x = x") (:field "seed : Alias") (:field "step : Alias → Alias") (:local "twice : Alias → Alias") (:local "twice x = step (step x)")))"#
     ]],
-        ),
-        (
-            "agda_editor_tactics_record_info_handles_multiple_field_sections",
-            r##"(agda-editor-tactics-record-info
+    )
+}
+
+fn agda_editor_tactics_record_info_handles_multiple_field_sections() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agda_editor_tactics_record_info_handles_multiple_field_sections",
+        r##"(agda-editor-tactics-record-info
          "record SplitFields : Set₁ where
   field
     Carrier : Set
@@ -75,14 +82,17 @@ fn parsing_public_surface_batch() {
     law : operation initial ≡ initial
   witness : Carrier
   witness = operation initial")"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:name "SplitFields" :level "₁" :body ((:field "Carrier : Set") (:field "initial : Carrier") (:local "derived : Carrier") (:local "derived = initial") (:field "operation : Carrier → Carrier") (:field "law : operation initial ≡ initial") (:local "witness : Carrier") (:local "witness = operation initial")))"#
     ]],
-        ),
-        (
-            "agda_editor_tactics_record_info_omits_blank_lines_but_preserves_declaration_order",
-            r##"(let* ((parsed
+    )
+}
+
+fn agda_editor_tactics_record_info_omits_blank_lines_but_preserves_declaration_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agda_editor_tactics_record_info_omits_blank_lines_but_preserves_declaration_order",
+        r##"(let* ((parsed
           (agda-editor-tactics-record-info
            "record Sparse (A : Set) : Set where
 
@@ -101,14 +111,17 @@ fn parsing_public_surface_batch() {
 "))
         (body (plist-get parsed :body)))
          (list parsed (length body) (mapcar #'car body) (mapcar #'cadr body)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:name "Sparse" :level "" :body ((:param "A : Set") (:local "before : A → A") (:local "before x = x") (:local "first : A") (:local "second : A") (:local "after : A") (:local "after = first"))) 7 (:param :local :local :local :local :local :local) ("A : Set" "before : A → A" "before x = x" "first : A" "second : A" "after : A" "after = first"))"#
     ]],
-        ),
-        (
-            "agda_editor_tactics_record_info_uses_each_field_block_indentation",
-            r##"(agda-editor-tactics-record-info
+    )
+}
+
+fn agda_editor_tactics_record_info_uses_each_field_block_indentation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agda_editor_tactics_record_info_uses_each_field_block_indentation",
+        r##"(agda-editor-tactics-record-info
          "record MixedIndent : Set where
  field
    one : Set
@@ -119,14 +132,17 @@ fn parsing_public_surface_batch() {
           two : Set
        two-local : Set
        two-local = two")"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:name "MixedIndent" :level "" :body ((:field "one : Set") (:local "one-local : Set") (:local "one-local = one") (:local "another-local = one-local") (:field "two : Set") (:local "two-local : Set") (:local "two-local = two")))"#
     ]],
-        ),
-        (
-            "agda_editor_tactics_record_info_parses_a_parameterless_record",
-            r##"(list
+    )
+}
+
+fn agda_editor_tactics_record_info_parses_a_parameterless_record() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agda_editor_tactics_record_info_parses_a_parameterless_record",
+        r##"(list
          (agda-editor-tactics-record-info
           "record UnitLike : Set where
   field
@@ -135,14 +151,17 @@ fn parsing_public_surface_batch() {
           "record Higher : Set (lsuc (lsuc zero)) where
       field
         Carrier : Set₁"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:name "UnitLike" :level "" :body ((:field "inhabitant : ⊤"))) (:name "Higher" :level " (lsuc (lsuc zero))" :body ((:field "Carrier : Set₁"))))"#
     ]],
-        ),
-        (
-            "agda_editor_tactics_record_info_exposes_documented_parser_boundaries",
-            r##"(mapcar
+    )
+}
+
+fn agda_editor_tactics_record_info_exposes_documented_parser_boundaries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agda_editor_tactics_record_info_exposes_documented_parser_boundaries",
+        r##"(mapcar
          (lambda (source)
            (condition-case error
                (list :value (agda-editor-tactics-record-info source))
@@ -169,10 +188,24 @@ fn parsing_public_surface_batch() {
            "record Implicit {A : Set} : Set where
   field
     value : A"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:value (:name "NoFields" :level "" :body ((:local "local : Set")))) (:value (:name "Hidden" :level "" :body ((:field "value : Set")))) (:value (:name "Implicit" :level "" :body ((:field "value : A")))))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn parsing_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        agda_editor_tactics_record_info_parses_the_documented_full_record(),
+        agda_editor_tactics_record_info_preserves_parameters_and_universe_level(),
+        agda_editor_tactics_record_info_classifies_preamble_locals_and_fields(),
+        agda_editor_tactics_record_info_handles_multiple_field_sections(),
+        agda_editor_tactics_record_info_omits_blank_lines_but_preserves_declaration_order(),
+        agda_editor_tactics_record_info_uses_each_field_block_indentation(),
+        agda_editor_tactics_record_info_parses_a_parameterless_record(),
+        agda_editor_tactics_record_info_exposes_documented_parser_boundaries(),
+    ];
+    assert_agda_editor_tactics_batch(&cases);
 }

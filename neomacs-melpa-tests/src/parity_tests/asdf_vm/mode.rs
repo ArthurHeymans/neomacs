@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_asdf_vm_batch;
+use super::{ParityBatchCase, assert_asdf_vm_batch};
 
-#[test]
-fn mode_public_surface_batch() {
-    assert_asdf_vm_batch(&[
-        (
-            "asdf_vm_exec_path_injection_prepend_append_and_duplicates_are_exact",
-            r##"(mapcar
+fn asdf_vm_exec_path_injection_prepend_append_and_duplicates_are_exact() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_exec_path_injection_prepend_append_and_duplicates_are_exact",
+        r##"(mapcar
                (lambda (behaviour)
                  (let ((asdf-vm-path-injection-behaviour
                         behaviour)
@@ -21,14 +19,17 @@ fn mode_public_surface_batch() {
                      "/shared/bin")
                     exec-path)))
                '(prepend append))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((prepend #1=("/tool/bin" "/shared/bin" "/base/bin" "/shared/bin") #1#) (append #2=("/base/bin" "/shared/bin" "/tool/bin" "/shared/bin") #2#))"#
     ]],
-        ),
-        (
-            "asdf_vm_exec_path_injection_disabled_requires_discoverable_executable_without_mutation",
-            r##"(let ((asdf-vm-path-injection-behaviour
+    )
+}
+
+fn asdf_vm_exec_path_injection_disabled_requires_discoverable_executable_without_mutation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_exec_path_injection_disabled_requires_discoverable_executable_without_mutation",
+        r##"(let ((asdf-vm-path-injection-behaviour
                     nil)
                    (asdf-vm-process-executable
                     "fixture-asdf")
@@ -60,14 +61,17 @@ fn mode_public_surface_batch() {
                        "/tool/bin")
                       exec-path
                       found)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error asdf-vm-no-exectuable-error nil) nil ("/base/bin") ("fixture-asdf" "fixture-asdf"))"#
     ]],
-        ),
-        (
-            "asdf_vm_exec_path_cleanup_removes_every_matching_occurrence_or_is_noop_when_disabled",
-            r##"(list
+    )
+}
+
+fn asdf_vm_exec_path_cleanup_removes_every_matching_occurrence_or_is_noop_when_disabled() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_exec_path_cleanup_removes_every_matching_occurrence_or_is_noop_when_disabled",
+        r##"(list
                (let ((asdf-vm-path-injection-behaviour
                       'prepend)
                      (exec-path
@@ -89,12 +93,15 @@ fn mode_public_surface_batch() {
                   (asdf-vm--clean-exec-path
                    "/tool/bin")
                   exec-path)))"##,
-            true,
-            expect![[r#"OK ((nil ("/base/bin" "/other/bin")) (nil ("/tool/bin" "/base/bin")))"#]],
-        ),
-        (
-            "asdf_vm_mode_activation_and_deactivation_round_trip_path_mode_line_and_environment_state",
-            r##"(let ((asdf-vm-mode-line-format
+        true,
+        expect![[r#"OK ((nil ("/base/bin" "/other/bin")) (nil ("/tool/bin" "/base/bin")))"#]],
+    )
+}
+
+fn asdf_vm_mode_activation_and_deactivation_round_trip_path_mode_line_and_environment_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_mode_activation_and_deactivation_round_trip_path_mode_line_and_environment_state",
+        r##"(let ((asdf-vm-mode-line-format
                     "(Fixture-ASDF)")
                    (asdf-vm-path-injection-behaviour
                     'prepend)
@@ -157,14 +164,17 @@ fn mode_public_surface_batch() {
                      "ASDF_DATA_DIR"
                      "ASDF_CONCURRENCY"))
                   asdf-vm-mode--state)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("(Fixture-ASDF)" . #1=("base")) ("/fixture/asdf/shims" "/base/bin" "/usr/bin") "/fixture/asdf/shims:/base/bin:/usr/bin" ("/new/config" ".fixture-versions" "/new/core" "/new/data" "8") ((asdf-vm-config-file "ASDF_CONFIG_FILE" "/old/config") (asdf-vm-tool-versions-filename "ASDF_TOOL_VERSIONS_FILENAME" nil) (asdf-vm-dir "ASDF_DIR" "/old/core") (asdf-vm-data-dir "ASDF_DATA_DIR" nil) (asdf-vm-concurrency "ASDF_CONCURRENCY" "auto"))) #1# ("/base/bin" "/usr/bin") "/base/bin:/usr/bin" ("/old/config" nil "/old/core" nil "auto") nil)"#
     ]],
-        ),
-        (
-            "asdf_vm_global_minor_mode_invokes_activation_only_on_enable_and_deactivation_on_disable",
-            r##"(let ((asdf-vm-mode nil)
+    )
+}
+
+fn asdf_vm_global_minor_mode_invokes_activation_only_on_enable_and_deactivation_on_disable() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_global_minor_mode_invokes_activation_only_on_enable_and_deactivation_on_disable",
+        r##"(let ((asdf-vm-mode nil)
                     calls)
                (cl-letf
                    (((symbol-function
@@ -185,12 +195,15 @@ fn mode_public_surface_batch() {
                   (asdf-vm-mode -1)
                   asdf-vm-mode
                   (nreverse calls))))"##,
-            true,
-            expect!["OK (t t t t nil nil (:activate :activate :deactivate))"],
-        ),
-        (
-            "asdf_vm_mode_enable_and_disable_user_commands_forward_their_exact_numeric_arguments",
-            r##"(let (calls)
+        true,
+        expect!["OK (t t t t nil nil (:activate :activate :deactivate))"],
+    )
+}
+
+fn asdf_vm_mode_enable_and_disable_user_commands_forward_their_exact_numeric_arguments() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asdf_vm_mode_enable_and_disable_user_commands_forward_their_exact_numeric_arguments",
+        r##"(let (calls)
                (cl-letf
                    (((symbol-function
                       'asdf-vm-mode)
@@ -201,8 +214,20 @@ fn mode_public_surface_batch() {
                   (asdf-vm-mode-enable)
                   (asdf-vm-mode-disable)
                   (nreverse calls))))"##,
-            true,
-            expect!["OK (:mode-result :mode-result ((1) (1)))"],
-        ),
-    ]);
+        true,
+        expect!["OK (:mode-result :mode-result ((1) (1)))"],
+    )
+}
+
+#[test]
+fn mode_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        asdf_vm_exec_path_injection_prepend_append_and_duplicates_are_exact(),
+        asdf_vm_exec_path_injection_disabled_requires_discoverable_executable_without_mutation(),
+        asdf_vm_exec_path_cleanup_removes_every_matching_occurrence_or_is_noop_when_disabled(),
+        asdf_vm_mode_activation_and_deactivation_round_trip_path_mode_line_and_environment_state(),
+        asdf_vm_global_minor_mode_invokes_activation_only_on_enable_and_deactivation_on_disable(),
+        asdf_vm_mode_enable_and_disable_user_commands_forward_their_exact_numeric_arguments(),
+    ];
+    assert_asdf_vm_batch(&cases);
 }

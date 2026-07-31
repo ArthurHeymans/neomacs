@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_dim_other_buffers_batch;
+use super::{ParityBatchCase, assert_auto_dim_other_buffers_batch};
 
-#[test]
-fn focus_public_surface_batch() {
-    assert_auto_dim_other_buffers_batch(&[
-        (
-            "auto_dim_other_buffers_focus_change_handles_gain_loss_and_disabled_loss_with_exact_state_transitions",
-            r##"(mapcar
+fn auto_dim_other_buffers_focus_change_handles_gain_loss_and_disabled_loss_with_exact_state_transitions() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dim_other_buffers_focus_change_handles_gain_loss_and_disabled_loss_with_exact_state_transitions",
+        r##"(mapcar
           (lambda (case)
             (let ((buffer
                    (generate-new-buffer
@@ -74,14 +72,17 @@ fn focus_public_surface_batch() {
             (nil t t)
             (nil t nil)
             (t t t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((t nil t) #1=(:update) nil t " *adob-focus-target*" t #1#) ((nil t t) nil nil nil nil nil ((:parameter t adob--dim t) (:force t))) ((nil t nil) nil nil nil " *adob-focus-target*" t nil) ((t t t) nil nil t " *adob-focus-target*" t nil))"#
     ]],
-        ),
-        (
-            "auto_dim_other_buffers_focus_change_skips_all_work_when_focus_state_is_unchanged",
-            r##"(let ((adob--focus-change-last-state
+    )
+}
+
+fn auto_dim_other_buffers_focus_change_skips_all_work_when_focus_state_is_unchanged() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dim_other_buffers_focus_change_skips_all_work_when_focus_state_is_unchanged",
+        r##"(let ((adob--focus-change-last-state
                                 :same)
                                (adob--focus-change-timer
                                 :pending)
@@ -106,12 +107,15 @@ fn focus_public_surface_batch() {
              adob--focus-change-timer
              adob--focus-change-last-state
              events)))"##,
-            true,
-            expect!["OK (nil nil :same nil)"],
-        ),
-        (
-            "auto_dim_other_buffers_focus_hook_calls_immediately_at_zero_delay_or_schedules_once",
-            r##"(mapcar
+        true,
+        expect!["OK (nil nil :same nil)"],
+    )
+}
+
+fn auto_dim_other_buffers_focus_hook_calls_immediately_at_zero_delay_or_schedules_once() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dim_other_buffers_focus_hook_calls_immediately_at_zero_delay_or_schedules_once",
+        r##"(mapcar
           (lambda (spec)
             (let ((adob--focus-change-debounce-delay
                    (car spec))
@@ -146,14 +150,17 @@ fn focus_public_surface_batch() {
             (-1 nil)
             (0.015 nil)
             (0.5 :existing-timer)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (((0 nil) :changed nil (:focus-change)) ((-1 nil) :changed nil (:focus-change)) ((0.015 nil) :new-timer :new-timer ((:schedule 0.015 nil t))) ((0.5 :existing-timer) nil :existing-timer nil))"
     ],
-        ),
-        (
-            "auto_dim_other_buffers_scheduled_focus_callback_clears_timer_before_performing_update",
-            r##"(let ((adob--focus-change-debounce-delay
+    )
+}
+
+fn auto_dim_other_buffers_scheduled_focus_callback_clears_timer_before_performing_update() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dim_other_buffers_scheduled_focus_callback_clears_timer_before_performing_update",
+        r##"(let ((adob--focus-change-debounce-delay
                                 0.25)
                                (adob--focus-change-timer nil)
                                (adob--focus-change-last-state nil)
@@ -187,12 +194,15 @@ fn focus_public_surface_batch() {
                adob--focus-change-timer
                adob--focus-change-last-state
                (nreverse events)))))"##,
-            true,
-            expect!["OK (:fixture-timer nil t ((:update nil t)))"],
-        ),
-        (
-            "auto_dim_other_buffers_focus_out_dims_real_selected_window_and_focus_in_restores_it",
-            r##"(save-window-excursion
+        true,
+        expect!["OK (:fixture-timer nil t ((:update nil t)))"],
+    )
+}
+
+fn auto_dim_other_buffers_focus_out_dims_real_selected_window_and_focus_in_restores_it() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dim_other_buffers_focus_out_dims_real_selected_window_and_focus_in_restores_it",
+        r##"(save-window-excursion
           (let ((buffer
                  (generate-new-buffer
                   " *adob-focus-workflow*")))
@@ -240,10 +250,21 @@ fn focus_public_surface_batch() {
                          adob--focus-change-last-state)))))
               (when (buffer-live-p buffer)
                 (kill-buffer buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((((t " *adob-focus-workflow*" t)) nil nil nil) ((t " *adob-focus-workflow*" nil)) t t t)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn focus_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_dim_other_buffers_focus_change_handles_gain_loss_and_disabled_loss_with_exact_state_transitions(),
+        auto_dim_other_buffers_focus_change_skips_all_work_when_focus_state_is_unchanged(),
+        auto_dim_other_buffers_focus_hook_calls_immediately_at_zero_delay_or_schedules_once(),
+        auto_dim_other_buffers_scheduled_focus_callback_clears_timer_before_performing_update(),
+        auto_dim_other_buffers_focus_out_dims_real_selected_window_and_focus_in_restores_it(),
+    ];
+    assert_auto_dim_other_buffers_batch(&cases);
 }

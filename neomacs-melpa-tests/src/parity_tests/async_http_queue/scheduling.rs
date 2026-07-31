@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_async_http_queue_batch;
+use super::{ParityBatchCase, assert_async_http_queue_batch};
 
-#[test]
-fn scheduling_public_surface_batch() {
-    assert_async_http_queue_batch(&[
-        (
-            "async_http_queue_process_resets_workers_and_schedules_exact_staggered_initial_batch",
-            r##"(let* ((state
+fn async_http_queue_process_resets_workers_and_schedules_exact_staggered_initial_batch() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_process_resets_workers_and_schedules_exact_staggered_initial_batch",
+        r##"(let* ((state
                 (async-http-queue-test-state
                  '("https://api.test/a"
                    "https://api.test/b")
@@ -57,14 +55,17 @@ fn scheduling_public_surface_batch() {
                   (car (aref event 5))
                   state)))
               events))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (nil 0 ((1 0 nil t t) (2 50 nil t t) (3 100 nil t t) (4 150 nil t t) (5 200 nil t t)))"
     ],
-        ),
-        (
-            "async_http_queue_process_with_zero_or_negative_limit_schedules_nothing",
-            r##"(let ((zero
+    )
+}
+
+fn async_http_queue_process_with_zero_or_negative_limit_schedules_nothing() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_process_with_zero_or_negative_limit_schedules_nothing",
+        r##"(let ((zero
                (async-http-queue-test-state
                 '("https://api.test/a")
                 0
@@ -90,12 +91,15 @@ fn scheduling_public_surface_batch() {
               zero)
              (async-http-queue--state-active-workers
               negative))))"##,
-            true,
-            expect!["OK (nil nil nil 0 0)"],
-        ),
-        (
-            "async_http_queue_process_rejects_non_integer_concurrency_during_scheduling",
-            r##"(mapcar
+        true,
+        expect!["OK (nil nil nil 0 0)"],
+    )
+}
+
+fn async_http_queue_process_rejects_non_integer_concurrency_during_scheduling() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_process_rejects_non_integer_concurrency_during_scheduling",
+        r##"(mapcar
           (lambda (limit)
             (let ((state
                    (async-http-queue-test-state
@@ -112,14 +116,17 @@ fn scheduling_public_surface_batch() {
                  (async-http-queue--process
                   state)))))
           '(nil 1.5 "2" two))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error wrong-type-argument (number-or-marker-p nil)) (:ok nil) (:error wrong-type-argument (number-or-marker-p "2")) (:error wrong-type-argument (number-or-marker-p two)))"#
     ]],
-        ),
-        (
-            "async_http_queue_process_next_respects_capacity_and_terminal_queue",
-            r##"(let* ((state
+    )
+}
+
+fn async_http_queue_process_next_respects_capacity_and_terminal_queue() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_process_next_respects_capacity_and_terminal_queue",
+        r##"(let* ((state
                 (async-http-queue-test-state
                  '("https://api.test/a"
                    "https://api.test/b")
@@ -160,14 +167,17 @@ fn scheduling_public_surface_batch() {
                 state)
                (async-http-queue--state-active-workers
                 state)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil nil nil (("https://api.test/a" done nil) ("https://api.test/b" done nil)) 0)"#
     ]],
-        ),
-        (
-            "async_http_queue_process_next_claims_first_pending_item_and_success_finishes_lifecycle",
-            r##"(let* (success
+    )
+}
+
+fn async_http_queue_process_next_claims_first_pending_item_and_success_finishes_lifecycle() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_process_next_claims_first_pending_item_and_success_finishes_lifecycle",
+        r##"(let* (success
                failure
                completion-results
                messages
@@ -240,14 +250,17 @@ fn scheduling_public_surface_batch() {
                 (nreverse timers))
                (nreverse completion-results)
                (nreverse messages)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:request t t (:queue (("https://api.test/a" processing nil)) :active 1 :limit 1 :timeout 10 :parser nil :completion t :error nil) (:queue (("https://api.test/a" done #1=((id . 7) (name . "ready")))) :active 0 :limit 1 :timeout 10 :parser nil :completion t :error nil) ((0.05 nil t t)) ((#1#)) ("Loaded 1 URLs"))"#
     ]],
-        ),
-        (
-            "async_http_queue_process_next_error_runs_per_url_callback_before_completion",
-            r##"(let* (failure
+    )
+}
+
+fn async_http_queue_process_next_error_runs_per_url_callback_before_completion() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_process_next_error_runs_per_url_callback_before_completion",
+        r##"(let* (failure
                lifecycle
                timers
                (state
@@ -299,14 +312,17 @@ fn scheduling_public_surface_batch() {
                     (nth 2 timer)
                     #'async-http-queue--process-next-pending)))
                 (nreverse timers))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:queue (("https://api.test/fail" processing nil)) :active 1 :limit 1 :timeout 10 :parser nil :completion t :error t) (:queue (("https://api.test/fail" error nil)) :active 0 :limit 1 :timeout 10 :parser nil :completion t :error t) ((:error "https://api.test/fail") (:complete (nil))) ((0.05 t)))"#
     ]],
-        ),
-        (
-            "async_http_queue_refills_slots_as_workers_finish_without_exceeding_limit",
-            r##"(let* ((urls
+    )
+}
+
+fn async_http_queue_refills_slots_as_workers_finish_without_exceeding_limit() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_refills_slots_as_workers_finish_without_exceeding_limit",
+        r##"(let* ((urls
                 '("https://api.test/1"
                   "https://api.test/2"
                   "https://api.test/3"
@@ -372,14 +388,17 @@ fn scheduling_public_surface_batch() {
              (length refill-events)
              (async-http-queue-test-state-snapshot
               state))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("https://api.test/1" "https://api.test/2" "https://api.test/3" "https://api.test/4") (2 1 1 1 0) 4 (:queue (("https://api.test/1" done :one) ("https://api.test/2" done :two) ("https://api.test/3" done :three) ("https://api.test/4" done :four)) :active 0 :limit 2 :timeout 10 :parser nil :completion nil :error nil))"#
     ]],
-        ),
-        (
-            "async_http_queue_duplicate_urls_collapse_into_one_fetch_and_shared_result",
-            r##"(let* (completed
+    )
+}
+
+fn async_http_queue_duplicate_urls_collapse_into_one_fetch_and_shared_result() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_duplicate_urls_collapse_into_one_fetch_and_shared_result",
+        r##"(let* (completed
                (state
                 (async-http-queue-test-state
                  '("https://api.test/same"
@@ -418,14 +437,17 @@ fn scheduling_public_surface_batch() {
                (async-http-queue-test-state-snapshot
                 state)
                completed))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil ("https://api.test/same") (:queue (("https://api.test/same" processing nil) ("https://api.test/same" processing nil)) :active 1 :limit 2 :timeout 10 :parser nil :completion t :error nil) (:queue (("https://api.test/same" done :one-response) ("https://api.test/same" done :one-response)) :active 0 :limit 2 :timeout 10 :parser nil :completion t :error nil) (:one-response :one-response))"#
     ]],
-        ),
-        (
-            "async_http_queue_completion_callback_signal_propagates_after_terminal_state_update",
-            r##"(let* ((state
+    )
+}
+
+fn async_http_queue_completion_callback_signal_propagates_after_terminal_state_update() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_completion_callback_signal_propagates_after_terminal_state_update",
+        r##"(let* ((state
                 (async-http-queue-test-state
                  '("https://api.test/a")
                  1
@@ -451,14 +473,17 @@ fn scheduling_public_surface_batch() {
                 (funcall success :payload)))
              (async-http-queue-test-state-snapshot
               state))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error error ("completion exploded")) (:queue (("https://api.test/a" done :payload)) :active 0 :limit 1 :timeout 10 :parser nil :completion t :error nil))"#
     ]],
-        ),
-        (
-            "async_http_queue_error_callback_signal_prevents_refill_and_completion_check",
-            r##"(let* ((state
+    )
+}
+
+fn async_http_queue_error_callback_signal_prevents_refill_and_completion_check() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_error_callback_signal_prevents_refill_and_completion_check",
+        r##"(let* ((state
                 (async-http-queue-test-state
                  '("https://api.test/a"
                    "https://api.test/b")
@@ -493,10 +518,26 @@ fn scheduling_public_surface_batch() {
               state)
              timers
              completion-checks)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error error ("error callback exploded")) (:queue (("https://api.test/a" error nil) ("https://api.test/b" pending nil)) :active 0 :limit 1 :timeout 10 :parser nil :completion nil :error t) nil nil)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn scheduling_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        async_http_queue_process_resets_workers_and_schedules_exact_staggered_initial_batch(),
+        async_http_queue_process_with_zero_or_negative_limit_schedules_nothing(),
+        async_http_queue_process_rejects_non_integer_concurrency_during_scheduling(),
+        async_http_queue_process_next_respects_capacity_and_terminal_queue(),
+        async_http_queue_process_next_claims_first_pending_item_and_success_finishes_lifecycle(),
+        async_http_queue_process_next_error_runs_per_url_callback_before_completion(),
+        async_http_queue_refills_slots_as_workers_finish_without_exceeding_limit(),
+        async_http_queue_duplicate_urls_collapse_into_one_fetch_and_shared_result(),
+        async_http_queue_completion_callback_signal_propagates_after_terminal_state_update(),
+        async_http_queue_error_callback_signal_prevents_refill_and_completion_check(),
+    ];
+    assert_async_http_queue_batch(&cases);
 }

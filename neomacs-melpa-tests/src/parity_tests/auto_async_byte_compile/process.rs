@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_async_byte_compile_batch;
+use super::{ParityBatchCase, assert_auto_async_byte_compile_batch};
 
-#[test]
-fn process_public_surface_batch() {
-    assert_auto_async_byte_compile_batch(&[
-        (
-            "auto_async_byte_compile_process_args_without_init_file_preserve_exact_load_path",
-            r##"(let ((load-path
+fn auto_async_byte_compile_process_args_without_init_file_preserve_exact_load_path() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_async_byte_compile_process_args_without_init_file_preserve_exact_load_path",
+        r##"(let ((load-path
                                 '("/fixture/first"
                                   "/fixture/with space"
                                   "/fixture/密钥"))
@@ -19,14 +17,17 @@ fn process_public_surface_batch() {
                   "/fixture/emacs")))
             (aabc/byte-compile-start-process-args
              "/workspace/source file.el")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("/fixture/emacs" "-Q" "-batch" "--eval" "(setq load-path (cons \".\" '(\"/fixture/first\" \"/fixture/with space\" \"/fixture/密钥\")))" "-f" "batch-byte-compile" "/workspace/source file.el")"#
     ]],
-        ),
-        (
-            "auto_async_byte_compile_process_args_include_existing_init_file_in_exact_order",
-            r##"(let* ((root
+    )
+}
+
+fn auto_async_byte_compile_process_args_include_existing_init_file_in_exact_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_async_byte_compile_process_args_include_existing_init_file_in_exact_order",
+        r##"(let* ((root
                                  (getenv
                                   "NEOMACS_TEST_SANDBOX_ROOT"))
                                 (init
@@ -61,14 +62,17 @@ fn process_public_surface_batch() {
             (when
                 (file-exists-p init)
               (delete-file init))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("/fixture/editor" "-Q" "-batch" "--eval" "(setq load-path (cons \".\" '(\"/one\" \"/two\")))" "-l" "[ORACLE-SANDBOX]/fixture init.el" "-f" "batch-byte-compile" "/project/module.el") t t)"#
     ]],
-        ),
-        (
-            "auto_async_byte_compile_emacs_command_returns_first_command_line_argument_verbatim",
-            r##"(mapcar
+    )
+}
+
+fn auto_async_byte_compile_emacs_command_returns_first_command_line_argument_verbatim() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_async_byte_compile_emacs_command_returns_first_command_line_argument_verbatim",
+        r##"(mapcar
           (lambda (arguments)
             (let ((command-line-args
                    arguments))
@@ -79,14 +83,17 @@ fn process_public_surface_batch() {
             ("emacs")
             ("/path/with spaces/emacs" "-Q")
             (neomacs-symbol "--batch")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil nil) (("emacs") "emacs") (("/path/with spaces/emacs" "-Q") "/path/with spaces/emacs") ((neomacs-symbol "--batch") neomacs-symbol))"#
     ]],
-        ),
-        (
-            "auto_async_byte_compile_doit_clears_result_and_forwards_exact_process_contract",
-            r##"(let ((buffer-file-name
+    )
+}
+
+fn auto_async_byte_compile_doit_clears_result_and_forwards_exact_process_contract() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_async_byte_compile_doit_clears_result_and_forwards_exact_process_contract",
+        r##"(let ((buffer-file-name
                                 "/project/nested/fixture module.el")
                                start-calls
                                sentinel-calls)
@@ -121,14 +128,17 @@ fn process_public_surface_batch() {
              (with-current-buffer
                  aabc/result-buffer
                (buffer-string)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:sentinel-installed (("auto-async-byte-compile fixture module.el" " *auto-async-byte-compile*" "/fixture/editor" "--fixture" "/project/nested/fixture module.el")) ((fixture-process aabc/process-sentinel)) "")"#
     ]],
-        ),
-        (
-            "auto_async_byte_compile_doit_start_failure_leaves_existing_result_buffer_empty",
-            r##"(let ((buffer-file-name
+    )
+}
+
+fn auto_async_byte_compile_doit_start_failure_leaves_existing_result_buffer_empty() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_async_byte_compile_doit_start_failure_leaves_existing_result_buffer_empty",
+        r##"(let ((buffer-file-name
                                 "/project/failing.el"))
           (with-current-buffer
               (get-buffer-create
@@ -151,12 +161,15 @@ fn process_public_surface_batch() {
              (with-current-buffer
                  aabc/result-buffer
                (buffer-string)))))"##,
-            true,
-            expect![[r#"OK ((:error error ("fixture process start failed")) "")"#]],
-        ),
-        (
-            "auto_async_byte_compile_real_save_launches_batch_compiler_and_creates_loadable_elc",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK ((:error error ("fixture process start failed")) "")"#]],
+    )
+}
+
+fn auto_async_byte_compile_real_save_launches_batch_compiler_and_creates_loadable_elc() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_async_byte_compile_real_save_launches_batch_compiler_and_creates_loadable_elc",
+        r##"(let* ((root
                                  (getenv
                                   "NEOMACS_TEST_SANDBOX_ROOT"))
                                 (file
@@ -235,8 +248,20 @@ fn process_public_surface_batch() {
                  'aabc-real-compiled-value)
               (fmakunbound
                'aabc-real-compiled-value))))"##,
-            true,
-            expect![[r#"OK (t (t exit 0) t t (:compiled 42 "密钥") "")"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (t (t exit 0) t t (:compiled 42 "密钥") "")"#]],
+    )
+}
+
+#[test]
+fn process_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_async_byte_compile_process_args_without_init_file_preserve_exact_load_path(),
+        auto_async_byte_compile_process_args_include_existing_init_file_in_exact_order(),
+        auto_async_byte_compile_emacs_command_returns_first_command_line_argument_verbatim(),
+        auto_async_byte_compile_doit_clears_result_and_forwards_exact_process_contract(),
+        auto_async_byte_compile_doit_start_failure_leaves_existing_result_buffer_empty(),
+        auto_async_byte_compile_real_save_launches_batch_compiler_and_creates_loadable_elc(),
+    ];
+    assert_auto_async_byte_compile_batch(&cases);
 }

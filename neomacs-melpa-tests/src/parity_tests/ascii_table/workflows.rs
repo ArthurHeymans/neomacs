@@ -15,7 +15,7 @@
 
 use expect_test::expect;
 
-use super::assert_ascii_table_batch;
+use super::{ParityBatchCase, assert_ascii_table_batch};
 
 /// `M-x ascii-table` in a real frame, then narrow the real window and revert.
 ///
@@ -35,12 +35,10 @@ use super::assert_ascii_table_batch;
 /// to be read out of the text: narrowing alone did not relayout, `g` did, and
 /// what `g` produced fits inside the window that was measured.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_ascii_table_batch(&[
-        (
-            "narrowing_a_real_window_relayouts_the_table_only_once_g_reverts_it",
-            r##"(let* ((snapshot
+fn narrowing_a_real_window_relayouts_the_table_only_once_g_reverts_it() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "narrowing_a_real_window_relayouts_the_table_only_once_g_reverts_it",
+        r##"(let* ((snapshot
                    (lambda (tag)
                      (with-current-buffer "*ASCII*"
                        (let* ((text (buffer-string))
@@ -90,14 +88,17 @@ fn workflows_public_surface_batch() {
                (when (get-buffer "*ASCII*")
                  (kill-buffer "*ASCII*"))
                (delete-other-windows)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((:after-m-x (("*ASCII*" . 80) ("*scratch*" . 80)) 80 8 "00  NUL  10  DLE  20     30  0  40  @  50  P  60  `  70  p  " 60 1 t) (:after-narrowing (("*ASCII*" . 49) ("*scratch*" . 30) ("*scratch*" . 80)) 49 8 "00  NUL  10  DLE  20     30  0  40  @  50  P  60  `  70  p  " 60 1 t) (:after-g (("*ASCII*" . 49) ("*scratch*" . 30) ("*scratch*" . 80)) 49 6 "00  NUL  16  SYN  2C  ,  42  B  58  X  6E  n  " 46 1 t)) :narrowing-alone-changed-the-table nil :g-changed-the-table t :new-layout-fits-the-window t)"#
     ]],
-        ),
-        (
-            "reverting_with_two_real_windows_fits_the_narrowest_one_not_the_selected_one",
-            r##"(let* ((widest-layout-fitting
+    )
+}
+
+fn reverting_with_two_real_windows_fits_the_narrowest_one_not_the_selected_one() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "reverting_with_two_real_windows_fits_the_narrowest_one_not_the_selected_one",
+        r##"(let* ((widest-layout-fitting
                    (lambda (limit)
                      (cl-loop
                       for pairs in '(8 7 6 5 4 3 2 1)
@@ -162,10 +163,18 @@ fn workflows_public_surface_batch() {
                (when (get-buffer "*ASCII*")
                  (kill-buffer "*ASCII*"))
                (delete-other-windows)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((:both-windows-show "*ASCII*" "*ASCII*") (:two-windows (("*ASCII*" . 49) ("*ASCII*" . 30) ("*scratch*" . 80)) 49 30 3 "00  NUL  2B  +  56  V  ") (:one-window (("*ASCII*" . 80) ("*scratch*" . 80)) 80 80 8 "00  NUL  10  DLE  20     30  0  40  @  50  P  60  `  70  p  ")) :rendered-layout 3 :narrowest-window-admits 3 :selected-window-alone-would-admit 6 :widened-again (3 8))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        narrowing_a_real_window_relayouts_the_table_only_once_g_reverts_it(),
+        reverting_with_two_real_windows_fits_the_narrowest_one_not_the_selected_one(),
+    ];
+    assert_ascii_table_batch(&cases);
 }

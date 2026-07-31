@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_seven_fifty_words_batch;
+use super::{ParityBatchCase, assert_seven_fifty_words_batch};
 
-#[test]
-fn authentication_public_surface_batch() {
-    assert_seven_fifty_words_batch(&[
-        (
-            "seven_fifty_words_public_command_default_and_interactive_specs_match_the_pin",
-            r##"(list
+fn seven_fifty_words_public_command_default_and_interactive_specs_match_the_pin() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "seven_fifty_words_public_command_default_and_interactive_specs_match_the_pin",
+        r##"(list
               750words-client-command
               (interactive-form
                '750words-credentials-setenv)
@@ -24,14 +22,17 @@ fn authentication_public_surface_batch() {
               (commandp '750words-buffer)
               (commandp
                '750words-region-or-buffer))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("750words-client.py %s" (interactive "P") (interactive "r") (interactive nil) (interactive nil) t nil t t t)"#
     ]],
-        ),
-        (
-            "seven_fifty_words_credentials_searches_exact_host_fields_and_creation_prompts",
-            r##"(let (observed)
+    )
+}
+
+fn seven_fifty_words_credentials_searches_exact_host_fields_and_creation_prompts() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "seven_fifty_words_credentials_searches_exact_host_fields_and_creation_prompts",
+        r##"(let (observed)
                (cl-letf
                    (((symbol-function
                       'auth-source-search)
@@ -49,14 +50,17 @@ fn authentication_public_surface_batch() {
                  (list
                   (750words-credentials t)
                   observed)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("writer@example.test" "plain-secret" save-entry) ((:max 1 :host "750words.com" :require (:user :secret) :create t) ((user . "750words.com username: ") (secret . "750words.com password for %u: "))))"#
     ]],
-        ),
-        (
-            "seven_fifty_words_credentials_calls_secret_thunk_once_and_preserves_save_function",
-            r##"(let (events)
+    )
+}
+
+fn seven_fifty_words_credentials_calls_secret_thunk_once_and_preserves_save_function() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "seven_fifty_words_credentials_calls_secret_thunk_once_and_preserves_save_function",
+        r##"(let (events)
                (cl-letf
                    (((symbol-function
                       'auth-source-search)
@@ -81,22 +85,28 @@ fn authentication_public_surface_batch() {
                     (functionp
                      (nth 2 credentials))
                     (nreverse events)))))"##,
-            true,
-            expect![[r#"OK ("writer" "resolved" t (secret save))"#]],
-        ),
-        (
-            "seven_fifty_words_credentials_returns_nil_when_auth_source_finds_nothing",
-            r##"(cl-letf
+        true,
+        expect![[r#"OK ("writer" "resolved" t (secret save))"#]],
+    )
+}
+
+fn seven_fifty_words_credentials_returns_nil_when_auth_source_finds_nothing() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "seven_fifty_words_credentials_returns_nil_when_auth_source_finds_nothing",
+        r##"(cl-letf
               (((symbol-function
                  'auth-source-search)
                 (lambda (&rest _) nil)))
               (750words-credentials))"##,
-            true,
-            expect!["OK nil"],
-        ),
-        (
-            "seven_fifty_words_credentials_setenv_forwards_save_sets_both_values_and_saves_last",
-            r##"(let ((process-environment
+        true,
+        expect!["OK nil"],
+    )
+}
+
+fn seven_fifty_words_credentials_setenv_forwards_save_sets_both_values_and_saves_last() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "seven_fifty_words_credentials_setenv_forwards_save_sets_both_values_and_saves_last",
+        r##"(let ((process-environment
                     (copy-sequence
                      process-environment))
                    events)
@@ -128,14 +138,17 @@ fn authentication_public_surface_batch() {
                   (getenv "USER_750WORDS")
                   (getenv "PASS_750WORDS")
                   (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (saved "new-user" "new-pass" ((credentials (4)) (save "new-user" "new-pass")))"#
     ]],
-        ),
-        (
-            "seven_fifty_words_credentials_setenv_leaves_environment_unchanged_when_missing",
-            r##"(let ((process-environment
+    )
+}
+
+fn seven_fifty_words_credentials_setenv_leaves_environment_unchanged_when_missing() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "seven_fifty_words_credentials_setenv_leaves_environment_unchanged_when_missing",
+        r##"(let ((process-environment
                     (copy-sequence
                      process-environment))
                    observed)
@@ -153,12 +166,15 @@ fn authentication_public_surface_batch() {
                   (getenv "USER_750WORDS")
                   (getenv
                    "PASS_750WORDS"))))"##,
-            true,
-            expect![[r#"OK (nil nil "kept-user" "kept-pass")"#]],
-        ),
-        (
-            "seven_fifty_words_credentials_setenv_ignores_a_non_function_save_value",
-            r##"(let ((process-environment
+        true,
+        expect![[r#"OK (nil nil "kept-user" "kept-pass")"#]],
+    )
+}
+
+fn seven_fifty_words_credentials_setenv_ignores_a_non_function_save_value() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "seven_fifty_words_credentials_setenv_ignores_a_non_function_save_value",
+        r##"(let ((process-environment
                     (copy-sequence
                      process-environment)))
                (cl-letf
@@ -173,8 +189,21 @@ fn authentication_public_surface_batch() {
                   (getenv "USER_750WORDS")
                   (getenv
                    "PASS_750WORDS"))))"##,
-            true,
-            expect![[r#"OK (nil "user" "pass")"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (nil "user" "pass")"#]],
+    )
+}
+
+#[test]
+fn authentication_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        seven_fifty_words_public_command_default_and_interactive_specs_match_the_pin(),
+        seven_fifty_words_credentials_searches_exact_host_fields_and_creation_prompts(),
+        seven_fifty_words_credentials_calls_secret_thunk_once_and_preserves_save_function(),
+        seven_fifty_words_credentials_returns_nil_when_auth_source_finds_nothing(),
+        seven_fifty_words_credentials_setenv_forwards_save_sets_both_values_and_saves_last(),
+        seven_fifty_words_credentials_setenv_leaves_environment_unchanged_when_missing(),
+        seven_fifty_words_credentials_setenv_ignores_a_non_function_save_value(),
+    ];
+    assert_seven_fifty_words_batch(&cases);
 }

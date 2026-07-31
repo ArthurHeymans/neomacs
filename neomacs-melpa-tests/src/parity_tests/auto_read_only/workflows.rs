@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_read_only_batch;
+use super::{ParityBatchCase, assert_auto_read_only_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_auto_read_only_batch(&[
-        (
-            "auto_read_only_global_find_file_workflow_protects_selected_compiled_buffer_with_view_mode",
-            r##"(save-window-excursion
+fn auto_read_only_global_find_file_workflow_protects_selected_compiled_buffer_with_view_mode() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_read_only_global_find_file_workflow_protects_selected_compiled_buffer_with_view_mode",
+        r##"(save-window-excursion
          (let ((buffer
                 (generate-new-buffer
                  " *auto-read-only-compiled-workflow*"))
@@ -43,14 +41,17 @@ fn workflows_public_surface_batch() {
              (auto-read-only-mode -1)
              (when (buffer-live-p buffer)
                (kill-buffer buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((" *auto-read-only-compiled-workflow*" "/workspace/build/library.elc" "compiled library" 17 nil nil nil) (" *auto-read-only-compiled-workflow*" "/workspace/build/library.elc" "compiled library" 17 t t nil) t 1)"#
     ]],
-        ),
-        (
-            "auto_read_only_global_find_file_workflow_leaves_unmatched_source_editable",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_read_only_global_find_file_workflow_leaves_unmatched_source_editable() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_read_only_global_find_file_workflow_leaves_unmatched_source_editable",
+        r##"(save-window-excursion
          (let ((buffer
                 (generate-new-buffer
                  " *auto-read-only-source-workflow*"))
@@ -80,14 +81,17 @@ fn workflows_public_surface_batch() {
              (auto-read-only-mode -1)
              (when (buffer-live-p buffer)
                (kill-buffer buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (" *auto-read-only-source-workflow*" "/workspace/src/library.el" "editable source!" 17 nil nil t)"#
     ]],
-        ),
-        (
-            "auto_read_only_default_user_emacs_directory_pattern_protects_installed_package_source",
-            r##"(let* ((source
+    )
+}
+
+fn auto_read_only_default_user_emacs_directory_pattern_protects_installed_package_source() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_read_only_default_user_emacs_directory_pattern_protects_installed_package_source",
+        r##"(let* ((source
                  (locate-library "auto-read-only"))
                 (installed-source
                  (expand-file-name
@@ -116,12 +120,15 @@ fn workflows_public_surface_batch() {
             buffer-read-only
             (bound-and-true-p view-mode)
             (buffer-modified-p))))"##,
-            true,
-            expect![[r#"OK ("auto-read-only.el" t (nil nil t nil) t t t nil)"#]],
-        ),
-        (
-            "auto_read_only_project_suppression_defers_protection_until_buffer_is_outside_project",
-            r##"(save-window-excursion
+        true,
+        expect![[r#"OK ("auto-read-only.el" t (nil nil t nil) t t t nil)"#]],
+    )
+}
+
+fn auto_read_only_project_suppression_defers_protection_until_buffer_is_outside_project() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_read_only_project_suppression_defers_protection_until_buffer_is_outside_project",
+        r##"(save-window-excursion
          (let ((buffer
                 (generate-new-buffer
                  " *auto-read-only-project-workflow*"))
@@ -169,12 +176,15 @@ fn workflows_public_surface_batch() {
                           (nreverse events)))))))
              (when (buffer-live-p buffer)
                (kill-buffer buffer)))))"##,
-            true,
-            expect![[r#"OK (nil t t ((:protected "/workspace/project/vendor/pkg.el")))"#]],
-        ),
-        (
-            "auto_read_only_custom_read_only_mode_blocks_edits_then_allows_them_after_manual_unlock",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK (nil t t ((:protected "/workspace/project/vendor/pkg.el")))"#]],
+    )
+}
+
+fn auto_read_only_custom_read_only_mode_blocks_edits_then_allows_them_after_manual_unlock() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_read_only_custom_read_only_mode_blocks_edits_then_allows_them_after_manual_unlock",
+        r##"(with-temp-buffer
          (insert "vendor payload")
          (set-buffer-modified-p nil)
          (setq buffer-file-name
@@ -198,14 +208,17 @@ fn workflows_public_surface_batch() {
               result
               blocked
               (auto-read-only-test-buffer-state)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t (:error buffer-read-only ((:buffer nil))) (" *temp*" "/workspace/vendor/pkg.el" "vendor payload?" 16 nil nil t))"#
     ]],
-        ),
-        (
-            "auto_read_only_disabling_global_mode_stops_subsequent_find_file_hook_protection",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_read_only_disabling_global_mode_stops_subsequent_find_file_hook_protection() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_read_only_disabling_global_mode_stops_subsequent_find_file_hook_protection",
+        r##"(save-window-excursion
          (let ((buffer
                 (generate-new-buffer
                  " *auto-read-only-disabled-workflow*"))
@@ -244,8 +257,20 @@ fn workflows_public_surface_batch() {
              (auto-read-only-mode -1)
              (when (buffer-live-p buffer)
                (kill-buffer buffer)))))"##,
-            true,
-            expect!["OK (nil nil nil nil)"],
-        ),
-    ]);
+        true,
+        expect!["OK (nil nil nil nil)"],
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_read_only_global_find_file_workflow_protects_selected_compiled_buffer_with_view_mode(),
+        auto_read_only_global_find_file_workflow_leaves_unmatched_source_editable(),
+        auto_read_only_default_user_emacs_directory_pattern_protects_installed_package_source(),
+        auto_read_only_project_suppression_defers_protection_until_buffer_is_outside_project(),
+        auto_read_only_custom_read_only_mode_blocks_edits_then_allows_them_after_manual_unlock(),
+        auto_read_only_disabling_global_mode_stops_subsequent_find_file_hook_protection(),
+    ];
+    assert_auto_read_only_batch(&cases);
 }

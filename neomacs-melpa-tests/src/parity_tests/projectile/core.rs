@@ -1,24 +1,25 @@
 use expect_test::expect;
 
-use super::assert_projectile_batch;
+use super::{ParityBatchCase, assert_projectile_batch};
 
-#[test]
-fn core_public_surface_batch() {
-    assert_projectile_batch(&[
-        (
-            "projectile_version_and_platform_helpers_are_stable",
-            r##"(list
+fn projectile_version_and_platform_helpers_are_stable() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "projectile_version_and_platform_helpers_are_stable",
+        r##"(list
               (projectile-version)
               (projectile-unixy-system-p)
               (projectile-parent "/alpha/beta/gamma/")
               (projectile-default-project-name "/alpha/beta/")
               (projectile-uniquify-dirname-transform "/alpha/beta/"))"##,
-            true,
-            expect![[r#"OK ("3.4.0-snapshot" t "/alpha/beta" "beta" "/alpha/beta/")"#]],
-        ),
-        (
-            "projectile_path_pattern_normalization_partitions_rooted_entries",
-            r##"(list
+        true,
+        expect![[r#"OK ("3.4.0-snapshot" t "/alpha/beta" "beta" "/alpha/beta/")"#]],
+    )
+}
+
+fn projectile_path_pattern_normalization_partitions_rooted_entries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "projectile_path_pattern_normalization_partitions_rooted_entries",
+        r##"(list
               (projectile-normalise-paths
                '("plain" "/rooted" "/nested/path" "" "/"))
               (projectile-normalise-patterns
@@ -27,12 +28,15 @@ fn core_public_surface_batch() {
               (projectile--directory-ancestors "top.el")
               (projectile--wildcard-p "*.el")
               (projectile--wildcard-p "plain.el"))"##,
-            true,
-            expect![[r#"OK (("rooted" "nested/path" "") ("plain" "") ("src/" "src/foo/") nil 0 nil)"#]],
-        ),
-        (
-            "projectile_glob_and_ignore_pattern_translation_handles_gitignore_shapes",
-            r##"(let ((samples
+        true,
+        expect![[r#"OK (("rooted" "nested/path" "") ("plain" "") ("src/" "src/foo/") nil 0 nil)"#]],
+    )
+}
+
+fn projectile_glob_and_ignore_pattern_translation_handles_gitignore_shapes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "projectile_glob_and_ignore_pattern_translation_handles_gitignore_shapes",
+        r##"(let ((samples
                     '("foo.el" "src/foo.el" "build/" "build/x.o"
                       "src/generated/x.c" "src/keep/x.c")))
                (mapcar
@@ -46,14 +50,17 @@ fn core_public_surface_batch() {
                            samples))))
                 '("*.el" "build/" "/build/" "src/generated/**"
                   "src/?eep/*.c")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("*.el" t t nil nil nil nil) ("build/" nil nil t t nil nil) ("/build/" nil nil t t nil nil) ("src/generated/**" nil nil nil nil t nil) ("src/?eep/*.c" nil nil nil nil nil t))"#
     ]],
-        ),
-        (
-            "projectile_dirconfig_parser_preserves_keep_ignore_ensure_and_legacy_entries",
-            r##"(let* ((projectile-dirconfig-comment-prefix ?#)
+    )
+}
+
+fn projectile_dirconfig_parser_preserves_keep_ignore_ensure_and_legacy_entries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "projectile_dirconfig_parser_preserves_keep_ignore_ensure_and_legacy_entries",
+        r##"(let* ((projectile-dirconfig-comment-prefix ?#)
                     (config
                      (projectile--parse-dirconfig-string
                       " + src\n+tests/\n-build/\n!build/keep.txt\n# comment\nlegacy\n  \n")))
@@ -65,14 +72,17 @@ fn core_public_surface_batch() {
                 (projectile--dirconfig-classify-line " \t+ lib ")
                 (projectile--dirconfig-classify-line "  # note")
                 (projectile--dirconfig-classify-line "")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("src/" "tests/") ("build/" "legacy") ("build/keep.txt") ("legacy") (:keep . "lib") (:comment) nil)"#
     ]],
-        ),
-        (
-            "projectile_project_type_registration_and_updates_preserve_attributes",
-            r##"(let ((projectile-project-types nil)
+    )
+}
+
+fn projectile_project_type_registration_and_updates_preserve_attributes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "projectile_project_type_registration_and_updates_preserve_attributes",
+        r##"(let ((projectile-project-types nil)
                     (projectile-project-root-files nil)
                     (projectile-project-root-files-bottom-up '(".git")))
                (projectile-register-project-type
@@ -92,22 +102,37 @@ fn core_public_surface_batch() {
                 (projectile-project-type-attribute 'demo 'compile-command)
                 projectile-project-root-files
                 projectile-project-root-files-bottom-up))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("demo.toml" "demo.json") "_spec" "test_" "make all" ("demo.json" "demo.toml") (".git"))"#
     ]],
-        ),
-        (
-            "projectile_combine_plists_uses_rightmost_values_including_nil",
-            r##"(list
+    )
+}
+
+fn projectile_combine_plists_uses_rightmost_values_including_nil() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "projectile_combine_plists_uses_rightmost_values_including_nil",
+        r##"(list
               (projectile--combine-plists
                '(:foo "first" :bar "bar")
                '(:foo "second" :baz "baz")
                '(:bar nil))
               (projectile--combine-plists nil '(:x 1))
               (projectile--combine-plists '(:x 1) nil))"##,
-            true,
-            expect![[r#"OK ((:foo "second" :bar nil :baz "baz") (:x 1) (:x 1))"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK ((:foo "second" :bar nil :baz "baz") (:x 1) (:x 1))"#]],
+    )
+}
+
+#[test]
+fn core_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        projectile_version_and_platform_helpers_are_stable(),
+        projectile_path_pattern_normalization_partitions_rooted_entries(),
+        projectile_glob_and_ignore_pattern_translation_handles_gitignore_shapes(),
+        projectile_dirconfig_parser_preserves_keep_ignore_ensure_and_legacy_entries(),
+        projectile_project_type_registration_and_updates_preserve_attributes(),
+        projectile_combine_plists_uses_rightmost_values_including_nil(),
+    ];
+    assert_projectile_batch(&cases);
 }

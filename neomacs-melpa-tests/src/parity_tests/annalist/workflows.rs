@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_annalist_batch;
+use super::{ParityBatchCase, assert_annalist_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_annalist_batch(&[
-        (
-            "records_updates_and_renders_a_release_inventory_with_audit_history",
-            r##"(progn
+fn records_updates_and_renders_a_release_inventory_with_audit_history() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "records_updates_and_renders_a_release_inventory_with_audit_history",
+        r##"(progn
   (setq annalist--tomes nil
         annalist--local-tomes nil
         annalist--tomes-settings nil
@@ -87,14 +85,17 @@ fn workflows_public_surface_batch() {
                (buffer-substring-no-properties (point-min) (point-max))))))
       (when (buffer-live-p description-buffer)
         (kill-buffer description-buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (3 ("production" "api" "4.0.1" "degraded" "sre" (:status-history ("deploying" "healthy") :revision 3)) org-mode t "| Environment | Service  |   Version | Status     | Owner   |\n|-------------+----------+-----------+------------+---------|\n| production  | api      |     4.0.1 | degraded   | sre     |\n| production  | frontend |     9.2.0 | healthy    | web     |\n| staging     | worker   | 4.1.0-rc1 | validating | runtime |\n")"#
     ]],
-        ),
-        (
-            "builds_a_filtered_nested_incident_runbook_with_extracted_elisp_actions",
-            r##"(progn
+    )
+}
+
+fn builds_a_filtered_nested_incident_runbook_with_extracted_elisp_actions() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "builds_a_filtered_nested_incident_runbook_with_extracted_elisp_actions",
+        r##"(progn
   (setq annalist--tomes nil
         annalist--local-tomes nil
         annalist--tomes-settings nil
@@ -164,14 +165,17 @@ fn workflows_public_surface_batch() {
              (buffer-substring-no-properties (point-min) (point-max)))))
       (when (buffer-live-p description-buffer)
         (kill-buffer description-buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (org-mode t "* production\n** api\n| Status   | Responder | Recovery action |\n|----------+-----------+-----------------|\n| degraded | alice     | [fn:1]          |\n\n[fn:1]\n#+begin_src emacs-lisp\n(progn (rollback 'api 4.0.0) (notify-on-call 'platform))\n#+end_src\n\n** frontend\n| Status | Responder | Recovery action |\n|--------+-----------+-----------------|\n\n* staging\n** worker\n| Status     | Responder | Recovery action |\n|------------+-----------+-----------------|\n| validating | carol     | [fn:2]          |\n\n[fn:2]\n#+begin_src emacs-lisp\n(progn (inspect-queue 'worker) (resume-deployment 'worker))\n#+end_src\n")"#
     ]],
-        ),
-        (
-            "audits_live_keybinding_changes_with_the_builtin_valid_view",
-            r##"(progn
+    )
+}
+
+fn audits_live_keybinding_changes_with_the_builtin_valid_view() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "audits_live_keybinding_changes_with_the_builtin_valid_view",
+        r##"(progn
   (defvar annalist-review-map (make-sparse-keymap))
   (setq annalist-review-map (make-sparse-keymap))
   (let ((deploy-key (kbd "C-c d"))
@@ -217,14 +221,17 @@ fn workflows_public_surface_batch() {
                (buffer-substring-no-properties (point-min) (point-max)))))
         (when (buffer-live-p description-buffer)
           (kill-buffer description-buffer))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (recompile t org-mode t "* ~annalist-review-map~\n| Key     | Definition                                           | Previous          |\n|---------+------------------------------------------------------+-------------------|\n| =C-c d= | ~recompile~                                          | ~project-compile~ |\n| =C-c r= | ~#[nil ((message Rollback the current deployment)) ~ | ~replace-string~  |\n")"#
     ]],
-        ),
-        (
-            "keeps_project_local_records_out_of_unrelated_description_buffers",
-            r##"(progn
+    )
+}
+
+fn keeps_project_local_records_out_of_unrelated_description_buffers() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "keeps_project_local_records_out_of_unrelated_description_buffers",
+        r##"(progn
   (setq annalist--tomes nil
         annalist--local-tomes nil
         annalist--tomes-settings nil
@@ -271,10 +278,20 @@ fn workflows_public_surface_batch() {
         (kill-buffer project-buffer))
       (when (buffer-live-p description-buffer)
         (kill-buffer description-buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("* Local\n| Project | Task        | Status      | Owner |\n|---------+-------------+-------------+-------|\n| neomacs | fix display | in progress | alice |\n\n* Global\n| Project | Task    | Status | Owner    |\n|---------+---------+--------+----------|\n| neomacs | release | ready  | platform |\n" "| Project | Task    | Status | Owner    |\n|---------+---------+--------+----------|\n| neomacs | release | ready  | platform |\n")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        records_updates_and_renders_a_release_inventory_with_audit_history(),
+        builds_a_filtered_nested_incident_runbook_with_extracted_elisp_actions(),
+        audits_live_keybinding_changes_with_the_builtin_valid_view(),
+        keeps_project_local_records_out_of_unrelated_description_buffers(),
+    ];
+    assert_annalist_batch(&cases);
 }

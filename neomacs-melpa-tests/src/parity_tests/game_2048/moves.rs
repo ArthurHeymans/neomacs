@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_game_2048_batch;
+use super::{ParityBatchCase, assert_game_2048_batch};
 
-#[test]
-fn moves_public_surface_batch() {
-    assert_game_2048_batch(&[
-        (
-            "game_2048_move_slides_through_empty_cells_to_the_edge",
-            r##"(let ((*2048-columns* 4)
+fn game_2048_move_slides_through_empty_cells_to_the_edge() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "game_2048_move_slides_through_empty_cells_to_the_edge",
+        r##"(let ((*2048-columns* 4)
                      (*2048-rows* 1)
                      (*2048-board*
                       (vector 0 0 0 2))
@@ -20,12 +18,15 @@ fn moves_public_surface_batch() {
                 *2048-board*
                 *2048-score*
                 *2048-combines-this-move*))"##,
-            true,
-            expect!["OK (t [2 0 0 0] 0 [nil nil nil nil])"],
-        ),
-        (
-            "game_2048_move_combines_once_updates_score_and_marks_destination",
-            r##"(let ((*2048-columns* 4)
+        true,
+        expect!["OK (t [2 0 0 0] 0 [nil nil nil nil])"],
+    )
+}
+
+fn game_2048_move_combines_once_updates_score_and_marks_destination() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "game_2048_move_combines_once_updates_score_and_marks_destination",
+        r##"(let ((*2048-columns* 4)
                      (*2048-rows* 1)
                      (*2048-board*
                       (vector 2 2 4 0))
@@ -55,12 +56,15 @@ fn moves_public_surface_batch() {
                 *2048-score*
                 (copy-sequence
                  *2048-combines-this-move*)))"##,
-            true,
-            expect!["OK (t [4 0 4 0] 14 4 [t nil nil nil] t [4 4 0 0] 14 [t nil nil nil])"],
-        ),
-        (
-            "game_2048_move_rejects_blocked_and_out_of_bounds_destinations",
-            r##"(let ((*2048-columns* 2)
+        true,
+        expect!["OK (t [4 0 4 0] 14 4 [t nil nil nil] t [4 4 0 0] 14 [t nil nil nil])"],
+    )
+}
+
+fn game_2048_move_rejects_blocked_and_out_of_bounds_destinations() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "game_2048_move_rejects_blocked_and_out_of_bounds_destinations",
+        r##"(let ((*2048-columns* 2)
                      (*2048-rows* 1)
                      (*2048-board*
                       (vector 2 4))
@@ -73,12 +77,15 @@ fn moves_public_surface_batch() {
                 (2048-move 0 1 0 1)
                 *2048-board*
                 *2048-score*))"##,
-            true,
-            expect!["OK (nil nil [2 4] 0)"],
-        ),
-        (
-            "game_2048_left_and_right_merge_pairs_without_double_combining",
-            r##"(let ((*2048-columns* 4)
+        true,
+        expect!["OK (nil nil [2 4] 0)"],
+    )
+}
+
+fn game_2048_left_and_right_merge_pairs_without_double_combining() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "game_2048_left_and_right_merge_pairs_without_double_combining",
+        r##"(let ((*2048-columns* 4)
                      (*2048-rows* 1)
                      events)
                (cl-letf (((symbol-function
@@ -116,12 +123,15 @@ fn moves_public_surface_batch() {
                     *2048-board*
                     *2048-score*
                     (nreverse events)))))"##,
-            true,
-            expect!["OK ([4 4 0 0] 8 [0 0 4 4] 8 (random print check random print check))"],
-        ),
-        (
-            "game_2048_up_and_down_process_columns_in_directional_order",
-            r##"(let ((*2048-columns* 1)
+        true,
+        expect!["OK ([4 4 0 0] 8 [0 0 4 4] 8 (random print check random print check))"],
+    )
+}
+
+fn game_2048_up_and_down_process_columns_in_directional_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "game_2048_up_and_down_process_columns_in_directional_order",
+        r##"(let ((*2048-columns* 1)
                      (*2048-rows* 4))
                (cl-letf (((symbol-function
                            '2048-insert-random-cell)
@@ -154,12 +164,15 @@ fn moves_public_surface_batch() {
                     (append *2048-board*
                             nil)
                     *2048-score*))))"##,
-            true,
-            expect!["OK ((4 4 0 0) 8 (0 0 4 4) 8)"],
-        ),
-        (
-            "game_2048_directional_noop_does_not_insert_a_random_tile",
-            r##"(let ((*2048-columns* 2)
+        true,
+        expect!["OK ((4 4 0 0) 8 (0 0 4 4) 8)"],
+    )
+}
+
+fn game_2048_directional_noop_does_not_insert_a_random_tile() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "game_2048_directional_noop_does_not_insert_a_random_tile",
+        r##"(let ((*2048-columns* 2)
                      (*2048-rows* 1)
                      (*2048-board*
                       (vector 2 4))
@@ -180,12 +193,15 @@ fn moves_public_surface_batch() {
                  (list
                   *2048-board*
                   random-called)))"##,
-            true,
-            expect!["OK ([2 4] nil)"],
-        ),
-        (
-            "game_2048_move_macro_resets_flags_then_prints_and_checks",
-            r##"(let ((*2048-columns* 2)
+        true,
+        expect!["OK ([2 4] nil)"],
+    )
+}
+
+fn game_2048_move_macro_resets_flags_then_prints_and_checks() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "game_2048_move_macro_resets_flags_then_prints_and_checks",
+        r##"(let ((*2048-columns* 2)
                      (*2048-rows* 2)
                      (*2048-combines-this-move*
                       (vector t t t t))
@@ -208,12 +224,15 @@ fn moves_public_surface_batch() {
                    (push 'body events))
                   *2048-combines-this-move*
                   (nreverse events))))"##,
-            true,
-            expect!["OK (checked [nil nil nil nil] ([nil nil nil nil] body print check))"],
-        ),
-        (
-            "game_2048_random_move_maps_each_random_index_to_one_direction",
-            r##"(let (events)
+        true,
+        expect!["OK (checked [nil nil nil nil] ([nil nil nil nil] body print check))"],
+    )
+}
+
+fn game_2048_random_move_maps_each_random_index_to_one_direction() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "game_2048_random_move_maps_each_random_index_to_one_direction",
+        r##"(let (events)
                (cl-letf (((symbol-function '2048-left)
                           (lambda ()
                             (push 'left events)))
@@ -239,8 +258,22 @@ fn moves_public_surface_batch() {
                  (dotimes (_ 4)
                    (2048-random-move))
                  (nreverse events)))"##,
-            true,
-            expect!["OK (left right up down)"],
-        ),
-    ]);
+        true,
+        expect!["OK (left right up down)"],
+    )
+}
+
+#[test]
+fn moves_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        game_2048_move_slides_through_empty_cells_to_the_edge(),
+        game_2048_move_combines_once_updates_score_and_marks_destination(),
+        game_2048_move_rejects_blocked_and_out_of_bounds_destinations(),
+        game_2048_left_and_right_merge_pairs_without_double_combining(),
+        game_2048_up_and_down_process_columns_in_directional_order(),
+        game_2048_directional_noop_does_not_insert_a_random_tile(),
+        game_2048_move_macro_resets_flags_then_prints_and_checks(),
+        game_2048_random_move_maps_each_random_index_to_one_direction(),
+    ];
+    assert_game_2048_batch(&cases);
 }

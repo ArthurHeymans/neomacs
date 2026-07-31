@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_agitjo_batch;
+use super::{ParityBatchCase, assert_agitjo_batch};
 
-#[test]
-fn publish_public_surface_batch() {
-    assert_agitjo_batch(&[
-        (
-            "agitjo_publish_preserves_a_failed_real_draft_then_retries_and_clears_it_on_success",
-            r####"(let* ((root
+fn agitjo_publish_preserves_a_failed_real_draft_then_retries_and_clears_it_on_success() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agitjo_publish_preserves_a_failed_real_draft_then_retries_and_clears_it_on_success",
+        r####"(let* ((root
                                   (file-name-as-directory
                                    (expand-file-name
                                     "agitjo-publish"
@@ -359,10 +357,17 @@ fn publish_public_surface_batch() {
                                   root
                                   t)))
                              result)"####,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("feature/parser:refs/for/main/team/retry-42" "origin" nil nil "Parser recovery now handles café input.\n\n## Verification\n\n- [x] Unicode payload\n- [x] Retry ordering\n" nil t "" (("push" "-v" "origin" "feature/parser:refs/for/main/team/retry-42" ((:description "Parser recovery now handles café input.\n\n## Verification\n\n- [x] Unicode payload\n- [x] Retry ordering\n") "--push-option=title=WIP: Parser recovery" "--porcelain")) ("push" "-v" "origin" "feature/parser:refs/for/main/team/retry-42" ((:description "Parser recovery now handles café input.\n\n## Verification\n\n- [x] Unicode payload\n- [x] Retry ordering\n- [x] Retry after transient failure\n") "--push-option=title=WIP: Parser recovery" "--porcelain"))) (("agitjo-test-failed-push" exit 9 "exited abnormally with code 9\n") ("agitjo-test-successful-push" exit 0 "finished\n")) ((:description "Parser recovery now handles café input.\n\n## Verification\n\n- [x] Unicode payload\n- [x] Retry ordering\n- [x] Retry after transient failure\n") "draft" "--push-option=title=Parser recovery" "--porcelain"))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn publish_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        agitjo_publish_preserves_a_failed_real_draft_then_retries_and_clears_it_on_success(),
+    ];
+    assert_agitjo_batch(&cases);
 }

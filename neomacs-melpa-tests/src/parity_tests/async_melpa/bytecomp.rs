@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_async_melpa_bytecomp_batch;
+use super::{ParityBatchCase, assert_async_melpa_bytecomp_batch};
 
-#[test]
-fn bytecomp_public_surface_batch() {
-    assert_async_melpa_bytecomp_batch(&[
-        (
-            "current_bytecomp_defaults_and_customization_metadata_match_gnu_emacs",
-            r##"
+fn current_bytecomp_defaults_and_customization_metadata_match_gnu_emacs() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "current_bytecomp_defaults_and_customization_metadata_match_gnu_emacs",
+        r##"
 (list
  async-bytecomp-allowed-packages
  async-byte-compile-log-file
@@ -18,14 +16,17 @@ fn bytecomp_public_surface_batch() {
  (documentation 'async-byte-compile-file)
  (help-function-arglist 'async-bytecomp--file-to-comp-buffer t))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (all "async-bytecomp.log" "\\`load-path\\'" (choice (const :tag "All packages" all) (repeat symbol)) boolean nil "Byte compile Lisp code FILE asynchronously.\n\nSame as ‘byte-compile-file’ but asynchronous." (file-or-dir &optional quiet type log-file))"#
     ]],
-        ),
-        (
-            "current_bytecomp_log_file_is_imported_into_compilation_buffer_and_removed",
-            r##"
+    )
+}
+
+fn current_bytecomp_log_file_is_imported_into_compilation_buffer_and_removed() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "current_bytecomp_log_file_is_imported_into_compilation_buffer_and_removed",
+        r##"
 (let* ((log-file (async-melpa-test-path "bytecomp/import.log"))
        (byte-compile-log-buffer "*async-bytecomp-import*")
        displayed
@@ -49,14 +50,17 @@ fn bytecomp_public_surface_batch() {
                 (file-exists-p log-file))))
     (async-melpa-test-kill-buffers byte-compile-log-buffer)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("*async-bytecomp-import*" t compilation-mode "fixture.el:3:2: Warning: first\nfixture.el:8:1: Error: broken\n" nil)"#
     ]],
-        ),
-        (
-            "current_bytecomp_completion_reports_success_warnings_and_error_counts",
-            r##"
+    )
+}
+
+fn current_bytecomp_completion_reports_success_warnings_and_error_counts() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "current_bytecomp_completion_reports_success_warnings_and_error_counts",
+        r##"
 (let* ((root (async-melpa-test-path "bytecomp/completion/"))
        (warning-log (expand-file-name "warnings.log" root))
        (error-log (expand-file-name "errors.log" root))
@@ -81,14 +85,17 @@ fn bytecomp_public_surface_batch() {
         (nreverse messages))
     (async-melpa-test-kill-buffers byte-compile-log-buffer)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("Directory `completion' compiled asynchronously with success" "File `one.el' compiled asynchronously with warnings" "Directory `completion' compiled asynchronously with warnings")"#
     ]],
-        ),
-        (
-            "current_comp_buffer_to_file_uses_sandbox_prefix_and_preserves_diagnostics",
-            r##"
+    )
+}
+
+fn current_comp_buffer_to_file_uses_sandbox_prefix_and_preserves_diagnostics() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "current_comp_buffer_to_file_uses_sandbox_prefix_and_preserves_diagnostics",
+        r##"
 (let* ((root (file-name-as-directory
               (async-melpa-test-path "bytecomp/export/")))
        (temporary-file-directory root)
@@ -111,14 +118,17 @@ fn bytecomp_public_surface_batch() {
               (delete-file log-file)))))
     (async-melpa-test-kill-buffers byte-compile-log-buffer)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil "[ORACLE-SANDBOX]/bytecomp/export/" t "fixture.el:9: Error: deterministic\n")"#
     ]],
-        ),
-        (
-            "current_package_dependency_walk_is_transitive_deduplicated_and_cycle_safe",
-            r##"
+    )
+}
+
+fn current_package_dependency_walk_is_transitive_deduplicated_and_cycle_safe() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "current_package_dependency_walk_is_transitive_deduplicated_and_cycle_safe",
+        r##"
 (let* ((desc (lambda (name reqs)
                (package-desc-create
                 :name name :version '(1 0) :summary "fixture"
@@ -136,14 +146,17 @@ fn bytecomp_public_surface_batch() {
    (async-bytecomp--get-package-deps '(fallback))
    (async-bytecomp--get-package-deps '(absent app right))))
 "##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((right shared left app) (right left app shared fallback) (right shared left app))"
     ],
-        ),
-        (
-            "current_directory_recompile_removes_stale_elc_and_constructs_real_job",
-            r##"
+    )
+}
+
+fn current_directory_recompile_removes_stale_elc_and_constructs_real_job() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "current_directory_recompile_removes_stale_elc_and_constructs_real_job",
+        r##"
 (let* ((root (file-name-as-directory
               (async-melpa-test-path "bytecomp/recompile/")))
        (source (expand-file-name "fixture.el" root))
@@ -172,14 +185,17 @@ fn bytecomp_public_surface_batch() {
             (functionp callback)
             (nreverse messages)))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (#1=("Started compiling asynchronously directory [ORACLE-SANDBOX]/bytecomp/recompile/") nil ("async") lambda t t #1#)"#
     ]],
-        ),
-        (
-            "current_single_file_compile_constructs_child_and_callback_protocol",
-            r##"
+    )
+}
+
+fn current_single_file_compile_constructs_child_and_callback_protocol() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "current_single_file_compile_constructs_child_and_callback_protocol",
+        r##"
 (let* ((file (async-melpa-test-path "bytecomp/single/fixture.el"))
        child callback imported)
   (async-melpa-test-write-file file "(defun fixture-single () :ok)\n")
@@ -201,14 +217,17 @@ fn bytecomp_public_surface_batch() {
              t)
             imported))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (fixture-process lambda t t ("[ORACLE-SANDBOX]/bytecomp/single/fixture.el" nil file "fixture.log"))"#
     ]],
-        ),
-        (
-            "current_package_compile_routes_allowed_dependency_and_sync_packages",
-            r##"
+    )
+}
+
+fn current_package_compile_routes_allowed_dependency_and_sync_packages() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "current_package_compile_routes_allowed_dependency_and_sync_packages",
+        r##"
 (let* ((root (async-melpa-test-path "bytecomp/package/"))
        (make-desc
         (lambda (name reqs)
@@ -236,14 +255,17 @@ fn bytecomp_public_surface_batch() {
       (async--package-compile #'fixture-original other :other))
     (list (nreverse compiled) (nreverse synchronous))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("[ORACLE-SANDBOX]/bytecomp/package/other/" t) ("[ORACLE-SANDBOX]/bytecomp/package/dep/" t)) ((other (:other))))"#
     ]],
-        ),
-        (
-            "current_bytecomp_package_mode_adds_and_removes_exact_advice",
-            r##"
+    )
+}
+
+fn current_bytecomp_package_mode_adds_and_removes_exact_advice() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "current_bytecomp_package_mode_adds_and_removes_exact_advice",
+        r##"
 (unwind-protect
     (progn
       (async-bytecomp-package-mode -1)
@@ -259,8 +281,23 @@ fn bytecomp_public_surface_batch() {
                 async-bytecomp-package-mode))))
   (async-bytecomp-package-mode -1))
 "##,
-            true,
-            expect!["OK (nil t nil nil)"],
-        ),
-    ]);
+        true,
+        expect!["OK (nil t nil nil)"],
+    )
+}
+
+#[test]
+fn bytecomp_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        current_bytecomp_defaults_and_customization_metadata_match_gnu_emacs(),
+        current_bytecomp_log_file_is_imported_into_compilation_buffer_and_removed(),
+        current_bytecomp_completion_reports_success_warnings_and_error_counts(),
+        current_comp_buffer_to_file_uses_sandbox_prefix_and_preserves_diagnostics(),
+        current_package_dependency_walk_is_transitive_deduplicated_and_cycle_safe(),
+        current_directory_recompile_removes_stale_elc_and_constructs_real_job(),
+        current_single_file_compile_constructs_child_and_callback_protocol(),
+        current_package_compile_routes_allowed_dependency_and_sync_packages(),
+        current_bytecomp_package_mode_adds_and_removes_exact_advice(),
+    ];
+    assert_async_melpa_bytecomp_batch(&cases);
 }

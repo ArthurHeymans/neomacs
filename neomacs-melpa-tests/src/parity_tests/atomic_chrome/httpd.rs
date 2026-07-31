@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_atomic_chrome_batch;
+use super::{ParityBatchCase, assert_atomic_chrome_batch};
 
-#[test]
-fn httpd_public_surface_batch() {
-    assert_atomic_chrome_batch(&[
-        (
-            "atomic_chrome_normalize_header_capitalizes_hyphenated_components_and_edge_inputs_exactly",
-            r##"(mapcar
+fn atomic_chrome_normalize_header_capitalizes_hyphenated_components_and_edge_inputs_exactly() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_normalize_header_capitalizes_hyphenated_components_and_edge_inputs_exactly",
+        r##"(mapcar
           (lambda (header)
             (list
              header
@@ -23,14 +21,17 @@ fn httpd_public_surface_batch() {
             ""
             "ümlaut-header"
             "x_underscore"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("content-length" "Content-Length") ("CONTENT-TYPE" "Content-Type") ("x-forwarded-for" "X-Forwarded-For") ("etag" "Etag") ("a--b" "A--B") ("-leading" "-Leading") ("trailing-" "Trailing-") ("" "") ("ümlaut-header" "Ümlaut-Header") ("x_underscore" "X_Underscore"))"#
     ]],
-        ),
-        (
-            "atomic_chrome_httpd_parse_string_decodes_practical_request_line_headers_and_body",
-            r##"(mapcar
+    )
+}
+
+fn atomic_chrome_httpd_parse_string_decodes_practical_request_line_headers_and_body() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_httpd_parse_string_decodes_practical_request_line_headers_and_body",
+        r##"(mapcar
           (lambda (request)
             (list
              request
@@ -40,14 +41,17 @@ fn httpd_public_surface_batch() {
             "POST /connect HTTP/1.1\r\nHost: localhost:4001\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: 17\r\nX-Trace-Id: a:b:c\r\n\r\n{\"text\":\"hello\"}"
             "OPTIONS /socket?x=1 HTTP/1.0\nOrigin: https://example.test\nConnection: keep-alive\n\nbody"
             "POST /unicode HTTP/1.1\r\nContent-Length: 8\r\n\r\nλ😀"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("GET / HTTP/1.1\15\nHost: localhost:4001\15\nAccept: application/json\15\n\15\n" (("GET" "/" "HTTP/1.1") ("Host" "localhost:4001") ("Accept" "application/json") ("Content" ""))) ("POST /connect HTTP/1.1\15\nHost: localhost:4001\15\nContent-Type: application/json; charset=utf-8\15\nContent-Length: 17\15\nX-Trace-Id: a:b:c\15\n\15\n{\"text\":\"hello\"}" (("POST" "/connect" "HTTP/1.1") ("Host" "localhost:4001") ("Content-Type" "application/json; charset=utf-8") ("Content-Length" "17") ("X-Trace-Id" "a:b:c") ("Content" "{\"text\":\"hello\"}"))) ("OPTIONS /socket?x=1 HTTP/1.0\nOrigin: https://example.test\nConnection: keep-alive\n\nbody" (("OPTIONS" "/socket?x=1" "HTTP/1.0") ("Origin" "https://example.test") ("Connection" "keep-alive") ("Content" nil))) ("POST /unicode HTTP/1.1\15\nContent-Length: 8\15\n\15\nλ😀" (("POST" "/unicode" "HTTP/1.1") ("Content-Length" "8") ("Content" "λ😀"))))"#
     ]],
-        ),
-        (
-            "atomic_chrome_httpd_parse_string_preserves_duplicate_headers_and_exact_split_quirks",
-            r##"(mapcar
+    )
+}
+
+fn atomic_chrome_httpd_parse_string_preserves_duplicate_headers_and_exact_split_quirks() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_httpd_parse_string_preserves_duplicate_headers_and_exact_split_quirks",
+        r##"(mapcar
           (lambda (request)
             (atomic-chrome-test-error-data
              (lambda ()
@@ -60,14 +64,17 @@ fn httpd_public_surface_batch() {
             "\r\n\r\n"
             "BROKEN"
             "GET / HTTP/1.1\r\nHeaderWithoutColon\r\n\r\n"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:ok (("POST" "/dup" "HTTP/1.1") ("X-Test" "first") ("X-Test" "second") ("Content" "payload"))) (:ok (("GET" "/spaces" "HTTP/1.1") ("Header" "value with: colons") ("Content" ""))) (:ok (("GET" "/lf" "HTTP/1.1") ("Header" "value") ("Body" "") ("With" "") ("Content" nil))) (:ok (nil ("Content" nil))) (:ok (nil ("Content" ""))) (:ok (("BROKEN") ("Content" nil))) (:ok (("GET" "/" "HTTP/1.1") ("Headerwithoutcolon" "") ("Content" ""))))"#
     ]],
-        ),
-        (
-            "atomic_chrome_httpd_process_filter_accumulates_incomplete_body_then_responds_once_complete",
-            r##"(let (previous
+    )
+}
+
+fn atomic_chrome_httpd_process_filter_accumulates_incomplete_body_then_responds_once_complete() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_httpd_process_filter_accumulates_incomplete_body_then_responds_once_complete",
+        r##"(let (previous
                events)
           (cl-letf
               (((symbol-function 'process-get)
@@ -111,14 +118,17 @@ fn httpd_public_surface_batch() {
              " world")
              previous
              (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("POST / HTTP/1.1\15\nContent-Length: 11\15\n\15\nhello" "POST / HTTP/1.1\15\nContent-Length: 11\15\n\15\nhello" :responded "POST / HTTP/1.1\15\nContent-Length: 11\15\n\15\nhello" ((get :client :previous-string nil) (put :client :previous-string "POST / HTTP/1.1\15\nContent-Length: 11\15\n\15\nhello") (get :client :previous-string "POST / HTTP/1.1\15\nContent-Length: 11\15\n\15\nhello") (respond :client "POST / HTTP/1.1\15\nContent-Length: 11\15\n\15\nhello")))"#
     ]],
-        ),
-        (
-            "atomic_chrome_httpd_process_filter_counts_encoded_bytes_for_multibyte_body",
-            r##"(let (previous
+    )
+}
+
+fn atomic_chrome_httpd_process_filter_counts_encoded_bytes_for_multibyte_body() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_httpd_process_filter_counts_encoded_bytes_for_multibyte_body",
+        r##"(let (previous
                events)
           (cl-letf
               (((symbol-function 'process-get)
@@ -152,14 +162,17 @@ fn httpd_public_surface_batch() {
                (nreverse events)
                (and previous
                     (string-bytes previous))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("POST /unicode HTTP/1.1\15\nContent-Length: 6\15\n\15\nλ" :responded ((stored 47) responded) 47)"#
     ]],
-        ),
-        (
-            "atomic_chrome_httpd_process_filter_missing_length_responds_immediately_and_missing_body_errors",
-            r##"(let (events
+    )
+}
+
+fn atomic_chrome_httpd_process_filter_missing_length_responds_immediately_and_missing_body_errors() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_httpd_process_filter_missing_length_responds_immediately_and_missing_body_errors",
+        r##"(let (events
                previous)
           (cl-letf
               (((symbol-function 'process-get)
@@ -190,14 +203,17 @@ fn httpd_public_surface_batch() {
                  "POST / HTTP/1.1\r\nContent-Length: 3\r\n\r\n")))
              previous
              (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:responded (:ok "POST / HTTP/1.1\15\nContent-Length: 3\15\n\15\n") "POST / HTTP/1.1\15\nContent-Length: 3\15\n\15\n" ((respond :no-length) (put "POST / HTTP/1.1\15\nContent-Length: 3\15\n\15\n")))"#
     ]],
-        ),
-        (
-            "atomic_chrome_httpd_send_response_starts_ghost_socket_once_and_writes_exact_protocol",
-            r##"(let ((atomic-chrome-server-ghost-text
+    )
+}
+
+fn atomic_chrome_httpd_send_response_starts_ghost_socket_once_and_writes_exact_protocol() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_httpd_send_response_starts_ghost_socket_once_and_writes_exact_protocol",
+        r##"(let ((atomic-chrome-server-ghost-text
                 nil)
                events)
           (cl-letf
@@ -237,14 +253,17 @@ fn httpd_public_surface_batch() {
               :second)
              atomic-chrome-server-ghost-text
              (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil :eof :ghost-websocket :eof :ghost-websocket ((start 64293) (send :first "HTTP/1.0 200 OK\nContent-Type: application/json\n\n{\"ProtocolVersion\":1,\"WebSocketPort\":64293}") (eof :first) (send :second "HTTP/1.0 200 OK\nContent-Type: application/json\n\n{\"ProtocolVersion\":1,\"WebSocketPort\":64293}") (eof :second)))"#
     ]],
-        ),
-        (
-            "atomic_chrome_httpd_send_response_propagates_start_and_write_failures_at_exact_state_boundaries",
-            r##"(let (scenarios)
+    )
+}
+
+fn atomic_chrome_httpd_send_response_propagates_start_and_write_failures_at_exact_state_boundaries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_httpd_send_response_propagates_start_and_write_failures_at_exact_state_boundaries",
+        r##"(let (scenarios)
           (dolist
               (failure
                '(:start :send :eof))
@@ -298,10 +317,24 @@ fn httpd_public_surface_batch() {
                   (nreverse events))
                  scenarios))))
           (nreverse scenarios))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:start (:error error ("start failure")) nil ((start 64293))) (:send (:error error ("send failure")) :ghost-server ((start 64293) (send :process "HTTP/1.0 200 OK\nContent-Type: application/json\n\n{\"ProtocolVersion\":1,\"WebSocketPort\":64293}"))) (:eof (:error error ("eof failure")) :ghost-server ((start 64293) (send :process "HTTP/1.0 200 OK\nContent-Type: application/json\n\n{\"ProtocolVersion\":1,\"WebSocketPort\":64293}") (eof :process))))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn httpd_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        atomic_chrome_normalize_header_capitalizes_hyphenated_components_and_edge_inputs_exactly(),
+        atomic_chrome_httpd_parse_string_decodes_practical_request_line_headers_and_body(),
+        atomic_chrome_httpd_parse_string_preserves_duplicate_headers_and_exact_split_quirks(),
+        atomic_chrome_httpd_process_filter_accumulates_incomplete_body_then_responds_once_complete(),
+        atomic_chrome_httpd_process_filter_counts_encoded_bytes_for_multibyte_body(),
+        atomic_chrome_httpd_process_filter_missing_length_responds_immediately_and_missing_body_errors(),
+        atomic_chrome_httpd_send_response_starts_ghost_socket_once_and_writes_exact_protocol(),
+        atomic_chrome_httpd_send_response_propagates_start_and_write_failures_at_exact_state_boundaries(),
+    ];
+    assert_atomic_chrome_batch(&cases);
 }

@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{AC_EMMET_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod workflows;
 
@@ -116,9 +119,9 @@ pub(crate) fn assert_unshimmed_ac_emmet_parity(elisp_form: &str, expected: Expec
 
 
 /// Multi-probe batch for `assert_ac_emmet_parity` cases (2a).
-pub(crate) fn assert_ac_emmet_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_ac_emmet_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         ac_emmet_oracle(AC_EMMET_TEST_PRELUDE),
         &name,
         "ac_emmet_parity",
@@ -127,9 +130,9 @@ pub(crate) fn assert_ac_emmet_batch(cases: &[(&str, &str, bool, Expect)]) {
 }
 
 /// Multi-probe batch for `assert_unshimmed_ac_emmet_parity` cases (2a).
-pub(crate) fn assert_unshimmed_ac_emmet_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_unshimmed_ac_emmet_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         ac_emmet_oracle(""),
         &name,
         "unshimmed_ac_emmet_parity",

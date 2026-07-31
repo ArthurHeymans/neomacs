@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_aidermacs_batch;
+use super::{ParityBatchCase, assert_aidermacs_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_aidermacs_batch(&[
-        (
-            "a_real_session_detects_each_edited_file_format_and_skips_the_one_that_does_not_exist",
-            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+fn a_real_session_detects_each_edited_file_format_and_skips_the_one_that_does_not_exist() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "a_real_session_detects_each_edited_file_format_and_skips_the_one_that_does_not_exist",
+        r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (root (file-name-as-directory (expand-file-name "repo" sandbox)))
        (program (expand-file-name "bin/aider-standin" sandbox))
        (log (expand-file-name "argv.log" sandbox))
@@ -88,14 +86,17 @@ fn workflows_public_surface_batch() {
         (when-let ((process (get-buffer-process buffer)))
           (delete-process process))
         (kill-buffer buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:ready t :mode aidermacs-comint-mode :announced 4 :detected (("src/real.el" "src/block.el" "src/diff.el")) :argv "argv: [--model] [standin] [--no-pretty] [--no-fancy-input]\n")"#
     ]],
-        ),
-        (
-            "answering_an_aider_question_sends_the_analysis_request_back_automatically",
-            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    )
+}
+
+fn answering_an_aider_question_sends_the_analysis_request_back_automatically() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "answering_an_aider_question_sends_the_analysis_request_back_automatically",
+        r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (root (file-name-as-directory (expand-file-name "repo" sandbox)))
        (program (expand-file-name "bin/aider-standin" sandbox))
        (received (expand-file-name "received.log" sandbox))
@@ -163,14 +164,17 @@ fn workflows_public_surface_batch() {
         (when-let ((process (get-buffer-process buffer)))
           (delete-process process))
         (kill-buffer buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:ready t :awaiting-after-question t :awaiting-cleared t :received "/run ls -la\ny\nPlease analyze the command output above.\n")"#
     ]],
-        ),
-        (
-            "the_community_edition_only_flag_is_withheld_from_a_stock_aider",
-            r##"(let ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
+    )
+}
+
+fn the_community_edition_only_flag_is_withheld_from_a_stock_aider() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_community_edition_only_flag_is_withheld_from_a_stock_aider",
+        r##"(let ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
   (cl-flet
       ((session-args (binary-name)
          (let* ((root (file-name-as-directory
@@ -215,10 +219,19 @@ fn workflows_public_surface_batch() {
                    (and (member "--linear-output" captured) t))))))
     (list :stock (session-args "aider")
           :community-edition (session-args "aider-ce"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:stock ("aider" ("--model" "m" "--no-auto-accept-architect") nil) :community-edition ("aider-ce" ("--model" "m" "--no-auto-accept-architect" "--linear-output") t))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        a_real_session_detects_each_edited_file_format_and_skips_the_one_that_does_not_exist(),
+        answering_an_aider_question_sends_the_analysis_request_back_automatically(),
+        the_community_edition_only_flag_is_withheld_from_a_stock_aider(),
+    ];
+    assert_aidermacs_batch(&cases);
 }

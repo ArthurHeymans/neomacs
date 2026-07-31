@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_ast_grep_batch;
+use super::{ParityBatchCase, assert_ast_grep_batch};
 
 /// Searching a real project through the documented `ast-grep-search' command.
 ///
@@ -34,12 +34,10 @@ use super::assert_ast_grep_batch;
 /// even though the JSON carries `range.end'.  The rewrite workflow, which uses
 /// the other parser, shows the end positions populated from the same field.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_ast_grep_batch(&[
-        (
-            "searching_a_real_project_parses_ast_greps_own_json_stream_into_candidates",
-            r##"(let* ((project (ast-grep-test-project))
+fn searching_a_real_project_parses_ast_greps_own_json_stream_into_candidates() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "searching_a_real_project_parses_ast_greps_own_json_stream_into_candidates",
+        r##"(let* ((project (ast-grep-test-project))
        (records (ast-grep-test-install project))
        (default-directory project))
   (let ((candidates
@@ -50,14 +48,17 @@ fn workflows_public_surface_batch() {
           :matches (mapcar #'ast-grep-test-match-summary candidates)
           :calls (ast-grep-test-calls-made)
           :unrecorded (ast-grep-test-unrecorded))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:records 3 :count 4 :matches (("[ORACLE-SANDBOX]/proj/src/other.js" 0 0 nil nil "console.log" nil) ("[ORACLE-SANDBOX]/proj/src/app.js" 0 23 nil nil "console.log" nil) ("[ORACLE-SANDBOX]/proj/src/app.js" 1 0 nil nil "console.log" nil) ("[ORACLE-SANDBOX]/proj/src/app.js" 3 2 nil nil "console.log" nil)) :calls ("run|--pattern=console.log|--json=stream|<project>/|") :unrecorded nil)"#
     ]],
-        ),
-        (
-            "rewriting_asks_the_tool_for_replacements_and_pairs_them_with_each_match",
-            r##"(let* ((project (ast-grep-test-project))
+    )
+}
+
+fn rewriting_asks_the_tool_for_replacements_and_pairs_them_with_each_match() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "rewriting_asks_the_tool_for_replacements_and_pairs_them_with_each_match",
+        r##"(let* ((project (ast-grep-test-project))
        (records (ast-grep-test-install project))
        (default-directory project))
   (let ((matches (ast-grep--collect-rewrites "console.log" "logger.info" project)))
@@ -71,14 +72,17 @@ fn workflows_public_surface_batch() {
                   matches)
           :calls (ast-grep-test-calls-made)
           :unrecorded (ast-grep-test-unrecorded))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:count 4 :matches (("app.js" 0 23 0 34 "console.log" "logger.info") ("app.js" 1 0 1 11 "console.log" "logger.info") ("app.js" 3 2 3 13 "console.log" "logger.info") ("other.js" 0 0 0 11 "console.log" "logger.info")) :calls ("run|--pattern=console.log|--rewrite=logger.info|--json=stream|<project>/|") :unrecorded nil)"#
     ]],
-        ),
-        (
-            "the_outline_feature_calls_a_subcommand_ast_grep_does_not_have",
-            r##"(let* ((project (ast-grep-test-project))
+    )
+}
+
+fn the_outline_feature_calls_a_subcommand_ast_grep_does_not_have() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_outline_feature_calls_a_subcommand_ast_grep_does_not_have",
+        r##"(let* ((project (ast-grep-test-project))
        (records (ast-grep-test-install project))
        (file (expand-file-name "src/app.js" project))
        (default-directory project))
@@ -87,10 +91,19 @@ fn workflows_public_surface_batch() {
                   (lambda () (ast-grep--run-outline file)))
         :calls (ast-grep-test-calls-made)
         :unrecorded (ast-grep-test-unrecorded)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:command ("ast-grep" "outline" "--json=stream" "[ORACLE-SANDBOX]/proj/src/app.js") :outcome (:error error ("The ast-grep failed with exit code 2: error: unrecognized subcommand 'outline'\n\nUsage: ast-grep [OPTIONS] <COMMAND>\n\nFor more information, try '--help'.")) :calls ("outline|--json=stream|<project>/src/app.js|") :unrecorded nil)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        searching_a_real_project_parses_ast_greps_own_json_stream_into_candidates(),
+        rewriting_asks_the_tool_for_replacements_and_pairs_them_with_each_match(),
+        the_outline_feature_calls_a_subcommand_ast_grep_does_not_have(),
+    ];
+    assert_ast_grep_batch(&cases);
 }

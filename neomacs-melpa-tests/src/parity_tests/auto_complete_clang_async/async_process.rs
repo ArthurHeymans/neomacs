@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_clang_async_batch;
+use super::{ParityBatchCase, assert_auto_complete_clang_async_batch};
 
-#[test]
-fn async_process_public_surface_batch() {
-    assert_auto_complete_clang_async_batch(&[
-        (
-            "auto_complete_clang_async_candidate_state_machine_sends_once_waits_acknowledges_and_preempts",
-            r##"(let* ((pair
+fn auto_complete_clang_async_candidate_state_machine_sends_once_waits_acknowledges_and_preempts() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_async_candidate_state_machine_sends_once_waits_acknowledges_and_preempts",
+        r##"(let* ((pair
                                  (acclang-test-start-cat
                                   "acclang-candidate"))
                                 (process
@@ -58,14 +56,17 @@ fn async_process_public_surface_batch() {
                              (acclang-test-finish-process
                               process
                               buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((idle nil wait nil "mem" (((:process "acclang-candidate" signal) "mem" "object.member"))) (wait #1=("waiting") wait #1# "mem" nil) (acknowledged #2=("ready") idle #2# "mem" nil) (preempted nil preempted ("ignored") "mem" nil))"#
     ]],
-        ),
-        (
-            "auto_complete_clang_async_filter_completion_response_parses_candidates_and_runs_real_state_transition",
-            r##"(let* ((pair
+    )
+}
+
+fn auto_complete_clang_async_filter_completion_response_parses_candidates_and_runs_real_state_transition() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_async_filter_completion_response_parses_candidates_and_runs_real_state_transition",
+        r##"(let* ((pair
                                  (acclang-test-start-cat
                                   "acclang-filter"))
                                 (process
@@ -116,14 +117,17 @@ fn async_process_public_surface_batch() {
                              (acclang-test-finish-process
                               process
                               buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (idle (("fork" "[#void#]fork()" nil) ("format" "[#int#]format(<#const char *fmt#>)" nil)) ((:start :force-init t) (:update)) "COMPLETION: format : [#int#]format(<#const char *fmt#>)\nCOMPLETION: fork : [#void#]fork()\n$" 92)"#
     ]],
-        ),
-        (
-            "auto_complete_clang_async_filter_preempted_response_restarts_completion_without_parsing_stale_data",
-            r##"(let* ((pair
+    )
+}
+
+fn auto_complete_clang_async_filter_preempted_response_restarts_completion_without_parsing_stale_data() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_async_filter_preempted_response_restarts_completion_without_parsing_stale_data",
+        r##"(let* ((pair
                                  (acclang-test-start-cat
                                   "acclang-preempted"))
                                 (process
@@ -167,12 +171,15 @@ fn async_process_public_surface_batch() {
                              (acclang-test-finish-process
                               process
                               buffer)))"##,
-            true,
-            expect![[r#"OK (idle ("preserved") ((:start) (:update)) "COMPLETION: stale : old$")"#]],
-        ),
-        (
-            "auto_complete_clang_async_filter_accumulates_partial_chunks_until_dollar_terminated_chunk",
-            r##"(let* ((pair
+        true,
+        expect![[r#"OK (idle ("preserved") ((:start) (:update)) "COMPLETION: stale : old$")"#]],
+    )
+}
+
+fn auto_complete_clang_async_filter_accumulates_partial_chunks_until_dollar_terminated_chunk() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_async_filter_accumulates_partial_chunks_until_dollar_terminated_chunk",
+        r##"(let* ((pair
                                  (acclang-test-start-cat
                                   "acclang-chunks"))
                                 (process
@@ -217,14 +224,17 @@ fn async_process_public_surface_batch() {
                              (acclang-test-finish-process
                               process
                               buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((wait nil nil) idle (("alpine" "[#int#]alpine$" nil) ("alpha" "[#int#]alpha" nil)) (:start :update) "COMPLETION: alpha : [#int#]alpha\nCOMPLETION: alpine : [#int#]alpine$")"#
     ]],
-        ),
-        (
-            "auto_complete_clang_async_syntax_check_switches_filter_and_sends_only_while_idle",
-            r##"(let* ((pair
+    )
+}
+
+fn auto_complete_clang_async_syntax_check_switches_filter_and_sends_only_while_idle() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_async_syntax_check_switches_filter_and_sends_only_while_idle",
+        r##"(let* ((pair
                                  (acclang-test-start-cat
                                   "acclang-syntax"))
                                 (process
@@ -269,14 +279,17 @@ fn async_process_public_surface_batch() {
                              (acclang-test-finish-process
                               process
                               buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((idle :sent wait ac-clang-flymake-process-filter ((:process "acclang-syntax" signal))) (wait nil wait ac-clang-filter-output nil) (acknowledged nil acknowledged ac-clang-filter-output nil))"#
     ]],
-        ),
-        (
-            "auto_complete_clang_async_flymake_filter_parses_chunks_finalizes_and_restores_completion_filter",
-            r##"(let* ((pair
+    )
+}
+
+fn auto_complete_clang_async_flymake_filter_parses_chunks_finalizes_and_restores_completion_filter() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_async_flymake_filter_parses_chunks_finalizes_and_restores_completion_filter",
+        r##"(let* ((pair
                                  (acclang-test-start-cat
                                   "acclang-flymake"))
                                 (process
@@ -336,14 +349,17 @@ fn async_process_public_surface_batch() {
                              (acclang-test-finish-process
                               process
                               buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((wait ac-clang-flymake-process-filter ((:parse "fixture.cpp:1:4: error: broken"))) idle ac-clang-filter-output ((:parse "\n$") :residual :sentinel) "fixture.cpp:1:4: error: broken\n$")"#
     ]],
-        ),
-        (
-            "auto_complete_clang_async_preemptive_insert_starts_idle_completion_or_marks_busy_request",
-            r##"(mapcar
+    )
+}
+
+fn auto_complete_clang_async_preemptive_insert_starts_idle_completion_or_marks_busy_request() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_async_preemptive_insert_starts_idle_completion_or_marks_busy_request",
+        r##"(mapcar
                            (lambda (status)
                              (with-temp-buffer
                                (let ((ac-clang-status
@@ -373,14 +389,17 @@ fn async_process_public_surface_batch() {
                              wait
                              acknowledged
                              preempted))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((idle :started "x" idle (nil)) (wait preempted "x" preempted nil) (acknowledged preempted "x" preempted nil) (preempted preempted "x" preempted nil))"#
     ]],
-        ),
-        (
-            "auto_complete_clang_async_autotrigger_routes_enabled_input_to_preemption_and_disabled_input_directly",
-            r##"(mapcar
+    )
+}
+
+fn auto_complete_clang_async_autotrigger_routes_enabled_input_to_preemption_and_disabled_input_directly() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_async_autotrigger_routes_enabled_input_to_preemption_and_disabled_input_directly",
+        r##"(mapcar
                            (lambda (enabled)
                              (with-temp-buffer
                                (let ((ac-clang-async-do-autocompletion-automatically
@@ -407,12 +426,15 @@ fn async_process_public_surface_batch() {
                                     (buffer-string)
                                     (nreverse calls))))))
                            '(t nil))"##,
-            true,
-            expect![[r#"OK ((t :preempted "P" (:preemptive)) (nil :inserted "I" ((:insert 1))))"#]],
-        ),
-        (
-            "auto_complete_clang_async_shutdown_and_reparse_wrappers_ignore_nil_or_forward_exact_process",
-            r##"(mapcar
+        true,
+        expect![[r#"OK ((t :preempted "P" (:preemptive)) (nil :inserted "I" ((:insert 1))))"#]],
+    )
+}
+
+fn auto_complete_clang_async_shutdown_and_reparse_wrappers_ignore_nil_or_forward_exact_process() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_async_shutdown_and_reparse_wrappers_ignore_nil_or_forward_exact_process",
+        r##"(mapcar
                            (lambda (process)
                              (let ((ac-clang-completion-process
                                     process)
@@ -438,14 +460,17 @@ fn async_process_public_surface_batch() {
                                   (ac-clang-reparse-buffer)
                                   (nreverse calls)))))
                            '(nil fixture-process))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((nil nil nil nil) (fixture-process :shutdown :reparse ((:shutdown fixture-process) (:reparse fixture-process))))"
     ],
-        ),
-        (
-            "auto_complete_clang_async_real_launch_installs_filter_hooks_keys_and_sends_initial_reparse_protocol",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_complete_clang_async_real_launch_installs_filter_hooks_keys_and_sends_initial_reparse_protocol() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_async_real_launch_installs_filter_hooks_keys_and_sends_initial_reparse_protocol",
+        r##"(save-window-excursion
                            (with-temp-buffer
                              (switch-to-buffer
                               (current-buffer))
@@ -512,10 +537,26 @@ fn async_process_public_surface_batch() {
                                    (acclang-test-finish-process
                                     process
                                     process-buffer))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((run open listen connect stop) ac-clang-filter-output nil (((kill-buffer-hook . ac-clang-shutdown-process) (ac-clang-shutdown-process t)) ((before-revert-hook . ac-clang-shutdown-process) (ac-clang-shutdown-process t)) ((before-save-hook . ac-clang-reparse-buffer) (ac-clang-reparse-buffer))) (("." ac-clang-async-autocomplete-autotrigger) (":" ac-clang-async-autocomplete-autotrigger) (">" ac-clang-async-autocomplete-autotrigger)) "SOURCEFILE\nsource_length:31\nstruct Widget { int member; };\n\n\nREPARSE\n\n")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn async_process_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_clang_async_candidate_state_machine_sends_once_waits_acknowledges_and_preempts(),
+        auto_complete_clang_async_filter_completion_response_parses_candidates_and_runs_real_state_transition(),
+        auto_complete_clang_async_filter_preempted_response_restarts_completion_without_parsing_stale_data(),
+        auto_complete_clang_async_filter_accumulates_partial_chunks_until_dollar_terminated_chunk(),
+        auto_complete_clang_async_syntax_check_switches_filter_and_sends_only_while_idle(),
+        auto_complete_clang_async_flymake_filter_parses_chunks_finalizes_and_restores_completion_filter(),
+        auto_complete_clang_async_preemptive_insert_starts_idle_completion_or_marks_busy_request(),
+        auto_complete_clang_async_autotrigger_routes_enabled_input_to_preemption_and_disabled_input_directly(),
+        auto_complete_clang_async_shutdown_and_reparse_wrappers_ignore_nil_or_forward_exact_process(),
+        auto_complete_clang_async_real_launch_installs_filter_hooks_keys_and_sends_initial_reparse_protocol(),
+    ];
+    assert_auto_complete_clang_async_batch(&cases);
 }

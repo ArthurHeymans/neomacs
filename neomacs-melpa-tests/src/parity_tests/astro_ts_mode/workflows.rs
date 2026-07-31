@@ -10,7 +10,7 @@
 
 use expect_test::expect;
 
-use super::assert_astro_ts_mode_batch;
+use super::{ParityBatchCase, assert_astro_ts_mode_batch};
 
 /// Type a component top down, then indent it, and compare the two products.
 ///
@@ -34,12 +34,10 @@ use super::assert_astro_ts_mode_batch;
 /// The indentation figures are the leading-space count per line, which keeps
 /// the comparison legible where two whole buffer strings would not be.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_astro_ts_mode_batch(&[
-        (
-            "typing_a_component_top_down_leaves_it_flat_until_the_closing_tags_exist",
-            r##"(cl-labels
+fn typing_a_component_top_down_leaves_it_flat_until_the_closing_tags_exist() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "typing_a_component_top_down_leaves_it_flat_until_the_closing_tags_exist",
+        r##"(cl-labels
               ((type-text
                 (text)
                 (dolist (character (append text nil))
@@ -92,14 +90,17 @@ fn workflows_public_surface_batch() {
                         (buffer-substring-no-properties
                          (point-min)
                          (point-max)))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:electric-indent t :typed "<main>\n<section>\n<h1>{title}</h1>\n</section>\n</main>\n" :typed-indentations (0 0 0 0 0 0) :tab-while-open 0 :tab-once-closed 2 :after-indent-region "<main>\n  <section>\n    <h1>{title}</h1>\n  </section>\n</main>\n" :indent-region-indentations (0 2 4 2 0 0) :typing-produced-the-indented-layout nil)"#
     ]],
-        ),
-        (
-            "commenting_a_line_uses_html_syntax_in_every_embedded_language",
-            r##"(with-temp-buffer
+    )
+}
+
+fn commenting_a_line_uses_html_syntax_in_every_embedded_language() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "commenting_a_line_uses_html_syntax_in_every_embedded_language",
+        r##"(with-temp-buffer
             (insert "---\n")
             (insert "const x = 1;\n")
             (insert "---\n")
@@ -148,10 +149,18 @@ fn workflows_public_surface_batch() {
                   nil t)
                  errors)
                :buffer (buffer-string))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:regions (("const x" tsx "<!-- " " -->" "<!-- const x = 1; -->") ("hi" astro "<!-- " " -->" "<!-- <div>hi</div> -->") ("let y" tsx "<!-- " " -->" "<!-- let y = 2; -->") ("color" css "<!-- " " -->" "<!-- .a { color: red; } -->")) :host-tree-error-nodes 0 :buffer #("---\n<!-- const x = 1; -->\n---\n<!-- <div>hi</div> -->\n<script>\n<!-- let y = 2; -->\n</script>\n<style>\n<!-- .a { color: red; } -->\n</style>\n" 0 3 (face font-lock-comment-face) 4 5 (syntax-table #1=(2097163)) 24 25 (syntax-table #2=(2097164)) 26 29 (face font-lock-comment-face) 30 31 (syntax-table #1# fontified nil) 31 35 (fontified nil) 35 36 (fontified nil) 36 39 (fontified nil face font-lock-function-name-face) 39 44 (fontified nil) 44 47 (fontified nil face font-lock-function-name-face) 47 48 (fontified nil) 48 51 (fontified nil) 51 52 (syntax-table #2# fontified nil) 54 60 (face font-lock-function-name-face) 62 63 (syntax-table #1#) 80 81 (syntax-table #2#) 84 90 (face font-lock-function-name-face) 93 98 (face font-lock-function-name-face) 100 101 (syntax-table #1#) 126 127 (syntax-table #2#) 130 135 (face font-lock-function-name-face)))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        typing_a_component_top_down_leaves_it_flat_until_the_closing_tags_exist(),
+        commenting_a_line_uses_html_syntax_in_every_embedded_language(),
+    ];
+    assert_astro_ts_mode_batch(&cases);
 }

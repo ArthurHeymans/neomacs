@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_apples_mode_batch;
+use super::{ParityBatchCase, assert_apples_mode_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_apples_mode_batch(&[
-        (
-            "author_completes_indents_navigates_and_saves_a_mail_automation_script",
-            r##"(progn
+fn author_completes_indents_navigates_and_saves_a_mail_automation_script() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "author_completes_indents_navigates_and_saves_a_mail_automation_script",
+        r##"(progn
                   (require 'imenu)
                   (let* ((script-file
                           (expand-file-name
@@ -82,14 +80,17 @@ fn workflows_public_surface_batch() {
                                        (nreverse faces))))))
                         (kill-buffer (current-buffer))))
                     result))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (apples-mode "property projectName : \"Release\"\n-- Build one message for the current recipient.\non publishReport(recipientName)\n    tell application \"Mail\"\n        if recipientName is not \"\" then\n            repeat with attachmentName in {\"report.pdf\", \"chart.png\"}\n                set reportMessage to \"Ready for \" & recipientName & \": \" & attachmentName\n            end repeat\n        end if\n    end tell\nend publishReport\n" t (3 "on publishReport(recipientName)") (("publishReport" . font-lock-function-name-face) ("tell" . apples-statements) ("repeat" . apples-statements) ("reportMessage" . font-lock-variable-name-face) ("is not" . apples-operators)))"#
     ]],
-        ),
-        (
-            "runs_a_selected_report_delivery_and_displays_the_external_result",
-            r##"(let* ((bin-dir
+    )
+}
+
+fn runs_a_selected_report_delivery_and_displays_the_external_result() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "runs_a_selected_report_delivery_and_displays_the_external_result",
+        r##"(let* ((bin-dir
                           (expand-file-name
                            "fake-apples-runtime"
                            temporary-file-directory))
@@ -155,14 +156,17 @@ fn workflows_public_surface_batch() {
                          (with-temp-buffer
                            (insert-file-contents calls)
                            (buffer-string))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (apples-run-region/buffer "Result: Delivered 2 reports" t "repeat with recipientName in recipients\ndisplay dialog \"Delivering to \" & recipientName\nend repeat\nreturn \"Delivered 2 reports\"\n" "-ss\n-e\nrepeat with recipientName in recipients\ndisplay dialog \"Delivering to \" & recipientName\nend repeat\nreturn \"Delivered 2 reports\"\n\n")"#
     ]],
-        ),
-        (
-            "failed_region_execution_highlights_the_broken_reference_and_moves_to_it",
-            r##"(let* ((bin-dir
+    )
+}
+
+fn failed_region_execution_highlights_the_broken_reference_and_moves_to_it() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "failed_region_execution_highlights_the_broken_reference_and_moves_to_it",
+        r##"(let* ((bin-dir
                           (expand-file-name
                            "fake-apples-error-runtime"
                            temporary-file-directory))
@@ -247,14 +251,17 @@ fn workflows_public_surface_batch() {
                          (with-temp-buffer
                            (insert-file-contents calls)
                            (buffer-string))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("execution error: The variable missingValue is not defined. [-2753]" 2 18 "missingValue") "property reportName : \"Q2\"\nset reportPath to reportName\nreturn reportPath\n" t "-ss\n-e\nset reportPath to missingValue\nreturn reportPath\n\n")"#
     ]],
-        ),
-        (
-            "compiles_then_decompiles_a_script_through_the_documented_toolchain",
-            r##"(let* ((root
+    )
+}
+
+fn compiles_then_decompiles_a_script_through_the_documented_toolchain() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "compiles_then_decompiles_a_script_through_the_documented_toolchain",
+        r##"(let* ((root
                           (expand-file-name
                            "apples-toolchain"
                            temporary-file-directory))
@@ -310,14 +317,17 @@ fn workflows_public_surface_batch() {
                      (with-temp-buffer
                        (insert-file-contents compiled)
                        (buffer-string))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t "FAKE-COMPILED\non reportTitle(projectName)\n    return \"Status: \" & projectName\nend reportTitle\n" "on reportTitle(projectName)\n    return \"Status: \" & projectName\nend reportTitle")"#
     ]],
-        ),
-        (
-            "expands_and_edits_the_installed_tell_application_snippet_in_a_real_script",
-            r##"(progn
+    )
+}
+
+fn expands_and_edits_the_installed_tell_application_snippet_in_a_real_script() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "expands_and_edits_the_installed_tell_application_snippet_in_a_real_script",
+        r##"(progn
                   (require 'yasnippet)
                   (let* ((package-root
                           (file-name-directory
@@ -346,14 +356,17 @@ fn workflows_public_surface_batch() {
                          (buffer-substring-no-properties
                           (point-min) (point-max))
                          (null (yas-active-snippets)))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t "tell application \"Mail\"\n    display dialog \"Release ready\" default answer \"Ship\"\nend tell" t)"#
     ]],
-        ),
-        (
-            "scratch_buffer_persists_an_edit_when_killed_and_restores_it_when_reopened",
-            r##"(let* ((apples-tmp-dir
+    )
+}
+
+fn scratch_buffer_persists_an_edit_when_killed_and_restores_it_when_reopened() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "scratch_buffer_persists_an_edit_when_killed_and_restores_it_when_reopened",
+        r##"(let* ((apples-tmp-dir
                           (expand-file-name
                            "apples-scratch-workflow"
                            temporary-file-directory))
@@ -382,10 +395,22 @@ fn workflows_public_surface_batch() {
                       (setq reopened (buffer-string))
                       (kill-buffer (current-buffer)))
                     (list restored persisted reopened))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("set reportCount to 1\n" "set reportCount to 1\nset reportCount to reportCount + 1\nreturn reportCount\n" "set reportCount to 1\nset reportCount to reportCount + 1\nreturn reportCount\n")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        author_completes_indents_navigates_and_saves_a_mail_automation_script(),
+        runs_a_selected_report_delivery_and_displays_the_external_result(),
+        failed_region_execution_highlights_the_broken_reference_and_moves_to_it(),
+        compiles_then_decompiles_a_script_through_the_documented_toolchain(),
+        expands_and_edits_the_installed_tell_application_snippet_in_a_real_script(),
+        scratch_buffer_persists_an_edit_when_killed_and_restores_it_when_reopened(),
+    ];
+    assert_apples_mode_batch(&cases);
 }

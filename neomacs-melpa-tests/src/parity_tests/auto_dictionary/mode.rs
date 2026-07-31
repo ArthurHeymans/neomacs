@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_dictionary_batch;
+use super::{ParityBatchCase, assert_auto_dictionary_batch};
 
-#[test]
-fn mode_public_surface_batch() {
-    assert_auto_dictionary_batch(&[
-        (
-            "auto_dictionary_mode_enable_disable_manages_lighter_timer_and_local_kill_hook",
-            r##"(with-temp-buffer
+fn auto_dictionary_mode_enable_disable_manages_lighter_timer_and_local_kill_hook() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_mode_enable_disable_manages_lighter_timer_and_local_kill_hook",
+        r##"(with-temp-buffer
          (let ((scheduled nil)
                (cancelled nil)
                (ispell-dictionary "english")
@@ -56,14 +54,17 @@ fn mode_public_surface_batch() {
                   #'adict--cancel-timer
                   kill-buffer-hook)
                  (nreverse cancelled)))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((t " en" test-timer (3 t adict-guess-dictionary-maybe " *temp*") t :never) (nil nil nil nil nil (test-timer)))"#
     ]],
-        ),
-        (
-            "auto_dictionary_mode_with_nil_idle_time_enables_without_scheduling",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_dictionary_mode_with_nil_idle_time_enables_without_scheduling() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_mode_with_nil_idle_time_enables_without_scheduling",
+        r##"(with-temp-buffer
          (let ((adict-idle-time nil)
                (scheduled 0)
                (ispell-dictionary nil))
@@ -84,12 +85,15 @@ fn mode_public_surface_batch() {
                 #'adict--cancel-timer
                 kill-buffer-hook)
                t)))))"##,
-            true,
-            expect![[r#"OK (t nil 0 " ??" t)"#]],
-        ),
-        (
-            "auto_dictionary_mode_reuses_existing_buffer_timer_without_duplicate_schedule",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK (t nil 0 " ??" t)"#]],
+    )
+}
+
+fn auto_dictionary_mode_reuses_existing_buffer_timer_without_duplicate_schedule() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_mode_reuses_existing_buffer_timer_without_duplicate_schedule",
+        r##"(with-temp-buffer
          (let ((adict-timer 'existing-timer)
                (scheduled 0)
                (cancelled nil))
@@ -111,12 +115,15 @@ fn mode_public_surface_batch() {
               (nreverse cancelled)
               (local-variable-p
                'adict-timer)))))"##,
-            true,
-            expect!["OK (0 (existing-timer) nil)"],
-        ),
-        (
-            "auto_dictionary_cancel_timer_is_idempotent_and_kills_local_binding",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK (0 (existing-timer) nil)"],
+    )
+}
+
+fn auto_dictionary_cancel_timer_is_idempotent_and_kills_local_binding() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_cancel_timer_is_idempotent_and_kills_local_binding",
+        r##"(with-temp-buffer
          (let ((cancelled nil))
            (setq-local adict-timer
                        'buffer-timer)
@@ -132,12 +139,15 @@ fn mode_public_surface_batch() {
               (local-variable-p
                'adict-timer)
               adict-timer))))"##,
-            true,
-            expect!["OK ((buffer-timer) nil nil)"],
-        ),
-        (
-            "auto_dictionary_lighter_shortens_long_names_and_preserves_short_codes",
-            r##"(list
+        true,
+        expect!["OK ((buffer-timer) nil nil)"],
+    )
+}
+
+fn auto_dictionary_lighter_shortens_long_names_and_preserves_short_codes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_lighter_shortens_long_names_and_preserves_short_codes",
+        r##"(list
          (mapcar
           #'adict--shorten-dict
           '("en" "eng" "english"
@@ -153,12 +163,15 @@ fn mode_public_surface_batch() {
                  (ispell-dictionary nil))
              (adict-update-lighter)
              adict-lighter)))"##,
-            true,
-            expect![[r#"OK (("en" "eng" "en" "de" "" "日本語") " am" " ??")"#]],
-        ),
-        (
-            "auto_dictionary_next_guess_tick_uses_never_sentinel_size_and_fractional_threshold",
-            r##"(list
+        true,
+        expect![[r#"OK (("en" "eng" "en" "de" "" "日本語") " am" " ??")"#]],
+    )
+}
+
+fn auto_dictionary_next_guess_tick_uses_never_sentinel_size_and_fractional_threshold() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_next_guess_tick_uses_never_sentinel_size_and_fractional_threshold",
+        r##"(list
          (with-temp-buffer
            (insert "1234567890")
            (let ((adict-last-check :never)
@@ -174,12 +187,15 @@ fn mode_public_surface_batch() {
            (let ((adict-last-check 7)
                  (adict-change-threshold 0.125))
              (adict--next-guess-tick))))"##,
-            true,
-            expect!["OK (0 42.0 7.625)"],
-        ),
-        (
-            "auto_dictionary_timer_callback_requires_same_buffer_and_sufficient_modification",
-            r##"(let ((target
+        true,
+        expect!["OK (0 42.0 7.625)"],
+    )
+}
+
+fn auto_dictionary_timer_callback_requires_same_buffer_and_sufficient_modification() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_timer_callback_requires_same_buffer_and_sufficient_modification",
+        r##"(let ((target
                 (generate-new-buffer
                  " *adict-target*"))
                (other
@@ -212,12 +228,15 @@ fn mode_public_surface_batch() {
                (nreverse calls))
            (kill-buffer target)
            (kill-buffer other)))"##,
-            true,
-            expect!["OK (t)"],
-        ),
-        (
-            "auto_dictionary_valid_manual_change_calls_ispell_hook_lighter_and_cancels_timer",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK (t)"],
+    )
+}
+
+fn auto_dictionary_valid_manual_change_calls_ispell_hook_lighter_and_cancels_timer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_valid_manual_change_calls_ispell_hook_lighter_and_cancels_timer",
+        r##"(with-temp-buffer
          (let* ((ispell-local-dictionary nil)
                (ispell-dictionary "en")
                (changes nil)
@@ -257,12 +276,15 @@ fn mode_public_surface_batch() {
                 (local-variable-p
                  'adict-timer)
                 (current-message))))))"##,
-            true,
-            expect![[r#"OK (adict-timer ("de") ((hook "de")) " de" (active-timer) nil nil)"#]],
-        ),
-        (
-            "auto_dictionary_invalid_manual_change_signals_before_side_effects",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK (adict-timer ("de") ((hook "de")) " de" (active-timer) nil nil)"#]],
+    )
+}
+
+fn auto_dictionary_invalid_manual_change_signals_before_side_effects() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_invalid_manual_change_signals_before_side_effects",
+        r##"(with-temp-buffer
          (let ((changes nil)
                (hooks 0)
                (adict-test-valid-dictionaries
@@ -285,12 +307,15 @@ fn mode_public_surface_batch() {
               changes
               hooks
               adict-lighter))))"##,
-            true,
-            expect![[r#"OK ((:signal error ("Dictionary \"missing\" not found")) nil 0 nil)"#]],
-        ),
-        (
-            "auto_dictionary_nil_manual_change_delegates_interactively_then_updates_hook",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ((:signal error ("Dictionary \"missing\" not found")) nil 0 nil)"#]],
+    )
+}
+
+fn auto_dictionary_nil_manual_change_delegates_interactively_then_updates_hook() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_nil_manual_change_delegates_interactively_then_updates_hook",
+        r##"(with-temp-buffer
          (let* ((interactive-calls nil)
                (hook-calls 0)
                (ispell-local-dictionary nil)
@@ -315,12 +340,15 @@ fn mode_public_surface_batch() {
               hook-calls
               ispell-local-dictionary
               adict-lighter))))"##,
-            true,
-            expect![[r#"OK (nil (ispell-change-dictionary) 1 "fr" " fr")"#]],
-        ),
-        (
-            "auto_dictionary_manual_change_can_keep_automatic_timer_when_policy_disabled",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK (nil (ispell-change-dictionary) 1 "fr" " fr")"#]],
+    )
+}
+
+fn auto_dictionary_manual_change_can_keep_automatic_timer_when_policy_disabled() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_manual_change_can_keep_automatic_timer_when_policy_disabled",
+        r##"(with-temp-buffer
          (let ((ispell-local-dictionary "en")
                (adict-stop-updating-on-dictionary-change
                 nil)
@@ -345,12 +373,15 @@ fn mode_public_surface_batch() {
               adict-timer
               cancelled
               adict-lighter))))"##,
-            true,
-            expect![[r#"OK ("de" active 0 " de")"#]],
-        ),
-        (
-            "auto_dictionary_guess_changes_only_different_dictionary_and_updates_last_check",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ("de" active 0 " de")"#]],
+    )
+}
+
+fn auto_dictionary_guess_changes_only_different_dictionary_and_updates_last_check() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_guess_changes_only_different_dictionary_and_updates_last_check",
+        r##"(with-temp-buffer
          (insert
           "bonjour vous allez revoir cette nouvelle")
          (let ((ispell-local-dictionary "en")
@@ -382,8 +413,26 @@ fn mode_public_surface_batch() {
                   (nreverse changes)
                   ispell-local-dictionary
                   adict-lighter))))))"##,
-            true,
-            expect![[r#"OK ("fr" t "fr" t ("fr") "fr" " fr")"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK ("fr" t "fr" t ("fr") "fr" " fr")"#]],
+    )
+}
+
+#[test]
+fn mode_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_dictionary_mode_enable_disable_manages_lighter_timer_and_local_kill_hook(),
+        auto_dictionary_mode_with_nil_idle_time_enables_without_scheduling(),
+        auto_dictionary_mode_reuses_existing_buffer_timer_without_duplicate_schedule(),
+        auto_dictionary_cancel_timer_is_idempotent_and_kills_local_binding(),
+        auto_dictionary_lighter_shortens_long_names_and_preserves_short_codes(),
+        auto_dictionary_next_guess_tick_uses_never_sentinel_size_and_fractional_threshold(),
+        auto_dictionary_timer_callback_requires_same_buffer_and_sufficient_modification(),
+        auto_dictionary_valid_manual_change_calls_ispell_hook_lighter_and_cancels_timer(),
+        auto_dictionary_invalid_manual_change_signals_before_side_effects(),
+        auto_dictionary_nil_manual_change_delegates_interactively_then_updates_hook(),
+        auto_dictionary_manual_change_can_keep_automatic_timer_when_policy_disabled(),
+        auto_dictionary_guess_changes_only_different_dictionary_and_updates_last_check(),
+    ];
+    assert_auto_dictionary_batch(&cases);
 }

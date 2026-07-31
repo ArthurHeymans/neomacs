@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_ac_html_csswatcher_batch;
+use super::{ParityBatchCase, assert_ac_html_csswatcher_batch};
 
 /// The scan itself: `M-x ac-html-csswatcher-refresh' in an HTML buffer runs
 /// csswatcher over that file and keeps the directory it names.
@@ -19,12 +19,10 @@ use super::assert_ac_html_csswatcher_batch;
 /// `*csswatcher-output*' buffer is asserted to be gone, since the sentinel kills
 /// it once it has read it.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_ac_html_csswatcher_batch(&[
-        (
-            "refreshing_runs_csswatcher_and_keeps_the_directory_it_names",
-            r##"(let* ((root (ac-html-csswatcher-test-site))
+fn refreshing_runs_csswatcher_and_keeps_the_directory_it_names() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "refreshing_runs_csswatcher_and_keeps_the_directory_it_names",
+        r##"(let* ((root (ac-html-csswatcher-test-site))
        (log (ac-html-csswatcher-test-install root ac-html-csswatcher-test-answering))
        (buffer (find-file-noselect (expand-file-name "index.html" root))))
   (ac-html-csswatcher-test-answers root (concat root ".cache/completion"))
@@ -71,14 +69,17 @@ fn workflows_public_surface_batch() {
                 :source-dir-after
                 (ac-html-csswatcher-test-relative ac-html-csswatcher-source-dir
                                                   root)))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:arguments ("SITE/index.html") :source-dir "SITE/.cache/completion" :buffer-local t :message "[csswatcher] parsed SITE/\n" :output-buffers nil) :with-command-args ("--debug" "--outputdir" "SITE/cache" "SITE/index.html") :with-another-command ("SITE/index.html") :source-dir-after "SITE/.cache/completion")"#
     ]],
-        ),
-        (
-            "enabling_it_adds_one_project_source_to_this_buffer_only",
-            r##"(let* ((root (ac-html-csswatcher-test-site))
+    )
+}
+
+fn enabling_it_adds_one_project_source_to_this_buffer_only() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "enabling_it_adds_one_project_source_to_this_buffer_only",
+        r##"(let* ((root (ac-html-csswatcher-test-site))
        (log (ac-html-csswatcher-test-install root ac-html-csswatcher-test-answering))
        (global-before (copy-sequence (default-value 'web-completion-data-sources)))
        (buffer (find-file-noselect (expand-file-name "index.html" root))))
@@ -106,14 +107,17 @@ fn workflows_public_surface_batch() {
               :global-after (copy-tree (default-value 'web-completion-data-sources))
               :global-untouched (equal global-before
                                        (default-value 'web-completion-data-sources)))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:local-before nil :after-enabling (:sources (("Project" . ac-html-csswatcher-source-dir) ("html" . web-completion-data-html-source-dir)) :local t :source-dir "SITE/.cache/completion") :after-the-company-alias (("Project" . ac-html-csswatcher-source-dir) ("html" . web-completion-data-html-source-dir)) :aliases (t t t) :global-before (("html" . web-completion-data-html-source-dir)) :global-after (("html" . web-completion-data-html-source-dir)) :global-untouched t)"#
     ]],
-        ),
-        (
-            "a_failed_or_unparsable_scan_can_silently_empty_the_completions",
-            r##"(let* ((root (ac-html-csswatcher-test-site))
+    )
+}
+
+fn a_failed_or_unparsable_scan_can_silently_empty_the_completions() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "a_failed_or_unparsable_scan_can_silently_empty_the_completions",
+        r##"(let* ((root (ac-html-csswatcher-test-site))
        (log (ac-html-csswatcher-test-install root ac-html-csswatcher-test-answering))
        (buffer (find-file-noselect (expand-file-name "index.html" root))))
   (ac-html-csswatcher-test-answers root (concat root ".cache/completion"))
@@ -149,14 +153,17 @@ fn workflows_public_surface_batch() {
                                       (string-prefix-p "csswatcher-"
                                                        (process-name process)))
                                     (process-list))))))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:after-a-good-scan "SITE/.cache/completion" :after-a-failed-scan "SITE/.cache/completion" :kept-the-good-one t :after-unparsable-output nil :after-project-without-acsource nil :not-visiting-a-file (:returned nil :processes 0))"#
     ]],
-        ),
-        (
-            "setup_wires_markup_modes_to_scan_and_css_modes_to_rescan_on_save",
-            r##"(let* ((root (ac-html-csswatcher-test-site))
+    )
+}
+
+fn setup_wires_markup_modes_to_scan_and_css_modes_to_rescan_on_save() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "setup_wires_markup_modes_to_scan_and_css_modes_to_rescan_on_save",
+        r##"(let* ((root (ac-html-csswatcher-test-site))
        (log (ac-html-csswatcher-test-install root ac-html-csswatcher-test-answering))
        (hooks '(html-mode-hook web-mode-hook slim-mode-hook jade-mode-hook
                 haml-mode-hook css-mode-hook less-mode-hook))
@@ -190,10 +197,20 @@ fn workflows_public_surface_batch() {
               (mapcar (lambda (argument)
                         (ac-html-csswatcher-test-relative argument root))
                       (ac-html-csswatcher-test-arguments log)))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:before ((html-mode-hook nil) (web-mode-hook nil) (slim-mode-hook nil) (jade-mode-hook nil) (haml-mode-hook nil) (css-mode-hook nil) (less-mode-hook nil)) :after ((html-mode-hook t 1) (web-mode-hook t 1) (slim-mode-hook t 1) (jade-mode-hook t 1) (haml-mode-hook t 1) (css-mode-hook nil 1) (less-mode-hook nil 1)) :css-buffer-has-a-local-after-save-hook t :global-after-save-hook-untouched t :scanned-on-save ("SITE/css/app.css"))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        refreshing_runs_csswatcher_and_keeps_the_directory_it_names(),
+        enabling_it_adds_one_project_source_to_this_buffer_only(),
+        a_failed_or_unparsable_scan_can_silently_empty_the_completions(),
+        setup_wires_markup_modes_to_scan_and_css_modes_to_rescan_on_save(),
+    ];
+    assert_ac_html_csswatcher_batch(&cases);
 }

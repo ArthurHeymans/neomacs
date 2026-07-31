@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_aidermacs_batch;
+use super::{ParityBatchCase, assert_aidermacs_batch};
 
-#[test]
-fn commands_public_surface_batch() {
-    assert_aidermacs_batch(&[
-        (
-            "aidermacs_multiline_and_edit_classification_cover_real_chat_modes",
-            r##"(list
+fn aidermacs_multiline_and_edit_classification_cover_real_chat_modes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidermacs_multiline_and_edit_classification_cover_real_chat_modes",
+        r##"(list
                       (mapcar #'aidermacs--process-message-if-multi-line
                               '("one line"
                                 "first\nsecond"
@@ -20,14 +18,17 @@ fn commands_public_surface_batch() {
                                      "/code fix" "/architect plan"
                                      "/help commands"))))
                        '(code architect ask help nil)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("one line" "{aidermacs\nfirst\nsecond\naidermacs}" "{aidermacs\n{aidermacs\nfirst\nsecond\naidermacs}\naidermacs}") ((t nil 0 0 nil) (t nil 0 0 nil) (nil nil 0 0 nil) (nil nil 0 0 nil) (nil nil 0 0 nil)))"#
     ]],
-        ),
-        (
-            "aidermacs_prompt_builder_combines_active_region_user_input_and_deduplicated_history",
-            r##"(with-temp-buffer
+    )
+}
+
+fn aidermacs_prompt_builder_combines_active_region_user_input_and_deduplicated_history() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidermacs_prompt_builder_combines_active_region_user_input_and_deduplicated_history",
+        r##"(with-temp-buffer
                       (rename-buffer "practical.py" t)
                       (insert "before\n")
                       (let ((start (point)))
@@ -51,14 +52,17 @@ fn commands_public_surface_batch() {
                               "/ask" nil "general" t)
                              aidermacs--read-string-history
                              (nreverse answers))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("/architect Improve this in practical.py regarding this section:\n```\ndef add(a, b):\n    return a + b\n\n```\n: duplicate" "/ask : duplicate" ("duplicate" "old request") ("/architect Improve this in practical.py regarding this section:\n```\ndef add(a, b):\n    return a + b\n\n```\n (confirm before edit): " "/ask  (general): "))"#
     ]],
-        ),
-        (
-            "aidermacs_context_region_detection_and_todo_comment_logic_use_real_buffer_syntax",
-            r##"(with-temp-buffer
+    )
+}
+
+fn aidermacs_context_region_detection_and_todo_comment_logic_use_real_buffer_syntax() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidermacs_context_region_detection_and_todo_comment_logic_use_real_buffer_syntax",
+        r##"(with-temp-buffer
                       (emacs-lisp-mode)
                       (insert
                        ";; first paragraph\n"
@@ -83,14 +87,17 @@ fn commands_public_surface_batch() {
                             (use-region-p)
                             (buffer-substring-no-properties
                              (region-beginning) (region-end)))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("\n(defun demo ()\n  ;; TODO: implement branch\n  nil)\n" (0 0 nil nil) (nil "\n(defun demo ()\n  ;; TODO: implement branch\n  nil)\n"))"#
     ]],
-        ),
-        (
-            "aidermacs_prompt_file_creation_is_repeatable_and_auto_enables_minor_mode",
-            r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    )
+}
+
+fn aidermacs_prompt_file_creation_is_repeatable_and_auto_enables_minor_mode() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidermacs_prompt_file_creation_is_repeatable_and_auto_enables_minor_mode",
+        r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                           (root (file-name-as-directory
                                  (expand-file-name "repo" sandbox)))
                           (default-directory root)
@@ -121,14 +128,17 @@ fn commands_public_surface_batch() {
                              (lookup-key
                               aidermacs-minor-mode-map
                               (kbd "C-c C-c")))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (".aider.prompt.org" "# aidermacs Prompt File - Command Reference:\n# C-c C-n or C-<return>: Send current line or selected region line by line\n# C-c C-c: Send current block or selected region as a whole\n# C-c C-z: Switch to aidermacs buffer\n\n* Sample task:\n\n/ask what this repo is about?\n" "# aidermacs Prompt File - Command Reference:\n# C-c C-n or C-<return>: Send current line or selected region line by line\n# C-c C-c: Send current block or selected region as a whole\n# C-c C-z: Switch to aidermacs buffer\n\n* Sample task:\n\n/ask what this repo is about?\n" nil aidermacs-send-block-or-region)"##
     ]],
-        ),
-        (
-            "aidermacs_line_region_and_block_senders_preserve_practical_prompt_units",
-            r##"(with-temp-buffer
+    )
+}
+
+fn aidermacs_line_region_and_block_senders_preserve_practical_prompt_units() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidermacs_line_region_and_block_senders_preserve_practical_prompt_units",
+        r##"(with-temp-buffer
                       (insert
                        "first task\n"
                        "\n"
@@ -152,14 +162,17 @@ fn commands_public_surface_batch() {
                           (forward-line -1)
                           (aidermacs-send-block-or-region)
                           (nreverse sent))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("first task" "first task" "second task" "third task" "\nparagraph two\ncontinues\n")"#
     ]],
-        ),
-        (
-            "aidermacs_mode_and_utility_commands_form_a_persistent_session_sequence",
-            r##"(let ((session (get-buffer-create "*aidermacs:modes*"))
+    )
+}
+
+fn aidermacs_mode_and_utility_commands_form_a_persistent_session_sequence() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidermacs_mode_and_utility_commands_form_a_persistent_session_sequence",
+        r##"(let ((session (get-buffer-create "*aidermacs:modes*"))
                           sent messages)
                       (unwind-protect
                           (cl-letf
@@ -197,14 +210,17 @@ fn commands_public_surface_batch() {
                                (nreverse messages))))
                         (when (buffer-live-p session)
                           (kill-buffer session))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (help nil ("/chat-mode code" "/chat-mode ask" "/chat-mode architect" "/chat-mode help" "/clear" "/reset" "/code ok" "/undo" "/commit" "/map-refresh" "/voice" "/web https://example.test/docs?q=1") ("Switched to code mode <default> - aider will make changes to your code" "Switched to ask mode - you can chat freely, aider will not edit your code" "Switched to architect mode - aider will propose solutions before making changes" "Switched to help mode - aider will answer questions about using aider" "Refreshing repository map..." "aidermacs awaiting speech" "Fetching content from https://example.test/docs?q=1..."))"#
     ]],
-        ),
-        (
-            "aidermacs_common_code_actions_build_practical_commands_at_external_session_boundary",
-            r##"(with-temp-buffer
+    )
+}
+
+fn aidermacs_common_code_actions_build_practical_commands_at_external_session_boundary() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidermacs_common_code_actions_build_practical_commands_at_external_session_boundary",
+        r##"(with-temp-buffer
                       (rename-buffer "service.el" t)
                       (emacs-lisp-mode)
                       (insert
@@ -237,10 +253,23 @@ fn commands_public_surface_batch() {
                            (nreverse sent)
                            (nreverse prompts)
                            aidermacs--read-string-history))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (3 ("/code Make this change: handle nil and malformed values" "/ask Propose a solution: handle nil and malformed values" "/architect Design a solution: handle nil and malformed values" "/ask : handle nil and malformed values" "/help : handle nil and malformed values") ("/code Make this change (will edit file): " "/ask Propose a solution (won't edit file): " "/architect Design a solution (confirm before edit): " "/ask  (empty for ask mode): " "/help  (question how to use aider, empty for all commands): ") ("handle nil and malformed values"))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn commands_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        aidermacs_multiline_and_edit_classification_cover_real_chat_modes(),
+        aidermacs_prompt_builder_combines_active_region_user_input_and_deduplicated_history(),
+        aidermacs_context_region_detection_and_todo_comment_logic_use_real_buffer_syntax(),
+        aidermacs_prompt_file_creation_is_repeatable_and_auto_enables_minor_mode(),
+        aidermacs_line_region_and_block_senders_preserve_practical_prompt_units(),
+        aidermacs_mode_and_utility_commands_form_a_persistent_session_sequence(),
+        aidermacs_common_code_actions_build_practical_commands_at_external_session_boundary(),
+    ];
+    assert_aidermacs_batch(&cases);
 }

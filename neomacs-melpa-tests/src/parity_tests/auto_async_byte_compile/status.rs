@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_async_byte_compile_batch;
+use super::{ParityBatchCase, assert_auto_async_byte_compile_batch};
 
-#[test]
-fn status_public_surface_batch() {
-    assert_auto_async_byte_compile_batch(&[
-        (
-            "auto_async_byte_compile_status_exit_and_warning_matrix_match",
-            r##"(mapcar
+fn auto_async_byte_compile_status_exit_and_warning_matrix_match() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_async_byte_compile_status_exit_and_warning_matrix_match",
+        r##"(mapcar
           (lambda (case)
             (let ((buffer
                    (generate-new-buffer
@@ -30,14 +28,17 @@ fn status_public_surface_batch() {
             (2 "")
             (2 "file.el:1:1:Warning: fixture")
             (127 "plain failure text")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((0 "") normal 1) ((0 "file.el:1:1:Warning: fixture") warning 21) ((1 "") error 1) ((1 "file.el:1:1:Warning: fixture") error 29) ((2 "") normal 1) ((2 "file.el:1:1:Warning: fixture") warning 21) ((127 "plain failure text") normal 1))"#
     ]],
-        ),
-        (
-            "auto_async_byte_compile_status_warning_scan_uses_default_case_folding_and_is_unanchored",
-            r##"(mapcar
+    )
+}
+
+fn auto_async_byte_compile_status_warning_scan_uses_default_case_folding_and_is_unanchored() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_async_byte_compile_status_warning_scan_uses_default_case_folding_and_is_unanchored",
+        r##"(mapcar
           (lambda (text)
             (let ((buffer
                    (generate-new-buffer
@@ -58,14 +59,17 @@ fn status_public_surface_batch() {
             ":Warning"
             ":\nWarning:"
             "before\n:Warning:\nafter"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((":Warning:" warning 10) ("prefix:Warning:suffix" warning 16) (":warning:" warning 10) (":WARNING:" warning 10) ("Warning:" normal 1) (":Warning" normal 1) (":\nWarning:" normal 1) ("before\n:Warning:\nafter" warning 17))"#
     ]],
-        ),
-        (
-            "auto_async_byte_compile_status_resets_and_mutates_result_buffer_point_exactly",
-            r##"(let ((buffer
+    )
+}
+
+fn auto_async_byte_compile_status_resets_and_mutates_result_buffer_point_exactly() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_async_byte_compile_status_resets_and_mutates_result_buffer_point_exactly",
+        r##"(let ((buffer
                                 (generate-new-buffer
                                  " *aabc-point*")))
           (unwind-protect
@@ -83,12 +87,15 @@ fn status_public_surface_batch() {
                  (aabc/status 0 buffer)
                  (point)))
             (kill-buffer buffer)))"##,
-            true,
-            expect!["OK (20 warning 16 error 16 warning 16)"],
-        ),
-        (
-            "auto_async_byte_compile_display_routes_normal_warning_and_error_statuses_exactly",
-            r##"(let ((buffer
+        true,
+        expect!["OK (20 warning 16 error 16 warning 16)"],
+    )
+}
+
+fn auto_async_byte_compile_display_routes_normal_warning_and_error_statuses_exactly() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_async_byte_compile_display_routes_normal_warning_and_error_statuses_exactly",
+        r##"(let ((buffer
                                 (generate-new-buffer
                                  " *aabc-display*"))
                                calls)
@@ -140,14 +147,17 @@ fn status_public_surface_batch() {
                   :custom)
                  (nreverse calls)))
             (kill-buffer buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("compile one.el completed" "compile two.el completed with warnings." :displayed :displayed :displayed ((:message "compile one.el completed") (:message "compile two.el completed with warnings.") (:display " *aabc-display*" nil) (:display " *aabc-display*" nil) (:display " *aabc-display*" nil)))"#
     ]],
-        ),
-        (
-            "auto_async_byte_compile_display_uses_configured_function_return_and_propagates_failure",
-            r##"(let ((buffer
+    )
+}
+
+fn auto_async_byte_compile_display_uses_configured_function_return_and_propagates_failure() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_async_byte_compile_display_uses_configured_function_return_and_propagates_failure",
+        r##"(let ((buffer
                                 (generate-new-buffer
                                  " *aabc-custom-display*"))
                                calls)
@@ -175,14 +185,17 @@ fn status_public_surface_batch() {
                      buffer
                      'warning)))))
             (kill-buffer buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:custom-return (" *aabc-custom-display*") (:error error ("fixture display failed")))"#
     ]],
-        ),
-        (
-            "auto_async_byte_compile_process_sentinel_observes_process_data_and_orders_display_before_hook",
-            r##"(let (events)
+    )
+}
+
+fn auto_async_byte_compile_process_sentinel_observes_process_data_and_orders_display_before_hook() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_async_byte_compile_process_sentinel_observes_process_data_and_orders_display_before_hook",
+        r##"(let (events)
           (cl-letf
               (((symbol-function 'process-exit-status)
                 (lambda (process)
@@ -234,14 +247,17 @@ fn status_public_surface_batch() {
                 'fixture-process-object
                 "ignored state")
                (nreverse events)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil ((:exit fixture-process-object) (:status 7 " *auto-async-byte-compile*") (:name fixture-process-object) (:buffer fixture-process-object) (:display "fixture-process" fixture-buffer warning) (:hook nil)))"#
     ]],
-        ),
-        (
-            "auto_async_byte_compile_process_sentinel_stops_before_hook_on_display_failure",
-            r##"(let (events)
+    )
+}
+
+fn auto_async_byte_compile_process_sentinel_stops_before_hook_on_display_failure() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_async_byte_compile_process_sentinel_stops_before_hook_on_display_failure",
+        r##"(let (events)
           (cl-letf
               (((symbol-function 'process-exit-status)
                 (lambda (_)
@@ -271,12 +287,15 @@ fn status_public_surface_batch() {
                    'fixture
                    "done")))
                (nreverse events)))))"##,
-            true,
-            expect![[r#"OK ((:error error ("fixture display failure")) (:display))"#]],
-        ),
-        (
-            "auto_async_byte_compile_process_sentinel_propagates_hook_failure_after_display",
-            r##"(let (events)
+        true,
+        expect![[r#"OK ((:error error ("fixture display failure")) (:display))"#]],
+    )
+}
+
+fn auto_async_byte_compile_process_sentinel_propagates_hook_failure_after_display() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_async_byte_compile_process_sentinel_propagates_hook_failure_after_display",
+        r##"(let (events)
           (cl-letf
               (((symbol-function 'process-exit-status)
                 (lambda (_)
@@ -307,8 +326,22 @@ fn status_public_surface_batch() {
                    'fixture
                    "done")))
                (nreverse events)))))"##,
-            true,
-            expect![[r#"OK ((:error error ("fixture hook failure")) (:display :hook))"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK ((:error error ("fixture hook failure")) (:display :hook))"#]],
+    )
+}
+
+#[test]
+fn status_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_async_byte_compile_status_exit_and_warning_matrix_match(),
+        auto_async_byte_compile_status_warning_scan_uses_default_case_folding_and_is_unanchored(),
+        auto_async_byte_compile_status_resets_and_mutates_result_buffer_point_exactly(),
+        auto_async_byte_compile_display_routes_normal_warning_and_error_statuses_exactly(),
+        auto_async_byte_compile_display_uses_configured_function_return_and_propagates_failure(),
+        auto_async_byte_compile_process_sentinel_observes_process_data_and_orders_display_before_hook(),
+        auto_async_byte_compile_process_sentinel_stops_before_hook_on_display_failure(),
+        auto_async_byte_compile_process_sentinel_propagates_hook_failure_after_display(),
+    ];
+    assert_auto_async_byte_compile_batch(&cases);
 }

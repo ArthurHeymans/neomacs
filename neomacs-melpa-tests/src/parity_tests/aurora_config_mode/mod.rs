@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{AURORA_CONFIG_MODE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod commands;
 mod jobpath;
@@ -121,9 +124,9 @@ pub(crate) fn assert_aurora_config_mode_autoload_parity(elisp_form: &str, expect
 
 
 /// Multi-probe batch for `assert_aurora_config_mode_autoload_parity` cases (2a).
-pub(crate) fn assert_aurora_config_mode_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_aurora_config_mode_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         aurora_config_mode_oracle("aurora-config-mode-autoloads.el"),
         &name,
         "aurora_config_mode_autoload_parity",
@@ -132,9 +135,9 @@ pub(crate) fn assert_aurora_config_mode_autoload_batch(cases: &[(&str, &str, boo
 }
 
 /// Multi-probe batch for `assert_aurora_config_mode_parity` cases (2a).
-pub(crate) fn assert_aurora_config_mode_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_aurora_config_mode_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         aurora_config_mode_oracle("aurora-config-mode.el"),
         &name,
         "aurora_config_mode_parity",

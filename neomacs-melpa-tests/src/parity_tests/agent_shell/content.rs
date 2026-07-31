@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_agent_shell_batch;
+use super::{ParityBatchCase, assert_agent_shell_batch};
 
-#[test]
-fn content_public_surface_batch() {
-    assert_agent_shell_batch(&[
-        (
-            "submitted_prompt_embeds_source_links_large_notes_and_encodes_an_image",
-            r##"
+fn submitted_prompt_embeds_source_links_large_notes_and_encodes_an_image() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "submitted_prompt_embeds_source_links_large_notes_and_encodes_an_image",
+        r##"
 (let* ((root
         (file-name-as-directory
          (expand-file-name
@@ -105,10 +103,17 @@ fn content_public_surface_batch() {
     (neomacs-agent-shell-test-kill shell))
   snapshot)
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK ([(#1=(type . "text") (text . "Compare")) ((type . "resource") (resource (uri . "file://[ORACLE-SANDBOX]/agent-shell-content-workflow/src/example.el") (text . "(defun answer () 42)\n") (mimeType . "application/emacs-lisp"))) (#1# (text . " with")) ((type . "resource_link") (uri . "file://[ORACLE-SANDBOX]/agent-shell-content-workflow/docs/design notes.md") (name . "docs/design notes.md") (mimeType . "text/plain") (size . 128)) (#1# (text . " and inspect")) ((type . "image") (data . "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB") (mimeType . "image/png") (uri . "file://[ORACLE-SANDBOX]/agent-shell-content-workflow/assets/pixel.png")) ((type . "text") (text . " before recommending a fix."))] t ("text" "resource" "text" "resource_link" "text" "image" "text") "\n\n▶ [✓] Starting agent\n\n▶ Agent capabilities\n\n▶ Available config options\n\n▶ Available models\n\n  Available /commands\n\nParity> Compare @src/example.el with @\"docs/design notes.md\" and inspect @assets/pixel.png before recommending a fix.\n\n▶ 3 files attached\n\nI compared the implementation, design notes, and image.\n\nParity>" "# Agent Shell Transcript\n\n**Agent:** Parity\n**Started:** TIME\n**Working Directory:** [ORACLE-SANDBOX]/agent-shell-content-workflow/\n**Session ID:** parity-session\n\n---\n\n## User (TIME)\n\nCompare @src/example.el with @\"docs/design notes.md\" and inspect @assets/pixel.png before recommending a fix.\n\n\n## Agent (TIME)\n\nI compared the implementation, design notes, and image.\n\n")"##
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn content_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        submitted_prompt_embeds_source_links_large_notes_and_encodes_an_image(),
+    ];
+    assert_agent_shell_batch(&cases);
 }

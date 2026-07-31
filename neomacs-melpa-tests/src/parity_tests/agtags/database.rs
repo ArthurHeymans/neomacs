@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_agtags_batch;
+use super::{ParityBatchCase, assert_agtags_batch};
 
 /// A user opens a C project, binds agtags to their own prefix key, and builds
 /// the tag database over a stale one left by an earlier checkout.  In an
@@ -11,12 +11,10 @@ use super::assert_agtags_batch;
 /// `gtags -i' in the directory the user chose, and drops the tag history and
 /// the completion cache so nothing from the old database can be offered.
 
-#[test]
-fn database_public_surface_batch() {
-    assert_agtags_batch(&[
-        (
-            "agtags_update_tags_replaces_a_stale_database_and_activates_the_backend",
-            r####"
+fn agtags_update_tags_replaces_a_stale_database_and_activates_the_backend() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agtags_update_tags_replaces_a_stale_database_and_activates_the_backend",
+        r####"
 (let* ((start (neomacs-agtags-test-start "agtags-database-workflow"))
        (root (car start))
        (tools (cdr start))
@@ -90,14 +88,17 @@ fn database_public_surface_batch() {
     (neomacs-agtags-test-cleanup root))
   result)
 "####,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("[ORACLE-SANDBOX]/agtags-database-workflow/" nil (("GPATH" nil nil) ("GTAGS" nil nil) ("GRTAGS" nil nil))) ("[ORACLE-SANDBOX]/agtags-database-workflow/" agtags (("GPATH" t t) ("GTAGS" t t) ("GRTAGS" t t))) "Tags create successed: [ORACLE-SANDBOX]/agtags-database-workflow/\n" (("GPATH" t nil) ("GTAGS" t nil) ("GRTAGS" t nil)) t (nil nil) (agtags t t t) (("q" agtags-switch-dwim) ("b" agtags-update-tags) ("f" agtags-open-file) ("F" agtags-find-file) ("t" agtags-find-tag) ("r" agtags-find-rtag) ("p" agtags-find-with-string) ("g" agtags-find-with-pattern)) "gtags cwd=[ORACLE-SANDBOX]/agtags-database-workflow <-i>\n")"#
     ]],
-        ),
-        (
-            "agtags_reports_failure_and_stays_inert_when_gnu_global_is_not_installed",
-            r####"
+    )
+}
+
+fn agtags_reports_failure_and_stays_inert_when_gnu_global_is_not_installed() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agtags_reports_failure_and_stays_inert_when_gnu_global_is_not_installed",
+        r####"
 (let* ((root (file-name-as-directory
               (expand-file-name "agtags-missing-global"
                                 (getenv "NEOMACS_TEST_SANDBOX_ROOT"))))
@@ -142,10 +143,18 @@ fn database_public_surface_batch() {
     (neomacs-agtags-test-cleanup root))
   result)
 "####,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil nil) "Tags create failed: [ORACLE-SANDBOX]/agtags-missing-global/\n" ("." ".." ".git" "docs" "include" "src") ("[ORACLE-SANDBOX]/agtags-missing-global/" nil nil "parser_init" nil nil) (nil nil))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn database_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        agtags_update_tags_replaces_a_stale_database_and_activates_the_backend(),
+        agtags_reports_failure_and_stays_inert_when_gnu_global_is_not_installed(),
+    ];
+    assert_agtags_batch(&cases);
 }

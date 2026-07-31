@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_aidev_mode_batch;
+use super::{ParityBatchCase, assert_aidev_mode_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_aidev_mode_batch(&[
-        (
-            "aidev_mode_refactors_one_function_in_a_saved_project_file_via_openai",
-            r##"(let* ((root
+fn aidev_mode_refactors_one_function_in_a_saved_project_file_via_openai() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidev_mode_refactors_one_function_in_a_saved_project_file_via_openai",
+        r##"(let* ((root
                                  (expand-file-name
                                   "openai-project"
                                   (getenv
@@ -114,14 +112,17 @@ fn workflows_public_surface_batch() {
                                (with-current-buffer project-buffer
                                  (set-buffer-modified-p nil))
                                (kill-buffer project-buffer))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t "(defun greet (name)\n  (format \"Hello, %s!\" name))\n(defun untouched (value)\n  (* value 2))\n" "(defun greet (name)\n  (format \"Hello, %s!\" name))\n(defun untouched (value)\n  (* value 2))\n" ("https://api.openai.com/v1/chat/completions" "POST" "gpt-4" ("system" "user" "user") ("(defun greet (name)\n  (concat \"Hello \" name))\n\n" "Use format and punctuation")) nil)"#
     ]],
-        ),
-        (
-            "aidev_mode_inserts_generated_python_using_selected_context_via_ollama",
-            r##"(let (request response-buffer)
+    )
+}
+
+fn aidev_mode_inserts_generated_python_using_selected_context_via_ollama() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidev_mode_inserts_generated_python_using_selected_context_via_ollama",
+        r##"(let (request response-buffer)
                            (with-temp-buffer
                              (python-mode)
                              (insert
@@ -195,14 +196,17 @@ fn workflows_public_surface_batch() {
                               request
                               (buffer-live-p
                                response-buffer))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("def normalize(value):\n    return value.strip().lower()\n\ndef slugify(value):\n    return normalize(value).replace(\" \", \"-\")\n\n# add slug helper below\n" ("http://ollama.test:11434/api/generate" "POST" "qwen2.5-coder:7b" t t) nil)"#
     ]],
-        ),
-        (
-            "aidev_mode_runs_a_two_turn_claude_chat_with_complete_conversation_history",
-            r##"(let ((aidev-provider
+    )
+}
+
+fn aidev_mode_runs_a_two_turn_claude_chat_with_complete_conversation_history() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidev_mode_runs_a_two_turn_claude_chat_with_complete_conversation_history",
+        r##"(let ((aidev-provider
                                 'claude)
                                (aidev-default-model
                                 "claude-3-5-sonnet-20240620")
@@ -289,14 +293,17 @@ fn workflows_public_surface_batch() {
                              (when
                                  (buffer-live-p chat-buffer)
                                (kill-buffer chat-buffer))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("User: Plan a safe migration\n\nAI: Inventory dependencies first.\n\nUser: Add rollback steps\n\nAI: Add a rollback checkpoint before each migration.\n\n" ((("role" . "user") ("content" . "Plan a safe migration")) (("role" . "assistant") ("content" . "Inventory dependencies first.")) (("role" . "user") ("content" . "Add rollback steps")) (("role" . "assistant") ("content" . "Add a rollback checkpoint before each migration."))) (("https://api.anthropic.com/v1/messages" "claude-3-5-sonnet-20240620" (("user" "Plan a safe migration"))) ("https://api.anthropic.com/v1/messages" "claude-3-5-sonnet-20240620" (("user" "Plan a safe migration") ("assistant" "Inventory dependencies first.") ("user" "Add rollback steps")))) (nil nil))"#
     ]],
-        ),
-        (
-            "aidev_mode_provider_failure_keeps_the_selected_file_and_disk_unchanged",
-            r##"(let* ((root
+    )
+}
+
+fn aidev_mode_provider_failure_keeps_the_selected_file_and_disk_unchanged() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aidev_mode_provider_failure_keeps_the_selected_file_and_disk_unchanged",
+        r##"(let* ((root
                                  (expand-file-name
                                   "failed-refactor"
                                   (getenv
@@ -368,10 +375,20 @@ fn workflows_public_surface_batch() {
                                (with-current-buffer project-buffer
                                  (set-buffer-modified-p nil))
                                (kill-buffer project-buffer))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((wrong-type-argument "Wrong type argument: arrayp, nil") "(defun deploy ()\n  (message \"deploying\"))\n" "(defun deploy ()\n  (message \"deploying\"))\n" nil nil)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        aidev_mode_refactors_one_function_in_a_saved_project_file_via_openai(),
+        aidev_mode_inserts_generated_python_using_selected_context_via_ollama(),
+        aidev_mode_runs_a_two_turn_claude_chat_with_complete_conversation_history(),
+        aidev_mode_provider_failure_keeps_the_selected_file_and_disk_unchanged(),
+    ];
+    assert_aidev_mode_batch(&cases);
 }

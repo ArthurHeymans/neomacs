@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{ANKI_CONNECT_MELPA_PIN, CachedMelpaOracle, S_MELPA_PIN};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod workflows;
 
@@ -66,9 +69,9 @@ pub(crate) fn assert_anki_connect_missing_dependency_signal(elisp_form: &str, ex
 
 
 /// Multi-probe batch for `assert_anki_connect_parity` cases (2a).
-pub(crate) fn assert_anki_connect_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_anki_connect_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         anki_connect_oracle("anki-connect.el", true),
         &name,
         "anki_connect_parity",
@@ -77,9 +80,9 @@ pub(crate) fn assert_anki_connect_batch(cases: &[(&str, &str, bool, Expect)]) {
 }
 
 /// Multi-probe batch for `assert_anki_connect_missing_dependency_signal` cases (2a).
-pub(crate) fn assert_anki_connect_missing_dependency_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_anki_connect_missing_dependency_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         anki_connect_oracle("anki-connect.el", false),
         &name,
         "anki_connect_missing_dependency_signal",

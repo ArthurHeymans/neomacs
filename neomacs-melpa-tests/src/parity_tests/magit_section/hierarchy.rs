@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_magit_section_batch;
+use super::{ParityBatchCase, assert_magit_section_batch};
 
-#[test]
-fn hierarchy_public_surface_batch() {
-    assert_magit_section_batch(&[
-        (
-            "magit_section_builds_exact_parent_child_tree_and_ranges",
-            r##"(with-temp-buffer
+fn magit_section_builds_exact_parent_child_tree_and_ranges() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "magit_section_builds_exact_parent_child_tree_and_ranges",
+        r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root "root")
@@ -37,14 +35,17 @@ fn hierarchy_public_surface_batch() {
                     (eq (oref two parent) group)
                     (buffer-substring-no-properties
                      (point-min) (point-max))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((root "root" 1 6 38) (group "group" 6 12 38) (item 1 12 16 25) (item 2 25 29 38)) t t t "Root\nGroup\nOne\nbody one\nTwo\nbody two\n")"#
     ]],
-        ),
-        (
-            "magit_section_ident_lookup_and_equality_are_structural",
-            r##"(with-temp-buffer
+    )
+}
+
+fn magit_section_ident_lookup_and_equality_are_structural() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "magit_section_ident_lookup_and_equality_are_structural",
+        r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root 'repository)
@@ -66,14 +67,17 @@ fn hierarchy_public_surface_batch() {
                           '((missing . "abc123")
                             (branch . "main")
                             (root . repository)))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((commit . "abc123") (branch . "main") (root . repository)) t t nil nil)"#
     ]],
-        ),
-        (
-            "magit_section_at_and_current_section_follow_text_properties",
-            r##"(with-temp-buffer
+    )
+}
+
+fn magit_section_at_and_current_section_follow_text_properties() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "magit_section_at_and_current_section_follow_text_properties",
+        r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root nil)
@@ -98,12 +102,15 @@ fn hierarchy_public_surface_batch() {
                            (eq at-first current-first)
                            (eq (magit-current-section)
                                magit-root-section))))))"##,
-            true,
-            expect![[r#"OK (nil root (item first) t t)"#]],
-        ),
-        (
-            "magit_section_siblings_parent_values_and_depth_first_mapping_are_exact",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK (nil root (item first) t t)"#]],
+    )
+}
+
+fn magit_section_siblings_parent_values_and_depth_first_mapping_are_exact() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "magit_section_siblings_parent_values_and_depth_first_mapping_are_exact",
+        r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root 'repo)
@@ -134,14 +141,17 @@ fn hierarchy_public_surface_batch() {
                     (mapcar (lambda (section) (oref section value))
                             (magit-section-siblings middle))
                     (nreverse order)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (repo (a) (c) (a c) ((item a) (leaf inside) (item b) (item c) (root repo)))"#
     ]],
-        ),
-        (
-            "magit_section_text_property_runs_cover_root_headings_bodies_and_end_boundary",
-            r##"(with-temp-buffer
+    )
+}
+
+fn magit_section_text_property_runs_cover_root_headings_bodies_and_end_boundary() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "magit_section_text_property_runs_cover_root_headings_bodies_and_end_boundary",
+        r##"(with-temp-buffer
                (magit-section-mode)
                (let ((inhibit-read-only t))
                  (magit-insert-section (root nil)
@@ -198,10 +208,21 @@ fn hierarchy_public_surface_batch() {
                      two)
                     (get-text-property
                      (point-max) 'magit-section)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("Root\nOne\nbody\nTwo\n" ((1 6 nil nil no-section) (6 15 item one one-object) (15 19 item two two-object)) nil t t nil)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn hierarchy_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        magit_section_builds_exact_parent_child_tree_and_ranges(),
+        magit_section_ident_lookup_and_equality_are_structural(),
+        magit_section_at_and_current_section_follow_text_properties(),
+        magit_section_siblings_parent_values_and_depth_first_mapping_are_exact(),
+        magit_section_text_property_runs_cover_root_headings_bodies_and_end_boundary(),
+    ];
+    assert_magit_section_batch(&cases);
 }

@@ -1,23 +1,24 @@
 use expect_test::expect;
 
-use super::{assert_zero_x_c_live_batch};
+use super::{ParityBatchCase, assert_zero_x_c_live_batch};
 
-#[test]
-fn live_public_surface_batch() {
-    assert_zero_x_c_live_batch(&[
-        (
-            "zero_x_c_live_defaults_match_the_pinned_library",
-            r##"(list
+fn zero_x_c_live_defaults_match_the_pinned_library() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "zero_x_c_live_defaults_match_the_pinned_library",
+        r##"(list
                0xc-live-display-bases
                0xc-live-input-bases
                (featurep '0xc)
                (featurep '0xc-live))"##,
-            true,
-            expect!["OK ((16 10 8 2) (16 10 8 2) t t)"],
-        ),
-        (
-            "zero_x_c_live_table_rows_cover_ambiguous_and_prefixed_inputs",
-            r##"(let ((0xc-max-base 16)
+        true,
+        expect!["OK ((16 10 8 2) (16 10 8 2) t t)"],
+    )
+}
+
+fn zero_x_c_live_table_rows_cover_ambiguous_and_prefixed_inputs() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "zero_x_c_live_table_rows_cover_ambiguous_and_prefixed_inputs",
+        r##"(let ((0xc-max-base 16)
                      (0xc-live-display-bases
                       '(16 10 8 2))
                      (0xc-live-input-bases
@@ -28,14 +29,17 @@ fn live_public_surface_batch() {
                  "0xff")
                 (0xc-live--table-rows
                  "8:17")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("Input" "Base 16" "Base 10" "Base 8" "Base 2") ("0x10" "10" "16" "20" "10000") ("0d10" "A" "10" "12" "1010") ("0o10" "8" "8" "10" "1000") ("0b10" "2" "2" "2" "10")) (("Input" "Base 16" "Base 10" "Base 8" "Base 2") ("0xff" "FF" "255" "377" "11111111")) (("Input" "Base 16" "Base 10" "Base 8" "Base 2") ("0o17" "F" "15" "17" "1111")))"#
     ]],
-        ),
-        (
-            "zero_x_c_live_table_rows_signal_when_configured_input_bases_filter_to_empty",
-            r##"(let ((0xc-max-base 36)
+    )
+}
+
+fn zero_x_c_live_table_rows_signal_when_configured_input_bases_filter_to_empty() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "zero_x_c_live_table_rows_signal_when_configured_input_bases_filter_to_empty",
+        r##"(let ((0xc-max-base 36)
                      (0xc-clamp-ten nil)
                      (0xc-clamp-hex nil)
                      (0xc-live-display-bases
@@ -44,12 +48,15 @@ fn live_public_surface_batch() {
                       '(2 8)))
                (0xc-live--table-rows
                 "z"))"##,
-            false,
-            expect!["ERR (wrong-type-argument sequencep 36)"],
-        ),
-        (
-            "zero_x_c_live_display_formats_columns_and_renders_errors",
-            r##"(let (success failure)
+        false,
+        expect!["ERR (wrong-type-argument sequencep 36)"],
+    )
+}
+
+fn zero_x_c_live_display_formats_columns_and_renders_errors() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "zero_x_c_live_display_formats_columns_and_renders_errors",
+        r##"(let (success failure)
                (unwind-protect
                    (progn
                      (0xc-live--display "0xff")
@@ -69,14 +76,17 @@ fn live_public_surface_batch() {
                       "*0xc Live Conversion*")
                    (kill-buffer
                     "*0xc Live Conversion*"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("Input  Base 16  Base 10  Base 8  Base 2    \n0xff   FF       255      377     11111111  \n" "0xc-live: (error Not a number)")"#
     ]],
-        ),
-        (
-            "zero_x_c_live_maybe_number_at_point_filters_words_by_parser_rules",
-            r##"(list
+    )
+}
+
+fn zero_x_c_live_maybe_number_at_point_filters_words_by_parser_rules() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "zero_x_c_live_maybe_number_at_point_filters_words_by_parser_rules",
+        r##"(list
                (with-temp-buffer
                  (insert "value 1234 here")
                  (goto-char 9)
@@ -87,12 +97,15 @@ fn live_public_surface_batch() {
                  (0xc-live--maybe-number-at-point))
                (with-temp-buffer
                  (0xc-live--maybe-number-at-point)))"##,
-            true,
-            expect![[r#"OK ("1234" "word" "")"#]],
-        ),
-        (
-            "zero_x_c_live_convert_installs_a_local_change_hook_around_read_string",
-            r##"(let ((original-hook
+        true,
+        expect![[r#"OK ("1234" "word" "")"#]],
+    )
+}
+
+fn zero_x_c_live_convert_installs_a_local_change_hook_around_read_string() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "zero_x_c_live_convert_installs_a_local_change_hook_around_read_string",
+        r##"(let ((original-hook
                       minibuffer-setup-hook)
                      observed)
                (cl-letf (((symbol-function
@@ -124,8 +137,20 @@ fn live_public_surface_batch() {
                   (equal
                    minibuffer-setup-hook
                    original-hook))))"##,
-            true,
-            expect![[r#"OK ("result" ("Number: " nil nil "101" nil 1) t)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK ("result" ("Number: " nil nil "101" nil 1) t)"#]],
+    )
+}
+
+#[test]
+fn live_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        zero_x_c_live_defaults_match_the_pinned_library(),
+        zero_x_c_live_table_rows_cover_ambiguous_and_prefixed_inputs(),
+        zero_x_c_live_table_rows_signal_when_configured_input_bases_filter_to_empty(),
+        zero_x_c_live_display_formats_columns_and_renders_errors(),
+        zero_x_c_live_maybe_number_at_point_filters_words_by_parser_rules(),
+        zero_x_c_live_convert_installs_a_local_change_hook_around_read_string(),
+    ];
+    assert_zero_x_c_live_batch(&cases);
 }

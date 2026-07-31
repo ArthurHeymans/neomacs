@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{ATOM_ONE_DARK_THEME_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod faces;
 mod lifecycle;
@@ -131,9 +134,9 @@ pub(crate) fn assert_atom_one_dark_theme_autoload_parity(elisp_form: &str, expec
 
 
 /// Multi-probe batch for `assert_atom_one_dark_theme_autoload_parity` cases (2a).
-pub(crate) fn assert_atom_one_dark_theme_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_atom_one_dark_theme_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         atom_one_dark_theme_oracle("atom-one-dark-theme-autoloads.el"),
         &name,
         "atom_one_dark_theme_autoload_parity",
@@ -142,9 +145,9 @@ pub(crate) fn assert_atom_one_dark_theme_autoload_batch(cases: &[(&str, &str, bo
 }
 
 /// Multi-probe batch for `assert_atom_one_dark_theme_parity` cases (2a).
-pub(crate) fn assert_atom_one_dark_theme_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_atom_one_dark_theme_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         atom_one_dark_theme_oracle("atom-one-dark-theme.el"),
         &name,
         "atom_one_dark_theme_parity",

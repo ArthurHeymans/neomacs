@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auth_source_keytar_batch;
+use super::{ParityBatchCase, assert_auth_source_keytar_batch};
 
-#[test]
-fn backend_public_surface_batch() {
-    assert_auth_source_keytar_batch(&[
-        (
-            "auth_source_keytar_backend_parse_builds_exact_keytar_backend_contract",
-            r##"(let ((backend
+fn auth_source_keytar_backend_parse_builds_exact_keytar_backend_contract() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_backend_parse_builds_exact_keytar_backend_contract",
+        r##"(let ((backend
                                 (auth-source-keytar-backend-parse
                                  'keytar)))
           (list
@@ -17,12 +15,15 @@ fn backend_public_surface_batch() {
            (eq
             (slot-value backend 'search-function)
             #'auth-source-keytar-search)))"##,
-            true,
-            expect![[r#"OK (("Keytar" keytar auth-source-keytar-search) t t)"#]],
-        ),
-        (
-            "auth_source_keytar_backend_parse_rejects_every_non_keytar_entry_without_side_effects",
-            r##"(let (calls)
+        true,
+        expect![[r#"OK (("Keytar" keytar auth-source-keytar-search) t t)"#]],
+    )
+}
+
+fn auth_source_keytar_backend_parse_rejects_every_non_keytar_entry_without_side_effects() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_backend_parse_rejects_every_non_keytar_entry_without_side_effects",
+        r##"(let (calls)
           (cl-letf
               (((symbol-function
                  'auth-source-backend-parse-parameters)
@@ -44,14 +45,17 @@ fn backend_public_surface_batch() {
                 keytar-config
                 0))
              (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((nil nil) ("keytar" nil) (KEYTAR nil) ((keytar) nil) ((:source keytar) nil) (keytar-config nil) (0 nil)) nil)"#
     ]],
-        ),
-        (
-            "auth_source_keytar_backend_parse_forwards_entry_and_unmodified_backend_to_parameter_parser",
-            r##"(let (calls)
+    )
+}
+
+fn auth_source_keytar_backend_parse_forwards_entry_and_unmodified_backend_to_parameter_parser() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_backend_parse_forwards_entry_and_unmodified_backend_to_parameter_parser",
+        r##"(let (calls)
           (cl-letf
               (((symbol-function
                  'auth-source-backend-parse-parameters)
@@ -70,14 +74,17 @@ fn backend_public_surface_batch() {
              (auth-source-keytar-backend-parse
               'keytar)
              (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:parsed keytar "Keytar") ((keytar ("Keytar" keytar auth-source-keytar-search))))"#
     ]],
-        ),
-        (
-            "auth_source_keytar_backend_parse_propagates_parameter_parser_failure_after_backend_construction",
-            r##"(let (observed)
+    )
+}
+
+fn auth_source_keytar_backend_parse_propagates_parameter_parser_failure_after_backend_construction() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_backend_parse_propagates_parameter_parser_failure_after_backend_construction",
+        r##"(let (observed)
           (cl-letf
               (((symbol-function
                  'auth-source-backend-parse-parameters)
@@ -95,14 +102,17 @@ fn backend_public_surface_batch() {
                 (auth-source-keytar-backend-parse
                  'keytar)))
              observed)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error error ("fixture backend parser failed")) (keytar ("Keytar" keytar auth-source-keytar-search)))"#
     ]],
-        ),
-        (
-            "auth_source_keytar_load_registers_parser_once_in_modern_auth_source_hook",
-            r##"(list
+    )
+}
+
+fn auth_source_keytar_load_registers_parser_once_in_modern_auth_source_hook() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_load_registers_parser_once_in_modern_auth_source_hook",
+        r##"(list
           (boundp
            'auth-source-backend-parser-functions)
           (memq
@@ -118,14 +128,17 @@ fn backend_public_surface_batch() {
           (advice-member-p
            #'auth-source-keytar-backend-parse
            'auth-source-backend-parse))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (t (auth-source-keytar-backend-parse auth-source-backends-parser-secrets auth-source-backends-parser-macos-keychain auth-source-backends-parser-file) 1 nil)"
     ],
-        ),
-        (
-            "auth_source_keytar_registered_hook_parses_keytar_and_declines_other_sources",
-            r##"(list
+    )
+}
+
+fn auth_source_keytar_registered_hook_parses_keytar_and_declines_other_sources() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_registered_hook_parses_keytar_and_declines_other_sources",
+        r##"(list
           (auth-source-keytar-test-backend-data
            (run-hook-with-args-until-success
             'auth-source-backend-parser-functions
@@ -136,26 +149,32 @@ fn backend_public_surface_batch() {
           (run-hook-with-args-until-success
            'auth-source-backend-parser-functions
            'unknown-backend))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("Keytar" keytar auth-source-keytar-search) #s(auth-source-backend ignore "" t t t nil ignore ignore) #s(auth-source-backend ignore "" t t t nil ignore ignore))"#
     ]],
-        ),
-        (
-            "auth_source_keytar_real_auth_source_backend_parser_accepts_keytar_source",
-            r##"(let ((backend
+    )
+}
+
+fn auth_source_keytar_real_auth_source_backend_parser_accepts_keytar_source() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_real_auth_source_backend_parser_accepts_keytar_source",
+        r##"(let ((backend
                                 (auth-source-backend-parse
                                  'keytar)))
           (list
            (auth-source-keytar-test-backend-data
             backend)
            (auth-source-backend-p backend)))"##,
-            true,
-            expect![[r#"OK (("Keytar" keytar auth-source-keytar-search) t)"#]],
-        ),
-        (
-            "auth_source_keytar_source_reloads_do_not_duplicate_modern_parser_hook",
-            r##"(let ((source
+        true,
+        expect![[r#"OK (("Keytar" keytar auth-source-keytar-search) t)"#]],
+    )
+}
+
+fn auth_source_keytar_source_reloads_do_not_duplicate_modern_parser_hook() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_source_reloads_do_not_duplicate_modern_parser_hook",
+        r##"(let ((source
                                 (getenv
                                  "NEOMACS_PACKAGE_SOURCE")))
           (load source nil t t)
@@ -173,12 +192,15 @@ fn backend_public_surface_batch() {
             (run-hook-with-args-until-success
              'auth-source-backend-parser-functions
              'keytar))))"##,
-            true,
-            expect![[r#"OK (1 ("Keytar" keytar auth-source-keytar-search))"#]],
-        ),
-        (
-            "auth_source_keytar_legacy_reload_uses_before_until_advice_when_parser_hook_is_unbound",
-            r##"(let ((source
+        true,
+        expect![[r#"OK (1 ("Keytar" keytar auth-source-keytar-search))"#]],
+    )
+}
+
+fn auth_source_keytar_legacy_reload_uses_before_until_advice_when_parser_hook_is_unbound() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_keytar_legacy_reload_uses_before_until_advice_when_parser_hook_is_unbound",
+        r##"(let ((source
                                 (getenv
                                  "NEOMACS_PACKAGE_SOURCE")))
           (remove-hook
@@ -200,8 +222,23 @@ fn backend_public_surface_batch() {
               t)
              (auth-source-keytar-test-backend-data
               backend))))"##,
-            true,
-            expect![[r#"OK (nil t ("Keytar" keytar auth-source-keytar-search))"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (nil t ("Keytar" keytar auth-source-keytar-search))"#]],
+    )
+}
+
+#[test]
+fn backend_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auth_source_keytar_backend_parse_builds_exact_keytar_backend_contract(),
+        auth_source_keytar_backend_parse_rejects_every_non_keytar_entry_without_side_effects(),
+        auth_source_keytar_backend_parse_forwards_entry_and_unmodified_backend_to_parameter_parser(),
+        auth_source_keytar_backend_parse_propagates_parameter_parser_failure_after_backend_construction(),
+        auth_source_keytar_load_registers_parser_once_in_modern_auth_source_hook(),
+        auth_source_keytar_registered_hook_parses_keytar_and_declines_other_sources(),
+        auth_source_keytar_real_auth_source_backend_parser_accepts_keytar_source(),
+        auth_source_keytar_source_reloads_do_not_duplicate_modern_parser_hook(),
+        auth_source_keytar_legacy_reload_uses_before_until_advice_when_parser_hook_is_unbound(),
+    ];
+    assert_auth_source_keytar_batch(&cases);
 }

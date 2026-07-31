@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{AUTH_SOURCE_GOPASS_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod backend;
 mod paths;
@@ -65,9 +68,9 @@ pub(crate) fn assert_auth_source_gopass_autoload_parity(elisp_form: &str, expect
 
 
 /// Multi-probe batch for `assert_auth_source_gopass_autoload_parity` cases (2a).
-pub(crate) fn assert_auth_source_gopass_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_auth_source_gopass_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         auth_source_gopass_oracle("auth-source-gopass-autoloads.el"),
         &name,
         "auth_source_gopass_autoload_parity",
@@ -76,9 +79,9 @@ pub(crate) fn assert_auth_source_gopass_autoload_batch(cases: &[(&str, &str, boo
 }
 
 /// Multi-probe batch for `assert_auth_source_gopass_parity` cases (2a).
-pub(crate) fn assert_auth_source_gopass_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_auth_source_gopass_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         auth_source_gopass_oracle("auth-source-gopass.el"),
         &name,
         "auth_source_gopass_parity",

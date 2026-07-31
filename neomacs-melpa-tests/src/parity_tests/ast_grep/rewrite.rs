@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_ast_grep_batch;
+use super::{ParityBatchCase, assert_ast_grep_batch};
 
-#[test]
-fn rewrite_public_surface_batch() {
-    assert_ast_grep_batch(&[
-        (
-            "ast_grep_rewrite_json_parser_preserves_full_multiline_ranges_and_replacements",
-            r##"(mapcar
+fn ast_grep_rewrite_json_parser_preserves_full_multiline_ranges_and_replacements() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_rewrite_json_parser_preserves_full_multiline_ranges_and_replacements",
+        r##"(mapcar
           (lambda (line)
             (ast-grep--parse-rewrite-line line))
           (list
@@ -16,14 +14,17 @@ fn rewrite_public_surface_batch() {
            "{\"file\":\"missing-end\",\"range\":{\"start\":{\"line\":1,\"column\":0}},\"text\":\"x\",\"replacement\":null}"
            ""
            "malformed"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:file "src/a.js" :start-line 3 :start-column 2 :end-line 5 :end-column 7 :text "old(\n x\n)" :replacement "new(x)") (:file "src/unicode.rs" :start-line 0 :start-column 1 :end-line 0 :end-column 4 :text "α界" :replacement "beta") (:file "missing-end" :start-line 1 :start-column 0 :end-line nil :end-column nil :text "x" :replacement :null) nil nil)"#
     ]],
-        ),
-        (
-            "ast_grep_collect_rewrites_runs_real_cli_with_exact_pattern_rewrite_and_directory",
-            r##"(let* ((work (ast-grep-test-path "rewrite-project"))
+    )
+}
+
+fn ast_grep_collect_rewrites_runs_real_cli_with_exact_pattern_rewrite_and_directory() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_collect_rewrites_runs_real_cli_with_exact_pattern_rewrite_and_directory",
+        r##"(let* ((work (ast-grep-test-path "rewrite-project"))
                (log (ast-grep-test-path "rewrite-argv.log"))
                (program
                 (ast-grep-test-make-executable
@@ -43,14 +44,17 @@ fn rewrite_public_surface_batch() {
               (regexp-quote work) "$WORK"
               (ast-grep-test-read-file log))
              matches)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("run\n--pattern=old($X)\n--rewrite=new($X)\n--json=stream\n$WORK\n" ((:file "src/a.js" :start-line 0 :start-column 4 :end-line 0 :end-column 10 :text "old(x)" :replacement "new(x)")))"#
     ]],
-        ),
-        (
-            "ast_grep_match_region_uses_character_coordinates_for_multiline_unicode_source",
-            r##"(with-temp-buffer
+    )
+}
+
+fn ast_grep_match_region_uses_character_coordinates_for_multiline_unicode_source() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_match_region_uses_character_coordinates_for_multiline_unicode_source",
+        r##"(with-temp-buffer
           (insert "zero\n\tα界 old(one)\nnext old(two)\n")
           (mapcar
            (lambda (match)
@@ -66,14 +70,17 @@ fn rewrite_public_surface_batch() {
               :end-line 2 :end-column 8)
              (:start-line 2 :start-column 5
               :end-line 2 :end-column 13))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((10 . 18) "old(one)") ((10 . 27) "old(one)\nnext old") ((24 . 32) "old(two)"))"#
     ]],
-        ),
-        (
-            "ast_grep_rewrite_sort_orders_files_ascending_and_positions_descending",
-            r##"(mapcar
+    )
+}
+
+fn ast_grep_rewrite_sort_orders_files_ascending_and_positions_descending() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_rewrite_sort_orders_files_ascending_and_positions_descending",
+        r##"(mapcar
           (lambda (match)
             (list
              (plist-get match :file)
@@ -86,14 +93,17 @@ fn rewrite_public_surface_batch() {
              (:file "a.rs" :start-line 3 :start-column 0 :text "a3")
              (:file "b.rs" :start-line 1 :start-column 9 :text "b9")
              (:file "a.rs" :start-line 3 :start-column 7 :text "a37"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("a.rs" 3 7 "a37") ("a.rs" 3 0 "a3") ("a.rs" 0 1 "a0") ("b.rs" 1 9 "b9") ("b.rs" 1 2 "b1"))"#
     ]],
-        ),
-        (
-            "ast_grep_apply_rewrites_bang_updates_all_files_in_reverse_offset_order_without_saving",
-            r##"(let* ((file-a
+    )
+}
+
+fn ast_grep_apply_rewrites_bang_updates_all_files_in_reverse_offset_order_without_saving() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_apply_rewrites_bang_updates_all_files_in_reverse_offset_order_without_saving",
+        r##"(let* ((file-a
                (ast-grep-test-write-file
                  "rewrite/a.txt"
                  "old(one) + old(two)\n"))
@@ -148,14 +158,17 @@ fn rewrite_public_surface_batch() {
                  choices))
             (ast-grep-test-kill-file-buffer file-a)
             (ast-grep-test-kill-file-buffer file-b)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("a.txt" "new(one) + new(two)\n" t) ("b.txt" "new(three)\n" t)) ("old(one) + old(two)\n" "old(three)\n") (#("Replaced 3 match(es) in 2 file(s); skipped 0; use C-x s to save" 50 55 (font-lock-face help-key-binding face help-key-binding))) nil)"#
     ]],
-        ),
-        (
-            "ast_grep_apply_rewrites_yes_skip_and_quit_follow_query_replace_semantics",
-            r##"(let* ((file
+    )
+}
+
+fn ast_grep_apply_rewrites_yes_skip_and_quit_follow_query_replace_semantics() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_apply_rewrites_yes_skip_and_quit_follow_query_replace_semantics",
+        r##"(let* ((file
                 (ast-grep-test-write-file
                  "rewrite/choices.el"
                  "old-a old-b old-c old-d\n"))
@@ -200,14 +213,17 @@ fn rewrite_public_surface_batch() {
                    (nreverse prompts)
                    final-message)))
             (ast-grep-test-kill-file-buffer file)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (#("old-a old-b old-c old-d\n" 0 24 (fontified nil)) nil ("Replace `old-d' with `new-d'? (y/n/!/q) ") "Replaced 0 match(es) in 0 file(s); skipped 0 (quit)")"#
     ]],
-        ),
-        (
-            "ast_grep_apply_rewrites_mixed_yes_and_skip_keeps_offsets_and_counts_exact",
-            r##"(let* ((file
+    )
+}
+
+fn ast_grep_apply_rewrites_mixed_yes_and_skip_keeps_offsets_and_counts_exact() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_apply_rewrites_mixed_yes_and_skip_keeps_offsets_and_counts_exact",
+        r##"(let* ((file
                 (ast-grep-test-write-file
                  "rewrite/mixed.txt"
                  "aa bb cc\n"))
@@ -246,14 +262,17 @@ fn rewrite_public_surface_batch() {
                    final-message
                    choices)))
             (ast-grep-test-kill-file-buffer file)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("AAAA bb CCCC\n" t #("Replaced 2 match(es) in 1 file(s); skipped 1; use C-x s to save" 50 55 (font-lock-face help-key-binding face help-key-binding)) nil)"#
     ]],
-        ),
-        (
-            "ast_grep_rewrite_command_prompts_collects_and_applies_real_workflow",
-            r##"(let* ((program
+    )
+}
+
+fn ast_grep_rewrite_command_prompts_collects_and_applies_real_workflow() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_rewrite_command_prompts_collects_and_applies_real_workflow",
+        r##"(let* ((program
                 (ast-grep-test-make-executable
                  "sg-present"
                  "exit 0"))
@@ -279,14 +298,17 @@ fn rewrite_public_surface_batch() {
              (ast-grep-rewrite "/fixture/project/")
              (nreverse calls)
              answers)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:applied ((:prompt "ast-grep pattern: " :args (nil ast-grep-history)) (:prompt "Rewrite `old($X)' with: " :args (nil ast-grep-rewrite-history)) (:collect "old($X)" "new($X)" "/fixture/project/") (:apply ((:file "a" :start-line 0 :start-column 0)))) nil)"#
     ]],
-        ),
-        (
-            "ast_grep_rewrite_command_reports_no_matches_without_entering_editor_loop",
-            r##"(let* ((program
+    )
+}
+
+fn ast_grep_rewrite_command_reports_no_matches_without_entering_editor_loop() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_rewrite_command_reports_no_matches_without_entering_editor_loop",
+        r##"(let* ((program
                 (ast-grep-test-make-executable
                  "sg-present"
                  "exit 0"))
@@ -312,8 +334,23 @@ fn rewrite_public_surface_batch() {
              (ast-grep-rewrite "/fixture/")
              (nreverse messages)
              applied)))"##,
-            true,
-            expect![[r#"OK (#1=("No matches for pattern: find-me") #1# nil)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (#1=("No matches for pattern: find-me") #1# nil)"#]],
+    )
+}
+
+#[test]
+fn rewrite_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        ast_grep_rewrite_json_parser_preserves_full_multiline_ranges_and_replacements(),
+        ast_grep_collect_rewrites_runs_real_cli_with_exact_pattern_rewrite_and_directory(),
+        ast_grep_match_region_uses_character_coordinates_for_multiline_unicode_source(),
+        ast_grep_rewrite_sort_orders_files_ascending_and_positions_descending(),
+        ast_grep_apply_rewrites_bang_updates_all_files_in_reverse_offset_order_without_saving(),
+        ast_grep_apply_rewrites_yes_skip_and_quit_follow_query_replace_semantics(),
+        ast_grep_apply_rewrites_mixed_yes_and_skip_keeps_offsets_and_counts_exact(),
+        ast_grep_rewrite_command_prompts_collects_and_applies_real_workflow(),
+        ast_grep_rewrite_command_reports_no_matches_without_entering_editor_loop(),
+    ];
+    assert_ast_grep_batch(&cases);
 }

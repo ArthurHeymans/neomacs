@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_batch;
+use super::{ParityBatchCase, assert_auto_complete_batch};
 
-#[test]
-fn lifecycle_public_surface_batch() {
-    assert_auto_complete_batch(&[
-        (
-            "auto_complete_mode_enable_disable_installs_and_removes_buffer_local_hooks_and_state",
-            r##"(with-temp-buffer
+fn auto_complete_mode_enable_disable_installs_and_removes_buffer_local_hooks_and_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_mode_enable_disable_installs_and_removes_buffer_local_hooks_and_state",
+        r##"(with-temp-buffer
                           (let ((ac-use-comphist nil)
                                 (ac-stop-flymake-on-completing
                                  nil)
@@ -63,14 +61,17 @@ fn lifecycle_public_surface_batch() {
                                   ac-completing
                                   ac-menu
                                   ac-prefix))))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((nil nil nil nil) (t 2 (ac-handle-pre-command t) (ac-handle-post-command t) (ac-clear-variables-after-save t) nil) (nil 3 nil nil nil nil nil nil))"
     ],
-        ),
-        (
-            "auto_complete_trigger_command_classifier_handles_builtin_custom_electric_and_excluded_commands",
-            r##"(let ((ac-trigger-commands
+    )
+}
+
+fn auto_complete_trigger_command_classifier_handles_builtin_custom_electric_and_excluded_commands() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_trigger_command_classifier_handles_builtin_custom_electric_and_excluded_commands",
+        r##"(let ((ac-trigger-commands
                                 '(self-insert-command
                                   fixture-trigger))
                                (ac-non-trigger-commands
@@ -94,14 +95,17 @@ fn lifecycle_public_surface_batch() {
                               package-install
                               "not-a-symbol"
                               nil)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((self-insert-command (self-insert-command . #1=(fixture-trigger)) nil) (fixture-trigger #1# nil) (fixture-blocked nil nil) (my-self-insert-command 3 nil) (electric-pair-post-self-insert-function 0 nil) (electric-buffer-list nil nil) (ac-source-command nil 0) (package-install nil nil) ("not-a-symbol" nil nil) (nil nil nil))"#
     ]],
-        ),
-        (
-            "auto_complete_disabled_faces_block_pre_command_trigger_at_exact_point",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_complete_disabled_faces_block_pre_command_trigger_at_exact_point() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_disabled_faces_block_pre_command_trigger_at_exact_point",
+        r##"(with-temp-buffer
                           (insert
                            (propertize
                             "comment"
@@ -127,14 +131,17 @@ fn lifecycle_public_surface_batch() {
                                 (ac-cursor-on-diable-face-p
                                  position)))
                              '(1 4 8 9 10 12))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((1 font-lock-comment-face #1=(font-lock-comment-face font-lock-string-face) #1#) (4 font-lock-comment-face #1# #1#) (8 nil nil nil) (9 font-lock-keyword-face nil nil) (10 font-lock-keyword-face nil nil) (12 font-lock-keyword-face nil nil))"
     ],
-        ),
-        (
-            "auto_complete_pre_and_post_command_hooks_start_update_and_abort_real_completion_session",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_complete_pre_and_post_command_hooks_start_update_and_abort_real_completion_session() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pre_and_post_command_hooks_start_update_and_abort_real_completion_session",
+        r##"(save-window-excursion
                           (with-temp-buffer
                             (switch-to-buffer
                              (current-buffer))
@@ -207,14 +214,17 @@ fn lifecycle_public_surface_batch() {
                                             ac-candidates
                                             ac-menu))))))
                                 (auto-complete-mode -1)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((t nil nil) (t t "al" ("alpha" "alpine") t) ("alp" t t "alp" ("alpha" "alpine") t) (nil nil nil nil nil))"#
     ]],
-        ),
-        (
-            "auto_complete_start_distinguishes_manual_command_from_automatic_stop_words",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_complete_start_distinguishes_manual_command_from_automatic_stop_words() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_start_distinguishes_manual_command_from_automatic_stop_words",
+        r##"(with-temp-buffer
                           (insert "end")
                           (let ((auto-complete-mode t)
                                 (ac-use-comphist nil)
@@ -253,12 +263,15 @@ fn lifecycle_public_surface_batch() {
                                         (length
                                          ac-current-sources))))))
                               (ac-abort))))"##,
-            true,
-            expect![[r#"OK ((nil nil nil nil) (t "end" 1 1))"#]],
-        ),
-        (
-            "auto_complete_trigger_key_replaces_old_binding_and_restores_fallback_space",
-            r##"(let ((ac-trigger-key nil)
+        true,
+        expect![[r#"OK ((nil nil nil nil) (t "end" 1 1))"#]],
+    )
+}
+
+fn auto_complete_trigger_key_replaces_old_binding_and_restores_fallback_space() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_trigger_key_replaces_old_binding_and_restores_fallback_space",
+        r##"(let ((ac-trigger-key nil)
                                (ac-mode-map
                                 (make-sparse-keymap)))
                            (ac-set-trigger-key "TAB")
@@ -284,12 +297,15 @@ fn lifecycle_public_surface_batch() {
                                  ac-mode-map
                                  (kbd "C-SPC"))
                                 ac-trigger-key))))"##,
-            true,
-            expect![[r#"OK (ac-trigger-key-command (nil ac-trigger-key-command "C-SPC") nil nil)"#]],
-        ),
-        (
-            "auto_complete_after_save_cache_registry_honors_predicates_and_registration_order",
-            r##"(let ((ac-clear-variables-after-save
+        true,
+        expect![[r#"OK (ac-trigger-key-command (nil ac-trigger-key-command "C-SPC") nil nil)"#]],
+    )
+}
+
+fn auto_complete_after_save_cache_registry_honors_predicates_and_registration_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_after_save_cache_registry_honors_predicates_and_registration_order",
+        r##"(let ((ac-clear-variables-after-save
                                 nil)
                                (always
                                 'always-value)
@@ -327,14 +343,17 @@ fn lifecycle_public_surface_batch() {
                               conditional
                               kept
                               predicate-calls)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (((kept . auto-complete-test-keep-p) (conditional . auto-complete-test-clear-p) (always)) always-value conditional-value kept-value 11)"
     ],
-        ),
-        (
-            "auto_complete_periodic_cache_registry_clears_on_exact_minute_multiples",
-            r##"(let ((ac-clear-variables-every-minute
+    )
+}
+
+fn auto_complete_periodic_cache_registry_clears_on_exact_minute_multiples() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_periodic_cache_registry_clears_on_exact_minute_multiples",
+        r##"(let ((ac-clear-variables-every-minute
                                 nil)
                                (ac-minutes-counter 0)
                                (each 'each-0)
@@ -377,14 +396,17 @@ fn lifecycle_public_surface_batch() {
                            (list
                             ac-clear-variables-every-minute
                             (nreverse observations)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (((every-three . 3) (every-two . 2) (each . 1)) ((1 each-1 two-1 three-1) (2 each-2 two-2 three-2) (3 each-3 two-3 three-3) (4 each-4 two-4 three-4) (5 each-5 two-5 three-5) (6 each-6 two-6 three-6)))"
     ],
-        ),
-        (
-            "auto_complete_cleanup_resets_session_objects_and_records_selected_candidate_history",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_complete_cleanup_resets_session_objects_and_records_selected_candidate_history() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_cleanup_resets_session_objects_and_records_selected_candidate_history",
+        r##"(save-window-excursion
                           (with-temp-buffer
                             (switch-to-buffer
                              (current-buffer))
@@ -441,14 +463,17 @@ fn lifecycle_public_surface_batch() {
                                          "forward-char")
                                         nil))))
                                 (ac-cleanup)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((1 "fo" 1) ((ac-inline nil) (ac-menu nil) (ac-completing nil) (ac-point nil) (ac-prefix nil) (ac-selected-candidate nil) (ac-candidates nil) (ac-current-sources nil)) (0 1 0 0 0 0 0 0 0 0 0 0))"#
     ]],
-        ),
-        (
-            "auto_complete_error_reports_original_condition_disables_mode_and_cleans_session",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_complete_error_reports_original_condition_disables_mode_and_cleans_session() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_error_reports_original_condition_disables_mode_and_cleans_session",
+        r##"(with-temp-buffer
                           (let ((ac-use-comphist nil)
                                 (ac-stop-flymake-on-completing
                                  nil))
@@ -470,8 +495,24 @@ fn lifecycle_public_surface_batch() {
                                ac-point
                                ac-completing
                                (current-message)))))"##,
-            true,
-            expect!["OK ((wrong-type-argument stringp 42) nil nil nil nil nil)"],
-        ),
-    ]);
+        true,
+        expect!["OK ((wrong-type-argument stringp 42) nil nil nil nil nil)"],
+    )
+}
+
+#[test]
+fn lifecycle_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_mode_enable_disable_installs_and_removes_buffer_local_hooks_and_state(),
+        auto_complete_trigger_command_classifier_handles_builtin_custom_electric_and_excluded_commands(),
+        auto_complete_disabled_faces_block_pre_command_trigger_at_exact_point(),
+        auto_complete_pre_and_post_command_hooks_start_update_and_abort_real_completion_session(),
+        auto_complete_start_distinguishes_manual_command_from_automatic_stop_words(),
+        auto_complete_trigger_key_replaces_old_binding_and_restores_fallback_space(),
+        auto_complete_after_save_cache_registry_honors_predicates_and_registration_order(),
+        auto_complete_periodic_cache_registry_clears_on_exact_minute_multiples(),
+        auto_complete_cleanup_resets_session_objects_and_records_selected_candidate_history(),
+        auto_complete_error_reports_original_condition_disables_mode_and_cleans_session(),
+    ];
+    assert_auto_complete_batch(&cases);
 }

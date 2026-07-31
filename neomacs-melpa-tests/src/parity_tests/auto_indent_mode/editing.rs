@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_indent_mode_batch;
+use super::{ParityBatchCase, assert_auto_indent_mode_batch};
 
-#[test]
-fn editing_public_surface_batch() {
-    assert_auto_indent_mode_batch(&[
-        (
-            "auto_indent_mode_programming_detection_combines_text_list_and_flyspell_state",
-            r##"(mapcar
+fn auto_indent_mode_programming_detection_combines_text_list_and_flyspell_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_programming_detection_combines_text_list_and_flyspell_state",
+        r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (setq major-mode (nth 0 case)
@@ -22,14 +20,17 @@ fn editing_public_surface_batch() {
            (emacs-lisp-mode nil nil)
            (text-mode t flyspell-generic-progmode-verify)
            (text-mode t other-predicate)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (((text-mode nil nil) nil) ((markdown-mode nil nil) nil) ((emacs-lisp-mode nil nil) t) ((text-mode t flyspell-generic-progmode-verify) t) ((text-mode t other-predicate) nil))"
     ],
-        ),
-        (
-            "auto_indent_mode_handle_end_of_line_collapses_and_removes_contextual_space",
-            r##"(mapcar
+    )
+}
+
+fn auto_indent_mode_handle_end_of_line_collapses_and_removes_contextual_space() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_handle_end_of_line_collapses_and_removes_contextual_space",
+        r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (insert (nth 0 case))
@@ -46,14 +47,17 @@ fn editing_public_surface_batch() {
            ("list(    item" 6 t)
            ("list(    item" 6 nil)
            ("word    next" 5 t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("(   value" 2 t) "(value" 2) (("list(    item" 6 t) "list(item" 6) (("list(    item" 6 nil) "list( item" 6) (("word    next" 5 t) "word next" 5))"#
     ]],
-        ),
-        (
-            "auto_indent_mode_handle_end_of_line_adds_space_only_for_matching_nonspace_neighbors",
-            r##"(mapcar
+    )
+}
+
+fn auto_indent_mode_handle_end_of_line_adds_space_only_for_matching_nonspace_neighbors() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_handle_end_of_line_adds_space_only_for_matching_nonspace_neighbors",
+        r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (insert (car case))
@@ -70,14 +74,17 @@ fn editing_public_surface_batch() {
            ("word next" . 5)
            ("(item" . 2)
            ("x\"value" . 3)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("wordnext" . 5) "word next" 5) (("word next" . 5) "word next" 5) (("(item" . 2) "(item" 2) (("x\"value" . 3) "x\"value" 3))"#
     ]],
-        ),
-        (
-            "auto_indent_mode_delete_char_joins_program_lines_with_contextual_spacing",
-            r##"(mapcar
+    )
+}
+
+fn auto_indent_mode_delete_char_joins_program_lines_with_contextual_spacing() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_delete_char_joins_program_lines_with_contextual_spacing",
+        r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (emacs-lisp-mode)
@@ -97,14 +104,17 @@ fn editing_public_surface_batch() {
            ("word\n    next" . 5)
            ("\"first\",\n    \"second\"" . 9)
            ("left \n    right" . 6)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("(alpha\n    beta)" . 7) "(alpha beta)" 7) (("word\n    next" . 5) "word next" 5) (("\"first\",\n    \"second\"" . 9) "\"first\", \"second\"" 9) (("left \n    right" . 6) "left right" 6))"#
     ]],
-        ),
-        (
-            "auto_indent_mode_backward_delete_variants_apply_configured_whitespace_method",
-            r##"(mapcar
+    )
+}
+
+fn auto_indent_mode_backward_delete_variants_apply_configured_whitespace_method() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_backward_delete_variants_apply_configured_whitespace_method",
+        r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (insert (nth 0 case))
@@ -122,14 +132,17 @@ fn editing_public_surface_batch() {
            ("word    " all auto-indent-backward-delete-char)
            ("word\t" untabify auto-indent-backward-delete-char-untabify)
            ("word x" nil auto-indent-delete-backward-char)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("word    " hungry auto-indent-delete-backward-char) "word" 5 auto-indent-delete-backward-char) (("word    " all auto-indent-backward-delete-char) "word" 5 auto-indent-delete-backward-char) (("word\11" untabify auto-indent-backward-delete-char-untabify) "word   " 8 auto-indent-delete-backward-char) (("word x" nil auto-indent-delete-backward-char) "word " 6 auto-indent-delete-backward-char))"#
     ]],
-        ),
-        (
-            "auto_indent_mode_yank_post_command_runs_hook_indents_and_untabifies_region",
-            r##"(let (events)
+    )
+}
+
+fn auto_indent_mode_yank_post_command_runs_hook_indents_and_untabifies_region() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_yank_post_command_runs_hook_indents_and_untabifies_region",
+        r##"(let (events)
          (with-temp-buffer
            (emacs-lisp-mode)
            (insert "(progn\n\t(message \"x\")\n)")
@@ -150,14 +163,17 @@ fn editing_public_surface_batch() {
               (nreverse events)
               (mark t)
               (point)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("(progn\n  (message \"x\")\n  )" ((1 24 "(progn\n\11(message \"x\")\n)")) 1 27)"#
     ]],
-        ),
-        (
-            "auto_indent_mode_yank_post_command_supports_reverse_region_and_tabify",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_indent_mode_yank_post_command_supports_reverse_region_and_tabify() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_yank_post_command_supports_reverse_region_and_tabify",
+        r##"(with-temp-buffer
          (setq tab-width 4)
          (insert "    alpha\n        beta")
          (set-mark (point-max))
@@ -171,12 +187,15 @@ fn editing_public_surface_batch() {
             (buffer-string)
             (mark t)
             (point))))"##,
-            true,
-            expect![[r#"OK ("\11alpha\n\11\11beta" 14 1)"#]],
-        ),
-        (
-            "auto_indent_mode_whole_buffer_save_indents_untabifies_and_trims",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ("\11alpha\n\11\11beta" 14 1)"#]],
+    )
+}
+
+fn auto_indent_mode_whole_buffer_save_indents_untabifies_and_trims() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_whole_buffer_save_indents_untabifies_and_trims",
+        r##"(with-temp-buffer
          (emacs-lisp-mode)
          (insert "(progn\n(message \"x\")   \n\t(message \"y\"))\n")
          (let ((auto-indent-indent-style 'aggressive)
@@ -189,12 +208,15 @@ fn editing_public_surface_batch() {
             (auto-indent-whole-buffer t)
             (buffer-string)
             (buffer-modified-p))))"##,
-            true,
-            expect![[r#"OK (nil "(progn\n  (message \"x\")\n  (message \"y\"))\n" t)"#]],
-        ),
-        (
-            "auto_indent_mode_whole_buffer_visit_uses_distinct_visit_options",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK (nil "(progn\n  (message \"x\")\n  (message \"y\"))\n" t)"#]],
+    )
+}
+
+fn auto_indent_mode_whole_buffer_visit_uses_distinct_visit_options() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_whole_buffer_visit_uses_distinct_visit_options",
+        r##"(with-temp-buffer
          (emacs-lisp-mode)
          (insert "(progn\n(message \"x\") \n\t(message \"y\"))\n")
          (let ((auto-indent-indent-style 'aggressive)
@@ -206,12 +228,15 @@ fn editing_public_surface_batch() {
             (auto-indent-whole-buffer nil)
             (buffer-string)
             (buffer-modified-p))))"##,
-            true,
-            expect![[r#"OK (nil "(progn\n  (message \"x\")\n  (message \"y\"))\n" t)"#]],
-        ),
-        (
-            "auto_indent_mode_whole_buffer_skips_disabled_and_conservative_cases",
-            r##"(mapcar
+        true,
+        expect![[r#"OK (nil "(progn\n  (message \"x\")\n  (message \"y\"))\n" t)"#]],
+    )
+}
+
+fn auto_indent_mode_whole_buffer_skips_disabled_and_conservative_cases() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_whole_buffer_skips_disabled_and_conservative_cases",
+        r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (funcall (nth 0 case))
@@ -228,14 +253,17 @@ fn editing_public_surface_batch() {
          '((fundamental-mode aggressive (fundamental-mode))
            (text-mode conservative nil)
            (text-mode aggressive nil)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((fundamental-mode aggressive (fundamental-mode)) nil "\11text   \n") ((text-mode conservative nil) nil "text\n") ((text-mode aggressive nil) nil "text\n"))"#
     ]],
-        ),
-        (
-            "auto_indent_mode_file_visit_can_restore_unmodified_state_after_cleanup",
-            r##"(let ((file
+    )
+}
+
+fn auto_indent_mode_file_visit_can_restore_unmodified_state_after_cleanup() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_file_visit_can_restore_unmodified_state_after_cleanup",
+        r##"(let ((file
                                 (expand-file-name
                                  "auto-indent-visit.el"
                                  default-directory)))
@@ -260,12 +288,15 @@ fn editing_public_surface_batch() {
                   (point))))
            (when (file-exists-p file)
              (delete-file file))))"##,
-            true,
-            expect![[r#"OK ("(progn\n  (message \"x\"))\n" nil 25)"#]],
-        ),
-        (
-            "auto_indent_mode_text_boundaries_distinguish_visual_whitespace_from_physical_edges",
-            r##"(mapcar
+        true,
+        expect![[r#"OK ("(progn\n  (message \"x\"))\n" nil 25)"#]],
+    )
+}
+
+fn auto_indent_mode_text_boundaries_distinguish_visual_whitespace_from_physical_edges() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_text_boundaries_distinguish_visual_whitespace_from_physical_edges",
+        r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (insert (car case))
@@ -281,8 +312,26 @@ fn editing_public_surface_batch() {
          '(("   alpha   \nbeta" . 3)
            ("   alpha   \nbeta" . 9)
            ("alpha\n\nbeta" . 7)))"##,
-            true,
-            expect!["OK (((nil nil nil) (t t nil)) ((nil nil nil) (t nil t)) ((nil t t) (t t t)))"],
-        ),
-    ]);
+        true,
+        expect!["OK (((nil nil nil) (t t nil)) ((nil nil nil) (t nil t)) ((nil t t) (t t t)))"],
+    )
+}
+
+#[test]
+fn editing_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_indent_mode_programming_detection_combines_text_list_and_flyspell_state(),
+        auto_indent_mode_handle_end_of_line_collapses_and_removes_contextual_space(),
+        auto_indent_mode_handle_end_of_line_adds_space_only_for_matching_nonspace_neighbors(),
+        auto_indent_mode_delete_char_joins_program_lines_with_contextual_spacing(),
+        auto_indent_mode_backward_delete_variants_apply_configured_whitespace_method(),
+        auto_indent_mode_yank_post_command_runs_hook_indents_and_untabifies_region(),
+        auto_indent_mode_yank_post_command_supports_reverse_region_and_tabify(),
+        auto_indent_mode_whole_buffer_save_indents_untabifies_and_trims(),
+        auto_indent_mode_whole_buffer_visit_uses_distinct_visit_options(),
+        auto_indent_mode_whole_buffer_skips_disabled_and_conservative_cases(),
+        auto_indent_mode_file_visit_can_restore_unmodified_state_after_cleanup(),
+        auto_indent_mode_text_boundaries_distinguish_visual_whitespace_from_physical_edges(),
+    ];
+    assert_auto_indent_mode_batch(&cases);
 }

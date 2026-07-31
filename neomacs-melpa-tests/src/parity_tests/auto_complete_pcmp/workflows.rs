@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_pcmp_batch;
+use super::{ParityBatchCase, assert_auto_complete_pcmp_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_auto_complete_pcmp_batch(&[
-        (
-            "auto_complete_pcmp_custom_command_dispatch_returns_real_pcomplete_choices",
-            r##"(progn
+fn auto_complete_pcmp_custom_command_dispatch_returns_real_pcomplete_choices() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_custom_command_dispatch_returns_real_pcomplete_choices",
+        r##"(progn
          (fset
           'pcomplete/ac-pcmp-fixture-mode/tool
           (lambda ()
@@ -21,12 +19,15 @@ fn workflows_public_surface_batch() {
             ac-pcmp--status
             ac-pcmp--point
             (buffer-string))))"##,
-            true,
-            expect![[r#"OK (("build" "check" "clean" "clippy") nil 6 "tool ")"#]],
-        ),
-        (
-            "auto_complete_pcmp_custom_command_prefix_preserves_full_source_candidates",
-            r##"(progn
+        true,
+        expect![[r#"OK (("build" "check" "clean" "clippy") nil 6 "tool ")"#]],
+    )
+}
+
+fn auto_complete_pcmp_custom_command_prefix_preserves_full_source_candidates() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_custom_command_prefix_preserves_full_source_candidates",
+        r##"(progn
          (fset
           'pcomplete/ac-pcmp-fixture-mode/deploy
           (lambda ()
@@ -43,14 +44,17 @@ fn workflows_public_surface_batch() {
                ac-pcmp--status
                (buffer-string))))
           '("" "p" "pro" "s" "missing")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("" #1=("production" "preview" "staging" "sandbox") nil "deploy ") ("p" #1# nil "deploy p") ("pro" #1# sole "deploy pro") ("s" #1# nil "deploy s") ("missing" #1# nil "deploy missing"))"#
     ]],
-        ),
-        (
-            "auto_complete_pcmp_candidate_selection_action_completes_command_lifecycle",
-            r##"(progn
+    )
+}
+
+fn auto_complete_pcmp_candidate_selection_action_completes_command_lifecycle() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_candidate_selection_action_completes_command_lifecycle",
+        r##"(progn
          (fset
           'pcomplete/ac-pcmp-fixture-mode/git
           (lambda ()
@@ -73,12 +77,15 @@ fn workflows_public_surface_batch() {
                 (buffer-string)
                 pcomplete-last-completion-length
                 pcomplete-last-completion-stub)))))"##,
-            true,
-            expect![[r#"OK (("checkout" "cherry-pick" "cherry") nil "git chcheckout" 8 "ch")"#]],
-        ),
-        (
-            "auto_complete_pcmp_real_file_completion_reads_deterministic_workspace_entries",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK (("checkout" "cherry-pick" "cherry") nil "git chcheckout" 8 "ch")"#]],
+    )
+}
+
+fn auto_complete_pcmp_real_file_completion_reads_deterministic_workspace_entries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_real_file_completion_reads_deterministic_workspace_entries",
+        r##"(let* ((root
                                  (expand-file-name
                                   "auto-complete-pcmp-files"
                                   default-directory))
@@ -112,12 +119,15 @@ fn workflows_public_surface_batch() {
                     (buffer-string)))))
            (when (file-exists-p root)
              (delete-directory root t))))"##,
-            true,
-            expect![[r#"OK (t ("alpha-dir/" "alpha.txt") nil "open al")"#]],
-        ),
-        (
-            "auto_complete_pcmp_real_command_failure_is_contained_and_next_request_recovers",
-            r##"(progn
+        true,
+        expect![[r#"OK (t ("alpha-dir/" "alpha.txt") nil "open al")"#]],
+    )
+}
+
+fn auto_complete_pcmp_real_command_failure_is_contained_and_next_request_recovers() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_real_command_failure_is_contained_and_next_request_recovers",
+        r##"(progn
          (fset
           'pcomplete/ac-pcmp-fixture-mode/fail
           (lambda ()
@@ -142,12 +152,15 @@ fn workflows_public_surface_batch() {
                 ac-pcmp--status
                 ac-pcmp--point
                 (buffer-string))))))"##,
-            true,
-            expect![[r#"OK (nil nil ("recovered" "ready") nil 4 "ok ")"#]],
-        ),
-        (
-            "auto_complete_pcmp_repeated_commands_refresh_candidates_status_and_point",
-            r##"(progn
+        true,
+        expect![[r#"OK (nil nil ("recovered" "ready") nil 4 "ok ")"#]],
+    )
+}
+
+fn auto_complete_pcmp_repeated_commands_refresh_candidates_status_and_point() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_repeated_commands_refresh_candidates_status_and_point",
+        r##"(progn
          (fset
           'pcomplete/ac-pcmp-fixture-mode/first
           (lambda ()
@@ -177,12 +190,15 @@ fn workflows_public_surface_batch() {
                 ac-pcmp--status
                 ac-pcmp--point
                 (buffer-string))))))"##,
-            true,
-            expect![[r#"OK (("one" "only") nil 8 ("two" "three" "four") nil 9 "second t")"#]],
-        ),
-        (
-            "auto_complete_pcmp_unique_candidate_and_action_append_exact_termination",
-            r##"(progn
+        true,
+        expect![[r#"OK (("one" "only") nil 8 ("two" "three" "four") nil 9 "second t")"#]],
+    )
+}
+
+fn auto_complete_pcmp_unique_candidate_and_action_append_exact_termination() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_unique_candidate_and_action_append_exact_termination",
+        r##"(progn
          (fset
           'pcomplete/ac-pcmp-fixture-mode/run
           (lambda ()
@@ -204,12 +220,15 @@ fn workflows_public_surface_batch() {
                 (buffer-string)
                 pcomplete-last-completion-length
                 pcomplete-last-completion-stub)))))"##,
-            true,
-            expect![[r#"OK (("release") sole "run rel -> " 4 "rel")"#]],
-        ),
-        (
-            "auto_complete_pcmp_self_insert_source_trigger_then_completion_pipeline",
-            r##"(let (events)
+        true,
+        expect![[r#"OK (("release") sole "run rel -> " 4 "rel")"#]],
+    )
+}
+
+fn auto_complete_pcmp_self_insert_source_trigger_then_completion_pipeline() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_pcmp_self_insert_source_trigger_then_completion_pipeline",
+        r##"(let (events)
          (cl-letf (((symbol-function 'self-insert-command)
                     (lambda (count)
                       (insert (make-string count ?-))
@@ -228,10 +247,24 @@ fn workflows_public_surface_batch() {
                 result
                 (buffer-string)
                 (nreverse events))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:completion-started "tool--" ((:insert 2 "tool--") (:complete (:triggered trigger-key) "tool--")))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_pcmp_custom_command_dispatch_returns_real_pcomplete_choices(),
+        auto_complete_pcmp_custom_command_prefix_preserves_full_source_candidates(),
+        auto_complete_pcmp_candidate_selection_action_completes_command_lifecycle(),
+        auto_complete_pcmp_real_file_completion_reads_deterministic_workspace_entries(),
+        auto_complete_pcmp_real_command_failure_is_contained_and_next_request_recovers(),
+        auto_complete_pcmp_repeated_commands_refresh_candidates_status_and_point(),
+        auto_complete_pcmp_unique_candidate_and_action_append_exact_termination(),
+        auto_complete_pcmp_self_insert_source_trigger_then_completion_pipeline(),
+    ];
+    assert_auto_complete_pcmp_batch(&cases);
 }

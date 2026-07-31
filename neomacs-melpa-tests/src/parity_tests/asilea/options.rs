@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_asilea_batch;
+use super::{ParityBatchCase, assert_asilea_batch};
 
-#[test]
-fn options_public_surface_batch() {
-    assert_asilea_batch(&[
-        (
-            "asilea_state_to_option_list_flattens_real_compiler_groups_in_group_and_option_order",
-            r##"(let ((options
+fn asilea_state_to_option_list_flattens_real_compiler_groups_in_group_and_option_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asilea_state_to_option_list_flattens_real_compiler_groups_in_group_and_option_order",
+        r##"(let ((options
                 [["-O0" "-O2" "-O3" "-Os"]
                  [nil "-g"]
                  [nil ("-march=native" "-mtune=native")]
@@ -25,14 +23,17 @@ fn options_public_surface_batch() {
             [1 1 1 1 0]
             [2 0 1 0 0]
             [3 1 0 1 0])))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((0 0 0 0 0) ("-O0" "-Wall" "-DNAME=hello world" "-Iinclude path")) ((1 1 1 1 0) ("-O2" "-g" "-march=native" "-mtune=native" "-Wall" "-Wextra" "-DNAME=hello world" "-Iinclude path")) ((2 0 1 0 0) ("-O3" "-march=native" "-mtune=native" "-Wall" "-DNAME=hello world" "-Iinclude path")) ((3 1 0 1 0) ("-Os" "-g" "-Wall" "-Wextra" "-DNAME=hello world" "-Iinclude path")))"#
     ]],
-        ),
-        (
-            "asilea_state_to_option_list_preserves_empty_duplicate_unicode_and_non_string_values",
-            r##"(let ((options
+    )
+}
+
+fn asilea_state_to_option_list_preserves_empty_duplicate_unicode_and_non_string_values() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asilea_state_to_option_list_preserves_empty_duplicate_unicode_and_non_string_values",
+        r##"(let ((options
                 [[nil "" "λ"]
                  [("a" "a" "") []]
                  [42 symbol ("日本" 7 nil)]
@@ -54,14 +55,17 @@ fn options_public_surface_batch() {
           '([0 0 0 0]
             [1 0 1 0]
             [2 1 2 0])))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (([0 0 0 0] :ok ("a" "a" "" 42 #1=("--nested"))) ([1 0 1 0] :ok ("" "a" "a" "" symbol #1#)) ([2 1 2 0] :ok ("λ" [] "日本" 7 nil #1#)))"#
     ]],
-        ),
-        (
-            "asilea_state_to_option_list_does_not_mutate_state_options_or_nested_lists",
-            r##"(let* ((nested
+    )
+}
+
+fn asilea_state_to_option_list_does_not_mutate_state_options_or_nested_lists() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asilea_state_to_option_list_does_not_mutate_state_options_or_nested_lists",
+        r##"(let* ((nested
                   (list "-ffoo" "-fbar"))
                  (options
                   (vector
@@ -87,14 +91,17 @@ fn options_public_surface_batch() {
           (equal nested nested-before)
           (eq nested (aref (aref options 1) 1))
           (eq nested result)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("-O3" "-ffoo" "-fbar") [1 1] t [["-O2" "-O3"] [nil #1=("-ffoo" "-fbar")]] t #1# t t nil)"#
     ]],
-        ),
-        (
-            "asilea_state_to_option_list_invalid_shape_and_indices_signal_exact_errors",
-            r##"(mapcar
+    )
+}
+
+fn asilea_state_to_option_list_invalid_shape_and_indices_signal_exact_errors() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asilea_state_to_option_list_invalid_shape_and_indices_signal_exact_errors",
+        r##"(mapcar
          (lambda (spec)
            (condition-case error-data
                (list
@@ -119,14 +126,17 @@ fn options_public_surface_batch() {
            ([0] "options")
            ([nil] [["x"]])
            ([0] [nil])))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((([0] [["x"]]) :ok ("x")) (([1] [#1=["x"]]) :error args-out-of-range (#1# 1)) (([-1] [#2=["x"]]) :error args-out-of-range (#2# -1)) (([0 0] #3=[["x"]]) :error args-out-of-range (#3# 1)) (([0] []) :error args-out-of-range ([] 0)) (([] [["x"]]) :ok nil) (("state" [#4=["x"]]) :error args-out-of-range (#4# 115)) (([0] "options") :error wrong-type-argument (arrayp 111)) (([nil] [["x"]]) :error wrong-type-argument (fixnump nil)) (([0] [nil]) :error wrong-type-argument (arrayp nil)))"#
     ]],
-        ),
-        (
-            "asilea_generate_random_state_uses_each_group_length_and_scripted_draw_in_order",
-            r##"(let ((options
+    )
+}
+
+fn asilea_generate_random_state_uses_each_group_length_and_scripted_draw_in_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asilea_generate_random_state_uses_each_group_length_and_scripted_draw_in_order",
+        r##"(let ((options
                 [["-O0" "-O2" "-O3"]
                  [nil "-g"]
                  ["a" "b" "c" "d"]
@@ -147,14 +157,17 @@ fn options_public_surface_batch() {
             options
             (asilea--state-to-option-list
              state options))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ([2 0 3 0] (2 0 3 0) (3 2 4 1) nil [["-O0" "-O2" "-O3"] [nil "-g"] ["a" "b" "c" "d"] ["only"]] ("-O3" "d" "only"))"#
     ]],
-        ),
-        (
-            "asilea_generate_random_state_returns_new_vector_without_mutating_option_groups",
-            r##"(let* ((first
+    )
+}
+
+fn asilea_generate_random_state_returns_new_vector_without_mutating_option_groups() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asilea_generate_random_state_returns_new_vector_without_mutating_option_groups",
+        r##"(let* ((first
                   (vector "a" "b"))
                  (second
                   (vector "c" "d" "e"))
@@ -173,12 +186,15 @@ fn options_public_surface_batch() {
           (eq (aref result 0) (aref options 0))
           (mapcar #'length
                   (append options nil))))"##,
-            true,
-            expect![[r#"OK ([0 0] [["a" "b"] ["c" "d" "e"]] nil t t nil (2 3))"#]],
-        ),
-        (
-            "asilea_neighboring_state_changes_scripted_coordinate_and_preserves_original",
-            r##"(let ((options
+        true,
+        expect![[r#"OK ([0 0] [["a" "b"] ["c" "d" "e"]] nil t t nil (2 3))"#]],
+    )
+}
+
+fn asilea_neighboring_state_changes_scripted_coordinate_and_preserves_original() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asilea_neighboring_state_changes_scripted_coordinate_and_preserves_original",
+        r##"(let ((options
                 [["-O0" "-O2" "-O3"]
                  [nil "-g"]
                  ["a" "b" "c" "d"]])
@@ -214,14 +230,17 @@ fn options_public_surface_batch() {
                (asilea--state-to-option-list
                 neighbor options))))
           specs))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((0 2) [1 0 2] #1=[1 0 2] [2 0 2] nil t (3 3) nil ("-O3" "c")) ((1 1) [1 0 2] #1# [1 1 2] nil t (3 2) nil ("-O2" "-g" "c")) ((2 3) [1 0 2] #1# [1 0 3] nil t (3 4) nil ("-O2" "d")) ((1 0) [1 0 2] #1# [1 0 2] nil t (3 2) nil ("-O2" "c")))"#
     ]],
-        ),
-        (
-            "asilea_random_state_helpers_surface_empty_and_invalid_shapes_exactly",
-            r##"(let ((random-function
+    )
+}
+
+fn asilea_random_state_helpers_surface_empty_and_invalid_shapes_exactly() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asilea_random_state_helpers_surface_empty_and_invalid_shapes_exactly",
+        r##"(let ((random-function
                 (lambda (limit)
                   (if
                       (and
@@ -262,10 +281,24 @@ fn options_public_surface_batch() {
              "x"
              [["x"]]
              ,random-function))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((asilea--generate-random-state [] #1=#[(limit) ((if (and (numberp limit) (> limit 0)) 0 (error "bad limit: %S" limit))) (t)]) :ok []) ((asilea--generate-random-state [[]] #1#) :error error ("bad limit: 0")) ((asilea--neighboring-state [] [] #1#) :error error ("bad limit: 0")) ((asilea--neighboring-state [0] [[]] #1#) :error error ("bad limit: 0")) ((asilea--neighboring-state "x" [["x"]] #1#) :ok "\0"))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn options_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        asilea_state_to_option_list_flattens_real_compiler_groups_in_group_and_option_order(),
+        asilea_state_to_option_list_preserves_empty_duplicate_unicode_and_non_string_values(),
+        asilea_state_to_option_list_does_not_mutate_state_options_or_nested_lists(),
+        asilea_state_to_option_list_invalid_shape_and_indices_signal_exact_errors(),
+        asilea_generate_random_state_uses_each_group_length_and_scripted_draw_in_order(),
+        asilea_generate_random_state_returns_new_vector_without_mutating_option_groups(),
+        asilea_neighboring_state_changes_scripted_coordinate_and_preserves_original(),
+        asilea_random_state_helpers_surface_empty_and_invalid_shapes_exactly(),
+    ];
+    assert_asilea_batch(&cases);
 }

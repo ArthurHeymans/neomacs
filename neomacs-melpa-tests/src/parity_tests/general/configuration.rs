@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_general_batch;
+use super::{ParityBatchCase, assert_general_batch};
 
-#[test]
-fn configuration_public_surface_batch() {
-    assert_general_batch(&[
-        (
-            "general_public_sorters_order_mixed_key_and_state_descriptors_exactly",
-            r##"(let ((by-car
+fn general_public_sorters_order_mixed_key_and_state_descriptors_exactly() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_public_sorters_order_mixed_key_and_state_descriptors_exactly",
+        r##"(let ((by-car
                      '((z . 1)
                        ([f2] . 2)
                        (nil . 3)
@@ -24,14 +22,17 @@ fn configuration_public_surface_batch() {
                  (copy-tree by-car))
                 (general-sort-by-cadr
                  (copy-tree by-cadr))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((nil . 3) ([f2] . 2) ("alpha" . 4) (beta . 5) (z . 1)) ((three nil) (two [f2]) (four "alpha") (five beta) (one z)))"#
     ]],
-        ),
-        (
-            "general_setq_uses_custom_setters_for_defined_variables",
-            r##"(progn
+    )
+}
+
+fn general_setq_uses_custom_setters_for_defined_variables() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_setq_uses_custom_setters_for_defined_variables",
+        r##"(progn
                (defcustom
                  neomacs-general-custom-value nil
                  "General parity variable."
@@ -51,14 +52,17 @@ fn configuration_public_surface_batch() {
                 (get
                  'neomacs-general-custom-value
                  'custom-set)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (#1=(:set requested) #1# #[(symbol value) ((set-default symbol (list :set value))) (t)])"#
     ]],
-        ),
-        (
-            "general_setting_helpers_preserve_default_local_and_equal_pushnew_semantics",
-            r##"(progn
+    )
+}
+
+fn general_setting_helpers_preserve_default_local_and_equal_pushnew_semantics() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_setting_helpers_preserve_default_local_and_equal_pushnew_semantics",
+        r##"(progn
                (defvar
                  neomacs-general-setting
                  'initial)
@@ -90,12 +94,15 @@ fn configuration_public_surface_batch() {
                   neomacs-general-items
                   (local-variable-p
                    'neomacs-general-setting))))"##,
-            true,
-            expect![[r#"OK (local default ((three) (one) (two)) t)"#]],
-        ),
-        (
-            "general_add_and_remove_hook_support_lists_order_append_and_local_values",
-            r##"(progn
+        true,
+        expect![[r#"OK (local default ((three) (one) (two)) t)"#]],
+    )
+}
+
+fn general_add_and_remove_hook_support_lists_order_append_and_local_values() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_add_and_remove_hook_support_lists_order_append_and_local_values",
+        r##"(progn
                (defvar
                  neomacs-general-hook-a nil)
                (defvar
@@ -134,14 +141,17 @@ fn configuration_public_surface_batch() {
                   local
                   neomacs-general-hook-a
                   neomacs-general-hook-b)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((backward-char forward-char next-line) (backward-char forward-char)) (t previous-line) nil nil)"#
     ]],
-        ),
-        (
-            "general_transient_hooks_remove_after_one_run_or_first_truthy_result",
-            r##"(progn
+    )
+}
+
+fn general_transient_hooks_remove_after_one_run_or_first_truthy_result() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_transient_hooks_remove_after_one_run_or_first_truthy_result",
+        r##"(progn
                (defvar
                  neomacs-general-once-hook nil)
                (defvar
@@ -183,12 +193,15 @@ fn configuration_public_surface_batch() {
                 neomacs-general-until-count
                 neomacs-general-once-hook
                 neomacs-general-until-hook))"##,
-            true,
-            expect![[r#"OK (1 2 nil nil)"#]],
-        ),
-        (
-            "general_advice_helpers_apply_lists_and_aliases_then_remove_cleanly",
-            r##"(progn
+        true,
+        expect![[r#"OK (1 2 nil nil)"#]],
+    )
+}
+
+fn general_advice_helpers_apply_lists_and_aliases_then_remove_cleanly() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_advice_helpers_apply_lists_and_aliases_then_remove_cleanly",
+        r##"(progn
                (defvar
                  neomacs-general-advice-events nil)
                (setq
@@ -243,14 +256,17 @@ fn configuration_public_surface_batch() {
                     'general-remove-advice)
                    (indirect-function
                     'general-advice-remove)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((a b) (before-two before-one body-a before-two before-one body-b) a (body-a) t t)"#
     ]],
-        ),
-        (
-            "general_transient_advice_removes_after_the_configured_result_condition",
-            r##"(progn
+    )
+}
+
+fn general_transient_advice_removes_after_the_configured_result_condition() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_transient_advice_removes_after_the_configured_result_condition",
+        r##"(progn
                (defvar
                  neomacs-general-advice-count 0)
                (setq
@@ -276,12 +292,15 @@ fn configuration_public_surface_batch() {
                 (neomacs-general-advice-target)
                 (neomacs-general-advice-target)
                 neomacs-general-advice-count))"##,
-            true,
-            expect![[r#"OK (nil nil finished original 3)"#]],
-        ),
-        (
-            "general_package_and_initialization_macros_run_in_the_documented_context",
-            r##"(let (events)
+        true,
+        expect![[r#"OK (nil nil finished original 3)"#]],
+    )
+}
+
+fn general_package_and_initialization_macros_run_in_the_documented_context() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_package_and_initialization_macros_run_in_the_documented_context",
+        r##"(let (events)
                (general-with-package
                    'general
                  (push
@@ -302,8 +321,22 @@ fn configuration_public_surface_batch() {
                   'general-with)
                  (indirect-function
                   'general-with-package))))"##,
-            true,
-            expect![[r#"OK (((package general) after-init after-tty) nil t)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (((package general) after-init after-tty) nil t)"#]],
+    )
+}
+
+#[test]
+fn configuration_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        general_public_sorters_order_mixed_key_and_state_descriptors_exactly(),
+        general_setq_uses_custom_setters_for_defined_variables(),
+        general_setting_helpers_preserve_default_local_and_equal_pushnew_semantics(),
+        general_add_and_remove_hook_support_lists_order_append_and_local_values(),
+        general_transient_hooks_remove_after_one_run_or_first_truthy_result(),
+        general_advice_helpers_apply_lists_and_aliases_then_remove_cleanly(),
+        general_transient_advice_removes_after_the_configured_result_condition(),
+        general_package_and_initialization_macros_run_in_the_documented_context(),
+    ];
+    assert_general_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_atl_long_lines_batch;
+use super::{ParityBatchCase, assert_atl_long_lines_batch};
 
-#[test]
-fn modes_public_surface_batch() {
-    assert_atl_long_lines_batch(&[
-        (
-            "atl_long_lines_minor_mode_initial_metadata_lighter_keymap_and_hook_state_match",
-            r##"(with-temp-buffer
+fn atl_long_lines_minor_mode_initial_metadata_lighter_keymap_and_hook_state_match() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atl_long_lines_minor_mode_initial_metadata_lighter_keymap_and_hook_state_match",
+        r##"(with-temp-buffer
          (list
           atl-long-lines-mode
           (local-variable-p
@@ -26,14 +24,17 @@ fn modes_public_surface_batch() {
            post-command-hook)
           (local-variable-p
            'post-command-hook)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil nil (atl-long-lines-mode " ATL-LL") nil t (atl-long-lines-mode--set-explicitly) 0 nil)"#
     ]],
-        ),
-        (
-            "atl_long_lines_enabling_mode_installs_one_buffer_local_post_command_callback_idempotently",
-            r##"(with-temp-buffer
+    )
+}
+
+fn atl_long_lines_enabling_mode_installs_one_buffer_local_post_command_callback_idempotently() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atl_long_lines_enabling_mode_installs_one_buffer_local_post_command_callback_idempotently",
+        r##"(with-temp-buffer
          (let ((before
                 post-command-hook))
            (atl-long-lines-mode 1)
@@ -56,12 +57,15 @@ fn modes_public_surface_batch() {
                #'atl-long-lines--start-timer
                post-command-hook)
               post-command-hook))))"##,
-            true,
-            expect!["OK (nil (t t t 1) t 1 (atl-long-lines--start-timer t))"],
-        ),
-        (
-            "atl_long_lines_disabling_mode_removes_only_its_local_callback",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK (nil (t t t 1) t 1 (atl-long-lines--start-timer t))"],
+    )
+}
+
+fn atl_long_lines_disabling_mode_removes_only_its_local_callback() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atl_long_lines_disabling_mode_removes_only_its_local_callback",
+        r##"(with-temp-buffer
          (let ((other
                 (lambda () :other)))
            (add-hook
@@ -88,12 +92,15 @@ fn modes_public_surface_batch() {
               t
               (copy-sequence
                post-command-hook))))))"##,
-            true,
-            expect!["OK (nil t 0 t 1)"],
-        ),
-        (
-            "atl_long_lines_mode_hook_sequence_for_repeated_enable_and_disable_matches",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK (nil t 0 t 1)"],
+    )
+}
+
+fn atl_long_lines_mode_hook_sequence_for_repeated_enable_and_disable_matches() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atl_long_lines_mode_hook_sequence_for_repeated_enable_and_disable_matches",
+        r##"(with-temp-buffer
          (let ((transitions nil))
            (add-hook
             'atl-long-lines-mode-hook
@@ -113,12 +120,15 @@ fn modes_public_surface_batch() {
             (atl-long-lines-test-hook-count
              #'atl-long-lines--start-timer
              post-command-hook))))"##,
-            true,
-            expect!["OK ((t t nil nil) nil 0)"],
-        ),
-        (
-            "atl_long_lines_turn_on_helper_activates_only_the_current_buffer",
-            r##"(let ((first
+        true,
+        expect!["OK ((t t nil nil) nil 0)"],
+    )
+}
+
+fn atl_long_lines_turn_on_helper_activates_only_the_current_buffer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atl_long_lines_turn_on_helper_activates_only_the_current_buffer",
+        r##"(let ((first
                 (generate-new-buffer
                  " *atl-first*"))
                (second
@@ -145,12 +155,15 @@ fn modes_public_surface_batch() {
                    post-command-hook))))
            (kill-buffer first)
            (kill-buffer second)))"##,
-            true,
-            expect!["OK (t nil 1 0)"],
-        ),
-        (
-            "atl_long_lines_minor_mode_state_and_hooks_are_independent_across_buffers",
-            r##"(let ((first
+        true,
+        expect!["OK (t nil 1 0)"],
+    )
+}
+
+fn atl_long_lines_minor_mode_state_and_hooks_are_independent_across_buffers() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atl_long_lines_minor_mode_state_and_hooks_are_independent_across_buffers",
+        r##"(let ((first
                 (generate-new-buffer
                  " *atl-one*"))
                (second
@@ -180,12 +193,15 @@ fn modes_public_surface_batch() {
                    post-command-hook))))
            (kill-buffer first)
            (kill-buffer second)))"##,
-            true,
-            expect!["OK (t nil 1 0)"],
-        ),
-        (
-            "global_atl_long_lines_mode_updates_existing_ordinary_buffers_and_cleans_up",
-            r##"(let ((first
+        true,
+        expect!["OK (t nil 1 0)"],
+    )
+}
+
+fn global_atl_long_lines_mode_updates_existing_ordinary_buffers_and_cleans_up() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "global_atl_long_lines_mode_updates_existing_ordinary_buffers_and_cleans_up",
+        r##"(let ((first
                 (generate-new-buffer
                  "atl-global-one"))
                (second
@@ -228,12 +244,15 @@ fn modes_public_surface_batch() {
            (global-atl-long-lines-mode -1)
            (kill-buffer first)
            (kill-buffer second)))"##,
-            true,
-            expect!["OK ((t t t) nil nil nil 0 0)"],
-        ),
-        (
-            "global_atl_long_lines_mode_activates_buffers_created_after_global_enable",
-            r##"(let (created)
+        true,
+        expect!["OK ((t t t) nil nil nil 0 0)"],
+    )
+}
+
+fn global_atl_long_lines_mode_activates_buffers_created_after_global_enable() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "global_atl_long_lines_mode_activates_buffers_created_after_global_enable",
+        r##"(let (created)
          (unwind-protect
              (progn
                (global-atl-long-lines-mode 1)
@@ -256,8 +275,22 @@ fn modes_public_surface_batch() {
            (when
                (buffer-live-p created)
              (kill-buffer created))))"##,
-            true,
-            expect!["OK (t t 1)"],
-        ),
-    ]);
+        true,
+        expect!["OK (t t 1)"],
+    )
+}
+
+#[test]
+fn modes_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        atl_long_lines_minor_mode_initial_metadata_lighter_keymap_and_hook_state_match(),
+        atl_long_lines_enabling_mode_installs_one_buffer_local_post_command_callback_idempotently(),
+        atl_long_lines_disabling_mode_removes_only_its_local_callback(),
+        atl_long_lines_mode_hook_sequence_for_repeated_enable_and_disable_matches(),
+        atl_long_lines_turn_on_helper_activates_only_the_current_buffer(),
+        atl_long_lines_minor_mode_state_and_hooks_are_independent_across_buffers(),
+        global_atl_long_lines_mode_updates_existing_ordinary_buffers_and_cleans_up(),
+        global_atl_long_lines_mode_activates_buffers_created_after_global_enable(),
+    ];
+    assert_atl_long_lines_batch(&cases);
 }

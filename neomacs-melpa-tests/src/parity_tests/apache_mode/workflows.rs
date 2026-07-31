@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_apache_mode_batch;
+use super::{ParityBatchCase, assert_apache_mode_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_apache_mode_batch(&[
-        (
-            "apache_mode_formats_comments_and_deploys_a_tls_virtual_host",
-            r####"
+fn apache_mode_formats_comments_and_deploys_a_tls_virtual_host() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "apache_mode_formats_comments_and_deploys_a_tls_virtual_host",
+        r####"
 (let* ((root
         (file-name-as-directory
          (expand-file-name
@@ -88,14 +86,17 @@ fn workflows_public_surface_batch() {
     (neomacs-apache-test-cleanup root))
   result)
 "####,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (:file "etc/apache2/sites-available/api.conf" :mode apache-mode :point (10 47 "    Header always set Strict-Transport-Security \"max-age=31536000; includeSubDomains\"") :lines ((1 0 "<VirtualHost *:443>") (2 4 "    ServerName api.example.test") (3 4 "    DocumentRoot \"/srv/www/api\"") (4 4 "    <Directory \"/srv/www/api\">") (5 8 "        # Options -Indexes +FollowSymLinks") (6 8 "        Require all granted") (7 4 "    </Directory>") (8 4 "    SSLEngine On") (9 4 "    SSLProtocol all -SSLv3") (10 4 "    Header always set Strict-Transport-Security \"max-age=31536000; includeSubDomains\"") (11 0 "</VirtualHost>")) :faces (("VirtualHost" font-lock-function-name-face) ("ServerName" font-lock-keyword-face) ("\"/srv/www/api\"" font-lock-string-face) ("# Options" font-lock-comment-delimiter-face) ("SSLEngine" font-lock-keyword-face) ("On" font-lock-type-face) ("Header" font-lock-keyword-face) ("\"max-age=31536000; includeSubDomains\"" font-lock-string-face)) :modified nil :disk "<VirtualHost *:443>\n    ServerName api.example.test\n    DocumentRoot \"/srv/www/api\"\n    <Directory \"/srv/www/api\">\n        # Options -Indexes +FollowSymLinks\n        Require all granted\n    </Directory>\n    SSLEngine On\n    SSLProtocol all -SSLv3\n    Header always set Strict-Transport-Security \"max-age=31536000; includeSubDomains\"\n</VirtualHost>\n")"##
     ]],
-        ),
-        (
-            "apache_mode_maintains_an_authenticated_https_htaccess_policy",
-            r####"
+    )
+}
+
+fn apache_mode_maintains_an_authenticated_https_htaccess_policy() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "apache_mode_maintains_an_authenticated_https_htaccess_policy",
+        r####"
 (let* ((root
         (file-name-as-directory
          (expand-file-name
@@ -189,14 +190,17 @@ fn workflows_public_surface_batch() {
     (neomacs-apache-test-cleanup root))
   result)
 "####,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (:file "srv/www/admin/.htaccess" :mode apache-mode :disabled-rewrite "# RewriteCond %{HTTPS} !=on\n# RewriteRule ^ https://admin.example.test%{REQUEST_URI} [R=301,L]\n" :point (11 23 4) :lines ((1 0 "AuthType Basic") (2 0 "AuthName \"Production operations\"") (3 0 "AuthUserFile /etc/apache2/admin.htpasswd") (4 0 "Require valid-user") (5 0 "") (6 0 "RewriteEngine On") (7 0 "RewriteCond %{HTTPS} !=on") (8 0 "RewriteRule ^ https://admin.example.test%{REQUEST_URI} [R=301,L]") (9 0 "") (10 0 "<FilesMatch \"^health\\.json$\">") (11 4 "    Require all granted") (12 0 "</FilesMatch>")) :faces (("AuthType" font-lock-keyword-face) ("Basic" font-lock-type-face) ("\"Production operations\"" font-lock-string-face) ("valid-user" font-lock-type-face) ("RewriteEngine" font-lock-keyword-face) ("On" font-lock-type-face) ("RewriteRule" font-lock-keyword-face) ("FilesMatch" font-lock-function-name-face)) :files-require-face font-lock-keyword-face :modified nil :disk "AuthType Basic\nAuthName \"Production operations\"\nAuthUserFile /etc/apache2/admin.htpasswd\nRequire valid-user\n\nRewriteEngine On\nRewriteCond %{HTTPS} !=on\nRewriteRule ^ https://admin.example.test%{REQUEST_URI} [R=301,L]\n\n<FilesMatch \"^health\\.json$\">\n    Require all granted\n</FilesMatch>\n")"##
     ]],
-        ),
-        (
-            "apache_mode_clones_and_customizes_a_reverse_proxy_configuration",
-            r####"
+    )
+}
+
+fn apache_mode_clones_and_customizes_a_reverse_proxy_configuration() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "apache_mode_clones_and_customizes_a_reverse_proxy_configuration",
+        r####"
 (let* ((root
         (file-name-as-directory
          (expand-file-name
@@ -281,10 +285,19 @@ fn workflows_public_surface_batch() {
     (neomacs-apache-test-cleanup root))
   result)
 "####,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:source "<VirtualHost *:80>\nServerName staging.example.test\nProxyPass /app http://staging-app.internal:8080/\nProxyPassReverse /app http://staging-app.internal:8080/\n<Location /health>\nRequire all granted\n</Location>\n</VirtualHost>\n" :destination-file "etc/httpd/conf/extra/production-proxy.conf" :mode apache-mode :indent-level 2 :replacements 3 :point (3 22 2) :lines ((1 0 "<VirtualHost *:80>") (2 2 "  ServerName production.example.test") (3 2 "  ProxyPreserveHost On") (4 2 "  ProxyPass /app http://production-app.internal:8080/") (5 2 "  ProxyPassReverse /app http://production-app.internal:8080/") (6 2 "  <Location /health>") (7 4 "    Require all granted") (8 2 "  </Location>") (9 0 "</VirtualHost>")) :faces (("VirtualHost" font-lock-function-name-face) ("ServerName" font-lock-keyword-face) ("ProxyPreserveHost" font-lock-keyword-face) ("On" font-lock-type-face) ("ProxyPass" font-lock-keyword-face) ("Location" font-lock-function-name-face) ("Require" font-lock-keyword-face) ("all" font-lock-type-face)) :modified nil :destination "<VirtualHost *:80>\n  ServerName production.example.test\n  ProxyPreserveHost On\n  ProxyPass /app http://production-app.internal:8080/\n  ProxyPassReverse /app http://production-app.internal:8080/\n  <Location /health>\n    Require all granted\n  </Location>\n</VirtualHost>\n")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        apache_mode_formats_comments_and_deploys_a_tls_virtual_host(),
+        apache_mode_maintains_an_authenticated_https_htaccess_policy(),
+        apache_mode_clones_and_customizes_a_reverse_proxy_configuration(),
+    ];
+    assert_apache_mode_batch(&cases);
 }

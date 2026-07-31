@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_with_editor_batch;
+use super::{ParityBatchCase, assert_with_editor_batch};
 
-#[test]
-fn lifecycle_public_surface_batch() {
-    assert_with_editor_batch(&[
-        (
-            "with_editor_finish_runs_query_pre_return_and_post_hooks_in_order",
-            r##"(with-temp-buffer
+fn with_editor_finish_runs_query_pre_return_and_post_hooks_in_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "with_editor_finish_runs_query_pre_return_and_post_hooks_in_order",
+        r##"(with-temp-buffer
                (let (events)
                  (setq-local
                   with-editor-finish-query-functions
@@ -28,12 +26,15 @@ fn lifecycle_public_surface_batch() {
                             (lambda (&rest _arguments) nil)))
                    (with-editor-finish 'force))
                  (nreverse events)))"##,
-            true,
-            expect![[r#"OK ((query force) pre (return nil) post)"#]],
-        ),
-        (
-            "with_editor_finish_stops_when_any_query_rejects_session",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ((query force) pre (return nil) post)"#]],
+    )
+}
+
+fn with_editor_finish_stops_when_any_query_rejects_session() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "with_editor_finish_stops_when_any_query_rejects_session",
+        r##"(with-temp-buffer
                (let (events)
                  (setq-local
                   with-editor-finish-query-functions
@@ -55,12 +56,15 @@ fn lifecycle_public_surface_batch() {
                               (push 'return events))))
                    (with-editor-finish nil))
                  (nreverse events)))"##,
-            true,
-            expect![[r#"OK ((first nil) (second nil))"#]],
-        ),
-        (
-            "with_editor_cancel_runs_cancel_hooks_and_reports_custom_message",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ((first nil) (second nil))"#]],
+    )
+}
+
+fn with_editor_cancel_runs_cancel_hooks_and_reports_custom_message() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "with_editor_cancel_runs_cancel_hooks_and_reports_custom_message",
+        r##"(with-temp-buffer
                (let (events)
                  (setq-local
                   with-editor-cancel-query-functions
@@ -90,12 +94,15 @@ fn lifecycle_public_surface_batch() {
                                events))))
                    (with-editor-cancel 'force))
                  (nreverse events)))"##,
-            true,
-            expect![[r#"OK ((query force) pre (return t) post "custom cancel")"#]],
-        ),
-        (
-            "with_editor_mode_installs_local_kill_guard_and_disabling_keeps_guard",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ((query force) pre (return t) post "custom cancel")"#]],
+    )
+}
+
+fn with_editor_mode_installs_local_kill_guard_and_disabling_keeps_guard() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "with_editor_mode_installs_local_kill_guard_and_disabling_keeps_guard",
+        r##"(with-temp-buffer
                (let ((with-editor-show-usage nil))
                  (with-editor-mode 1)
                  (let ((enabled
@@ -116,8 +123,18 @@ fn lifecycle_public_surface_batch() {
                       #'with-editor-kill-buffer-noop
                       kill-buffer-query-functions)
                      t)))))"##,
-            true,
-            expect![[r#"OK ((t t t) nil t)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK ((t t t) nil t)"#]],
+    )
+}
+
+#[test]
+fn lifecycle_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        with_editor_finish_runs_query_pre_return_and_post_hooks_in_order(),
+        with_editor_finish_stops_when_any_query_rejects_session(),
+        with_editor_cancel_runs_cancel_hooks_and_reports_custom_message(),
+        with_editor_mode_installs_local_kill_guard_and_disabling_keeps_guard(),
+    ];
+    assert_with_editor_batch(&cases);
 }

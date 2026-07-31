@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_magit_batch;
+use super::{ParityBatchCase, assert_magit_batch};
 
-#[test]
-fn blame_public_surface_batch() {
-    assert_magit_batch(&[
-        (
-            "magit_blame_addition_populates_commit_details_for_a_visited_file",
-            r##"(let* ((root (make-temp-file "magit-blame-" t))
+fn magit_blame_addition_populates_commit_details_for_a_visited_file() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "magit_blame_addition_populates_commit_details_for_a_visited_file",
+        r##"(let* ((root (make-temp-file "magit-blame-" t))
                     (default-directory (file-name-as-directory root))
                     (file (expand-file-name "tracked.txt" root))
                     (processes-before (process-list))
@@ -67,8 +65,15 @@ fn blame_public_surface_batch() {
                    (unless (memq process processes-before)
                      (delete-process process)))
                  (delete-directory root t)))"##,
-            true,
-            expect![[r#"OK (t t t "first\nsecond\n" t)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (t t t "first\nsecond\n" t)"#]],
+    )
+}
+
+#[test]
+fn blame_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        magit_blame_addition_populates_commit_details_for_a_visited_file(),
+    ];
+    assert_magit_batch(&cases);
 }

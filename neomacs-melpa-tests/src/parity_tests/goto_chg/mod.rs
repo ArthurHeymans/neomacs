@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{CachedMelpaOracle, GOTO_CHG_MELPA_PIN};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod navigation;
 mod undo_entries;
@@ -41,9 +44,9 @@ pub(crate) fn assert_goto_chg_signal_parity(form: &str, expected: Expect) {
 }
 
 /// Multi-probe batch for `assert_goto_chg_parity` cases (2a).
-pub(crate) fn assert_goto_chg_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_goto_chg_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         goto_chg_oracle(),
         &name,
         "goto_chg_parity",

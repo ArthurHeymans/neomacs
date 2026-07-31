@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auth_source_xoauth2_batch;
+use super::{ParityBatchCase, assert_auth_source_xoauth2_batch};
 
-#[test]
-fn credentials_public_surface_batch() {
-    assert_auth_source_xoauth2_batch(&[
-        (
-            "auth_source_xoauth2_file_creds_reads_plist_from_gpg_named_file",
-            r##"(let ((file-name-handler-alist nil)
+fn auth_source_xoauth2_file_creds_reads_plist_from_gpg_named_file() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_xoauth2_file_creds_reads_plist_from_gpg_named_file",
+        r##"(let ((file-name-handler-alist nil)
                (file
                 (auth-source-xoauth2-test-file
                  "single-account.gpg")))
@@ -22,12 +20,15 @@ fn credentials_public_surface_batch() {
           "ignored.example"
           "ignored-user"
           443))"##,
-            true,
-            expect![[r#"OK "Symbol’s function definition is void: :token-url""#]],
-        ),
-        (
-            "auth_source_xoauth2_file_creds_uses_exact_hash_table_tuple",
-            r##"(let ((file-name-handler-alist nil)
+        true,
+        expect![[r#"OK "Symbol’s function definition is void: :token-url""#]],
+    )
+}
+
+fn auth_source_xoauth2_file_creds_uses_exact_hash_table_tuple() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_xoauth2_file_creds_uses_exact_hash_table_tuple",
+        r##"(let ((file-name-handler-alist nil)
                (file
                 (auth-source-xoauth2-test-file
                  "accounts.gpg")))
@@ -61,14 +62,17 @@ fn credentials_public_surface_batch() {
            file "smtp.two" "bob" 587)
           (auth-source-xoauth2--file-creds
            file "missing" "alice" 993)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:token-url "one" :client-id "id-one" :client-secret "secret-one" :refresh-token "refresh-one") (:token-url "two" :client-id "id-two" :client-secret "secret-two" :refresh-token "refresh-two") nil nil)"#
     ]],
-        ),
-        (
-            "auth_source_xoauth2_file_creds_requires_gpg_extension",
-            r##"(mapcar
+    )
+}
+
+fn auth_source_xoauth2_file_creds_requires_gpg_extension() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_xoauth2_file_creds_requires_gpg_extension",
+        r##"(mapcar
          (lambda (name)
            (auth-source-xoauth2-test-error-data
             (lambda ()
@@ -78,14 +82,17 @@ fn credentials_public_surface_batch() {
            "/fixture/creds.gpg~"
            "/fixture/no-extension"
            "/fixture/GPG"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error error ("The auth-source-xoauth2-creds file must be GPG encrypted")) (:ok "GPG error: \"no usable configuration\", OpenPGP") (:error error ("The auth-source-xoauth2-creds file must be GPG encrypted")) (:error error ("The auth-source-xoauth2-creds file must be GPG encrypted")))"#
     ]],
-        ),
-        (
-            "auth_source_xoauth2_file_creds_reports_read_and_eval_failures",
-            r##"(let ((file-name-handler-alist nil)
+    )
+}
+
+fn auth_source_xoauth2_file_creds_reports_read_and_eval_failures() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_xoauth2_file_creds_reports_read_and_eval_failures",
+        r##"(let ((file-name-handler-alist nil)
                (invalid
                 (auth-source-xoauth2-test-file
                  "invalid.gpg"))
@@ -106,14 +113,17 @@ fn credentials_public_surface_batch() {
                (auth-source-xoauth2--file-creds
                 file "host" "user" "port"))))
           (list invalid runtime-error missing)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:ok "End of file during parsing: #<killed buffer>") (:ok "credential exploded") (:ok "Opening input file: No such file or directory, [ORACLE-SANDBOX]/missing.gpg"))"#
     ]],
-        ),
-        (
-            "auth_source_xoauth2_file_creds_evaluates_form_with_lexical_binding",
-            r##"(let ((file-name-handler-alist nil)
+    )
+}
+
+fn auth_source_xoauth2_file_creds_evaluates_form_with_lexical_binding() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_xoauth2_file_creds_evaluates_form_with_lexical_binding",
+        r##"(let ((file-name-handler-alist nil)
                (file
                 (auth-source-xoauth2-test-file
                  "computed.gpg")))
@@ -126,14 +136,17 @@ fn credentials_public_surface_batch() {
             "        :refresh-token \"refresh\"))"))
          (auth-source-xoauth2--file-creds
           file "host" "user" "port"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:token-url "computed-url" :client-id "computed-id" :client-secret "secret" :refresh-token "refresh")"#
     ]],
-        ),
-        (
-            "auth_source_xoauth2_file_hash_lookup_emits_exact_debug_coordinates",
-            r##"(let ((file-name-handler-alist nil)
+    )
+}
+
+fn auth_source_xoauth2_file_hash_lookup_emits_exact_debug_coordinates() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_xoauth2_file_hash_lookup_emits_exact_debug_coordinates",
+        r##"(let ((file-name-handler-alist nil)
                (file
                 (auth-source-xoauth2-test-file
                  "debug.gpg"))
@@ -159,10 +172,22 @@ fn credentials_public_surface_batch() {
             (auth-source-xoauth2--file-creds
              file "host" "user" 443)
             (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:token-url "url") (("Searching hash table for (%S %S %S)" ("host" "user" 443))))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn credentials_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auth_source_xoauth2_file_creds_reads_plist_from_gpg_named_file(),
+        auth_source_xoauth2_file_creds_uses_exact_hash_table_tuple(),
+        auth_source_xoauth2_file_creds_requires_gpg_extension(),
+        auth_source_xoauth2_file_creds_reports_read_and_eval_failures(),
+        auth_source_xoauth2_file_creds_evaluates_form_with_lexical_binding(),
+        auth_source_xoauth2_file_hash_lookup_emits_exact_debug_coordinates(),
+    ];
+    assert_auth_source_xoauth2_batch(&cases);
 }

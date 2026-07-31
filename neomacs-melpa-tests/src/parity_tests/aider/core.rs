@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_aider_batch;
+use super::{ParityBatchCase, assert_aider_batch};
 
-#[test]
-fn core_public_surface_batch() {
-    assert_aider_batch(&[
-        (
-            "aider_multiline_message_protocol_handles_plain_wrapped_and_partial_inputs",
-            r##"(mapcar
+fn aider_multiline_message_protocol_handles_plain_wrapped_and_partial_inputs() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aider_multiline_message_protocol_handles_plain_wrapped_and_partial_inputs",
+        r##"(mapcar
          #'aider--process-message-if-multi-line
          '("single line"
            ""
@@ -16,14 +14,17 @@ fn core_public_surface_batch() {
            "trailing\n"
            "{aider\nalready wrapped\naider}"
            "prefix {aider\nalready marked"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("single line" "" "{aider\nline one\nline two\naider}" "{aider\n\nleading\naider}" "{aider\ntrailing\n\naider}" "{aider\nalready wrapped\naider}" "prefix {aider\nalready marked")"#
     ]],
-        ),
-        (
-            "aider_cli_history_parser_preserves_order_multiline_blocks_and_unclosed_input",
-            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    )
+}
+
+fn aider_cli_history_parser_preserves_order_multiline_blocks_and_unclosed_input() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aider_cli_history_parser_preserves_order_multiline_blocks_and_unclosed_input",
+        r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                 (history (expand-file-name "history/.aider.input.history" root)))
          (make-directory (file-name-directory history) t)
          (with-temp-file history
@@ -41,14 +42,17 @@ fn core_public_surface_batch() {
           (aider--parse-aider-cli-history
            (expand-file-name "missing" root))
           (file-attribute-size (file-attributes history))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("first command" "{aider\nline one\nline two\naider}" "second command" "{aider\nunfinished") nil 112)"#
     ]],
-        ),
-        (
-            "aider_buffer_names_cover_repo_branch_file_and_invalid_contexts",
-            r##"(let (messages)
+    )
+}
+
+fn aider_buffer_names_cover_repo_branch_file_and_invalid_contexts() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aider_buffer_names_cover_repo_branch_file_and_invalid_contexts",
+        r##"(let (messages)
          (cl-letf (((symbol-function 'message)
                     (lambda (format-string &rest args)
                       (push (apply #'format format-string args) messages))))
@@ -79,14 +83,17 @@ fn core_public_surface_batch() {
                     (aider-buffer-name)
                   (error (list (car error-data) (cadr error-data))))))
             (nreverse messages))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("*aider:/repo/project/*" "*aider:/repo/project/:feature/a*" "*aider:/repo/project/*" "*aider:/work/loose/*" (error "Aider: Not in a git repository and current buffer is not associated with a file") ("Aider: Could not determine git branch for '/repo/project/', or branch name is empty. Using default git repo buffer name."))"#
     ]],
-        ),
-        (
-            "aider_prepare_args_adds_architect_guard_and_subtree_once",
-            r##"(let ((aider-args '("--model" "sonnet"))
+    )
+}
+
+fn aider_prepare_args_adds_architect_guard_and_subtree_once() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aider_prepare_args_adds_architect_guard_and_subtree_once",
+        r##"(let ((aider-args '("--model" "sonnet"))
                messages)
          (cl-letf (((symbol-function 'aider--maybe-prompt-subtree-only-for-special-modes)
                     (lambda (args) (append args '("--from-mode"))))
@@ -100,14 +107,17 @@ fn core_public_surface_batch() {
                    '("--auto-accept-architect" "--subtree-only")))
               (aider--prepare-aider-args nil t))
             (nreverse messages))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("--model" "sonnet" "--no-auto-accept-architect" . #1=("--from-mode")) ("--model" "sonnet" "--no-auto-accept-architect" "--from-mode" "--subtree-only") ("--auto-accept-architect" "--subtree-only" . #1#) ("Adding --subtree-only argument as requested."))"#
     ]],
-        ),
-        (
-            "aider_command_completion_reports_exact_bounds_candidates_and_exclusivity",
-            r##"(mapcar
+    )
+}
+
+fn aider_command_completion_reports_exact_bounds_candidates_and_exclusivity() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aider_command_completion_reports_exact_bounds_candidates_and_exclusivity",
+        r##"(mapcar
          (lambda (input)
            (with-temp-buffer
              (insert input)
@@ -120,14 +130,17 @@ fn core_public_surface_batch() {
                      (nth 3 completion)
                      (nth 4 completion))))))
          '("/" "/co" "prefix /co" "  /rea" "/unknown" "/model suffix"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((1 2 ("/add" "/architect" "/ask" "/code" "/reset" "/undo" "/lint" "/read-only" "/drop" "/copy" "/copy-context" "/clear" "/commit" "/exit" "/quit" "/paste" "/help" "/chat-mode" "/diff" "/editor" "/git" "/load" "/ls" "/map" "/map-refresh" "/think-tokens" "/tokens" "/model" "/editor-model" "/weak-model" "/models" "/reasoning-effort" "/multiline-mode" "/report" "/run" "/save" "/settings" "/test" "/voice" "/web") :exclusive no) (1 4 ("/code" "/copy" "/copy-context" "/commit") :exclusive no) nil nil nil (1 7 ("/model" "/models") :exclusive no))"#
     ]],
-        ),
-        (
-            "aider_comint_mode_installs_buffer_local_hooks_history_and_input_navigation",
-            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    )
+}
+
+fn aider_comint_mode_installs_buffer_local_hooks_history_and_input_navigation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aider_comint_mode_installs_buffer_local_hooks_history_and_input_navigation",
+        r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                 (history (expand-file-name ".aider.input.history" root))
                 (aider-enable-markdown-highlighting nil))
          (with-temp-file history
@@ -158,14 +171,17 @@ fn core_public_surface_batch() {
                            (buffer-string)
                            aider--history-index
                            aider--original-input))))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((aider-comint-mode aider-input-sender t (aider-core--command-completion comint-completion-at-point t) ("newest" "oldest")) "newest" "oldest" "newest" "draft" nil nil)"#
     ]],
-        ),
-        (
-            "aider_current_added_file_parser_reads_latest_prompt_block_and_read_only_suffixes",
-            r##"(let ((buffer (generate-new-buffer " *aider-added-files*")))
+    )
+}
+
+fn aider_current_added_file_parser_reads_latest_prompt_block_and_read_only_suffixes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aider_current_added_file_parser_reads_latest_prompt_block_and_read_only_suffixes",
+        r##"(let ((buffer (generate-new-buffer " *aider-added-files*")))
          (unwind-protect
              (with-current-buffer buffer
                (insert "old.py\n\n> old prompt\n")
@@ -182,14 +198,17 @@ fn core_public_surface_batch() {
                     (insert "no prompt here\n")
                     (aider-core--parse-added-file-list)))))
            (kill-buffer buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("> old prompt" "src/main.py" "docs/guide.md" "tests/test_main.py") nil)"#
     ]],
-        ),
-        (
-            "aider_auto_trigger_hooks_route_only_exact_commands_at_end_of_line",
-            r##"(let (calls)
+    )
+}
+
+fn aider_auto_trigger_hooks_route_only_exact_commands_at_end_of_line() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aider_auto_trigger_hooks_route_only_exact_commands_at_end_of_line",
+        r##"(let (calls)
          (cl-letf (((symbol-function 'completion-at-point)
                     (lambda () (push 'completion calls)))
                    ((symbol-function 'aider-prompt-insert-add-file-path)
@@ -208,8 +227,22 @@ fn core_public_surface_batch() {
                  (aider-core--auto-trigger-file-path-insertion)
                  (aider-core--auto-trigger-insert-prompt))))
            (nreverse calls)))"##,
-            true,
-            expect!["OK (completion add-path drop-path prompt completion)"],
-        ),
-    ]);
+        true,
+        expect!["OK (completion add-path drop-path prompt completion)"],
+    )
+}
+
+#[test]
+fn core_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        aider_multiline_message_protocol_handles_plain_wrapped_and_partial_inputs(),
+        aider_cli_history_parser_preserves_order_multiline_blocks_and_unclosed_input(),
+        aider_buffer_names_cover_repo_branch_file_and_invalid_contexts(),
+        aider_prepare_args_adds_architect_guard_and_subtree_once(),
+        aider_command_completion_reports_exact_bounds_candidates_and_exclusivity(),
+        aider_comint_mode_installs_buffer_local_hooks_history_and_input_navigation(),
+        aider_current_added_file_parser_reads_latest_prompt_block_and_read_only_suffixes(),
+        aider_auto_trigger_hooks_route_only_exact_commands_at_end_of_line(),
+    ];
+    assert_aider_batch(&cases);
 }

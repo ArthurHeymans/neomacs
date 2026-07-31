@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_add_hooks_batch;
+use super::{ParityBatchCase, assert_add_hooks_batch};
 
 /// The example in the package's own docstrings, run as written: one function
 /// onto two mode hooks, first through `add-hooks-pair' and then through the
@@ -13,12 +13,10 @@ use super::assert_add_hooks_batch;
 /// one call, and a hook variable nobody has defined yet is simply created by
 /// `add-hook' - which is how this works for modes that are not loaded.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_add_hooks_batch(&[
-        (
-            "the_documented_example_puts_one_function_on_several_mode_hooks",
-            r##"(progn
+fn the_documented_example_puts_one_function_on_several_mode_hooks() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_documented_example_puts_one_function_on_several_mode_hooks",
+        r##"(progn
   (add-hooks-test-reset 'css-mode-hook 'sgml-mode-hook 'add-hooks-test-plain-hook)
   (add-hooks-pair '(css-mode sgml-mode) 'add-hooks-test-emmet-mode)
   (let ((by-pair (list :css css-mode-hook
@@ -43,14 +41,17 @@ fn workflows_public_surface_batch() {
                                                   'add-hooks-test-emmet-mode)
             :undefined-hook-after (and (boundp 'add-hooks-test-unheard-of-mode-hook)
                                        add-hooks-test-unheard-of-mode-hook)))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (:through-a-pair (:css (add-hooks-test-emmet-mode) :sgml (add-hooks-test-emmet-mode) :css-fires (emmet-mode) :sgml-fires (emmet-mode)) :through-the-alist (:css (add-hooks-test-emmet-mode) :sgml (add-hooks-test-emmet-mode)) :both-forms-agree t :suffix-implied css-mode-hook :suffix-kept add-hooks-test-plain-hook :mixed-spellings ((add-hooks-test-emmet-mode) (add-hooks-test-emmet-mode)) :undefined-hook-before nil :undefined-hook-added nil :undefined-hook-after (add-hooks-test-emmet-mode))"
     ],
-        ),
-        (
-            "one_pair_covers_every_hook_crossed_with_every_function",
-            r##"(progn
+    )
+}
+
+fn one_pair_covers_every_hook_crossed_with_every_function() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "one_pair_covers_every_hook_crossed_with_every_function",
+        r##"(progn
   (add-hooks-test-reset 'css-mode-hook 'sgml-mode-hook 'text-mode-hook)
   (add-hooks-pair '(css-mode sgml-mode text-mode)
                   '(add-hooks-test-emmet-mode add-hooks-test-rainbow-mode))
@@ -76,14 +77,17 @@ fn workflows_public_surface_batch() {
             :and-they-fire (list (add-hooks-test-fire 'css-mode-hook)
                                  (add-hooks-test-fire 'sgml-mode-hook)
                                  (add-hooks-test-fire 'text-mode-hook))))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (:after-one-call (:css #1=(add-hooks-test-rainbow-mode add-hooks-test-emmet-mode) :sgml #2=(add-hooks-test-rainbow-mode add-hooks-test-emmet-mode) :text #3=(add-hooks-test-rainbow-mode add-hooks-test-emmet-mode) :css-fires (rainbow-mode emmet-mode)) :after-the-same-call-again (:css #1# :sgml #2# :text #3#) :unchanged t :the-very-same-list t :from-an-alist-of-two-pairs (:css (add-hooks-test-emmet-mode) :sgml (add-hooks-test-rainbow-mode add-hooks-test-emmet-mode) :text (add-hooks-test-rainbow-mode add-hooks-test-emmet-mode)) :and-they-fire ((emmet-mode) (rainbow-mode emmet-mode) (rainbow-mode emmet-mode)))"
     ],
-        ),
-        (
-            "a_lambda_counts_as_one_function_and_a_list_as_several",
-            r##"(let ((hook 'add-hooks-test-plain-hook))
+    )
+}
+
+fn a_lambda_counts_as_one_function_and_a_list_as_several() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "a_lambda_counts_as_one_function_and_a_list_as_several",
+        r##"(let ((hook 'add-hooks-test-plain-hook))
   (add-hooks-test-reset hook)
   (add-hooks-pair 'add-hooks-test-plain (add-hooks-test-recorder 'single))
   (let ((single (list :entries (length add-hooks-test-plain-hook)
@@ -110,14 +114,17 @@ fn workflows_public_surface_batch() {
                              :list-of-two (length (add-hooks-listify '(a b)))
                              :symbol (add-hooks-listify 'add-hooks-test-emmet-mode)
                              :nil (add-hooks-listify nil)))))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (:one-lambda (:entries 1 :fires (single)) :two-lambdas (:entries 2 :fires (second first)) :one-symbol (:entries 1 :fires (emmet-mode)) :nil-functions (:entries 0 :value nil) :listify (:lambda 1 :list-of-two 2 :symbol (add-hooks-test-emmet-mode) :nil nil))"
     ],
-        ),
-        (
-            "a_string_hook_is_refused_at_once_and_a_list_of_non_functions_is_not",
-            r##"(progn
+    )
+}
+
+fn a_string_hook_is_refused_at_once_and_a_list_of_non_functions_is_not() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "a_string_hook_is_refused_at_once_and_a_list_of_non_functions_is_not",
+        r##"(progn
   (add-hooks-test-reset 'css-mode-hook 'add-hooks-test-plain-hook)
   (list
    :string-hook
@@ -141,10 +148,20 @@ fn workflows_public_surface_batch() {
            :signal-when-run (condition-case error
                                 (add-hooks-test-fire 'add-hooks-test-plain-hook)
                               (error (list (car error) (cadr error))))))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (:string-hook (:signal (wrong-type-argument symbolp) :hook-untouched nil) :list-of-non-functions (:stored (beta alpha) :looks-normal t :signal-when-run (void-function beta)) :unevaluated-form (:stored (#1='oops add-hooks-test-fired setq) :signal-when-run (invalid-function #1#)))"
     ],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        the_documented_example_puts_one_function_on_several_mode_hooks(),
+        one_pair_covers_every_hook_crossed_with_every_function(),
+        a_lambda_counts_as_one_function_and_a_list_as_several(),
+        a_string_hook_is_refused_at_once_and_a_list_of_non_functions_is_not(),
+    ];
+    assert_add_hooks_batch(&cases);
 }

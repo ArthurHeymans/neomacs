@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{ASCII_TABLE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod commands;
 mod formatting;
@@ -94,9 +97,9 @@ pub(crate) fn assert_ascii_table_autoload_parity(elisp_form: &str, expected: Exp
 
 
 /// Multi-probe batch for `assert_ascii_table_autoload_parity` cases (2a).
-pub(crate) fn assert_ascii_table_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_ascii_table_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         ascii_table_oracle("ascii-table-autoloads.el"),
         &name,
         "ascii_table_autoload_parity",
@@ -105,9 +108,9 @@ pub(crate) fn assert_ascii_table_autoload_batch(cases: &[(&str, &str, bool, Expe
 }
 
 /// Multi-probe batch for `assert_ascii_table_parity` cases (2a).
-pub(crate) fn assert_ascii_table_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_ascii_table_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         ascii_table_oracle("ascii-table.el"),
         &name,
         "ascii_table_parity",

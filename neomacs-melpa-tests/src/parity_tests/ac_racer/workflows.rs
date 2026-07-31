@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_ac_racer_batch;
+use super::{ParityBatchCase, assert_ac_racer_batch};
 
 /// The workflow the package exists for: open a Rust file in a cargo project,
 /// run `M-x ac-racer-setup', and complete a method against racer.  The
@@ -12,12 +12,10 @@ use super::assert_ac_racer_batch;
 /// candidates auto-complete first expands their common part inline, then the
 /// user picks the second one and completes it.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_ac_racer_batch(&[
-        (
-            "sets_up_the_source_and_completes_a_string_method_through_racer",
-            r##"
+fn sets_up_the_source_and_completes_a_string_method_through_racer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "sets_up_the_source_and_completes_a_string_method_through_racer",
+        r##"
         (progn
           (ac-racer-test-project)
           (ac-racer-test-reply
@@ -79,14 +77,17 @@ fn workflows_public_surface_batch() {
                            (ac-racer-test-file-text ac-racer--tempfile))
            :recorded (ac-racer-test-recorded)))
     "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:setup (:mode-before nil :sources-before #1=(ac-source-words-in-same-mode-buffers) :returned (ac-source-racer . #1#) :mode-after t :major-mode rust-mode) :offered (:line "    label.insert" :point 155 :ac-point 149 :ac-prefix "insert" :candidates (("insert" "Function" "pub fn insert(&mut self, idx: usize, ch: char)") ("insert_str" "Function" "pub fn insert_str(&mut self, idx: usize, string: &str)")) :first-properties (document "pub fn insert(&mut self, idx: usize, ch: char)" summary "Function") :menu-live t :menu ("insert" "insert_str") :selected "insert") :completed (:line "    label.insert_str" :point 159 :menu-live nil :last-completion ("insert_str" "Function" "pub fn insert_str(&mut self, idx: usize, string: &str)" 149) :buffer "use std::collections::HashMap;\n\nfn main() {\n    let mut scores: HashMap<String, i32> = HashMap::new();\n    let mut label = String::new();\n    label.insert_str\n    scores.insert(label, 1);\n    for (name, score) in &scores {\n        println!(\"{}: {}\", name, score);\n    }\n}\n") :tempfile (t "use std::collections::HashMap;\n\nfn main() {\n    let mut scores: HashMap<String, i32> = HashMap::new();\n    let mut label = String::new();\n    label.ins\n    scores.insert(label, 1);\n    for (name, score) in &scores {\n        println!(\"{}: {}\", name, score);\n    }\n}\n") :recorded (("01-request" . "argv: complete 6 13 [ORACLE-SANDBOX]/rust/src/main.rs [ORACLE-TMPDIR]/ac-racer-complete\nRUST_SRC_PATH: [ORACLE-SANDBOX]/rust/rust-src\nstdin: \ncwd: [ORACLE-SANDBOX]/rust/src\ntempfile([ORACLE-TMPDIR]/ac-racer-complete):\nuse std::collections::HashMap;\n\nfn main() {\n    let mut scores: HashMap<String, i32> = HashMap::new();\n    let mut label = String::new();\n    label.ins\n    scores.insert(label, 1);\n    for (name, score) in &scores {\n        println!(\"{}: {}\", name, score);\n    }\n}\n")))"#
     ]],
-        ),
-        (
-            "completes_a_non_ascii_identifier_and_reports_a_character_column",
-            r##"
+    )
+}
+
+fn completes_a_non_ascii_identifier_and_reports_a_character_column() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "completes_a_non_ascii_identifier_and_reports_a_character_column",
+        r##"
         (progn
           (ac-racer-test-project)
           (ac-racer-test-reply
@@ -129,14 +130,17 @@ fn workflows_public_surface_batch() {
            :tempfile (ac-racer-test-file-text ac-racer--tempfile)
            :recorded (ac-racer-test-recorded)))
     "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:before (:line "    let betrag = währung::erz" :point 202 :column 29 :byte-column 30) :completed (:line "    let betrag = währung::erzeuge" :point 206 :column 33 :menu-live nil :last-completion ("erzeuge" "Function" "pub fn erzeuge(höhe: i64) -> Betrag" 199)) :tempfile "mod währung {\n    pub struct Betrag { pub höhe: i64 }\n\n    pub fn erzeuge(höhe: i64) -> Betrag {\n        Betrag { höhe }\n    }\n}\n\nfn main() {\n    // Grüße an die Welt – 図形\n    let betrag = währung::erz\n    println!(\"{}\", betrag.höhe);\n}\n" :recorded (("01-request" . "argv: complete 11 29 [ORACLE-SANDBOX]/rust/src/main.rs [ORACLE-TMPDIR]/ac-racer-complete\nRUST_SRC_PATH: [ORACLE-SANDBOX]/rust/rust-src\nstdin: \ncwd: [ORACLE-SANDBOX]/rust/src\ntempfile([ORACLE-TMPDIR]/ac-racer-complete):\nmod währung {\n    pub struct Betrag { pub höhe: i64 }\n\n    pub fn erzeuge(höhe: i64) -> Betrag {\n        Betrag { höhe }\n    }\n}\n\nfn main() {\n    // Grüße an die Welt – 図形\n    let betrag = währung::erz\n    println!(\"{}\", betrag.höhe);\n}\n")))"#
     ]],
-        ),
-        (
-            "offers_nothing_when_racer_finds_no_matches_or_exits_non_zero",
-            r##"
+    )
+}
+
+fn offers_nothing_when_racer_finds_no_matches_or_exits_non_zero() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "offers_nothing_when_racer_finds_no_matches_or_exits_non_zero",
+        r##"
         (progn
           (ac-racer-test-project)
           (ac-racer-test-reply "PREFIX 10,13,zzz\nEND\n" 1)
@@ -183,14 +187,17 @@ fn workflows_public_surface_batch() {
                    :invocations (ac-racer-test-invocations)))
            :recorded (ac-racer-test-recorded)))
     "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:no-matches (:line "    label.zzz" :point 57 :candidates nil :menu-live nil :modified nil :invocations 1) :racer-failed (:line "    label.ins" :point 63 :candidates nil :menu-live nil :modified nil :invocations 2) :recorded (("01-request" . "argv: complete 3 13 [ORACLE-SANDBOX]/rust/src/main.rs [ORACLE-TMPDIR]/ac-racer-complete\nRUST_SRC_PATH: [ORACLE-SANDBOX]/rust/rust-src\nstdin: \ncwd: [ORACLE-SANDBOX]/rust/src\ntempfile([ORACLE-TMPDIR]/ac-racer-complete):\nfn main() {\n    let label = String::new();\n    label.zzz\n}\n") ("02-request" . "argv: complete 3 13 [ORACLE-SANDBOX]/rust/src/lib.rs [ORACLE-TMPDIR]/ac-racer-complete\nRUST_SRC_PATH: [ORACLE-SANDBOX]/rust/rust-src\nstdin: \ncwd: [ORACLE-SANDBOX]/rust/src\ntempfile([ORACLE-TMPDIR]/ac-racer-complete):\npub fn helper() {\n    let label = String::new();\n    label.ins\n}\n")))"#
     ]],
-        ),
-        (
-            "signals_file_missing_when_the_racer_binary_is_not_installed",
-            r##"
+    )
+}
+
+fn signals_file_missing_when_the_racer_binary_is_not_installed() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "signals_file_missing_when_the_racer_binary_is_not_installed",
+        r##"
         (progn
           (ac-racer-test-project)
           (ac-racer-test-reply
@@ -232,14 +239,17 @@ fn workflows_public_surface_batch() {
                    :invocations (ac-racer-test-invocations)))
            :recorded (ac-racer-test-recorded)))
     "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:uninstalled (:racer-cmd "racer" :exists nil :error (file-missing ("Searching for program" "No such file or directory" "[ORACLE-SANDBOX]/rust/bin/racer")) :line "    label.ins" :point 61 :candidates nil :modified nil :invocations 0) :reinstalled (:line "    label.insert" :point 64 :last-completion ("insert" "Function" "pub fn insert(&mut self, idx: usize, ch: char)" 58) :invocations 1) :recorded (("01-request" . "argv: complete 3 13 [ORACLE-SANDBOX]/rust/src/main.rs [ORACLE-TMPDIR]/ac-racer-complete\nRUST_SRC_PATH: [ORACLE-SANDBOX]/rust/rust-src\nstdin: \ncwd: [ORACLE-SANDBOX]/rust/src\ntempfile([ORACLE-TMPDIR]/ac-racer-complete):\nfn main() {\n    let mut label = String::new();\n    label.ins\n}\n")))"#
     ]],
-        ),
-        (
-            "setup_adds_the_source_once_and_only_to_the_buffer_that_ran_it",
-            r##"
+    )
+}
+
+fn setup_adds_the_source_once_and_only_to_the_buffer_that_ran_it() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "setup_adds_the_source_once_and_only_to_the_buffer_that_ran_it",
+        r##"
         (progn
           (ac-racer-test-project)
           (ac-racer-test-reply
@@ -307,10 +317,21 @@ fn workflows_public_surface_batch() {
                      :invocations (ac-racer-test-invocations)))
              :recorded (ac-racer-test-recorded))))
     "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:configured (:first #1=(ac-source-racer . #2=(ac-source-words-in-same-mode-buffers)) :second #1# :mode t :buffer-local t) :untouched (:major-mode rust-mode :mode t :sources #2# :buffer-local nil) :global-default #2# :completes-in-configured (:line "    label.insert" :last-completion ("insert" "Function" "pub fn insert(&mut self, idx: usize, ch: char)" 58) :invocations 1) :silent-in-untouched (:line "    label.ins" :point 67 :sources #2# :candidates ("ins" "insert") :modified nil :invocations 1) :recorded (("01-request" . "argv: complete 3 13 [ORACLE-SANDBOX]/rust/src/main.rs [ORACLE-TMPDIR]/ac-racer-complete\nRUST_SRC_PATH: [ORACLE-SANDBOX]/rust/rust-src\nstdin: \ncwd: [ORACLE-SANDBOX]/rust/src\ntempfile([ORACLE-TMPDIR]/ac-racer-complete):\nfn main() {\n    let mut label = String::new();\n    label.ins\n}\n")))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        sets_up_the_source_and_completes_a_string_method_through_racer(),
+        completes_a_non_ascii_identifier_and_reports_a_character_column(),
+        offers_nothing_when_racer_finds_no_matches_or_exits_non_zero(),
+        signals_file_missing_when_the_racer_binary_is_not_installed(),
+        setup_adds_the_source_once_and_only_to_the_buffer_that_ran_it(),
+    ];
+    assert_ac_racer_batch(&cases);
 }

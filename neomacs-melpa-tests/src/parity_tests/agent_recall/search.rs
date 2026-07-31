@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_agent_recall_batch;
+use super::{ParityBatchCase, assert_agent_recall_batch};
 
-#[test]
-fn search_public_surface_batch() {
-    assert_agent_recall_batch(&[
-        (
-            "agent_recall_reindexes_then_searches_real_transcript_files_with_builtin_grep",
-            r####"(let* ((root
+fn agent_recall_reindexes_then_searches_real_transcript_files_with_builtin_grep() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agent_recall_reindexes_then_searches_real_transcript_files_with_builtin_grep",
+        r####"(let* ((root
                                  (expand-file-name
                                   "search"
                                   (getenv
@@ -128,10 +126,17 @@ fn search_public_surface_batch() {
                              (delete-directory
                               root
                               t)))"####,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (2 grep-mode t exit 0 ("[ROOT]/alpha/.agent-shell/transcripts/alpha-session.md:2:> Trace needle-token through the parser." "[ROOT]/beta/.agent-shell/transcripts/beta-session.org:2:Document the needle-token deployment fix."))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn search_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        agent_recall_reindexes_then_searches_real_transcript_files_with_builtin_grep(),
+    ];
+    assert_agent_recall_batch(&cases);
 }

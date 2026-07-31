@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{ATTRAP_MELPA_PIN, CachedMelpaOracle, DASH_MELPA_PIN, F_MELPA_PIN, S_MELPA_PIN};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod workflows;
 
@@ -171,9 +174,9 @@ pub(crate) fn assert_attrap_parity(elisp_form: &str, expected: Expect) {
 }
 
 /// Multi-probe batch for `assert_attrap_parity` cases (2a).
-pub(crate) fn assert_attrap_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_attrap_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         attrap_oracle(),
         &name,
         "attrap_parity",

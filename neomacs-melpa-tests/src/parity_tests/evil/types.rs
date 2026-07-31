@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_evil_batch;
+use super::{ParityBatchCase, assert_evil_batch};
 
-#[test]
-fn types_public_surface_batch() {
-    assert_evil_batch(&[
-        (
-            "evil_exclusive_type_normalizes_boundaries_and_describes_character_counts",
-            r##"(with-temp-buffer
+fn evil_exclusive_type_normalizes_boundaries_and_describes_character_counts() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "evil_exclusive_type_normalizes_boundaries_and_describes_character_counts",
+        r##"(with-temp-buffer
                (insert "first line\nsecond line\nthird")
                (let ((second-line
                       (save-excursion
@@ -21,14 +19,17 @@ fn types_public_surface_batch() {
                   (evil-describe 1 1 'exclusive)
                   (evil-describe 1 2 'exclusive)
                   (evil-describe 5 2 'exclusive))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((1 1 exclusive) (2 11 inclusive :expanded t) (1 12 line :expanded t) "0 characters" "1 character" "3 characters")"#
     ]],
-        ),
-        (
-            "evil_inclusive_type_expands_contracts_reversed_positions_and_describes_counts",
-            r##"(with-temp-buffer
+    )
+}
+
+fn evil_inclusive_type_expands_contracts_reversed_positions_and_describes_counts() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "evil_inclusive_type_expands_contracts_reversed_positions_and_describes_counts",
+        r##"(with-temp-buffer
                (insert "abcdefgh")
                (list
                 (evil-expand 1 1 'inclusive)
@@ -37,14 +38,17 @@ fn types_public_surface_batch() {
                 (evil-contract 6 2 'inclusive)
                 (evil-describe 1 1 'inclusive)
                 (evil-describe 5 2 'inclusive)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((1 2 inclusive :expanded t) (2 6 inclusive :expanded t) (1 1 inclusive :expanded nil) (2 5 inclusive :expanded nil) "1 character" "4 characters")"#
     ]],
-        ),
-        (
-            "evil_line_and_block_types_expand_contract_and_describe_dimensions",
-            r##"(with-temp-buffer
+    )
+}
+
+fn evil_line_and_block_types_expand_contract_and_describe_dimensions() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "evil_line_and_block_types_expand_contract_and_describe_dimensions",
+        r##"(with-temp-buffer
                (insert "alpha\nbravo\ncharlie\n")
                (let ((first 1)
                      (second
@@ -66,14 +70,17 @@ fn types_public_surface_batch() {
                   (evil-expand first (1+ third) 'block)
                   (evil-contract first (1+ second) 'block)
                   (evil-describe first (1+ third) 'block))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((1 7 line :expanded t) (1 13 line :expanded t) "2 lines" (1 2 block :expanded t) (1 8 block :expanded t) (1 15 block :expanded t) (1 7 block :expanded nil) "3 rows and 2 columns")"#
     ]],
-        ),
-        (
-            "evil_transform_handles_nil_types_markers_and_existing_expansion_flags",
-            r##"(with-temp-buffer
+    )
+}
+
+fn evil_transform_handles_nil_types_markers_and_existing_expansion_flags() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "evil_transform_handles_nil_types_markers_and_existing_expansion_flags",
+        r##"(with-temp-buffer
                (insert "abcdef")
                (let ((marker (copy-marker 2)))
                  (unwind-protect
@@ -84,14 +91,17 @@ fn types_public_surface_batch() {
                       (evil-transform :expand marker 2 'inclusive)
                       (evil-expand 1 2 'inclusive :expanded t))
                    (set-marker marker nil))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((1 2 block) (1 2) (1 2) (2 3 inclusive :expanded t) (1 2 inclusive :expanded t))"
     ],
-        ),
-        (
-            "evil_ranges_sort_positions_preserve_properties_and_support_copying_mutators",
-            r##"(let* ((range (evil-range 9 3 'inclusive
+    )
+}
+
+fn evil_ranges_sort_positions_preserve_properties_and_support_copying_mutators() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "evil_ranges_sort_positions_preserve_properties_and_support_copying_mutators",
+        r##"(let* ((range (evil-range 9 3 'inclusive
                                    :foo 'one :bar 'two))
                     (copy (evil-copy-range range))
                     (changed
@@ -106,14 +116,17 @@ fn types_public_surface_batch() {
                 (evil-range-properties range)
                 changed
                 range))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (#2=(1 1 inclusive . #1=(:foo one :bar two)) t 1 1 inclusive #1# (1 1 line :foo changed :bar two :baz t) #2#)"
     ],
-        ),
-        (
-            "evil_range_component_mutators_distinguish_in_place_and_copy_updates",
-            r##"(let* ((original
+    )
+}
+
+fn evil_range_component_mutators_distinguish_in_place_and_copy_updates() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "evil_range_component_mutators_distinguish_in_place_and_copy_updates",
+        r##"(let* ((original
                      (evil-range 2 8 'exclusive :name 'original))
                     (beg-copy
                      (evil-set-range-beginning original 1 t))
@@ -125,22 +138,38 @@ fn types_public_surface_batch() {
                      (evil-set-range-properties
                       original '(:name copy :extra t) t)))
                (list original beg-copy end-copy type-copy props-copy))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((1 1 exclusive :name original) (1 1 exclusive :name original) (1 9 exclusive :name original) (1 1 line :name original) (1 1 exclusive :name copy :extra t))"
     ],
-        ),
-        (
-            "evil_range_union_combines_extent_type_and_property_precedence",
-            r##"(let ((left (evil-range 1 5 'inclusive :left t))
+    )
+}
+
+fn evil_range_union_combines_extent_type_and_property_precedence() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "evil_range_union_combines_extent_type_and_property_precedence",
+        r##"(let ((left (evil-range 1 5 'inclusive :left t))
                     (right (evil-range 4 10 'line :right t)))
                (list
                 (evil-range-union left right)
                 (evil-range-union left right 'block)
                 (evil-range-union nil right)
                 (evil-range-union left nil)))"##,
-            true,
-            expect!["OK ((1 1 inclusive) (1 1 block) nil nil)"],
-        ),
-    ]);
+        true,
+        expect!["OK ((1 1 inclusive) (1 1 block) nil nil)"],
+    )
+}
+
+#[test]
+fn types_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        evil_exclusive_type_normalizes_boundaries_and_describes_character_counts(),
+        evil_inclusive_type_expands_contracts_reversed_positions_and_describes_counts(),
+        evil_line_and_block_types_expand_contract_and_describe_dimensions(),
+        evil_transform_handles_nil_types_markers_and_existing_expansion_flags(),
+        evil_ranges_sort_positions_preserve_properties_and_support_copying_mutators(),
+        evil_range_component_mutators_distinguish_in_place_and_copy_updates(),
+        evil_range_union_combines_extent_type_and_property_precedence(),
+    ];
+    assert_evil_batch(&cases);
 }

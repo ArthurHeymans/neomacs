@@ -1,27 +1,28 @@
 use expect_test::expect;
 
-use super::assert_ai_code_batch;
+use super::{ParityBatchCase, assert_ai_code_batch};
 
-#[test]
-fn behaviors_public_surface_batch() {
-    assert_ai_code_batch(&[
-        (
-            "behavior_tags_extract_mode_modifiers_constraints_and_bundle_from_real_prompt",
-            r##"
+fn behavior_tags_extract_mode_modifiers_constraints_and_bundle_from_real_prompt() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "behavior_tags_extract_mode_modifiers_constraints_and_bundle_from_real_prompt",
+        r##"
 (progn
   (require 'ai-code-behaviors)
   (ai-code--extract-and-remove-hashtags
    "Implement ledger retries #code #deep #tdd #no-breaking-changes @production-safe while preserving #unknown-tag"
    'gptel-plan))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:mode nil :modifiers ("deep" "tdd") :constraint-modifiers nil :preset nil) "Implement ledger retries #code #no-breaking-changes @production-safe while preserving #unknown-tag" nil nil)"#
     ]],
-        ),
-        (
-            "behavior_keyword_classifier_distinguishes_real_engineering_intents",
-            r##"
+    )
+}
+
+fn behavior_keyword_classifier_distinguishes_real_engineering_intents() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "behavior_keyword_classifier_distinguishes_real_engineering_intents",
+        r##"
 (progn
   (require 'ai-code-behaviors)
   (mapcar
@@ -33,14 +34,17 @@ fn behaviors_public_surface_batch() {
      "Write unit tests and integration tests for the parser"
      "Design a specification and implementation plan for offline sync")))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:mode "=code" :modifiers nil :confidence high) (:mode "=debug" :modifiers nil :confidence high) (:mode "=review" :modifiers nil :confidence medium) (:mode "=research" :modifiers nil :confidence high) (:mode "=test" :modifiers nil :confidence high) (:mode "=spec" :modifiers nil :confidence high))"#
     ]],
-        ),
-        (
-            "behavior_state_is_strictly_isolated_between_repository_roots",
-            r##"
+    )
+}
+
+fn behavior_state_is_strictly_isolated_between_repository_roots() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "behavior_state_is_strictly_isolated_between_repository_roots",
+        r##"
 (progn
   (require 'ai-code-behaviors)
   (let ((ai-code--behaviors-session-states (make-hash-table :test 'equal))
@@ -65,14 +69,17 @@ fn behaviors_public_surface_batch() {
             (ai-code--behaviors-get-state "/repos/service-a/")
             (ai-code--behaviors-get-state "/repos/service-b/")))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((:mode "code" :modifiers ("tdd")) "tdd-dev" "production-safe" #1=(:mode "review" :modifiers ("challenge")) "code-review") nil #1#)"#
     ]],
-        ),
-        (
-            "behavior_constraints_expand_and_render_into_actionable_instruction",
-            r##"
+    )
+}
+
+fn behavior_constraints_expand_and_render_into_actionable_instruction() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "behavior_constraints_expand_and_render_into_actionable_instruction",
+        r##"
 (progn
   (require 'ai-code-behaviors)
   (cl-letf (((symbol-function 'ai-code--load-behavior-prompt)
@@ -94,14 +101,17 @@ fn behaviors_public_surface_batch() {
              "Make retries idempotent without changing the public API.")))
       (list bundle instruction wrapped))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil "AdditionalContext: <operating-mode>\nModify code and verify the result.\n</operating-mode>\n\nAdditionalContext: <behavior-modifiers>\nTrace dependencies before editing.\n\nWork red, green, then refactor.\n</behavior-modifiers>\n\nAdditionalContext: <custom-constraints>\nRun the repository's focused test suite.\n</custom-constraints>\n\nThese behaviors apply until superseded by new hashtags. During compaction, preserve the most recent <operating-mode> and <behavior-modifiers> blocks." "AdditionalContext: <operating-mode>\nModify code and verify the result.\n</operating-mode>\n\nAdditionalContext: <behavior-modifiers>\nTrace dependencies before editing.\n\nWork red, green, then refactor.\n</behavior-modifiers>\n\nAdditionalContext: <custom-constraints>\nRun the repository's focused test suite.\n</custom-constraints>\n\nThese behaviors apply until superseded by new hashtags. During compaction, preserve the most recent <operating-mode> and <behavior-modifiers> blocks.\n\n<user-prompt>\nMake retries idempotent without changing the public API.\n</user-prompt>")"#
     ]],
-        ),
-        (
-            "behavior_globs_find_only_matching_real_project_files",
-            r##"
+    )
+}
+
+fn behavior_globs_find_only_matching_real_project_files() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "behavior_globs_find_only_matching_real_project_files",
+        r##"
 (progn
   (require 'ai-code-behaviors)
   (let ((root (make-temp-file "ai-code-behavior-glob-" t)))
@@ -125,12 +135,15 @@ fn behaviors_public_surface_batch() {
             (sort (ai-code--expand-glob-in-dir "**/*_test.rs" root) #'string<))))
       (delete-directory root t))))
 "##,
-            true,
-            expect![[r#"OK (4 nil ".*.*/.*_test\\.rs" nil nil)"#]],
-        ),
-        (
-            "behavior_json_parser_handles_wrapped_escaped_and_malformed_responses",
-            r##"
+        true,
+        expect![[r#"OK (4 nil ".*.*/.*_test\\.rs" nil nil)"#]],
+    )
+}
+
+fn behavior_json_parser_handles_wrapped_escaped_and_malformed_responses() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "behavior_json_parser_handles_wrapped_escaped_and_malformed_responses",
+        r##"
 (progn
   (require 'ai-code-behaviors)
   (mapcar
@@ -141,14 +154,17 @@ fn behaviors_public_surface_batch() {
      "not json at all"
      "{\"mode\":\"code\"")))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((mode . "code") (modifiers . ["deep" "tdd"])) ((mode . "review") (note . "brace } in string")) ((mode . "debug") (nested (retry . t))) nil nil)"#
     ]],
-        ),
-        (
-            "behavior_clean_prompt_removes_injected_context_before_classification",
-            r##"
+    )
+}
+
+fn behavior_clean_prompt_removes_injected_context_before_classification() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "behavior_clean_prompt_removes_injected_context_before_classification",
+        r##"
 (progn
   (require 'ai-code-behaviors)
   (let ((text
@@ -158,14 +174,17 @@ fn behaviors_public_surface_batch() {
      (let ((ai-code-use-gptel-classify-prompt nil))
        (ai-code--classify-prompt-intent text)))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("Implement a bounded retry queue and write integration tests." (:mode "=code" :modifiers nil :confidence high))"#
     ]],
-        ),
-        (
-            "behavior_agent_prompt_vector_reconstruction_preserves_non_text_parts",
-            r##"
+    )
+}
+
+fn behavior_agent_prompt_vector_reconstruction_preserves_non_text_parts() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "behavior_agent_prompt_vector_reconstruction_preserves_non_text_parts",
+        r##"
 (progn
   (require 'ai-code-behaviors)
   (let* ((original
@@ -180,10 +199,24 @@ fn behaviors_public_surface_batch() {
            '(:temperature 0.1 :stream t))))
     (list text rebuilt)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("" [((type . "text") (text . "Review this carefully")) (:type text :text "Review ") (:type image :source "/repo/diagram.png") (:type text :text "this #review #deep")])"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn behaviors_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        behavior_tags_extract_mode_modifiers_constraints_and_bundle_from_real_prompt(),
+        behavior_keyword_classifier_distinguishes_real_engineering_intents(),
+        behavior_state_is_strictly_isolated_between_repository_roots(),
+        behavior_constraints_expand_and_render_into_actionable_instruction(),
+        behavior_globs_find_only_matching_real_project_files(),
+        behavior_json_parser_handles_wrapped_escaped_and_malformed_responses(),
+        behavior_clean_prompt_removes_injected_context_before_classification(),
+        behavior_agent_prompt_vector_reconstruction_preserves_non_text_parts(),
+    ];
+    assert_ai_code_batch(&cases);
 }

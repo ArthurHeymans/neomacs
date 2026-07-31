@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_ede_arduino_batch};
+use super::{ParityBatchCase, assert_ede_arduino_batch};
 
-#[test]
-fn ede_projects_public_surface_batch() {
-    assert_ede_arduino_batch(&[
-        (
-            "project_root_and_primary_file_follow_real_sketchbook_directory_layout",
-            r##"(let* ((sketchbook
+fn project_root_and_primary_file_follow_real_sketchbook_directory_layout() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "project_root_and_primary_file_follow_real_sketchbook_directory_layout",
+        r##"(let* ((sketchbook
                           (make-temp-file
                            "arduino-sketchbook-" t))
                          (project
@@ -69,12 +67,15 @@ fn ede_projects_public_surface_batch() {
                                   (kill-buffer
                                    pde-buffer))))))
                       (delete-directory sketchbook t)))"##,
-            true,
-            expect!["OK (t t t t)"],
-        ),
-        (
-            "project_root_rejects_paths_outside_sketchbook_and_nonexistent_projects",
-            r##"(let* ((root
+        true,
+        expect!["OK (t t t t)"],
+    )
+}
+
+fn project_root_rejects_paths_outside_sketchbook_and_nonexistent_projects() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "project_root_rejects_paths_outside_sketchbook_and_nonexistent_projects",
+        r##"(let* ((root
                           (make-temp-file
                            "arduino-root-boundaries-" t))
                          (sketchbook
@@ -106,12 +107,15 @@ fn ede_projects_public_surface_batch() {
                              (ede-arduino-root missing)
                              (ede-arduino-file outside))))
                       (delete-directory root t)))"##,
-            true,
-            expect!["OK (nil nil nil)"],
-        ),
-        (
-            "project_loader_creates_registers_and_populates_a_new_ino_project",
-            r##"(let* ((root
+        true,
+        expect!["OK (nil nil nil)"],
+    )
+}
+
+fn project_loader_creates_registers_and_populates_a_new_ino_project() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "project_loader_creates_registers_and_populates_a_new_ino_project",
+        r##"(let* ((root
                           (make-temp-file
                            "arduino-project-load-" t))
                          (project-dir
@@ -167,14 +171,17 @@ fn ede_projects_public_surface_batch() {
                                (oref result targets)
                                (nreverse messages)))))
                       (delete-directory root t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t t "Robot" t t nil ("Creating new project" "Obsolete name argument \"Robot\" passed to ede-arduino-project constructor"))"#
     ]],
-        ),
-        (
-            "project_loader_reuses_an_existing_open_project_without_registering_another",
-            r##"(let* ((existing
+    )
+}
+
+fn project_loader_reuses_an_existing_open_project_without_registering_another() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "project_loader_reuses_an_existing_open_project_without_registering_another",
+        r##"(let* ((existing
                           (make-instance
                            'ede-arduino-project
                            :name "Existing"
@@ -209,12 +216,15 @@ fn ede_projects_public_surface_batch() {
                         (list
                          (eq result existing)
                          (nreverse events)))))"##,
-            true,
-            expect![[r#"OK (t (:sync "Opening existing project"))"#]],
-        ),
-        (
-            "target_lookup_creates_one_directory_target_then_reuses_it",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK (t (:sync "Opening existing project"))"#]],
+    )
+}
+
+fn target_lookup_creates_one_directory_target_then_reuses_it() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "target_lookup_creates_one_directory_target_then_reuses_it",
+        r##"(let* ((root
                           (make-temp-file
                            "arduino-target-" t))
                          (project
@@ -253,12 +263,15 @@ fn ede_projects_public_surface_batch() {
                               root)
                              (oref first source))))
                       (delete-directory root t)))"##,
-            true,
-            expect!["OK (t 1 t t nil)"],
-        ),
-        (
-            "upload_and_target_compile_delegate_to_current_project_with_exact_commands",
-            r##"(let* ((project
+        true,
+        expect!["OK (t 1 t t nil)"],
+    )
+}
+
+fn upload_and_target_compile_delegate_to_current_project_with_exact_commands() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "upload_and_target_compile_delegate_to_current_project_with_exact_commands",
+        r##"(let* ((project
                           (make-instance
                            'ede-arduino-project
                            :name "CompileDemo"
@@ -298,12 +311,15 @@ fn ede_projects_public_surface_batch() {
                             project)
                            (cadr event)))
                         (nreverse events)))))"##,
-            true,
-            expect![[r#"OK (:compiled :compiled ((t "gmake all upload") (t "gmake verify")))"#]],
-        ),
-        (
-            "project_compile_creates_makefile_before_invoking_requested_or_default_command",
-            r##"(let* ((project
+        true,
+        expect![[r#"OK (:compiled :compiled ((t "gmake all upload") (t "gmake verify")))"#]],
+    )
+}
+
+fn project_compile_creates_makefile_before_invoking_requested_or_default_command() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "project_compile_creates_makefile_before_invoking_requested_or_default_command",
+        r##"(let* ((project
                           (make-instance
                            'ede-arduino-project
                            :name "CompileDemo"
@@ -344,26 +360,32 @@ fn ede_projects_public_surface_batch() {
                                 project))
                             event))
                         (nreverse events)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:compilation :compilation ((:makefile t) (:compile "gmake all upload") (:makefile t) (:compile "gmake")))"#
     ]],
-        ),
-        (
-            "project_debug_target_reports_the_explicit_unsupported_contract",
-            r##"(let ((target
+    )
+}
+
+fn project_debug_target_reports_the_explicit_unsupported_contract() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "project_debug_target_reports_the_explicit_unsupported_contract",
+        r##"(let ((target
                          (make-instance
                           'ede-arduino-target
                           :name "Demo"
                           :path "/workspace/Demo/"
                           :source nil)))
                     (project-debug-target target))"##,
-            false,
-            expect![[r#"ERR (error "No Debugger support for Arduino")"#]],
-        ),
-        (
-            "serial_monitor_uses_active_preference_port_and_switches_to_line_mode",
-            r##"(let ((prefs
+        false,
+        expect![[r#"ERR (error "No Debugger support for Arduino")"#]],
+    )
+}
+
+fn serial_monitor_uses_active_preference_port_and_switches_to_line_mode() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "serial_monitor_uses_active_preference_port_and_switches_to_line_mode",
+        r##"(let ((prefs
                          (make-instance
                           'ede-arduino-prefs))
                         events)
@@ -386,12 +408,15 @@ fn ede_projects_public_surface_batch() {
                       (list
                        (cedet-arduino-serial-monitor)
                        (nreverse events))))"##,
-            true,
-            expect![[r#"OK (:line (:sync (:serial "/dev/ttyACM7" 9600) :line-mode))"#]],
-        ),
-        (
-            "preprocessor_map_keeps_builtin_levels_and_merges_refreshed_semantic_defines",
-            r##"(let ((target
+        true,
+        expect![[r#"OK (:line (:sync (:serial "/dev/ttyACM7" 9600) :line-mode))"#]],
+    )
+}
+
+fn preprocessor_map_keeps_builtin_levels_and_merges_refreshed_semantic_defines() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "preprocessor_map_keeps_builtin_levels_and_merges_refreshed_semantic_defines",
+        r##"(let ((target
                          (make-instance
                           'ede-arduino-target
                           :name "Demo"
@@ -441,14 +466,17 @@ fn ede_projects_public_surface_batch() {
                       (list
                        (ede-preprocessor-map target)
                        (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("HIGH" . "0x1") ("LOW" . "0x0") ("CUSTOM_PIN" . "42")) ((:table "/opt/arduino/hardware/arduino/cores/arduino/wiring.h") (:needs-refresh fake-table) (:refresh fake-table)))"#
     ]],
-        ),
-        (
-            "system_include_path_combines_core_and_each_detected_library",
-            r##"(let ((target
+    )
+}
+
+fn system_include_path_combines_core_and_each_detected_library() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "system_include_path_combines_core_and_each_detected_library",
+        r##"(let ((target
                          (make-instance
                           'ede-arduino-target
                           :name "Demo"
@@ -472,14 +500,17 @@ fn ede_projects_public_surface_batch() {
                       (list
                        (ede-system-include-path target)
                        (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("/opt/arduino/hardware/arduino/cores/arduino" "/opt/arduino/libraries/Servo" "/opt/arduino/libraries/Ethernet/utility") (:sync))"#
     ]],
-        ),
-        (
-            "sketch_guessing_prefers_pde_then_ino_and_reports_missing_primary_file",
-            r##"(let* ((root
+    )
+}
+
+fn sketch_guessing_prefers_pde_then_ino_and_reports_missing_primary_file() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "sketch_guessing_prefers_pde_then_ino_and_reports_missing_primary_file",
+        r##"(let* ((root
                           (make-temp-file
                            "arduino-guess-sketch-" t))
                          (project
@@ -525,8 +556,26 @@ fn ede_projects_public_surface_batch() {
                                      "#<ede-arduino-project ")
                                     (cadr error-data)))))))))
                       (delete-directory root t)))"##,
-            true,
-            expect![[r#"OK ("Guess.pde" "Guess.ino" (error 0))"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK ("Guess.pde" "Guess.ino" (error 0))"#]],
+    )
+}
+
+#[test]
+fn ede_projects_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        project_root_and_primary_file_follow_real_sketchbook_directory_layout(),
+        project_root_rejects_paths_outside_sketchbook_and_nonexistent_projects(),
+        project_loader_creates_registers_and_populates_a_new_ino_project(),
+        project_loader_reuses_an_existing_open_project_without_registering_another(),
+        target_lookup_creates_one_directory_target_then_reuses_it(),
+        upload_and_target_compile_delegate_to_current_project_with_exact_commands(),
+        project_compile_creates_makefile_before_invoking_requested_or_default_command(),
+        project_debug_target_reports_the_explicit_unsupported_contract(),
+        serial_monitor_uses_active_preference_port_and_switches_to_line_mode(),
+        preprocessor_map_keeps_builtin_levels_and_merges_refreshed_semantic_defines(),
+        system_include_path_combines_core_and_each_detected_library(),
+        sketch_guessing_prefers_pde_then_ino_and_reports_missing_primary_file(),
+    ];
+    assert_ede_arduino_batch(&cases);
 }

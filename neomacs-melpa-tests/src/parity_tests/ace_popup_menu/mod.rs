@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{ACE_POPUP_MENU_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod workflows;
 
@@ -143,9 +146,9 @@ pub(crate) fn assert_ace_popup_menu_parity(elisp_form: &str, expected: Expect) {
 }
 
 /// Multi-probe batch for `assert_ace_popup_menu_parity` cases (2a).
-pub(crate) fn assert_ace_popup_menu_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_ace_popup_menu_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         ace_popup_menu_oracle(),
         &name,
         "ace_popup_menu_parity",

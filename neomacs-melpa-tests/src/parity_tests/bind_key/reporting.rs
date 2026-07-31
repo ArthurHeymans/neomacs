@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_bind_key_batch;
+use super::{ParityBatchCase, assert_bind_key_batch};
 
-#[test]
-fn reporting_public_surface_batch() {
-    assert_bind_key_batch(&[
-        (
-            "bind_key_descriptions_cover_symbols_lambdas_closures_keymaps_and_byte_code",
-            r##"(let ((map-symbol
+fn bind_key_descriptions_cover_symbols_lambdas_closures_keymaps_and_byte_code() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "bind_key_descriptions_cover_symbols_lambdas_closures_keymaps_and_byte_code",
+        r##"(let ((map-symbol
                     (make-symbol "neomacs-described-map")))
                (set map-symbol (make-sparse-keymap))
                (fset map-symbol (symbol-value map-symbol))
@@ -34,14 +32,17 @@ fn reporting_public_surface_batch() {
                     '(closure nil nil "Closure documentation"
                               (interactive)))
                    (get-binding-description map-symbol)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK ((forward-char "#<lambda>" "#<closure>" "#<keymap>" "#<byte-compiled lambda>") ("Lambda documentation" "Closure documentation" "A documented keymap"))"##
     ]],
-        ),
-        (
-            "compare_keybindings_reports_order_and_group_boundaries_for_maps_and_prefixes",
-            r##"(let ((bind-key-segregation-regexp
+    )
+}
+
+fn compare_keybindings_reports_order_and_group_boundaries_for_maps_and_prefixes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "compare_keybindings_reports_order_and_group_boundaries_for_maps_and_prefixes",
+        r##"(let ((bind-key-segregation-regexp
                     "\\`\\(?:C-c \\|M-g \\)"))
                (mapcar
                 (lambda (pair)
@@ -56,12 +57,15 @@ fn reporting_public_surface_batch() {
                    (("C-c b" . map-a) ignore nil))
                   ((("C-c b" . map-a) ignore nil)
                    (("C-c a" . map-a) ignore nil)))))"##,
-            true,
-            expect![[r#"OK ((t . t) (t . t) (nil . t) (t) (nil))"#]],
-        ),
-        (
-            "describe_personal_keybindings_reports_original_current_and_rebound_commands",
-            r##"(progn
+        true,
+        expect![[r#"OK ((t . t) (t . t) (nil . t) (t) (nil))"#]],
+    )
+}
+
+fn describe_personal_keybindings_reports_original_current_and_rebound_commands() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "describe_personal_keybindings_reports_original_current_and_rebound_commands",
+        r##"(progn
                (defvar neomacs-bind-key-report-map
                  (make-sparse-keymap))
                (define-key neomacs-bind-key-report-map "a"
@@ -78,14 +82,17 @@ fn reporting_public_surface_batch() {
                  (with-current-buffer "*Personal Keybindings*"
                    (buffer-substring-no-properties
                     (point-min) (point-max)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK "Key name    Command                     Comments\n----------- --------------------------- ---------------------\n\n\nneomacs-bind-key-report-map: a\n-------------------------------------------------------------\n\na           `forward-char'              was `beginning-of-line'\nb           `backward-char'             [now: `end-of-line']\n""#
     ]],
-        ),
-        (
-            "bind_key_registry_distinguishes_global_symbol_and_direct_map_descriptors",
-            r##"(progn
+    )
+}
+
+fn bind_key_registry_distinguishes_global_symbol_and_direct_map_descriptors() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "bind_key_registry_distinguishes_global_symbol_and_direct_map_descriptors",
+        r##"(progn
                (defvar neomacs-bind-key-symbol-map
                  (make-sparse-keymap))
                (let ((personal-keybindings nil)
@@ -107,10 +114,20 @@ fn reporting_public_surface_batch() {
                      (nth 1 entry)
                      (nth 2 entry)))
                   (reverse personal-keybindings))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("C-c g" global forward-line nil) ("x" neomacs-bind-key-symbol-map forward-char nil) ("y" direct-map backward-char nil))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn reporting_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        bind_key_descriptions_cover_symbols_lambdas_closures_keymaps_and_byte_code(),
+        compare_keybindings_reports_order_and_group_boundaries_for_maps_and_prefixes(),
+        describe_personal_keybindings_reports_original_current_and_rebound_commands(),
+        bind_key_registry_distinguishes_global_symbol_and_direct_map_descriptors(),
+    ];
+    assert_bind_key_batch(&cases);
 }

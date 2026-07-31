@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_adwaita_dark_theme_batch;
+use super::{ParityBatchCase, assert_adwaita_dark_theme_batch};
 
 /// Enabling the theme: `load-theme' finds it on the package's own
 /// `custom-theme-load-path' entry, registers 520 face settings and nothing
@@ -11,12 +11,10 @@ use super::assert_adwaita_dark_theme_batch;
 /// (min-colors 256))' clause matches nothing and the registered palette is not
 /// realised on this display in either editor.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_adwaita_dark_theme_batch(&[
-        (
-            "loading_the_theme_registers_its_documented_palette_for_every_probed_face",
-            r##"(let ((before (list :themes (copy-sequence custom-enabled-themes)
+fn loading_the_theme_registers_its_documented_palette_for_every_probed_face() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "loading_the_theme_registers_its_documented_palette_for_every_probed_face",
+        r##"(let ((before (list :themes (copy-sequence custom-enabled-themes)
                     :registered (adwaita-test-registered
                                  '(default mode-line font-lock-keyword-face))
                     :resolved (adwaita-test-resolved '(default mode-line)))))
@@ -38,14 +36,17 @@ fn workflows_public_surface_batch() {
               :resolved (adwaita-test-resolved
                          '(default mode-line font-lock-keyword-face))))
     (adwaita-test-reset)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:before (:themes nil :registered ((default :not-registered) (mode-line :not-registered) (font-lock-keyword-face :not-registered)) :resolved ((default :foreground "unspecified-fg" :background "unspecified-bg" :weight normal :box nil) (mode-line :foreground unspecified :background unspecified :weight unspecified :box unspecified))) :load (t (adwaita-dark) t t 520 (theme-face)) :display (:graphic nil :daemon nil :display-type mono :color-cells 0 :matches-theme-clause nil :matches-any-display t) :registered ((default #1=((class color) (min-colors 256)) (:background "gray11" :foreground "gray86")) (cursor #1# (:background "gray86")) (region #1# (:background "gray27" :distant-foreground "gray86")) (highlight #1# (:background "steelblue2" :foreground "gray13" :distant-foreground "gray87")) (fringe #1# (:inherit default :foreground "gray27")) (mode-line #1# (:background "gray19" :foreground "gray86" :box nil)) (mode-line-inactive #1# (:background "gray14" :foreground "gray40" :box nil)) (mode-line-buffer-id #1# (:foreground "gray87" :weight bold)) (font-lock-keyword-face #1# (:foreground "orange2" :weight bold)) (font-lock-string-face #1# (:foreground "mediumaquamarine")) (font-lock-comment-face #1# (:foreground "gray40")) (font-lock-function-name-face #1# nil) (font-lock-variable-name-face #1# nil) (font-lock-constant-face #1# (:foreground "mediumpurple3")) (font-lock-type-face #1# (:foreground "mediumaquamarine" :weight bold)) (font-lock-builtin-face #1# (:foreground "mediumpurple3")) (font-lock-warning-face #1# (:inherit warning)) (error #1# (:foreground "indianred2")) (warning #1# (:foreground "gold2")) (success #1# (:foreground "seagreen3")) (isearch #1# (:inherit highlight)) (lazy-highlight #1# (:inherit highlight)) (link #1# (:foreground "steelblue2" :underline t :weight bold)) (line-number #1# (:inherit default :foreground "gray40")) (line-number-current-line #1# (:inherit (hl-line default) :foreground "gray65")) (minibuffer-prompt #1# (:foreground "gray65")) (vertical-border #1# (:background "gray14" :foreground "gray14")) (show-paren-match #1# (:foreground "gray87" :weight ultra-bold))) :resolved ((default :foreground "unspecified-fg" :background "unspecified-bg" :weight normal :box nil) (mode-line :foreground unspecified :background unspecified :weight unspecified :box unspecified) (font-lock-keyword-face :foreground unspecified :background unspecified :weight bold :box unspecified)))"#
     ]],
-        ),
-        (
-            "each_documented_toggle_changes_the_registered_appearance",
-            r##"(unwind-protect
+    )
+}
+
+fn each_documented_toggle_changes_the_registered_appearance() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "each_documented_toggle_changes_the_registered_appearance",
+        r##"(unwind-protect
     (list
      :mode-line-default
      (progn (adwaita-test-reset)
@@ -86,14 +87,17 @@ fn workflows_public_surface_batch() {
       'adwaita-dark-theme-no-completions-first-difference t
       '(completions-first-difference)))
   (adwaita-test-reset))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:mode-line-default ((mode-line #1=((class color) (min-colors 256)) (:background "gray19" :foreground "gray86" :box nil)) (mode-line-inactive #1# (:background "gray14" :foreground "gray40" :box nil))) :mode-line-padded ((mode-line #2=((class color) (min-colors 256)) (:background "gray19" :foreground "gray86" :box (:line-width 10 :color "gray19"))) (mode-line-inactive #2# (:background "gray14" :foreground "gray40" :box (:line-width 10 :color "gray14")))) :outlines-default ((outline-1 #3=((class color) (min-colors 256)) (:foreground "steelblue2" :weight bold)) (outline-2 #3# (:foreground "orchid3" :weight bold)) (outline-3 #3# (:foreground "seagreen3" :weight bold))) :outlines-gray ((outline-1 #4=((class color) (min-colors 256)) (:foreground "gray48" :weight bold)) (outline-2 #4# (:foreground "gray65" :weight bold)) (outline-3 #4# (:foreground "gray48" :weight bold))) :delimiters-default ((rainbow-delimiters-depth-1-face #5=((class color) (min-colors 256)) (:foreground "steelblue2")) (rainbow-delimiters-depth-2-face #5# (:foreground "orchid3"))) :delimiters-gray ((rainbow-delimiters-depth-1-face #6=((class color) (min-colors 256)) (:foreground "gray65")) (rainbow-delimiters-depth-2-face #6# (:foreground "gray65"))) :vertico-default ((vertico-current ((class color) (min-colors 256)) (:background "gray19" :bold nil))) :vertico-bold ((vertico-current ((class color) (min-colors 256)) (:background "gray19" :bold bold))) :first-difference-default ((completions-first-difference ((class color) (min-colors 256)) (:weight bold))) :first-difference-off ((completions-first-difference ((class color) (min-colors 256)) nil)))"#
     ]],
-        ),
-        (
-            "disabling_the_theme_restores_the_captured_baseline_exactly",
-            r##"(unwind-protect
+    )
+}
+
+fn disabling_the_theme_restores_the_captured_baseline_exactly() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "disabling_the_theme_restores_the_captured_baseline_exactly",
+        r##"(unwind-protect
     (let ((baseline (list :themes (copy-sequence custom-enabled-themes)
                           :resolved (adwaita-test-resolved
                                      adwaita-test-probed-faces)
@@ -124,14 +128,17 @@ fn workflows_public_surface_batch() {
                                    (list (copy-sequence custom-enabled-themes)
                                          (adwaita-test-registered '(default))))))))
   (adwaita-test-reset))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:baseline-restored t :registration-removed t :baseline (:themes nil :resolved ((default :foreground "unspecified-fg" :background "unspecified-bg" :weight normal :box nil) (cursor :foreground unspecified :background "white" :weight unspecified :box unspecified) (region :foreground unspecified :background unspecified :weight unspecified :box unspecified) (highlight :foreground unspecified :background unspecified :weight unspecified :box unspecified) (fringe :foreground unspecified :background "gray" :weight unspecified :box unspecified) (mode-line :foreground unspecified :background unspecified :weight unspecified :box unspecified) (mode-line-inactive :foreground unspecified :background unspecified :weight unspecified :box unspecified) (mode-line-buffer-id :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-keyword-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-string-face :foreground unspecified :background unspecified :weight unspecified :box unspecified) (font-lock-comment-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-function-name-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-variable-name-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-constant-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-type-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-builtin-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-warning-face :foreground unspecified :background unspecified :weight bold :box unspecified) (error :foreground unspecified :background unspecified :weight bold :box unspecified) (warning :foreground unspecified :background unspecified :weight bold :box unspecified) (success :foreground unspecified :background unspecified :weight bold :box unspecified) (isearch :foreground unspecified :background unspecified :weight unspecified :box unspecified) (lazy-highlight :foreground unspecified :background unspecified :weight unspecified :box unspecified) (link :foreground unspecified :background unspecified :weight unspecified :box unspecified) (line-number :foreground "unspecified-fg" :background "unspecified-bg" :weight normal :box nil) (line-number-current-line :foreground "unspecified-fg" :background "unspecified-bg" :weight normal :box nil) (minibuffer-prompt :foreground "cyan" :background unspecified :weight unspecified :box unspecified) (vertical-border :foreground unspecified :background unspecified :weight unspecified :box unspecified) (show-paren-match :foreground unspecified :background unspecified :weight unspecified :box unspecified)) :registered ((default :not-registered) (mode-line :not-registered) (region :not-registered))) :enabled (:themes (adwaita-dark) :enabled-p t :resolved ((default :foreground "unspecified-fg" :background "unspecified-bg" :weight normal :box nil) (cursor :foreground unspecified :background "white" :weight unspecified :box unspecified) (region :foreground unspecified :background unspecified :weight unspecified :box unspecified) (highlight :foreground unspecified :background unspecified :weight unspecified :box unspecified) (fringe :foreground unspecified :background "gray" :weight unspecified :box unspecified) (mode-line :foreground unspecified :background unspecified :weight unspecified :box unspecified) (mode-line-inactive :foreground unspecified :background unspecified :weight unspecified :box unspecified) (mode-line-buffer-id :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-keyword-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-string-face :foreground unspecified :background unspecified :weight unspecified :box unspecified) (font-lock-comment-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-function-name-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-variable-name-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-constant-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-type-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-builtin-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-warning-face :foreground unspecified :background unspecified :weight bold :box unspecified) (error :foreground unspecified :background unspecified :weight bold :box unspecified) (warning :foreground unspecified :background unspecified :weight bold :box unspecified) (success :foreground unspecified :background unspecified :weight bold :box unspecified) (isearch :foreground unspecified :background unspecified :weight unspecified :box unspecified) (lazy-highlight :foreground unspecified :background unspecified :weight unspecified :box unspecified) (link :foreground unspecified :background unspecified :weight unspecified :box unspecified) (line-number :foreground "unspecified-fg" :background "unspecified-bg" :weight normal :box nil) (line-number-current-line :foreground "unspecified-fg" :background "unspecified-bg" :weight normal :box nil) (minibuffer-prompt :foreground "cyan" :background unspecified :weight unspecified :box unspecified) (vertical-border :foreground unspecified :background unspecified :weight unspecified :box unspecified) (show-paren-match :foreground unspecified :background unspecified :weight unspecified :box unspecified))) :disabled (:themes nil :enabled-p nil :loaded-p t :settings 520 :resolved ((default :foreground "unspecified-fg" :background "unspecified-bg" :weight normal :box nil) (cursor :foreground unspecified :background "white" :weight unspecified :box unspecified) (region :foreground unspecified :background unspecified :weight unspecified :box unspecified) (highlight :foreground unspecified :background unspecified :weight unspecified :box unspecified) (fringe :foreground unspecified :background "gray" :weight unspecified :box unspecified) (mode-line :foreground unspecified :background unspecified :weight unspecified :box unspecified) (mode-line-inactive :foreground unspecified :background unspecified :weight unspecified :box unspecified) (mode-line-buffer-id :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-keyword-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-string-face :foreground unspecified :background unspecified :weight unspecified :box unspecified) (font-lock-comment-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-function-name-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-variable-name-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-constant-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-type-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-builtin-face :foreground unspecified :background unspecified :weight bold :box unspecified) (font-lock-warning-face :foreground unspecified :background unspecified :weight bold :box unspecified) (error :foreground unspecified :background unspecified :weight bold :box unspecified) (warning :foreground unspecified :background unspecified :weight bold :box unspecified) (success :foreground unspecified :background unspecified :weight bold :box unspecified) (isearch :foreground unspecified :background unspecified :weight unspecified :box unspecified) (lazy-highlight :foreground unspecified :background unspecified :weight unspecified :box unspecified) (link :foreground unspecified :background unspecified :weight unspecified :box unspecified) (line-number :foreground "unspecified-fg" :background "unspecified-bg" :weight normal :box nil) (line-number-current-line :foreground "unspecified-fg" :background "unspecified-bg" :weight normal :box nil) (minibuffer-prompt :foreground "cyan" :background unspecified :weight unspecified :box unspecified) (vertical-border :foreground unspecified :background unspecified :weight unspecified :box unspecified) (show-paren-match :foreground unspecified :background unspecified :weight unspecified :box unspecified)) :registered ((default :not-registered) (mode-line :not-registered) (region :not-registered))) :re-enabled ((adwaita-dark) ((default ((class color) (min-colors 256)) (:background "gray11" :foreground "gray86")))))"#
     ]],
-        ),
-        (
-            "a_second_theme_loaded_on_top_takes_precedence_and_disabling_it_hands_back",
-            r##"(unwind-protect
+    )
+}
+
+fn a_second_theme_loaded_on_top_takes_precedence_and_disabling_it_hands_back() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "a_second_theme_loaded_on_top_takes_precedence_and_disabling_it_hands_back",
+        r##"(unwind-protect
     (progn
       (adwaita-test-reset)
       (load-theme 'adwaita-dark t)
@@ -158,14 +165,17 @@ fn workflows_public_surface_batch() {
                 (list :themes (copy-sequence custom-enabled-themes)
                       :registered (adwaita-test-registered '(default region)))))))
   (adwaita-test-reset))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (:adwaita-only (:themes (adwaita-dark) :registered ((default #1=((class color) (min-colors 256)) #2=(:background "gray11" :foreground "gray86")) (region #1# #3=(:background "gray27" :distant-foreground "gray86")) (font-lock-string-face #1# (:foreground "mediumaquamarine")))) :with-overlay (:themes (adwaita-test-overlay adwaita-dark) :default-registration ((adwaita-test-overlay ((((class color) (min-colors 256)) (:background "#101010")))) (adwaita-dark ((((class color) (min-colors 256)) (:background "gray11" :foreground "gray86"))))) :region-registration ((adwaita-test-overlay ((((class color) (min-colors 256)) (:background "#3584e4")))) (adwaita-dark ((((class color) (min-colors 256)) (:background "gray27" :distant-foreground "gray86"))))) :string-registration ((adwaita-dark ((((class color) (min-colors 256)) (:foreground "mediumaquamarine")))))) :after-removing-overlay (:themes (adwaita-dark) :registered ((default #1# #2#) (region #1# #3#))))"##
     ]],
-        ),
-        (
-            "the_fringe_extras_install_the_themes_own_bitmaps",
-            r##"(unwind-protect
+    )
+}
+
+fn the_fringe_extras_install_the_themes_own_bitmaps() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_fringe_extras_install_the_themes_own_bitmaps",
+        r##"(unwind-protect
     (progn
       (adwaita-test-reset)
       (load-theme 'adwaita-dark t)
@@ -192,10 +202,21 @@ fn workflows_public_surface_batch() {
                                              'delete 2)))
               :bitmap-defined (and (get 'adwaita-dark-theme--diff-hl-bmp 'fringe) t))))
   (adwaita-test-reset))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (:before ((right-arrow . 4) (left-arrow . 3) (right-curly-arrow . 8) (left-curly-arrow . 7)) :arrows (left-curly-arrow ((right-arrow . 4) (left-arrow . 3) (right-curly-arrow . 8) (left-curly-arrow . 7))) :flymake ((adwaita-dark-theme--marker-bmp compilation-error) (adwaita-dark-theme--marker-bmp compilation-warning) (adwaita-dark-theme--marker-bmp compilation-info)) :diff-hl (adwaita-dark-theme--diff-hl-fringe-bmp-function adwaita-dark-theme--diff-hl-bmp adwaita-dark-theme--diff-hl-bmp) :bitmap-defined t)"
     ],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        loading_the_theme_registers_its_documented_palette_for_every_probed_face(),
+        each_documented_toggle_changes_the_registered_appearance(),
+        disabling_the_theme_restores_the_captured_baseline_exactly(),
+        a_second_theme_loaded_on_top_takes_precedence_and_disabling_it_hands_back(),
+        the_fringe_extras_install_the_themes_own_bitmaps(),
+    ];
+    assert_adwaita_dark_theme_batch(&cases);
 }

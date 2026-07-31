@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_ast_grep_batch;
+use super::{ParityBatchCase, assert_ast_grep_batch};
 
-#[test]
-fn commands_public_surface_batch() {
-    assert_ast_grep_batch(&[
-        (
-            "ast_grep_build_command_preserves_patterns_rewrites_and_expands_directory",
-            r##"(let* ((root (ast-grep-test-path "work"))
+fn ast_grep_build_command_preserves_patterns_rewrites_and_expands_directory() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_build_command_preserves_patterns_rewrites_and_expands_directory",
+        r##"(let* ((root (ast-grep-test-path "work"))
                (default-directory (file-name-as-directory root))
                (ast-grep-executable "sg fixture"))
           (make-directory root t)
@@ -24,14 +22,17 @@ fn commands_public_surface_batch() {
             (ast-grep--build-command "$A && $A()" "src")
             (ast-grep--build-command
              "old($X)" "src/lib" "new($X)"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("sg fixture" "run" "--pattern=console.log($A)" "--json=stream") ("sg fixture" "run" "--pattern=$A && $A()" "--json=stream" "$ROOT/src") ("sg fixture" "run" "--pattern=old($X)" "--rewrite=new($X)" "--json=stream" "$ROOT/src/lib"))"#
     ]],
-        ),
-        (
-            "ast_grep_command_string_shell_quotes_hostile_arguments_losslessly",
-            r##"(let* ((command
+    )
+}
+
+fn ast_grep_command_string_shell_quotes_hostile_arguments_losslessly() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_command_string_shell_quotes_hostile_arguments_losslessly",
+        r##"(let* ((command
                 '("ast grep"
                   "run"
                   "--pattern=a b;$(touch nope)"
@@ -46,14 +47,17 @@ fn commands_public_surface_batch() {
              quoted
              "; printf '<%s>' \"$@\""))
            (file-exists-p "nope")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("ast\\ grep run --pattern\\=a\\ b\\;\\$\\(touch\\ nope\\) --rewrite\\=it\\'s\\ \\\"\\$X\\\" /work/a\\ dir" "<ast grep><run><--pattern=a b;$(touch nope)><--rewrite=it's \"$X\"></work/a dir>" nil)"#
     ]],
-        ),
-        (
-            "ast_grep_read_file_and_executable_probe_cover_present_missing_and_disabled_tools",
-            r##"(let* ((file (ast-grep-test-write-file
+    )
+}
+
+fn ast_grep_read_file_and_executable_probe_cover_present_missing_and_disabled_tools() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_read_file_and_executable_probe_cover_present_missing_and_disabled_tools",
+        r##"(let* ((file (ast-grep-test-write-file
                       "work/utf8.txt"
                       "alpha\nβeta\n"))
                (program
@@ -71,12 +75,15 @@ fn commands_public_surface_batch() {
                        (file-truename program)))
            (let ((ast-grep-executable "certainly-no-such-sg"))
              (ast-grep--executable-available-p))))"##,
-            true,
-            expect![[r#"OK ("alpha\nβeta\n" "" "" t nil)"#]],
-        ),
-        (
-            "ast_grep_call_runs_real_program_with_exact_argv_cwd_stdout_and_stderr",
-            r##"(let* ((work (ast-grep-test-path "project"))
+        true,
+        expect![[r#"OK ("alpha\nβeta\n" "" "" t nil)"#]],
+    )
+}
+
+fn ast_grep_call_runs_real_program_with_exact_argv_cwd_stdout_and_stderr() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_call_runs_real_program_with_exact_argv_cwd_stdout_and_stderr",
+        r##"(let* ((work (ast-grep-test-path "project"))
                (log (ast-grep-test-path "argv.log"))
                (program
                 (ast-grep-test-make-executable
@@ -103,14 +110,17 @@ fn commands_public_surface_batch() {
               nil
               "\\`ast-grep-stderr-"
               t))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("match-one\nmatch-two\n" "cwd=$WORK\narg=run\narg=--pattern=a b\narg=--json=stream\narg=.\n" nil)"#
     ]],
-        ),
-        (
-            "ast_grep_call_reports_real_exit_failures_with_both_output_streams",
-            r##"(let* ((program
+    )
+}
+
+fn ast_grep_call_reports_real_exit_failures_with_both_output_streams() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_call_reports_real_exit_failures_with_both_output_streams",
+        r##"(let* ((program
                 (ast-grep-test-make-executable
                  "sg-fail"
                  "printf 'partial result\\n'\nprintf 'invalid pattern: $BAD\\n' >&2\nexit 7"))
@@ -121,14 +131,17 @@ fn commands_public_surface_batch() {
               (list program "run" "--pattern=$BAD")
               nil
               "search"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:error error ("The ast-grep failed with exit code 7: partial result\n\ninvalid pattern: $BAD"))"#
     ]],
-        ),
-        (
-            "ast_grep_call_debug_mode_emits_command_directory_streams_and_status",
-            r##"(let* ((work (ast-grep-test-path "debug-work"))
+    )
+}
+
+fn ast_grep_call_debug_mode_emits_command_directory_streams_and_status() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_call_debug_mode_emits_command_directory_streams_and_status",
+        r##"(let* ((work (ast-grep-test-path "debug-work"))
                (program
                 (ast-grep-test-make-executable
                  "sg-debug"
@@ -150,14 +163,17 @@ fn commands_public_surface_batch() {
               work
               "fixture")
              (nreverse messages))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("json-output\n" ("Debug: fixture command: [ORACLE-SANDBOX]/bin/sg-debug run --pattern\\=x\\ y" "Debug: Working directory: $WORK" "Debug: fixture stdout: json-output\n" "Debug: fixture stderr: warning-output\n" "Debug: fixture exit code: 0"))"#
     ]],
-        ),
-        (
-            "ast_grep_run_command_composes_real_search_command_and_parses_stream_workflow",
-            r##"(let* ((work (ast-grep-test-path "search-root"))
+    )
+}
+
+fn ast_grep_run_command_composes_real_search_command_and_parses_stream_workflow() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_run_command_composes_real_search_command_and_parses_stream_workflow",
+        r##"(let* ((work (ast-grep-test-path "search-root"))
                (log (ast-grep-test-path "search-argv.log"))
                (program
                 (ast-grep-test-make-executable
@@ -175,14 +191,17 @@ fn commands_public_surface_batch() {
              (mapcar #'substring-no-properties candidates)
              (mapcar #'ast-grep-test-match-summary candidates)
              (hash-table-count ast-grep--candidate-table))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("run\n--pattern=console.log($A)\n--json=stream\n[ORACLE-SANDBOX]/search-root\n" ("src/app.js:3:4:console.log(value)") (("src/app.js" 2 4 nil nil "console.log(value)" nil)) 1)"#
     ]],
-        ),
-        (
-            "ast_grep_project_directory_and_search_dispatch_real_user_workflow",
-            r##"(let ((program
+    )
+}
+
+fn ast_grep_project_directory_and_search_dispatch_real_user_workflow() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_project_directory_and_search_dispatch_real_user_workflow",
+        r##"(let ((program
                 (ast-grep-test-make-executable
                  "sg-present"
                  "exit 0"))
@@ -201,14 +220,17 @@ fn commands_public_surface_batch() {
                (ast-grep-project)
                (ast-grep-directory "~/source")
                (nreverse calls)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:searched :searched :searched ((sync "/explicit/") (sync "/fixture/project/") (sync "~/source")))"#
     ]],
-        ),
-        (
-            "ast_grep_project_root_uses_project_current_and_project_root_protocol",
-            r##"(let (calls current)
+    )
+}
+
+fn ast_grep_project_root_uses_project_current_and_project_root_protocol() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_project_root_uses_project_current_and_project_root_protocol",
+        r##"(let (calls current)
           (cl-letf (((symbol-function 'project-current)
                      (lambda (&rest args)
                        (push (list :current args) calls)
@@ -228,14 +250,17 @@ fn commands_public_surface_batch() {
                outside
                (ast-grep--project-root)
                (nreverse calls)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil ((:current nil))) "/fixture/root/" ((:current nil) (:root (fixture-project . "/fixture/root/"))))"#
     ]],
-        ),
-        (
-            "ast_grep_search_rejects_missing_executable_before_backend_selection",
-            r##"(let ((ast-grep-executable
+    )
+}
+
+fn ast_grep_search_rejects_missing_executable_before_backend_selection() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_search_rejects_missing_executable_before_backend_selection",
+        r##"(let ((ast-grep-executable
                 "ast-grep-certainly-not-installed")
                selected
                dispatched)
@@ -252,26 +277,32 @@ fn commands_public_surface_batch() {
                 (ast-grep-search "/fixture/")))
              selected
              dispatched)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error error ("The ast-grep executable not found. Please install ast-grep")) nil nil)"#
     ]],
-        ),
-        (
-            "ast_grep_project_commands_signal_useful_errors_outside_projects",
-            r##"(cl-letf (((symbol-function 'ast-grep--project-root)
+    )
+}
+
+fn ast_grep_project_commands_signal_useful_errors_outside_projects() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_project_commands_signal_useful_errors_outside_projects",
+        r##"(cl-letf (((symbol-function 'ast-grep--project-root)
                     (lambda () nil)))
           (list
            (ast-grep-test-error-data #'ast-grep-project)
            (ast-grep-test-error-data #'ast-grep-rewrite-project)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error error ("Not in a project")) (:error error ("Not in a project")))"#
     ]],
-        ),
-        (
-            "ast_grep_minor_mode_toggles_buffer_local_state_and_exact_lighter",
-            r##"(with-temp-buffer
+    )
+}
+
+fn ast_grep_minor_mode_toggles_buffer_local_state_and_exact_lighter() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ast_grep_minor_mode_toggles_buffer_local_state_and_exact_lighter",
+        r##"(with-temp-buffer
           (let ((initial
                  (list ast-grep-mode
                        (local-variable-p 'ast-grep-mode))))
@@ -288,8 +319,26 @@ fn commands_public_surface_batch() {
                (list
                 ast-grep-mode
                 (local-variable-p 'ast-grep-mode))))))"##,
-            true,
-            expect![[r#"OK ((nil nil) (t t (ast-grep-mode " ast-grep")) (nil t))"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK ((nil nil) (t t (ast-grep-mode " ast-grep")) (nil t))"#]],
+    )
+}
+
+#[test]
+fn commands_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        ast_grep_build_command_preserves_patterns_rewrites_and_expands_directory(),
+        ast_grep_command_string_shell_quotes_hostile_arguments_losslessly(),
+        ast_grep_read_file_and_executable_probe_cover_present_missing_and_disabled_tools(),
+        ast_grep_call_runs_real_program_with_exact_argv_cwd_stdout_and_stderr(),
+        ast_grep_call_reports_real_exit_failures_with_both_output_streams(),
+        ast_grep_call_debug_mode_emits_command_directory_streams_and_status(),
+        ast_grep_run_command_composes_real_search_command_and_parses_stream_workflow(),
+        ast_grep_project_directory_and_search_dispatch_real_user_workflow(),
+        ast_grep_project_root_uses_project_current_and_project_root_protocol(),
+        ast_grep_search_rejects_missing_executable_before_backend_selection(),
+        ast_grep_project_commands_signal_useful_errors_outside_projects(),
+        ast_grep_minor_mode_toggles_buffer_local_state_and_exact_lighter(),
+    ];
+    assert_ast_grep_batch(&cases);
 }

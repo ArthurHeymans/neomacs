@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_ede_arduino_batch};
+use super::{ParityBatchCase, assert_ede_arduino_batch};
 
-#[test]
-fn ede_preferences_public_surface_batch() {
-    assert_ede_arduino_batch(&[
-        (
-            "preferences_reader_parses_real_file_expands_sketchbook_and_attaches_board_data",
-            r##"(let ((prefs-file
+fn preferences_reader_parses_real_file_expands_sketchbook_and_attaches_board_data() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "preferences_reader_parses_real_file_expands_sketchbook_and_attaches_board_data",
+        r##"(let ((prefs-file
                          (make-temp-file
                           "arduino-preferences-"))
                         (ede-arduino-active-prefs nil)
@@ -48,14 +46,17 @@ fn ede_preferences_public_surface_batch() {
                                timestamp))
                              (nreverse board-lookups))))
                       (delete-file prefs-file)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("/dev/ttyACM2" "mega" "[ORACLE-HOME]/Embedded Projects/" (:board "mega") t t ("mega"))"#
     ]],
-        ),
-        (
-            "preferences_cache_skips_unchanged_file_then_refreshes_when_size_changes",
-            r##"(let ((prefs-file
+    )
+}
+
+fn preferences_cache_skips_unchanged_file_then_refreshes_when_size_changes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "preferences_cache_skips_unchanged_file_then_refreshes_when_size_changes",
+        r##"(let ((prefs-file
                          (make-temp-file
                           "arduino-preferences-cache-"))
                         (ede-arduino-active-prefs nil)
@@ -92,12 +93,15 @@ fn ede_preferences_public_surface_batch() {
                               sketchbook)))
                            (nreverse board-lookups)))
                       (delete-file prefs-file)))"##,
-            true,
-            expect![[r#"OK ("/dev/ttyUSB123" "nano" "Arduino Projects" ("uno" "nano"))"#]],
-        ),
-        (
-            "malformed_preferences_report_each_missing_required_key_precisely",
-            r##"(let ((root
+        true,
+        expect![[r#"OK ("/dev/ttyUSB123" "nano" "Arduino Projects" ("uno" "nano"))"#]],
+    )
+}
+
+fn malformed_preferences_report_each_missing_required_key_precisely() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "malformed_preferences_report_each_missing_required_key_precisely",
+        r##"(let ((root
                          (make-temp-file
                           "arduino-malformed-prefs-" t))
                         outcomes)
@@ -131,14 +135,17 @@ fn ede_preferences_public_surface_batch() {
                                outcomes)))
                           (nreverse outcomes))
                       (delete-directory root t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((error "Cannot find serial.port from the arduino preferences") (error "Cannot find board from the arduino preferences") (error "Cannot find sketchbook.path from the arduino preferences"))"#
     ]],
-        ),
-        (
-            "sync_declining_to_launch_ide_when_preferences_are_missing_signals_exact_error",
-            r##"(let ((ede-arduino-preferences-file
+    )
+}
+
+fn sync_declining_to_launch_ide_when_preferences_are_missing_signals_exact_error() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "sync_declining_to_launch_ide_when_preferences_are_missing_signals_exact_error",
+        r##"(let ((ede-arduino-preferences-file
                          (expand-file-name
                           "definitely-missing-preferences.txt"
                           temporary-file-directory)))
@@ -146,14 +153,17 @@ fn ede_preferences_public_surface_batch() {
                         (((symbol-function 'y-or-n-p)
                           (lambda (_prompt) nil)))
                       (ede-arduino-sync)))"##,
-            false,
-            expect![[
+        false,
+        expect![[
         r#"ERR (error "EDE cannot build/upload arduino projects without preferences from the arduino IDE")"#
     ]],
-        ),
-        (
-            "sync_accepting_missing_preferences_launches_ide_then_reads_and_returns_active_object",
-            r##"(let ((ede-arduino-preferences-file
+    )
+}
+
+fn sync_accepting_missing_preferences_launches_ide_then_reads_and_returns_active_object() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "sync_accepting_missing_preferences_launches_ide_then_reads_and_returns_active_object",
+        r##"(let ((ede-arduino-preferences-file
                          (expand-file-name
                           "missing-but-created-by-ide.txt"
                           temporary-file-directory))
@@ -190,14 +200,17 @@ fn ede_preferences_public_surface_batch() {
                           result
                           ede-arduino-active-prefs)
                          (nreverse events)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t ((:confirm "Can't find arduino preferences.  Start IDE to configure? ") :launch (:read "missing-but-created-by-ide.txt")))"#
     ]],
-        ),
-        (
-            "configured_install_paths_honor_container_prefix_and_host_fallback",
-            r##"(let* ((root
+    )
+}
+
+fn configured_install_paths_honor_container_prefix_and_host_fallback() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "configured_install_paths_honor_container_prefix_and_host_fallback",
+        r##"(let* ((root
                           (make-temp-file
                            "arduino-install-paths-" t))
                          (host
@@ -231,12 +244,15 @@ fn ede_preferences_public_surface_batch() {
                                (ede-arduino-find-install t)
                                container-app)))))
                       (delete-directory root t)))"##,
-            true,
-            expect![[r#"OK (t ("opt/arduino" t))"#]],
-        ),
-        (
-            "install_discovery_parses_appdir_from_a_real_arduino_launcher_script",
-            r##"(let ((launcher
+        true,
+        expect![[r#"OK (t ("opt/arduino" t))"#]],
+    )
+}
+
+fn install_discovery_parses_appdir_from_a_real_arduino_launcher_script() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "install_discovery_parses_appdir_from_a_real_arduino_launcher_script",
+        r##"(let ((launcher
                          (make-temp-file
                           "arduino-launcher-"))
                         (ede-arduino-appdir nil))
@@ -253,22 +269,28 @@ fn ede_preferences_public_surface_batch() {
                              (ede-arduino-find-install)
                              ede-arduino-appdir)))
                       (delete-file launcher)))"##,
-            true,
-            expect!["OK (nil nil)"],
-        ),
-        (
-            "missing_install_command_reports_exact_discovery_error",
-            r##"(let ((ede-arduino-appdir nil)
+        true,
+        expect!["OK (nil nil)"],
+    )
+}
+
+fn missing_install_command_reports_exact_discovery_error() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "missing_install_command_reports_exact_discovery_error",
+        r##"(let ((ede-arduino-appdir nil)
                         (ede-arduino-arduino-command
                          "arduino-command-that-cannot-exist")
                         (exec-path nil))
                     (ede-arduino-find-install))"##,
-            false,
-            expect!["ERR (wrong-type-argument stringp nil)"],
-        ),
-        (
-            "version_makefile_boards_and_library_helpers_resolve_real_install_layout",
-            r##"(let* ((root
+        false,
+        expect!["ERR (wrong-type-argument stringp nil)"],
+    )
+}
+
+fn version_makefile_boards_and_library_helpers_resolve_real_install_layout() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "version_makefile_boards_and_library_helpers_resolve_real_install_layout",
+        r##"(let* ((root
                           (make-temp-file
                            "arduino-layout-" t))
                          (lib
@@ -302,14 +324,17 @@ fn ede_preferences_public_surface_batch() {
                               (ede-arduino-libdir "Servo")
                               root))))
                       (delete-directory root t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("2.3.4" "Arduino.mk" "hardware/vendor/boards.txt" "libraries" "libraries/Servo")"#
     ]],
-        ),
-        (
-            "board_reader_builds_complete_board_object_from_realistic_boards_file",
-            r##"(let ((boards-file
+    )
+}
+
+fn board_reader_builds_complete_board_object_from_realistic_boards_file() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "board_reader_builds_complete_board_object_from_realistic_boards_file",
+        r##"(let ((boards-file
                          (make-temp-file
                           "arduino-boards-")))
                     (unwind-protect
@@ -343,14 +368,17 @@ fn ede_preferences_public_surface_batch() {
                                (oref board f_cpu)
                                (oref board core)))))
                       (delete-file boards-file)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t "Arduino Uno" "arduino" "115200" "32256" "atmega328p" "16000000L" "arduino")"#
     ]],
-        ),
-        (
-            "ide_launcher_uses_current_directory_buffer_and_configured_command",
-            r##"(let ((work
+    )
+}
+
+fn ide_launcher_uses_current_directory_buffer_and_configured_command() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ide_launcher_uses_current_directory_buffer_and_configured_command",
+        r##"(let ((work
                          (make-temp-file
                           "arduino-ide-work-" t))
                         (ede-arduino-arduino-command
@@ -384,10 +412,27 @@ fn ede_preferences_public_surface_batch() {
                       (when (get-buffer "*Arduino IDE*")
                         (kill-buffer "*Arduino IDE*"))
                       (delete-directory work t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (fake-process ((("arduino" (:buffer nil) "/opt/arduino/arduino") t "")) "")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn ede_preferences_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        preferences_reader_parses_real_file_expands_sketchbook_and_attaches_board_data(),
+        preferences_cache_skips_unchanged_file_then_refreshes_when_size_changes(),
+        malformed_preferences_report_each_missing_required_key_precisely(),
+        sync_declining_to_launch_ide_when_preferences_are_missing_signals_exact_error(),
+        sync_accepting_missing_preferences_launches_ide_then_reads_and_returns_active_object(),
+        configured_install_paths_honor_container_prefix_and_host_fallback(),
+        install_discovery_parses_appdir_from_a_real_arduino_launcher_script(),
+        missing_install_command_reports_exact_discovery_error(),
+        version_makefile_boards_and_library_helpers_resolve_real_install_layout(),
+        board_reader_builds_complete_board_object_from_realistic_boards_file(),
+        ide_launcher_uses_current_directory_buffer_and_configured_command(),
+    ];
+    assert_ede_arduino_batch(&cases);
 }

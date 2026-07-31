@@ -26,8 +26,9 @@ phase-specific failures.
 - Multi-probe batches (`CachedPackageOracle::run_batch` /
   `parity_tests::batch_support`) run many named Elisp probes in one GNU Emacs
   process and one Neomacs process (setup once per editor; cases keep separate
-  expect-test snapshots). Package workflow corpora use this path by default;
-  a few isolation-sensitive tests remain single-probe.
+  expect-test snapshots). Each probe is a `fn …() -> ParityBatchCase` constructor;
+  the package `#[test]` builds a `Vec<ParityBatchCase>` and runs one dual-editor
+  batch. A few isolation-sensitive tests remain single-probe.
 - `src/parity_tests/dash/` uses 103 ordinary Rust `#[test]` functions.
   Each case isolates one API family and covers normal, empty, boundary,
   mutation, evaluation-count, or signal behavior. Together they exercise the

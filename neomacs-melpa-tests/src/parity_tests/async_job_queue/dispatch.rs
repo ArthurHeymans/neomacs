@@ -1,13 +1,11 @@
 use expect_test::{Expect, expect};
 
-use super::assert_async_job_queue_batch;
+use super::{ParityBatchCase, assert_async_job_queue_batch};
 
-#[test]
-fn dispatch_public_surface_batch() {
-    assert_async_job_queue_batch(&[
-        (
-            "two_slot_scheduler_preserves_fifo_under_saturation_and_cleans_every_job",
-            r##"
+fn two_slot_scheduler_preserves_fifo_under_saturation_and_cleans_every_job() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "two_slot_scheduler_preserves_fifo_under_saturation_and_cleans_every_job",
+        r##"
 (let (table jobs starts finishes events cancelled
       (future-counter 0))
   (cl-letf (((symbol-function 'async-start)
@@ -105,14 +103,17 @@ fn dispatch_public_surface_batch() {
           (nreverse jobs))
          cancelled)))))
 "##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((:id fixed-two :active t :in-use 2 :free 0 :used-slots (0 1) :free-slots nil :queued 2 :timer t) (:id fixed-two :active t :in-use 2 :free 0 :used-slots (0 1) :free-slots nil :queued 1 :timer t) (:id fixed-two :active t :in-use 0 :free 2 :used-slots nil :free-slots (1 0) :queued 0 :timer nil) ((1 lambda t) (2 lambda t) (3 lambda t) (4 lambda t)) ((dispatch job-1 0 1 0) (dispatch job-2 1 2 0) (finish job-2 value-2 t value-2 nil nil) (dispatch job-3 1 2 1) (finish job-1 value-1 t value-1 nil nil) (dispatch job-4 0 2 0) (finish job-3 value-3 t value-3 nil nil) (finish job-4 value-4 t value-4 nil nil) (empty (:id fixed-two :active t :in-use 0 :free 2 :used-slots nil :free-slots (1 0) :queued 0 :timer t))) ((:id job-1 :table nil :run-slot nil :started t :future nil :ended t :returned t :result value-1) (:id job-2 :table nil :run-slot nil :started t :future nil :ended t :returned t :result value-2) (:id job-3 :table nil :run-slot nil :started t :future nil :ended t :returned t :result value-3) (:id job-4 :table nil :run-slot nil :started t :future nil :ended t :returned t :result value-4)) (fixture-timer))"
     ],
-        ),
-        (
-            "inactive_queue_activation_and_deactivation_preserve_fifo_and_hook_order",
-            r##"
+    )
+}
+
+fn inactive_queue_activation_and_deactivation_preserve_fifo_and_hook_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "inactive_queue_activation_and_deactivation_preserve_fifo_and_hook_order",
+        r##"
 (let (table jobs finishes events cancelled
       (future-counter 0))
   (cl-letf (((symbol-function 'async-start)
@@ -201,14 +202,17 @@ fn dispatch_public_surface_batch() {
             (nreverse jobs))
            cancelled))))))
 "##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((:id gated :active nil :in-use 0 :free 2 :used-slots nil :free-slots (0 1) :queued 3 :timer nil) (:id gated :active t :in-use 2 :free 0 :used-slots (0 1) :free-slots nil :queued 1 :timer t) (:id gated :active nil :in-use 1 :free 1 :used-slots (1) :free-slots (0) :queued 1 :timer t) (:id gated :active t :in-use 0 :free 2 :used-slots nil :free-slots (1 0) :queued 0 :timer nil) ((activate-b open-one) (activate-a open-one) (dispatch first 0) (dispatch second 1) (deactivate-b pause) (deactivate-a pause) (finish first first-value) (activate-b open-two) (activate-a open-two) (dispatch third 0) (finish second second-value) (finish third third-value)) ((:id first :table nil :run-slot nil :started t :future nil :ended t :returned t :result first-value) (:id second :table nil :run-slot nil :started t :future nil :ended t :returned t :result second-value) (:id third :table nil :run-slot nil :started t :future nil :ended t :returned t :result third-value)) (activation-timer))"
     ],
-        ),
-        (
-            "dispatch_queued_fills_only_available_slots_and_never_bypasses_older_jobs",
-            r##"
+    )
+}
+
+fn dispatch_queued_fills_only_available_slots_and_never_bypasses_older_jobs() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "dispatch_queued_fills_only_available_slots_and_never_bypasses_older_jobs",
+        r##"
 (let* ((table
         (async-job-queue-make-job-queue
          1 3 nil t nil nil 'manual))
@@ -262,14 +266,17 @@ fn dispatch_public_surface_batch() {
              index))))
         (async-job-queue--slots-in-use-list table))))))
 "##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (nil ((oldest 0) (middle 1) (newest 2)) (:id manual :active t :in-use 3 :free 0 :used-slots (0 1 2) :free-slots nil :queued 0 :timer nil) (oldest middle newest))"
     ],
-        ),
-        (
-            "callback_wrapper_returns_success_and_converts_each_user_error_to_warning",
-            r##"
+    )
+}
+
+fn callback_wrapper_returns_success_and_converts_each_user_error_to_warning() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "callback_wrapper_returns_success_and_converts_each_user_error_to_warning",
+        r##"
 (let (calls warnings)
   (cl-letf (((symbol-function 'fixture-success)
              (lambda (&rest values)
@@ -292,10 +299,20 @@ fn dispatch_public_surface_batch() {
      (nreverse calls)
      (nreverse warnings))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (6 :warned ((1 2 3)) ((:error "error: (\"rejected callback payload\")")))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn dispatch_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        two_slot_scheduler_preserves_fifo_under_saturation_and_cleans_every_job(),
+        inactive_queue_activation_and_deactivation_preserve_fifo_and_hook_order(),
+        dispatch_queued_fills_only_available_slots_and_never_bypasses_older_jobs(),
+        callback_wrapper_returns_success_and_converts_each_user_error_to_warning(),
+    ];
+    assert_async_job_queue_batch(&cases);
 }

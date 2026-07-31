@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_async_http_queue_batch;
+use super::{ParityBatchCase, assert_async_http_queue_batch};
 
-#[test]
-fn state_public_surface_batch() {
-    assert_async_http_queue_batch(&[
-        (
-            "async_http_queue_state_constructor_predicate_accessors_and_no_copier_contract",
-            r##"(let* ((completion
+fn async_http_queue_state_constructor_predicate_accessors_and_no_copier_contract() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_state_constructor_predicate_accessors_and_no_copier_contract",
+        r##"(let* ((completion
                 (lambda (_) :complete))
                (failure
                 (lambda (_) :failed))
@@ -51,12 +49,15 @@ fn state_public_surface_batch() {
            (fboundp
             'copy-async-http-queue--state)
            (type-of state)))"##,
-            true,
-            expect!["OK (t nil t 2 7 19 t t t nil async-http-queue--state)"],
-        ),
-        (
-            "async_http_queue_every_generated_accessor_supports_setf_mutation",
-            r##"(let* ((state
+        true,
+        expect!["OK (t nil t 2 7 19 t t t nil async-http-queue--state)"],
+    )
+}
+
+fn async_http_queue_every_generated_accessor_supports_setf_mutation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_every_generated_accessor_supports_setf_mutation",
+        r##"(let* ((state
                 (async-http-queue-test-state
                  '("https://api.test/old")
                  1
@@ -103,14 +104,17 @@ fn state_public_surface_batch() {
             (async-http-queue--state-error-callback
              state)
             failure)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:queue (("https://api.test/new" processing "seed")) :active 4 :limit 9 :timeout 31 :parser :custom :completion t :error t) t t t)"#
     ]],
-        ),
-        (
-            "async_http_queue_update_status_copy_on_write_preserves_input_and_other_fields",
-            r##"(let* ((state
+    )
+}
+
+fn async_http_queue_update_status_copy_on_write_preserves_input_and_other_fields() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_update_status_copy_on_write_preserves_input_and_other_fields",
+        r##"(let* ((state
                 (async-http-queue-test-state
                  '("https://api.test/a"
                    "https://api.test/b")))
@@ -144,14 +148,17 @@ fn state_public_surface_batch() {
              (eq second-before second-after)
              (alist-get 'status second-before)
              (alist-get 'data second-after))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("https://api.test/a" pending (:existing payload)) ("https://api.test/b" processing #1=(:existing payload))) nil t nil pending #1#)"#
     ]],
-        ),
-        (
-            "async_http_queue_update_data_copies_matching_item_and_preserves_status_and_neighbors",
-            r##"(let* ((payload
+    )
+}
+
+fn async_http_queue_update_data_copies_matching_item_and_preserves_status_and_neighbors() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_update_data_copies_matching_item_and_preserves_status_and_neighbors",
+        r##"(let* ((payload
                 '((id . 42)
                   (nested . [a b c])))
                (state
@@ -185,14 +192,17 @@ fn state_public_surface_batch() {
              (eq
               (alist-get 'data middle-after)
               payload))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("https://api.test/a" pending nil) ("https://api.test/b" processing ((id . 42) (nested . [a b c]))) ("https://api.test/c" pending nil)) nil t t)"#
     ]],
-        ),
-        (
-            "async_http_queue_updates_for_unknown_url_rebuild_queue_without_changing_values",
-            r##"(let* ((state
+    )
+}
+
+fn async_http_queue_updates_for_unknown_url_rebuild_queue_without_changing_values() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_updates_for_unknown_url_rebuild_queue_without_changing_values",
+        r##"(let* ((state
                 (async-http-queue-test-state
                  '("https://api.test/a"
                    "https://api.test/b")))
@@ -219,14 +229,17 @@ fn state_public_surface_batch() {
               #'eq
               items-before
               queue-after))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("https://api.test/a" pending nil) ("https://api.test/b" pending nil)) nil (t t))"#
     ]],
-        ),
-        (
-            "async_http_queue_duplicate_urls_are_all_updated_by_each_url_keyed_mutation",
-            r##"(let ((state
+    )
+}
+
+fn async_http_queue_duplicate_urls_are_all_updated_by_each_url_keyed_mutation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_duplicate_urls_are_all_updated_by_each_url_keyed_mutation",
+        r##"(let ((state
                (async-http-queue-test-state
                 '("https://api.test/same"
                   "https://api.test/other"
@@ -241,14 +254,17 @@ fn state_public_surface_batch() {
            'shared-result)
           (async-http-queue-test-queue-snapshot
            state))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("https://api.test/same" processing shared-result) ("https://api.test/other" pending nil) ("https://api.test/same" processing shared-result))"#
     ]],
-        ),
-        (
-            "async_http_queue_malformed_matching_item_signals_during_missing_slot_mutation",
-            r##"(let ((status-state
+    )
+}
+
+fn async_http_queue_malformed_matching_item_signals_during_missing_slot_mutation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_malformed_matching_item_signals_during_missing_slot_mutation",
+        r##"(let ((status-state
                (async-http-queue--state-create
                 :queue
                 '(((url . "https://api.test/a")
@@ -275,14 +291,17 @@ fn state_public_surface_batch() {
             status-state)
            (async-http-queue--state-queue
             data-state)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error wrong-type-argument (consp nil)) (:error wrong-type-argument (consp nil)) (((url . "https://api.test/a") (data))) (((url . "https://api.test/a") (status . pending))))"#
     ]],
-        ),
-        (
-            "async_http_queue_completion_preserves_input_order_across_mixed_terminal_states",
-            r##"(let* ((results)
+    )
+}
+
+fn async_http_queue_completion_preserves_input_order_across_mixed_terminal_states() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_completion_preserves_input_order_across_mixed_terminal_states",
+        r##"(let* ((results)
                (messages)
                (state
                 (async-http-queue-test-state
@@ -335,14 +354,17 @@ fn state_public_surface_batch() {
            (nreverse messages)
            (async-http-queue-test-queue-snapshot
             state)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((t (#1=(:id 1) nil #2=(:id 3)))) ("Loaded 2 URLs (1 failed)") (("https://api.test/first" done #1#) ("https://api.test/second" error nil) ("https://api.test/third" done #2#)))"#
     ]],
-        ),
-        (
-            "async_http_queue_completion_waits_for_pending_and_processing_items_with_progress",
-            r##"(let* ((urls
+    )
+}
+
+fn async_http_queue_completion_waits_for_pending_and_processing_items_with_progress() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_completion_waits_for_pending_and_processing_items_with_progress",
+        r##"(let* ((urls
                 (cl-loop
                  for index from 1 to 12
                  collect
@@ -398,12 +420,15 @@ fn state_public_surface_batch() {
              state))
            (async-http-queue--state-active-workers
             state)))"##,
-            true,
-            expect![[r#"OK (0 ("Loading URLs... 1/12 completed (1 failed)") 9 0)"#]],
-        ),
-        (
-            "async_http_queue_empty_state_completes_with_empty_vector_and_nil_callback_is_safe",
-            r##"(let* (results
+        true,
+        expect![[r#"OK (0 ("Loading URLs... 1/12 completed (1 failed)") 9 0)"#]],
+    )
+}
+
+fn async_http_queue_empty_state_completes_with_empty_vector_and_nil_callback_is_safe() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_empty_state_completes_with_empty_vector_and_nil_callback_is_safe",
+        r##"(let* (results
                messages
                (state
                 (async-http-queue-test-state
@@ -438,12 +463,15 @@ fn state_public_surface_batch() {
                (length value)))
             results)
            (nreverse messages)))"##,
-            true,
-            expect![[r#"OK (((t 0)) ("Loaded 0 URLs" "Loaded 0 URLs"))"#]],
-        ),
-        (
-            "async_http_queue_check_completion_is_not_idempotent_after_terminal_state",
-            r##"(let* (results
+        true,
+        expect![[r#"OK (((t 0)) ("Loaded 0 URLs" "Loaded 0 URLs"))"#]],
+    )
+}
+
+fn async_http_queue_check_completion_is_not_idempotent_after_terminal_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_http_queue_check_completion_is_not_idempotent_after_terminal_state",
+        r##"(let* (results
                messages
                (state
                 (async-http-queue-test-state
@@ -479,8 +507,25 @@ fn state_public_surface_batch() {
           (list
            (nreverse results)
            (nreverse messages)))"##,
-            true,
-            expect![[r#"OK (((:payload) (:payload)) ("Loaded 1 URLs" "Loaded 1 URLs"))"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (((:payload) (:payload)) ("Loaded 1 URLs" "Loaded 1 URLs"))"#]],
+    )
+}
+
+#[test]
+fn state_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        async_http_queue_state_constructor_predicate_accessors_and_no_copier_contract(),
+        async_http_queue_every_generated_accessor_supports_setf_mutation(),
+        async_http_queue_update_status_copy_on_write_preserves_input_and_other_fields(),
+        async_http_queue_update_data_copies_matching_item_and_preserves_status_and_neighbors(),
+        async_http_queue_updates_for_unknown_url_rebuild_queue_without_changing_values(),
+        async_http_queue_duplicate_urls_are_all_updated_by_each_url_keyed_mutation(),
+        async_http_queue_malformed_matching_item_signals_during_missing_slot_mutation(),
+        async_http_queue_completion_preserves_input_order_across_mixed_terminal_states(),
+        async_http_queue_completion_waits_for_pending_and_processing_items_with_progress(),
+        async_http_queue_empty_state_completes_with_empty_vector_and_nil_callback_is_safe(),
+        async_http_queue_check_completion_is_not_idempotent_after_terminal_state(),
+    ];
+    assert_async_http_queue_batch(&cases);
 }

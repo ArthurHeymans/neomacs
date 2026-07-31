@@ -1,12 +1,10 @@
-use super::{assert_async_status_autoload_batch, assert_async_status_batch};
+use super::{ParityBatchCase, assert_async_status_autoload_batch, assert_async_status_batch};
 use expect_test::expect;
 
-#[test]
-fn registry_async_status_batch() {
-    assert_async_status_batch(&[
-        (
-            "installed_descriptor_matches_the_exact_pin_commit_and_dependencies",
-            r##"(let* ((description
+fn installed_descriptor_matches_the_exact_pin_commit_and_dependencies() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "installed_descriptor_matches_the_exact_pin_commit_and_dependencies",
+        r##"(let* ((description
         (cadr (assq 'async-status package-alist)))
        (requirements
         (mapcar
@@ -22,14 +20,17 @@ fn registry_async_status_batch() {
    (package-desc-summary description)
    requirements
    (package-desc-extras description)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (async-status "20230821.204" "A package for indicator support." ((emacs "28.1") (svg-lib "0.2.7") (posframe "1.4.2")) ((:maintainers ("Jason Kim" . "sukbeom.kim@gmail.com")) (:authors ("Jason Kim" . "sukbeom.kim@gmail.com")) (:keywords "tools" "async") (:revdesc . "d2f5becc9850") (:commit . "d2f5becc9850c26aa71fb581f9fc389eac740f52") (:url . "https://github.com/seokbeomkim/async-status")))"#
     ]],
-        ),
-        (
-            "packaged_source_has_the_verified_melpa_payload_content_hash",
-            r##"(let* ((description
+    )
+}
+
+fn packaged_source_has_the_verified_melpa_payload_content_hash() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "packaged_source_has_the_verified_melpa_payload_content_hash",
+        r##"(let* ((description
         (cadr (assq 'async-status package-alist)))
        (source
         (expand-file-name
@@ -43,14 +44,17 @@ fn registry_async_status_batch() {
      (secure-hash 'sha256 (current-buffer)))
    (file-attribute-size
     (file-attributes source))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (\"async-status.el\" \"ec9fe3f25a13458e26d206f12e61590ab2598fb067f9775db1ce26bcbd40df9b\" 8659)"
     ],
-        ),
-        (
-            "complete_declared_function_surface_is_bound_after_loading",
-            r##"(mapcar
+    )
+}
+
+fn complete_declared_function_surface_is_bound_after_loading() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "complete_declared_function_surface_is_bound_after_loading",
+        r##"(mapcar
  (lambda (symbol)
    (list symbol
          (fboundp symbol)
@@ -75,14 +79,17 @@ fn registry_async_status_batch() {
    async-status--remove-item
    async-status-add-item-to-bar
    async-status-remove-item-from-bar))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((async-status--get-absolute-path-by-id t t (id)) (async-status-req-id t t (name)) (async-status-clean-up t t (id)) (async-status--get-msg-val t t (id)) (async-status-safely-set-msg-val t t (id val &optional threshold)) (async-status-set-msg-val t t (id val)) (async-status-show t t nil) (async-status-hide t t (&optional force)) (async-status--print-truncated-string t t (str max-length)) (async-status--redraw-item t t (item)) (async-status--refresh-status-bar t t nil) (async-status--update-items t t (event)) (async-status--find-item-by-msgid t t (id)) (async-status--remove-item t t (item)) (async-status-add-item-to-bar t t (id &optional label)) (async-status-remove-item-from-bar t t (id)))"#
     ]],
-        ),
-        (
-            "generated_item_struct_surface_is_complete_and_callable",
-            r##"(mapcar
+    )
+}
+
+fn generated_item_struct_surface_is_complete_and_callable() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "generated_item_struct_surface_is_complete_and_callable",
+        r##"(mapcar
  (lambda (symbol)
    (list
     symbol
@@ -97,14 +104,17 @@ fn registry_async_status_batch() {
    async-status--item-file-path
    async-status--item-progress
    async-status--item-label))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((async-status--item-p t (x)) (make-async-status--item t (&rest --cl-rest--)) (copy-async-status--item t (arg)) (async-status--item-msg-id t (x)) (async-status--item-fs-watcher-id t (x)) (async-status--item-file-path t (x)) (async-status--item-progress t (x)) (async-status--item-label t (x)))"#
     ]],
-        ),
-        (
-            "variables_custom_types_defaults_and_group_metadata_match",
-            r##"(list
+    )
+}
+
+fn variables_custom_types_defaults_and_group_metadata_match() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "variables_custom_types_defaults_and_group_metadata_match",
+        r##"(list
  async-status--file-prefix
  async-status-indicator-width
  async-status-progress-bar-width
@@ -117,14 +127,17 @@ fn registry_async_status_batch() {
  (get 'async-status 'custom-group)
  (get 'async-status 'group-documentation)
  (get 'async-status 'custom-links))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("async-status-" 462 150.0 20.0 nil integer float float nil ((async-status-indicator-width custom-variable) (async-status-progress-bar-width custom-variable) (async-status-progress-bar-height custom-variable)) "An indicator to display the status of Emacs processes." ((url-link "https://github.com/seokbeomKim/async-status")))"#
     ]],
-        ),
-        (
-            "item_constructor_accessors_copy_and_mutation_have_value_semantics",
-            r##"(let* ((item
+    )
+}
+
+fn item_constructor_accessors_copy_and_mutation_have_value_semantics() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "item_constructor_accessors_copy_and_mutation_have_value_semantics",
+        r##"(let* ((item
         (make-async-status--item
          :msg-id "job-a"
          :fs-watcher-id '(watch . 7)
@@ -158,14 +171,17 @@ fn registry_async_status_batch() {
      (async-status--item-file-path copy))
     (async-status--item-progress copy)
     (async-status--item-label copy))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t t nil nil ("job-a" t "job-a" 0.25 "Compile") ("job-a" t "job-a" 0.75 "Link"))"#
     ]],
-        ),
-        (
-            "item_constructor_accepts_partial_and_reordered_keyword_arguments",
-            r##"(let ((empty (make-async-status--item))
+    )
+}
+
+fn item_constructor_accepts_partial_and_reordered_keyword_arguments() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "item_constructor_accepts_partial_and_reordered_keyword_arguments",
+        r##"(let ((empty (make-async-status--item))
       (partial
        (make-async-status--item
         :label "Only label"
@@ -176,12 +192,15 @@ fn registry_async_status_batch() {
    (async-status--item-p '(async-status--item nil nil nil nil nil))
    (async-status--item-p [async-status--item nil nil nil nil nil])
    (async-status--item-p nil)))"##,
-            true,
-            expect!["OK ((nil nil nil nil nil) (\"partial\" nil nil nil \"Only label\") nil nil nil)"],
-        ),
-        (
-            "repeated_source_loads_preserve_customized_values_and_existing_defvar_state",
-            r##"(let* ((source (getenv "NEOMACS_PACKAGE_SOURCE"))
+        true,
+        expect!["OK ((nil nil nil nil nil) (\"partial\" nil nil nil \"Only label\") nil nil nil)"],
+    )
+}
+
+fn repeated_source_loads_preserve_customized_values_and_existing_defvar_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "repeated_source_loads_preserve_customized_values_and_existing_defvar_state",
+        r##"(let* ((source (getenv "NEOMACS_PACKAGE_SOURCE"))
        (old-width async-status-indicator-width)
        (old-progress-width async-status-progress-bar-width))
   (setq
@@ -203,18 +222,15 @@ fn registry_async_status_batch() {
      async-status-indicator-width old-width
      async-status-progress-bar-width old-progress-width
      async-status--shown-items nil)))"##,
-            true,
-            expect!["OK (t 77 91.5 (\"kept\"))"],
-        ),
-    ]);
+        true,
+        expect!["OK (t 77 91.5 (\"kept\"))"],
+    )
 }
 
-#[test]
-fn registry_async_status_autoload_batch() {
-    assert_async_status_autoload_batch(&[
-        (
-            "generated_autoload_file_registers_only_its_feature_without_eager_runtime_loading",
-            r##"(let ((history
+fn generated_autoload_file_registers_only_its_feature_without_eager_runtime_loading() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "generated_autoload_file_registers_only_its_feature_without_eager_runtime_loading",
+        r##"(let ((history
        (assoc
         (getenv "NEOMACS_PACKAGE_SOURCE")
         load-history)))
@@ -225,10 +241,32 @@ fn registry_async_status_autoload_batch() {
    (fboundp 'async-status-add-item-to-bar)
    (file-name-nondirectory (car history))
    (cdr history)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t nil nil nil "async-status-autoloads.el" ((provide . async-status-autoloads)))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn registry_async_status_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        installed_descriptor_matches_the_exact_pin_commit_and_dependencies(),
+        packaged_source_has_the_verified_melpa_payload_content_hash(),
+        complete_declared_function_surface_is_bound_after_loading(),
+        generated_item_struct_surface_is_complete_and_callable(),
+        variables_custom_types_defaults_and_group_metadata_match(),
+        item_constructor_accessors_copy_and_mutation_have_value_semantics(),
+        item_constructor_accepts_partial_and_reordered_keyword_arguments(),
+        repeated_source_loads_preserve_customized_values_and_existing_defvar_state(),
+    ];
+    assert_async_status_batch(&cases);
+}
+
+#[test]
+fn registry_async_status_autoload_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        generated_autoload_file_registers_only_its_feature_without_eager_runtime_loading(),
+    ];
+    assert_async_status_autoload_batch(&cases);
 }

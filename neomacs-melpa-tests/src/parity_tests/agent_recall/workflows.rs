@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_agent_recall_batch;
+use super::{ParityBatchCase, assert_agent_recall_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_agent_recall_batch(&[
-        (
-            "agent_recall_reindexes_real_project_and_org_transcripts_then_reloads_the_persisted_index",
-            r####"(let* ((root
+fn agent_recall_reindexes_real_project_and_org_transcripts_then_reloads_the_persisted_index() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agent_recall_reindexes_real_project_and_org_transcripts_then_reloads_the_persisted_index",
+        r####"(let* ((root
                                  (expand-file-name
                                   "library"
                                   (getenv
@@ -193,10 +191,17 @@ fn workflows_public_surface_batch() {
                              (delete-directory
                               root
                               t)))"####,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil t (("org-transcripts/planning-session.org" "research-notes" "planning-session" "bbbbbbbb-1111-2222-3333-444444444444" "Compare the two garbage collection strategies.") ("projects/alpha/.agent-shell/transcripts/2026-07-10-17-07-00.md" "alpha" "2026-07-10-17-07-00" "aaaaaaaa-1111-2222-3333-444444444444" "Repair the production parser without changing its public API.") ("projects/nested/beta/.agent-shell/transcripts/2026-07-11-09-30-00.md" "beta" "2026-07-11-09-30-00" nil "Explain why the deployment cache is stale.")) (("[research-notes] planning-session" . "org-transcripts/planning-session.org") ("[beta] 2026-07-11-09-30-00" . "projects/nested/beta/.agent-shell/transcripts/2026-07-11-09-30-00.md") ("[alpha] 2026-07-10-17-07-00" . "projects/alpha/.agent-shell/transcripts/2026-07-10-17-07-00.md")) (("org-transcripts/planning-session.org" "research-notes" "planning-session" "bbbbbbbb-1111-2222-3333-444444444444" "Compare the two garbage collection strategies.") ("projects/alpha/.agent-shell/transcripts/2026-07-10-17-07-00.md" "alpha" "2026-07-10-17-07-00" "aaaaaaaa-1111-2222-3333-444444444444" "Repair the production parser without changing its public API.") ("projects/nested/beta/.agent-shell/transcripts/2026-07-11-09-30-00.md" "beta" "2026-07-11-09-30-00" nil "Explain why the deployment cache is stale.")) "Agent Recall -- Transcript Statistics\n════════════════════════════════════════\n\n  Transcripts: 3\n  Projects:    3\n  Total size:  0.0 MB\n\nBy Project:\n────────────────────────────────────────\n  research-notes                    1 files  (0.0 MB)\n  beta                              1 files  (0.0 MB)\n  alpha                             1 files  (0.0 MB)\n" nil)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        agent_recall_reindexes_real_project_and_org_transcripts_then_reloads_the_persisted_index(),
+    ];
+    assert_agent_recall_batch(&cases);
 }

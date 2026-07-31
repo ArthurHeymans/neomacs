@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_magit_batch;
+use super::{ParityBatchCase, assert_magit_batch};
 
-#[test]
-fn prompts_public_surface_batch() {
-    assert_magit_batch(&[
-        (
-            "magit_prompt_matching_selects_patterns_suffixes_and_match_groups",
-            r##"(let* ((prompts
+fn magit_prompt_matching_selects_patterns_suffixes_and_match_groups() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "magit_prompt_matching_selects_patterns_suffixes_and_match_groups",
+        r##"(let* ((prompts
                      '("^bar: ?$"
                        "^foo '\\(?99:.*\\)': ?$"
                        "^foo: ?$"))
@@ -23,12 +21,15 @@ fn prompts_public_surface_batch() {
                 (magit-process-match-prompt '("^foo: ?$") "foo: ")
                 matched
                 payload))"##,
-            true,
-            expect![[r#"OK (nil "foo: " "foo: " "foo 'payload': " "payload")"#]],
-        ),
-        (
-            "magit_password_prompt_patterns_extract_hosts_without_protocol_noise",
-            r##"(mapcar
+        true,
+        expect![[r#"OK (nil "foo: " "foo: " "foo 'payload': " "payload")"#]],
+    )
+}
+
+fn magit_password_prompt_patterns_extract_hosts_without_protocol_noise() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "magit_password_prompt_patterns_extract_hosts_without_protocol_noise",
+        r##"(mapcar
               (lambda (prompt)
                 (and
                  (magit-process-match-prompt
@@ -45,10 +46,18 @@ fn prompts_public_surface_batch() {
                 "volumio@192.168.0.211's password: "
                 "Token: "
                 "not a credential prompt"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t t "example.com" "me@magit.vc" "ahihi@foo" "user@host" "volumio@192.168.0.211" t nil)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn prompts_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        magit_prompt_matching_selects_patterns_suffixes_and_match_groups(),
+        magit_password_prompt_patterns_extract_hosts_without_protocol_noise(),
+    ];
+    assert_magit_batch(&cases);
 }

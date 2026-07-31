@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_async1_batch;
+use super::{ParityBatchCase, assert_async1_batch};
 
-#[test]
-fn timers_public_surface_batch() {
-    assert_async1_batch(&[
-        (
-            "async1_default_template_ports_basic_nil_zero_and_empty_data_cases_deterministically",
-            r##"(let (values returns)
+fn async1_default_template_ports_basic_nil_zero_and_empty_data_cases_deterministically() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async1_default_template_ports_basic_nil_zero_and_empty_data_cases_deterministically",
+        r##"(let (values returns)
          (async1-test-reset-scheduler)
          (cl-letf
              (((symbol-function 'run-at-time)
@@ -49,14 +47,17 @@ fn timers_public_surface_batch() {
               trace
               (nreverse values)
               async1-test-now))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((:async1-test-timer 1) (:async1-test-timer 2) (:async1-test-timer 3)) ((:at 0 :id 3 :repeat nil :function :closure :arguments (" -> suffix")) (:at 0.25 :id 2 :repeat nil :function :closure :arguments ("suffix")) (:at 0.5 :id 1 :repeat nil :function :closure :arguments ("test -> suffix"))) ((:empty " -> suffix") (:nil "suffix") (:basic "test -> suffix")) 0.5)"#
     ]],
-        ),
-        (
-            "async1_default_template_real_zero_delay_timer_runs_callback_via_editor_event_loop",
-            r##"(let (value
+    )
+}
+
+fn async1_default_template_real_zero_delay_timer_runs_callback_via_editor_event_loop() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async1_default_template_real_zero_delay_timer_runs_callback_via_editor_event_loop",
+        r##"(let (value
                (callback-count 0)
                timer)
          (setq timer
@@ -76,12 +77,15 @@ fn timers_public_surface_batch() {
            0.5)
           value
           callback-count))"##,
-            true,
-            expect![[r#"OK (t "real -> timer" "real -> timer" 1)"#]],
-        ),
-        (
-            "async1_start_real_timer_pipeline_completes_sequential_and_parallel_workflow",
-            r##"(let (final-values)
+        true,
+        expect![[r#"OK (t "real -> timer" "real -> timer" 1)"#]],
+    )
+}
+
+fn async1_start_real_timer_pipeline_completes_sequential_and_parallel_workflow() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async1_start_real_timer_pipeline_completes_sequential_and_parallel_workflow",
+        r##"(let (final-values)
          (let ((aggregator
                 (lambda (results)
                   (mapconcat
@@ -114,12 +118,15 @@ fn timers_public_surface_batch() {
            1)
           final-values
           (length final-values)))"##,
-            true,
-            expect![[r#"OK (#1=("root -> faster | root -> slower -> tail") #1# 1)"#]],
-        ),
-        (
-            "async1_start_real_timer_custom_step_preserves_lexical_capture_across_callback",
-            r##"(let ((captured "external")
+        true,
+        expect![[r#"OK (#1=("root -> faster | root -> slower -> tail") #1# 1)"#]],
+    )
+}
+
+fn async1_start_real_timer_custom_step_preserves_lexical_capture_across_callback() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async1_start_real_timer_custom_step_preserves_lexical_capture_across_callback",
+        r##"(let ((captured "external")
                events
                final-values)
          (async1-start
@@ -146,14 +153,17 @@ fn timers_public_surface_batch() {
            0.5)
           (nreverse events)
           final-values))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (#1=("seed -> external -> built-in") ((:scheduled "seed" "external") :finished) #1#)"#
     ]],
-        ),
-        (
-            "async1_start_real_simultaneous_zero_delay_parallel_uses_default_aggregate_and_print",
-            r##"(let (printed)
+    )
+}
+
+fn async1_start_real_simultaneous_zero_delay_parallel_uses_default_aggregate_and_print() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async1_start_real_simultaneous_zero_delay_parallel_uses_default_aggregate_and_print",
+        r##"(let (printed)
          (cl-letf
              (((symbol-function 'print)
                (lambda (object &optional _stream)
@@ -177,8 +187,19 @@ fn timers_public_surface_batch() {
              '("Final result: {A, B}"
                "Final result: {B, A}"))
             (length printed))))"##,
-            true,
-            expect![[r#"OK (#1=("Final result: {B, A}") #1# ("Final result: {B, A}") 1)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (#1=("Final result: {B, A}") #1# ("Final result: {B, A}") 1)"#]],
+    )
+}
+
+#[test]
+fn timers_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        async1_default_template_ports_basic_nil_zero_and_empty_data_cases_deterministically(),
+        async1_default_template_real_zero_delay_timer_runs_callback_via_editor_event_loop(),
+        async1_start_real_timer_pipeline_completes_sequential_and_parallel_workflow(),
+        async1_start_real_timer_custom_step_preserves_lexical_capture_across_callback(),
+        async1_start_real_simultaneous_zero_delay_parallel_uses_default_aggregate_and_print(),
+    ];
+    assert_async1_batch(&cases);
 }

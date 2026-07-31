@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_minor_mode_batch;
+use super::{ParityBatchCase, assert_auto_minor_mode_batch};
 
-#[test]
-fn filenames_public_surface_batch() {
-    assert_auto_minor_mode_batch(&[
-        (
-            "auto_minor_mode_plain_filename_removes_backup_versions_and_remote_prefixes",
-            r##"(mapcar
+fn auto_minor_mode_plain_filename_removes_backup_versions_and_remote_prefixes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_minor_mode_plain_filename_removes_backup_versions_and_remote_prefixes",
+        r##"(mapcar
                            (lambda (name)
                              (list
                               name
@@ -20,14 +18,17 @@ fn filenames_public_surface_batch() {
                              "/ssh:user@example.test:/srv/app/main.rb~"
                              "/sudo:root@localhost:/etc/service.conf.~3~"
                              "relative/file.el~"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("/workspace/report.txt" "/workspace/report.txt") ("/workspace/report.txt~" "/workspace/report.txt") ("/workspace/report.txt.~12~" "/workspace/report.txt") ("/ssh:user@example.test:/srv/app/main.rb" "/srv/app/main.rb") ("/ssh:user@example.test:/srv/app/main.rb~" "/srv/app/main.rb") ("/sudo:root@localhost:/etc/service.conf.~3~" "/etc/service.conf") ("relative/file.el~" "relative/file.el"))"#
     ]],
-        ),
-        (
-            "auto_minor_mode_filename_rules_enable_every_matching_mode_in_order",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_minor_mode_filename_rules_enable_every_matching_mode_in_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_minor_mode_filename_rules_enable_every_matching_mode_in_order",
+        r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (setq
                             buffer-file-name
@@ -46,14 +47,17 @@ fn filenames_public_surface_batch() {
                             auto-minor-mode-test-gamma-mode
                             (nreverse
                              auto-minor-mode-test-events)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (t t t ((:alpha 1 t 1 fundamental-mode) (:beta 1 t 1 fundamental-mode) (:gamma 1 t 1 fundamental-mode)))"
     ],
-        ),
-        (
-            "auto_minor_mode_filename_matching_is_always_case_folded",
-            r##"(mapcar
+    )
+}
+
+fn auto_minor_mode_filename_matching_is_always_case_folded() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_minor_mode_filename_matching_is_always_case_folded",
+        r##"(mapcar
                            (lambda (name)
                              (with-temp-buffer
                                (auto-minor-mode-test-reset)
@@ -72,14 +76,17 @@ fn filenames_public_surface_batch() {
                              "/project/file.aMmTeSt"
                              "/project/FILE.AMMTEST"
                              "/project/file.ammtestx"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("/project/file.ammtest" t ((:alpha 1 t 1 fundamental-mode))) ("/project/file.aMmTeSt" t ((:alpha 1 t 1 fundamental-mode))) ("/project/FILE.AMMTEST" t ((:alpha 1 t 1 fundamental-mode))) ("/project/file.ammtestx" nil nil))"#
     ]],
-        ),
-        (
-            "auto_minor_mode_filename_regex_boundaries_reject_near_matches",
-            r##"(mapcar
+    )
+}
+
+fn auto_minor_mode_filename_regex_boundaries_reject_near_matches() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_minor_mode_filename_regex_boundaries_reject_near_matches",
+        r##"(mapcar
                            (lambda (name)
                              (with-temp-buffer
                                (auto-minor-mode-test-reset)
@@ -97,14 +104,17 @@ fn filenames_public_surface_batch() {
                              "/project/x.env"
                              "/project/.environment"
                              "/project/.env/local"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("/project/.env" t) ("/project/.env.local" t) ("/project/x.env" nil) ("/project/.environment" nil) ("/project/.env/local" nil))"#
     ]],
-        ),
-        (
-            "auto_minor_mode_filename_rules_require_a_visited_file",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_minor_mode_filename_rules_require_a_visited_file() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_minor_mode_filename_rules_require_a_visited_file",
+        r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (rename-buffer
                             "notes.ammtest")
@@ -119,12 +129,15 @@ fn filenames_public_surface_batch() {
                             buffer-file-name
                             auto-minor-mode-test-alpha-mode
                             auto-minor-mode-test-events))"##,
-            true,
-            expect![[r#"OK ("notes.ammtest" nil nil nil)"#]],
-        ),
-        (
-            "auto_minor_mode_remote_backup_filename_drives_practical_rule_without_connection",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ("notes.ammtest" nil nil nil)"#]],
+    )
+}
+
+fn auto_minor_mode_remote_backup_filename_drives_practical_rule_without_connection() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_minor_mode_remote_backup_filename_drives_practical_rule_without_connection",
+        r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (setq
                             buffer-file-name
@@ -142,12 +155,15 @@ fn filenames_public_surface_batch() {
                             auto-minor-mode-test-beta-mode
                             (nreverse
                              auto-minor-mode-test-events)))"##,
-            true,
-            expect![[r#"OK ("/srv/site/config.yaml" t nil ((:alpha 1 t 1 fundamental-mode)))"#]],
-        ),
-        (
-            "auto_minor_mode_duplicate_filename_rules_reactivate_the_same_mode",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ("/srv/site/config.yaml" t nil ((:alpha 1 t 1 fundamental-mode)))"#]],
+    )
+}
+
+fn auto_minor_mode_duplicate_filename_rules_reactivate_the_same_mode() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_minor_mode_duplicate_filename_rules_reactivate_the_same_mode",
+        r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (setq
                             buffer-file-name
@@ -169,12 +185,15 @@ fn filenames_public_surface_batch() {
                               without-keep
                               auto-minor-mode-test-events
                               auto-minor-mode-test-alpha-mode)))"##,
-            true,
-            expect!["OK (((:alpha 1 t 1 fundamental-mode) (:alpha 1 t 1 fundamental-mode)) nil t)"],
-        ),
-        (
-            "auto_minor_mode_keep_skips_enabled_modes_but_enables_disabled_matches",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK (((:alpha 1 t 1 fundamental-mode) (:alpha 1 t 1 fundamental-mode)) nil t)"],
+    )
+}
+
+fn auto_minor_mode_keep_skips_enabled_modes_but_enables_disabled_matches() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_minor_mode_keep_skips_enabled_modes_but_enables_disabled_matches",
+        r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (setq
                             buffer-file-name
@@ -192,12 +211,15 @@ fn filenames_public_surface_batch() {
                             auto-minor-mode-test-beta-mode
                             (nreverse
                              auto-minor-mode-test-events)))"##,
-            true,
-            expect!["OK (t t ((:beta 1 t 1 fundamental-mode)))"],
-        ),
-        (
-            "auto_minor_mode_keep_does_not_skip_unregistered_truthy_mode_variable",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK (t t ((:beta 1 t 1 fundamental-mode)))"],
+    )
+}
+
+fn auto_minor_mode_keep_does_not_skip_unregistered_truthy_mode_variable() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_minor_mode_keep_does_not_skip_unregistered_truthy_mode_variable",
+        r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (setq
                             buffer-file-name
@@ -215,12 +237,15 @@ fn filenames_public_surface_batch() {
                             auto-minor-mode-test-unregistered-mode
                             (nreverse
                              auto-minor-mode-test-events)))"##,
-            true,
-            expect!["OK (nil t ((:unregistered 1 t 1 fundamental-mode)))"],
-        ),
-        (
-            "auto_minor_mode_direct_filename_runner_uses_ambient_case_fold_and_rejects_function_matcher",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK (nil t ((:unregistered 1 t 1 fundamental-mode)))"],
+    )
+}
+
+fn auto_minor_mode_direct_filename_runner_uses_ambient_case_fold_and_rejects_function_matcher() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_minor_mode_direct_filename_runner_uses_ambient_case_fold_and_rejects_function_matcher",
+        r##"(with-temp-buffer
                            (setq
                             buffer-file-name
                             "/project/FILE.AMM")
@@ -246,10 +271,26 @@ fn filenames_public_surface_batch() {
                                   'auto-minor-mode-test-filename-match
                                   'auto-minor-mode-test-beta-mode))
                                 nil)))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (((nil nil) (t t)) (:signal wrong-type-argument (stringp auto-minor-mode-test-filename-match)))"
     ],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn filenames_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_minor_mode_plain_filename_removes_backup_versions_and_remote_prefixes(),
+        auto_minor_mode_filename_rules_enable_every_matching_mode_in_order(),
+        auto_minor_mode_filename_matching_is_always_case_folded(),
+        auto_minor_mode_filename_regex_boundaries_reject_near_matches(),
+        auto_minor_mode_filename_rules_require_a_visited_file(),
+        auto_minor_mode_remote_backup_filename_drives_practical_rule_without_connection(),
+        auto_minor_mode_duplicate_filename_rules_reactivate_the_same_mode(),
+        auto_minor_mode_keep_skips_enabled_modes_but_enables_disabled_matches(),
+        auto_minor_mode_keep_does_not_skip_unregistered_truthy_mode_variable(),
+        auto_minor_mode_direct_filename_runner_uses_ambient_case_fold_and_rejects_function_matcher(),
+    ];
+    assert_auto_minor_mode_batch(&cases);
 }

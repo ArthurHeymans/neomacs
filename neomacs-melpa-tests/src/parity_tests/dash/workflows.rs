@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_dash_batch;
+use super::{ParityBatchCase, assert_dash_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_dash_batch(&[
-        (
-            "summarising_an_order_book_by_region_through_one_threaded_pipeline",
-            r##"
+fn summarising_an_order_book_by_region_through_one_threaded_pipeline() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "summarising_an_order_book_by_region_through_one_threaded_pipeline",
+        r##"
 (dash-test-on-fresh
  ;; What a report actually looks like: group the orders, total each group,
  ;; drop the ones below a threshold, and rank what is left.
@@ -22,14 +20,17 @@ fn workflows_public_surface_batch() {
       (--remove (< (plist-get it :cents) 1000))
       (--sort (> (plist-get it :cents) (plist-get other :cents)))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:result ((:region east :orders 2 :cents 12900 :customers ("Katherine" "Ada")) (:region north :orders 2 :cents 6075 :customers ("Ada")) (:region south :orders 2 :cents 5150 :customers ("Grace"))) :source-unchanged t :source ((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk")) (:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug")) (:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen"))))"#
     ]],
-        ),
-        (
-            "destructuring_each_record_with_let_and_lambda_patterns",
-            r##"
+    )
+}
+
+fn destructuring_each_record_with_let_and_lambda_patterns() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "destructuring_each_record_with_let_and_lambda_patterns",
+        r##"
 (dash-test-on-fresh
  (list
   ;; `-let' with a plist pattern reads the fields out by keyword.
@@ -58,14 +59,17 @@ fn workflows_public_surface_batch() {
   (-let (((&plist :discount discount :cents cents) (car orders)))
     (list discount cents))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:result (:one-record (1041 "Ada" 2) :every-line ("1041 Ada 42.00" "1042 Grace 9.50" "1043 Ada 18.75" "1044 Katherine 123.00" "1045 Grace 42.00" "1046 Ada 6.00") :nested (:first-id 1041 :second-region south :second-is-the-whole t :rest-ids (1043 1044 1045 1046) :last-items ("pen" "pen")) :absent-key (nil 4200)) :source-unchanged t :source ((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk")) (:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug")) (:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen"))))"#
     ]],
-        ),
-        (
-            "splitting_a_run_of_orders_into_windows_and_runs",
-            r##"
+    )
+}
+
+fn splitting_a_run_of_orders_into_windows_and_runs() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "splitting_a_run_of_orders_into_windows_and_runs",
+        r##"
 (dash-test-on-fresh
  (let ((cents (--map (plist-get it :cents) orders)))
    (list
@@ -82,14 +86,17 @@ fn workflows_public_surface_batch() {
     :consecutive (-zip-pair (-butlast cents) (cdr cents))
     :running (-running-sum cents))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:result (:in-pairs ((4200 950) (1875 12300) (4200 600)) :threes ((4200 950 1875) (12300 4200 600)) :fours ((4200 950 1875 12300)) :fours-all ((4200 950 1875 12300) (4200 600)) :sliding ((4200 950 1875) (950 1875 12300) (1875 12300 4200) (12300 4200 600)) :runs-by-region (((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen"))) ((:id 1042 :customer "Grace" :region south :cents 950 :items ("pen"))) ((:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk"))) ((:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug"))) ((:id 1045 :customer "Grace" :region south :cents 4200 :items nil)) ((:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen")))) :split-on-a-big-one (((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk"))) ((:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen")))) :consecutive ((4200 . 950) (950 . 1875) (1875 . 12300) (12300 . 4200) (4200 . 600)) :running (4200 5150 7025 19325 23525 24125)) :source-unchanged t :source ((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk")) (:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug")) (:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen"))))"#
     ]],
-        ),
-        (
-            "folding_over_the_book_to_build_a_ledger_and_pick_extremes",
-            r##"
+    )
+}
+
+fn folding_over_the_book_to_build_a_ledger_and_pick_extremes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "folding_over_the_book_to_build_a_ledger_and_pick_extremes",
+        r##"
 (dash-test-on-fresh
  (list
   ;; Build up an alist of per-customer totals in one pass.
@@ -125,14 +132,17 @@ fn workflows_public_surface_batch() {
   :annotated (--map (cons (car it) (plist-get (cdr it) :id))
                     (--annotate (plist-get it :region) orders))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:result (:ledger (("Katherine" . 12300) ("Grace" . 5150) ("Ada" . 6675)) :reductions (0 4200 5150 7025 19325 23525 24125) :from-the-right (1041 1042 1043 1044 1045 1046) :largest 1044 :smallest 1046 :ties (1041 1045) :annotated ((north . 1041) (south . 1042) (north . 1043) (east . 1044) (south . 1045) (east . 1046))) :source-unchanged t :source ((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk")) (:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug")) (:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen"))))"#
     ]],
-        ),
-        (
-            "the_destructive_operations_rewrite_their_argument_and_the_others_do_not",
-            r##"
+    )
+}
+
+fn the_destructive_operations_rewrite_their_argument_and_the_others_do_not() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_destructive_operations_rewrite_their_argument_and_the_others_do_not",
+        r##"
 (list
  ;; `-insert-at', `-remove-at' and `-replace-at' are documented as
  ;; returning a new list.  The source must survive them intact.
@@ -172,14 +182,17 @@ fn workflows_public_surface_batch() {
          :source-after source
          :source-unchanged (equal source '(3 1 2)))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:pure (:results ((a b x . #1=(c d)) (a . #1#) (z . #2=(b . #1#)) (a b c "d") (b c)) :source-after (a . #2#) :source-unchanged t) :splice (:result (1 2 2 3 4 4) :source-after (1 2 3 4) :source-unchanged t) :destructive (:before (b c) :after-push (a b c) :after-pop (b c)) :sorting (:sorted (1 2 3) :source-after (3 1 2) :source-unchanged t))"#
     ]],
-        ),
-        (
-            "threading_and_short_circuiting_over_a_record_that_may_be_missing",
-            r##"
+    )
+}
+
+fn threading_and_short_circuiting_over_a_record_that_may_be_missing() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "threading_and_short_circuiting_over_a_record_that_may_be_missing",
+        r##"
 (dash-test-on-fresh
  (cl-flet ((find-order (id) (--find (= id (plist-get it :id)) orders)))
    (list
@@ -218,10 +231,22 @@ fn workflows_public_surface_batch() {
                                   (first (car items)))
                        (list first (length items))))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:result (:present "DESK" :missing nil :empty-items nil :named "order for Ada" :if-let "Grace" :if-let-else "no such order" :when-let* ("pen" 2) :when-let*-stops nil) :source-unchanged t :source ((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk")) (:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug")) (:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen"))))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        summarising_an_order_book_by_region_through_one_threaded_pipeline(),
+        destructuring_each_record_with_let_and_lambda_patterns(),
+        splitting_a_run_of_orders_into_windows_and_runs(),
+        folding_over_the_book_to_build_a_ledger_and_pick_extremes(),
+        the_destructive_operations_rewrite_their_argument_and_the_others_do_not(),
+        threading_and_short_circuiting_over_a_record_that_may_be_missing(),
+    ];
+    assert_dash_batch(&cases);
 }

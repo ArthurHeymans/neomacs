@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_compat_batch;
+use super::{ParityBatchCase, assert_compat_batch};
 
-#[test]
-fn buffers_public_surface_batch() {
-    assert_compat_batch(&[
-        (
-            "compat_with_work_buffer_nests_distinct_reusable_buffers",
-            r##"(let (outer inner result)
+fn compat_with_work_buffer_nests_distinct_reusable_buffers() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "compat_with_work_buffer_nests_distinct_reusable_buffers",
+        r##"(let (outer inner result)
                (setq result
                      (with-work-buffer
                        (setq outer (current-buffer))
@@ -29,12 +27,15 @@ fn buffers_public_surface_batch() {
                (list result
                      (buffer-live-p outer)
                      (buffer-live-p inner)))"##,
-            true,
-            expect![[r#"OK ((0 "outer" (t 0 "inner")) t t)"#]],
-        ),
-        (
-            "compat_insert_into_buffer_honors_default_start_and_end_ranges",
-            r##"(list
+        true,
+        expect![[r#"OK ((0 "outer" (t 0 "inner")) t t)"#]],
+    )
+}
+
+fn compat_insert_into_buffer_honors_default_start_and_end_ranges() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "compat_insert_into_buffer_honors_default_start_and_end_ranges",
+        r##"(list
                (with-temp-buffer
                  (let ((destination (current-buffer)))
                    (insert "abc")
@@ -56,12 +57,15 @@ fn buffers_public_surface_batch() {
                      (insert "def")
                      (insert-into-buffer destination 2 3))
                    (buffer-string))))"##,
-            true,
-            expect![[r#"OK ("abcdef" "abcef" "abce")"#]],
-        ),
-        (
-            "compat_with_buffer_unmodified_if_unchanged_tracks_net_and_real_edits",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ("abcdef" "abcef" "abce")"#]],
+    )
+}
+
+fn compat_with_buffer_unmodified_if_unchanged_tracks_net_and_real_edits() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "compat_with_buffer_unmodified_if_unchanged_tracks_net_and_real_edits",
+        r##"(with-temp-buffer
                (insert "base")
                (set-buffer-modified-p nil)
                (let ((unchanged
@@ -79,12 +83,15 @@ fn buffers_public_surface_batch() {
                  (list unchanged
                        changed
                        (buffer-string))))"##,
-            true,
-            expect![[r#"OK (nil t "base!")"#]],
-        ),
-        (
-            "compat_buffer_match_and_match_buffers_cover_boolean_name_mode_and_logic_forms",
-            r##"(let* ((first (generate-new-buffer
+        true,
+        expect![[r#"OK (nil t "base!")"#]],
+    )
+}
+
+fn compat_buffer_match_and_match_buffers_cover_boolean_name_mode_and_logic_forms() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "compat_buffer_match_and_match_buffers_cover_boolean_name_mode_and_logic_forms",
+        r##"(let* ((first (generate-new-buffer
                             "*compat-alpha*"))
                     (second (generate-new-buffer
                              "*compat-beta*"))
@@ -130,8 +137,18 @@ fn buffers_public_surface_batch() {
                     (when (buffer-live-p buffer)
                       (kill-buffer buffer)))
                   (list first second third))))"##,
-            true,
-            expect![[r#"OK ((t nil t t t t t t) ("*compat-beta*" "*compat-alpha*"))"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK ((t nil t t t t t t) ("*compat-beta*" "*compat-alpha*"))"#]],
+    )
+}
+
+#[test]
+fn buffers_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        compat_with_work_buffer_nests_distinct_reusable_buffers(),
+        compat_insert_into_buffer_honors_default_start_and_end_ranges(),
+        compat_with_buffer_unmodified_if_unchanged_tracks_net_and_real_edits(),
+        compat_buffer_match_and_match_buffers_cover_boolean_name_mode_and_logic_forms(),
+    ];
+    assert_compat_batch(&cases);
 }

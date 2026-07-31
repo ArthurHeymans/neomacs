@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_astro_ts_mode_batch;
+use super::{ParityBatchCase, assert_astro_ts_mode_batch};
 
-#[test]
-fn prefix_public_surface_batch() {
-    assert_astro_ts_mode_batch(&[
-        (
-            "prefix_font_lock_features_preserves_language_override_and_rule_payload",
-            r##"(let* ((capture '((identifier) @font-lock-variable-name-face))
+fn prefix_font_lock_features_preserves_language_override_and_rule_payload() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "prefix_font_lock_features_preserves_language_override_and_rule_payload",
+        r##"(let* ((capture '((identifier) @font-lock-variable-name-face))
               (settings
                (list
                 (list 'tsx
@@ -20,25 +18,31 @@ fn prefix_public_surface_batch() {
            (astro-ts-mode--prefix-font-lock-features
             "embedded" settings)
            settings))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (#3=((tsx #1=((identifier) @font-lock-variable-name-face) identifier #2=((identifier) @font-lock-variable-name-face)) (tsx :override keyword keep)) ((tsx #1# embedded-identifier #2#) (tsx :override embedded-keyword keep)) #3#)"
     ],
-        ),
-        (
-            "prefix_font_lock_features_handles_empty_and_partial_settings_exactly",
-            r##"(list
+    )
+}
+
+fn prefix_font_lock_features_handles_empty_and_partial_settings_exactly() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "prefix_font_lock_features_handles_empty_and_partial_settings_exactly",
+        r##"(list
           (astro-ts-mode--prefix-font-lock-features "tsx" nil)
           (astro-ts-mode--prefix-font-lock-features
            "x" '((astro query feature)
                  (css nil nil nil)
                  (tsx one two three four))))"##,
-            true,
-            expect!["OK (nil ((astro query x-feature nil) (css nil x-nil nil) (tsx one x-two three)))"],
-        ),
-        (
-            "real_typescript_settings_gain_only_tsx_feature_prefixes",
-            r##"(let* ((original
+        true,
+        expect!["OK (nil ((astro query x-feature nil) (css nil x-nil nil) (tsx one x-two three)))"],
+    )
+}
+
+fn real_typescript_settings_gain_only_tsx_feature_prefixes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "real_typescript_settings_gain_only_tsx_feature_prefixes",
+        r##"(let* ((original
                 (typescript-ts-mode--font-lock-settings 'tsx))
                (prefixed
                 (astro-ts-mode--prefix-font-lock-features
@@ -65,14 +69,17 @@ fn prefix_public_surface_batch() {
                "tsx-"
                (symbol-name (nth 2 setting))))
             prefixed)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (16 16 ((comment tsx-comment t t t) (constant tsx-constant t t t) (keyword tsx-keyword t t t) (string tsx-string t t t) (declaration tsx-declaration t t t) (identifier tsx-identifier t t t) (property tsx-property t t t) (expression tsx-expression t t t) (function tsx-function t t t) (pattern tsx-pattern t t t) (jsx tsx-jsx t t t) (number tsx-number t t t)) t)"
     ],
-        ),
-        (
-            "real_css_settings_gain_only_css_feature_prefixes",
-            r##"(let ((prefixed
+    )
+}
+
+fn real_css_settings_gain_only_css_feature_prefixes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "real_css_settings_gain_only_css_feature_prefixes",
+        r##"(let ((prefixed
                 (astro-ts-mode--prefix-font-lock-features
                  "css" css--treesit-settings)))
           (list
@@ -91,14 +98,17 @@ fn prefix_public_surface_batch() {
                "css-"
                (symbol-name (nth 2 setting))))
             prefixed)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (12 12 ((treesit-compiled-query css-comment) (treesit-compiled-query css-string) (treesit-compiled-query css-keyword) (treesit-compiled-query css-variable) (treesit-compiled-query css-operator) (treesit-compiled-query css-selector) (treesit-compiled-query css-property) (treesit-compiled-query css-function) (treesit-compiled-query css-constant) (treesit-compiled-query css-query) (treesit-compiled-query css-bracket) (treesit-compiled-query css-error)) t)"
     ],
-        ),
-        (
-            "distinct_prefixes_keep_colliding_embedded_feature_names_disjoint",
-            r##"(let ((settings
+    )
+}
+
+fn distinct_prefixes_keep_colliding_embedded_feature_names_disjoint() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "distinct_prefixes_keep_colliding_embedded_feature_names_disjoint",
+        r##"(let ((settings
                 '((tsx query comment override)
                   (tsx query string override)
                   (tsx query bracket override))))
@@ -112,14 +122,17 @@ fn prefix_public_surface_batch() {
             (astro-ts-mode--prefix-font-lock-features
              "css" settings))
            settings))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((tsx-comment tsx-string tsx-bracket) (css-comment css-string css-bracket) ((tsx query comment override) (tsx query string override) (tsx query bracket override)))"
     ],
-        ),
-        (
-            "repeated_prefixing_is_explicit_compositional_and_nonmutating",
-            r##"(let* ((settings
+    )
+}
+
+fn repeated_prefixing_is_explicit_compositional_and_nonmutating() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "repeated_prefixing_is_explicit_compositional_and_nonmutating",
+        r##"(let* ((settings
                 '((astro query definition override)
                   (astro query bracket override)))
                (once
@@ -132,10 +145,22 @@ fn prefix_public_surface_batch() {
                 (equal settings
                        '((astro query definition override)
                          (astro query bracket override)))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (((astro query definition override) (astro query bracket override)) ((astro query one-definition override) (astro query one-bracket override)) ((astro query two-one-definition override) (astro query two-one-bracket override)) t)"
     ],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn prefix_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        prefix_font_lock_features_preserves_language_override_and_rule_payload(),
+        prefix_font_lock_features_handles_empty_and_partial_settings_exactly(),
+        real_typescript_settings_gain_only_tsx_feature_prefixes(),
+        real_css_settings_gain_only_css_feature_prefixes(),
+        distinct_prefixes_keep_colliding_embedded_feature_names_disjoint(),
+        repeated_prefixing_is_explicit_compositional_and_nonmutating(),
+    ];
+    assert_astro_ts_mode_batch(&cases);
 }

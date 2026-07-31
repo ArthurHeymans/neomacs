@@ -1,12 +1,10 @@
-use super::assert_astyle_batch;
+use super::{ParityBatchCase, assert_astyle_batch};
 use expect_test::{Expect, expect};
 
-#[test]
-fn commands_public_surface_batch() {
-    assert_astyle_batch(&[
-        (
-            "region_command_delegates_exact_program_arguments_io_policy_and_success_predicate",
-            r##"
+fn region_command_delegates_exact_program_arguments_io_policy_and_success_predicate() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "region_command_delegates_exact_program_arguments_io_policy_and_success_predicate",
+        r##"
 (let* ((input
         (astyle-test-path
          "delegation/input.c"))
@@ -72,14 +70,17 @@ fn commands_public_surface_batch() {
          (file-exists-p input)
          (buffer-string))))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:formatted (:temporary-name astyle :call astyle 8 33 "astyle" ("--style=google" "--indent=spaces=4" "--suffix=none") t t "input.c" t nil t nil) nil "before\nint main(){\nreturn 0;\n}\nafter\n")"#
     ]],
-        ),
-        (
-            "buffer_command_reports_progress_and_delegates_accessible_bounds_and_prefix",
-            r##"
+    )
+}
+
+fn buffer_command_reports_progress_and_delegates_accessible_bounds_and_prefix() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "buffer_command_reports_progress_and_delegates_accessible_bounds_and_prefix",
+        r##"
 (with-temp-buffer
   (insert
    "hidden\nvisible one\nvisible two\nhidden end")
@@ -109,12 +110,15 @@ fn commands_public_surface_batch() {
          (point-min)
          (point-max))))))
 "##,
-            true,
-            expect![[r#"OK (:region-result nil ((8 31 9 "visible one\nvisible two")) 8 31)"#]],
-        ),
-        (
-            "real_buffer_formatting_runs_sandbox_executable_replaces_content_and_records_arguments",
-            r##"
+        true,
+        expect![[r#"OK (:region-result nil ((8 31 9 "visible one\nvisible two")) 8 31)"#]],
+    )
+}
+
+fn real_buffer_formatting_runs_sandbox_executable_replaces_content_and_records_arguments() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "real_buffer_formatting_runs_sandbox_executable_replaces_content_and_records_arguments",
+        r##"
 (let* ((installation
         (astyle-test-install-formatter))
        (argument-log
@@ -152,14 +156,17 @@ fn commands_public_surface_batch() {
               (buffer-string))))))
     (astyle-test-kill-error-buffer)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil "int main() {\n    return 0;\n}\n" 11 "--style=google\n--indent=spaces=4\n--suffix=none\n" (special-mode ""))"#
     ]],
-        ),
-        (
-            "real_region_formatting_changes_only_selected_c_function_and_preserves_surroundings",
-            r##"
+    )
+}
+
+fn real_region_formatting_changes_only_selected_c_function_and_preserves_surroundings() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "real_region_formatting_changes_only_selected_c_function_and_preserves_surroundings",
+        r##"
 (let* ((installation
         (astyle-test-install-formatter))
        (argument-log
@@ -198,14 +205,17 @@ fn commands_public_surface_batch() {
              (list beg end)))))
     (astyle-test-kill-error-buffer)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil "prefix\nint main() {\n    return 0;\n}\nsuffix\n" "--style=linux\n--indent=spaces=2\n--pad-oper\n--pad-header\n--break-blocks\n--delete-empty-lines\n--align-pointer=type\n--align-reference=name\n" (8 32))"#
     ]],
-        ),
-        (
-            "project_rc_argument_is_passed_to_real_formatter_without_default_flags",
-            r##"
+    )
+}
+
+fn project_rc_argument_is_passed_to_real_formatter_without_default_flags() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "project_rc_argument_is_passed_to_real_formatter_without_default_flags",
+        r##"
 (let* ((installation
         (astyle-test-install-formatter))
        (argument-log
@@ -249,14 +259,17 @@ fn commands_public_surface_batch() {
           configuration)))
     (astyle-test-kill-error-buffer)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil "int main() {\n    return 0;\n}\n" "--options=[ORACLE-SANDBOX]/rc-project/.astylerc\n" "[ORACLE-SANDBOX]/rc-project/.astylerc")"#
     ]],
-        ),
-        (
-            "formatter_failure_preserves_buffer_decodes_ansi_stderr_and_honors_display_errors",
-            r##"
+    )
+}
+
+fn formatter_failure_preserves_buffer_decodes_ansi_stderr_and_honors_display_errors() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "formatter_failure_preserves_buffer_decodes_ansi_stderr_and_honors_display_errors",
+        r##"
 (let ((installation
        (astyle-test-install-formatter))
       displays)
@@ -312,14 +325,17 @@ fn commands_public_surface_batch() {
      nil)
     (astyle-test-kill-error-buffer)))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil "int main(){\nreturn 0;\n}\n" nil (("*astyle errors*" nil)) (special-mode t "fixture formatter failed\n") (t t))"#
     ]],
-        ),
-        (
-            "missing_formatter_program_preserves_content_and_reports_launch_failure",
-            r##"
+    )
+}
+
+fn missing_formatter_program_preserves_content_and_reports_launch_failure() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "missing_formatter_program_preserves_content_and_reports_launch_failure",
+        r##"
 (unwind-protect
     (with-temp-buffer
       (insert
@@ -357,10 +373,23 @@ fn commands_public_surface_batch() {
                text)))))))
   (astyle-test-kill-error-buffer))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("astyle failed: see *astyle errors*" "int main(){\nreturn 0;\n}\n" nil (special-mode 0 50))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn commands_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        region_command_delegates_exact_program_arguments_io_policy_and_success_predicate(),
+        buffer_command_reports_progress_and_delegates_accessible_bounds_and_prefix(),
+        real_buffer_formatting_runs_sandbox_executable_replaces_content_and_records_arguments(),
+        real_region_formatting_changes_only_selected_c_function_and_preserves_surroundings(),
+        project_rc_argument_is_passed_to_real_formatter_without_default_flags(),
+        formatter_failure_preserves_buffer_decodes_ansi_stderr_and_honors_display_errors(),
+        missing_formatter_program_preserves_content_and_reports_launch_failure(),
+    ];
+    assert_astyle_batch(&cases);
 }

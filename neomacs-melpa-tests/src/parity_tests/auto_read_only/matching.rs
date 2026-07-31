@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_read_only_batch;
+use super::{ParityBatchCase, assert_auto_read_only_batch};
 
-#[test]
-fn matching_public_surface_batch() {
-    assert_auto_read_only_batch(&[
-        (
-            "auto_read_only_default_regexps_match_exact_extension_and_directory_boundaries",
-            r##"(let ((quoted-user-directory
+fn auto_read_only_default_regexps_match_exact_extension_and_directory_boundaries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_read_only_default_regexps_match_exact_extension_and_directory_boundaries",
+        r##"(let ((quoted-user-directory
                 (regexp-quote
                  (file-name-as-directory
                   (expand-file-name
@@ -53,14 +51,17 @@ fn matching_public_surface_batch() {
             "/workspace/.cask/29.1/elpa/pkg.el"
             "/workspace/.casket/pkg.el"
             "/workspace/vendor/pkg.el"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("\\(?:\\.\\(?:\\(?:el\\|py\\)c\\)\\)\\'" "/share/.+/site-lisp/" "[USER-EMACS-DIRECTORY]/\\(?:el\\(?:-get\\|pa\\)\\)/" "/\\(?:\\.\\(?:bundle\\|cask\\)\\)/") (("/workspace/cache/module.elc" t) ("/workspace/cache/module.pyc" t) ("/workspace/cache/module.elc.gz" nil) ("/workspace/cache/MODULE.ELC" t) ("/opt/share/emacs/site-lisp/library.el" t) ("/opt/share/site-lisp/library.el" nil) ("[ORACLE-HOME]/.emacs.d/elpa/pkg/pkg.el" t) ("[ORACLE-HOME]/.emacs.d/el-get/pkg/pkg.el" t) ("[ORACLE-HOME]/.emacs.d/packages/pkg.el" nil) ("/workspace/.bundle/ruby/tool.rb" t) ("/workspace/.cask/29.1/elpa/pkg.el" t) ("/workspace/.casket/pkg.el" nil) ("/workspace/vendor/pkg.el" nil)))"#
     ]],
-        ),
-        (
-            "auto_read_only_without_filename_or_without_match_is_a_strict_noop",
-            r##"(mapcar
+    )
+}
+
+fn auto_read_only_without_filename_or_without_match_is_a_strict_noop() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_read_only_without_filename_or_without_match_is_a_strict_noop",
+        r##"(mapcar
          (lambda (file)
            (with-temp-buffer
              (insert "editable")
@@ -80,14 +81,17 @@ fn matching_public_surface_batch() {
            "/workspace/src/main.el"
            "/workspace/vendorish/main.el"
            "/workspace/output.elc.gz"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil nil (" *temp*" nil "editable" 9 nil nil nil)) ("/workspace/src/main.el" nil (" *temp*" "/workspace/src/main.el" "editable" 9 nil nil nil)) ("/workspace/vendorish/main.el" nil (" *temp*" "/workspace/vendorish/main.el" "editable" 9 nil nil nil)) ("/workspace/output.elc.gz" nil (" *temp*" "/workspace/output.elc.gz" "editable" 9 nil nil nil)))"#
     ]],
-        ),
-        (
-            "auto_read_only_default_action_enters_real_view_mode_and_returns_its_value",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_read_only_default_action_enters_real_view_mode_and_returns_its_value() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_read_only_default_action_enters_real_view_mode_and_returns_its_value",
+        r##"(with-temp-buffer
          (insert "compiled payload")
          (set-buffer-modified-p nil)
          (setq buffer-file-name
@@ -107,14 +111,17 @@ fn matching_public_surface_batch() {
                 (car error-data)
                 (cdr error-data))))
             (buffer-string))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t (" *temp*" "/workspace/build/module.elc" "compiled payload" 17 t t nil) (buffer-read-only ((:buffer nil))) "compiled payload")"#
     ]],
-        ),
-        (
-            "auto_read_only_custom_action_runs_once_in_original_buffer_with_exact_state",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_read_only_custom_action_runs_once_in_original_buffer_with_exact_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_read_only_custom_action_runs_once_in_original_buffer_with_exact_state",
+        r##"(with-temp-buffer
          (rename-buffer
           " *auto-read-only-action*")
          (insert "third-party source")
@@ -135,14 +142,17 @@ fn matching_public_surface_batch() {
             (auto-read-only)
             (nreverse calls)
             (auto-read-only-test-buffer-state))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:protected ((" *auto-read-only-action*" "/workspace/vendor/library.el" "third-party source" 7 nil nil nil)) (" *auto-read-only-action*" "/workspace/vendor/library.el" "third-party source" 7 nil nil nil))"#
     ]],
-        ),
-        (
-            "auto_read_only_stops_at_first_match_and_never_evaluates_later_invalid_regexp",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_read_only_stops_at_first_match_and_never_evaluates_later_invalid_regexp() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_read_only_stops_at_first_match_and_never_evaluates_later_invalid_regexp",
+        r##"(with-temp-buffer
          (setq buffer-file-name
                "/workspace/vendor/library.el")
          (let* ((auto-read-only-file-regexps
@@ -156,12 +166,15 @@ fn matching_public_surface_batch() {
             (auto-read-only-test-error-data
              #'auto-read-only)
             (nreverse calls))))"##,
-            true,
-            expect!["OK ((:ok :done) (:action))"],
-        ),
-        (
-            "auto_read_only_reaches_and_propagates_invalid_later_regexp_after_misses",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK ((:ok :done) (:action))"],
+    )
+}
+
+fn auto_read_only_reaches_and_propagates_invalid_later_regexp_after_misses() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_read_only_reaches_and_propagates_invalid_later_regexp_after_misses",
+        r##"(with-temp-buffer
          (setq buffer-file-name
                "/workspace/src/library.el")
          (let ((auto-read-only-file-regexps
@@ -174,12 +187,15 @@ fn matching_public_surface_batch() {
              #'auto-read-only)
             buffer-read-only
             (bound-and-true-p view-mode))))"##,
-            true,
-            expect![[r#"OK ((:error invalid-regexp ("Unmatched [ or [^")) nil nil)"#]],
-        ),
-        (
-            "auto_read_only_preserves_preexisting_match_data_for_match_and_miss_paths",
-            r##"(progn
+        true,
+        expect![[r#"OK ((:error invalid-regexp ("Unmatched [ or [^")) nil nil)"#]],
+    )
+}
+
+fn auto_read_only_preserves_preexisting_match_data_for_match_and_miss_paths() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_read_only_preserves_preexisting_match_data_for_match_and_miss_paths",
+        r##"(progn
          (string-match
           "\\(seed\\)-\\([0-9]+\\)"
           "seed-42")
@@ -207,14 +223,17 @@ fn matching_public_surface_batch() {
                   outcomes))))
            (list before
                  (nreverse outcomes))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((0 7 0 4 5 7) (("/workspace/vendor/pkg.el" nil (0 7 0 4 5 7) t) ("/workspace/src/pkg.el" nil (0 7 0 4 5 7) t)))"#
     ]],
-        ),
-        (
-            "auto_read_only_matcher_uses_one_filename_and_stops_calling_after_success",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_read_only_matcher_uses_one_filename_and_stops_calling_after_success() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_read_only_matcher_uses_one_filename_and_stops_calling_after_success",
+        r##"(with-temp-buffer
          (setq buffer-file-name
                "/workspace/vendor/pkg.el")
          (let ((auto-read-only-file-regexps
@@ -234,14 +253,17 @@ fn matching_public_surface_batch() {
              (list
               (auto-read-only)
               (nreverse calls)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:applied (("first" "/workspace/vendor/pkg.el") ("second" "/workspace/vendor/pkg.el")))"#
     ]],
-        ),
-        (
-            "auto_read_only_buffer_local_patterns_and_actions_are_isolated_in_practical_use",
-            r##"(let ((first
+    )
+}
+
+fn auto_read_only_buffer_local_patterns_and_actions_are_isolated_in_practical_use() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_read_only_buffer_local_patterns_and_actions_are_isolated_in_practical_use",
+        r##"(let ((first
                 (generate-new-buffer
                  " *auto-read-only-first*"))
                (second
@@ -298,14 +320,17 @@ fn matching_public_surface_batch() {
              (kill-buffer first))
            (when (buffer-live-p second)
              (kill-buffer second))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:first-result :second-result ((:first " *auto-read-only-first*") (:second " *auto-read-only-second*")) ("/vendor/") ("/generated/"))"#
     ]],
-        ),
-        (
-            "auto_read_only_custom_function_arity_and_errors_propagate_without_fallback",
-            r##"(mapcar
+    )
+}
+
+fn auto_read_only_custom_function_arity_and_errors_propagate_without_fallback() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_read_only_custom_function_arity_and_errors_propagate_without_fallback",
+        r##"(mapcar
          (lambda (function)
            (with-temp-buffer
              (setq buffer-file-name
@@ -336,10 +361,26 @@ fn matching_public_surface_batch() {
             :wrong-arity)
           (lambda ()
             (error "custom failure"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((:error wrong-number-of-arguments 0) nil nil) ((:error error ("custom failure")) nil nil))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn matching_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_read_only_default_regexps_match_exact_extension_and_directory_boundaries(),
+        auto_read_only_without_filename_or_without_match_is_a_strict_noop(),
+        auto_read_only_default_action_enters_real_view_mode_and_returns_its_value(),
+        auto_read_only_custom_action_runs_once_in_original_buffer_with_exact_state(),
+        auto_read_only_stops_at_first_match_and_never_evaluates_later_invalid_regexp(),
+        auto_read_only_reaches_and_propagates_invalid_later_regexp_after_misses(),
+        auto_read_only_preserves_preexisting_match_data_for_match_and_miss_paths(),
+        auto_read_only_matcher_uses_one_filename_and_stops_calling_after_success(),
+        auto_read_only_buffer_local_patterns_and_actions_are_isolated_in_practical_use(),
+        auto_read_only_custom_function_arity_and_errors_propagate_without_fallback(),
+    ];
+    assert_auto_read_only_batch(&cases);
 }

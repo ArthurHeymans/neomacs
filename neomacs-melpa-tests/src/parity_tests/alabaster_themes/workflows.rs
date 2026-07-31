@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_alabaster_themes_batch;
+use super::{ParityBatchCase, assert_alabaster_themes_batch};
 
 /// What an alabaster theme actually changes on the display this suite runs on
 /// -- which is nothing, and that is the finding.
@@ -32,12 +32,10 @@ use super::assert_alabaster_themes_batch;
 /// the fake in place exactly as it does without it.  A fake that does not work
 /// is worse than no fake, because it stops the next reader looking.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_alabaster_themes_batch(&[
-        (
-            "no_themed_face_resolves_on_this_display_and_the_gate_says_why",
-            r##"(let* ((sample '(default font-lock-string-face font-lock-keyword-face
+fn no_themed_face_resolves_on_this_display_and_the_gate_says_why() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "no_themed_face_resolves_on_this_display_and_the_gate_says_why",
+        r##"(let* ((sample '(default font-lock-string-face font-lock-keyword-face
                  region mode-line))
        (resolved (lambda ()
                    (mapcar (lambda (face)
@@ -68,14 +66,17 @@ fn workflows_public_surface_batch() {
           (seq-remove #'null
                       (seq-mapn (lambda (b a) (unless (equal b a) (car b)))
                                 before after)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:display (:color-cells 16777216 :visual-class static-gray :graphic nil) :gate (:clause ((class color) (min-colors 256)) :matches nil :colour-count-alone-matches t :class-alone-matches nil) :theme-enabled t :registered-face-count 501 :before ((default "unspecified-fg" "unspecified-bg") (font-lock-string-face unspecified unspecified) (font-lock-keyword-face unspecified unspecified) (region unspecified unspecified) (mode-line unspecified unspecified)) :after ((default "unspecified-fg" "unspecified-bg") (font-lock-string-face unspecified unspecified) (font-lock-keyword-face unspecified unspecified) (region unspecified unspecified) (mode-line unspecified unspecified)) :faces-whose-appearance-changed nil)"#
     ]],
-        ),
-        (
-            "the_registered_specs_carry_the_real_colours_the_resolved_reads_cannot_see",
-            r##"(progn
+    )
+}
+
+fn the_registered_specs_carry_the_real_colours_the_resolved_reads_cannot_see() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_registered_specs_carry_the_real_colours_the_resolved_reads_cannot_see",
+        r##"(progn
   (load-theme 'alabaster-themes-dark t)
   (let ((spec (lambda (face)
                 (let (found)
@@ -95,10 +96,18 @@ fn workflows_public_surface_batch() {
                                    diff-added))))
             (list :clauses (delete-dups (copy-tree clauses))
                   :count (length clauses))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (:specs ((default ((((class color) (min-colors 256)) :background "#0E1415" :foreground "#CECECE"))) (font-lock-string-face ((((class color) (min-colors 256)) :foreground "#95CB82"))) (font-lock-keyword-face ((((class color) (min-colors 256)) :foreground "#CECECE"))) (org-level-1 ((((class color) (min-colors 256)) :inherit bold :height unspecified :weight unspecified :foreground "#8AB1F0"))) (diff-added ((((class color) (min-colors 256)) :background "#1f3a1f" :foreground "#95CB82")))) :every-spec-uses-the-same-clause (:clauses (((class color) (min-colors 256))) :count 5))"##
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        no_themed_face_resolves_on_this_display_and_the_gate_says_why(),
+        the_registered_specs_carry_the_real_colours_the_resolved_reads_cannot_see(),
+    ];
+    assert_alabaster_themes_batch(&cases);
 }

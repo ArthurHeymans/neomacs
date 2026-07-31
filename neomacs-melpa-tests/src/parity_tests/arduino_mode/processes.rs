@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_arduino_mode_batch;
+use super::{ParityBatchCase, assert_arduino_mode_batch};
 
-#[test]
-fn processes_public_surface_batch() {
-    assert_arduino_mode_batch(&[
-        (
-            "upload_builds_exact_process_request_and_success_sentinel_cleans_source_state",
-            r##"(let ((source
+fn upload_builds_exact_process_request_and_success_sentinel_cleans_source_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "upload_builds_exact_process_request_and_success_sentinel_cleans_source_state",
+        r##"(let ((source
                          (get-buffer-create
                           "*arduino-upload-source-contract*"))
                         process-args sentinel events)
@@ -63,14 +61,17 @@ fn processes_public_surface_batch() {
                                  before mode-line-process
                                  (nreverse events))))))
                       (kill-buffer source)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:command ("arduino-custom" "--upload" "/workspace/Blink/Blink.ino") :name "arduino-upload" :buffer "*arduino-upload*" :sentinel #[(_proc event) ((if (string= event "finished\n") (progn (save-current-buffer (set-buffer arduino-upload-process-buf) (setq mode-line-process nil)) (message "Arduino upload succeed.")) (save-current-buffer (set-buffer arduino-upload-process-buf) (display-buffer "*arduino-upload*"))) (setq mode-line-process (prog1 nil (make-local-variable 'mode-line-process))) (save-current-buffer (set-buffer arduino-upload-process-buf) (if spinner-current (progn (spinner-stop))))) (t)]) "*arduino-upload-source-contract*" "arduino-upload" nil ((:start triangle) (:message "Arduino upload succeed.") :stop))"#
     ]],
-        ),
-        (
-            "upload_failure_sentinel_displays_diagnostics_and_stops_active_spinner",
-            r##"(let ((source
+    )
+}
+
+fn upload_failure_sentinel_displays_diagnostics_and_stops_active_spinner() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "upload_failure_sentinel_displays_diagnostics_and_stops_active_spinner",
+        r##"(let ((source
                          (get-buffer-create
                           "*arduino-upload-failure-contract*"))
                         sentinel events)
@@ -111,12 +112,15 @@ fn processes_public_surface_batch() {
                                mode-line-process
                                (nreverse events)))))
                       (kill-buffer source)))"##,
-            true,
-            expect![[r#"OK (nil ((:display "*arduino-upload*") :stop))"#]],
-        ),
-        (
-            "verify_builds_exact_request_and_both_sentinel_paths_have_expected_lifecycle",
-            r##"(let ((source
+        true,
+        expect![[r#"OK (nil ((:display "*arduino-upload*") :stop))"#]],
+    )
+}
+
+fn verify_builds_exact_request_and_both_sentinel_paths_have_expected_lifecycle() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "verify_builds_exact_request_and_both_sentinel_paths_have_expected_lifecycle",
+        r##"(let ((source
                          (get-buffer-create
                           "*arduino-verify-source-contract*"))
                         process-args sentinel events)
@@ -171,14 +175,17 @@ fn processes_public_surface_batch() {
                                  before mode-line-process
                                  (nreverse events))))))
                       (kill-buffer source)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:command ("arduino-cli" "--verify" "/workspace/Sensor/Sensor.ino") :name "arduino-verify" :buffer "*arduino-verify*" :sentinel #[(_proc event) ((if (string= event "finished\n") (progn (save-current-buffer (set-buffer arduino-verify-process-buf) (setq mode-line-process nil)) (message "Arduino verify build succeed.")) (display-buffer "*arduino-verify*")) (setq mode-line-process (prog1 nil (make-local-variable 'mode-line-process))) (save-current-buffer (set-buffer arduino-verify-process-buf) (if spinner-current (progn (spinner-stop))))) (t)]) "*arduino-verify-source-contract*" "arduino-verify" nil ((:start moon) (:message "Arduino verify build succeed.") :stop (:display "*arduino-verify*") :stop))"#
     ]],
-        ),
-        (
-            "open_with_ide_builds_exact_request_and_success_sentinel_reports_completion",
-            r##"(let ((source
+    )
+}
+
+fn open_with_ide_builds_exact_request_and_success_sentinel_reports_completion() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "open_with_ide_builds_exact_request_and_success_sentinel_reports_completion",
+        r##"(let ((source
                          (get-buffer-create
                           "*arduino-open-source-contract*"))
                         process-args sentinel events)
@@ -225,14 +232,17 @@ fn processes_public_surface_batch() {
                                  before mode-line-process
                                  (nreverse events))))))
                       (kill-buffer source)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:command ("/opt/arduino/arduino" "/workspace/Robot/Robot.ino") :name "arduino-open" :buffer "*arduino-open*" :sentinel #[(_proc event) ((if (string= event "finished\n") (progn (save-current-buffer (set-buffer arduino-open-process-buf) (setq mode-line-process nil)) (message "Opened with Arduino succeed."))) (setq mode-line-process (prog1 nil (make-local-variable 'mode-line-process))) (save-current-buffer (set-buffer arduino-open-process-buf) (if spinner-current (progn (spinner-stop))))) (t)]) "*arduino-open-source-contract*" "arduino-open" nil ((:start rotating-line) (:message "Opened with Arduino succeed.") :stop))"#
     ]],
-        ),
-        (
-            "board_and_library_installers_dispatch_exact_start_process_arguments",
-            r##"(let ((arduino-executable
+    )
+}
+
+fn board_and_library_installers_dispatch_exact_start_process_arguments() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "board_and_library_installers_dispatch_exact_start_process_arguments",
+        r##"(let ((arduino-executable
                          "/opt/arduino/bin/arduino")
                         calls)
                     (cl-letf
@@ -249,14 +259,17 @@ fn processes_public_surface_batch() {
                        (arduino-install-library
                         "Servo:1.2.1")
                        (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (process-1 process-2 (("arduino-install-boards" "*arduino-install-boards*" "/opt/arduino/bin/arduino" "--install-boards" "arduino:samd") ("arduino-install-library" "*arduino-install-library*" "/opt/arduino/bin/arduino" "--install-library" "Servo:1.2.1")))"#
     ]],
-        ),
-        (
-            "interactive_installers_preserve_prompts_defaults_and_user_values",
-            r##"(let (reads calls)
+    )
+}
+
+fn interactive_installers_preserve_prompts_defaults_and_user_values() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "interactive_installers_preserve_prompts_defaults_and_user_values",
+        r##"(let (reads calls)
                     (cl-letf
                         (((symbol-function 'read-string)
                           (lambda (prompt initial &rest _args)
@@ -279,14 +292,17 @@ fn processes_public_surface_batch() {
                       (list
                        (nreverse reads)
                        (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("Arduino install board: " "arduino:sam") ("Arduino install library: " "Bridge:1.0.0")) (("arduino-install-boards" "*arduino-install-boards*" "arduino" "--install-boards" "vendor:board") ("arduino-install-library" "*arduino-install-library*" "arduino" "--install-library" "Wire:2.0")))"#
     ]],
-        ),
-        (
-            "serial_monitor_switches_to_live_port_or_opens_serial_with_explicit_and_prompted_speed",
-            r##"(let (events)
+    )
+}
+
+fn serial_monitor_switches_to_live_port_or_opens_serial_with_explicit_and_prompted_speed() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "serial_monitor_switches_to_live_port_or_opens_serial_with_explicit_and_prompted_speed",
+        r##"(let (events)
                     (cl-letf
                         (((symbol-function 'get-buffer-process)
                           (lambda (port)
@@ -318,10 +334,23 @@ fn processes_public_surface_batch() {
                        (arduino-serial-monitor
                         "/dev/ttyACM0" nil)
                        (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:switched :serial-opened :serial-opened ((:switch "/dev/ttyLIVE") (:serial "/dev/ttyUSB0" 57600) :read-speed (:serial "/dev/ttyACM0" 115200)))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn processes_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        upload_builds_exact_process_request_and_success_sentinel_cleans_source_state(),
+        upload_failure_sentinel_displays_diagnostics_and_stops_active_spinner(),
+        verify_builds_exact_request_and_both_sentinel_paths_have_expected_lifecycle(),
+        open_with_ide_builds_exact_request_and_success_sentinel_reports_completion(),
+        board_and_library_installers_dispatch_exact_start_process_arguments(),
+        interactive_installers_preserve_prompts_defaults_and_user_values(),
+        serial_monitor_switches_to_live_port_or_opens_serial_with_explicit_and_prompted_speed(),
+    ];
+    assert_arduino_mode_batch(&cases);
 }

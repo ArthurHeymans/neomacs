@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_aurel_batch;
+use super::{ParityBatchCase, assert_aurel_batch};
 
-#[test]
-fn filters_public_surface_batch() {
-    assert_aurel_batch(&[
-        (
-            "aurel_filter_chain_threads_mutations_and_continues_after_nil",
-            r##"(let (events)
+fn aurel_filter_chain_threads_mutations_and_continues_after_nil() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_filter_chain_threads_mutations_and_continues_after_nil",
+        r##"(let (events)
          (cl-labels
              ((add-first
                (info)
@@ -35,12 +33,15 @@ fn filters_public_surface_batch() {
               #'drop
               #'must-not-run))
             (nreverse events))))"##,
-            true,
-            expect![[r#"OK (((first . 1) (original . 0)) nil (:first :first :drop :late))"#]],
-        ),
-        (
-            "aurel_contains_every_string_combines_selected_fields_literally",
-            r##"(let ((info
+        true,
+        expect![[r#"OK (((first . 1) (original . 0)) nil (:first :first :drop :late))"#]],
+    )
+}
+
+fn aurel_contains_every_string_combines_selected_fields_literally() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_contains_every_string_combines_selected_fields_literally",
+        r##"(let ((info
                 '((name . "Emacs Git")
                   (description
                    . "Fast.Editor for Lisp"))))
@@ -70,14 +71,17 @@ fn filters_public_surface_batch() {
              "Fast.Editor")
             ((name)
              "Editor"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((t "Emacs Git") (t "Emacs Git") (t "Emacs Git") (t "Emacs Git") (t "Emacs Git") (nil nil))"#
     ]],
-        ),
-        (
-            "aurel_aur_url_filters_mutate_package_path_and_prepend_git_url",
-            r##"(let* ((info
+    )
+}
+
+fn aurel_aur_url_filters_mutate_package_path_and_prepend_git_url() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_aur_url_filters_mutate_package_path_and_prepend_git_url",
+        r##"(let* ((info
                  '((name . "emacs-git")
                    (pkg-url
                     . "/cgit/aur.git/snapshot/emacs-git.tar.gz")
@@ -94,14 +98,17 @@ fn filters_public_surface_batch() {
           (eq info pkg-result)
           (eq pkg-result
               (cdr git-result))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (#1=((name . "emacs-git") (pkg-url . "https://aur.archlinux.org/cgit/aur.git/snapshot/emacs-git.tar.gz") (id . 42)) ((git-url . "https://aur.archlinux.org/emacs-git.git") . #1#) t t)"#
     ]],
-        ),
-        (
-            "aurel_pacman_none_filter_normalizes_strings_and_rejects_non_string_values",
-            r##"(let ((aurel-none-string
+    )
+}
+
+fn aurel_pacman_none_filter_normalizes_strings_and_rejects_non_string_values() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_pacman_none_filter_normalizes_strings_and_rejects_non_string_values",
+        r##"(let ((aurel-none-string
                 "None"))
          (list
           (aurel-pacman-filter-none
@@ -114,14 +121,17 @@ fn filters_public_surface_batch() {
            (lambda ()
              (aurel-pacman-filter-none
               '((installed-size . 0)))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((installed-name . "demo") (depends-opt) (required . "none") (optional-for . "") (validated . "SHA-256")) (:error wrong-type-argument (stringp 0)))"#
     ]],
-        ),
-        (
-            "aurel_filtered_alist_keys_mutations_and_exposes_continuation_after_nil",
-            r##"(let ((filters
+    )
+}
+
+fn aurel_filtered_alist_keys_mutations_and_exposes_continuation_after_nil() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_filtered_alist_keys_mutations_and_exposes_continuation_after_nil",
+        r##"(let ((filters
                 (list
                  (lambda (info)
                    (and
@@ -156,14 +166,17 @@ fn filters_public_surface_batch() {
                  (keep)))
               filters
               'id)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((10 (processed . "ALPHA") (id . 10) (name . "alpha") (keep . t)) (30 (processed . "GAMMA") (id . 30) (name . "gamma") (keep . yes))) (:error wrong-type-argument (char-or-string-p nil)))"#
     ]],
-        ),
-        (
-            "aurel_receive_packages_joins_aur_and_pacman_records_by_name",
-            r##"(let ((aurel-installed-packages-check
+    )
+}
+
+fn aurel_receive_packages_joins_aur_and_pacman_records_by_name() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_receive_packages_joins_aur_and_pacman_records_by_name",
+        r##"(let ((aurel-installed-packages-check
                 t)
                calls)
          (cl-letf
@@ -194,14 +207,17 @@ fn filters_public_surface_batch() {
             (aurel-receive-packages-info
              "fixture:aur")
             (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((10 (git-url . "https://aur.archlinux.org/alpha.git") (name . "alpha") (id . 10) (pkg-url . "https://aur.archlinux.org/alpha.tar.gz")) (20 (git-url . "https://aur.archlinux.org/beta.git") (name . "beta") (id . 20) (pkg-url . "https://aur.archlinux.org/beta.tar.gz") (installed-name . "beta") (installed-version . "2.0") (depends-opt))) ((:aur "fixture:aur") (:pacman "alpha" "beta")))"#
     ]],
-        ),
-        (
-            "aurel_package_predicates_cover_maintenance_versions_and_regexps",
-            r##"(progn
+    )
+}
+
+fn aurel_package_predicates_cover_maintenance_versions_and_regexps() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_package_predicates_cover_maintenance_versions_and_regexps",
+        r##"(progn
          (defun aurel-test-predicate-summary
              (entry)
            (list
@@ -250,14 +266,17 @@ fn filters_public_surface_batch() {
              (description . "")
              (version)
              (installed-version)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("emacs-git" t nil t nil t nil t t) ("tiny" nil t nil t nil t nil t) ("unknown" nil t nil t t nil nil t))"#
     ]],
-        ),
-        (
-            "aurel_filter_commands_forward_predicates_prefixes_and_regexp_closures",
-            r##"(let (calls)
+    )
+}
+
+fn aurel_filter_commands_forward_predicates_prefixes_and_regexp_closures() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurel_filter_commands_forward_predicates_prefixes_and_regexp_closures",
+        r##"(let (calls)
          (cl-letf
              (((symbol-function
                 'bui-enable-filter)
@@ -306,10 +325,24 @@ fn filters_public_surface_batch() {
               (aurel-enable-filter
                :outer)
               (nreverse calls)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:enabled :enabled :enabled :enabled :enabled :enabled :enabled :enabled :enabled ((aurel-package-unmaintained? nil nil) (aurel-package-maintained? (4) nil) (aurel-package-not-outdated? nil nil) (aurel-package-outdated? - nil) (aurel-package-different-versions? nil nil) (aurel-package-same-versions? 7 nil) (:closure nil nil) (:closure t 6) (aurel-package-not-outdated? :outer nil)))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn filters_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        aurel_filter_chain_threads_mutations_and_continues_after_nil(),
+        aurel_contains_every_string_combines_selected_fields_literally(),
+        aurel_aur_url_filters_mutate_package_path_and_prepend_git_url(),
+        aurel_pacman_none_filter_normalizes_strings_and_rejects_non_string_values(),
+        aurel_filtered_alist_keys_mutations_and_exposes_continuation_after_nil(),
+        aurel_receive_packages_joins_aur_and_pacman_records_by_name(),
+        aurel_package_predicates_cover_maintenance_versions_and_regexps(),
+        aurel_filter_commands_forward_predicates_prefixes_and_regexp_closures(),
+    ];
+    assert_aurel_batch(&cases);
 }

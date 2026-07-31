@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_projectile_batch;
+use super::{ParityBatchCase, assert_projectile_batch};
 
-#[test]
-fn filesystem_public_surface_batch() {
-    assert_projectile_batch(&[
-        (
-            "projectile_root_strategies_find_expected_marker_levels",
-            r##"(let* ((root (make-temp-file "projectile-root-" t))
+fn projectile_root_strategies_find_expected_marker_levels() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "projectile_root_strategies_find_expected_marker_levels",
+        r##"(let* ((root (make-temp-file "projectile-root-" t))
                     (default-directory (file-name-as-directory root))
                     (project (expand-file-name "project/" root))
                     (nested (expand-file-name "src/lib/" project))
@@ -41,12 +39,15 @@ fn filesystem_public_surface_batch() {
                        (projectile-root-top-down-recurring nested '(".git"))
                        project)))
                  (delete-directory root t)))"##,
-            true,
-            expect![[r#"OK (t t t nil t)"#]],
-        ),
-        (
-            "projectile_project_root_contract_handles_marked_project_and_nil_directory",
-            r##"(let* ((root (make-temp-file "projectile-project-" t))
+        true,
+        expect![[r#"OK (t t t nil t)"#]],
+    )
+}
+
+fn projectile_project_root_contract_handles_marked_project_and_nil_directory() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "projectile_project_root_contract_handles_marked_project_and_nil_directory",
+        r##"(let* ((root (make-temp-file "projectile-project-" t))
                     (project (file-name-as-directory root))
                     (nested (expand-file-name "src/lib/" project))
                     (projectile-project-root-cache
@@ -63,12 +64,15 @@ fn filesystem_public_surface_batch() {
                       (let ((default-directory nil))
                         (projectile-project-root))))
                  (delete-directory root t)))"##,
-            true,
-            expect![[r#"OK (t t nil)"#]],
-        ),
-        (
-            "projectile_native_directory_indexing_filters_ignored_paths",
-            r##"(let* ((root (make-temp-file "projectile-index-" t))
+        true,
+        expect![[r#"OK (t t nil)"#]],
+    )
+}
+
+fn projectile_native_directory_indexing_filters_ignored_paths() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "projectile_native_directory_indexing_filters_ignored_paths",
+        r##"(let* ((root (make-temp-file "projectile-index-" t))
                     (project (file-name-as-directory root))
                     (projectile-globally-ignored-directories
                      '(".git" "build"))
@@ -90,12 +94,15 @@ fn filesystem_public_surface_batch() {
                        (sort (projectile-dir-files-native project)
                              #'string<)))
                  (delete-directory root t)))"##,
-            true,
-            expect![[r#"OK ("keep.el" "src/nested.el")"#]],
-        ),
-        (
-            "projectile_task_manifest_parsers_read_controlled_project_files",
-            r##"(let* ((root (make-temp-file "projectile-tasks-" t))
+        true,
+        expect![[r#"OK ("keep.el" "src/nested.el")"#]],
+    )
+}
+
+fn projectile_task_manifest_parsers_read_controlled_project_files() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "projectile_task_manifest_parsers_read_controlled_project_files",
+        r##"(let* ((root (make-temp-file "projectile-tasks-" t))
                     (project (file-name-as-directory root)))
                (unwind-protect
                    (progn
@@ -113,14 +120,17 @@ fn filesystem_public_surface_batch() {
                       (projectile-tasks-from-deno project)
                       (projectile-tasks-from-composer project)))
                  (delete-directory root t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("npm:build" . "npm run build") ("npm:test" . "npm run test")) (("deno:dev" . "deno task dev")) (("composer:lint" . "composer run-script lint")))"#
     ]],
-        ),
-        (
-            "projectile_text_task_parsers_ignore_assignments_and_nested_keys",
-            r##"(let* ((root (make-temp-file "projectile-text-tasks-" t))
+    )
+}
+
+fn projectile_text_task_parsers_ignore_assignments_and_nested_keys() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "projectile_text_task_parsers_ignore_assignments_and_nested_keys",
+        r##"(let* ((root (make-temp-file "projectile-text-tasks-" t))
                     (project (file-name-as-directory root)))
                (unwind-protect
                    (progn
@@ -138,10 +148,21 @@ fn filesystem_public_surface_batch() {
                       (projectile-tasks-from-taskfile project)
                       (projectile-tasks-from-make project)))
                  (delete-directory root t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("just:build" . "just build") ("just:fmt" . "just fmt") ("just:test" . "just test")) (("task:build" . "task build") ("task:test" . "task test")) (("make:all" . "make all") ("make:test" . "make test")))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn filesystem_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        projectile_root_strategies_find_expected_marker_levels(),
+        projectile_project_root_contract_handles_marked_project_and_nil_directory(),
+        projectile_native_directory_indexing_filters_ignored_paths(),
+        projectile_task_manifest_parsers_read_controlled_project_files(),
+        projectile_text_task_parsers_ignore_assignments_and_nested_keys(),
+    ];
+    assert_projectile_batch(&cases);
 }

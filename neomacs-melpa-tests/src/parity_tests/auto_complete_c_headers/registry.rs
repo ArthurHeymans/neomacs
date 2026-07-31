@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_auto_complete_c_headers_autoload_batch, assert_auto_complete_c_headers_batch};
+use super::{ParityBatchCase, assert_auto_complete_c_headers_autoload_batch, assert_auto_complete_c_headers_batch};
 
-#[test]
-fn registry_auto_complete_c_headers_batch() {
-    assert_auto_complete_c_headers_batch(&[
-        (
-            "auto_complete_c_headers_descriptor_dependency_and_features_are_exact",
-            r##"(let* ((descriptor
+fn auto_complete_c_headers_descriptor_dependency_and_features_are_exact() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_descriptor_dependency_and_features_are_exact",
+        r##"(let* ((descriptor
                 (cadr
                  (assq
                   'auto-complete-c-headers
@@ -41,14 +39,17 @@ fn registry_auto_complete_c_headers_batch() {
            'auto-complete-c-headers)
           (featurep 'auto-complete)
           (featurep 'popup)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (auto-complete-c-headers "20150912.323" "An auto-complete source for C/C++ header files." ((auto-complete (1 4))) ((:maintainers ("Masafumi Oyamada" . "stillpedant@gmail.com")) (:authors ("Masafumi Oyamada" . "stillpedant@gmail.com")) (:keywords "c") (:revdesc . "52fef720c6f2") (:commit . "52fef720c6f274ad8de52bef39a343421006c511") (:url . "https://github.com/mooz/auto-complete-c-headers")) (auto-complete "20251231.1622") (popup "20251231.1622") t t t)"#
     ]],
-        ),
-        (
-            "auto_complete_c_headers_installed_payload_bytes_are_pinned",
-            r##"(let* ((descriptor
+    )
+}
+
+fn auto_complete_c_headers_installed_payload_bytes_are_pinned() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_installed_payload_bytes_are_pinned",
+        r##"(let* ((descriptor
                 (cadr
                  (assq
                   'auto-complete-c-headers
@@ -75,14 +76,17 @@ fn registry_auto_complete_c_headers_batch() {
                   'sha256
                   (current-buffer))))))
           files))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("auto-complete-c-headers-pkg.el" 470 "3eac4fd25dedf6f5135a6d4fa4cac7f42190d3836058afc46baa4d87319f29d6") ("auto-complete-c-headers.el" 6387 "c699f3f8fc8a8a7ceb16897a32bf7a922680d362ff288bf2253a07facda5a280"))"#
     ]],
-        ),
-        (
-            "auto_complete_c_headers_default_configuration_and_source_are_exact",
-            r##"(list
+    )
+}
+
+fn auto_complete_c_headers_default_configuration_and_source_are_exact() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_default_configuration_and_source_are_exact",
+        r##"(list
          achead:include-patterns
          achead:include-directories
          achead:get-include-directories-function
@@ -91,14 +95,17 @@ fn registry_auto_complete_c_headers_batch() {
          achead:include-cache
          achead:ac-latest-results-alist
          ac-source-c-headers)"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (("\\.\\(h\\|hpp\\|hh\\)$" "/[a-zA-Z-_]+$") ("." "/usr/include" "/usr/local/include") achead:get-include-directories "#\\(?:include\\|import\\)[ \11]*[<\"][ \11]*\\([^\"<>' \11\15\n]+\\)" t nil nil ((init setq achead:include-cache nil) (candidates . achead:ac-candidates) (prefix . "#\\(?:include\\|import\\)[ \11]*[<\"][ \11]*\\([^\"<>' \11\15\n]+\\)") (document . achead:documentation-for-candidate) (requires . 0) (symbol . "I") (action . ac-start) (limit)))"##
     ]],
-        ),
-        (
-            "auto_complete_c_headers_public_function_contracts_and_origins_are_exact",
-            r##"(mapcar
+    )
+}
+
+fn auto_complete_c_headers_public_function_contracts_and_origins_are_exact() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_public_function_contracts_and_origins_are_exact",
+        r##"(mapcar
          (lambda (symbol)
            (list
             symbol
@@ -115,14 +122,17 @@ fn registry_auto_complete_c_headers_batch() {
            achead:get-include-file-candidates
            achead:documentation-for-candidate
            achead:ac-candidates))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((achead:get-include-directories t nil nil nil "auto-complete-c-headers.el") (achead:get-include-directories-from-options t nil nil (cmd-line-options) "auto-complete-c-headers.el") (achead:file-list-for-directory t nil nil (dir) "auto-complete-c-headers.el") (achead:path-should-be-displayed t nil nil (path) "auto-complete-c-headers.el") (achead:get-include-file-candidates t nil nil (&optional basedir) "auto-complete-c-headers.el") (achead:documentation-for-candidate t nil nil (candidate) "auto-complete-c-headers.el") (achead:ac-candidates t nil nil nil "auto-complete-c-headers.el"))"#
     ]],
-        ),
-        (
-            "auto_complete_c_headers_source_load_history_records_complete_contract",
-            r##"(let* ((file
+    )
+}
+
+fn auto_complete_c_headers_source_load_history_records_complete_contract() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_source_load_history_records_complete_contract",
+        r##"(let* ((file
                  (locate-library
                   "auto-complete-c-headers"))
                 (history
@@ -136,14 +146,17 @@ fn registry_auto_complete_c_headers_batch() {
               (car event)
               '(defun defvar provide))))
           history))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((defun . achead:get-include-directories) (defun . achead:get-include-directories-from-options) (defun . achead:file-list-for-directory) (defun . achead:path-should-be-displayed) (defun . achead:get-include-file-candidates) (defun . achead:documentation-for-candidate) (defun . achead:ac-candidates) (defun . ac-complete-c-headers) (provide . auto-complete-c-headers))"
     ],
-        ),
-        (
-            "auto_complete_c_headers_reload_resets_defvars_but_redefines_functions_and_source",
-            r##"(let ((source
+    )
+}
+
+fn auto_complete_c_headers_reload_resets_defvars_but_redefines_functions_and_source() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_reload_resets_defvars_but_redefines_functions_and_source",
+        r##"(let ((source
                 (locate-library
                  "auto-complete-c-headers"))
                (achead:include-patterns
@@ -166,14 +179,17 @@ fn registry_auto_complete_c_headers_batch() {
               (symbol-function
                'achead:path-should-be-displayed))
           ac-source-c-headers))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (("\\.inc\\'") ("/custom/include") nil nil ((init setq achead:include-cache nil) (candidates . achead:ac-candidates) (prefix . "#\\(?:include\\|import\\)[ \11]*[<\"][ \11]*\\([^\"<>' \11\15\n]+\\)") (document . achead:documentation-for-candidate) (requires . 0) (symbol . "I") (action . ac-start) (limit)))"##
     ]],
-        ),
-        (
-            "auto_complete_c_headers_source_entries_resolve_to_callable_completion_behavior",
-            r##"(let ((init
+    )
+}
+
+fn auto_complete_c_headers_source_entries_resolve_to_callable_completion_behavior() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_source_entries_resolve_to_callable_completion_behavior",
+        r##"(let ((init
                 (cdr
                  (assq 'init
                        ac-source-c-headers)))
@@ -206,20 +222,17 @@ fn registry_auto_complete_c_headers_batch() {
           (cdr
            (assq 'limit
                  ac-source-c-headers))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((setq achead:include-cache nil) achead:ac-candidates achead:documentation-for-candidate ac-start t t t 0 "I" nil)"#
     ]],
-        ),
-    ]);
+    )
 }
 
-#[test]
-fn registry_auto_complete_c_headers_autoload_batch() {
-    assert_auto_complete_c_headers_autoload_batch(&[
-        (
-            "auto_complete_c_headers_generated_autoload_provides_feature_without_source",
-            r##"(let* ((file
+fn auto_complete_c_headers_generated_autoload_provides_feature_without_source() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_c_headers_generated_autoload_provides_feature_without_source",
+        r##"(let* ((file
                  (locate-library
                   "auto-complete-c-headers-autoloads"))
                 (history
@@ -239,8 +252,29 @@ fn registry_auto_complete_c_headers_autoload_batch() {
           (boundp 'ac-source-c-headers)
           (fboundp
            'achead:ac-candidates)))"##,
-            true,
-            expect!["OK (t nil ((provide . auto-complete-c-headers-autoloads)) nil nil)"],
-        ),
-    ]);
+        true,
+        expect!["OK (t nil ((provide . auto-complete-c-headers-autoloads)) nil nil)"],
+    )
+}
+
+#[test]
+fn registry_auto_complete_c_headers_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_c_headers_descriptor_dependency_and_features_are_exact(),
+        auto_complete_c_headers_installed_payload_bytes_are_pinned(),
+        auto_complete_c_headers_default_configuration_and_source_are_exact(),
+        auto_complete_c_headers_public_function_contracts_and_origins_are_exact(),
+        auto_complete_c_headers_source_load_history_records_complete_contract(),
+        auto_complete_c_headers_reload_resets_defvars_but_redefines_functions_and_source(),
+        auto_complete_c_headers_source_entries_resolve_to_callable_completion_behavior(),
+    ];
+    assert_auto_complete_c_headers_batch(&cases);
+}
+
+#[test]
+fn registry_auto_complete_c_headers_autoload_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_c_headers_generated_autoload_provides_feature_without_source(),
+    ];
+    assert_auto_complete_c_headers_autoload_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_aggressive_fill_paragraph_batch;
+use super::{ParityBatchCase, assert_aggressive_fill_paragraph_batch};
 
-#[test]
-fn editing_public_surface_batch() {
-    assert_aggressive_fill_paragraph_batch(&[
-        (
-            "aggressive_fill_paragraph_real_space_command_reflows_and_undo_restores_prose",
-            r##"(with-temp-buffer
+fn aggressive_fill_paragraph_real_space_command_reflows_and_undo_restores_prose() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aggressive_fill_paragraph_real_space_command_reflows_and_undo_restores_prose",
+        r##"(with-temp-buffer
                            (text-mode)
                            (buffer-enable-undo)
                            (setq
@@ -60,14 +58,17 @@ fn editing_public_surface_batch() {
                                  original
                                  (buffer-string))
                                 buffer-undo-list))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t "Release notes explain how parser\nrecovery prevents data loss while\npreserving request order across every\nretry. " 113 4 7 32 "Release notes explain how parser recovery prevents data loss while preserving request order across every retry." 112 t nil)"#
     ]],
-        ),
-        (
-            "aggressive_fill_paragraph_real_commands_fill_comments_without_reformatting_code",
-            r####"(with-temp-buffer
+    )
+}
+
+fn aggressive_fill_paragraph_real_commands_fill_comments_without_reformatting_code() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aggressive_fill_paragraph_real_commands_fill_comments_without_reformatting_code",
+        r####"(with-temp-buffer
                             (emacs-lisp-mode)
                             (setq
                              fill-column
@@ -118,10 +119,18 @@ fn editing_public_surface_batch() {
                                 (line-number-at-pos)
                                 (current-column))
                                aggressive-fill-paragraph-mode)))"####,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("(defun publish-result (result)\n  ;; Explain why the parser retries the\n  ;; request while preserving the original\n  ;; ordering guarantee. \n  (message \"result=%S and this source form must remain on one line\" result)) " (140 4 25) (218 5 77) t)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn editing_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        aggressive_fill_paragraph_real_space_command_reflows_and_undo_restores_prose(),
+        aggressive_fill_paragraph_real_commands_fill_comments_without_reformatting_code(),
+    ];
+    assert_aggressive_fill_paragraph_batch(&cases);
 }

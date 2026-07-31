@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{AGDA_EDITOR_TACTICS_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod indentation;
 mod mode;
@@ -53,9 +56,9 @@ pub(crate) fn assert_agda_editor_tactics_autoload_parity(elisp_form: &str, expec
 
 
 /// Multi-probe batch for `assert_agda_editor_tactics_autoload_parity` cases (2a).
-pub(crate) fn assert_agda_editor_tactics_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_agda_editor_tactics_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         agda_editor_tactics_oracle("agda-editor-tactics-autoloads.el"),
         &name,
         "agda_editor_tactics_autoload_parity",
@@ -64,9 +67,9 @@ pub(crate) fn assert_agda_editor_tactics_autoload_batch(cases: &[(&str, &str, bo
 }
 
 /// Multi-probe batch for `assert_agda_editor_tactics_parity` cases (2a).
-pub(crate) fn assert_agda_editor_tactics_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_agda_editor_tactics_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         agda_editor_tactics_oracle("agda-editor-tactics.el"),
         &name,
         "agda_editor_tactics_parity",

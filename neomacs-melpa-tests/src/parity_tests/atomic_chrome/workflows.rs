@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_atomic_chrome_batch;
+use super::{ParityBatchCase, assert_atomic_chrome_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_atomic_chrome_batch(&[
-        (
-            "atomic_chrome_edit_mode_lifecycle_installs_local_hooks_idempotently_and_leaves_them_on_disable",
-            r##"(with-temp-buffer
+fn atomic_chrome_edit_mode_lifecycle_installs_local_hooks_idempotently_and_leaves_them_on_disable() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_edit_mode_lifecycle_installs_local_hooks_idempotently_and_leaves_them_on_disable",
+        r##"(with-temp-buffer
           (setq-local
            kill-buffer-hook nil)
           (setq-local
@@ -51,14 +49,17 @@ fn workflows_public_surface_batch() {
                (cl-count
                 'atomic-chrome-send-buffer-text
                 post-command-hook)))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (((1 t t (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t) (1 t t (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t) (-1 nil nil (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t) (nil t t (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t) (0 nil nil (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t) (2 t t (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t)) ((mode-hook t) (mode-hook t) (mode-hook nil) (mode-hook t) (mode-hook nil) (mode-hook t)) 1 1)"
     ],
-        ),
-        (
-            "atomic_chrome_edit_mode_with_auto_update_disabled_installs_only_close_hook",
-            r##"(with-temp-buffer
+    )
+}
+
+fn atomic_chrome_edit_mode_with_auto_update_disabled_installs_only_close_hook() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_edit_mode_with_auto_update_disabled_installs_only_close_hook",
+        r##"(with-temp-buffer
           (setq-local
            kill-buffer-hook nil)
           (setq-local
@@ -78,14 +79,17 @@ fn workflows_public_surface_batch() {
               kill-buffer-hook)
              (copy-sequence
               post-command-hook))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (t t (atomic-chrome-close-connection) nil nil nil (atomic-chrome-close-connection) nil)"
     ],
-        ),
-        (
-            "atomic_chrome_turn_on_edit_mode_checks_table_membership_and_preserves_unrelated_buffer",
-            r##"(let ((registered
+    )
+}
+
+fn atomic_chrome_turn_on_edit_mode_checks_table_membership_and_preserves_unrelated_buffer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_turn_on_edit_mode_checks_table_membership_and_preserves_unrelated_buffer",
+        r##"(let ((registered
                 (generate-new-buffer
                  " *atomic-turn-on-registered*"))
                (unrelated
@@ -123,12 +127,15 @@ fn workflows_public_surface_batch() {
              registered)
             (atomic-chrome-test-kill-buffer
              unrelated)))"##,
-            true,
-            expect!["OK ((t t t) (nil nil nil))"],
-        ),
-        (
-            "global_atomic_chrome_edit_mode_enables_only_registered_live_buffers_and_disables_mode",
-            r##"(let ((registered
+        true,
+        expect!["OK ((t t t) (nil nil nil))"],
+    )
+}
+
+fn global_atomic_chrome_edit_mode_enables_only_registered_live_buffers_and_disables_mode() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "global_atomic_chrome_edit_mode_enables_only_registered_live_buffers_and_disables_mode",
+        r##"(let ((registered
                 (generate-new-buffer
                  " *atomic-global-registered*"))
                (unrelated
@@ -190,12 +197,15 @@ fn workflows_public_surface_batch() {
              registered)
             (atomic-chrome-test-kill-buffer
              unrelated)))"##,
-            true,
-            expect!["OK ((t (t t t) nil) (nil (nil t t) nil))"],
-        ),
-        (
-            "atomic_chrome_close_edit_buffer_runs_done_hook_then_frame_and_split_window_cleanup",
-            r##"(let ((buffer
+        true,
+        expect!["OK ((t (t t t) nil) (nil (nil t t) nil))"],
+    )
+}
+
+fn atomic_chrome_close_edit_buffer_runs_done_hook_then_frame_and_split_window_cleanup() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_close_edit_buffer_runs_done_hook_then_frame_and_split_window_cleanup",
+        r##"(let ((buffer
                 (generate-new-buffer
                  " *atomic-close-split*"))
                (atomic-chrome-buffer-table
@@ -263,14 +273,17 @@ fn workflows_public_surface_batch() {
                    (nreverse events))))
             (atomic-chrome-test-kill-buffer
              buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:quit t ((window " *atomic-close-split*") (done 8 16 "editable") (delete-frame :edit-frame) (quit t :edit-window t)))"#
     ]],
-        ),
-        (
-            "atomic_chrome_atomic_protocol_practical_edit_update_send_and_disconnect_workflow",
-            r##"(let ((atomic-chrome-buffer-table
+    )
+}
+
+fn atomic_chrome_atomic_protocol_practical_edit_update_send_and_disconnect_workflow() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_atomic_protocol_practical_edit_update_send_and_disconnect_workflow",
+        r##"(let ((atomic-chrome-buffer-table
                 (make-hash-table
                  :test 'equal))
                (atomic-chrome-server-ghost-text
@@ -361,14 +374,17 @@ fn workflows_public_surface_batch() {
                      (nreverse events)))))
             (atomic-chrome-test-kill-buffer
              edit-buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("Browser editor" "(+ 1 2)\n;; local" emacs-lisp-mode t t t nil) ("Browser editor" "(+ 20 22)" emacs-lisp-mode t t t t) nil 0 ((show "Browser editor" "Browser editor") (send browser-socket "{\"type\":\"updateText\",\"payload\":{\"text\":\"(+ 1 2)\\n;; local\"}}") (socket-close browser-socket)))"#
     ]],
-        ),
-        (
-            "atomic_chrome_ghost_text_practical_create_bidirectional_update_and_send_workflow",
-            r##"(let ((atomic-chrome-buffer-table
+    )
+}
+
+fn atomic_chrome_ghost_text_practical_create_bidirectional_update_and_send_workflow() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_ghost_text_practical_create_bidirectional_update_and_send_workflow",
+        r##"(let ((atomic-chrome-buffer-table
                 (make-hash-table
                  :test 'equal))
                (atomic-chrome-server-ghost-text
@@ -431,10 +447,23 @@ fn workflows_public_surface_batch() {
                    (nreverse events))))
             (atomic-chrome-test-kill-buffer
              edit-buffer)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("Ghost editor" "draft" text-mode nil nil nil t) ("Ghost editor" "browser revision + emacs" text-mode nil nil nil nil) (("Ghost editor" (ghost-socket :ghost-server) :ghost-frame)) ((show "Ghost editor" "Ghost editor") (send ghost-socket "{\"text\":\"browser revision + emacs\"}")))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        atomic_chrome_edit_mode_lifecycle_installs_local_hooks_idempotently_and_leaves_them_on_disable(),
+        atomic_chrome_edit_mode_with_auto_update_disabled_installs_only_close_hook(),
+        atomic_chrome_turn_on_edit_mode_checks_table_membership_and_preserves_unrelated_buffer(),
+        global_atomic_chrome_edit_mode_enables_only_registered_live_buffers_and_disables_mode(),
+        atomic_chrome_close_edit_buffer_runs_done_hook_then_frame_and_split_window_cleanup(),
+        atomic_chrome_atomic_protocol_practical_edit_update_send_and_disconnect_workflow(),
+        atomic_chrome_ghost_text_practical_create_bidirectional_update_and_send_workflow(),
+    ];
+    assert_atomic_chrome_batch(&cases);
 }

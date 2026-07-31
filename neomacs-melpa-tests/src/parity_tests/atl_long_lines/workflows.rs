@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_atl_long_lines_batch;
+use super::{ParityBatchCase, assert_atl_long_lines_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_atl_long_lines_batch(&[
-        (
-            "global_atl_long_lines_cross_buffer_commands_share_and_supersede_one_timer",
-            r##"(let ((buffer-a
+fn global_atl_long_lines_cross_buffer_commands_share_and_supersede_one_timer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "global_atl_long_lines_cross_buffer_commands_share_and_supersede_one_timer",
+        r##"(let ((buffer-a
                 (generate-new-buffer
                  " *atl-long-lines-a*"))
                (buffer-b
@@ -122,14 +120,17 @@ fn workflows_public_surface_batch() {
              (global-atl-long-lines-mode -1))
            (kill-buffer buffer-a)
            (kill-buffer buffer-b)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         "OK (((t 1) (t 1)) ((:schedule 1 :a 0.4 nil atl-long-lines-do-toggle nil) (:cancel 1 :a) (:schedule 2 :b 0.4 nil atl-long-lines-do-toggle nil)) (2) (2 :b) ((nil 0) (nil 0)))"
     ]],
-        ),
-        (
-            "atl_long_lines_enabled_post_command_to_timer_callback_keeps_short_line_truncated",
-            r##"(with-temp-buffer
+    )
+}
+
+fn atl_long_lines_enabled_post_command_to_timer_callback_keeps_short_line_truncated() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atl_long_lines_enabled_post_command_to_timer_callback_keeps_short_line_truncated",
+        r##"(with-temp-buffer
          (insert "short")
          (goto-char
           (point-min))
@@ -170,12 +171,15 @@ fn workflows_public_surface_batch() {
                 (atl-long-lines-test-hook-count
                  #'atl-long-lines--start-timer
                  post-command-hook))))))"##,
-            true,
-            expect!["OK (t t (0.4 nil atl-long-lines-do-toggle nil) t 1)"],
-        ),
-        (
-            "atl_long_lines_cursor_navigation_recomputes_wrapping_for_each_visited_line",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK (t t (0.4 nil atl-long-lines-do-toggle nil) t 1)"],
+    )
+}
+
+fn atl_long_lines_cursor_navigation_recomputes_wrapping_for_each_visited_line() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atl_long_lines_cursor_navigation_recomputes_wrapping_for_each_visited_line",
+        r##"(with-temp-buffer
          (insert
           "tiny\n"
           "this is a realistically long source-code line\n"
@@ -218,12 +222,15 @@ fn workflows_public_surface_batch() {
                  truncate-lines)
                 states))
              (nreverse states))))"##,
-            true,
-            expect!["OK ((1 4 t) (2 45 nil) (3 6 t) (2 45 nil) (1 4 t))"],
-        ),
-        (
-            "atl_long_lines_rapid_post_commands_cancel_superseded_work_and_only_latest_callback_drives_ui",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK ((1 4 t) (2 45 nil) (3 6 t) (2 45 nil) (1 4 t))"],
+    )
+}
+
+fn atl_long_lines_rapid_post_commands_cancel_superseded_work_and_only_latest_callback_drives_ui() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atl_long_lines_rapid_post_commands_cancel_superseded_work_and_only_latest_callback_drives_ui",
+        r##"(with-temp-buffer
          (insert
           "short\n"
           "this line is substantially longer than the fixture window\n")
@@ -288,12 +295,15 @@ fn workflows_public_surface_batch() {
                (car live))
               truncate-lines
               (length callbacks)))))"##,
-            true,
-            expect!["OK ((1) (2) 2 t nil 2)"],
-        ),
-        (
-            "atl_long_lines_runtime_delay_customization_affects_the_next_command_without_reenabling_mode",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK ((1) (2) 2 t nil 2)"],
+    )
+}
+
+fn atl_long_lines_runtime_delay_customization_affects_the_next_command_without_reenabling_mode() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atl_long_lines_runtime_delay_customization_affects_the_next_command_without_reenabling_mode",
+        r##"(with-temp-buffer
          (let ((atl-long-lines-delay 0.4)
                observed)
            (cl-letf
@@ -326,14 +336,17 @@ fn workflows_public_surface_batch() {
               atl-long-lines-mode
               (nreverse observed)
               atl-long-lines--timer))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (t ((0.4 nil atl-long-lines-do-toggle nil) (2.5 nil atl-long-lines-do-toggle nil)) (:timer 2.5))"
     ],
-        ),
-        (
-            "atl_long_lines_disable_stops_future_post_command_scheduling_but_reenable_restores_it",
-            r##"(with-temp-buffer
+    )
+}
+
+fn atl_long_lines_disable_stops_future_post_command_scheduling_but_reenable_restores_it() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atl_long_lines_disable_stops_future_post_command_scheduling_but_reenable_restores_it",
+        r##"(with-temp-buffer
          (let ((schedules 0))
            (cl-letf
                (((symbol-function 'timerp)
@@ -362,12 +375,15 @@ fn workflows_public_surface_batch() {
               (atl-long-lines-test-hook-count
                #'atl-long-lines--start-timer
                post-command-hook)))))"##,
-            true,
-            expect!["OK (2 t 1)"],
-        ),
-        (
-            "atl_long_lines_real_idle_timer_event_handler_applies_the_current_line_policy",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK (2 t 1)"],
+    )
+}
+
+fn atl_long_lines_real_idle_timer_event_handler_applies_the_current_line_policy() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atl_long_lines_real_idle_timer_event_handler_applies_the_current_line_policy",
+        r##"(with-temp-buffer
          (insert
           "this line is longer than twelve columns")
          (goto-char
@@ -403,8 +419,21 @@ fn workflows_public_surface_batch() {
              (when
                  (timerp timer)
                (cancel-timer timer)))))"##,
-            true,
-            expect!["OK (nil t nil t t)"],
-        ),
-    ]);
+        true,
+        expect!["OK (nil t nil t t)"],
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        global_atl_long_lines_cross_buffer_commands_share_and_supersede_one_timer(),
+        atl_long_lines_enabled_post_command_to_timer_callback_keeps_short_line_truncated(),
+        atl_long_lines_cursor_navigation_recomputes_wrapping_for_each_visited_line(),
+        atl_long_lines_rapid_post_commands_cancel_superseded_work_and_only_latest_callback_drives_ui(),
+        atl_long_lines_runtime_delay_customization_affects_the_next_command_without_reenabling_mode(),
+        atl_long_lines_disable_stops_future_post_command_scheduling_but_reenable_restores_it(),
+        atl_long_lines_real_idle_timer_event_handler_applies_the_current_line_policy(),
+    ];
+    assert_atl_long_lines_batch(&cases);
 }

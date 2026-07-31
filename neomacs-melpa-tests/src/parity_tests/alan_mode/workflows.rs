@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_alan_mode_batch;
+use super::{ParityBatchCase, assert_alan_mode_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_alan_mode_batch(&[
-        (
-            "opening_each_file_of_a_real_alan_project_selects_its_mode_and_configures_its_compiler",
-            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+fn opening_each_file_of_a_real_alan_project_selects_its_mode_and_configures_its_compiler() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "opening_each_file_of_a_real_alan_project_selects_its_mode_and_configures_its_compiler",
+        r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (project (file-name-as-directory (expand-file-name "customer" root)))
        (tools (expand-file-name "dependencies/dev/internals/alan/tools/" project))
        ;; The sandbox is inside the neomacs worktree, whose .dir-locals.el
@@ -54,14 +52,17 @@ fn workflows_public_surface_batch() {
                     (alan-test-relative alan--flycheck-language-definition project)))
           (kill-buffer buffer))))
     files)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:compiler-environment ("emacs" "warning") :tree-sitter-gate (t nil) :opened (("schema.alan" alan-schema-mode "schema" "dependencies/dev/internals/alan/language" "../.." t "dependencies/dev/internals/alan/tools/compiler-project" "dependencies/dev/internals/alan/language") ("grammar.alan" alan-grammar-mode "grammar" "dependencies/dev/internals/alan/language" "../.." t "dependencies/dev/internals/alan/tools/compiler-project" "dependencies/dev/internals/alan/language") ("wiring.alan" alan-wiring-mode "wiring" nil "." nil nil nil) ("application.alan" alan-application-mode "application" ".alan/devenv/platform/if-types/model/language" "." t "dependencies/dev/internals/alan/tools/compiler-project" ".alan/devenv/platform/if-types/model/language") ("interface.alan" alan-interface-mode "interface" nil "." t nil nil) ("settings.alan" alan-settings-mode "settings" ".alan/devenv/system-types/auto-webclient/language" "." t "dependencies/dev/internals/alan/tools/compiler-project" ".alan/devenv/system-types/auto-webclient/language") ("control.alan" alan-control-mode "control" nil "." t nil nil) ("mapping.alan" alan-mapping-mode "mapping" nil "." nil nil nil) ("migration.alan" alan-migration-mode "migration" nil "." t nil nil) ("deployment.alan" alan-deployment-mode "deployment" ".alan/devenv/platform/project-build-environment/language" "." nil "dependencies/dev/internals/alan/tools/compiler-project" ".alan/devenv/platform/project-build-environment/language") ("phrases.alan" alan-phrases-mode "phrases" nil "." nil nil nil) ("views/main.alan" alan-views-mode "views" ".alan/devenv/system-types/webclient/language" "../" t "dependencies/dev/internals/alan/tools/compiler-project" ".alan/devenv/system-types/webclient/language") ("widgets/list.alan" alan-widget-mode "widget" ".alan/devenv/system-types/webclient/language" "../" t "dependencies/dev/internals/alan/tools/compiler-project" ".alan/devenv/system-types/webclient/language") ("templates/page.alan" alan-template-mode "template" "dependencies/dev/internals/alan-to-text-transformation/language" "../../../" t "dependencies/dev/internals/alan/tools/compiler-project" "dependencies/dev/internals/alan-to-text-transformation/language") ("translations/nl.alan" alan-translations-mode "translations" nil "." nil nil nil) ("models/plain.alan" alan-mode "Alan" nil "." nil nil nil)))"#
     ]],
-        ),
-        (
-            "flycheck_runs_the_project_compiler_and_reports_only_this_files_diagnostics",
-            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    )
+}
+
+fn flycheck_runs_the_project_compiler_and_reports_only_this_files_diagnostics() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "flycheck_runs_the_project_compiler_and_reports_only_this_files_diagnostics",
+        r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (project (file-name-as-directory (expand-file-name "customer" root)))
        (source (expand-file-name "models/accounts/schema.alan" project))
        (other (expand-file-name "models/accounts/other.alan" project))
@@ -123,14 +124,17 @@ fn workflows_public_surface_batch() {
     (when (buffer-live-p buffer)
       (with-current-buffer buffer (set-buffer-modified-p nil))
       (kill-buffer buffer))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:mode alan-schema-mode :finished t :status finished :executable "dependencies/dev/internals/alan/tools/compiler-project" :language "dependencies/dev/internals/alan/language" :project-root "../.." :invocations "cwd=[PROJECT]models/accounts\nargv: [[PROJECT]dependencies/dev/internals/alan/language] [-C] [../..] [/dev/null]\n" :emitted 4 :shown 2 :diagnostics ((3 5 error "models/accounts/schema.alan" " unresolved reference 'balance'\n candidates are 'balances'\n in collection 'accounts'") (7 1 warning "models/accounts/schema.alan" " node 'status' is never read")))"#
     ]],
-        ),
-        (
-            "without_a_project_compiler_flycheck_falls_back_to_the_projects_build_script",
-            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    )
+}
+
+fn without_a_project_compiler_flycheck_falls_back_to_the_projects_build_script() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "without_a_project_compiler_flycheck_falls_back_to_the_projects_build_script",
+        r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (project (file-name-as-directory (expand-file-name "scripted" root)))
        (source (expand-file-name "models/accounts/schema.alan" project))
        (script (expand-file-name "alan" project))
@@ -170,14 +174,17 @@ fn workflows_public_surface_batch() {
     (when (buffer-live-p buffer)
       (with-current-buffer buffer (set-buffer-modified-p nil))
       (kill-buffer buffer))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:mode alan-schema-mode :finished t :status finished :executable "alan" :language nil :compile-command "[PROJECT]alan build" :invocations "cwd=[PROJECT]models/accounts\nargv: [build]\n" :diagnostics ((2 9 error "models/accounts/schema.alan" " the build branch ran")))"#
     ]],
-        ),
-        (
-            "the_documented_electric_layout_rule_opens_a_line_inside_an_empty_alan_block",
-            r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
+    )
+}
+
+fn the_documented_electric_layout_rule_opens_a_line_inside_an_empty_alan_block() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_documented_electric_layout_rule_opens_a_line_inside_an_empty_alan_block",
+        r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (project (file-name-as-directory (expand-file-name "layout" root)))
        (source (expand-file-name "models/accounts/schema.alan" project))
        (enable-dir-local-variables nil))
@@ -228,10 +235,20 @@ fn workflows_public_surface_batch() {
            :without-rule (session nil)
            :with-rule (session t))
         (kill-buffer opened)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:syntax (alan-schema-mode 40 41) :generic-syntax (alan-mode 95 95) :without-rule ("'root' -> component {\n}" 23 2 0 "}") :with-rule ("'root' -> component {\n\11\n}" 24 2 2 "\11"))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        opening_each_file_of_a_real_alan_project_selects_its_mode_and_configures_its_compiler(),
+        flycheck_runs_the_project_compiler_and_reports_only_this_files_diagnostics(),
+        without_a_project_compiler_flycheck_falls_back_to_the_projects_build_script(),
+        the_documented_electric_layout_rule_opens_a_line_inside_an_empty_alan_block(),
+    ];
+    assert_alan_mode_batch(&cases);
 }

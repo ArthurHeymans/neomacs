@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_magit_batch;
+use super::{ParityBatchCase, assert_magit_batch};
 
-#[test]
-fn status_public_surface_batch() {
-    assert_magit_batch(&[
-        (
-            "magit_status_sections_track_unicode_spaced_and_plain_files_across_states",
-            r##"(let* ((root (make-temp-file "magit-status-files-" t))
+fn magit_status_sections_track_unicode_spaced_and_plain_files_across_states() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "magit_status_sections_track_unicode_spaced_and_plain_files_across_states",
+        r##"(let* ((root (make-temp-file "magit-status-files-" t))
                     (default-directory (file-name-as-directory root))
                     status-buffer)
                (unwind-protect
@@ -75,12 +73,15 @@ fn status_public_surface_batch() {
                  (when (buffer-live-p status-buffer)
                    (kill-buffer status-buffer))
                  (delete-directory root t)))"##,
-            true,
-            expect![[r#"OK ((t t t) (t t t) (t t t))"#]],
-        ),
-        (
-            "magit_status_section_visibility_commands_preserve_exact_visible_text",
-            r##"(let* ((root (make-temp-file "magit-status-text-" t))
+        true,
+        expect![[r#"OK ((t t t) (t t t) (t t t))"#]],
+    )
+}
+
+fn magit_status_section_visibility_commands_preserve_exact_visible_text() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "magit_status_section_visibility_commands_preserve_exact_visible_text",
+        r##"(let* ((root (make-temp-file "magit-status-text-" t))
                     (default-directory (file-name-as-directory root))
                     status-buffer)
                (unwind-protect
@@ -131,10 +132,18 @@ fn status_public_surface_batch() {
                  (when (buffer-live-p status-buffer)
                    (kill-buffer status-buffer))
                  (delete-directory root t)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("Head:     master dummy\n\nRecent commits" "Head:     master dummy\n\nRecent commits\n<HASH> master dummy" "Head:     master dummy\n\nRecent commits")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn status_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        magit_status_sections_track_unicode_spaced_and_plain_files_across_states(),
+        magit_status_section_visibility_commands_preserve_exact_visible_text(),
+    ];
+    assert_magit_batch(&cases);
 }

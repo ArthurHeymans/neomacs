@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auth_source_gopass_batch;
+use super::{ParityBatchCase, assert_auth_source_gopass_batch};
 
-#[test]
-fn paths_public_surface_batch() {
-    assert_auth_source_gopass_batch(&[
-        (
-            "auth_source_gopass_default_path_maps_real_account_coordinates",
-            r##"(mapcar
+fn auth_source_gopass_default_path_maps_real_account_coordinates() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_gopass_default_path_maps_real_account_coordinates",
+        r##"(mapcar
          (lambda (coordinates)
            (apply
             #'auth-source-gopass--gopass-construct-query-path
@@ -15,14 +13,17 @@ fn paths_public_surface_batch() {
          '((backend login "smtp.example.test" "alice@example.test" 587)
            (nil nil "space host" "Ada Lovelace" nil)
            (ignored ignored "δοκιμή.example" "λ-user" "443")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("accounts/smtp.example.test/alice@example.test" "accounts/space host/Ada Lovelace" "accounts/δοκιμή.example/λ-user")"#
     ]],
-        ),
-        (
-            "auth_source_gopass_path_respects_custom_prefix_and_separator",
-            r##"(mapcar
+    )
+}
+
+fn auth_source_gopass_path_respects_custom_prefix_and_separator() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_gopass_path_respects_custom_prefix_and_separator",
+        r##"(mapcar
          (lambda (configuration)
            (let ((auth-source-gopass-path-prefix
                   (nth 0 configuration))
@@ -38,14 +39,17 @@ fn paths_public_surface_batch() {
            ("" "/" "host" "user")
            ("root" "" "host" "user")
            ("accounts" " → " "主机" "用户")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("team/vault::mail.example::alice" "/host/user" "roothostuser" "accounts → 主机 → 用户")"#
     ]],
-        ),
-        (
-            "auth_source_gopass_path_exposes_nil_and_non_string_component_contracts",
-            r##"(mapcar
+    )
+}
+
+fn auth_source_gopass_path_exposes_nil_and_non_string_component_contracts() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_gopass_path_exposes_nil_and_non_string_component_contracts",
+        r##"(mapcar
          (lambda (arguments)
            (auth-source-gopass-test-error-data
             (lambda ()
@@ -56,14 +60,17 @@ fn paths_public_surface_batch() {
            (nil nil "host" nil nil)
            (nil nil host "alice" nil)
            (nil nil "host" 42 nil)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:ok "accounts//alice") (:ok "accounts/host/") (:error wrong-type-argument (sequencep host)) (:error wrong-type-argument (sequencep 42)))"#
     ]],
-        ),
-        (
-            "auth_source_gopass_path_dynamic_configuration_does_not_leak",
-            r##"(list
+    )
+}
+
+fn auth_source_gopass_path_dynamic_configuration_does_not_leak() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_gopass_path_dynamic_configuration_does_not_leak",
+        r##"(list
          (auth-source-gopass--gopass-construct-query-path
           nil nil "host" "alice" nil)
          (let ((auth-source-gopass-path-prefix "work")
@@ -74,14 +81,17 @@ fn paths_public_surface_batch() {
           nil nil "host" "alice" nil)
          auth-source-gopass-path-prefix
          auth-source-gopass-path-separator)"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("accounts/host/alice" "work.host.alice" "accounts/host/alice" "accounts" "/")"#
     ]],
-        ),
-        (
-            "auth_source_gopass_search_passes_every_coordinate_to_custom_constructor",
-            r##"(let (constructor-arguments
+    )
+}
+
+fn auth_source_gopass_search_passes_every_coordinate_to_custom_constructor() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_gopass_search_passes_every_coordinate_to_custom_constructor",
+        r##"(let (constructor-arguments
                events)
          (let ((auth-source-gopass-construct-query-path
                 (lambda (&rest arguments)
@@ -108,14 +118,17 @@ fn paths_public_surface_batch() {
                :max 1)
               constructor-arguments
               (nreverse events)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((:user "alice" :secret "secret")) (fixture-backend gopass "smtp.example" "alice" 587) ((:find "gopass") (:shell "gopass show -o vault/item")))"#
     ]],
-        ),
-        (
-            "auth_source_gopass_custom_constructor_output_is_shell_quoted_once",
-            r##"(let ((auth-source-gopass-executable
+    )
+}
+
+fn auth_source_gopass_custom_constructor_output_is_shell_quoted_once() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auth_source_gopass_custom_constructor_output_is_shell_quoted_once",
+        r##"(let ((auth-source-gopass-executable
                 "/fixture/bin/go pass")
                (auth-source-gopass-construct-query-path
                 (lambda (&rest _arguments)
@@ -134,10 +147,22 @@ fn paths_public_surface_batch() {
              :host "smtp.example"
              :user "alice")
             (nreverse commands))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((:user "alice" :secret "p@ss word")) ("/fixture/bin/go pass show -o team\\ vault/alice\\'s\\ smtp\\;\\ echo\\ unsafe"))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn paths_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auth_source_gopass_default_path_maps_real_account_coordinates(),
+        auth_source_gopass_path_respects_custom_prefix_and_separator(),
+        auth_source_gopass_path_exposes_nil_and_non_string_component_contracts(),
+        auth_source_gopass_path_dynamic_configuration_does_not_leak(),
+        auth_source_gopass_search_passes_every_coordinate_to_custom_constructor(),
+        auth_source_gopass_custom_constructor_output_is_shell_quoted_once(),
+    ];
+    assert_auth_source_gopass_batch(&cases);
 }

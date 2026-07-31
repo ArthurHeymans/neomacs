@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_addressbook_bookmark_batch;
+use super::{ParityBatchCase, assert_addressbook_bookmark_batch};
 
 /// Recording contacts through `addressbook-bookmark-set'.  The prompts show
 /// the shape of the interview - name once, then group, mail, phone and web
@@ -10,12 +10,10 @@ use super::assert_addressbook_bookmark_batch;
 /// can tell them apart from ordinary bookmarks.  Nothing is written to disk
 /// yet: only the modification counter moves.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_addressbook_bookmark_batch(&[
-        (
-            "creating_contacts_records_addressbook_bookmarks",
-            r##"(let ((bookmark-default-file (ab-test-path "book/contacts.bmk"))
+fn creating_contacts_records_addressbook_bookmarks() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "creating_contacts_records_addressbook_bookmarks",
+        r##"(let ((bookmark-default-file (ab-test-path "book/contacts.bmk"))
       (bookmark-alist nil)
       (bookmark-save-flag nil)
       (bookmark-alist-modification-count 0))
@@ -34,14 +32,17 @@ fn workflows_public_surface_batch() {
           (addressbook-bookmark-p "Zoë Müller")
           bookmark-alist-modification-count
           (file-exists-p (ab-test-path "book/contacts.bmk")))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("Zoë Müller") "(\"Zoë Müller\" (city . \"Köln\") (country . \"Deutschland\") (email . \"zoe@example.org, z.mueller@example.net\") (group . \"Freunde\") (handler . addressbook-bookmark-jump) (image . \"\") (last-modified <TIME>) (location . \"Addressbook entry\") (note . \"Grüße aus Köln\") (phone . \"+49 221 4711\") (position . 0) (state . \"NRW\") (street . \"Hauptstraße 7\") (type . \"addressbook\") (web . \"https://zoë.example\") (zipcode . \"50667\"))" ("Name: " "Group: " "Group: " "Mail: " "Mail: " "Mail: " "Phone: " "Phone: " "Web: " "Web: " "Street: " "City: " "State: " "Zipcode: " "Country: " "Note: " "Image path: " "`Zoë Müller' Recorded. Add a new contact? ")) ("Ann Smith" "Zoë Müller") "(\"Ann Smith\" (city . \"Springfield\") (country . \"USA\") (email . \"ann@example.com\") (group . \"Work\") (handler . addressbook-bookmark-jump) (image . \"\") (last-modified <TIME>) (location . \"Addressbook entry\") (note . \"\") (phone . \"\") (position . 0) (state . \"IL\") (street . \"12 Main Street\") (type . \"addressbook\") (web . \"\") (zipcode . \"62704\"))" ("Ann Smith" "Zoë Müller") t 2 nil)"#
     ]],
-        ),
-        (
-            "the_bookmark_file_round_trips_a_non_ascii_contact_and_filename",
-            r##"(let* ((directory (ab-test-path "carnet d'adresses"))
+    )
+}
+
+fn the_bookmark_file_round_trips_a_non_ascii_contact_and_filename() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_bookmark_file_round_trips_a_non_ascii_contact_and_filename",
+        r##"(let* ((directory (ab-test-path "carnet d'adresses"))
        (file (expand-file-name "répertoire.bmk" directory))
        (bookmark-default-file file)
        (bookmark-alist nil)
@@ -69,14 +70,17 @@ fn workflows_public_surface_batch() {
           (mapcar #'car bookmark-alist)
           (equal saved (ab-test-record-text "Zoë Müller"))
           (ab-test-record-text "Zoë Müller"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((t ("." ".." "répertoire.bmk") (nil nil t) utf-8-emacs-unix) ";;;; Emacs Bookmark Format Version 1;;;; -*- coding: utf-8-emacs; mode: lisp-data -*-\n;;; This format is meant to be slightly human-readable;\n;;; nevertheless, you probably don't want to edit it.\n;;; -*- End Of Bookmark File Format Version Stamp -*-\n((\"Ann Smith\"\n  (position . 0)\n  (last-modified <TIME>)\n  (type . \"addressbook\")\n  (location . \"Addressbook entry\")\n  (image . \"\")\n  (email . \"ann@example.com\")\n  (phone . \"\")\n  (web . \"\")\n  (street . \"12 Main Street\")\n  (city . \"Springfield\")\n  (state . \"IL\")\n  (zipcode . \"62704\")\n  (country . \"USA\")\n  (note . \"\")\n  (group . \"Work\")\n  (handler . addressbook-bookmark-jump))\n(\"Zoë Müller\"\n (position . 0)\n (last-modified <TIME>)\n (type . \"addressbook\")\n (location . \"Addressbook entry\")\n (image . \"\")\n (email . \"zoe@example.org, z.mueller@example.net\")\n (phone . \"+49 221 4711\")\n (web . \"https://zoë.example\")\n (street . \"Hauptstraße 7\")\n (city . \"Köln\")\n (state . \"NRW\")\n (zipcode . \"50667\")\n (country . \"Deutschland\")\n (note . \"Grüße aus Köln\")\n (group . \"Freunde\")\n (handler . addressbook-bookmark-jump))\n)\n" (nil (90 111 195 171 32 77 195 188 108 108 101 114 34 10)) ("Ann Smith" "Zoë Müller") t "(\"Zoë Müller\" (city . \"Köln\") (country . \"Deutschland\") (email . \"zoe@example.org, z.mueller@example.net\") (group . \"Freunde\") (handler . addressbook-bookmark-jump) (image . \"\") (last-modified <TIME>) (location . \"Addressbook entry\") (note . \"Grüße aus Köln\") (phone . \"+49 221 4711\") (position . 0) (state . \"NRW\") (street . \"Hauptstraße 7\") (type . \"addressbook\") (web . \"https://zoë.example\") (zipcode . \"50667\"))")"#
     ]],
-        ),
-        (
-            "a_latin_1_bookmark_file_keeps_its_accented_contact",
-            r##"(let* ((directory (ab-test-path "carnet"))
+    )
+}
+
+fn a_latin_1_bookmark_file_keeps_its_accented_contact() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "a_latin_1_bookmark_file_keeps_its_accented_contact",
+        r##"(let* ((directory (ab-test-path "carnet"))
        (file (expand-file-name "adressen.bmk" directory))
        (bookmark-default-file file)
        (bookmark-alist nil)
@@ -98,14 +102,17 @@ fn workflows_public_surface_batch() {
           (mapcar #'car bookmark-alist)
           (equal saved (ab-test-record-text (caar bookmark-alist)))
           (assoc-default 'city (car bookmark-alist)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil (90 111 235 32 77 252 108 108 101 114 34 10) iso-latin-1-unix ("Zoë Müller") t "Köln")"#
     ]],
-        ),
-        (
-            "the_addressbook_buffer_renders_every_recorded_field",
-            r##"(let ((bookmark-default-file (ab-test-path "book/contacts.bmk"))
+    )
+}
+
+fn the_addressbook_buffer_renders_every_recorded_field() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_addressbook_buffer_renders_every_recorded_field",
+        r##"(let ((bookmark-default-file (ab-test-path "book/contacts.bmk"))
       (bookmark-alist nil)
       (bookmark-save-flag nil)
       (bookmark-alist-modification-count 0)
@@ -130,14 +137,17 @@ fn workflows_public_surface_batch() {
                 (car (addressbook-get-contact-data)))))
     (when (get-buffer addressbook-buffer-name)
       (kill-buffer addressbook-buffer-name))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("*addressbook*" addressbook-mode t "Addressbook Melpa-Test\n\n---------------------------------------------\nName:    Zoë Müller\nGroup:   Freunde\nMail:    zoe@example.org, z.mueller@example.net\nPhone:   +49 221 4711\nWeb:     https://zoë.example\nStreet:  Hauptstraße 7\nCity:    Köln\nState:   NRW\nZipcode: 50667\nCountry: Deutschland\nNote:    Grüße aus Köln\n---------------------------------------------\nName:    Ann Smith\nGroup:   Work\nMail:    ann@example.com\nStreet:  12 Main Street\nCity:    Springfield\nState:   IL\nZipcode: 62704\nCountry: USA\n---------------------------------------------\n" (((:foreground "green" :underline t)) ("Zoë Müller" ((:underline t)))) 1 "Zoë Müller")"#
     ]],
-        ),
-        (
-            "editing_a_contact_offers_its_values_and_rewrites_the_entry",
-            r##"(let ((bookmark-default-file (ab-test-path "book/contacts.bmk"))
+    )
+}
+
+fn editing_a_contact_offers_its_values_and_rewrites_the_entry() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "editing_a_contact_offers_its_values_and_rewrites_the_entry",
+        r##"(let ((bookmark-default-file (ab-test-path "book/contacts.bmk"))
       (bookmark-alist nil)
       (bookmark-save-flag nil)
       (bookmark-alist-modification-count 0)
@@ -162,14 +172,17 @@ fn workflows_public_surface_batch() {
                   bookmark-alist-modification-count))))
     (when (get-buffer addressbook-buffer-name)
       (kill-buffer addressbook-buffer-name))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (addressbook-edit (("Name: " . "Zoë Müller") ("Group: " . "Freunde") ("Mail: " . "zoe@example.org, z.mueller@example.net") ("Phone: " . "+49 221 4711") ("Web: " . "https://zoë.example") ("Street: " . "Hauptstraße 7") ("City: " . "Köln") ("State: " . "NRW") ("Zipcode: " . "50667") ("Country: " . "Deutschland") ("Note: " . "Grüße aus Köln") ("Image path: " . "") ("Save changes? " . :y-or-n-p)) "(\"Zoë Müller\" (city . \"München\") (country . \"Deutschland\") (email . \"zoe@example.org\") (group . \"Freunde\") (handler . addressbook-bookmark-jump) (image . \"\") (last-modified <TIME>) (location . \"Addressbook entry\") (note . \"Umgezogen\") (phone . \"+49 221 4711\") (position . 0) (state . \"Bayern\") (street . \"Sendlinger Straße 1\") (type . \"addressbook\") (web . \"https://zoë.example\") (zipcode . \"80331\"))" "Addressbook Melpa-Test\n\n---------------------------------------------\nName:    Zoë Müller\nGroup:   Freunde\nMail:    zoe@example.org\nPhone:   +49 221 4711\nWeb:     https://zoë.example\nStreet:  Sendlinger Straße 1\nCity:    München\nState:   Bayern\nZipcode: 80331\nCountry: Deutschland\nNote:    Umgezogen\n---------------------------------------------\nName:    Ann Smith\nGroup:   Work\nMail:    ann@example.com\nStreet:  12 Main Street\nCity:    Springfield\nState:   IL\nZipcode: 62704\nCountry: USA\n---------------------------------------------\n" 3)"#
     ]],
-        ),
-        (
-            "deleting_a_contact_leaves_the_buffer_refresh_broken",
-            r##"(let ((bookmark-default-file (ab-test-path "book/contacts.bmk"))
+    )
+}
+
+fn deleting_a_contact_leaves_the_buffer_refresh_broken() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "deleting_a_contact_leaves_the_buffer_refresh_broken",
+        r##"(let ((bookmark-default-file (ab-test-path "book/contacts.bmk"))
       (bookmark-alist nil)
       (bookmark-save-flag nil)
       (bookmark-alist-modification-count 0)
@@ -203,14 +216,17 @@ fn workflows_public_surface_batch() {
                     (buffer-substring-no-properties (point-min) (point-max)))))))
     (when (get-buffer addressbook-buffer-name)
       (kill-buffer addressbook-buffer-name))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("Zoë Müller") ("Zoë Müller") nil nil) ("Zoë Müller") (wrong-type-argument stringp nil) "Name:    Zoë Müller\nGroup:   Freunde\nMail:    zoe@example.org, z.mueller@example.net\nPhone:   +49 221 4711\nWeb:     https://zoë.example\nStreet:  Hauptstraße 7\nCity:    Köln\nState:   NRW\nZipcode: 50667\nCountry: Deutschland\nNote:    Grüße aus Köln\n---------------------------------------------\n")"#
     ]],
-        ),
-        (
-            "mail_completion_offers_the_recorded_addresses",
-            r##"(let ((bookmark-default-file (ab-test-path "book/contacts.bmk"))
+    )
+}
+
+fn mail_completion_offers_the_recorded_addresses() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "mail_completion_offers_the_recorded_addresses",
+        r##"(let ((bookmark-default-file (ab-test-path "book/contacts.bmk"))
       (bookmark-alist nil)
       (bookmark-save-flag nil)
       (bookmark-alist-modification-count 0))
@@ -249,10 +265,23 @@ fn workflows_public_surface_batch() {
                            (buffer-substring-no-properties (point-min) (point-max)))))))))
       (kill-buffer buffer)
       (when (get-buffer "*Completions*") (kill-buffer "*Completions*")))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("^\\(Newsgroups\\|Followup-To\\|Posted-To\\|Gcc\\):" "^\\(Newsgroups\\|Followup-To\\|Posted-To\\|Gcc\\):" "^\\(Resent-\\)?\\(To\\|B?Cc\\):" "^\\(Reply-To\\|From\\|Mail-Followup-To\\|Mail-Copies-To\\):" "^\\(Disposition-Notification-To\\|Return-Receipt-To\\):") (message-tab completion-at-point) (#("Ann Smith              ann@example.com" 23 38 (face font-lock-doc-face)) #("Zoë Müller             zoe@example.org" 23 38 (face font-lock-doc-face)) #("Zoë Müller             z.mueller@example.net" 23 44 (face font-lock-doc-face))) ("To: ann@example.com" 20) "Cc: Zoë Müller             z" "Type M-RET on a completion to select it.\nType M-<down> or M-<up> to move point between completions.\n\n2 possible completions:\nZoë Müller             z.mueller@example.net\nZoë Müller             zoe@example.org")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        creating_contacts_records_addressbook_bookmarks(),
+        the_bookmark_file_round_trips_a_non_ascii_contact_and_filename(),
+        a_latin_1_bookmark_file_keeps_its_accented_contact(),
+        the_addressbook_buffer_renders_every_recorded_field(),
+        editing_a_contact_offers_its_values_and_rewrites_the_entry(),
+        deleting_a_contact_leaves_the_buffer_refresh_broken(),
+        mail_completion_offers_the_recorded_addresses(),
+    ];
+    assert_addressbook_bookmark_batch(&cases);
 }

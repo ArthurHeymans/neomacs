@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{AGDA_LIB_MODE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod workflows;
 
@@ -44,9 +47,9 @@ pub(crate) fn assert_agda_lib_mode_autoload_parity(elisp_form: &str, expected: E
 
 
 /// Multi-probe batch for `assert_agda_lib_mode_autoload_parity` cases (2a).
-pub(crate) fn assert_agda_lib_mode_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_agda_lib_mode_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         agda_lib_mode_oracle("agda-lib-mode-autoloads.el"),
         &name,
         "agda_lib_mode_autoload_parity",
@@ -55,9 +58,9 @@ pub(crate) fn assert_agda_lib_mode_autoload_batch(cases: &[(&str, &str, bool, Ex
 }
 
 /// Multi-probe batch for `assert_agda_lib_mode_parity` cases (2a).
-pub(crate) fn assert_agda_lib_mode_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_agda_lib_mode_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         agda_lib_mode_oracle("agda-lib-mode.el"),
         &name,
         "agda_lib_mode_parity",

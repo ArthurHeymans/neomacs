@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_package_update_batch;
+use super::{ParityBatchCase, assert_auto_package_update_batch};
 
-#[test]
-fn selection_public_surface_batch() {
-    assert_auto_package_update_batch(&[
-        (
-            "auto_package_update_quelpa_filter_reads_cache_and_removes_each_cached_name",
-            r##"(let
+fn auto_package_update_quelpa_filter_reads_cache_and_removes_each_cached_name() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_package_update_quelpa_filter_reads_cache_and_removes_each_cached_name",
+        r##"(let
                              ((packages
                                (list
                                 'alpha
@@ -35,10 +33,17 @@ fn selection_public_surface_batch() {
                                 (nreverse calls)
                                 quelpa-cache
                                 (featurep 'quelpa)))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (#1=(alpha gamma) #1# (:read-cache) ((beta . first) (delta . second) (absent . third)) t)"
     ],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn selection_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_package_update_quelpa_filter_reads_cache_and_removes_each_cached_name(),
+    ];
+    assert_auto_package_update_batch(&cases);
 }

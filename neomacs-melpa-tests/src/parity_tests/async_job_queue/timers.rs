@@ -1,13 +1,11 @@
 use expect_test::{Expect, expect};
 
-use super::assert_async_job_queue_batch;
+use super::{ParityBatchCase, assert_async_job_queue_batch};
 
-#[test]
-fn timers_public_surface_batch() {
-    assert_async_job_queue_batch(&[
-        (
-            "timer_factory_routes_numeric_and_absolute_frequencies_with_exact_repeat_policy",
-            r##"
+fn timer_factory_routes_numeric_and_absolute_frequencies_with_exact_repeat_policy() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "timer_factory_routes_numeric_and_absolute_frequencies_with_exact_repeat_policy",
+        r##"
 (let (calls)
   (cl-letf (((symbol-function 'run-with-timer)
              (lambda (&rest args)
@@ -30,14 +28,17 @@ fn timers_public_surface_batch() {
       '(26000 12 0 0) t #'vector 'gamma)
      (nreverse calls))))
 "##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (numeric-timer numeric-timer absolute-timer ((run-with-timer 0.25 0.25 ignore alpha 2) (run-with-timer 4 nil list beta) (run-at-time #1=(26000 12 0 0) #1# vector gamma)))"
     ],
-        ),
-        (
-            "timer_info_is_nonrecursive_and_covers_every_timer_field",
-            r##"
+    )
+}
+
+fn timer_info_is_nonrecursive_and_covers_every_timer_field() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "timer_info_is_nonrecursive_and_covers_every_timer_field",
+        r##"
 (let ((timer
        (timer-create)))
   (setf
@@ -75,14 +76,17 @@ fn timers_public_surface_batch() {
    (async-job-queue--timer-info nil)
    (async-job-queue--timer-info timer)))
 "##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (nil [timer (triggered t) (high-seconds 12) (low-seconds 34) (micro-seconds 56) (pico-seconds 78) (repeat-delay 0.5) #'fixture-function (idle-delay nil) (integral-multiple 4)])"
     ],
-        ),
-        (
-            "ensure_running_creates_one_timer_for_work_and_keeps_it_while_inactive",
-            r##"
+    )
+}
+
+fn ensure_running_creates_one_timer_for_work_and_keeps_it_while_inactive() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ensure_running_creates_one_timer_for_work_and_keeps_it_while_inactive",
+        r##"
 (let* ((table
         (async-job-queue-make-job-queue
          0.1 1 nil t nil nil 'ensure-work))
@@ -132,14 +136,17 @@ fn timers_public_surface_batch() {
        cancelled
        (async-job-queue-parity-table-state table)))))
 "##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (ensure-timer ensure-timer ensure-timer 1 ((0.1 0.1 t t)) nil (:id ensure-work :active nil :in-use 1 :free 0 :used-slots (0) :free-slots nil :queued 0 :timer t))"
     ],
-        ),
-        (
-            "ensure_running_calls_on_empty_before_cancelling_the_last_timer",
-            r##"
+    )
+}
+
+fn ensure_running_calls_on_empty_before_cancelling_the_last_timer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ensure_running_calls_on_empty_before_cancelling_the_last_timer",
+        r##"
 (let (events cancelled)
   (let ((table
          (async-job-queue-make-job-queue
@@ -174,10 +181,20 @@ fn timers_public_surface_batch() {
          cancelled
          (async-job-queue-parity-table-state table))))))
 "##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (nil ((empty ensure-empty 0 0 t) (cancel last-timer)) (last-timer) (:id ensure-empty :active t :in-use 0 :free 2 :used-slots nil :free-slots (0 1) :queued 0 :timer nil))"
     ],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn timers_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        timer_factory_routes_numeric_and_absolute_frequencies_with_exact_repeat_policy(),
+        timer_info_is_nonrecursive_and_covers_every_timer_field(),
+        ensure_running_creates_one_timer_for_work_and_keeps_it_while_inactive(),
+        ensure_running_calls_on_empty_before_cancelling_the_last_timer(),
+    ];
+    assert_async_job_queue_batch(&cases);
 }

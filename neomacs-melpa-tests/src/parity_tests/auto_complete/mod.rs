@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{AUTO_COMPLETE_MELPA_PIN, CachedMelpaOracle, POPUP_MELPA_PIN};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod completion;
 mod config;
@@ -89,9 +92,9 @@ pub(crate) fn assert_auto_complete_autoload_parity(elisp_form: &str, expected: E
 
 
 /// Multi-probe batch for `assert_auto_complete_autoload_parity` cases (2a).
-pub(crate) fn assert_auto_complete_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_auto_complete_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         auto_complete_oracle("auto-complete-autoloads.el"),
         &name,
         "auto_complete_autoload_parity",
@@ -100,9 +103,9 @@ pub(crate) fn assert_auto_complete_autoload_batch(cases: &[(&str, &str, bool, Ex
 }
 
 /// Multi-probe batch for `assert_auto_complete_parity` cases (2a).
-pub(crate) fn assert_auto_complete_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_auto_complete_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         auto_complete_oracle("auto-complete.el"),
         &name,
         "auto_complete_parity",
@@ -111,9 +114,9 @@ pub(crate) fn assert_auto_complete_batch(cases: &[(&str, &str, bool, Expect)]) {
 }
 
 /// Multi-probe batch for `assert_auto_complete_config_parity` cases (2a).
-pub(crate) fn assert_auto_complete_config_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_auto_complete_config_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         auto_complete_oracle("auto-complete-config.el"),
         &name,
         "auto_complete_config_parity",

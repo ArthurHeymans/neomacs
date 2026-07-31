@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_act_mode_batch;
+use super::{ParityBatchCase, assert_act_mode_batch};
 
 /// Opening an ACT design is the entire installation story: the package's only
 /// side effect on load is its `auto-mode-alist' entry.  Visiting six real file
@@ -10,12 +10,10 @@ use super::assert_act_mode_batch;
 /// `prog-mode', named "act", with the package's font-lock rules installed
 /// buffer locally and the generated keymap and syntax table in place.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_act_mode_batch(&[
-        (
-            "visiting_an_act_file_selects_the_mode_and_its_prog_mode_inheritance",
-            r##"(progn
+fn visiting_an_act_file_selects_the_mode_and_its_prog_mode_inheritance() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "visiting_an_act_file_selects_the_mode_and_its_prog_mode_inheritance",
+        r##"(progn
   (let ((observed nil))
     (dolist (name '("design.act" "design.ACT" "design.act.bak" "design.act~"
                     "design.acta" "act"))
@@ -33,26 +31,32 @@ fn workflows_public_surface_batch() {
           :buffer-local (local-variable-p 'font-lock-defaults)
           :keymap-parent (eq (keymap-parent act-mode-map) prog-mode-map)
           :syntax-table (eq (syntax-table) act-mode-syntax-table))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:routing (("design.act" act-mode) ("design.ACT" act-mode) ("design.act.bak" act-mode) ("design.act~" act-mode) ("design.acta" fundamental-mode) ("act" fundamental-mode)) :alist ("\\.act\\'" . act-mode) :mode act-mode :mode-name "act" :parent prog-mode :derived t :font-lock-defaults ((act-fontlock)) :buffer-local t :keymap-parent t :syntax-table t)"#
     ]],
-        ),
-        (
-            "syntax_highlighting_covers_every_category_of_the_language",
-            r##"(progn
+    )
+}
+
+fn syntax_highlighting_covers_every_category_of_the_language() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "syntax_highlighting_covers_every_category_of_the_language",
+        r##"(progn
   (actm-test-visit "design.act" actm-test-design)
   (list :runs (actm-test-face-runs)
         :point (point)
         :modified (buffer-modified-p)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:runs (("// a two-stage buffer, from the ACT tutorial" . font-lock-comment-face) ("\n") ("import" . font-lock-keyword-face) (" ") ("\"globals.act\"" . font-lock-string-face) (";\n") ("export" . font-lock-keyword-face) (" ") ("defproc" . font-lock-function-name-face) (" buffer (") ("bool" . font-lock-type-face) ("? in; ") ("bool" . font-lock-type-face) ("! out) {\n  ") ("bool" . font-lock-type-face) (" _x;\n  ") ("prs" . font-lock-function-name-face) (" {\n    in => _x-\n    _x => out-\n  }\n}\n") ("deftype" . font-lock-function-name-face) (" ") ("e1of" . font-lock-type-face) ("<3>" . font-lock-constant-face) (" onehot;\n") ("defchan" . font-lock-function-name-face) (" handshake (") ("int" . font-lock-type-face) (" width) { ") ("pint" . font-lock-type-face) (" w = width; }\n")) :point 1 :modified nil)"#
     ]],
-        ),
-        (
-            "comments_case_and_word_boundaries_keep_keywords_from_leaking",
-            r##"(progn
+    )
+}
+
+fn comments_case_and_word_boundaries_keep_keywords_from_leaking() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "comments_case_and_word_boundaries_keep_keywords_from_leaking",
+        r##"(progn
   (actm-test-visit "boundaries.act"
     (concat "// import int defproc inside a comment\n"
             "exported printing myint pint2 int_t \"int\" INT Int\n"
@@ -60,14 +64,17 @@ fn workflows_public_surface_batch() {
   (list :runs (actm-test-face-runs)
         :faces (actm-test-faces-of "exported" "printing" "myint" "pint2"
                                    "int_t" "INT" "Int")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:runs (("// import int defproc inside a comment" . font-lock-comment-face) ("\nexported printing myint pint2 ") ("int" . font-lock-type-face) ("_t ") ("\"int\"" . font-lock-string-face) (" INT Int\n") ("int" . font-lock-type-face) (" x; ") ("e1of" . font-lock-type-face) ("<12>" . font-lock-constant-face) (" y; a<b> z; ") ("<3>" . font-lock-constant-face) ("\n")) :faces (("exported" nil) ("printing" nil) ("myint" nil) ("pint2" nil) ("int_t" font-lock-type-face) ("INT" nil) ("Int" nil)))"#
     ]],
-        ),
-        (
-            "the_mode_paints_comments_without_declaring_any_comment_syntax",
-            r##"(progn
+    )
+}
+
+fn the_mode_paints_comments_without_declaring_any_comment_syntax() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_mode_paints_comments_without_declaring_any_comment_syntax",
+        r##"(progn
   (actm-test-visit "syntax.act" actm-test-design)
   (font-lock-ensure)
   (list :comment-start comment-start
@@ -85,14 +92,17 @@ fn workflows_public_surface_batch() {
                      (list (nth 3 (syntax-ppss))
                            (get-text-property (1- (point)) 'face)))
         :parse-sexp-ignore-comments parse-sexp-ignore-comments))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:comment-start nil :comment-end "" :slash-syntax "_" :quote-syntax "\"" :in-comment (nil font-lock-comment-face) :in-string (34 font-lock-string-face) :parse-sexp-ignore-comments t)"#
     ]],
-        ),
-        (
-            "tab_falls_back_to_prog_modes_relative_indentation",
-            r##"(progn
+    )
+}
+
+fn tab_falls_back_to_prog_modes_relative_indentation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "tab_falls_back_to_prog_modes_relative_indentation",
+        r##"(progn
   (actm-test-visit "indent.act"
     "defproc buffer (bool? in) {\nbool _x;\nprs {\nin => _x-\n}\n}\n")
   (let ((before (buffer-substring-no-properties (point-min) (point-max)))
@@ -109,14 +119,17 @@ fn workflows_public_surface_batch() {
           :line (buffer-substring-no-properties (line-beginning-position)
                                                 (line-end-position))
           :text (buffer-substring-no-properties (point-min) (point-max)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:indent-line-function indent-relative :tab-width 8 :indent-region-changed nil :column 8 :line "\11bool _x;" :text "defproc buffer (bool? in) {\n\11bool _x;\nprs {\nin => _x-\n}\n}\n")"#
     ]],
-        ),
-        (
-            "appending_a_declaration_highlights_the_new_text_too",
-            r##"(progn
+    )
+}
+
+fn appending_a_declaration_highlights_the_new_text_too() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "appending_a_declaration_highlights_the_new_text_too",
+        r##"(progn
   (actm-test-visit "edit.act" "export defproc demo () { }\n")
   (let ((before (actm-test-face-runs)))
     (goto-char (point-max))
@@ -126,10 +139,22 @@ fn workflows_public_surface_batch() {
           :after (actm-test-face-runs)
           :modified (buffer-modified-p)
           :point (point))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:before (("export" . font-lock-keyword-face) (" ") ("defproc" . font-lock-function-name-face) (" demo () { }\n")) :after (("export" . font-lock-keyword-face) (" ") ("defproc" . font-lock-function-name-face) (" demo () { }\n") ("deftype" . font-lock-function-name-face) (" ") ("e2of" . font-lock-type-face) ("<4>" . font-lock-constant-face) (" dual;\n")) :modified t :point 50)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        visiting_an_act_file_selects_the_mode_and_its_prog_mode_inheritance(),
+        syntax_highlighting_covers_every_category_of_the_language(),
+        comments_case_and_word_boundaries_keep_keywords_from_leaking(),
+        the_mode_paints_comments_without_declaring_any_comment_syntax(),
+        tab_falls_back_to_prog_modes_relative_indentation(),
+        appending_a_declaration_highlights_the_new_text_too(),
+    ];
+    assert_act_mode_batch(&cases);
 }

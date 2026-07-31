@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_all_the_icons_ivy_rich_batch;
+use super::{ParityBatchCase, assert_all_the_icons_ivy_rich_batch};
 
-#[test]
-fn processes_public_surface_batch() {
-    assert_all_the_icons_ivy_rich_batch(&[
-        (
-            "live_subprocess_annotations_report_status_buffer_thread_command_and_identifier_shapes",
-            r##"(let* ((buffer
+fn live_subprocess_annotations_report_status_buffer_thread_command_and_identifier_shapes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "live_subprocess_annotations_report_status_buffer_thread_command_and_identifier_shapes",
+        r##"(let* ((buffer
                      (generate-new-buffer
                       " *all-the-icons-ivy-rich-process*"))
                     (process
@@ -62,14 +60,17 @@ fn processes_public_surface_batch() {
                  (when (buffer-live-p buffer)
                    (kill-buffer buffer)))
                result)"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t ("run" all-the-icons-ivy-rich-process-status-face) " *all-the-icons-ivy-rich-process*" t #("Main        " 0 12 (face all-the-icons-ivy-rich-process-thread-face)) "sh -c sleep 30")"#
     ]],
-        ),
-        (
-            "pipe_and_missing_process_annotations_cover_non_child_and_absent_candidates",
-            r##"(let* ((buffer
+    )
+}
+
+fn pipe_and_missing_process_annotations_cover_non_child_and_absent_candidates() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "pipe_and_missing_process_annotations_cover_non_child_and_absent_candidates",
+        r##"(let* ((buffer
                      (generate-new-buffer
                       " *all-the-icons-ivy-rich-pipe*"))
                     (process
@@ -108,10 +109,18 @@ fn processes_public_surface_batch() {
                  (when (buffer-live-p buffer)
                    (kill-buffer buffer)))
                result)"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("--" #("open" 0 4 (face all-the-icons-ivy-rich-process-status-face)) " *all-the-icons-ivy-rich-pipe*" "--" "(serial port ?)") (nil nil nil nil nil))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn processes_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        live_subprocess_annotations_report_status_buffer_thread_command_and_identifier_shapes(),
+        pipe_and_missing_process_annotations_cover_non_child_and_absent_candidates(),
+    ];
+    assert_all_the_icons_ivy_rich_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_ansible_doc_batch;
+use super::{ParityBatchCase, assert_ansible_doc_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_ansible_doc_batch(&[
-        (
-            "ansible_doc_opens_completed_module_documentation_from_a_real_playbook",
-            r####"
+fn ansible_doc_opens_completed_module_documentation_from_a_real_playbook() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ansible_doc_opens_completed_module_documentation_from_a_real_playbook",
+        r####"
 (let* ((root
         (file-name-as-directory
          (expand-file-name
@@ -141,14 +139,17 @@ fn workflows_public_surface_batch() {
     (neomacs-ansible-doc-test-cleanup root))
   result)
 "####,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("playbooks/deploy.yml" yaml-mode t ansible-doc 7 9 "      copy:" nil) ("Documentation for Ansible Module (default copy): " ("copy" "file" "user" "ansible.builtin.template") t nil nil "copy") ("*ansible-doc copy*" ansible-doc-module-mode "ADoc Module" "copy" t t 1 "> COPY\n\nCopy application configuration to managed hosts.\n\nOptions (= is mandatory):\n= src\n    Local path of the configuration file.\n- dest\n    Absolute path on the managed host.\n    [Default: /etc/myapp/app.conf]\n- backup\n    Create a backup before replacing the file.\n    (Choices: yes, no)\n    See [file] for ownership and mode management.\nNotes:  The source is read from the control machine.\nRequirements:  none\n\n# - name: Deploy the application configuration\n  copy:\n    src: files/app.conf\n    dest: /etc/myapp/app.conf\n    backup: yes\n" (("> COPY" ansible-doc-header) ("Options" ansible-doc-section) ("= src" ansible-doc-mandatory-option) ("- dest" ansible-doc-option) ("Default:" ansible-doc-label) ("Choices:" ansible-doc-label) ("Notes:" ansible-doc-section) ("Requirements:" ansible-doc-section)) (("src" 85) ("dest" 133) ("backup" 214)) ("[file]" "file" ansible-doc-follow-module-xref "mouse-2, RET: visit module")) "ansible-doc cwd=[ORACLE-SANDBOX]/ansible-doc-playbook-workflow/playbooks <--list>\nansible-doc cwd=[ORACLE-SANDBOX]/ansible-doc-playbook-workflow/playbooks <copy>\n")"#
     ]],
-        ),
-        (
-            "ansible_doc_follows_a_module_reference_and_bookmarks_the_destination",
-            r####"
+    )
+}
+
+fn ansible_doc_follows_a_module_reference_and_bookmarks_the_destination() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ansible_doc_follows_a_module_reference_and_bookmarks_the_destination",
+        r####"
 (let* ((root
         (file-name-as-directory
          (expand-file-name
@@ -258,14 +259,17 @@ fn workflows_public_surface_batch() {
     (neomacs-ansible-doc-test-cleanup root))
   result)
 "####,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("*ansible-doc copy*" "copy" 1 "> COPY") ("*ansible-doc file*" "file" ansible-doc-module-mode 1 "> FILE\n\nManage ownership, permissions, and state of remote paths.\n\nOptions (= is mandatory):\n= path\n    Path to manage.\n- state\n    Desired path state.\n    (Choices: file, directory, absent)\n- mode\n    Filesystem permissions.\n\n# - name: Create the configuration directory\n  file:\n    path: /etc/myapp\n    state: directory\n    mode: 0750\n") ("file" ansible-doc-jump-module-bookmark) ("*ansible-doc file*" "file" ansible-doc-module-mode 1 "> FILE") ("*ansible-doc copy*" "*ansible-doc file*") "ansible-doc cwd=[ORACLE-SANDBOX]/ansible-doc-navigation-workflow/roles/myapp/tasks <copy>\nansible-doc cwd=[ORACLE-SANDBOX]/ansible-doc-navigation-workflow/roles/myapp/tasks <file>\n")"#
     ]],
-        ),
-        (
-            "ansible_doc_reuses_completion_after_editing_then_reloads_changed_documentation",
-            r####"
+    )
+}
+
+fn ansible_doc_reuses_completion_after_editing_then_reloads_changed_documentation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "ansible_doc_reuses_completion_after_editing_then_reloads_changed_documentation",
+        r####"
 (let* ((root
         (file-name-as-directory
          (expand-file-name
@@ -402,10 +406,19 @@ fn workflows_public_surface_batch() {
     (neomacs-ansible-doc-test-cleanup root))
   result)
 "####,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("Documentation for Ansible Module (default copy): " ("copy" "file" "user" "ansible.builtin.template") t "copy") ("Documentation for Ansible Module (default user): " ("copy" "file" "user" "ansible.builtin.template") t "user")) ("*ansible-doc copy*" t "copy") ("*ansible-doc user*" "user" 79 79 "> USER\n\nManage application service accounts.\n\nOptions (= is mandatory):\n= name\n    Account name.\n- shell\n    Login shell.\n    [Default: /bin/sh]\n- system\n    Create a system account.\n    (Choices: yes, no)\n\n# - name: Create the application account\n  user:\n    name: myapp\n    system: yes\n" "> USER\n\nManage application service accounts and login policy.\n\nOptions (= is mandatory):\n= name\n    Account name.\n- shell\n    Login shell.\n    [Default: /usr/sbin/nologin]\n- system\n    Create a system account.\n    (Choices: yes, no)\n\n# - name: Create the application account\n  user:\n    name: myapp\n    system: yes\n" ansible-doc-default) ("---\n- name: Provision application resources\n  hosts: app_servers\n  tasks:\n    - name: Create the application service account\n      user:\n        name: myapp\n        system: true\n" nil 6 9) "ansible-doc cwd=[ORACLE-SANDBOX]/ansible-doc-edit-reload-workflow/playbooks <--list>\nansible-doc cwd=[ORACLE-SANDBOX]/ansible-doc-edit-reload-workflow/playbooks <copy>\nansible-doc cwd=[ORACLE-SANDBOX]/ansible-doc-edit-reload-workflow/playbooks <user>\nansible-doc cwd=[ORACLE-SANDBOX]/ansible-doc-edit-reload-workflow/playbooks <user>\n")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        ansible_doc_opens_completed_module_documentation_from_a_real_playbook(),
+        ansible_doc_follows_a_module_reference_and_bookmarks_the_destination(),
+        ansible_doc_reuses_completion_after_editing_then_reloads_changed_documentation(),
+    ];
+    assert_ansible_doc_batch(&cases);
 }

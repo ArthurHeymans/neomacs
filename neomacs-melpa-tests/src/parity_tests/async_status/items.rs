@@ -1,12 +1,10 @@
-use super::assert_async_status_batch;
+use super::{ParityBatchCase, assert_async_status_batch};
 use expect_test::expect;
 
-#[test]
-fn items_public_surface_batch() {
-    assert_async_status_batch(&[
-        (
-            "add_item_registers_the_exact_file_watch_and_custom_label",
-            r##"(let ((id (async-status-req-id "compile"))
+fn add_item_registers_the_exact_file_watch_and_custom_label() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "add_item_registers_the_exact_file_watch_and_custom_label",
+        r##"(let ((id (async-status-req-id "compile"))
       calls)
   (unwind-protect
       (cl-letf (((symbol-function 'file-notify-add-watch)
@@ -35,14 +33,17 @@ fn items_public_surface_batch() {
            calls)))
     (setq async-status--shown-items nil)
     (async-status-clean-up id)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t t (watch . 17) t 0 "Compile project" ((t (change) async-status--update-items)))"#
     ]],
-        ),
-        (
-            "add_item_defaults_the_label_to_the_allocated_message_id",
-            r##"(let ((id (async-status-req-id "default-label")))
+    )
+}
+
+fn add_item_defaults_the_label_to_the_allocated_message_id() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "add_item_defaults_the_label_to_the_allocated_message_id",
+        r##"(let ((id (async-status-req-id "default-label")))
   (unwind-protect
       (cl-letf (((symbol-function 'file-notify-add-watch)
                  (lambda (&rest _arguments) :watch)))
@@ -56,12 +57,15 @@ fn items_public_surface_batch() {
            (async-status--item-fs-watcher-id item))))
     (setq async-status--shown-items nil)
     (async-status-clean-up id)))"##,
-            true,
-            expect!["OK (t t 0 :watch)"],
-        ),
-        (
-            "newly_added_items_are_displayed_in_reverse_registration_order",
-            r##"(let ((first (async-status-req-id "first"))
+        true,
+        expect!["OK (t t 0 :watch)"],
+    )
+}
+
+fn newly_added_items_are_displayed_in_reverse_registration_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "newly_added_items_are_displayed_in_reverse_registration_order",
+        r##"(let ((first (async-status-req-id "first"))
       (second (async-status-req-id "second"))
       (watch-id 0))
   (unwind-protect
@@ -86,12 +90,15 @@ fn items_public_surface_batch() {
     (setq async-status--shown-items nil)
     (async-status-clean-up first)
     (async-status-clean-up second)))"##,
-            true,
-            expect!["OK ((\"Second\" 2 t) (\"First\" 1 t))"],
-        ),
-        (
-            "find_item_skips_non_items_and_returns_the_first_matching_duplicate",
-            r##"(let* ((first
+        true,
+        expect!["OK ((\"Second\" 2 t) (\"First\" 1 t))"],
+    )
+}
+
+fn find_item_skips_non_items_and_returns_the_first_matching_duplicate() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "find_item_skips_non_items_and_returns_the_first_matching_duplicate",
+        r##"(let* ((first
         (make-async-status--item
          :msg-id "same"
          :label "first"))
@@ -115,12 +122,15 @@ fn items_public_surface_batch() {
         other)
        (async-status--find-item-by-msgid "missing"))
     (setq async-status--shown-items nil)))"##,
-            true,
-            expect!["OK (t t nil)"],
-        ),
-        (
-            "remove_item_uses_identity_and_removes_every_occurrence_of_that_object",
-            r##"(let* ((target
+        true,
+        expect!["OK (t t nil)"],
+    )
+}
+
+fn remove_item_uses_identity_and_removes_every_occurrence_of_that_object() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "remove_item_uses_identity_and_removes_every_occurrence_of_that_object",
+        r##"(let* ((target
         (make-async-status--item
          :msg-id "same"
          :label "target"))
@@ -140,12 +150,15 @@ fn items_public_surface_batch() {
        (mapcar #'async-status--item-msg-id
                async-status--shown-items))
     (setq async-status--shown-items nil)))"##,
-            true,
-            expect!["OK (2 t (\"same\" \"other\"))"],
-        ),
-        (
-            "remove_from_bar_unregisters_the_watch_removes_item_and_refreshes_once",
-            r##"(let* ((target
+        true,
+        expect!["OK (2 t (\"same\" \"other\"))"],
+    )
+}
+
+fn remove_from_bar_unregisters_the_watch_removes_item_and_refreshes_once() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "remove_from_bar_unregisters_the_watch_removes_item_and_refreshes_once",
+        r##"(let* ((target
         (make-async-status--item
          :msg-id "target"
          :fs-watcher-id '(watch . 9)))
@@ -169,12 +182,15 @@ fn items_public_surface_batch() {
        (mapcar #'async-status--item-msg-id
                async-status--shown-items))
     (setq async-status--shown-items nil)))"##,
-            true,
-            expect!["OK (((:remove (watch . 9)) :refresh) (\"other\"))"],
-        ),
-        (
-            "removing_an_unknown_id_has_no_watch_refresh_or_state_side_effect",
-            r##"(let ((item
+        true,
+        expect!["OK (((:remove (watch . 9)) :refresh) (\"other\"))"],
+    )
+}
+
+fn removing_an_unknown_id_has_no_watch_refresh_or_state_side_effect() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "removing_an_unknown_id_has_no_watch_refresh_or_state_side_effect",
+        r##"(let ((item
        (make-async-status--item
         :msg-id "kept"
         :fs-watcher-id :watch))
@@ -191,12 +207,15 @@ fn items_public_surface_batch() {
       (list calls
             (eq (car async-status--shown-items) item))
     (setq async-status--shown-items nil)))"##,
-            true,
-            expect!["OK (nil t)"],
-        ),
-        (
-            "file_event_updates_only_the_matching_item_then_refreshes_and_shows",
-            r##"(let ((first-id (async-status-req-id "first"))
+        true,
+        expect!["OK (nil t)"],
+    )
+}
+
+fn file_event_updates_only_the_matching_item_then_refreshes_and_shows() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "file_event_updates_only_the_matching_item_then_refreshes_and_shows",
+        r##"(let ((first-id (async-status-req-id "first"))
       (second-id (async-status-req-id "second"))
       calls)
   (unwind-protect
@@ -227,12 +246,15 @@ fn items_public_surface_batch() {
     (setq async-status--shown-items nil)
     (async-status-clean-up first-id)
     (async-status-clean-up second-id)))"##,
-            true,
-            expect!["OK (0 \"0.625\" (:refresh :show))"],
-        ),
-        (
-            "file_event_for_an_unknown_message_surfaces_the_struct_type_error",
-            r##"(let ((id (async-status-req-id "unknown-event")))
+        true,
+        expect!["OK (0 \"0.625\" (:refresh :show))"],
+    )
+}
+
+fn file_event_for_an_unknown_message_surfaces_the_struct_type_error() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "file_event_for_an_unknown_message_surfaces_the_struct_type_error",
+        r##"(let ((id (async-status-req-id "unknown-event")))
   (unwind-protect
       (progn
         (setq async-status--shown-items nil)
@@ -252,8 +274,23 @@ fn items_public_surface_batch() {
             t))))
     (setq async-status--shown-items nil)
     (async-status-clean-up id)))"##,
-            true,
-            expect!["OK (:error wrong-type-argument t)"],
-        ),
-    ]);
+        true,
+        expect!["OK (:error wrong-type-argument t)"],
+    )
+}
+
+#[test]
+fn items_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        add_item_registers_the_exact_file_watch_and_custom_label(),
+        add_item_defaults_the_label_to_the_allocated_message_id(),
+        newly_added_items_are_displayed_in_reverse_registration_order(),
+        find_item_skips_non_items_and_returns_the_first_matching_duplicate(),
+        remove_item_uses_identity_and_removes_every_occurrence_of_that_object(),
+        remove_from_bar_unregisters_the_watch_removes_item_and_refreshes_once(),
+        removing_an_unknown_id_has_no_watch_refresh_or_state_side_effect(),
+        file_event_updates_only_the_matching_item_then_refreshes_and_shows(),
+        file_event_for_an_unknown_message_surfaces_the_struct_type_error(),
+    ];
+    assert_async_status_batch(&cases);
 }

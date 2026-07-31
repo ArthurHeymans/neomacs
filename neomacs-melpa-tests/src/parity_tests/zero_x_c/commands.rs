@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_zero_x_c_batch;
+use super::{ParityBatchCase, assert_zero_x_c_batch};
 
-#[test]
-fn commands_public_surface_batch() {
-    assert_zero_x_c_batch(&[
-        (
-            "zero_x_c_convert_reproduces_upstream_cross_base_examples",
-            r##"(list
+fn zero_x_c_convert_reproduces_upstream_cross_base_examples() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "zero_x_c_convert_reproduces_upstream_cross_base_examples",
+        r##"(list
                (0xc-convert 10 "0xff" t)
                (0xc-convert 10 "'hff" t)
                (0xc-convert 10 "0b1010" t)
@@ -15,12 +13,15 @@ fn commands_public_surface_batch() {
                (0xc-convert 8 "7:100" t)
                (0xc-convert 10 "5:41300" t)
                (0xc-convert 12 "0t10201020" t))"##,
-            true,
-            expect![[r#"OK ("255" "255" "10" "10" "61" "2700" "1696")"#]],
-        ),
-        (
-            "zero_x_c_convert_messages_unless_silent",
-            r##"(let (messages)
+        true,
+        expect![[r#"OK ("255" "255" "10" "10" "61" "2700" "1696")"#]],
+    )
+}
+
+fn zero_x_c_convert_messages_unless_silent() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "zero_x_c_convert_messages_unless_silent",
+        r##"(let (messages)
                (cl-letf (((symbol-function 'message)
                           (lambda (format-string &rest args)
                             (let ((text
@@ -35,12 +36,15 @@ fn commands_public_surface_batch() {
                   (0xc-convert
                    2 "0xff" t)
                   (nreverse messages))))"##,
-            true,
-            expect![[r#"OK ("FF" "11111111" ("FF"))"#]],
-        ),
-        (
-            "zero_x_c_convert_prompts_for_number_and_non_prefix_base",
-            r##"(let (calls)
+        true,
+        expect![[r#"OK ("FF" "11111111" ("FF"))"#]],
+    )
+}
+
+fn zero_x_c_convert_prompts_for_number_and_non_prefix_base() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "zero_x_c_convert_prompts_for_number_and_non_prefix_base",
+        r##"(let (calls)
                (cl-letf (((symbol-function
                            'read-from-minibuffer)
                           (lambda (prompt &rest _)
@@ -57,12 +61,15 @@ fn commands_public_surface_batch() {
                  (list
                   (0xc-convert 1 nil t)
                   (nreverse calls))))"##,
-            true,
-            expect![[r#"OK ("11111111" ((number "Number: ") (base "Convert to base: ")))"#]],
-        ),
-        (
-            "zero_x_c_bounds_at_point_include_apostrophe_hints",
-            r##"(mapcar
+        true,
+        expect![[r#"OK ("11111111" ((number "Number: ") (base "Convert to base: ")))"#]],
+    )
+}
+
+fn zero_x_c_bounds_at_point_include_apostrophe_hints() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "zero_x_c_bounds_at_point_include_apostrophe_hints",
+        r##"(mapcar
                (lambda (case)
                  (with-temp-buffer
                    (insert (car case))
@@ -71,12 +78,15 @@ fn commands_public_surface_batch() {
                '(("before 0xBEEF after" . 11)
                  ("before 'hBEEF after" . 12)
                  ("12345" . 3)))"##,
-            true,
-            expect!["OK ((8 14) (8 14) (1 6))"],
-        ),
-        (
-            "zero_x_c_convert_point_replaces_only_the_number_and_uses_default_base",
-            r##"(list
+        true,
+        expect!["OK ((8 14) (8 14) (1 6))"],
+    )
+}
+
+fn zero_x_c_convert_point_replaces_only_the_number_and_uses_default_base() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "zero_x_c_convert_point_replaces_only_the_number_and_uses_default_base",
+        r##"(list
                (with-temp-buffer
                  (insert "left 0xBEEF right")
                  (goto-char 10)
@@ -88,8 +98,19 @@ fn commands_public_surface_batch() {
                    (goto-char 11)
                    (0xc-convert-point)
                    (buffer-string))))"##,
-            true,
-            expect![[r#"OK ("left 48879 right" "value 1111 end")"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK ("left 48879 right" "value 1111 end")"#]],
+    )
+}
+
+#[test]
+fn commands_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        zero_x_c_convert_reproduces_upstream_cross_base_examples(),
+        zero_x_c_convert_messages_unless_silent(),
+        zero_x_c_convert_prompts_for_number_and_non_prefix_base(),
+        zero_x_c_bounds_at_point_include_apostrophe_hints(),
+        zero_x_c_convert_point_replaces_only_the_number_and_uses_default_base(),
+    ];
+    assert_zero_x_c_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_minor_mode_batch;
+use super::{ParityBatchCase, assert_auto_minor_mode_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_auto_minor_mode_batch(&[
-        (
-            "auto_minor_mode_real_theme_file_combines_major_filename_and_magic_selection",
-            r##"(let*
+fn auto_minor_mode_real_theme_file_combines_major_filename_and_magic_selection() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_minor_mode_real_theme_file_combines_major_filename_and_magic_selection",
+        r##"(let*
                              ((root
                                (auto-minor-mode-test-root
                                 "theme-file"))
@@ -54,14 +52,17 @@ fn workflows_public_surface_batch() {
                                    (set-buffer-modified-p nil))
                                  (kill-buffer buffer))
                                (delete-directory root t))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("midnight-theme.el" emacs-lisp-mode t t ((:alpha 1 t 1 emacs-lisp-mode) (:beta 1 t 1 emacs-lisp-mode)) ";;; midnight-theme.el --- Theme\n(deftheme midnight)\n" 1 nil)"#
     ]],
-        ),
-        (
-            "auto_minor_mode_two_real_project_files_keep_minor_mode_state_buffer_local",
-            r##"(let*
+    )
+}
+
+fn auto_minor_mode_two_real_project_files_keep_minor_mode_state_buffer_local() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_minor_mode_two_real_project_files_keep_minor_mode_state_buffer_local",
+        r##"(let*
                              ((root
                                (auto-minor-mode-test-root
                                 "project-buffers"))
@@ -134,14 +135,17 @@ fn workflows_public_surface_batch() {
                                      (set-buffer-modified-p nil))
                                    (kill-buffer buffer)))
                                (delete-directory root t))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((conf-space-mode t t t t) (text-mode nil nil nil nil) nil nil ((:alpha 1 t 1 conf-space-mode) (:beta 1 t 1 conf-space-mode)))"
     ],
-        ),
-        (
-            "auto_minor_mode_real_numbered_and_simple_backup_files_match_the_base_suffix",
-            r##"(let*
+    )
+}
+
+fn auto_minor_mode_real_numbered_and_simple_backup_files_match_the_base_suffix() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_minor_mode_real_numbered_and_simple_backup_files_match_the_base_suffix",
+        r##"(let*
                              ((root
                                (auto-minor-mode-test-root
                                 "backup-files"))
@@ -196,14 +200,17 @@ fn workflows_public_surface_batch() {
                                      (set-buffer-modified-p nil))
                                    (kill-buffer buffer)))
                                (delete-directory root t))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("deploy.ammtest.~17~" "deploy.ammtest" t t) ("deploy.ammtest~" "deploy.ammtest" t t)) ((:alpha 1 t 1 fundamental-mode) (:alpha 1 t 1 fundamental-mode)))"#
     ]],
-        ),
-        (
-            "auto_minor_mode_existing_restriction_treats_its_visible_header_as_magic_start",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_minor_mode_existing_restriction_treats_its_visible_header_as_magic_start() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_minor_mode_existing_restriction_treats_its_visible_header_as_magic_start",
+        r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
                            (insert
                             "ignored preamble\n"
@@ -235,14 +242,17 @@ fn workflows_public_surface_batch() {
                                 (= original-min (point-min))
                                 (= original-max (point-max))
                                 (buffer-string)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK (t ((:alpha 1 t 18 fundamental-mode)) t t t "#!service\nenabled=true\n")"##
     ]],
-        ),
-        (
-            "auto_minor_mode_real_revisit_without_selected_major_reactivates_even_when_keep_requested",
-            r##"(let*
+    )
+}
+
+fn auto_minor_mode_real_revisit_without_selected_major_reactivates_even_when_keep_requested() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_minor_mode_real_revisit_without_selected_major_reactivates_even_when_keep_requested",
+        r##"(let*
                              ((root
                                (auto-minor-mode-test-root
                                 "revisit"))
@@ -290,10 +300,21 @@ fn workflows_public_surface_batch() {
                                    (set-buffer-modified-p nil))
                                  (kill-buffer buffer))
                                (delete-directory root t))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (1 2 3 t ((:alpha 1 t 1 fundamental-mode) (:alpha 1 t 1 fundamental-mode) (:alpha 1 t 1 fundamental-mode)))"
     ],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_minor_mode_real_theme_file_combines_major_filename_and_magic_selection(),
+        auto_minor_mode_two_real_project_files_keep_minor_mode_state_buffer_local(),
+        auto_minor_mode_real_numbered_and_simple_backup_files_match_the_base_suffix(),
+        auto_minor_mode_existing_restriction_treats_its_visible_header_as_magic_start(),
+        auto_minor_mode_real_revisit_without_selected_major_reactivates_even_when_keep_requested(),
+    ];
+    assert_auto_minor_mode_batch(&cases);
 }

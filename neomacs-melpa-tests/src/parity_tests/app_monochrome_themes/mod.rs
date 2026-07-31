@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{APP_MONOCHROME_THEMES_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod workflows;
 
@@ -126,9 +129,9 @@ pub(crate) fn assert_app_monochrome_parity(elisp_form: &str, expected: Expect) {
 }
 
 /// Multi-probe batch for `assert_app_monochrome_parity` cases (2a).
-pub(crate) fn assert_app_monochrome_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_app_monochrome_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         app_monochrome_oracle(),
         &name,
         "app_monochrome_parity",

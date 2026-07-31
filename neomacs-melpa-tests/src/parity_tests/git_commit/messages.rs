@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_git_commit_batch;
+use super::{ParityBatchCase, assert_git_commit_batch};
 
-#[test]
-fn messages_public_surface_batch() {
-    assert_git_commit_batch(&[
-        (
-            "git_commit_buffer_message_removes_comments_scissors_and_normalizes_blank_edges",
-            r##"(list
+fn git_commit_buffer_message_removes_comments_scissors_and_normalizes_blank_edges() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "git_commit_buffer_message_removes_comments_scissors_and_normalizes_blank_edges",
+        r##"(list
                (with-temp-buffer
                  (setq-local comment-start "#")
                  (insert "\n\nSummary\n\nBody\n# status\nignored\n")
@@ -20,14 +18,17 @@ fn messages_public_surface_batch() {
                  (setq-local comment-start "#")
                  (insert "Summary without newline")
                  (git-commit-buffer-message)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("\nSummary\n\nBody\nignored\n" "Summary\n\nBody\n" "Summary without newline\n")"#
     ]],
-        ),
-        (
-            "git_commit_buffer_message_rejects_whitespace_and_comment_only_buffers",
-            r##"(list
+    )
+}
+
+fn git_commit_buffer_message_rejects_whitespace_and_comment_only_buffers() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "git_commit_buffer_message_rejects_whitespace_and_comment_only_buffers",
+        r##"(list
                (with-temp-buffer
                  (setq-local comment-start "#")
                  (insert " \t\n\r\n")
@@ -40,12 +41,15 @@ fn messages_public_surface_batch() {
                  (setq-local comment-start "#")
                  (insert "\n# comment\n \t\n")
                  (git-commit-buffer-message)))"##,
-            true,
-            expect![[r#"OK (nil nil nil)"#]],
-        ),
-        (
-            "git_commit_ensure_comment_gap_only_expands_an_initial_empty_comment_boundary",
-            r##"(mapcar
+        true,
+        expect![[r#"OK (nil nil nil)"#]],
+    )
+}
+
+fn git_commit_ensure_comment_gap_only_expands_an_initial_empty_comment_boundary() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "git_commit_ensure_comment_gap_only_expands_an_initial_empty_comment_boundary",
+        r##"(mapcar
                (lambda (text)
                  (with-temp-buffer
                    (setq-local comment-start "#")
@@ -56,14 +60,17 @@ fn messages_public_surface_batch() {
                  "\n\n# instructions\n"
                  "summary\n# instructions\n"
                  "# instructions\n"))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK ("\n\n# instructions\n" "\n\n# instructions\n" "summary\n# instructions\n" "# instructions\n")"##
     ]],
-        ),
-        (
-            "git_commit_save_message_deduplicates_and_moves_the_latest_message_to_the_front",
-            r##"(with-temp-buffer
+    )
+}
+
+fn git_commit_save_message_deduplicates_and_moves_the_latest_message_to_the_front() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "git_commit_save_message_deduplicates_and_moves_the_latest_message_to_the_front",
+        r##"(with-temp-buffer
                (setq-local comment-start "#")
                (setq-local log-edit-comment-ring (make-ring 4))
                (let ((git-commit-use-local-message-ring nil))
@@ -74,12 +81,15 @@ fn messages_public_surface_batch() {
                  (list
                   (ring-length log-edit-comment-ring)
                   (ring-elements log-edit-comment-ring))))"##,
-            true,
-            expect![[r#"OK (2 ("one\n" "two\n"))"#]],
-        ),
-        (
-            "git_commit_previous_and_next_message_preserve_instruction_comments",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK (2 ("one\n" "two\n"))"#]],
+    )
+}
+
+fn git_commit_previous_and_next_message_preserve_instruction_comments() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "git_commit_previous_and_next_message_preserve_instruction_comments",
+        r##"(with-temp-buffer
                (setq-local comment-start "#")
                (setq-local log-edit-comment-ring (make-ring 5))
                (setq-local log-edit-comment-ring-index nil)
@@ -96,14 +106,17 @@ fn messages_public_surface_batch() {
                   (buffer-string)
                   log-edit-comment-ring-index
                   (ring-elements log-edit-comment-ring))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r##"OK ("newer\n\n# instructions\n" 1 "draft\n\n# instructions\n" 0 ("draft\n" "newer\n" "older\n"))"##
     ]],
-        ),
-        (
-            "git_commit_summary_regexp_captures_limit_overflow_and_nonempty_second_line",
-            r##"(let ((comment-start "#")
+    )
+}
+
+fn git_commit_summary_regexp_captures_limit_overflow_and_nonempty_second_line() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "git_commit_summary_regexp_captures_limit_overflow_and_nonempty_second_line",
+        r##"(let ((comment-start "#")
                     (git-commit-need-summary-line t)
                     (git-commit-summary-max-length 5))
                (mapcar
@@ -117,12 +130,15 @@ fn messages_public_surface_batch() {
                 '("# comment\nabcdef\nbody\n"
                   "\nshort\n\nbody\n"
                   "\n# comment\n\n\n")))"##,
-            true,
-            expect![[r#"OK (("abcde" "f" "body") ("short" "" nil) ("" "" nil))"#]],
-        ),
-        (
-            "git_commit_style_checks_short_circuit_prompts_and_honor_force",
-            r##"(let ((comment-start "#")
+        true,
+        expect![[r#"OK (("abcde" "f" "body") ("short" "" nil) ("" "" nil))"#]],
+    )
+}
+
+fn git_commit_style_checks_short_circuit_prompts_and_honor_force() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "git_commit_style_checks_short_circuit_prompts_and_honor_force",
+        r##"(let ((comment-start "#")
                     (git-commit-need-summary-line t)
                     (git-commit-summary-max-length 5)
                     (git-commit-style-convention-checks
@@ -146,14 +162,17 @@ fn messages_public_surface_batch() {
                   (check "abcdef\nbody\n" '(nil t) nil)
                   (check "abcdef\nbody\n" '(t nil) nil)
                   (check "abcdef\nbody\n" nil t))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((t nil) (nil ("Summary line is too long.  Commit anyway? ")) (nil ("Summary line is too long.  Commit anyway? " "Second line is not empty.  Commit anyway? ")) (t nil))"#
     ]],
-        ),
-        (
-            "git_commit_cancel_message_reports_whether_the_message_was_saved",
-            r##"(let (messages)
+    )
+}
+
+fn git_commit_cancel_message_reports_whether_the_message_was_saved() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "git_commit_cancel_message_reports_whether_the_message_was_saved",
+        r##"(let (messages)
                (cl-letf (((symbol-function 'message)
                           (lambda (format-string &rest arguments)
                             (let ((text
@@ -166,10 +185,24 @@ fn messages_public_surface_batch() {
                         '(git-commit-save-message)))
                    (git-commit-cancel-message))
                  (nreverse messages)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("Commit canceled" "Commit canceled.  Message saved to `log-edit-comment-ring'")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn messages_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        git_commit_buffer_message_removes_comments_scissors_and_normalizes_blank_edges(),
+        git_commit_buffer_message_rejects_whitespace_and_comment_only_buffers(),
+        git_commit_ensure_comment_gap_only_expands_an_initial_empty_comment_boundary(),
+        git_commit_save_message_deduplicates_and_moves_the_latest_message_to_the_front(),
+        git_commit_previous_and_next_message_preserve_instruction_comments(),
+        git_commit_summary_regexp_captures_limit_overflow_and_nonempty_second_line(),
+        git_commit_style_checks_short_circuit_prompts_and_honor_force(),
+        git_commit_cancel_message_reports_whether_the_message_was_saved(),
+    ];
+    assert_git_commit_batch(&cases);
 }

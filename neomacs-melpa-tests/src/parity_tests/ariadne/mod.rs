@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{ARIADNE_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod workflows;
 
@@ -41,9 +44,9 @@ pub(crate) fn assert_ariadne_with_legacy_cl_parity(elisp_form: &str, expected: E
 }
 
 /// Multi-probe batch for `assert_ariadne_parity` cases (2a).
-pub(crate) fn assert_ariadne_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_ariadne_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         ariadne_oracle(""),
         &name,
         "ariadne_parity",
@@ -52,9 +55,9 @@ pub(crate) fn assert_ariadne_batch(cases: &[(&str, &str, bool, Expect)]) {
 }
 
 /// Multi-probe batch for `assert_ariadne_with_legacy_cl_parity` cases (2a).
-pub(crate) fn assert_ariadne_with_legacy_cl_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_ariadne_with_legacy_cl_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         ariadne_oracle("(require 'cl)"),
         &name,
         "ariadne_with_legacy_cl_parity",

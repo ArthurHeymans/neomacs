@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_general_batch;
+use super::{ParityBatchCase, assert_general_batch};
 
-#[test]
-fn dispatch_public_surface_batch() {
-    assert_general_batch(&[
-        (
-            "general_predicate_dispatch_selects_the_first_true_definition_then_fallback",
-            r##"(progn
+fn general_predicate_dispatch_selects_the_first_true_definition_then_fallback() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_predicate_dispatch_selects_the_first_true_definition_then_fallback",
+        r##"(progn
                (defvar
                  neomacs-general-predicate-map
                  (make-sparse-keymap))
@@ -46,12 +44,15 @@ fn dispatch_public_surface_batch() {
                       fallback
                       second
                       (key-binding (kbd "x")))))))"##,
-            true,
-            expect![[r#"OK (beginning-of-line backward-char forward-char)"#]],
-        ),
-        (
-            "general_key_dynamically_resolves_a_binding_and_runs_setup_and_teardown",
-            r##"(progn
+        true,
+        expect![[r#"OK (beginning-of-line backward-char forward-char)"#]],
+    )
+}
+
+fn general_key_dynamically_resolves_a_binding_and_runs_setup_and_teardown() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_key_dynamically_resolves_a_binding_and_runs_setup_and_teardown",
+        r##"(progn
                (defvar
                  neomacs-general-key-map
                  (make-sparse-keymap))
@@ -87,12 +88,15 @@ fn dispatch_public_surface_batch() {
                     resolved
                     (nreverse
                      neomacs-general-key-events)))))"##,
-            true,
-            expect![[r#"OK (forward-char (setup teardown))"#]],
-        ),
-        (
-            "general_translate_key_uses_the_original_backup_across_separate_calls",
-            r##"(progn
+        true,
+        expect![[r#"OK (forward-char (setup teardown))"#]],
+    )
+}
+
+fn general_translate_key_uses_the_original_backup_across_separate_calls() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_translate_key_uses_the_original_backup_across_separate_calls",
+        r##"(progn
                (defvar
                  neomacs-general-translate-map
                  (make-sparse-keymap))
@@ -140,12 +144,15 @@ fn dispatch_public_surface_batch() {
                 (lookup-key
                  general-neomacs-general-translate-map-backup-map
                  (kbd "a"))))"##,
-            true,
-            expect![[r#"OK (backward-char next-line forward-char t forward-char)"#]],
-        ),
-        (
-            "general_translate_key_destructive_calls_observe_prior_mutations",
-            r##"(progn
+        true,
+        expect![[r#"OK (backward-char next-line forward-char t forward-char)"#]],
+    )
+}
+
+fn general_translate_key_destructive_calls_observe_prior_mutations() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_translate_key_destructive_calls_observe_prior_mutations",
+        r##"(progn
                (defvar
                  neomacs-general-destructive-map
                  (make-sparse-keymap))
@@ -186,12 +193,15 @@ fn dispatch_public_surface_batch() {
                 (lookup-key
                  neomacs-general-destructive-map
                  (kbd "c"))))"##,
-            true,
-            expect![[r#"OK (backward-char next-line backward-char)"#]],
-        ),
-        (
-            "general_swap_key_exchanges_both_definitions_in_one_operation",
-            r##"(progn
+        true,
+        expect![[r#"OK (backward-char next-line backward-char)"#]],
+    )
+}
+
+fn general_swap_key_exchanges_both_definitions_in_one_operation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_swap_key_exchanges_both_definitions_in_one_operation",
+        r##"(progn
                (defvar
                  neomacs-general-swap-map
                  (make-sparse-keymap))
@@ -216,12 +226,15 @@ fn dispatch_public_surface_batch() {
                 (lookup-key
                  neomacs-general-swap-map
                  (kbd "b"))))"##,
-            true,
-            expect![[r#"OK (backward-char forward-char)"#]],
-        ),
-        (
-            "general_auto_unbind_replaces_a_non_prefix_before_installing_nested_keys",
-            r##"(progn
+        true,
+        expect![[r#"OK (backward-char forward-char)"#]],
+    )
+}
+
+fn general_auto_unbind_replaces_a_non_prefix_before_installing_nested_keys() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_auto_unbind_replaces_a_non_prefix_before_installing_nested_keys",
+        r##"(progn
                (defvar
                  neomacs-general-auto-map
                  (make-sparse-keymap))
@@ -262,12 +275,15 @@ fn dispatch_public_surface_batch() {
                          neomacs-general-auto-map
                          (kbd "a b c"))))
                    (general-auto-unbind-keys t))))"##,
-            true,
-            expect![[r#"OK (error t (keymap (99 . next-line)) next-line)"#]],
-        ),
-        (
-            "general_simulate_key_generates_a_named_command_and_executes_the_target_binding",
-            r##"(progn
+        true,
+        expect![[r#"OK (error t (keymap (99 . next-line)) next-line)"#]],
+    )
+}
+
+fn general_simulate_key_generates_a_named_command_and_executes_the_target_binding() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_simulate_key_generates_a_named_command_and_executes_the_target_binding",
+        r##"(progn
                (defvar
                  neomacs-general-simulate-map
                  (make-sparse-keymap))
@@ -296,12 +312,15 @@ fn dispatch_public_surface_batch() {
                     (documentation command)
                     (point)
                     general--last-simulated-command))))"##,
-            true,
-            expect![[r#"OK (neomacs-general-simulate-a t "Simulate general a." 2 forward-char)"#]],
-        ),
-        (
-            "general_key_dispatch_runs_a_matching_command_and_tracks_it",
-            r##"(progn
+        true,
+        expect![[r#"OK (neomacs-general-simulate-a t "Simulate general a." 2 forward-char)"#]],
+    )
+}
+
+fn general_key_dispatch_runs_a_matching_command_and_tracks_it() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "general_key_dispatch_runs_a_matching_command_and_tracks_it",
+        r##"(progn
                (defvar
                  neomacs-general-dispatch-events nil)
                (setq
@@ -332,10 +351,24 @@ fn dispatch_public_surface_batch() {
                   (nreverse
                    neomacs-general-dispatch-events)
                   general--last-dispatch-command)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (neomacs-general-dispatch "General dispatch command." (alternate) neomacs-general-alternate)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn dispatch_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        general_predicate_dispatch_selects_the_first_true_definition_then_fallback(),
+        general_key_dynamically_resolves_a_binding_and_runs_setup_and_teardown(),
+        general_translate_key_uses_the_original_backup_across_separate_calls(),
+        general_translate_key_destructive_calls_observe_prior_mutations(),
+        general_swap_key_exchanges_both_definitions_in_one_operation(),
+        general_auto_unbind_replaces_a_non_prefix_before_installing_nested_keys(),
+        general_simulate_key_generates_a_named_command_and_executes_the_target_binding(),
+        general_key_dispatch_runs_a_matching_command_and_tracks_it(),
+    ];
+    assert_general_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_asm_blox_batch;
+use super::{ParityBatchCase, assert_asm_blox_batch};
 
-#[test]
-fn files_public_surface_batch() {
-    assert_asm_blox_batch(&[
-        (
-            "asm_blox_saved_puzzle_ids_and_next_filename_ignore_unrelated_files_and_sort_numeric_ids",
-            r##"(let* ((asm-blox-save-directory-name
+fn asm_blox_saved_puzzle_ids_and_next_filename_ignore_unrelated_files_and_sort_numeric_ids() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asm_blox_saved_puzzle_ids_and_next_filename_ignore_unrelated_files_and_sort_numeric_ids",
+        r##"(let* ((asm-blox-save-directory-name
                  (asm-blox-test-sandbox-path
                   "saved-games"))
                 (files
@@ -36,12 +34,15 @@ fn files_public_surface_batch() {
             "Fixture" 42))
           (asm-blox--saved-puzzle-ct-ids
            "Other")))"##,
-            true,
-            expect![[r#"OK ((2 7 10) "Fixture-11.asbx" "Fixture-42.asbx" (99))"#]],
-        ),
-        (
-            "asm_blox_backup_workflow_writes_exact_buffer_contents_beside_the_active_solution",
-            r##"(let* ((directory
+        true,
+        expect![[r#"OK ((2 7 10) "Fixture-11.asbx" "Fixture-42.asbx" (99))"#]],
+    )
+}
+
+fn asm_blox_backup_workflow_writes_exact_buffer_contents_beside_the_active_solution() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asm_blox_backup_workflow_writes_exact_buffer_contents_beside_the_active_solution",
+        r##"(let* ((directory
                  (asm-blox-test-sandbox-path
                   "backup-workflow"))
                 (solution
@@ -65,12 +66,15 @@ fn files_public_surface_batch() {
               (buffer-string))
             (buffer-string)
             (buffer-modified-p))))"##,
-            true,
-            expect![[r#"OK (t "cell one\ncell two\n\316\273\n" "cell one\ncell two\nλ\n" t)"#]],
-        ),
-        (
-            "asm_blox_win_workflow_copies_origin_solution_to_hidden_win_file",
-            r##"(let* ((directory
+        true,
+        expect![[r#"OK (t "cell one\ncell two\n\316\273\n" "cell one\ncell two\nλ\n" t)"#]],
+    )
+}
+
+fn asm_blox_win_workflow_copies_origin_solution_to_hidden_win_file() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asm_blox_win_workflow_copies_origin_solution_to_hidden_win_file",
+        r##"(let* ((directory
                  (asm-blox-test-sandbox-path
                   "win-workflow"))
                 (solution
@@ -116,12 +120,15 @@ fn files_public_surface_batch() {
              (with-current-buffer execution
                (set-buffer-modified-p nil))
              (kill-buffer execution))))"##,
-            true,
-            expect![[r#"OK (t "compiled board\nsolution body\n" t)"#]],
-        ),
-        (
-            "asm_blox_puzzle_won_detection_matches_only_named_hidden_win_artifacts",
-            r##"(let ((asm-blox-save-directory-name
+        true,
+        expect![[r#"OK (t "compiled board\nsolution body\n" t)"#]],
+    )
+}
+
+fn asm_blox_puzzle_won_detection_matches_only_named_hidden_win_artifacts() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asm_blox_puzzle_won_detection_matches_only_named_hidden_win_artifacts",
+        r##"(let ((asm-blox-save-directory-name
                 (asm-blox-test-sandbox-path
                  "won-detection")))
          (make-directory
@@ -142,14 +149,17 @@ fn files_public_surface_batch() {
              name
              (asm-blox--puzzle-won-p name)))
           '("Identity" "Other" "Missing" "entity")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("Identity" ".Identity-1.asbx.win.txt") ("Other" ".Other-1.asbx.win.txt") ("Missing" nil) ("entity" ".Identity-1.asbx.win.txt"))"#
     ]],
-        ),
-        (
-            "asm_blox_rendered_board_roundtrips_all_twelve_code_cells_and_problem_identity",
-            r##"(let* ((fixture-problem
+    )
+}
+
+fn asm_blox_rendered_board_roundtrips_all_twelve_code_cells_and_problem_identity() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asm_blox_rendered_board_roundtrips_all_twelve_code_cells_and_problem_identity",
+        r##"(let* ((fixture-problem
                  (lambda ()
                    (asm-blox--problem-spec-create
                     :name "Round Trip"
@@ -200,10 +210,21 @@ fn files_public_surface_batch() {
               (length rendered)
               (substring rendered
                          (- (length rendered) 47))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("Round Trip" (((0 0) "(const 0)\n(send right)") ((0 1) "(const 1)\n(send right)") ((0 2) "(const 2)\n(send right)") ((0 3) "(const 3)\n(send right)") ((1 0) "(const 10)\n(send right)") ((1 1) "(const 11)\n(send right)") ((1 2) "(const 12)\n(send right)") ((1 3) "(const 13)\n(send right)") ((2 0) "(const 20)\n(send right)") ((2 1) "(const 21)\n(send right)") ((2 2) "(const 22)\n(send right)") ((2 3) "(const 23)\n(send right)")) 5803 "   \n\n\nRound Trip:\nRender and parse every cell.\n")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn files_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        asm_blox_saved_puzzle_ids_and_next_filename_ignore_unrelated_files_and_sort_numeric_ids(),
+        asm_blox_backup_workflow_writes_exact_buffer_contents_beside_the_active_solution(),
+        asm_blox_win_workflow_copies_origin_solution_to_hidden_win_file(),
+        asm_blox_puzzle_won_detection_matches_only_named_hidden_win_artifacts(),
+        asm_blox_rendered_board_roundtrips_all_twelve_code_cells_and_problem_identity(),
+    ];
+    assert_asm_blox_batch(&cases);
 }

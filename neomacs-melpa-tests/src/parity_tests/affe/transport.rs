@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_affe_batch;
+use super::{ParityBatchCase, assert_affe_batch};
 
-#[test]
-fn transport_public_surface_batch() {
-    assert_affe_batch(&[
-        (
-            "affe_send_serializes_symbols_lists_unicode_and_embedded_newlines",
-            r##"(let (calls)
+fn affe_send_serializes_symbols_lists_unicode_and_embedded_newlines() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "affe_send_serializes_symbols_lists_unicode_and_embedded_newlines",
+        r##"(let (calls)
                (cl-letf
                    (((symbol-function
                       'process-send-string)
@@ -20,12 +18,15 @@ fn transport_public_surface_batch() {
                               '(search 20 "α" "a\nb"))
                   (affe--send 'client 'exit)
                   (nreverse calls))))"##,
-            true,
-            expect![[r#"OK (sent sent ((client "(search 20 \"α\" \"a\\nb\")\n") (client "exit\n")))"#]],
-        ),
-        (
-            "affe_connect_frames_fragmented_lines_flushes_tail_and_builds_local_socket_process",
-            r##"(let (arguments callbacks)
+        true,
+        expect![[r#"OK (sent sent ((client "(search 20 \"α\" \"a\\nb\")\n") (client "exit\n")))"#]],
+    )
+}
+
+fn affe_connect_frames_fragmented_lines_flushes_tail_and_builds_local_socket_process() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "affe_connect_frames_fragmented_lines_flushes_tail_and_builds_local_socket_process",
+        r##"(let (arguments callbacks)
                (cl-letf
                    (((symbol-function
                       'make-network-process)
@@ -59,14 +60,17 @@ fn transport_public_surface_batch() {
                        (plist-get arguments
                                   :service))
                       (nreverse callbacks))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (network-client "affe-socket" t utf-8 local "affe-socket" (("one two" "three") ("four" "five") ("tail")))"#
     ]],
-        ),
-        (
-            "affe_connect_keeps_independent_fragment_state_per_connection",
-            r##"(let (processes first second)
+    )
+}
+
+fn affe_connect_keeps_independent_fragment_state_per_connection() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "affe_connect_keeps_independent_fragment_state_per_connection",
+        r##"(let (processes first second)
                (cl-letf
                    (((symbol-function
                       'make-network-process)
@@ -101,8 +105,17 @@ fn transport_public_surface_batch() {
                      (list
                       (nreverse first)
                       (nreverse second))))))"##,
-            true,
-            expect![[r#"OK ((("a")) (("b") ("c")))"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK ((("a")) (("b") ("c")))"#]],
+    )
+}
+
+#[test]
+fn transport_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        affe_send_serializes_symbols_lists_unicode_and_embedded_newlines(),
+        affe_connect_frames_fragmented_lines_flushes_tail_and_builds_local_socket_process(),
+        affe_connect_keeps_independent_fragment_state_per_connection(),
+    ];
+    assert_affe_batch(&cases);
 }

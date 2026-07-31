@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_package_update_batch;
+use super::{ParityBatchCase, assert_auto_package_update_batch};
 
-#[test]
-fn schedule_public_surface_batch() {
-    assert_auto_package_update_batch(&[
-        (
-            "auto_package_update_file_helpers_distinguish_missing_overwrite_and_unwritable_files",
-            r##"(let*
+fn auto_package_update_file_helpers_distinguish_missing_overwrite_and_unwritable_files() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_package_update_file_helpers_distinguish_missing_overwrite_and_unwritable_files",
+        r##"(let*
                              ((root
                                (auto-package-update-test-root
                                 "file-helpers"))
@@ -45,12 +43,15 @@ fn schedule_public_surface_batch() {
                               (file-attribute-size
                                (file-attributes file))
                               (file-exists-p missing))))"##,
-            true,
-            expect![[r#"OK (("old\n" nil) "new-value" 9 nil)"#]],
-        ),
-        (
-            "auto_package_update_current_day_round_trips_through_configured_sandbox_file",
-            r##"(let*
+        true,
+        expect![[r#"OK (("old\n" nil) "new-value" 9 nil)"#]],
+    )
+}
+
+fn auto_package_update_current_day_round_trips_through_configured_sandbox_file() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_package_update_current_day_round_trips_through_configured_sandbox_file",
+        r##"(let*
                              ((root
                                (auto-package-update-test-root
                                 "current-day"))
@@ -75,12 +76,15 @@ fn schedule_public_surface_batch() {
                                  auto-package-update-last-update-day-path)
                                 (file-exists-p
                                  auto-package-update-last-update-day-path)))))"##,
-            true,
-            expect![[r#"OK (nil 24680 "24680" t)"#]],
-        ),
-        (
-            "auto_package_update_daily_timer_uses_exact_period_callback_and_return_value",
-            r##"(let (calls)
+        true,
+        expect![[r#"OK (nil 24680 "24680" t)"#]],
+    )
+}
+
+fn auto_package_update_daily_timer_uses_exact_period_callback_and_return_value() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_package_update_daily_timer_uses_exact_period_callback_and_return_value",
+        r##"(let (calls)
                            (cl-letf
                                (((symbol-function
                                   'run-at-time)
@@ -99,8 +103,17 @@ fn schedule_public_surface_batch() {
                               (auto-package-update-at-time
                                "03:15")
                               (nreverse calls))))"##,
-            true,
-            expect![[r#"OK (fixture-timer (("03:15" 86400 auto-package-update-maybe nil)))"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (fixture-timer (("03:15" 86400 auto-package-update-maybe nil)))"#]],
+    )
+}
+
+#[test]
+fn schedule_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_package_update_file_helpers_distinguish_missing_overwrite_and_unwritable_files(),
+        auto_package_update_current_day_round_trips_through_configured_sandbox_file(),
+        auto_package_update_daily_timer_uses_exact_period_callback_and_return_value(),
+    ];
+    assert_auto_package_update_batch(&cases);
 }

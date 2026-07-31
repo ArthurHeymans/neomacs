@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_async_backup_batch;
+use super::{ParityBatchCase, assert_async_backup_batch};
 
-#[test]
-fn process_public_surface_batch() {
-    assert_async_backup_batch(&[
-        (
-            "async_backup_real_child_copies_content_with_exact_process_command_and_status",
-            r##"(let* ((input
+fn async_backup_real_child_copies_content_with_exact_process_command_and_status() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_real_child_copies_content_with_exact_process_command_and_status",
+        r##"(let* ((input
                 (async-backup-test-write-file
                  "process-success/input.txt"
                  "saved content\n"))
@@ -48,14 +46,17 @@ fn process_public_surface_batch() {
                  (async-backup-test-read-file output)))
             (async-backup-test-kill-buffer
              (get-buffer "*async-backup*"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t "async-backup" exit 0 ("emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//process-success/input.txt\" \"$ROOT//process-success/backups$ROOT//process-success/input-2026-07-27T13-30-00.txt\")") t 0 t "saved content\n")"#
     ]],
-        ),
-        (
-            "async_backup_returns_before_gate_opens_and_child_finishes_later",
-            r##"(let* ((input
+    )
+}
+
+fn async_backup_returns_before_gate_opens_and_child_finishes_later() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_returns_before_gate_opens_and_child_finishes_later",
+        r##"(let* ((input
                 (async-backup-test-write-file
                  "process-async/input.org"
                  "* asynchronous\n"))
@@ -95,14 +96,17 @@ fn process_public_surface_batch() {
                  (async-backup-test-read-file output)))
             (async-backup-test-kill-buffer
              (get-buffer "*async-backup*"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((run open listen connect stop) nil :editor-continued) exit 0 t "* asynchronous\n")"#
     ]],
-        ),
-        (
-            "async_backup_multiple_calls_launch_concurrent_children_instead_of_queueing",
-            r##"(let* ((root
+    )
+}
+
+fn async_backup_multiple_calls_launch_concurrent_children_instead_of_queueing() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_multiple_calls_launch_concurrent_children_instead_of_queueing",
+        r##"(let* ((root
                 (async-backup-test-path
                  "process-concurrent/backups"))
                (gate
@@ -153,14 +157,17 @@ fn process_public_surface_batch() {
                  (mapcar #'async-backup-test-read-file outputs)))
             (async-backup-test-kill-buffer
              (get-buffer "*async-backup*"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("async-backup" "async-backup<1>" "async-backup<2>") (#1=(run open listen connect stop) #1# #1#) 3 (nil nil nil)) (0 0 0) ("content-one.txt\n" "content-two.txt\n" "content-three.txt\n"))"#
     ]],
-        ),
-        (
-            "async_backup_same_timestamp_collision_leaves_one_success_and_one_failure",
-            r##"(let* ((input
+    )
+}
+
+fn async_backup_same_timestamp_collision_leaves_one_success_and_one_failure() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_same_timestamp_collision_leaves_one_success_and_one_failure",
+        r##"(let* ((input
                 (async-backup-test-write-file
                  "process-collision/input.txt"
                  "collision content\n"))
@@ -216,12 +223,15 @@ fn process_public_surface_batch() {
                     t))))
             (async-backup-test-kill-buffer
              (get-buffer "*async-backup*"))))"##,
-            true,
-            expect![[r#"OK (("async-backup" "async-backup<1>") (0 73) t "collision content\n" t)"#]],
-        ),
-        (
-            "async_backup_missing_input_is_reported_by_child_without_creating_output",
-            r##"(let* ((input
+        true,
+        expect![[r#"OK (("async-backup" "async-backup<1>") (0 73) t "collision content\n" t)"#]],
+    )
+}
+
+fn async_backup_missing_input_is_reported_by_child_without_creating_output() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_missing_input_is_reported_by_child_without_creating_output",
+        r##"(let* ((input
                 (async-backup-test-path
                  "process-missing/input.txt"))
                (root
@@ -255,12 +265,15 @@ fn process_public_surface_batch() {
                     t))))
             (async-backup-test-kill-buffer
              (get-buffer "*async-backup*"))))"##,
-            true,
-            expect!["OK (nil exit 1 nil t)"],
-        ),
-        (
-            "async_backup_missing_emacs_executable_signals_after_creating_output_directory",
-            r##"(let* ((input
+        true,
+        expect!["OK (nil exit 1 nil t)"],
+    )
+}
+
+fn async_backup_missing_emacs_executable_signals_after_creating_output_directory() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_missing_emacs_executable_signals_after_creating_output_directory",
+        r##"(let* ((input
                 (async-backup-test-write-file
                  "process-no-emacs/input.txt"
                  "input\n"))
@@ -283,14 +296,17 @@ fn process_public_surface_batch() {
                (directory-file-name root)
                (file-name-directory input)))
              (get-buffer "*async-backup*"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error file-missing ("Searching for program" "No such file or directory" "emacs")) t (:buffer "*async-backup*"))"#
     ]],
-        ),
-        (
-            "async_backup_child_stdout_and_stderr_share_persistent_process_buffer",
-            r##"(let* ((input
+    )
+}
+
+fn async_backup_child_stdout_and_stderr_share_persistent_process_buffer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_child_stdout_and_stderr_share_persistent_process_buffer",
+        r##"(let* ((input
                 (async-backup-test-write-file
                  "process-output/input.txt"
                  "input\n"))
@@ -320,12 +336,15 @@ fn process_public_surface_batch() {
                       (string-match-p "stderr-line" text))))
                  (buffer-live-p buffer)))
             (async-backup-test-kill-buffer buffer)))"##,
-            true,
-            expect!["OK (t exit 0 (0 12) t)"],
-        ),
-        (
-            "async_backup_sequential_children_reuse_named_output_buffer_and_append_results",
-            r##"(let* ((root
+        true,
+        expect!["OK (t exit 0 (0 12) t)"],
+    )
+}
+
+fn async_backup_sequential_children_reuse_named_output_buffer_and_append_results() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_sequential_children_reuse_named_output_buffer_and_append_results",
+        r##"(let* ((root
                 (async-backup-test-path
                  "process-buffer/backups"))
                (async-backup-location root)
@@ -371,12 +390,15 @@ fn process_public_surface_batch() {
                        text))))))
             (async-backup-test-kill-buffer
              (get-buffer "*async-backup*"))))"##,
-            true,
-            expect![[r#"OK (("async-backup" "async-backup") (t t) (0 48))"#]],
-        ),
-        (
-            "async_backup_process_environment_is_snapshotted_independently_per_launch",
-            r##"(let* ((root
+        true,
+        expect![[r#"OK (("async-backup" "async-backup") (t t) (0 48))"#]],
+    )
+}
+
+fn async_backup_process_environment_is_snapshotted_independently_per_launch() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_process_environment_is_snapshotted_independently_per_launch",
+        r##"(let* ((root
                 (async-backup-test-path
                  "process-env/backups"))
                (gate
@@ -423,12 +445,15 @@ fn process_public_surface_batch() {
                   expected)))
             (async-backup-test-kill-buffer
              (get-buffer "*async-backup*"))))"##,
-            true,
-            expect![[r#"OK ((0 0) ((t "alpha\n" "alpha") (t "beta\n" "beta")))"#]],
-        ),
-        (
-            "async_backup_caller_can_explicitly_delete_running_child_and_output_buffer",
-            r##"(let* ((input
+        true,
+        expect![[r#"OK ((0 0) ((t "alpha\n" "alpha") (t "beta\n" "beta")))"#]],
+    )
+}
+
+fn async_backup_caller_can_explicitly_delete_running_child_and_output_buffer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_backup_caller_can_explicitly_delete_running_child_and_output_buffer",
+        r##"(let* ((input
                 (async-backup-test-write-file
                  "process-cleanup/input.txt"
                  "input\n"))
@@ -465,8 +490,24 @@ fn process_public_surface_batch() {
              (process-status process)
              (buffer-live-p buffer)
              (file-exists-p output))))"##,
-            true,
-            expect!["OK (((run open listen connect stop) t nil) nil signal nil nil)"],
-        ),
-    ]);
+        true,
+        expect!["OK (((run open listen connect stop) t nil) nil signal nil nil)"],
+    )
+}
+
+#[test]
+fn process_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        async_backup_real_child_copies_content_with_exact_process_command_and_status(),
+        async_backup_returns_before_gate_opens_and_child_finishes_later(),
+        async_backup_multiple_calls_launch_concurrent_children_instead_of_queueing(),
+        async_backup_same_timestamp_collision_leaves_one_success_and_one_failure(),
+        async_backup_missing_input_is_reported_by_child_without_creating_output(),
+        async_backup_missing_emacs_executable_signals_after_creating_output_directory(),
+        async_backup_child_stdout_and_stderr_share_persistent_process_buffer(),
+        async_backup_sequential_children_reuse_named_output_buffer_and_append_results(),
+        async_backup_process_environment_is_snapshotted_independently_per_launch(),
+        async_backup_caller_can_explicitly_delete_running_child_and_output_buffer(),
+    ];
+    assert_async_backup_batch(&cases);
 }

@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{AUSTRALIA_HOLIDAYS_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod integration;
 mod national;
@@ -95,9 +98,9 @@ pub(crate) fn assert_australia_holidays_autoload_parity(elisp_form: &str, expect
 
 
 /// Multi-probe batch for `assert_australia_holidays_autoload_parity` cases (2a).
-pub(crate) fn assert_australia_holidays_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_australia_holidays_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         australia_holidays_oracle("australia-holidays-autoloads.el"),
         &name,
         "australia_holidays_autoload_parity",
@@ -106,9 +109,9 @@ pub(crate) fn assert_australia_holidays_autoload_batch(cases: &[(&str, &str, boo
 }
 
 /// Multi-probe batch for `assert_australia_holidays_parity` cases (2a).
-pub(crate) fn assert_australia_holidays_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_australia_holidays_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         australia_holidays_oracle("australia-holidays.el"),
         &name,
         "australia_holidays_parity",

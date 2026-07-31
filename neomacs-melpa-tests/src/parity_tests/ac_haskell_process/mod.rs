@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{AC_HASKELL_PROCESS_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod workflows;
 
@@ -128,9 +131,9 @@ pub(crate) fn assert_ac_haskell_process_parity(form: &str, expected: Expect) {
 }
 
 /// Multi-probe batch for `assert_ac_haskell_process_parity` cases (2a).
-pub(crate) fn assert_ac_haskell_process_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_ac_haskell_process_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         ac_haskell_process_oracle(),
         &name,
         "ac_haskell_process_parity",

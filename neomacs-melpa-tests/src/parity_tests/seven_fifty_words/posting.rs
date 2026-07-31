@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_seven_fifty_words_batch;
+use super::{ParityBatchCase, assert_seven_fifty_words_batch};
 
-#[test]
-fn posting_public_surface_batch() {
-    assert_seven_fifty_words_batch(&[
-        (
-            "seven_fifty_words_file_starts_formatted_command_and_installs_live_process_sentinel",
-            r##"(let ((750words-client-command
+fn seven_fifty_words_file_starts_formatted_command_and_installs_live_process_sentinel() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "seven_fifty_words_file_starts_formatted_command_and_installs_live_process_sentinel",
+        r##"(let ((750words-client-command
                     "client --input=%s")
                    events)
                (cl-letf
@@ -61,14 +59,17 @@ fn posting_public_surface_batch() {
                   (750words-file
                    "draft with spaces.txt")
                   (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (installed ((generate "*750words-client-command*") (async "client --input=draft with spaces.txt" output-buffer) (get-process output-buffer) (live client-process) (sentinel client-process t) (callback output-buffer client-process "done")))"#
     ]],
-        ),
-        (
-            "seven_fifty_words_file_reports_non_live_process_without_installing_sentinel",
-            r##"(let ((750words-client-command
+    )
+}
+
+fn seven_fifty_words_file_reports_non_live_process_without_installing_sentinel() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "seven_fifty_words_file_reports_non_live_process_without_installing_sentinel",
+        r##"(let ((750words-client-command
                     "post %s")
                    events)
                (cl-letf
@@ -102,14 +103,17 @@ fn posting_public_surface_batch() {
                  (list
                   (750words-file "draft.txt")
                   (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("Running 'post draft.txt' failed." ("Running 'post draft.txt' failed."))"#
     ]],
-        ),
-        (
-            "seven_fifty_words_post_process_handles_exit_and_signal_in_exact_order",
-            r##"(let ((statuses '(exit signal))
+    )
+}
+
+fn seven_fifty_words_post_process_handles_exit_and_signal_in_exact_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "seven_fifty_words_post_process_handles_exit_and_signal_in_exact_order",
+        r##"(let ((statuses '(exit signal))
                    events)
                (cl-letf
                    (((symbol-function
@@ -150,14 +154,17 @@ fn posting_public_surface_batch() {
                    'second-process
                    "killed\n")
                   (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (handled handled ((status first-process) (switch first-output) special (shell first-process "finished\n") (status second-process) (switch second-output) special (shell second-process "killed\n")))"#
     ]],
-        ),
-        (
-            "seven_fifty_words_post_process_ignores_running_and_stopped_processes",
-            r##"(let ((statuses '(run stop))
+    )
+}
+
+fn seven_fifty_words_post_process_ignores_running_and_stopped_processes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "seven_fifty_words_post_process_ignores_running_and_stopped_processes",
+        r##"(let ((statuses '(run stop))
                    events)
                (cl-letf
                    (((symbol-function
@@ -185,12 +192,15 @@ fn posting_public_surface_batch() {
                   (750words--post-process-fn
                    'output 'process "stopped")
                   events)))"##,
-            true,
-            expect!["OK (nil nil nil)"],
-        ),
-        (
-            "seven_fifty_words_region_writes_exact_bounds_then_posts_the_sandbox_file",
-            r##"(let ((file
+        true,
+        expect!["OK (nil nil nil)"],
+    )
+}
+
+fn seven_fifty_words_region_writes_exact_bounds_then_posts_the_sandbox_file() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "seven_fifty_words_region_writes_exact_bounds_then_posts_the_sandbox_file",
+        r##"(let ((file
                     (expand-file-name
                      "region.txt"
                      (getenv "TMPDIR")))
@@ -227,12 +237,15 @@ fn posting_public_surface_batch() {
                         (file-exists-p file))))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-            true,
-            expect![[r#"OK ((posted "ONE") (prefix "750words" post "[ORACLE-TMPDIR]/region.txt") t)"#]],
-        ),
-        (
-            "seven_fifty_words_buffer_forwards_current_minimum_and_maximum",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ((posted "ONE") (prefix "750words" post "[ORACLE-TMPDIR]/region.txt") t)"#]],
+    )
+}
+
+fn seven_fifty_words_buffer_forwards_current_minimum_and_maximum() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "seven_fifty_words_buffer_forwards_current_minimum_and_maximum",
+        r##"(with-temp-buffer
                (insert "payload")
                (narrow-to-region 2 7)
                (let (observed)
@@ -248,12 +261,15 @@ fn posting_public_surface_batch() {
                     observed
                     (point-min)
                     (point-max)))))"##,
-            true,
-            expect!["OK (posted (2 7) 2 7)"],
-        ),
-        (
-            "seven_fifty_words_region_or_buffer_dispatches_active_region_bounds_verbatim",
-            r##"(let (events)
+        true,
+        expect!["OK (posted (2 7) 2 7)"],
+    )
+}
+
+fn seven_fifty_words_region_or_buffer_dispatches_active_region_bounds_verbatim() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "seven_fifty_words_region_or_buffer_dispatches_active_region_bounds_verbatim",
+        r##"(let (events)
                (cl-letf
                    (((symbol-function
                       'region-active-p)
@@ -278,12 +294,15 @@ fn posting_public_surface_batch() {
                  (list
                   (750words-region-or-buffer)
                   (nreverse events))))"##,
-            true,
-            expect!["OK (region-posted ((region 9 3)))"],
-        ),
-        (
-            "seven_fifty_words_region_or_buffer_uses_whole_buffer_without_active_region",
-            r##"(let (events)
+        true,
+        expect!["OK (region-posted ((region 9 3)))"],
+    )
+}
+
+fn seven_fifty_words_region_or_buffer_uses_whole_buffer_without_active_region() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "seven_fifty_words_region_or_buffer_uses_whole_buffer_without_active_region",
+        r##"(let (events)
                (cl-letf
                    (((symbol-function
                       'region-active-p)
@@ -300,8 +319,22 @@ fn posting_public_surface_batch() {
                  (list
                   (750words-region-or-buffer)
                   (nreverse events))))"##,
-            true,
-            expect!["OK (buffer-posted (buffer))"],
-        ),
-    ]);
+        true,
+        expect!["OK (buffer-posted (buffer))"],
+    )
+}
+
+#[test]
+fn posting_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        seven_fifty_words_file_starts_formatted_command_and_installs_live_process_sentinel(),
+        seven_fifty_words_file_reports_non_live_process_without_installing_sentinel(),
+        seven_fifty_words_post_process_handles_exit_and_signal_in_exact_order(),
+        seven_fifty_words_post_process_ignores_running_and_stopped_processes(),
+        seven_fifty_words_region_writes_exact_bounds_then_posts_the_sandbox_file(),
+        seven_fifty_words_buffer_forwards_current_minimum_and_maximum(),
+        seven_fifty_words_region_or_buffer_dispatches_active_region_bounds_verbatim(),
+        seven_fifty_words_region_or_buffer_uses_whole_buffer_without_active_region(),
+    ];
+    assert_seven_fifty_words_batch(&cases);
 }

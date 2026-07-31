@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_indent_mode_batch;
+use super::{ParityBatchCase, assert_auto_indent_mode_batch};
 
-#[test]
-fn kill_public_surface_batch() {
-    assert_auto_indent_mode_batch(&[
-        (
-            "auto_indent_mode_ports_upstream_blank_line_kill_ert_as_real_editing_case",
-            r##"(with-temp-buffer
+fn auto_indent_mode_ports_upstream_blank_line_kill_ert_as_real_editing_case() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_ports_upstream_blank_line_kill_ert_as_real_editing_case",
+        r##"(with-temp-buffer
          (insert "HISTSIZE=1000\n\nHISTFILESIZE=2000")
          (sh-mode)
          (goto-char (point-min))
@@ -20,12 +18,15 @@ fn kill_public_surface_batch() {
             (point)
             (looking-at "HISTFILESIZE=2000")
             (current-kill 0 t))))"##,
-            true,
-            expect![[r#"OK ("HISTSIZE=1000\nHISTFILESIZE=2000" 15 t "\n")"#]],
-        ),
-        (
-            "auto_indent_mode_kill_line_at_eol_nil_joins_and_normalizes_whitespace",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ("HISTSIZE=1000\nHISTFILESIZE=2000" 15 t "\n")"#]],
+    )
+}
+
+fn auto_indent_mode_kill_line_at_eol_nil_joins_and_normalizes_whitespace() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_kill_line_at_eol_nil_joins_and_normalizes_whitespace",
+        r##"(with-temp-buffer
          (emacs-lisp-mode)
          (insert "(alpha)\n    (beta)")
          (goto-char (point-at-eol))
@@ -41,12 +42,15 @@ fn kill_public_surface_batch() {
             (buffer-string)
             (point)
             (car kill-ring))))"##,
-            true,
-            expect![[r#"OK ("(alpha)\n(beta)" 15 "")"#]],
-        ),
-        (
-            "auto_indent_mode_kill_line_whole_line_and_blanks_have_distinct_extent",
-            r##"(mapcar
+        true,
+        expect![[r#"OK ("(alpha)\n(beta)" 15 "")"#]],
+    )
+}
+
+fn auto_indent_mode_kill_line_whole_line_and_blanks_have_distinct_extent() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_kill_line_whole_line_and_blanks_have_distinct_extent",
+        r##"(mapcar
          (lambda (style)
            (with-temp-buffer
              (insert "alpha\n\n\nbeta\ngamma")
@@ -62,14 +66,17 @@ fn kill_public_surface_batch() {
                      (point)
                      kill-ring))))
          '(whole-line blanks))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((whole-line "alpha\n\n\nbeta\ngamma" 19 ("")) (blanks "alpha\n\n\nbeta\ngamma" 19 ("")))"#
     ]],
-        ),
-        (
-            "auto_indent_mode_kill_line_active_region_delegates_to_region_kill",
-            r##"(auto-indent-test-error
+    )
+}
+
+fn auto_indent_mode_kill_line_active_region_delegates_to_region_kill() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_kill_line_active_region_delegates_to_region_kill",
+        r##"(auto-indent-test-error
          (lambda ()
            (with-temp-buffer
              (insert "before SELECTED after")
@@ -86,14 +93,17 @@ fn kill_public_surface_batch() {
                 (point)
                 mark-active
                 kill-ring)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:signal invalid-function (#[(&optional beg end &optional yank-handler) ((if (not t) #1=(if (called-interactively-p 'any) (kill-region beg end) (kill-region beg end yank-handler)) #1# (auto-indent-deindent-last-kill))) nil nil "Kill region advice and function.  Allows the region to delete the beginning white-space if desired." (list (point) (mark))]))"#
     ]],
-        ),
-        (
-            "auto_indent_mode_kill_region_function_deindents_multiline_kill_ring_entry",
-            r##"(auto-indent-test-error
+    )
+}
+
+fn auto_indent_mode_kill_region_function_deindents_multiline_kill_ring_entry() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_kill_region_function_deindents_multiline_kill_ring_entry",
+        r##"(auto-indent-test-error
          (lambda ()
            (with-temp-buffer
              (insert "  first\n    second\n  third\nkeep")
@@ -109,14 +119,17 @@ fn kill_public_surface_batch() {
                 (buffer-string)
                 kill-ring
                 (current-kill 0 t))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:signal invalid-function (#[(&optional beg end &optional yank-handler) ((if (not t) #1=(if (called-interactively-p 'any) (kill-region beg end) (kill-region beg end yank-handler)) #1# (auto-indent-deindent-last-kill))) nil nil "Kill region advice and function.  Allows the region to delete the beginning white-space if desired." (list (point) (mark))]))"#
     ]],
-        ),
-        (
-            "auto_indent_mode_kill_ring_save_copies_without_deleting_and_normalizes_indent",
-            r##"(auto-indent-test-error
+    )
+}
+
+fn auto_indent_mode_kill_ring_save_copies_without_deleting_and_normalizes_indent() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_kill_ring_save_copies_without_deleting_and_normalizes_indent",
+        r##"(auto-indent-test-error
          (lambda ()
            (with-temp-buffer
              (insert "  first\n    second\n  third")
@@ -129,12 +142,15 @@ fn kill_public_surface_batch() {
                 (buffer-string)
                 kill-ring
                 (current-kill 0 t))))))"##,
-            true,
-            expect!["OK (:signal void-variable (yank-handler))"],
-        ),
-        (
-            "auto_indent_mode_deindent_last_kill_updates_only_latest_entry",
-            r##"(let ((kill-ring
+        true,
+        expect!["OK (:signal void-variable (yank-handler))"],
+    )
+}
+
+fn auto_indent_mode_deindent_last_kill_updates_only_latest_entry() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_deindent_last_kill_updates_only_latest_entry",
+        r##"(let ((kill-ring
                                 '("  alpha\n    beta\n gamma"
                                   "older")))
          (auto-indent-deindent-last-kill)
@@ -142,12 +158,15 @@ fn kill_public_surface_batch() {
           kill-ring
           (current-kill 0 t)
           (current-kill 1 t)))"##,
-            true,
-            expect![[r#"OK (("alpha\nbeta\ngamma" "older") "alpha\nbeta\ngamma" "older")"#]],
-        ),
-        (
-            "auto_indent_mode_command_classifiers_cover_symbols_and_live_bindings",
-            r##"(mapcar
+        true,
+        expect![[r#"OK (("alpha\nbeta\ngamma" "older") "alpha\nbeta\ngamma" "older")"#]],
+    )
+}
+
+fn auto_indent_mode_command_classifiers_cover_symbols_and_live_bindings() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_command_classifiers_cover_symbols_and_live_bindings",
+        r##"(mapcar
          (lambda (command)
            (let ((this-command command)
                  (viper-mode nil)
@@ -168,14 +187,17 @@ fn kill_public_surface_batch() {
            kill-ring-save
            self-insert-command
            nil))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((delete-backward-char (delete-backward-char backward-delete-char backward-delete-char-untabify nil) nil nil nil nil) (backward-delete-char (backward-delete-char backward-delete-char-untabify nil) nil nil nil nil) (delete-char nil (delete-char delete-forward-char delete-char) nil nil nil) (kill-line nil nil (kill-line kill-line kill-line) nil nil) (kill-region nil nil nil (kill-region nil) (kill-region nil)) (kill-ring-save nil nil nil nil nil) (self-insert-command nil nil nil nil nil) (nil (nil) nil nil (nil) (nil)))"
     ],
-        ),
-        (
-            "auto_indent_mode_remove_advice_policy_handles_modes_minibuffer_and_commands",
-            r##"(mapcar
+    )
+}
+
+fn auto_indent_mode_remove_advice_policy_handles_modes_minibuffer_and_commands() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_remove_advice_policy_handles_modes_minibuffer_and_commands",
+        r##"(mapcar
          (lambda (case)
            (with-temp-buffer
              (setq major-mode (nth 0 case)
@@ -190,14 +212,17 @@ fn kill_public_surface_batch() {
            (emacs-lisp-mode kill-line auto-indent-delete-char)
            (emacs-lisp-mode kill-line delete-char)
            (emacs-lisp-mode 42 nil)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (((text-mode kill-line nil) (text-mode)) ((emacs-lisp-mode auto-indent-kill-line nil) 0) ((emacs-lisp-mode kill-line auto-indent-delete-char) 0) ((emacs-lisp-mode kill-line delete-char) nil) ((emacs-lisp-mode 42 nil) t))"
     ],
-        ),
-        (
-            "auto_indent_mode_invalid_kill_line_style_signals_exact_configuration_error",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_indent_mode_invalid_kill_line_style_signals_exact_configuration_error() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_indent_mode_invalid_kill_line_style_signals_exact_configuration_error",
+        r##"(with-temp-buffer
          (insert "alpha\nbeta")
          (goto-char (point-at-eol))
          (let ((auto-indent-mode t)
@@ -206,8 +231,24 @@ fn kill_public_surface_batch() {
            (auto-indent-test-error
             (lambda ()
               (auto-indent-kill-line 1)))))"##,
-            true,
-            expect!["OK (:value nil)"],
-        ),
-    ]);
+        true,
+        expect!["OK (:value nil)"],
+    )
+}
+
+#[test]
+fn kill_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_indent_mode_ports_upstream_blank_line_kill_ert_as_real_editing_case(),
+        auto_indent_mode_kill_line_at_eol_nil_joins_and_normalizes_whitespace(),
+        auto_indent_mode_kill_line_whole_line_and_blanks_have_distinct_extent(),
+        auto_indent_mode_kill_line_active_region_delegates_to_region_kill(),
+        auto_indent_mode_kill_region_function_deindents_multiline_kill_ring_entry(),
+        auto_indent_mode_kill_ring_save_copies_without_deleting_and_normalizes_indent(),
+        auto_indent_mode_deindent_last_kill_updates_only_latest_entry(),
+        auto_indent_mode_command_classifiers_cover_symbols_and_live_bindings(),
+        auto_indent_mode_remove_advice_policy_handles_modes_minibuffer_and_commands(),
+        auto_indent_mode_invalid_kill_line_style_signals_exact_configuration_error(),
+    ];
+    assert_auto_indent_mode_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_agent_recall_autoload_batch, assert_agent_recall_batch};
+use super::{ParityBatchCase, assert_agent_recall_autoload_batch, assert_agent_recall_batch};
 
-#[test]
-fn smoke_agent_recall_batch() {
-    assert_agent_recall_batch(&[
-        (
-            "agent_recall_loads_the_pinned_package_with_its_real_agent_shell_dependency",
-            r##"(let ((descriptor
+fn agent_recall_loads_the_pinned_package_with_its_real_agent_shell_dependency() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agent_recall_loads_the_pinned_package_with_its_real_agent_shell_dependency",
+        r##"(let ((descriptor
                                 (cadr
                                  (assq
                                   'agent-recall
@@ -47,20 +45,17 @@ fn smoke_agent_recall_batch() {
                                agent-recall-resume
                                agent-recall-stats
                                agent-recall-backfill))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (agent-recall "20260710.1707" ((emacs (29 1)) (agent-shell (0 1 0))) t t t "agent-shell" ((agent-recall-reindex t) (agent-recall-search t) (agent-recall-browse t) (agent-recall-resume t) (agent-recall-stats t) (agent-recall-backfill t)))"#
     ]],
-        ),
-    ]);
+    )
 }
 
-#[test]
-fn smoke_agent_recall_autoload_batch() {
-    assert_agent_recall_autoload_batch(&[
-        (
-            "agent_recall_autoloads_the_user_entry_points_without_loading_the_main_source",
-            r##"(list
+fn agent_recall_autoloads_the_user_entry_points_without_loading_the_main_source() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "agent_recall_autoloads_the_user_entry_points_without_loading_the_main_source",
+        r##"(list
                            (featurep
                             'agent-recall)
                            (mapcar
@@ -82,10 +77,25 @@ fn smoke_agent_recall_autoload_batch() {
                               agent-recall-stats
                               agent-recall-track-sessions
                               agent-recall-backfill)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil ((agent-recall-reindex t "agent-recall" t) (agent-recall-invalidate-cache t "agent-recall" t) (agent-recall-search t "agent-recall" t) (agent-recall-search-live t "agent-recall" t) (agent-recall-browse t "agent-recall" t) (agent-recall-clean-view nil nil nil) (agent-recall-resume t "agent-recall" t) (agent-recall-stats t "agent-recall" t) (agent-recall-track-sessions t "agent-recall" nil) (agent-recall-backfill t "agent-recall" t)))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn smoke_agent_recall_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        agent_recall_loads_the_pinned_package_with_its_real_agent_shell_dependency(),
+    ];
+    assert_agent_recall_batch(&cases);
+}
+
+#[test]
+fn smoke_agent_recall_autoload_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        agent_recall_autoloads_the_user_entry_points_without_loading_the_main_source(),
+    ];
+    assert_agent_recall_autoload_batch(&cases);
 }

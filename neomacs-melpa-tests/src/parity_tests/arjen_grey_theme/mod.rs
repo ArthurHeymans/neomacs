@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{ARJEN_GREY_THEME_MELPA_PIN, CachedMelpaOracle, HELM_MELPA_PIN};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod workflows;
 
@@ -75,9 +78,9 @@ pub(crate) fn assert_arjen_grey_theme_with_helm_parity(elisp_form: &str, expecte
 
 
 /// Multi-probe batch for `assert_arjen_grey_theme_autoload_parity` cases (2a).
-pub(crate) fn assert_arjen_grey_theme_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_arjen_grey_theme_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         arjen_grey_theme_oracle("arjen-grey-theme-autoloads.el", ""),
         &name,
         "arjen_grey_theme_autoload_parity",
@@ -86,9 +89,9 @@ pub(crate) fn assert_arjen_grey_theme_autoload_batch(cases: &[(&str, &str, bool,
 }
 
 /// Multi-probe batch for `assert_arjen_grey_theme_parity` cases (2a).
-pub(crate) fn assert_arjen_grey_theme_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_arjen_grey_theme_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         arjen_grey_theme_oracle("arjen-grey-theme.el", ""),
         &name,
         "arjen_grey_theme_parity",
@@ -97,9 +100,9 @@ pub(crate) fn assert_arjen_grey_theme_batch(cases: &[(&str, &str, bool, Expect)]
 }
 
 /// Multi-probe batch for `assert_arjen_grey_theme_with_helm_parity` cases (2a).
-pub(crate) fn assert_arjen_grey_theme_with_helm_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_arjen_grey_theme_with_helm_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         CachedMelpaOracle::new(ARJEN_GREY_THEME_MELPA_PIN, "arjen-grey-theme.el")
         .expect("prepare pinned arjen-grey-theme source below ./tmp")
         .with_melpa_dependency(HELM_MELPA_PIN)

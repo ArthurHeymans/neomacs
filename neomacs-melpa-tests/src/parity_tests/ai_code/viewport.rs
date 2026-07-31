@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_ai_code_batch;
+use super::{ParityBatchCase, assert_ai_code_batch};
 
-#[test]
-fn viewport_public_surface_batch() {
-    assert_ai_code_batch(&[
-        (
-            "viewport_request_protocol_decodes_versioned_regular_and_staging_payloads",
-            r##"
+fn viewport_request_protocol_decodes_versioned_regular_and_staging_payloads() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "viewport_request_protocol_decodes_versioned_regular_and_staging_payloads",
+        r##"
 (progn
   (require 'ai-code-editor-viewport)
   (let ((encode
@@ -29,14 +27,17 @@ fn viewport_public_surface_batch() {
              ai-code-editor-viewport--request-version
              "staging" "--" "-literal-name.txt"))))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:status-file "/status/one" :directory "/repo" :submit-p nil :staging-request-p nil :arguments ("+42:7" "src/lib.rs")) (:status-file "/status/two" :directory "/repo" :submit-p t :staging-request-p t :arguments ("--" "-literal-name.txt")))"#
     ]],
-        ),
-        (
-            "viewport_request_protocol_validates_malformed_intent_kind_and_field_count",
-            r##"
+    )
+}
+
+fn viewport_request_protocol_validates_malformed_intent_kind_and_field_count() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "viewport_request_protocol_validates_malformed_intent_kind_and_field_count",
+        r##"
 (progn
   (require 'ai-code-editor-viewport)
   (let ((encode
@@ -56,14 +57,17 @@ fn viewport_public_surface_batch() {
             ai-code-editor-viewport--request-version "unknown")
       '("/status" "/repo" "0")))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((error "Invalid AI Code editor submit intent") (error "Invalid AI Code editor request kind") (error "Malformed AI Code editor request"))"#
     ]],
-        ),
-        (
-            "viewport_file_arguments_apply_positions_once_and_respect_double_dash",
-            r##"
+    )
+}
+
+fn viewport_file_arguments_apply_positions_once_and_respect_double_dash() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "viewport_file_arguments_apply_positions_once_and_respect_double_dash",
+        r##"
 (progn
   (require 'ai-code-editor-viewport)
   (mapcar
@@ -77,14 +81,17 @@ fn viewport_public_surface_batch() {
     '("--wait" "+12:4" "src/api.el" "README.md"
       "+7" "src/model.el" "--" "+literal.el" "-draft.txt"))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("api.el" 12 4) ("README.md" nil nil) ("model.el" 7 nil) ("+literal.el" nil nil) ("-draft.txt" nil nil))"#
     ]],
-        ),
-        (
-            "viewport_status_file_is_scoped_and_writes_submit_token_atomically",
-            r##"
+    )
+}
+
+fn viewport_status_file_is_scoped_and_writes_submit_token_atomically() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "viewport_status_file_is_scoped_and_writes_submit_token_atomically",
+        r##"
 (progn
   (require 'ai-code-editor-viewport)
   (let* ((root (make-temp-file "ai-code-viewport-status-" t))
@@ -110,12 +117,15 @@ fn viewport_public_surface_batch() {
       (delete-directory root t)
       (delete-file outside))))
 "##,
-            true,
-            expect![[r#"OK (t nil "0 1 submit-7\n" "Invalid AI Code editor submit token")"#]],
-        ),
-        (
-            "viewport_attachment_references_are_repo_relative_and_external_absolute",
-            r##"
+        true,
+        expect![[r#"OK (t nil "0 1 submit-7\n" "Invalid AI Code editor submit token")"#]],
+    )
+}
+
+fn viewport_attachment_references_are_repo_relative_and_external_absolute() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "viewport_attachment_references_are_repo_relative_and_external_absolute",
+        r##"
 (progn
   (require 'ai-code-editor-viewport)
   (require 'ai-code-editor-viewport-attachments)
@@ -143,14 +153,17 @@ fn viewport_public_surface_batch() {
       (delete-directory root t)
       (delete-file outside))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("@notes/design.txt" t ("--output" "$ROOT//notes/design.txt" "--format=$ROOT//notes/design.txt"))"#
     ]],
-        ),
-        (
-            "viewport_attachment_serialization_spaces_adjacent_images_without_mutation",
-            r##"
+    )
+}
+
+fn viewport_attachment_serialization_spaces_adjacent_images_without_mutation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "viewport_attachment_serialization_spaces_adjacent_images_without_mutation",
+        r##"
 (progn
   (require 'ai-code-editor-viewport)
   (require 'ai-code-editor-viewport-attachments)
@@ -177,10 +190,22 @@ fn viewport_public_surface_batch() {
        before
        (buffer-string)))))
 "##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("Compare @first.png with @second.png now" #("Compare@first.pngwith@second.pngnow" 7 17 (ai-code-editor-viewport-file #1="/repo/first.png" ai-code-editor-viewport-image first) 21 32 (ai-code-editor-viewport-file #2="/repo/second.png" ai-code-editor-viewport-image second)) #("Compare@first.pngwith@second.pngnow" 7 17 (ai-code-editor-viewport-file #1# ai-code-editor-viewport-image first) 21 32 (ai-code-editor-viewport-file #2# ai-code-editor-viewport-image second)))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn viewport_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        viewport_request_protocol_decodes_versioned_regular_and_staging_payloads(),
+        viewport_request_protocol_validates_malformed_intent_kind_and_field_count(),
+        viewport_file_arguments_apply_positions_once_and_respect_double_dash(),
+        viewport_status_file_is_scoped_and_writes_submit_token_atomically(),
+        viewport_attachment_references_are_repo_relative_and_external_absolute(),
+        viewport_attachment_serialization_spaces_adjacent_images_without_mutation(),
+    ];
+    assert_ai_code_batch(&cases);
 }

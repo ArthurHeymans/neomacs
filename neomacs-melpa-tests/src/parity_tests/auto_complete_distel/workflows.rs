@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_distel_batch;
+use super::{ParityBatchCase, assert_auto_complete_distel_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_auto_complete_distel_batch(&[
-        (
-            "auto_complete_distel_real_module_menu_navigates_and_completes_erlang_module",
-            r##"(save-window-excursion
+fn auto_complete_distel_real_module_menu_navigates_and_completes_erlang_module() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_distel_real_module_menu_navigates_and_completes_erlang_module",
+        r##"(save-window-excursion
           (with-temp-buffer
             (switch-to-buffer
              (current-buffer))
@@ -75,14 +73,17 @@ fn workflows_public_surface_batch() {
                            ac-completing
                            ac-prefix))))
                   (auto-complete-mode -1))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("li" (("lists" "m") ("lib" "m") ("linux" "m")) t "lists") "lib" "handle(Items) -> lib" ((:module "li" " *temp*") (:sleep 0.1)) nil nil nil)"#
     ]],
-        ),
-        (
-            "auto_complete_distel_real_function_menu_prefixes_distel_results_with_module",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_complete_distel_real_function_menu_prefixes_distel_results_with_module() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_distel_real_function_menu_prefixes_distel_results_with_module",
+        r##"(save-window-excursion
           (with-temp-buffer
             (switch-to-buffer
              (current-buffer))
@@ -144,14 +145,17 @@ fn workflows_public_surface_batch() {
                            ac-menu
                            ac-completing))))
                   (auto-complete-mode -1))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("lists:ma" ("lists:map" "lists:mapfoldl" "lists:mapfoldr") "lists:map") "lists:mapfoldr" "Result = lists:mapfoldr" ((:function "lists" "ma") (:sleep 0.1)) nil nil)"#
     ]],
-        ),
-        (
-            "auto_complete_distel_incremental_erlang_function_typing_requeries_and_narrows_menu",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_complete_distel_incremental_erlang_function_typing_requeries_and_narrows_menu() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_distel_incremental_erlang_function_typing_requeries_and_narrows_menu",
+        r##"(save-window-excursion
           (with-temp-buffer
             (switch-to-buffer
              (current-buffer))
@@ -231,14 +235,17 @@ fn workflows_public_surface_batch() {
                               (line-end-position))
                              (nreverse events))))))
                   (auto-complete-mode -1))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("lists:m" ("lists:map" "lists:mapfoldl" "lists:mapfoldr" "lists:member")) ("lists:ma" ("lists:map" "lists:mapfoldl" "lists:mapfoldr")) ("lists:mapf" ("lists:mapfoldl" "lists:mapfoldr")) "lists:mapfoldr" (("lists" "m") ("lists" "ma") ("lists" "mapf")))"#
     ]],
-        ),
-        (
-            "auto_complete_distel_real_candidates_retain_document_function_for_selected_item",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_complete_distel_real_candidates_retain_document_function_for_selected_item() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_distel_real_candidates_retain_document_function_for_selected_item",
+        r##"(save-window-excursion
           (with-temp-buffer
             (switch-to-buffer
              (current-buffer))
@@ -289,14 +296,17 @@ fn workflows_public_surface_batch() {
                            selected))
                          document-calls)))
                   (auto-complete-mode -1))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("lists:map" distel-completion-get-doc-string "DOC[lists:map]" ("lists:map"))"#
     ]],
-        ),
-        (
-            "auto_complete_distel_punctuation_or_digit_suffix_does_not_start_remote_completion",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_complete_distel_punctuation_or_digit_suffix_does_not_start_remote_completion() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_distel_punctuation_or_digit_suffix_does_not_start_remote_completion",
+        r##"(save-window-excursion
           (mapcar
            (lambda (text)
              (with-temp-buffer
@@ -330,14 +340,17 @@ fn workflows_public_surface_batch() {
                             ac-completing)))
                      (auto-complete-mode -1))))))
            '("." "module2" "lists:map(")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("." nil nil nil nil nil nil) ("module2" nil nil nil nil nil nil) ("lists:map(" nil nil nil nil nil nil))"#
     ]],
-        ),
-        (
-            "auto_complete_distel_two_erlang_buffers_keep_prefix_remote_query_and_result_isolated",
-            r##"(save-window-excursion
+    )
+}
+
+fn auto_complete_distel_two_erlang_buffers_keep_prefix_remote_query_and_result_isolated() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_distel_two_erlang_buffers_keep_prefix_remote_query_and_result_isolated",
+        r##"(save-window-excursion
           (let ((first
                  (generate-new-buffer
                   " *distel-orders*"))
@@ -408,10 +421,22 @@ fn workflows_public_surface_batch() {
             (list
              results
              (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((" *distel-orders*" "orders:f" ("orders:fetch" "orders:find") "orders:fetch") (" *distel-users*" "users:f" ("users:fetch" "users:filter") "users:fetch")) ((" *distel-orders*" "orders" "f") (" *distel-users*" "users" "f")))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_distel_real_module_menu_navigates_and_completes_erlang_module(),
+        auto_complete_distel_real_function_menu_prefixes_distel_results_with_module(),
+        auto_complete_distel_incremental_erlang_function_typing_requeries_and_narrows_menu(),
+        auto_complete_distel_real_candidates_retain_document_function_for_selected_item(),
+        auto_complete_distel_punctuation_or_digit_suffix_does_not_start_remote_completion(),
+        auto_complete_distel_two_erlang_buffers_keep_prefix_remote_query_and_result_isolated(),
+    ];
+    assert_auto_complete_distel_batch(&cases);
 }

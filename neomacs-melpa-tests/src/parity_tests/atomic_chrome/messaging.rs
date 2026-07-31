@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_atomic_chrome_batch;
+use super::{ParityBatchCase, assert_atomic_chrome_batch};
 
-#[test]
-fn messaging_public_surface_batch() {
-    assert_atomic_chrome_batch(&[
-        (
-            "atomic_chrome_send_buffer_text_emits_exact_atomic_chrome_update_json_and_clears_modified_state",
-            r##"(let ((atomic-chrome-buffer-table
+fn atomic_chrome_send_buffer_text_emits_exact_atomic_chrome_update_json_and_clears_modified_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_send_buffer_text_emits_exact_atomic_chrome_update_json_and_clears_modified_state",
+        r##"(let ((atomic-chrome-buffer-table
                 (make-hash-table
                  :test 'equal))
                (atomic-chrome-server-ghost-text
@@ -49,14 +47,17 @@ fn messaging_public_surface_batch() {
                (buffer-modified-p)
                (text-properties-at
                 (point-min))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil ((send atomic-socket "{\"type\":\"updateText\",\"payload\":{\"text\":\"Hello \\\"browser\\\"\\nλ and emoji 😀\"}}")) #("Hello \"browser\"\nλ and emoji 😀" 0 5 (invisible nil face bold)) nil (invisible nil face bold))"#
     ]],
-        ),
-        (
-            "atomic_chrome_send_buffer_text_emits_exact_ghost_text_json_shape",
-            r##"(let ((atomic-chrome-buffer-table
+    )
+}
+
+fn atomic_chrome_send_buffer_text_emits_exact_ghost_text_json_shape() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_send_buffer_text_emits_exact_ghost_text_json_shape",
+        r##"(let ((atomic-chrome-buffer-table
                 (make-hash-table
                  :test 'equal))
                (atomic-chrome-server-ghost-text
@@ -90,12 +91,15 @@ fn messaging_public_surface_batch() {
                (atomic-chrome-send-buffer-text)
                (nreverse events)
                (buffer-modified-p)))))"##,
-            true,
-            expect![[r#"OK (nil ((send ghost-socket "{\"text\":\"line one\\nline two\"}")) nil)"#]],
-        ),
-        (
-            "atomic_chrome_send_buffer_text_uses_accessible_narrowed_plain_text",
-            r##"(let ((atomic-chrome-buffer-table
+        true,
+        expect![[r#"OK (nil ((send ghost-socket "{\"text\":\"line one\\nline two\"}")) nil)"#]],
+    )
+}
+
+fn atomic_chrome_send_buffer_text_uses_accessible_narrowed_plain_text() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_send_buffer_text_uses_accessible_narrowed_plain_text",
+        r##"(let ((atomic-chrome-buffer-table
                 (make-hash-table
                  :test 'equal))
                (socket
@@ -144,14 +148,17 @@ fn messaging_public_surface_batch() {
                 (point-max))
                (point-min)
                (point-max)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil (narrowed-socket "{\"type\":\"updateText\",\"payload\":{\"text\":\"editable\"}}") #("editable" 0 8 (category test face italic)) "editable" 8 16)"#
     ]],
-        ),
-        (
-            "atomic_chrome_send_buffer_text_sends_empty_content_but_without_socket_only_clears_modified",
-            r##"(let ((atomic-chrome-buffer-table
+    )
+}
+
+fn atomic_chrome_send_buffer_text_sends_empty_content_but_without_socket_only_clears_modified() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_send_buffer_text_sends_empty_content_but_without_socket_only_clears_modified",
+        r##"(let ((atomic-chrome-buffer-table
                 (make-hash-table
                  :test 'equal))
                (socket
@@ -191,14 +198,17 @@ fn messaging_public_surface_batch() {
                  empty-result
                  missing-result
                  (nreverse events))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil nil) (nil nil) ((empty-socket "{\"type\":\"updateText\",\"payload\":{\"text\":\"\"}}")))"#
     ]],
-        ),
-        (
-            "atomic_chrome_send_buffer_text_propagates_transport_error_before_clearing_modified_state",
-            r##"(let ((atomic-chrome-buffer-table
+    )
+}
+
+fn atomic_chrome_send_buffer_text_propagates_transport_error_before_clearing_modified_state() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "atomic_chrome_send_buffer_text_propagates_transport_error_before_clearing_modified_state",
+        r##"(let ((atomic-chrome-buffer-table
                 (make-hash-table
                  :test 'equal))
                (atomic-chrome-server-ghost-text
@@ -240,10 +250,21 @@ fn messaging_public_surface_batch() {
                (gethash
                 (current-buffer)
                 atomic-chrome-buffer-table)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error error ("transport failed failing-socket")) ((send failing-socket "{\"type\":\"updateText\",\"payload\":{\"text\":\"must remain modified\"}}")) t "must remain modified" (#s(websocket connecting failing-socket nil nil nil nil nil nil nil "ws://failing-socket.test" nil nil failing-socket :atomic-server nil nil nil) nil))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn messaging_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        atomic_chrome_send_buffer_text_emits_exact_atomic_chrome_update_json_and_clears_modified_state(),
+        atomic_chrome_send_buffer_text_emits_exact_ghost_text_json_shape(),
+        atomic_chrome_send_buffer_text_uses_accessible_narrowed_plain_text(),
+        atomic_chrome_send_buffer_text_sends_empty_content_but_without_socket_only_clears_modified(),
+        atomic_chrome_send_buffer_text_propagates_transport_error_before_clearing_modified_state(),
+    ];
+    assert_atomic_chrome_batch(&cases);
 }

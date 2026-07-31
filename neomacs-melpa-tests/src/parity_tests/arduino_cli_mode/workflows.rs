@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_arduino_cli_mode_batch;
+use super::{ParityBatchCase, assert_arduino_cli_mode_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_arduino_cli_mode_batch(&[
-        (
-            "compiles_a_saved_weather_station_sketch_from_the_live_minor_mode_keymap",
-            r##"(let* ((project
+fn compiles_a_saved_weather_station_sketch_from_the_live_minor_mode_keymap() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "compiles_a_saved_weather_station_sketch_from_the_live_minor_mode_keymap",
+        r##"(let* ((project
                           (expand-file-name
                            "weather station/"
                            temporary-file-directory))
@@ -115,14 +113,17 @@ fn workflows_public_surface_batch() {
                                   (buffer-string)
                                   t t)))))
                         (kill-buffer (current-buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (arduino-cli-compile "int samples = 0;\nvoid setup() { Serial.begin(115200); }\nvoid loop() {\n  samples++;\n  Serial.println(samples);\n}\n" (arduino-cli-compilation-mode "Compiled weather_station.ino: 928 bytes, 3% flash.") "CALL <board> <list> <--format> <json> CWD=<<TMP>/weather station>\nCALL <compile> <--fqbn> <arduino:avr:uno> <<TMP>/weather station/> <-t> <--warnings> <all> <--verbose> <--no-color> CWD=<<TMP>/weather station>\n")"#
     ]],
-        ),
-        (
-            "uploads_a_file_local_default_board_through_the_live_mode_menu",
-            r##"(let* ((project
+    )
+}
+
+fn uploads_a_file_local_default_board_through_the_live_mode_menu() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "uploads_a_file_local_default_board_through_the_live_mode_menu",
+        r##"(let* ((project
                           (expand-file-name
                            "greenhouse-controller/"
                            temporary-file-directory))
@@ -229,14 +230,17 @@ fn workflows_public_surface_batch() {
                                   (buffer-string)
                                   t t)))))
                         (kill-buffer (current-buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (arduino-cli-upload ("esp32:esp32:esp32c3" "/dev/ttyUSB9") "// -*- arduino-cli-default-fqbn: \"esp32:esp32:esp32c3\"; arduino-cli-default-port: \"/dev/ttyUSB9\"; -*-\nvoid setup() { pinMode(LED_BUILTIN, OUTPUT); }\nvoid loop() { digitalWrite(LED_BUILTIN, HIGH); }\n// Calibrated for the east greenhouse.\n" "Uploaded greenhouse_controller.ino to /dev/ttyUSB9." "CALL <board> <list> <--format> <json> CWD=<<TMP>/greenhouse-controller>\nCALL <upload> <--fqbn> <esp32:esp32:esp32c3> <--port> </dev/ttyUSB9> <<TMP>/greenhouse-controller/> <--quiet> CWD=<<TMP>/greenhouse-controller>\n")"#
     ]],
-        ),
-        (
-            "selects_the_nonfirst_connected_board_then_uploads_through_real_completion",
-            r##"(let* ((project
+    )
+}
+
+fn selects_the_nonfirst_connected_board_then_uploads_through_real_completion() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "selects_the_nonfirst_connected_board_then_uploads_through_real_completion",
+        r##"(let* ((project
                           (expand-file-name
                            "portable-air-quality/"
                            temporary-file-directory))
@@ -344,14 +348,17 @@ fn workflows_public_surface_batch() {
                                   (buffer-string)
                                   t t)))))
                         (kill-buffer (current-buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (arduino-cli-upload ("Board ") "Uploaded air-quality firmware to the field Nano." "CALL <board> <list> <--format> <json> CWD=<<TMP>/portable-air-quality>\nCALL <upload> <--fqbn> <arduino:avr:nano> <--port> </dev/ttyUSB2> <<TMP>/portable-air-quality/> CWD=<<TMP>/portable-air-quality>\n")"#
     ]],
-        ),
-        (
-            "installs_a_selected_library_version_through_real_minibuffer_completion",
-            r##"(let* ((workspace
+    )
+}
+
+fn installs_a_selected_library_version_through_real_minibuffer_completion() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "installs_a_selected_library_version_through_real_minibuffer_completion",
+        r##"(let* ((workspace
                           (expand-file-name
                            "firmware-dependencies/"
                            temporary-file-directory))
@@ -445,14 +452,17 @@ fn workflows_public_surface_batch() {
                                 "<TMP>/"
                                 (buffer-string)
                                 t t))))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (arduino-cli-lib-install ("Library ") "Installed ArduinoJson 7.3.0 for production firmware." "CALL <lib> <search> <--format> <json> CWD=<<TMP>/firmware-dependencies>\nCALL <lib> <update-index> CWD=<<TMP>/firmware-dependencies>\nCALL <lib> <install> <ArduinoJson@7.3.0> CWD=<<TMP>/firmware-dependencies>\n")"#
     ]],
-        ),
-        (
-            "creates_edits_and_saves_a_new_sketch_through_the_live_minor_mode_keymap",
-            r##"(let* ((sketch-root
+    )
+}
+
+fn creates_edits_and_saves_a_new_sketch_through_the_live_minor_mode_keymap() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "creates_edits_and_saves_a_new_sketch_through_the_live_minor_mode_keymap",
+        r##"(let* ((sketch-root
                           (expand-file-name
                            "customer-sketches/"
                            temporary-file-directory))
@@ -546,14 +556,17 @@ fn workflows_public_surface_batch() {
                                 "<TMP>/"
                                 (buffer-string)
                                 t t))))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (arduino-cli-new-sketch ("Sketch name: " "Sketch path: ") t "void setup() {\n  Serial.begin(9600);\n}\n\nvoid loop() {\n  Serial.println(analogRead(A0));\n  delay(1000);\n}\n" "CALL <sketch> <new> <FieldLogger> CWD=<<TMP>/customer-sketches>\n")"#
     ]],
-        ),
-        (
-            "opens_reads_and_stops_a_real_serial_monitor_process",
-            r##"(let* ((project
+    )
+}
+
+fn opens_reads_and_stops_a_real_serial_monitor_process() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "opens_reads_and_stops_a_real_serial_monitor_process",
+        r##"(let* ((project
                           (expand-file-name
                            "telemetry-node/"
                            temporary-file-directory))
@@ -650,14 +663,17 @@ fn workflows_public_surface_batch() {
                               "<TMP>/"
                               (buffer-string)
                               t t)))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (t "temperature=22.4C humidity=51% sequence=17" nil "CALL <board> <list> <--format> <json> CWD=<<TMP>/telemetry-node>\nCALL <monitor> <--port> </dev/ttyUSB4> <--config> <baudrate=57600> CWD=<<TMP>/telemetry-node>\n")"#
     ]],
-        ),
-        (
-            "compile_and_upload_stops_then_restarts_the_live_serial_monitor",
-            r##"(let* ((project
+    )
+}
+
+fn compile_and_upload_stops_then_restarts_the_live_serial_monitor() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "compile_and_upload_stops_then_restarts_the_live_serial_monitor",
+        r##"(let* ((project
                           (expand-file-name
                            "irrigation-controller/"
                            temporary-file-directory))
@@ -845,10 +861,23 @@ fn workflows_public_surface_batch() {
                           (kill-buffer
                            arduino-cli--monitor-buffer))
                         (kill-buffer (current-buffer)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (arduino-cli-compile-and-upload t nil "Compiled and uploaded irrigation_controller.ino." (t t 2) nil nil "CALL <board> <list> <--format> <json> CWD=<<TMP>/irrigation-controller>\nCALL <monitor> <--port> </dev/ttyACM7> <--config> <baudrate=38400> CWD=<<TMP>/irrigation-controller>\nCALL <board> <list> <--format> <json> CWD=<<TMP>/irrigation-controller>\nCALL <compile> <--fqbn> <arduino:avr:mega> <--port> </dev/ttyACM7> <--upload> <<TMP>/irrigation-controller/> <--quiet> CWD=<<TMP>/irrigation-controller>\nCALL <board> <list> <--format> <json> CWD=<<TMP>/irrigation-controller>\nCALL <monitor> <--port> </dev/ttyACM7> <--config> <baudrate=115200> CWD=<<TMP>/irrigation-controller>\n")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        compiles_a_saved_weather_station_sketch_from_the_live_minor_mode_keymap(),
+        uploads_a_file_local_default_board_through_the_live_mode_menu(),
+        selects_the_nonfirst_connected_board_then_uploads_through_real_completion(),
+        installs_a_selected_library_version_through_real_minibuffer_completion(),
+        creates_edits_and_saves_a_new_sketch_through_the_live_minor_mode_keymap(),
+        opens_reads_and_stops_a_real_serial_monitor_process(),
+        compile_and_upload_stops_then_restarts_the_live_serial_monitor(),
+    ];
+    assert_arduino_cli_mode_batch(&cases);
 }

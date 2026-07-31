@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_async_await_batch;
+use super::{ParityBatchCase, assert_async_await_batch};
 
-#[test]
-fn macros_public_surface_batch() {
-    assert_async_await_batch(&[
-        (
-            "async_defun_awaits_resolved_values_in_source_order_and_returns_last_value",
-            r##"(let (events)
+fn async_defun_awaits_resolved_values_in_source_order_and_returns_last_value() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_defun_awaits_resolved_values_in_source_order_and_returns_last_value",
+        r##"(let (events)
           (async-defun parity-ordered (input)
             (push (list :start input) events)
             (let ((first
@@ -27,12 +25,15 @@ fn macros_public_surface_batch() {
             (list
              outcome
              (nreverse events))))"##,
-            true,
-            expect!["OK ((fulfilled (:fullfilled (4 6 18))) ((:start 4) (:first 6) (:second 18)))"],
-        ),
-        (
-            "async_defun_preserves_required_optional_and_rest_argument_semantics",
-            r##"(progn
+        true,
+        expect!["OK ((fulfilled (:fullfilled (4 6 18))) ((:start 4) (:first 6) (:second 18)))"],
+    )
+}
+
+fn async_defun_preserves_required_optional_and_rest_argument_semantics() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_defun_preserves_required_optional_and_rest_argument_semantics",
+        r##"(progn
           (async-defun parity-arguments
               (required &optional optional &rest rest)
             (await
@@ -49,14 +50,17 @@ fn macros_public_surface_batch() {
            (async-await-test-settle
             (parity-arguments
              :required :optional 1 2 3))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((required &optional optional &rest rest) (fulfilled (:fullfilled (:required nil nil 0))) (fulfilled (:fullfilled (:required :optional (1 2 3) 3))))"
     ],
-        ),
-        (
-            "async_defun_preserves_docstring_declarations_and_interactive_contract",
-            r##"(progn
+    )
+}
+
+fn async_defun_preserves_docstring_declarations_and_interactive_contract() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_defun_preserves_docstring_declarations_and_interactive_contract",
+        r##"(progn
           (async-defun parity-command (count)
             "Return COUNT asynchronously."
             (interactive "p")
@@ -69,14 +73,17 @@ fn macros_public_surface_batch() {
             'parity-command t)
            (async-await-test-settle
             (parity-command 6))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("Return COUNT asynchronously." (interactive "p") t (count) (fulfilled (:fullfilled 12)))"#
     ]],
-        ),
-        (
-            "async_lambda_captures_lexical_state_across_multiple_awaits",
-            r##"(let* ((factor 7)
+    )
+}
+
+fn async_lambda_captures_lexical_state_across_multiple_awaits() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_lambda_captures_lexical_state_across_multiple_awaits",
+        r##"(let* ((factor 7)
                  (offset 3)
                  (function
                   (async-lambda (value)
@@ -89,12 +96,15 @@ fn macros_public_surface_batch() {
                         (+ scaled offset)))))))
           (async-await-test-settle
            (funcall function 5)))"##,
-            true,
-            expect!["OK (fulfilled (:fullfilled 38))"],
-        ),
-        (
-            "one_async_lambda_is_reusable_without_state_leaking_between_invocations",
-            r##"(let ((function
+        true,
+        expect!["OK (fulfilled (:fullfilled 38))"],
+    )
+}
+
+fn one_async_lambda_is_reusable_without_state_leaking_between_invocations() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "one_async_lambda_is_reusable_without_state_leaking_between_invocations",
+        r##"(let ((function
                  (async-lambda (label values)
                    (let (seen)
                      (dolist (value values)
@@ -111,14 +121,17 @@ fn macros_public_surface_batch() {
             (funcall function
                      :right
                      '(8 9 10)))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((fulfilled (:fullfilled ((:left 1) (:left 2)))) (fulfilled (:fullfilled ((:right 8) (:right 9) (:right 10)))))"
     ],
-        ),
-        (
-            "nested_async_functions_flatten_each_others_promises_practically",
-            r##"(progn
+    )
+}
+
+fn nested_async_functions_flatten_each_others_promises_practically() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "nested_async_functions_flatten_each_others_promises_practically",
+        r##"(progn
           (async-defun parity-inner (value)
             (await
              (async-await-test-delay
@@ -138,12 +151,15 @@ fn macros_public_surface_batch() {
                   right-value))))
           (async-await-test-settle
            (parity-outer 3 4)))"##,
-            true,
-            expect!["OK (fulfilled (:fullfilled (9 16 25)))"],
-        ),
-        (
-            "awaits_inside_loops_conditionals_and_let_star_keep_control_flow",
-            r##"(progn
+        true,
+        expect!["OK (fulfilled (:fullfilled (9 16 25)))"],
+    )
+}
+
+fn awaits_inside_loops_conditionals_and_let_star_keep_control_flow() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "awaits_inside_loops_conditionals_and_let_star_keep_control_flow",
+        r##"(progn
           (async-defun parity-control-flow (values)
             (let ((index 0)
                   result)
@@ -168,14 +184,17 @@ fn macros_public_surface_batch() {
           (async-await-test-settle
            (parity-control-flow
             '(2 4 7 9))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (fulfilled (:fullfilled ((0 2 2 :even) (1 4 5 :odd) (2 7 9 :odd) (3 9 12 :even))))"
     ],
-        ),
-        (
-            "await_accepts_non_promise_values_of_practical_elisp_types",
-            r##"(progn
+    )
+}
+
+fn await_accepts_non_promise_values_of_practical_elisp_types() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "await_accepts_non_promise_values_of_practical_elisp_types",
+        r##"(progn
           (async-defun parity-plain-values ()
             (list
              (await nil)
@@ -192,12 +211,15 @@ fn macros_public_surface_batch() {
                 (gethash "key" table)))))
           (async-await-test-settle
            (parity-plain-values)))"##,
-            true,
-            expect![[r#"OK (fulfilled (:fullfilled (nil 42 "text" :keyword (a b) [1 2 3] "value")))"#]],
-        ),
-        (
-            "promise_returned_as_final_body_value_is_adopted_and_flattened",
-            r##"(progn
+        true,
+        expect![[r#"OK (fulfilled (:fullfilled (nil 42 "text" :keyword (a b) [1 2 3] "value")))"#]],
+    )
+}
+
+fn promise_returned_as_final_body_value_is_adopted_and_flattened() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "promise_returned_as_final_body_value_is_adopted_and_flattened",
+        r##"(progn
           (async-defun parity-final-promise (value)
             (await
              (promise-resolve
@@ -207,12 +229,15 @@ fn macros_public_surface_batch() {
              (list :final (* value 2))))
           (async-await-test-settle
            (parity-final-promise 11)))"##,
-            true,
-            expect!["OK (fulfilled (:fullfilled (:final 22)))"],
-        ),
-        (
-            "macroexpansion_has_defun_and_lambda_shells_with_local_await_rewriting",
-            r##"(let* ((defun-expansion
+        true,
+        expect!["OK (fulfilled (:fullfilled (:final 22)))"],
+    )
+}
+
+fn macroexpansion_has_defun_and_lambda_shells_with_local_await_rewriting() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "macroexpansion_has_defun_and_lambda_shells_with_local_await_rewriting",
+        r##"(let* ((defun-expansion
                   (macroexpand-1
                    '(async-defun parity-expanded (x)
                       (await x))))
@@ -259,12 +284,15 @@ fn macros_public_surface_batch() {
               (memq 'iter-yield
                     lambda-tree))))
            (fboundp 'await)))"##,
-            true,
-            expect!["OK ((defun parity-expanded (x) t t t) (lambda (x) t t t) nil)"],
-        ),
-        (
-            "invocation_runs_until_first_await_then_resumes_asynchronously",
-            r##"(let (events)
+        true,
+        expect!["OK ((defun parity-expanded (x) t t t) (lambda (x) t t t) nil)"],
+    )
+}
+
+fn invocation_runs_until_first_await_then_resumes_asynchronously() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "invocation_runs_until_first_await_then_resumes_asynchronously",
+        r##"(let (events)
           (async-defun parity-lifecycle ()
             (push :before-await events)
             (let ((value
@@ -284,10 +312,27 @@ fn macros_public_surface_batch() {
                immediate
                outcome
                (nreverse events)))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((:before-await) (fulfilled (:fullfilled :complete)) (:before-await :resumed))"
     ],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn macros_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        async_defun_awaits_resolved_values_in_source_order_and_returns_last_value(),
+        async_defun_preserves_required_optional_and_rest_argument_semantics(),
+        async_defun_preserves_docstring_declarations_and_interactive_contract(),
+        async_lambda_captures_lexical_state_across_multiple_awaits(),
+        one_async_lambda_is_reusable_without_state_leaking_between_invocations(),
+        nested_async_functions_flatten_each_others_promises_practically(),
+        awaits_inside_loops_conditionals_and_let_star_keep_control_flow(),
+        await_accepts_non_promise_values_of_practical_elisp_types(),
+        promise_returned_as_final_body_value_is_adopted_and_flattened(),
+        macroexpansion_has_defun_and_lambda_shells_with_local_await_rewriting(),
+        invocation_runs_until_first_await_then_resumes_asynchronously(),
+    ];
+    assert_async_await_batch(&cases);
 }

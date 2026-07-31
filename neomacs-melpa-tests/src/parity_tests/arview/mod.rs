@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{ARVIEW_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod workflows;
 
@@ -150,9 +153,9 @@ pub(crate) fn assert_arview_autoload_parity(elisp_form: &str, expected: Expect) 
 
 
 /// Multi-probe batch for `assert_arview_autoload_parity` cases (2a).
-pub(crate) fn assert_arview_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_arview_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         arview_oracle("arview-autoloads.el"),
         &name,
         "arview_autoload_parity",
@@ -161,9 +164,9 @@ pub(crate) fn assert_arview_autoload_batch(cases: &[(&str, &str, bool, Expect)])
 }
 
 /// Multi-probe batch for `assert_arview_parity` cases (2a).
-pub(crate) fn assert_arview_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_arview_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         arview_oracle("arview.el"),
         &name,
         "arview_parity",

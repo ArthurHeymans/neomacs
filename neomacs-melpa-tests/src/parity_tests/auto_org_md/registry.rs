@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_auto_org_md_autoload_batch, assert_auto_org_md_batch};
+use super::{ParityBatchCase, assert_auto_org_md_autoload_batch, assert_auto_org_md_batch};
 
-#[test]
-fn registry_auto_org_md_batch() {
-    assert_auto_org_md_batch(&[
-        (
-            "auto_org_md_loads_exact_features_and_public_surface",
-            r##"(list
+fn auto_org_md_loads_exact_features_and_public_surface() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_org_md_loads_exact_features_and_public_surface",
+        r##"(list
          (featurep 'auto-org-md)
          (featurep 'org)
          (featurep 'ox-md)
@@ -20,14 +18,17 @@ fn registry_auto_org_md_batch() {
             auto-org-md-on
             auto-org-md-off
             auto-org-md-mode)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (t t t ((auto-org-md-export t nil) (auto-org-md-on t nil) (auto-org-md-off t nil) (auto-org-md-mode t t)))"
     ],
-        ),
-        (
-            "auto_org_md_public_arglists_and_interactive_contract_are_exact",
-            r##"(mapcar
+    )
+}
+
+fn auto_org_md_public_arglists_and_interactive_contract_are_exact() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_org_md_public_arglists_and_interactive_contract_are_exact",
+        r##"(mapcar
          (lambda (symbol)
            (list
             symbol
@@ -38,14 +39,17 @@ fn registry_auto_org_md_batch() {
            auto-org-md-on
            auto-org-md-off
            auto-org-md-mode))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((auto-org-md-export nil nil nil) (auto-org-md-on nil nil "Turn on auto-org-md.") (auto-org-md-off nil nil "Turn off auto-org-md.") (auto-org-md-mode (&optional arg) (interactive (list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) "cycle auto-org-md-mode between on/off\n\nThis is a minor mode.  If called interactively, toggle the ‘Auto-org-md\nmode’ mode.  If the prefix argument is positive, enable the mode, and if\nit is zero or negative, disable the mode.\n\nIf called from Lisp, toggle the mode if ARG is ‘toggle’.  Enable the\nmode if ARG is nil, omitted, or is a positive number.  Disable the mode\nif ARG is a negative number.\n\nTo check whether the minor mode is enabled in the current buffer,\nevaluate the variable ‘auto-org-md-mode’.\n\nThe mode’s hook is called both when the mode is enabled and when it is\ndisabled."))"#
     ]],
-        ),
-        (
-            "auto_org_md_minor_mode_variable_properties_are_exact",
-            r##"(list
+    )
+}
+
+fn auto_org_md_minor_mode_variable_properties_are_exact() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_org_md_minor_mode_variable_properties_are_exact",
+        r##"(list
          auto-org-md-mode
          (default-value 'auto-org-md-mode)
          (local-variable-p 'auto-org-md-mode)
@@ -53,14 +57,17 @@ fn registry_auto_org_md_batch() {
          (get 'auto-org-md-mode 'custom-type)
          (get 'auto-org-md-mode 'standard-value)
          (get 'auto-org-md-mode 'permanent-local))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil nil nil "Non-nil if Auto-org-md mode is enabled.\nUse the command `auto-org-md-mode' to change this variable." nil nil nil)"#
     ]],
-        ),
-        (
-            "auto_org_md_mode_registry_has_exact_lighter_keymap_and_hook",
-            r##"(list
+    )
+}
+
+fn auto_org_md_mode_registry_has_exact_lighter_keymap_and_hook() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_org_md_mode_registry_has_exact_lighter_keymap_and_hook",
+        r##"(list
          (assq 'auto-org-md-mode minor-mode-alist)
          (assq 'auto-org-md-mode minor-mode-map-alist)
          (boundp 'auto-org-md-mode-map)
@@ -68,12 +75,15 @@ fn registry_auto_org_md_batch() {
               auto-org-md-mode-map)
          (boundp 'auto-org-md-mode-hook)
          auto-org-md-mode-hook)"##,
-            true,
-            expect![[r#"OK ((auto-org-md-mode "org-md") nil nil nil t nil)"#]],
-        ),
-        (
-            "auto_org_md_package_descriptor_matches_pinned_archive",
-            r##"(let* ((entry (assq 'auto-org-md package-alist))
+        true,
+        expect![[r#"OK ((auto-org-md-mode "org-md") nil nil nil t nil)"#]],
+    )
+}
+
+fn auto_org_md_package_descriptor_matches_pinned_archive() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_org_md_package_descriptor_matches_pinned_archive",
+        r##"(let* ((entry (assq 'auto-org-md package-alist))
          (descriptor (cadr entry)))
          (list
           (package-desc-name descriptor)
@@ -86,14 +96,17 @@ fn registry_auto_org_md_batch() {
            (directory-file-name
             (package-desc-dir descriptor)))
           (package-desc-extras descriptor)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (auto-org-md "20180213.2343" "Export a markdown file automatically when you save an org-file." ((emacs (24 4))) nil "auto-org-md-20180213.2343" ((:maintainers ("jamcha" . "jamcha.aa@gmail.com")) (:authors ("jamcha" . "jamcha.aa@gmail.com")) (:keywords "org" "markdown") (:revdesc . "9318338bdb7f") (:commit . "9318338bdb7fe8bd698d88f3af89b2d6413efdd2") (:url . "https://github.com/jamcha-aa/auto-org-md")))"#
     ]],
-        ),
-        (
-            "auto_org_md_load_history_records_all_definitions_and_provide",
-            r##"(let* ((entry
+    )
+}
+
+fn auto_org_md_load_history_records_all_definitions_and_provide() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_org_md_load_history_records_all_definitions_and_provide",
+        r##"(let* ((entry
                                  (cl-find-if
                                   (lambda (item)
                                     (member
@@ -115,32 +128,32 @@ fn registry_auto_org_md_batch() {
            '(provide . auto-org-md)
            definitions
            :test #'equal)))"##,
-            true,
-            expect![[r#"OK ("auto-org-md.el" (nil nil nil nil nil) 1)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK ("auto-org-md.el" (nil nil nil nil nil) 1)"#]],
+    )
 }
 
-#[test]
-fn registry_auto_org_md_autoload_batch() {
-    assert_auto_org_md_autoload_batch(&[
-        (
-            "auto_org_md_autoloads_expose_export_without_loading_runtime",
-            r##"(list
+fn auto_org_md_autoloads_expose_export_without_loading_runtime() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_org_md_autoloads_expose_export_without_loading_runtime",
+        r##"(list
          (featurep 'auto-org-md)
          (autoloadp
           (symbol-function 'auto-org-md-export))
          (commandp 'auto-org-md-export)
          (interactive-form 'auto-org-md-export)
          (symbol-function 'auto-org-md-export))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (nil t nil nil #[nil ((if (derived-mode-p 'org-mode) (progn (org-md-export-to-markdown)))) nil])"
     ],
-        ),
-        (
-            "auto_org_md_autoloads_expose_minor_mode_metadata_without_loading_runtime",
-            r##"(list
+    )
+}
+
+fn auto_org_md_autoloads_expose_minor_mode_metadata_without_loading_runtime() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_org_md_autoloads_expose_minor_mode_metadata_without_loading_runtime",
+        r##"(list
          (featurep 'auto-org-md)
          (boundp 'auto-org-md-mode)
          (and (boundp 'auto-org-md-mode)
@@ -151,14 +164,17 @@ fn registry_auto_org_md_autoload_batch() {
          (interactive-form 'auto-org-md-mode)
          (assq 'auto-org-md-mode minor-mode-alist)
          (get 'auto-org-md-mode 'variable-documentation))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (nil nil nil t t (interactive (list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) (auto-org-md-mode "org-md") "Non-nil if Auto-org-md mode is enabled.\nUse the command `auto-org-md-mode' to change this variable.")"#
     ]],
-        ),
-        (
-            "auto_org_md_autoload_invocation_loads_runtime_and_installs_local_hook",
-            r##"(progn
+    )
+}
+
+fn auto_org_md_autoload_invocation_loads_runtime_and_installs_local_hook() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_org_md_autoload_invocation_loads_runtime_and_installs_local_hook",
+        r##"(progn
          (auto-org-md-test-reset-state)
          (with-temp-buffer
            (org-mode)
@@ -184,8 +200,30 @@ fn registry_auto_org_md_autoload_batch() {
                 (memq 'auto-org-md-export
                       after-save-hook)
                 (nreverse messages))))))"##,
-            true,
-            expect![[r#"OK (t t t t (auto-org-md-export t) ("auto-org-md-mode is on."))"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (t t t t (auto-org-md-export t) ("auto-org-md-mode is on."))"#]],
+    )
+}
+
+#[test]
+fn registry_auto_org_md_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_org_md_loads_exact_features_and_public_surface(),
+        auto_org_md_public_arglists_and_interactive_contract_are_exact(),
+        auto_org_md_minor_mode_variable_properties_are_exact(),
+        auto_org_md_mode_registry_has_exact_lighter_keymap_and_hook(),
+        auto_org_md_package_descriptor_matches_pinned_archive(),
+        auto_org_md_load_history_records_all_definitions_and_provide(),
+    ];
+    assert_auto_org_md_batch(&cases);
+}
+
+#[test]
+fn registry_auto_org_md_autoload_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_org_md_autoloads_expose_export_without_loading_runtime(),
+        auto_org_md_autoloads_expose_minor_mode_metadata_without_loading_runtime(),
+        auto_org_md_autoload_invocation_loads_runtime_and_installs_local_hook(),
+    ];
+    assert_auto_org_md_autoload_batch(&cases);
 }

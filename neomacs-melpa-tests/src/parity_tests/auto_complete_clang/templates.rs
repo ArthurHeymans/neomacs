@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_clang_batch;
+use super::{ParityBatchCase, assert_auto_complete_clang_batch};
 
-#[test]
-fn templates_public_surface_batch() {
-    assert_auto_complete_clang_batch(&[
-        (
-            "auto_complete_clang_template_candidate_returns_shared_global_list",
-            r##"(let ((ac-template-candidates
+fn auto_complete_clang_template_candidate_returns_shared_global_list() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_template_candidate_returns_shared_global_list",
+        r##"(let ((ac-template-candidates
                 '("first" "second")))
          (let ((result
                 (ac-template-candidate)))
@@ -17,12 +15,15 @@ fn templates_public_surface_batch() {
                 ac-template-candidates)
             result
             ac-template-candidates)))"##,
-            true,
-            expect![[r#"OK (t #1=("changed" "second") #1#)"#]],
-        ),
-        (
-            "auto_complete_clang_template_prefix_returns_exact_start_point_or_nil",
-            r##"(list
+        true,
+        expect![[r#"OK (t #1=("changed" "second") #1#)"#]],
+    )
+}
+
+fn auto_complete_clang_template_prefix_returns_exact_start_point_or_nil() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_template_prefix_returns_exact_start_point_or_nil",
+        r##"(list
          (let ((ac-template-start-point
                 nil))
            (ac-template-prefix))
@@ -36,12 +37,15 @@ fn templates_public_surface_batch() {
                 (copy-marker 7)))
            (marker-position
             (ac-template-prefix))))"##,
-            true,
-            expect!["OK (nil 1 42 1)"],
-        ),
-        (
-            "auto_complete_clang_template_action_noops_when_start_point_is_nil",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK (nil 1 42 1)"],
+    )
+}
+
+fn auto_complete_clang_template_action_noops_when_start_point_is_nil() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_template_action_noops_when_start_point_is_nil",
+        r##"(with-temp-buffer
          (insert "candidate")
          (let ((ac-template-start-point nil)
                (ac-last-completion
@@ -58,12 +62,15 @@ fn templates_public_surface_batch() {
               (ac-template-action)
               (buffer-string)
               calls))))"##,
-            true,
-            expect![[r#"OK (nil "candidate" nil)"#]],
-        ),
-        (
-            "auto_complete_clang_template_action_without_snippet_backend_keeps_text_and_messages",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK (nil "candidate" nil)"#]],
+    )
+}
+
+fn auto_complete_clang_template_action_without_snippet_backend_keeps_text_and_messages() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_template_action_without_snippet_backend_keeps_text_and_messages",
+        r##"(with-temp-buffer
          (insert "(int value)")
          (let* ((selected
                  (propertize
@@ -91,14 +98,17 @@ fn templates_public_surface_batch() {
               (ac-template-action)
               (buffer-string)
               (nreverse messages)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (#1=("Dude! You are too out! Please install a yasnippet or a snippet script:)") "(int value)" #1#)"#
     ]],
-        ),
-        (
-            "auto_complete_clang_template_action_yasnippet_converts_required_optional_and_variadic_arguments",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_complete_clang_template_action_yasnippet_converts_required_optional_and_variadic_arguments() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_template_action_yasnippet_converts_required_optional_and_variadic_arguments",
+        r##"(with-temp-buffer
          (insert "(int value, int level, ...)")
          (let* ((selected
                  (propertize
@@ -125,14 +135,17 @@ fn templates_public_surface_batch() {
               (ac-template-action)
               (buffer-string)
               (nreverse calls)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (expanded "(int value, int level, ...)" (("(${int value}, int level}, ${...)" 1 28)))"#
     ]],
-        ),
-        (
-            "auto_complete_clang_template_action_yasnippet_falls_back_to_legacy_argument_order",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_complete_clang_template_action_yasnippet_falls_back_to_legacy_argument_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_template_action_yasnippet_falls_back_to_legacy_argument_order",
+        r##"(with-temp-buffer
          (insert "(int value)")
          (let* ((selected
                  (propertize
@@ -163,12 +176,15 @@ fn templates_public_surface_batch() {
              (list
               (ac-template-action)
               (nreverse calls)))))"##,
-            true,
-            expect![[r#"OK (legacy-expanded (("(${int value})" 1 12) (1 12 "(${int value})")))"#]],
-        ),
-        (
-            "auto_complete_clang_template_action_snippet_backend_replaces_selected_text",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK (legacy-expanded (("(${int value})" 1 12) (1 12 "(${int value})")))"#]],
+    )
+}
+
+fn auto_complete_clang_template_action_snippet_backend_replaces_selected_text() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_template_action_snippet_backend_replaces_selected_text",
+        r##"(with-temp-buffer
          (insert "(int value, int level)")
          (let* ((selected
                  (propertize
@@ -195,12 +211,15 @@ fn templates_public_surface_batch() {
               (ac-template-action)
               (buffer-string)
               (nreverse insertions)))))"##,
-            true,
-            expect![[r#"OK (inserted "($${int value}, int level)" ("($${int value}, int level)"))"#]],
-        ),
-        (
-            "auto_complete_clang_function_pointer_template_builds_yasnippet_from_nested_arguments",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK (inserted "($${int value}, int level)" ("($${int value}, int level)"))"#]],
+    )
+}
+
+fn auto_complete_clang_function_pointer_template_builds_yasnippet_from_nested_arguments() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_function_pointer_template_builds_yasnippet_from_nested_arguments",
+        r##"(with-temp-buffer
          (insert
           "(int, std::pair<long, long>, void (*)(char, double))")
          (let* ((selected
@@ -227,14 +246,17 @@ fn templates_public_surface_batch() {
              (list
               (ac-template-action)
               (nreverse calls)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (expanded ((#("(${int}, ${std::pair<long, long>}, ${void (*)(char, double)})" 3 6 (raw-args "") 11 25 (raw-args "") 27 32 (raw-args "") 37 50 (raw-args "") 52 59 (raw-args "")) 1 53)))"#
     ]],
-        ),
-        (
-            "auto_complete_clang_function_pointer_template_builds_snippet_backend_placeholders",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_complete_clang_function_pointer_template_builds_snippet_backend_placeholders() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_clang_function_pointer_template_builds_snippet_backend_placeholders",
+        r##"(with-temp-buffer
          (insert "(int, const char *, ...)")
          (let* ((selected
                  (propertize
@@ -261,10 +283,25 @@ fn templates_public_surface_batch() {
               (ac-template-action)
               (buffer-string)
               (nreverse insertions)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (inserted #("($${int}, $${const char *}, $${...})" 4 7 (raw-args "") 13 25 (raw-args "") 31 34 (raw-args "")) (#("($${int}, $${const char *}, $${...})" 4 7 (raw-args "") 13 25 (raw-args "") 31 34 (raw-args ""))))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn templates_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_clang_template_candidate_returns_shared_global_list(),
+        auto_complete_clang_template_prefix_returns_exact_start_point_or_nil(),
+        auto_complete_clang_template_action_noops_when_start_point_is_nil(),
+        auto_complete_clang_template_action_without_snippet_backend_keeps_text_and_messages(),
+        auto_complete_clang_template_action_yasnippet_converts_required_optional_and_variadic_arguments(),
+        auto_complete_clang_template_action_yasnippet_falls_back_to_legacy_argument_order(),
+        auto_complete_clang_template_action_snippet_backend_replaces_selected_text(),
+        auto_complete_clang_function_pointer_template_builds_yasnippet_from_nested_arguments(),
+        auto_complete_clang_function_pointer_template_builds_snippet_backend_placeholders(),
+    ];
+    assert_auto_complete_clang_batch(&cases);
 }

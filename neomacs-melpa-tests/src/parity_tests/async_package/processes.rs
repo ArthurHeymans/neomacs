@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_async_batch;
+use super::{ParityBatchCase, assert_async_batch};
 
-#[test]
-fn processes_public_surface_batch() {
-    assert_async_batch(&[
-        (
-            "async_start_process_future_reports_success_and_cleans_its_output_buffer",
-            r##"(let* ((process
+fn async_start_process_future_reports_success_and_cleans_its_output_buffer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_start_process_future_reports_success_and_cleans_its_output_buffer",
+        r##"(let* ((process
                       (async-start-process
                        "neomacs-async-success"
                        "sh"
@@ -21,12 +19,15 @@ fn processes_public_surface_batch() {
                 (process-exit-status process)
                 (buffer-live-p
                  (process-buffer process))))"##,
-            true,
-            expect![[r#"OK (t exit 0 nil)"#]],
-        ),
-        (
-            "async_start_process_callback_can_observe_stdout_before_cleanup",
-            r##"(let (observed)
+        true,
+        expect![[r#"OK (t exit 0 nil)"#]],
+    )
+}
+
+fn async_start_process_callback_can_observe_stdout_before_cleanup() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_start_process_callback_can_observe_stdout_before_cleanup",
+        r##"(let (observed)
                (let ((process
                       (async-start-process
                        "neomacs-async-callback"
@@ -51,12 +52,15 @@ fn processes_public_surface_batch() {
                   (async-get process)
                   (buffer-live-p
                    (process-buffer process)))))"##,
-            true,
-            expect![[r#"OK ((0 "callback-output" t) nil nil)"#]],
-        ),
-        (
-            "async_start_process_future_returns_the_exact_nonzero_exit_failure",
-            r##"(let* ((process
+        true,
+        expect![[r#"OK ((0 "callback-output" t) nil nil)"#]],
+    )
+}
+
+fn async_start_process_future_returns_the_exact_nonzero_exit_failure() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_start_process_future_returns_the_exact_nonzero_exit_failure",
+        r##"(let* ((process
                       (async-start-process
                        "neomacs-async-failure"
                        "sh"
@@ -70,14 +74,17 @@ fn processes_public_surface_batch() {
                 (process-exit-status process)
                 (buffer-live-p
                  (process-buffer process))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((error "Async process 'neomacs-async-failure' failed with exit code 7") exit 7 nil)"#
     ]],
-        ),
-        (
-            "async_process_noquery_option_controls_the_process_query_flag",
-            r##"(let (query noquery)
+    )
+}
+
+fn async_process_noquery_option_controls_the_process_query_flag() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "async_process_noquery_option_controls_the_process_query_flag",
+        r##"(let (query noquery)
                (unwind-protect
                    (progn
                      (let ((async-process-noquery-on-exit
@@ -104,8 +111,18 @@ fn processes_public_surface_batch() {
                  (when noquery
                    (async-wait noquery)
                    (async-get noquery))))"##,
-            true,
-            expect![[r#"OK (t nil)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (t nil)"#]],
+    )
+}
+
+#[test]
+fn processes_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        async_start_process_future_reports_success_and_cleans_its_output_buffer(),
+        async_start_process_callback_can_observe_stdout_before_cleanup(),
+        async_start_process_future_returns_the_exact_nonzero_exit_failure(),
+        async_process_noquery_option_controls_the_process_query_flag(),
+    ];
+    assert_async_batch(&cases);
 }

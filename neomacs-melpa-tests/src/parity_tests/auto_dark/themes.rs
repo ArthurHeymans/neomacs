@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_dark_batch;
+use super::{ParityBatchCase, assert_auto_dark_batch};
 
-#[test]
-fn themes_public_surface_batch() {
-    assert_auto_dark_batch(&[
-        (
-            "auto_dark_themes_for_mode_selects_exact_dark_light_and_unknown_slots",
-            r##"(mapcar
+fn auto_dark_themes_for_mode_selects_exact_dark_light_and_unknown_slots() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dark_themes_for_mode_selects_exact_dark_light_and_unknown_slots",
+        r##"(mapcar
           (lambda (themes)
             (let ((auto-dark-themes
                    themes))
@@ -33,14 +31,17 @@ fn themes_public_surface_batch() {
             ((one two)
              (three four)
              (ignored))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((nil ((dark nil) (light nil) (unknown nil) (nil nil))) ((#1=(wombat) #2=(leuven)) ((dark #1#) (light #2#) (unknown nil) (nil nil))) ((nil #3=(tango)) ((dark nil) (light #3#) (unknown nil) (nil nil))) ((#4=(tango-dark) nil) ((dark #4#) (light nil) (unknown nil) (nil nil))) ((#5=(one two) #6=(three four) (ignored)) ((dark #5#) (light #6#) (unknown nil) (nil nil))))"
     ],
-        ),
-        (
-            "auto_dark_update_frame_backgrounds_sets_global_mode_before_every_frame",
-            r##"(let ((frame-background-mode
+    )
+}
+
+fn auto_dark_update_frame_backgrounds_sets_global_mode_before_every_frame() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dark_update_frame_backgrounds_sets_global_mode_before_every_frame",
+        r##"(let ((frame-background-mode
                                 'initial)
                                events)
           (cl-letf
@@ -71,14 +72,17 @@ fn themes_public_surface_batch() {
               'dark)
              frame-background-mode
              (nreverse events))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((frame-a frame-b frame-c) dark ((:frame-list dark) (:set frame-a dark) (:set frame-b dark) (:set frame-c dark)))"
     ],
-        ),
-        (
-            "auto_dark_enable_themes_deduplicates_targets_disables_only_others_and_uses_fast_or_load_path",
-            r##"(let ((custom-enabled-themes
+    )
+}
+
+fn auto_dark_enable_themes_deduplicates_targets_disables_only_others_and_uses_fast_or_load_path() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dark_enable_themes_deduplicates_targets_disables_only_others_and_uses_fast_or_load_path",
+        r##"(let ((custom-enabled-themes
                                 '(old-theme
                                   user
                                   keep-theme))
@@ -122,14 +126,17 @@ fn themes_public_surface_batch() {
                 new-theme))
              custom-enabled-themes
              (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("Warning (emacs): Failed to enable theme(s): new-theme" (old-theme user keep-theme) ((:disable old-theme) (:disable user) (:enable keep-theme)))"#
     ]],
-        ),
-        (
-            "auto_dark_enable_themes_collects_all_failures_and_warns_once_after_other_themes_continue",
-            r##"(let ((custom-enabled-themes
+    )
+}
+
+fn auto_dark_enable_themes_collects_all_failures_and_warns_once_after_other_themes_continue() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dark_enable_themes_collects_all_failures_and_warns_once_after_other_themes_continue",
+        r##"(let ((custom-enabled-themes
                                 '(obsolete))
                                events)
           (mapc
@@ -169,14 +176,17 @@ fn themes_public_surface_batch() {
                    good-two
                    bad-two))))
              (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("Warning (emacs): Failed to enable theme(s): bad-two, bad-one" nil) ((:disable obsolete) (:enable bad-two) (:enable good-two) (:enable bad-one) (:enable good-one)))"#
     ]],
-        ),
-        (
-            "auto_dark_declared_but_not_loaded_theme_uses_load_path_for_issue_96",
-            r##"(let ((custom-enabled-themes nil)
+    )
+}
+
+fn auto_dark_declared_but_not_loaded_theme_uses_load_path_for_issue_96() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dark_declared_but_not_loaded_theme_uses_load_path_for_issue_96",
+        r##"(let ((custom-enabled-themes nil)
                                events)
           (unless
               (custom-theme-p
@@ -215,14 +225,17 @@ fn themes_public_surface_batch() {
              (auto-dark--enable-themes
               '(auto-dark-fixture-declared))
              (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((auto-dark-fixture-declared user changed) nil "Warning (emacs): Failed to enable theme(s): auto-dark-fixture-declared" nil)"#
     ]],
-        ),
-        (
-            "auto_dark_set_theme_updates_state_frames_themes_then_selected_hook",
-            r##"(let* ((auto-dark-themes
+    )
+}
+
+fn auto_dark_set_theme_updates_state_frames_themes_then_selected_hook() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dark_set_theme_updates_state_frames_themes_then_selected_hook",
+        r##"(let* ((auto-dark-themes
                                  '((dark-a dark-b)
                                    (light-a)))
                                 (auto-dark--last-dark-mode-state
@@ -269,14 +282,17 @@ fn themes_public_surface_batch() {
                 'light))
              auto-dark--last-dark-mode-state
              (nreverse events))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (nil dark ((:frames dark dark) (:themes (dark-a dark-b) dark) :dark-hook) nil light ((:frames light light) (:themes (light-a) light) :light-hook))"
     ],
-        ),
-        (
-            "auto_dark_set_theme_is_complete_noop_before_theme_variable_initialization",
-            r##"(let ((saved
+    )
+}
+
+fn auto_dark_set_theme_is_complete_noop_before_theme_variable_initialization() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dark_set_theme_is_complete_noop_before_theme_variable_initialization",
+        r##"(let ((saved
                                 auto-dark-themes)
                                (auto-dark--last-dark-mode-state
                                 'unknown)
@@ -306,12 +322,15 @@ fn themes_public_surface_batch() {
             (set
              'auto-dark-themes
              saved)))"##,
-            true,
-            expect!["OK (nil nil unknown nil)"],
-        ),
-        (
-            "auto_dark_toggle_appearance_switches_unknown_light_and_dark_states_practically",
-            r##"(let (calls)
+        true,
+        expect!["OK (nil nil unknown nil)"],
+    )
+}
+
+fn auto_dark_toggle_appearance_switches_unknown_light_and_dark_states_practically() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dark_toggle_appearance_switches_unknown_light_and_dark_states_practically",
+        r##"(let (calls)
           (cl-letf
               (((symbol-function
                  'auto-dark--set-theme)
@@ -337,14 +356,17 @@ fn themes_public_surface_batch() {
                 light
                 dark))
              (nreverse calls))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (((unknown (:set dark) dark) (nil (:set dark) dark) (light (:set dark) dark) (dark (:set light) light)) (dark dark dark light))"
     ],
-        ),
-        (
-            "auto_dark_check_and_set_skips_exact_state_but_repairs_theme_drift",
-            r##"(let ((auto-dark-themes
+    )
+}
+
+fn auto_dark_check_and_set_skips_exact_state_but_repairs_theme_drift() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dark_check_and_set_skips_exact_state_but_repairs_theme_drift",
+        r##"(let ((auto-dark-themes
                                 '((dark-theme)
                                   (light-theme)))
                                calls)
@@ -386,12 +408,15 @@ fn themes_public_surface_batch() {
                (list
                 (auto-dark--check-and-set-dark-mode)
                 (nreverse calls))))))"##,
-            true,
-            expect!["OK ((nil nil) (:changed #1=(dark light)) (:changed #1#))"],
-        ),
-        (
-            "auto_dark_custom_theme_setter_preloads_missing_themes_sets_default_and_refreshes_active_mode",
-            r##"(let ((setter
+        true,
+        expect!["OK ((nil nil) (:changed #1=(dark light)) (:changed #1#))"],
+    )
+}
+
+fn auto_dark_custom_theme_setter_preloads_missing_themes_sets_default_and_refreshes_active_mode() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dark_custom_theme_setter_preloads_missing_themes_sets_default_and_refreshes_active_mode",
+        r##"(let ((setter
                                 (get
                                  'auto-dark-themes
                                  'custom-set))
@@ -441,14 +466,17 @@ fn themes_public_surface_batch() {
              (default-value
               'auto-dark-themes)
              (nreverse calls))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (:refreshed #1=((already-loaded needs-load-dark) (needs-load-light already-loaded)) #1# ((:load needs-load-dark nil t) (:load needs-load-light nil t) (:refresh #1#)))"
     ],
-        ),
-        (
-            "auto_dark_custom_theme_setter_propagates_preload_failure_before_setting_or_refreshing",
-            r##"(let ((setter
+    )
+}
+
+fn auto_dark_custom_theme_setter_propagates_preload_failure_before_setting_or_refreshing() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dark_custom_theme_setter_propagates_preload_failure_before_setting_or_refreshing",
+        r##"(let ((setter
                                 (get
                                  'auto-dark-themes
                                  'custom-set))
@@ -483,14 +511,17 @@ fn themes_public_surface_batch() {
                    (other-theme)))))
              auto-dark-themes
              (nreverse calls))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error error ("fixture unsafe theme")) ((old-dark) (old-light)) ((:load failing-theme nil t)))"#
     ]],
-        ),
-        (
-            "auto_dark_real_builtin_theme_configuration_enable_toggle_and_disable_workflow_match",
-            r##"(let ((custom-safe-themes t)
+    )
+}
+
+fn auto_dark_real_builtin_theme_configuration_enable_toggle_and_disable_workflow_match() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dark_real_builtin_theme_configuration_enable_toggle_and_disable_workflow_match",
+        r##"(let ((custom-safe-themes t)
                                (auto-dark-detection-method
                                 'manual)
                                (frame-background-mode
@@ -536,10 +567,28 @@ fn themes_public_surface_batch() {
             (mapc
              #'disable-theme
              '(tango-dark tango))))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (((tango-dark) ((tango-dark t t t) (tango t t nil) (tsdh-dark nil nil nil) (tsdh-light nil nil nil) (wombat nil nil nil) (leuven nil nil nil))) ((tango) ((tango-dark t t nil) (tango t t t) (tsdh-dark nil nil nil) (tsdh-light nil nil nil) (wombat nil nil nil) (leuven nil nil nil))) ((tango-dark) ((tango-dark t t t) (tango t t nil) (tsdh-dark nil nil nil) (tsdh-light nil nil nil) (wombat nil nil nil) (leuven nil nil nil))) nil (tango-dark) dark dark)"
     ],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn themes_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_dark_themes_for_mode_selects_exact_dark_light_and_unknown_slots(),
+        auto_dark_update_frame_backgrounds_sets_global_mode_before_every_frame(),
+        auto_dark_enable_themes_deduplicates_targets_disables_only_others_and_uses_fast_or_load_path(),
+        auto_dark_enable_themes_collects_all_failures_and_warns_once_after_other_themes_continue(),
+        auto_dark_declared_but_not_loaded_theme_uses_load_path_for_issue_96(),
+        auto_dark_set_theme_updates_state_frames_themes_then_selected_hook(),
+        auto_dark_set_theme_is_complete_noop_before_theme_variable_initialization(),
+        auto_dark_toggle_appearance_switches_unknown_light_and_dark_states_practically(),
+        auto_dark_check_and_set_skips_exact_state_but_repairs_theme_drift(),
+        auto_dark_custom_theme_setter_preloads_missing_themes_sets_default_and_refreshes_active_mode(),
+        auto_dark_custom_theme_setter_propagates_preload_failure_before_setting_or_refreshing(),
+        auto_dark_real_builtin_theme_configuration_enable_toggle_and_disable_workflow_match(),
+    ];
+    assert_auto_dark_batch(&cases);
 }

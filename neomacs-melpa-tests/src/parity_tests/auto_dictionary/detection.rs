@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_dictionary_batch;
+use super::{ParityBatchCase, assert_auto_dictionary_batch};
 
-#[test]
-fn detection_public_surface_batch() {
-    assert_auto_dictionary_batch(&[
-        (
-            "auto_dictionary_dictionary_name_search_honors_candidate_and_valid_list_order",
-            r##"(list
+fn auto_dictionary_dictionary_name_search_honors_candidate_and_valid_list_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_dictionary_name_search_honors_candidate_and_valid_list_order",
+        r##"(list
          (adict-guess-dictionary-name
           '("de" "deutsch" "german")
           '("francais" "deutsch" "english"))
@@ -23,12 +21,15 @@ fn detection_public_surface_batch() {
             '("en" "english")))
          (adict-guess-dictionary-name nil
                                       '("en")))"##,
-            true,
-            expect![[r#"OK ("deutsch" nil "german" "english" nil)"#]],
-        ),
-        (
-            "auto_dictionary_dictionary_cons_preserves_language_even_when_dictionary_missing",
-            r##"(let ((adict-test-valid-dictionaries
+        true,
+        expect![[r#"OK ("deutsch" nil "german" "english" nil)"#]],
+    )
+}
+
+fn auto_dictionary_dictionary_cons_preserves_language_even_when_dictionary_missing() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_dictionary_cons_preserves_language_even_when_dictionary_missing",
+        r##"(let ((adict-test-valid-dictionaries
                                 '("deutsch" "english")))
          (list
           (adict--guess-dictionary-cons
@@ -37,22 +38,28 @@ fn detection_public_surface_batch() {
            '("en" "english"))
           (adict--guess-dictionary-cons
            '("fr" "francais" "french"))))"##,
-            true,
-            expect![[r#"OK (("de" . "deutsch") ("en" . "english") ("fr"))"#]],
-        ),
-        (
-            "auto_dictionary_custom_type_is_derived_from_language_list_in_order",
-            r##"(let ((adict-language-list
+        true,
+        expect![[r#"OK (("de" . "deutsch") ("en" . "english") ("fr"))"#]],
+    )
+}
+
+fn auto_dictionary_custom_type_is_derived_from_language_list_in_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_custom_type_is_derived_from_language_list_in_order",
+        r##"(let ((adict-language-list
                                 '(nil "de" "en" "eo")))
          (adict--dictionary-alist-type))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (repeat (cons (choice (const "de") (const "en") (const "eo")) (choice (const :tag "Off" nil) (string :tag "Dictionary name"))))"#
     ]],
-        ),
-        (
-            "auto_dictionary_real_multilingual_buffer_produces_exact_score_vector_and_winner",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_dictionary_real_multilingual_buffer_produces_exact_score_vector_and_winner() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_real_multilingual_buffer_produces_exact_score_vector_and_winner",
+        r##"(with-temp-buffer
          (insert
           "Hello dear friend, you are welcome and we have some news.\n"
           "Bonjour, vous allez revoir cette nouvelle.\n"
@@ -68,12 +75,15 @@ fn detection_public_surface_batch() {
            nil)
           (adict--evaluate-buffer-find-dictionary
            nil)))"##,
-            true,
-            expect![[r#"OK ((7 8 4 5 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0) "en" 1 "en" "en")"#]],
-        ),
-        (
-            "auto_dictionary_tied_scores_choose_lowest_positive_language_index",
-            r##"(list
+        true,
+        expect![[r#"OK ((7 8 4 5 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0) "en" 1 "en" "en")"#]],
+    )
+}
+
+fn auto_dictionary_tied_scores_choose_lowest_positive_language_index() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_tied_scores_choose_lowest_positive_language_index",
+        r##"(list
          (cl-letf
              (((symbol-function
                 'adict-evaluate-buffer)
@@ -95,12 +105,15 @@ fn detection_public_surface_batch() {
                  [99 0 0])))
            (adict--evaluate-buffer-find-max-index
             nil)))"##,
-            true,
-            expect!["OK (1 2 1)"],
-        ),
-        (
-            "auto_dictionary_current_and_legacy_dictionary_formats_map_same_language_index",
-            r##"(list
+        true,
+        expect!["OK (1 2 1)"],
+    )
+}
+
+fn auto_dictionary_current_and_legacy_dictionary_formats_map_same_language_index() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_current_and_legacy_dictionary_formats_map_same_language_index",
+        r##"(list
          (let ((adict-language-list
                 '(nil "de" "en" "fr"))
                (adict-dictionary-list
@@ -129,12 +142,15 @@ fn detection_public_surface_batch() {
                t)
               (adict--evaluate-buffer-find-dictionary
                t)))))"##,
-            true,
-            expect![[r#"OK (("en" "en_US") ("en" "en_US"))"#]],
-        ),
-        (
-            "auto_dictionary_disabled_language_still_detects_language_but_returns_no_dictionary",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK (("en" "en_US") ("en" "en_US"))"#]],
+    )
+}
+
+fn auto_dictionary_disabled_language_still_detects_language_but_returns_no_dictionary() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_disabled_language_still_detects_language_but_returns_no_dictionary",
+        r##"(with-temp-buffer
          (insert
           "kaj ĉu ankaŭ antaŭ morgaŭ ĉar ŝi ĉiam estas ĉi tie")
          (let ((adict-dictionary-list
@@ -145,12 +161,15 @@ fn detection_public_surface_batch() {
             (adict--evaluate-buffer-find-dictionary
              nil)
             (adict-guess-dictionary))))"##,
-            true,
-            expect![[r#"OK ("eo" nil nil)"#]],
-        ),
-        (
-            "auto_dictionary_foreach_word_handles_punctuation_case_length_and_region_bounds",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ("eo" nil nil)"#]],
+    )
+}
+
+fn auto_dictionary_foreach_word_handles_punctuation_case_length_and_region_bounds() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_foreach_word_handles_punctuation_case_length_and_region_bounds",
+        r##"(with-temp-buffer
          (insert
           "zero HELLO, bonjour extraordinarily drei; goodbye")
          (let (words)
@@ -161,12 +180,15 @@ fn detection_public_surface_batch() {
             (lambda (word)
               (push word words)))
            (nreverse words)))"##,
-            true,
-            expect![[r#"OK ("HELLO" "bonjour" "drei" "goodbye")"#]],
-        ),
-        (
-            "auto_dictionary_foreach_word_respects_flyspell_generic_word_predicate",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ("HELLO" "bonjour" "drei" "goodbye")"#]],
+    )
+}
+
+fn auto_dictionary_foreach_word_respects_flyspell_generic_word_predicate() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_foreach_word_respects_flyspell_generic_word_predicate",
+        r##"(with-temp-buffer
          (insert
           "hello skipme bonjour keepme")
          (let ((flyspell-generic-check-word-p
@@ -183,12 +205,15 @@ fn detection_public_surface_batch() {
             (lambda (word)
               (push word words)))
            (nreverse words)))"##,
-            true,
-            expect![[r#"OK ("hello" "bonjour")"#]],
-        ),
-        (
-            "auto_dictionary_foreach_word_excludes_conditional_overlay_text_from_scoring",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ("hello" "bonjour")"#]],
+    )
+}
+
+fn auto_dictionary_foreach_word_excludes_conditional_overlay_text_from_scoring() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_foreach_word_excludes_conditional_overlay_text_from_scoring",
+        r##"(with-temp-buffer
          (insert "hello ")
          (let ((overlay
                 (make-overlay
@@ -213,12 +238,15 @@ fn detection_public_surface_batch() {
               (append
                (adict-evaluate-buffer)
                nil)))))"##,
-            true,
-            expect![[r#"OK (("hello" "drei") (0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0))"#]],
-        ),
-        (
-            "auto_dictionary_idle_only_scan_stops_when_input_becomes_pending",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK (("hello" "drei") (0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0))"#]],
+    )
+}
+
+fn auto_dictionary_idle_only_scan_stops_when_input_becomes_pending() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_idle_only_scan_stops_when_input_becomes_pending",
+        r##"(with-temp-buffer
          (insert
           "hello bonjour zunächst además svenska pozdrav")
          (let ((polls 0)
@@ -239,12 +267,15 @@ fn detection_public_surface_batch() {
              (list
               (nreverse words)
               polls))))"##,
-            true,
-            expect![[r#"OK (("hello" "bonjour" "zunächst" "además") 5)"#]],
-        ),
-        (
-            "auto_dictionary_third_party_word_and_buffer_apis_cover_case_unknown_and_idle_abort",
-            r##"(list
+        true,
+        expect![[r#"OK (("hello" "bonjour" "zunächst" "además") 5)"#]],
+    )
+}
+
+fn auto_dictionary_third_party_word_and_buffer_apis_cover_case_unknown_and_idle_abort() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_dictionary_third_party_word_and_buffer_apis_cover_case_unknown_and_idle_abort",
+        r##"(list
          (mapcar
           #'adict-guess-word-language
           '("HELLO" "Bonjour" "MORGAŬ"
@@ -260,8 +291,26 @@ fn detection_public_surface_batch() {
                   'input-pending-p)
                  (lambda () t)))
              (adict-guess-buffer-language t))))"##,
-            true,
-            expect![[r#"OK (("en" "fr" "eo" nil) "eo" nil)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (("en" "fr" "eo" nil) "eo" nil)"#]],
+    )
+}
+
+#[test]
+fn detection_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_dictionary_dictionary_name_search_honors_candidate_and_valid_list_order(),
+        auto_dictionary_dictionary_cons_preserves_language_even_when_dictionary_missing(),
+        auto_dictionary_custom_type_is_derived_from_language_list_in_order(),
+        auto_dictionary_real_multilingual_buffer_produces_exact_score_vector_and_winner(),
+        auto_dictionary_tied_scores_choose_lowest_positive_language_index(),
+        auto_dictionary_current_and_legacy_dictionary_formats_map_same_language_index(),
+        auto_dictionary_disabled_language_still_detects_language_but_returns_no_dictionary(),
+        auto_dictionary_foreach_word_handles_punctuation_case_length_and_region_bounds(),
+        auto_dictionary_foreach_word_respects_flyspell_generic_word_predicate(),
+        auto_dictionary_foreach_word_excludes_conditional_overlay_text_from_scoring(),
+        auto_dictionary_idle_only_scan_stops_when_input_becomes_pending(),
+        auto_dictionary_third_party_word_and_buffer_apis_cover_case_unknown_and_idle_abort(),
+    ];
+    assert_auto_dictionary_batch(&cases);
 }

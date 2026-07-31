@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::assert_amd_mode_batch;
+use super::{ParityBatchCase, assert_amd_mode_batch};
 
 /// Starting a module from nothing, which is the first thing the package's
 /// commentary tells a user to do: `amd-auto-insert' writes an empty `define'
@@ -21,12 +21,10 @@ use super::assert_amd_mode_batch;
 /// answers `shortcut', so `lib/keyboard/bindings' enters the array under its
 /// full path and the parameter list under the name the user chose.
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_amd_mode_batch(&[
-        (
-            "starting_an_empty_module_and_importing_dependencies_by_name",
-            r##"(let* ((root (amd-test-project "amd-start"))
+fn starting_an_empty_module_and_importing_dependencies_by_name() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "starting_an_empty_module_and_importing_dependencies_by_name",
+        r##"(let* ((root (amd-test-project "amd-start"))
        (buffer (amd-test-open root "src/app/main.js" "")))
   (amd-test-in buffer
     (amd-auto-insert)
@@ -45,14 +43,17 @@ fn workflows_public_surface_batch() {
             (list template first second duplicate
                   (equal second duplicate)
                   (amd-test-text))))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("define([], function() {\n    \n});\n" 29) "define(['lib/router'], function(router) {\n    \n});\n" "define(['lib/router',\n\11'widgets/button'], function(router, button) {\n    \n});\n" "define(['lib/router',\n\11'widgets/button'], function(router, button) {\n    \n});\n" t "define(['lib/router',\n\11'widgets/button',\n\11'lib/keyboard/bindings'], function(router, button, shortcut) {\n    \n});\n")"#
     ]],
-        ),
-        (
-            "importing_a_file_uses_a_relative_path_only_where_the_settings_say_so",
-            r##"(let* ((root (amd-test-project "amd-paths"))
+    )
+}
+
+fn importing_a_file_uses_a_relative_path_only_where_the_settings_say_so() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "importing_a_file_uses_a_relative_path_only_where_the_settings_say_so",
+        r##"(let* ((root (amd-test-project "amd-paths"))
        (_ (amd-test-write root "src/app/util/format.js" "define([], function() {});\n"))
        (_ (amd-test-write root "src/vendor/moment.js" "define([], function() {});\n")))
   (cl-flet ((import-both
@@ -69,14 +70,17 @@ fn workflows_public_surface_batch() {
             (import-both :relative-when-below))
           (let ((amd-always-use-relative-file-name t))
             (import-both :always-relative)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:default "define(['src/app/util/format',\n\11'src/vendor/moment'], function(format, moment) {\n\n});\n") (:relative-when-below "define(['./util/format',\n\11'src/vendor/moment'], function(format, moment) {\n\n});\n") (:always-relative "define(['./util/format',\n\11'../vendor/moment'], function(format, moment) {\n\n});\n"))"#
     ]],
-        ),
-        (
-            "killing_and_reordering_a_dependency_keeps_the_parameter_list_in_step",
-            r##"(let* ((root (amd-test-project "amd-edit"))
+    )
+}
+
+fn killing_and_reordering_a_dependency_keeps_the_parameter_list_in_step() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "killing_and_reordering_a_dependency_keeps_the_parameter_list_in_step",
+        r##"(let* ((root (amd-test-project "amd-edit"))
        (buffer (amd-test-open root "src/app/main.js" amd-test-two-module-source)))
   (amd-test-in buffer
     (let ((bindings (list (key-description
@@ -105,14 +109,17 @@ fn workflows_public_surface_batch() {
             (execute-kbd-macro (kbd "<C-S-up>"))
             (list bindings original killed reimported moved-down
                   (amd-test-text))))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("C-k" "C-S-<up>" "C-S-<down>") "define([\n    'lib/router',\n    'widgets/button'\n], function(router, button) {\n    return router;\n});\n" "define([\n    'widgets/button'\n], function(button) {\n    return router;\n});\n" "define([\n    'widgets/button',\n    'lib/router'\n], function(button, router) {\n    return router;\n});\n" "define([\n    'lib/router',\n    'widgets/button'\n], function(router, button) {\n    return router;\n});\n" "define([\n    'widgets/button',\n    'lib/router'\n], function(button, router) {\n    return router;\n});\n")"#
     ]],
-        ),
-        (
-            "copying_the_buffers_module_path_applies_the_projects_rewrite_rules",
-            r##"(let* ((root (amd-test-project "amd-copy"))
+    )
+}
+
+fn copying_the_buffers_module_path_applies_the_projects_rewrite_rules() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "copying_the_buffers_module_path_applies_the_projects_rewrite_rules",
+        r##"(let* ((root (amd-test-project "amd-copy"))
        (buffer (amd-test-open root "src/widgets/forms/button.js"
                               "define([], function() {\n\n});\n")))
   (amd-test-in buffer
@@ -141,14 +148,17 @@ fn workflows_public_surface_batch() {
                                 amd-search-references))
                       (amd-test-text)
                       kill-ring)))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("'src/widgets/forms/button'" "'widgets/forms/button'" "'ui/forms/button'" "'src/widgets/forms/button'" "'src/widgets/forms/button'" "define([], function() {\n\n});\n" (nil ((error "Not within a project") (error "Not within a project") (error "Not within a project")) "" nil))"#
     ]],
-        ),
-        (
-            "searching_for_references_runs_ag_with_the_configured_ignores",
-            r##"(let* ((root (amd-test-project "amd-refs"))
+    )
+}
+
+fn searching_for_references_runs_ag_with_the_configured_ignores() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "searching_for_references_runs_ag_with_the_configured_ignores",
+        r##"(let* ((root (amd-test-project "amd-refs"))
        (log (amd-test-configure-ag
              root
              (concat "src/app/main.js:3:    'widgets/button',\n"
@@ -172,14 +182,17 @@ fn workflows_public_surface_batch() {
               (with-current-buffer "*Messages*"
                 (buffer-substring-no-properties message-start (point-max)))
               (and (get-buffer "*xref*") t))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("--js" "--noheading" "--ignore-dir" "bower_components" "--ignore-dir" "node_modules" "--ignore-dir" "build" "--ignore-dir" "lib" "--ignore" "*.min.js" "define\\([^])]+['|\"](.*/)?button['|\"]") "src/app/other.js\n2:define(['widgets/button'], function(button) {\nsrc/app/main.js\n3:'widgets/button',\n") "No reference found" ("--js" "--noheading" "--ignore-dir" "dist" "--ignore" "*.bundle.js" "--ignore" "*.min.js" "define\\([^])]+['|\"](.*/)?button['|\"]") "No reference found\n" nil)"#
     ]],
-        ),
-        (
-            "a_reference_longer_than_a_hundred_characters_aborts_the_search",
-            r##"(let* ((root (amd-test-project "amd-long"))
+    )
+}
+
+fn a_reference_longer_than_a_hundred_characters_aborts_the_search() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "a_reference_longer_than_a_hundred_characters_aborts_the_search",
+        r##"(let* ((root (amd-test-project "amd-long"))
        (long-line (concat "var b=" (make-string 120 ?x) "'button';"))
        (log (amd-test-configure-ag
              root
@@ -198,10 +211,22 @@ fn workflows_public_surface_batch() {
               (amd-test-ag-arguments log)
               (and (bufferp short) t)
               (amd-test-xref-text "amd-long"))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:signal wrong-type-argument :on-a-line-of-length 135) ("--js" "--noheading" "--ignore-dir" "bower_components" "--ignore-dir" "node_modules" "--ignore-dir" "build" "--ignore-dir" "lib" "--ignore" "*.min.js" "define\\([^])]+['|\"](.*/)?button['|\"]") t "src/app/main.js\n3:define(['widgets/button'], function(button) {\n")"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        starting_an_empty_module_and_importing_dependencies_by_name(),
+        importing_a_file_uses_a_relative_path_only_where_the_settings_say_so(),
+        killing_and_reordering_a_dependency_keeps_the_parameter_list_in_step(),
+        copying_the_buffers_module_path_applies_the_projects_rewrite_rules(),
+        searching_for_references_runs_ag_with_the_configured_ignores(),
+        a_reference_longer_than_a_hundred_characters_aborts_the_search(),
+    ];
+    assert_amd_mode_batch(&cases);
 }

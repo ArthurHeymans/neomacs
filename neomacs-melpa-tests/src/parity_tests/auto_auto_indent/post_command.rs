@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_auto_indent_batch;
+use super::{ParityBatchCase, assert_auto_auto_indent_batch};
 
-#[test]
-fn post_command_public_surface_batch() {
-    assert_auto_auto_indent_batch(&[
-        (
-            "auto_auto_indent_before_change_marks_only_enabled_buffer_and_accepts_hook_arguments",
-            r##"(mapcar
+fn auto_auto_indent_before_change_marks_only_enabled_buffer_and_accepts_hook_arguments() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_auto_indent_before_change_marks_only_enabled_buffer_and_accepts_hook_arguments",
+        r##"(mapcar
           (lambda (enabled)
             (with-temp-buffer
               (setq aai-mode enabled
@@ -20,12 +18,15 @@ fn post_command_public_surface_batch() {
                 :extra)
                aai--change-flag)))
           '(nil t 1))"##,
-            true,
-            expect!["OK ((nil nil nil) (t t t) (1 t t))"],
-        ),
-        (
-            "auto_auto_indent_post_command_returns_early_when_disabled_or_cua_rectangle_active",
-            r##"(mapcar
+        true,
+        expect!["OK ((nil nil nil) (t t t) (1 t t))"],
+    )
+}
+
+fn auto_auto_indent_post_command_returns_early_when_disabled_or_cua_rectangle_active() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_auto_indent_post_command_returns_early_when_disabled_or_cua_rectangle_active",
+        r##"(mapcar
           (lambda (case)
             (with-temp-buffer
               (insert "  body")
@@ -45,12 +46,15 @@ fn post_command_public_surface_batch() {
                  (point)
                  aai--change-flag))))
           '(disabled rectangle))"##,
-            true,
-            expect!["OK ((disabled nil 1 :pending) (rectangle nil 1 :pending))"],
-        ),
-        (
-            "auto_auto_indent_post_command_immediately_indents_first_structural_and_regular_edits",
-            r##"(mapcar
+        true,
+        expect!["OK ((disabled nil 1 :pending) (rectangle nil 1 :pending))"],
+    )
+}
+
+fn auto_auto_indent_post_command_immediately_indents_first_structural_and_regular_edits() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_auto_indent_post_command_immediately_indents_first_structural_and_regular_edits",
+        r##"(mapcar
           (lambda (spec)
             (with-temp-buffer
               (insert "body")
@@ -82,14 +86,17 @@ fn post_command_public_surface_batch() {
              self-insert-command
              40)
             (forward-word other 120)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK (((self-insert-command other 120) nil t ((self-insert-command other 120))) ((self-insert-command self-insert-command 40) nil t ((self-insert-command self-insert-command 40))) ((forward-word other 120) nil t ((forward-word other 120))))"
     ],
-        ),
-        (
-            "auto_auto_indent_repeated_nonstructural_self_insert_cancels_and_reschedules_idle_timer",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_auto_indent_repeated_nonstructural_self_insert_cancels_and_reschedules_idle_timer() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_auto_indent_repeated_nonstructural_self_insert_cancels_and_reschedules_idle_timer",
+        r##"(with-temp-buffer
           (insert "body")
           (set-buffer-modified-p t)
           (let ((aai-mode t)
@@ -125,12 +132,15 @@ fn post_command_public_surface_batch() {
                aai--change-flag
                aai--timer
                (nreverse events)))))"##,
-            true,
-            expect!["OK (nil t :new-timer ((:cancel :old-timer) (:schedule 0.75 nil t)))"],
-        ),
-        (
-            "auto_auto_indent_post_command_command_matrix_freezes_immediate_delayed_and_skipped_paths",
-            r##"(mapcar
+        true,
+        expect!["OK (nil t :new-timer ((:cancel :old-timer) (:schedule 0.75 nil t)))"],
+    )
+}
+
+fn auto_auto_indent_post_command_command_matrix_freezes_immediate_delayed_and_skipped_paths() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_auto_indent_post_command_command_matrix_freezes_immediate_delayed_and_skipped_paths",
+        r##"(mapcar
           (lambda (command)
             (with-temp-buffer
               (insert "body")
@@ -166,14 +176,17 @@ fn post_command_public_surface_batch() {
             undo-tree-undo
             undo-tree-redo
             forward-word))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((self-insert-command (:indent) t nil) (delete-horizontal-space nil t nil) (quoted-insert nil t nil) (backward-paragraph nil t nil) (kill-region nil t nil) (save-buffer nil t nil) (undo nil t nil) (undo-tree-undo nil t nil) (undo-tree-redo nil t nil) (forward-word (:indent) t nil))"
     ],
-        ),
-        (
-            "auto_auto_indent_unmodified_buffer_skips_immediate_indent_but_can_schedule_delayed_work",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_auto_indent_unmodified_buffer_skips_immediate_indent_but_can_schedule_delayed_work() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_auto_indent_unmodified_buffer_skips_immediate_indent_but_can_schedule_delayed_work",
+        r##"(with-temp-buffer
           (insert "body")
           (set-buffer-modified-p nil)
           (let ((aai-mode t)
@@ -196,12 +209,15 @@ fn post_command_public_surface_batch() {
                (nreverse events)
                aai--timer
                aai--change-flag))))"##,
-            true,
-            expect!["OK (nil (:timer) :timer t)"],
-        ),
-        (
-            "auto_auto_indent_post_command_cursor_correction_depends_on_navigation_direction",
-            r##"(mapcar
+        true,
+        expect!["OK (nil (:timer) :timer t)"],
+    )
+}
+
+fn auto_auto_indent_post_command_cursor_correction_depends_on_navigation_direction() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_auto_indent_post_command_cursor_correction_depends_on_navigation_direction",
+        r##"(mapcar
           (lambda (command)
             (with-temp-buffer
               (insert "first\n    second\n")
@@ -228,14 +244,17 @@ fn post_command_public_surface_batch() {
             previous-line
             next-line
             other-command))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((backward-char nil 6 1 5) (left-char nil 6 1 5) (forward-char nil 11 2 4) (right-char nil 11 2 4) (previous-line nil 11 2 4) (next-line nil 11 2 4) (other-command nil 7 2 0))"
     ],
-        ),
-        (
-            "auto_auto_indent_active_region_and_multiple_cursors_suppress_position_correction",
-            r##"(mapcar
+    )
+}
+
+fn auto_auto_indent_active_region_and_multiple_cursors_suppress_position_correction() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_auto_indent_active_region_and_multiple_cursors_suppress_position_correction",
+        r##"(mapcar
           (lambda (case)
             (with-temp-buffer
               (insert "    selected")
@@ -258,12 +277,15 @@ fn post_command_public_surface_batch() {
                  (current-column)
                  (region-active-p)))))
           '(normal region multiple-cursors))"##,
-            true,
-            expect!["OK ((normal nil 5 4 nil) (region nil 1 0 t) (multiple-cursors nil 1 0 nil))"],
-        ),
-        (
-            "auto_auto_indent_post_command_swallows_errors_unless_debug_handler_is_enabled",
-            r##"(mapcar
+        true,
+        expect!["OK ((normal nil 5 4 nil) (region nil 1 0 t) (multiple-cursors nil 1 0 nil))"],
+    )
+}
+
+fn auto_auto_indent_post_command_swallows_errors_unless_debug_handler_is_enabled() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_auto_indent_post_command_swallows_errors_unless_debug_handler_is_enabled",
+        r##"(mapcar
           (lambda (debug-enabled)
             (with-temp-buffer
               (insert "body")
@@ -291,14 +313,17 @@ fn post_command_public_surface_batch() {
                    aai--change-flag
                    (nreverse events))))))
           '(nil t))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((nil (:ok nil) t nil) (t (:ok :debugged) t ((nil (error "fixture indentation failed")))))"#
     ]],
-        ),
-        (
-            "auto_auto_indent_real_insert_hook_and_post_command_reformat_practical_lisp_edit",
-            r##"(with-temp-buffer
+    )
+}
+
+fn auto_auto_indent_real_insert_hook_and_post_command_reformat_practical_lisp_edit() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_auto_indent_real_insert_hook_and_post_command_reformat_practical_lisp_edit",
+        r##"(with-temp-buffer
           (emacs-lisp-mode)
           (insert
            "(progn\n"
@@ -320,8 +345,24 @@ fn post_command_public_surface_batch() {
                (buffer-string)
                (point)
                (current-column)))))"##,
-            true,
-            expect![[r#"OK (t t "(progn\n  (message \"one\"))\n" 10 2)"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (t t "(progn\n  (message \"one\"))\n" 10 2)"#]],
+    )
+}
+
+#[test]
+fn post_command_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_auto_indent_before_change_marks_only_enabled_buffer_and_accepts_hook_arguments(),
+        auto_auto_indent_post_command_returns_early_when_disabled_or_cua_rectangle_active(),
+        auto_auto_indent_post_command_immediately_indents_first_structural_and_regular_edits(),
+        auto_auto_indent_repeated_nonstructural_self_insert_cancels_and_reschedules_idle_timer(),
+        auto_auto_indent_post_command_command_matrix_freezes_immediate_delayed_and_skipped_paths(),
+        auto_auto_indent_unmodified_buffer_skips_immediate_indent_but_can_schedule_delayed_work(),
+        auto_auto_indent_post_command_cursor_correction_depends_on_navigation_direction(),
+        auto_auto_indent_active_region_and_multiple_cursors_suppress_position_correction(),
+        auto_auto_indent_post_command_swallows_errors_unless_debug_handler_is_enabled(),
+        auto_auto_indent_real_insert_hook_and_post_command_reformat_practical_lisp_edit(),
+    ];
+    assert_auto_auto_indent_batch(&cases);
 }

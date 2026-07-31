@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_ai_code_batch;
+use super::{ParityBatchCase, assert_ai_code_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_ai_code_batch(&[
-        (
-            "the_editor_helper_the_package_installs_emits_frames_its_own_parser_decodes",
-            r##"(progn
+fn the_editor_helper_the_package_installs_emits_frames_its_own_parser_decodes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "the_editor_helper_the_package_installs_emits_frames_its_own_parser_decodes",
+        r##"(progn
   (require 'ai-code-editor-viewport-transport)
   (let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
          (root (file-name-as-directory (expand-file-name "repo" sandbox)))
@@ -85,10 +83,17 @@ fn workflows_public_surface_batch() {
          :without-frame-prefix (invoke '("api.el") nil)
          ;; And with no file arguments at all.
          :without-files (invoke '() prefix-entry))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:regular (:payloads 1 :fields ("[STATUS-FILE]" "[SANDBOX]/repo" "0" "ai-code-editor-viewport-v1" "regular" "+2:3" "api.el" "")) :staging (:payloads 1 :fields ("[STATUS-FILE]" "[SANDBOX]/repo" "0" "ai-code-editor-viewport-v1" "staging" "api.el" "")) :submit (:payloads 1 :fields ("[STATUS-FILE]" "[SANDBOX]/repo" "1" "ai-code-editor-viewport-v1" "regular" "api.el" "")) :without-frame-prefix (:payloads 0 :fields nil) :without-files (:payloads 0 :fields nil))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        the_editor_helper_the_package_installs_emits_frames_its_own_parser_decodes(),
+    ];
+    assert_ai_code_batch(&cases);
 }

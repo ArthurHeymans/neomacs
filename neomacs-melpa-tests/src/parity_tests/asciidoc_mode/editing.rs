@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_asciidoc_mode_batch;
+use super::{ParityBatchCase, assert_asciidoc_mode_batch};
 
-#[test]
-fn editing_public_surface_batch() {
-    assert_asciidoc_mode_batch(&[
-        (
-            "heading_commands_edit_nested_document_structure_and_preserve_point_semantics",
-            r##"(with-temp-buffer
+fn heading_commands_edit_nested_document_structure_and_preserve_point_semantics() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "heading_commands_edit_nested_document_structure_and_preserve_point_semantics",
+        r##"(with-temp-buffer
   (insert
    "= Document\n\n"
    "== Architecture\n\n"
@@ -54,14 +52,17 @@ fn editing_public_surface_batch() {
       '(("Document" . asciidoc-promote-heading)
         ("Deep Limit" . asciidoc-demote-heading)
         ("Ordinary prose" . asciidoc-promote-heading))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (((asciidoc-demote-heading 28 29 "=== Architecture") (asciidoc-promote-heading 50 49 "== Parser Pipeline")) "= Document\n\n=== Architecture\n\n== Parser Pipeline\n\n====== Deep Limit\n\nOrdinary prose.\n" ((user-error ("Already at the topmost heading level") "= Document") (user-error ("Already at the deepest heading level") "====== Deep Limit") (user-error ("Point is not on a heading") "Ordinary prose.")))"#
     ]],
-        ),
-        (
-            "comment_and_uncomment_region_round_trip_realistic_asciidoc_without_touching_urls",
-            r##"(with-temp-buffer
+    )
+}
+
+fn comment_and_uncomment_region_round_trip_realistic_asciidoc_without_touching_urls() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "comment_and_uncomment_region_round_trip_realistic_asciidoc_without_touching_urls",
+        r##"(with-temp-buffer
   (insert
    "= Operations\n\n"
    "Visit https://example.com/a/b for deployment details.\n"
@@ -88,14 +89,17 @@ fn editing_public_surface_batch() {
          (string-match-p
           "https://example.com/a/b"
           (buffer-string)))))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("// " "^//+\\s-*" "= Operations\n\nVisit https://example.com/a/b for deployment details.\nRun the documented rollback when required.\n" "= Operations\n\n// Visit https://example.com/a/b for deployment details.\n// Run the documented rollback when required.\n" "= Operations\n\nVisit https://example.com/a/b for deployment details.\nRun the documented rollback when required.\n" t 14 20)"#
     ]],
-        ),
-        (
-            "paragraph_filling_wraps_prose_around_a_url_without_inventing_comment_prefixes",
-            r##"(with-temp-buffer
+    )
+}
+
+fn paragraph_filling_wraps_prose_around_a_url_without_inventing_comment_prefixes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "paragraph_filling_wraps_prose_around_a_url_without_inventing_comment_prefixes",
+        r##"(with-temp-buffer
   (insert
    "Visit https://example.com/a/b for more details about the practical "
    "deployment process and its rollback procedure.\n\n"
@@ -119,14 +123,17 @@ fn editing_public_surface_batch() {
      (goto-char (point-max))
      (forward-line -1)
      (nth 4 (syntax-ppss)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ("Visit https://example.com/a/b for more\ndetails about the practical deployment\nprocess and its rollback procedure.\n\n// A genuine comment remains a comment.\n" 5 nil nil)"#
     ]],
-        ),
-        (
-            "inherited_text_indentation_normalizes_explicit_asciidoc_list_and_source_layout_exactly",
-            r##"(with-temp-buffer
+    )
+}
+
+fn inherited_text_indentation_normalizes_explicit_asciidoc_list_and_source_layout_exactly() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "inherited_text_indentation_normalizes_explicit_asciidoc_list_and_source_layout_exactly",
+        r##"(with-temp-buffer
   (insert
    "* Parent item\n"
    "  continuation aligned by the author\n"
@@ -152,10 +159,20 @@ fn editing_public_surface_batch() {
           (forward-line line)
           (current-indentation)))
       '(0 1 2 4 5 6 7 8)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (indent-relative "* Parent item\n  continuation aligned by the author\n** Nested item\n\n[source,emacs-lisp]\n----\n(let ((value 1))\n  (+ value 2))\n----\n" "* Parent item\ncontinuation aligned by the author\n** Nested item\n\n[source,emacs-lisp]\n----\n(let ((value 1))\n(+ value 2))\n----\n" nil (0 0 0 0 0 0 0 0))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn editing_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        heading_commands_edit_nested_document_structure_and_preserve_point_semantics(),
+        comment_and_uncomment_region_round_trip_realistic_asciidoc_without_touching_urls(),
+        paragraph_filling_wraps_prose_around_a_url_without_inventing_comment_prefixes(),
+        inherited_text_indentation_normalizes_explicit_asciidoc_list_and_source_layout_exactly(),
+    ];
+    assert_asciidoc_mode_batch(&cases);
 }

@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_aurora_config_mode_batch;
+use super::{ParityBatchCase, assert_aurora_config_mode_batch};
 
-#[test]
-fn workflows_public_surface_batch() {
-    assert_aurora_config_mode_batch(&[
-        (
-            "aurora_config_mode_practical_font_lock_failure_does_not_block_inspect_and_diff",
-            r##"(with-temp-buffer
+fn aurora_config_mode_practical_font_lock_failure_does_not_block_inspect_and_diff() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurora_config_mode_practical_font_lock_failure_does_not_block_inspect_and_diff",
+        r##"(with-temp-buffer
           (setq
            buffer-file-name
            (expand-file-name
@@ -57,14 +55,17 @@ fn workflows_public_surface_batch() {
                answers
                (buffer-string)
                (buffer-modified-p)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((aurora-config-mode "Aurora" python-mode "payments = Job(\n    name='payments',\n    task=Task(processes=[Service(), Process()]))\n" nil nil t 6 aurora-config-inspect aurora-config-diff) (:error wrong-type-argument (listp font-lock-type-face)) nil (:compiled "aurora inspect cluster/payments/prod/payments payments.aurora") (:compiled "aurora diff cluster/payments/stage/payments payments.aurora") (("Job path as 'cluster/role/env/job': " "smf1/") ("Job path as 'cluster/role/env/job': " "cluster/payments/prod/payments")) (("aurora inspect cluster/payments/prod/payments payments.aurora" "aurora inspect cluster/payments/prod/payments payments.aurora") ("aurora diff cluster/payments/stage/payments payments.aurora" "aurora diff cluster/payments/stage/payments payments.aurora")) "cluster/payments/stage/payments" nil "payments = Job(\n    name='payments',\n    task=Task(processes=[Service(), Process()]))\n" nil)"#
     ]],
-        ),
-        (
-            "aurora_config_mode_two_live_configuration_buffers_keep_independent_jobpaths_and_basenames",
-            r##"(let ((first
+    )
+}
+
+fn aurora_config_mode_two_live_configuration_buffers_keep_independent_jobpaths_and_basenames() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurora_config_mode_two_live_configuration_buffers_keep_independent_jobpaths_and_basenames",
+        r##"(let ((first
                 (generate-new-buffer
                  " *aurora-first*"))
                (second
@@ -119,14 +120,17 @@ fn workflows_public_surface_batch() {
                   'aurora-config-last-job-path)))
             (kill-buffer first)
             (kill-buffer second)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("west/api/prod/api" t aurora-config-mode) ("east/worker/stage/worker" t aurora-config-mode) ("aurora inspect west/api/prod/api api.aurora" "aurora diff east/worker/stage/worker worker.mesos") "smf1/")"#
     ]],
-        ),
-        (
-            "aurora_config_mode_incremental_edit_repeats_font_lock_failure_without_losing_content",
-            r##"(with-temp-buffer
+    )
+}
+
+fn aurora_config_mode_incremental_edit_repeats_font_lock_failure_without_losing_content() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurora_config_mode_incremental_edit_repeats_font_lock_failure_without_losing_content",
+        r##"(with-temp-buffer
           (insert
            "def make_job(name):\n"
            "    return Job(name=name)\n")
@@ -152,14 +156,17 @@ fn workflows_public_surface_batch() {
              (aurora-config-test-face-runs)
              (buffer-string)
              (buffer-modified-p))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((:error wrong-type-argument (listp font-lock-type-face)) nil (:error wrong-type-argument (listp font-lock-type-face)) nil "def make_job(name):\n    return Job(name=name)\n\nservice = Service(processes=[JVMProcess(), Process()])\nschema = Struct(name=String, replicas=Integer)\n" t)"#
     ]],
-        ),
-        (
-            "aurora_config_mode_renaming_between_supported_and_unsupported_suffixes_changes_auto_mode_choice",
-            r##"(with-temp-buffer
+    )
+}
+
+fn aurora_config_mode_renaming_between_supported_and_unsupported_suffixes_changes_auto_mode_choice() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurora_config_mode_renaming_between_supported_and_unsupported_suffixes_changes_auto_mode_choice",
+        r##"(with-temp-buffer
           (let (states)
             (dolist
                 (name
@@ -187,14 +194,17 @@ fn workflows_public_surface_batch() {
                  (kbd "C-c a i")))
                states))
             (nreverse states)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("service.aurora" aurora-config-mode "Aurora" aurora-config-mode aurora-config-inspect) ("service.txt" text-mode "Text" nil 1) ("service.mesos" aurora-config-mode "Aurora" aurora-config-mode aurora-config-inspect) ("service.py" python-mode "Python" nil 2) ("service.AURORA" aurora-config-mode "Aurora" aurora-config-mode aurora-config-inspect))"#
     ]],
-        ),
-        (
-            "aurora_config_mode_compile_command_binding_is_per_call_and_does_not_leak_across_workflow",
-            r##"(with-temp-buffer
+    )
+}
+
+fn aurora_config_mode_compile_command_binding_is_per_call_and_does_not_leak_across_workflow() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "aurora_config_mode_compile_command_binding_is_per_call_and_does_not_leak_across_workflow",
+        r##"(with-temp-buffer
           (setq
            buffer-file-name
            (expand-file-name
@@ -222,10 +232,21 @@ fn workflows_public_surface_batch() {
                 "cluster/role/prod/no-leak")
                compile-command
                (nreverse observations)))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:done "outer compile command" :done "outer compile command" (("aurora inspect cluster/role/dev/no-leak no-leak.aurora" "aurora inspect cluster/role/dev/no-leak no-leak.aurora") ("aurora diff cluster/role/prod/no-leak no-leak.aurora" "aurora diff cluster/role/prod/no-leak no-leak.aurora")))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn workflows_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        aurora_config_mode_practical_font_lock_failure_does_not_block_inspect_and_diff(),
+        aurora_config_mode_two_live_configuration_buffers_keep_independent_jobpaths_and_basenames(),
+        aurora_config_mode_incremental_edit_repeats_font_lock_failure_without_losing_content(),
+        aurora_config_mode_renaming_between_supported_and_unsupported_suffixes_changes_auto_mode_choice(),
+        aurora_config_mode_compile_command_binding_is_per_call_and_does_not_leak_across_workflow(),
+    ];
+    assert_aurora_config_mode_batch(&cases);
 }

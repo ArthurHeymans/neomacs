@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::{assert_goto_chg_batch};
+use super::{ParityBatchCase, assert_goto_chg_batch};
 
-#[test]
-fn navigation_public_surface_batch() {
-    assert_goto_chg_batch(&[
-        (
-            "goto_chg_navigates_real_insertions_backward_then_forward_by_change_time",
-            r##"(with-temp-buffer
+fn goto_chg_navigates_real_insertions_backward_then_forward_by_change_time() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_navigates_real_insertions_backward_then_forward_by_change_time",
+        r##"(with-temp-buffer
                (buffer-enable-undo)
                (insert (make-string 80 ?-))
                (setq buffer-undo-list nil)
@@ -42,12 +40,15 @@ fn navigation_public_surface_batch() {
                   glc-probe-depth
                   glc-direction
                   glc-current-span)))"##,
-            true,
-            expect!["OK ((71 41 11 41 71) 1 -1 2)"],
-        ),
-        (
-            "goto_chg_navigates_real_deletion_and_property_change_entries",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK ((71 41 11 41 71) 1 -1 2)"],
+    )
+}
+
+fn goto_chg_navigates_real_deletion_and_property_change_entries() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_navigates_real_deletion_and_property_change_entries",
+        r##"(with-temp-buffer
                (buffer-enable-undo)
                (insert
                 "01234567890123456789012345678901234567890123456789")
@@ -79,12 +80,15 @@ fn navigation_public_surface_batch() {
                   (nreverse messages)
                   glc-probe-depth
                   glc-current-span)))"##,
-            true,
-            expect![[r#"OK ((27 8) ("T-1: Property change" "T-2: Deleted \"78901\"") 2 0)"#]],
-        ),
-        (
-            "goto_chg_numeric_and_universal_arguments_update_the_active_span",
-            r##"(with-temp-buffer
+        true,
+        expect![[r#"OK ((27 8) ("T-1: Property change" "T-2: Deleted \"78901\"") 2 0)"#]],
+    )
+}
+
+fn goto_chg_numeric_and_universal_arguments_update_the_active_span() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_numeric_and_universal_arguments_update_the_active_span",
+        r##"(with-temp-buffer
                (buffer-enable-undo)
                (insert (make-string 60 ?x))
                (setq buffer-undo-list nil)
@@ -114,12 +118,15 @@ fn navigation_public_surface_batch() {
                   (nreverse spans)
                   (nreverse messages)
                   glc-direction)))"##,
-            true,
-            expect![[r#"OK ((0 12) ("Current span is 12 chars") 1)"#]],
-        ),
-        (
-            "goto_chg_reverse_normalizes_each_prefix_shape_before_delegating",
-            r##"(let (calls)
+        true,
+        expect![[r#"OK ((0 12) ("Current span is 12 chars") 1)"#]],
+    )
+}
+
+fn goto_chg_reverse_normalizes_each_prefix_shape_before_delegating() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_reverse_normalizes_each_prefix_shape_before_delegating",
+        r##"(let (calls)
                (cl-letf (((symbol-function 'goto-last-change)
                           (lambda (arg)
                             (push
@@ -140,14 +147,17 @@ fn navigation_public_surface_batch() {
                      (goto-last-change-reverse
                       (car case))))
                  (nreverse calls)))"##,
-            true,
-            expect![
+        true,
+        expect![
         "OK ((- goto-last-change other) (nil goto-last-change other) ((-4) goto-last-change other) (-7 goto-last-change other) (- goto-last-change goto-last-change))"
     ],
-        ),
-        (
-            "goto_chg_first_call_skips_current_edit_after_obvious_edit_commands",
-            r##"(with-temp-buffer
+    )
+}
+
+fn goto_chg_first_call_skips_current_edit_after_obvious_edit_commands() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_first_call_skips_current_edit_after_obvious_edit_commands",
+        r##"(with-temp-buffer
                (buffer-enable-undo)
                (insert (make-string 50 ?x))
                (setq buffer-undo-list nil)
@@ -169,42 +179,54 @@ fn navigation_public_surface_batch() {
                             (point)
                             glc-probe-depth)))
                   '(other yank self-insert-command kill-region))))"##,
-            true,
-            expect!["OK ((other 36 1) (yank 11 2) (self-insert-command 11 2) (kill-region 36 1))"],
-        ),
-        (
-            "goto_chg_signals_when_the_buffer_has_no_changes",
-            r##"(with-temp-buffer
+        true,
+        expect!["OK ((other 36 1) (yank 11 2) (self-insert-command 11 2) (kill-region 36 1))"],
+    )
+}
+
+fn goto_chg_signals_when_the_buffer_has_no_changes() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_signals_when_the_buffer_has_no_changes",
+        r##"(with-temp-buffer
                (let ((this-command 'goto-last-change)
                      (last-command 'other))
                  (goto-last-change nil)))"##,
-            false,
-            expect![[r#"ERR (error "No change info (undo is disabled)")"#]],
-        ),
-        (
-            "goto_chg_signals_when_undo_is_disabled",
-            r##"(with-temp-buffer
+        false,
+        expect![[r#"ERR (error "No change info (undo is disabled)")"#]],
+    )
+}
+
+fn goto_chg_signals_when_undo_is_disabled() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_signals_when_undo_is_disabled",
+        r##"(with-temp-buffer
                (setq buffer-undo-list t)
                (let ((this-command 'goto-last-change)
                      (last-command 'other))
                  (goto-last-change nil)))"##,
-            false,
-            expect![[r#"ERR (error "No change info (undo is disabled)")"#]],
-        ),
-        (
-            "goto_chg_rejects_reverse_direction_as_the_first_operation",
-            r##"(with-temp-buffer
+        false,
+        expect![[r#"ERR (error "No change info (undo is disabled)")"#]],
+    )
+}
+
+fn goto_chg_rejects_reverse_direction_as_the_first_operation() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_rejects_reverse_direction_as_the_first_operation",
+        r##"(with-temp-buffer
                (buffer-enable-undo)
                (insert "changed")
                (let ((this-command 'goto-last-change)
                      (last-command 'other))
                  (goto-last-change -1)))"##,
-            false,
-            expect![[r#"ERR (error "Negative arg: Cannot reverse as the first operation")"#]],
-        ),
-        (
-            "goto_chg_signals_at_the_older_and_newer_ends_of_history",
-            r##"(with-temp-buffer
+        false,
+        expect![[r#"ERR (error "Negative arg: Cannot reverse as the first operation")"#]],
+    )
+}
+
+fn goto_chg_signals_at_the_older_and_newer_ends_of_history() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "goto_chg_signals_at_the_older_and_newer_ends_of_history",
+        r##"(with-temp-buffer
                (buffer-enable-undo)
                (insert (make-string 40 ?x))
                (setq buffer-undo-list nil)
@@ -243,10 +265,25 @@ fn navigation_public_surface_batch() {
                              'no-signal)
                          (error (list (car err) (cdr err)))))
                  (list older newer glc-probe-depth glc-direction)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((error ("No further change info")) (error ("No later change info")) 1 -1)"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn navigation_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        goto_chg_navigates_real_insertions_backward_then_forward_by_change_time(),
+        goto_chg_navigates_real_deletion_and_property_change_entries(),
+        goto_chg_numeric_and_universal_arguments_update_the_active_span(),
+        goto_chg_reverse_normalizes_each_prefix_shape_before_delegating(),
+        goto_chg_first_call_skips_current_edit_after_obvious_edit_commands(),
+        goto_chg_signals_when_the_buffer_has_no_changes(),
+        goto_chg_signals_when_undo_is_disabled(),
+        goto_chg_rejects_reverse_direction_as_the_first_operation(),
+        goto_chg_signals_at_the_older_and_newer_ends_of_history(),
+    ];
+    assert_goto_chg_batch(&cases);
 }

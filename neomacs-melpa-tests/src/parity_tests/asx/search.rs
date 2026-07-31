@@ -1,31 +1,35 @@
 use expect_test::expect;
 
-use super::assert_asx_batch;
+use super::{ParityBatchCase, assert_asx_batch};
 
-#[test]
-fn search_public_surface_batch() {
-    assert_asx_batch(&[
-        (
-            "asx_google_extractor_reads_result_titles_and_question_urls_in_dom_order",
-            r##"(asx--extract-links-google
+fn asx_google_extractor_reads_result_titles_and_question_urls_in_dom_order() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_google_extractor_reads_result_titles_and_question_urls_in_dom_order",
+        r##"(asx--extract-links-google
          (asx-test-search-dom))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("First " . "https://stackoverflow.com/questions/101/first") ("Second result" . "https://emacs.stackexchange.com/questions/202/second"))"#
     ]],
-        ),
-        (
-            "asx_duckduckgo_extractor_combines_nested_title_text_and_trims_display_urls",
-            r##"(asx--extract-links-duckduckgo
+    )
+}
+
+fn asx_duckduckgo_extractor_combines_nested_title_text_and_trims_display_urls() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_duckduckgo_extractor_combines_nested_title_text_and_trims_display_urls",
+        r##"(asx--extract-links-duckduckgo
          (asx-test-search-dom))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("Duck  one" . "stackoverflow.com/questions/303/duck-one") ("Duck two" . "example.com/articles/404"))"#
     ]],
-        ),
-        (
-            "asx_extract_links_dispatches_through_builtin_and_custom_engine_configuration",
-            r##"(let ((dom
+    )
+}
+
+fn asx_extract_links_dispatches_through_builtin_and_custom_engine_configuration() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_extract_links_dispatches_through_builtin_and_custom_engine_configuration",
+        r##"(let ((dom
                 (asx-test-search-dom))
                calls)
          (cl-letf
@@ -52,14 +56,17 @@ fn search_public_surface_batch() {
                       #'asx-test-custom-extractor))))
               (asx--extract-links dom))
             calls)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("First " . "https://stackoverflow.com/questions/101/first") ("Second result" . "https://emacs.stackexchange.com/questions/202/second")) (("Duck  one" . "stackoverflow.com/questions/303/duck-one") ("Duck two" . "example.com/articles/404")) (("Custom" . "https://custom.invalid/questions/9")) (html))"#
     ]],
-        ),
-        (
-            "asx_filter_posts_keeps_only_question_paths_without_reordering_or_rewriting_links",
-            r##"(asx--filter-posts
+    )
+}
+
+fn asx_filter_posts_keeps_only_question_paths_without_reordering_or_rewriting_links() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_filter_posts_keeps_only_question_paths_without_reordering_or_rewriting_links",
+        r##"(asx--filter-posts
          '(("Question"
             .
             "https://stackoverflow.com/questions/123/title")
@@ -78,14 +85,17 @@ fn search_public_surface_batch() {
            ("No digits"
             .
             "https://example.com/questions/abc")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("Question" . "https://stackoverflow.com/questions/123/title") ("Bare question path" . "questions/9") ("Leading zeros" . "https://serverfault.com/questions/0007/x"))"#
     ]],
-        ),
-        (
-            "asx_post_prefixes_mark_every_title_equal_to_current_post_and_preserve_urls",
-            r##"(let ((asx--posts
+    )
+}
+
+fn asx_post_prefixes_mark_every_title_equal_to_current_post_and_preserve_urls() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_post_prefixes_mark_every_title_equal_to_current_post_and_preserve_urls",
+        r##"(let ((asx--posts
                 '(("First" . "url-1")
                   ("Duplicate" . "url-2")
                   ("Duplicate" . "url-3")
@@ -101,14 +111,17 @@ fn search_public_surface_batch() {
            asx--posts)
           (asx--get-posts-with-prefix
            asx--posts)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (#1=("Duplicate" . "url-2") ((("First" . "url-1") "   ") (#1# "=> ") (("Duplicate" . "url-3") "=> ") (("Last" . "url-4") "   ")) (("   First" . "url-1") ("=> Duplicate" . "url-2") ("=> Duplicate" . "url-3") ("   Last" . "url-4")))"#
     ]],
-        ),
-        (
-            "asx_select_post_prompts_with_prefixed_candidates_and_stores_selected_index",
-            r##"(let ((asx--posts
+    )
+}
+
+fn asx_select_post_prompts_with_prefixed_candidates_and_stores_selected_index() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_select_post_prompts_with_prefixed_candidates_and_stores_selected_index",
+        r##"(let ((asx--posts
                 '(("First" . "url-1")
                   ("Second" . "url-2")
                   ("Third" . "url-3")))
@@ -131,14 +144,17 @@ fn search_public_surface_batch() {
             asx--current-post-index
             (asx--get-current-post)
             observed)))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (2 2 ("Third" . "url-3") ("Post: " (("=> First" . "url-1") ("   Second" . "url-2") ("   Third" . "url-3")) nil))"#
     ]],
-        ),
-        (
-            "asx_handle_search_filters_results_selects_first_and_requests_post_without_prompt",
-            r##"(let ((asx-prompt-post-p nil)
+    )
+}
+
+fn asx_handle_search_filters_results_selects_first_and_requests_post_without_prompt() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_handle_search_filters_results_selects_first_and_requests_post_without_prompt",
+        r##"(let ((asx-prompt-post-p nil)
                (asx--current-post-index 9)
                requests)
          (cl-letf
@@ -159,14 +175,17 @@ fn search_public_surface_batch() {
             asx--posts
             asx--current-post-index
             (nreverse requests))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:queued (#1=("First" . "https://stackoverflow.com/questions/1/first") ("Second" . "https://emacs.stackexchange.com/questions/2/second")) 0 (#1#))"#
     ]],
-        ),
-        (
-            "asx_handle_search_prompt_path_uses_selector_before_requesting_chosen_post",
-            r##"(let ((asx-prompt-post-p t)
+    )
+}
+
+fn asx_handle_search_prompt_path_uses_selector_before_requesting_chosen_post() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_handle_search_prompt_path_uses_selector_before_requesting_chosen_post",
+        r##"(let ((asx-prompt-post-p t)
                events)
          (cl-letf
              (((symbol-function
@@ -196,14 +215,17 @@ fn search_public_surface_batch() {
             asx--posts
             asx--current-post-index
             (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:queued #1=(("First" . "questions/1") #2=("Second" . "questions/2")) 1 ((:select #1#) (:request #2#)))"#
     ]],
-        ),
-        (
-            "asx_handle_search_signals_when_extraction_contains_no_question_posts",
-            r##"(let (requests)
+    )
+}
+
+fn asx_handle_search_signals_when_extraction_contains_no_question_posts() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_handle_search_signals_when_extraction_contains_no_question_posts",
+        r##"(let (requests)
          (cl-letf
              (((symbol-function
                 'asx--extract-links)
@@ -223,12 +245,15 @@ fn search_public_surface_batch() {
                 (cdr error))))
             asx--posts
             requests)))"##,
-            true,
-            expect![[r#"OK ((user-error ("No posts found")) nil nil)"#]],
-        ),
-        (
-            "asx_remove_and_next_deletes_all_matching_urls_then_advances_in_remaining_ring",
-            r##"(let ((asx--posts
+        true,
+        expect![[r#"OK ((user-error ("No posts found")) nil nil)"#]],
+    )
+}
+
+fn asx_remove_and_next_deletes_all_matching_urls_then_advances_in_remaining_ring() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_remove_and_next_deletes_all_matching_urls_then_advances_in_remaining_ring",
+        r##"(let ((asx--posts
                 '(("First" . "url-1")
                   ("Bad A" . "bad-url")
                   ("Bad B" . "bad-url")
@@ -251,12 +276,15 @@ fn search_public_surface_batch() {
             asx--posts
             asx--current-post-index
             (nreverse calls))))"##,
-            true,
-            expect![[r#"OK (:advanced #1=(("First" . "url-1") ("Last" . "url-4")) 1 ((1 1 #1#)))"#]],
-        ),
-        (
-            "asx_remove_and_next_signals_after_removing_the_last_available_post",
-            r##"(let ((asx--posts
+        true,
+        expect![[r#"OK (:advanced #1=(("First" . "url-1") ("Last" . "url-4")) 1 ((1 1 #1#)))"#]],
+    )
+}
+
+fn asx_remove_and_next_signals_after_removing_the_last_available_post() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_remove_and_next_signals_after_removing_the_last_available_post",
+        r##"(let ((asx--posts
                 '(("Only" . "bad-url")))
                calls)
          (cl-letf
@@ -273,12 +301,15 @@ fn search_public_surface_batch() {
                 (cdr error))))
             asx--posts
             calls)))"##,
-            true,
-            expect![[r#"OK ((user-error ("No posts found")) nil nil)"#]],
-        ),
-        (
-            "asx_navigation_commands_forward_exact_offsets_and_first_post_delta",
-            r##"(let ((asx--current-post-index 4)
+        true,
+        expect![[r#"OK ((user-error ("No posts found")) nil nil)"#]],
+    )
+}
+
+fn asx_navigation_commands_forward_exact_offsets_and_first_post_delta() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_navigation_commands_forward_exact_offsets_and_first_post_delta",
+        r##"(let ((asx--current-post-index 4)
                calls)
          (cl-letf
              (((symbol-function 'asx-n-post)
@@ -291,12 +322,15 @@ fn search_public_surface_batch() {
             (asx-reload-post)
             (asx-first-post)
             (nreverse calls))))"##,
-            true,
-            expect!["OK (1 -1 0 -4 (1 -1 0 -4))"],
-        ),
-        (
-            "asx_n_post_wraps_forward_backward_and_large_offsets_then_requests_current_post",
-            r##"(let ((asx--posts
+        true,
+        expect!["OK (1 -1 0 -4 (1 -1 0 -4))"],
+    )
+}
+
+fn asx_n_post_wraps_forward_backward_and_large_offsets_then_requests_current_post() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_n_post_wraps_forward_backward_and_large_offsets_then_requests_current_post",
+        r##"(let ((asx--posts
                 '(("Zero" . "url-0")
                   ("One" . "url-1")
                   ("Two" . "url-2")))
@@ -320,14 +354,17 @@ fn search_public_surface_batch() {
             (asx-n-post 8)
             asx--current-post-index
             (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:requested :requested :requested :requested :requested 1 ((1 #2=("One" . "url-1")) (2 #1=("Two" . "url-2")) (0 ("Zero" . "url-0")) (2 #1#) (1 #2#)))"#
     ]],
-        ),
-        (
-            "asx_jump_selects_from_current_posts_then_requests_the_selected_post",
-            r##"(let ((asx--posts
+    )
+}
+
+fn asx_jump_selects_from_current_posts_then_requests_the_selected_post() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "asx_jump_selects_from_current_posts_then_requests_the_selected_post",
+        r##"(let ((asx--posts
                 '(("First" . "url-1")
                   ("Second" . "url-2")))
                (asx--current-post-index 0)
@@ -353,10 +390,30 @@ fn search_public_surface_batch() {
             (asx-jump)
             asx--current-post-index
             (nreverse events))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (:queued 1 ((:select (("First" . "url-1") #1=("Second" . "url-2"))) (:request #1#)))"#
     ]],
-        ),
-    ]);
+    )
+}
+
+#[test]
+fn search_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        asx_google_extractor_reads_result_titles_and_question_urls_in_dom_order(),
+        asx_duckduckgo_extractor_combines_nested_title_text_and_trims_display_urls(),
+        asx_extract_links_dispatches_through_builtin_and_custom_engine_configuration(),
+        asx_filter_posts_keeps_only_question_paths_without_reordering_or_rewriting_links(),
+        asx_post_prefixes_mark_every_title_equal_to_current_post_and_preserve_urls(),
+        asx_select_post_prompts_with_prefixed_candidates_and_stores_selected_index(),
+        asx_handle_search_filters_results_selects_first_and_requests_post_without_prompt(),
+        asx_handle_search_prompt_path_uses_selector_before_requesting_chosen_post(),
+        asx_handle_search_signals_when_extraction_contains_no_question_posts(),
+        asx_remove_and_next_deletes_all_matching_urls_then_advances_in_remaining_ring(),
+        asx_remove_and_next_signals_after_removing_the_last_available_post(),
+        asx_navigation_commands_forward_exact_offsets_and_first_post_delta(),
+        asx_n_post_wraps_forward_backward_and_large_offsets_then_requests_current_post(),
+        asx_jump_selects_from_current_posts_then_requests_the_selected_post(),
+    ];
+    assert_asx_batch(&cases);
 }

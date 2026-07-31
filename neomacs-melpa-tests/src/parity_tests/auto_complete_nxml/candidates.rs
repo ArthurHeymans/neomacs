@@ -1,13 +1,11 @@
 use expect_test::expect;
 
-use super::assert_auto_complete_nxml_batch;
+use super::{ParityBatchCase, assert_auto_complete_nxml_batch};
 
-#[test]
-fn candidates_public_surface_batch() {
-    assert_auto_complete_nxml_batch(&[
-        (
-            "auto_complete_nxml_project_ident_prefers_explicit_then_project_then_default",
-            r##"(let ((baseline
+fn auto_complete_nxml_project_ident_prefers_explicit_then_project_then_default() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_nxml_project_ident_prefers_explicit_then_project_then_default",
+        r##"(let ((baseline
                                 (auto-complete-nxml-get-project-ident)))
          (provide 'anything-project)
          (cl-letf (((symbol-function 'ap:get-root-directory)
@@ -19,12 +17,15 @@ fn candidates_public_surface_batch() {
             (cl-letf (((symbol-function 'ap:get-root-directory)
                        (lambda () nil)))
               (auto-complete-nxml-get-project-ident)))))"##,
-            true,
-            expect![[r#"OK ("default" "explicit" "/project/root/" "default")"#]],
-        ),
-        (
-            "auto_complete_nxml_project_word_stores_are_isolated_by_project_and_kind",
-            r##"(let ((auto-complete-nxml-tag-value-words-hash
+        true,
+        expect![[r#"OK ("default" "explicit" "/project/root/" "default")"#]],
+    )
+}
+
+fn auto_complete_nxml_project_word_stores_are_isolated_by_project_and_kind() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_nxml_project_word_stores_are_isolated_by_project_and_kind",
+        r##"(let ((auto-complete-nxml-tag-value-words-hash
                                 (make-hash-table :test 'equal))
              (auto-complete-nxml-attr-words-hash-hash
               (make-hash-table :test 'equal))
@@ -48,14 +49,17 @@ fn candidates_public_surface_batch() {
           (acnxml-test-hash-alist
            (auto-complete-nxml-get-project-attr-words-hash "project-b"))
           (auto-complete-nxml-get-project-tag-value-words "missing")))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("alpha" "shared") ("beta" "shared") (("class" "primary" "wide")) (("lang" "en" "fr")) nil)"#
     ]],
-        ),
-        (
-            "auto_complete_nxml_tag_value_scan_collects_words_across_real_xml_content",
-            r##"(let ((auto-complete-nxml-tag-value-words-hash
+    )
+}
+
+fn auto_complete_nxml_tag_value_scan_collects_words_across_real_xml_content() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_nxml_tag_value_scan_collects_words_across_real_xml_content",
+        r##"(let ((auto-complete-nxml-tag-value-words-hash
                                 (make-hash-table :test 'equal))
              (ac-prefix "skip"))
          (with-temp-buffer
@@ -71,14 +75,17 @@ fn candidates_public_surface_batch() {
             (auto-complete-nxml-get-project-tag-value-words "fixture")
             (buffer-string)
             (point))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("delta-2" "gamma" "beta" "alpha" "") "<root><title>alpha beta</title><p>beta, gamma!</p><code>skip delta-2</code><empty></empty></root>" 98)"#
     ]],
-        ),
-        (
-            "auto_complete_nxml_tag_value_scan_merges_with_existing_project_words",
-            r##"(let ((auto-complete-nxml-tag-value-words-hash
+    )
+}
+
+fn auto_complete_nxml_tag_value_scan_merges_with_existing_project_words() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_nxml_tag_value_scan_merges_with_existing_project_words",
+        r##"(let ((auto-complete-nxml-tag-value-words-hash
                                 (make-hash-table :test 'equal))
              (ac-prefix "none"))
          (auto-complete-nxml-put-project-tag-value-words
@@ -93,14 +100,17 @@ fn candidates_public_surface_batch() {
              (list
               once
               (auto-complete-nxml-get-project-tag-value-words "fixture")))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("gamma" "beta" "" "existing" "alpha") ("gamma" "beta" "" "existing" "alpha"))"#
     ]],
-        ),
-        (
-            "auto_complete_nxml_attribute_scan_groups_values_and_excludes_style_id_and_prefix",
-            r##"(let ((auto-complete-nxml-attr-words-hash-hash
+    )
+}
+
+fn auto_complete_nxml_attribute_scan_groups_values_and_excludes_style_id_and_prefix() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_nxml_attribute_scan_groups_values_and_excludes_style_id_and_prefix",
+        r##"(let ((auto-complete-nxml-attr-words-hash-hash
                                 (make-hash-table :test 'equal))
              (ac-prefix "skip"))
          (with-temp-buffer
@@ -112,12 +122,15 @@ fn candidates_public_surface_batch() {
            (auto-complete-nxml-update-attr-words "fixture")
            (acnxml-test-hash-alist
             (auto-complete-nxml-get-project-attr-words-hash "fixture"))))"##,
-            true,
-            expect![[r#"OK (("class" "compact" "wide" "primary") ("role" "link" "button"))"#]],
-        ),
-        (
-            "auto_complete_nxml_myself_candidates_require_content_context_and_automatic_start",
-            r##"(let ((auto-complete-nxml-tag-value-words-hash
+        true,
+        expect![[r#"OK (("class" "compact" "wide" "primary") ("role" "link" "button"))"#]],
+    )
+}
+
+fn auto_complete_nxml_myself_candidates_require_content_context_and_automatic_start() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_nxml_myself_candidates_require_content_context_and_automatic_start",
+        r##"(let ((auto-complete-nxml-tag-value-words-hash
                                 (make-hash-table :test 'equal))
              (ac-prefix "")
              (this-command 'self-insert-command))
@@ -132,14 +145,17 @@ fn candidates_public_surface_batch() {
           '(("<root><a>alpha beta</a><b>ga" . t)
             ("<root attr=\"alpha" . t)
             ("<root><a>alpha</a><b>ga" . nil))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK ((("<root><a>alpha beta</a><b>ga" . t) ("beta" "alpha")) (("<root attr=\"alpha" . t) nil) (("<root><a>alpha</a><b>ga") nil))"#
     ]],
-        ),
-        (
-            "auto_complete_nxml_css_candidates_switch_between_properties_and_values",
-            r##"(let ((auto-complete-nxml-automatic-p t)
+    )
+}
+
+fn auto_complete_nxml_css_candidates_switch_between_properties_and_values() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_nxml_css_candidates_switch_between_properties_and_values",
+        r##"(let ((auto-complete-nxml-automatic-p t)
              (this-command 'self-insert-command)
              (ac-css-property-alist
               '(("color" . colors)
@@ -158,14 +174,17 @@ fn candidates_public_surface_batch() {
               "<p style=\"color: re"
               "<p class=\"fo"
               "outside"))))"##,
-            true,
-            expect![[
+        true,
+        expect![[
         r#"OK (("<p style=\"fo" ("color" "font-size" "display")) ("<p style=\"color: re" ("red" "green" "blue")) ("<p class=\"fo" nil) ("outside" nil))"#
     ]],
-        ),
-        (
-            "auto_complete_nxml_rng_candidates_support_function_and_alist_tables_and_dedupe",
-            r##"(let ((auto-complete-nxml-automatic-p t)
+    )
+}
+
+fn auto_complete_nxml_rng_candidates_support_function_and_alist_tables_and_dedupe() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_nxml_rng_candidates_support_function_and_alist_tables_and_dedupe",
+        r##"(let ((auto-complete-nxml-automatic-p t)
              (this-command 'self-insert-command))
          (cl-letf (((symbol-function 'rng-complete)
                     (lambda ()
@@ -181,12 +200,15 @@ fn candidates_public_surface_batch() {
            (with-temp-buffer
              (insert "a")
              (auto-complete-nxml-get-candidates))))"##,
-            true,
-            expect![[r#"OK ("beta" "gamma")"#]],
-        ),
-        (
-            "auto_complete_nxml_nxml_value_candidates_forward_schema_match_values",
-            r##"(let ((auto-complete-nxml-automatic-p t)
+        true,
+        expect![[r#"OK ("beta" "gamma")"#]],
+    )
+}
+
+fn auto_complete_nxml_nxml_value_candidates_forward_schema_match_values() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_nxml_nxml_value_candidates_forward_schema_match_values",
+        r##"(let ((auto-complete-nxml-automatic-p t)
              (this-command 'self-insert-command)
              calls)
          (cl-letf (((symbol-function 'rng-set-state-after)
@@ -201,12 +223,15 @@ fn candidates_public_surface_batch() {
              (list
               (auto-complete-nxml-get-tag-value-candidates-by-nxml)
               (nreverse calls)))))"##,
-            true,
-            expect![[r#"OK (("draft" "final" "archived") (set-state possible-values))"#]],
-        ),
-        (
-            "auto_complete_nxml_attribute_value_candidates_fall_back_to_buffer_history",
-            r##"(let ((auto-complete-nxml-attr-words-hash-hash
+        true,
+        expect![[r#"OK (("draft" "final" "archived") (set-state possible-values))"#]],
+    )
+}
+
+fn auto_complete_nxml_attribute_value_candidates_fall_back_to_buffer_history() -> ParityBatchCase {
+    ParityBatchCase::new(
+        "auto_complete_nxml_attribute_value_candidates_fall_back_to_buffer_history",
+        r##"(let ((auto-complete-nxml-attr-words-hash-hash
                                 (make-hash-table :test 'equal))
              (auto-complete-nxml-automatic-p t)
              (this-command 'self-insert-command)
@@ -224,8 +249,24 @@ fn candidates_public_surface_batch() {
               auto-complete-nxml-buffer-current-attr
               (acnxml-test-hash-alist
                (auto-complete-nxml-get-project-attr-words-hash))))))"##,
-            true,
-            expect![[r#"OK (#1=("compact" "wide" "primary") "class" (("class" . #1#)))"#]],
-        ),
-    ]);
+        true,
+        expect![[r#"OK (#1=("compact" "wide" "primary") "class" (("class" . #1#)))"#]],
+    )
+}
+
+#[test]
+fn candidates_public_surface_batch() {
+    let cases: Vec<ParityBatchCase> = vec![
+        auto_complete_nxml_project_ident_prefers_explicit_then_project_then_default(),
+        auto_complete_nxml_project_word_stores_are_isolated_by_project_and_kind(),
+        auto_complete_nxml_tag_value_scan_collects_words_across_real_xml_content(),
+        auto_complete_nxml_tag_value_scan_merges_with_existing_project_words(),
+        auto_complete_nxml_attribute_scan_groups_values_and_excludes_style_id_and_prefix(),
+        auto_complete_nxml_myself_candidates_require_content_context_and_automatic_start(),
+        auto_complete_nxml_css_candidates_switch_between_properties_and_values(),
+        auto_complete_nxml_rng_candidates_support_function_and_alist_tables_and_dedupe(),
+        auto_complete_nxml_nxml_value_candidates_forward_schema_match_values(),
+        auto_complete_nxml_attribute_value_candidates_fall_back_to_buffer_history(),
+    ];
+    assert_auto_complete_nxml_batch(&cases);
 }

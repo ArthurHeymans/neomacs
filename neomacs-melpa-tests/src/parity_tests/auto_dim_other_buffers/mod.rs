@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::{AUTO_DIM_OTHER_BUFFERS_MELPA_PIN, CachedMelpaOracle};
 use expect_test::Expect;
 
-use super::batch_support::assert_oracle_batch;
+use super::batch_support::assert_oracle_batch_cases;
+
+/// Case constructors in child modules use this via `super::ParityBatchCase`.
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod focus;
 mod lifecycle;
@@ -130,9 +133,9 @@ pub(crate) fn assert_auto_dim_other_buffers_autoload_parity(elisp_form: &str, ex
 
 
 /// Multi-probe batch for `assert_auto_dim_other_buffers_autoload_parity` cases (2a).
-pub(crate) fn assert_auto_dim_other_buffers_autoload_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_auto_dim_other_buffers_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         auto_dim_other_buffers_oracle("auto-dim-other-buffers-autoloads.el"),
         &name,
         "auto_dim_other_buffers_autoload_parity",
@@ -141,9 +144,9 @@ pub(crate) fn assert_auto_dim_other_buffers_autoload_batch(cases: &[(&str, &str,
 }
 
 /// Multi-probe batch for `assert_auto_dim_other_buffers_parity` cases (2a).
-pub(crate) fn assert_auto_dim_other_buffers_batch(cases: &[(&str, &str, bool, Expect)]) {
+pub(crate) fn assert_auto_dim_other_buffers_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch(
+    assert_oracle_batch_cases(
         auto_dim_other_buffers_oracle("auto-dim-other-buffers.el"),
         &name,
         "auto_dim_other_buffers_parity",
