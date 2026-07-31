@@ -53,23 +53,57 @@ pub fn extract_marked_outcome(stdout: &str, marker: &str) -> Result<EvalOutcome,
     EvalOutcome::parse(encoded)
 }
 
-/// Wrap setup and probe forms in the shared result protocol.
+/// One case id paired with its parsed editor outcome.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MarkedBatchOutcome {
+    pub id: String,
+    pub outcome: EvalOutcome,
+}
+
+/// Extract every batch outcome line `MARKER<id>:<OK|ERR> …` in order.
 ///
-/// Both inputs may contain multiple forms. The value of the probe's final
-/// form is recursively normalized and printed with `prin1`; ordinary Lisp
-/// errors are caught and their complete signal data is normalized and printed
-/// instead. Workspace and per-engine sandbox roots come from the
-/// `NEOMACS_TEST_WORKSPACE_ROOT` and `NEOMACS_TEST_SANDBOX_ROOT` environment
-/// variables.
-pub fn wrap_elisp_outcome(setup: &str, probe: &str, marker: &str) -> String {
-    let marker = elisp_string(marker);
-    format!(
-        r##"(let ((print-circle t)
-                  (print-length nil)
-                  (print-level nil)
-                  (print-escape-newlines t)
-                  (print-escape-control-characters t))
-           (defun neomacs--test-oracle-normalize-string (value)
+/// Case ids must not contain `:`. Duplicate ids in the same stdout are an error.
+pub fn extract_marked_batch_outcomes(
+    stdout: &str,
+    marker: &str,
+) -> Result<Vec<MarkedBatchOutcome>, String> {
+    let mut results = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for line in stdout.lines() {
+        let Some(rest) = line.split_once(marker).map(|(_, rest)| rest.trim()) else {
+            continue;
+        };
+        // Skip non-batch single-outcome lines that lack `id:`.
+        let Some((id, encoded)) = rest.split_once(':') else {
+            continue;
+        };
+        let id = id.trim();
+        if id.is_empty() {
+            return Err(format!(
+                "editor output contained an empty batch outcome id after `{marker}`"
+            ));
+        }
+        if !seen.insert(id.to_string()) {
+            return Err(format!(
+                "editor output contained duplicate batch outcome id `{id}`"
+            ));
+        }
+        results.push(MarkedBatchOutcome {
+            id: id.to_string(),
+            outcome: EvalOutcome::parse(encoded.trim())?,
+        });
+    }
+    if results.is_empty() {
+        return Err(format!(
+            "editor output did not contain any batch outcome markers `{marker}<id>:`"
+        ));
+    }
+    Ok(results)
+}
+
+/// Lisp that defines the shared normalizer used by single- and multi-probe wrappers.
+fn oracle_normalizer_elisp() -> &'static str {
+    r##"(defun neomacs--test-oracle-normalize-string (value)
              (dolist
                  (root
                   (list
@@ -165,7 +199,26 @@ pub fn wrap_elisp_outcome(setup: &str, probe: &str, marker: &str) -> String {
            (defun neomacs--test-oracle-normalized (value)
              (neomacs--test-oracle-normalize
               value
-              (make-hash-table :test 'eq)))
+              (make-hash-table :test 'eq)))"##
+}
+
+/// Wrap setup and probe forms in the shared result protocol.
+///
+/// Both inputs may contain multiple forms. The value of the probe's final
+/// form is recursively normalized and printed with `prin1`; ordinary Lisp
+/// errors are caught and their complete signal data is normalized and printed
+/// instead. Workspace and per-engine sandbox roots come from the
+/// `NEOMACS_TEST_WORKSPACE_ROOT` and `NEOMACS_TEST_SANDBOX_ROOT` environment
+/// variables.
+pub fn wrap_elisp_outcome(setup: &str, probe: &str, marker: &str) -> String {
+    let marker = elisp_string(marker);
+    format!(
+        r##"(let ((print-circle t)
+                  (print-length nil)
+                  (print-level nil)
+                  (print-escape-newlines t)
+                  (print-escape-control-characters t))
+           {normalizer}
            (condition-case neomacs--oracle-error
                (let ((neomacs--oracle-result
                       (progn
@@ -183,8 +236,109 @@ pub fn wrap_elisp_outcome(setup: &str, probe: &str, marker: &str) -> String {
               (princ "ERR ")
               (prin1
                (neomacs--test-oracle-normalized
-                neomacs--oracle-error)))))"##
+                neomacs--oracle-error)))))"##,
+        normalizer = oracle_normalizer_elisp(),
+        setup = setup,
+        probe = probe,
+        marker = marker,
     )
+}
+
+/// One named probe embedded in a multi-probe batch process.
+#[derive(Clone, Copy, Debug)]
+pub struct BatchProbe<'a> {
+    /// Stable case id. Must be non-empty and must not contain `:`.
+    pub id: &'a str,
+    /// Elisp forms evaluated after shared setup; final value is the outcome.
+    pub probe: &'a str,
+}
+
+/// Wrap shared setup plus many named probes for one editor process.
+///
+/// Setup runs once. Each probe is wrapped in its own `condition-case` so a
+/// signal in one case does not stop later cases. Emitted lines look like:
+///
+/// ```text
+/// <marker><id>:OK …
+/// <marker><id>:ERR …
+/// ```
+pub fn wrap_elisp_batch_outcomes(
+    setup: &str,
+    cases: &[BatchProbe<'_>],
+    marker: &str,
+) -> Result<String, String> {
+    if cases.is_empty() {
+        return Err("batch outcomes require at least one probe".into());
+    }
+    let marker_lit = elisp_string(marker);
+    let mut body = String::new();
+    body.push_str(setup);
+    body.push('\n');
+    let mut seen = std::collections::HashSet::new();
+    for case in cases {
+        validate_batch_case_id(case.id)?;
+        if !seen.insert(case.id) {
+            return Err(format!("duplicate batch case id `{}`", case.id));
+        }
+        let id_lit = elisp_string(case.id);
+        body.push_str(&format!(
+            r##"
+           (condition-case neomacs--oracle-error
+               (let ((neomacs--oracle-result
+                      (progn
+                        {probe})))
+                 (princ "\n")
+                 (princ {marker})
+                 (princ {id})
+                 (princ ":")
+                 (princ "OK ")
+                 (prin1
+                  (neomacs--test-oracle-normalized
+                   neomacs--oracle-result)))
+             (error
+              (princ "\n")
+              (princ {marker})
+              (princ {id})
+              (princ ":")
+              (princ "ERR ")
+              (prin1
+               (neomacs--test-oracle-normalized
+                neomacs--oracle-error))))
+"##,
+            probe = case.probe,
+            marker = marker_lit,
+            id = id_lit,
+        ));
+    }
+
+    Ok(format!(
+        r##"(let ((print-circle t)
+                  (print-length nil)
+                  (print-level nil)
+                  (print-escape-newlines t)
+                  (print-escape-control-characters t))
+           {normalizer}
+           (progn
+             {body}))"##,
+        normalizer = oracle_normalizer_elisp(),
+        body = body,
+    ))
+}
+
+/// Reject empty ids and ids that would break the `MARKER<id>:` wire format.
+pub fn validate_batch_case_id(id: &str) -> Result<(), String> {
+    if id.is_empty() {
+        return Err("batch case id must not be empty".into());
+    }
+    if id.contains(':') {
+        return Err(format!(
+            "batch case id `{id}` must not contain ':' (reserved by the batch outcome protocol)"
+        ));
+    }
+    if id.chars().any(|c| c.is_whitespace()) {
+        return Err(format!("batch case id `{id}` must not contain whitespace"));
+    }
+    Ok(())
 }
 
 fn elisp_string(value: &str) -> String {

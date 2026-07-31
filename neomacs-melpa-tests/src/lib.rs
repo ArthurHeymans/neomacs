@@ -14,7 +14,10 @@ use std::process::{Command, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use neomacs_test_oracle::{EvalOutcome, extract_marked_outcome, wrap_elisp_outcome};
+use neomacs_test_oracle::{
+    BatchProbe, EvalOutcome, extract_marked_batch_outcomes, extract_marked_outcome,
+    wrap_elisp_batch_outcomes, wrap_elisp_outcome,
+};
 use wait_timeout::ChildExt;
 
 mod source_lock;
@@ -1832,6 +1835,25 @@ pub struct ElispOracleReport {
     pub gnu_emacs: EvalOutcome,
 }
 
+/// One named probe for [`CachedPackageOracle::run_batch`].
+#[derive(Clone, Copy, Debug)]
+pub struct OracleBatchCase<'a> {
+    /// Stable case id (no `:` or whitespace). Used in failures and expect keys.
+    pub id: &'a str,
+    /// Elisp forms evaluated after shared package setup.
+    pub probe: &'a str,
+    /// When true, require an `OK` value; when false, require an `ERR` signal.
+    pub expect_value: bool,
+}
+
+/// Differential outcomes for one case inside a multi-probe batch.
+#[derive(Debug)]
+pub struct OracleBatchCaseReport {
+    pub id: String,
+    pub neomacs: EvalOutcome,
+    pub gnu_emacs: EvalOutcome,
+}
+
 /// Differential oracle for one exact package cached below `./tmp`.
 pub struct CachedPackageOracle {
     package_name: String,
@@ -1965,6 +1987,107 @@ impl CachedPackageOracle {
         self.run_expected(name, probe, false)
     }
 
+    /// Run many named probes in one GNU Emacs process and one Neomacs process.
+    ///
+    /// Shared package setup (`package-initialize`, load, prelude) runs once per
+    /// editor. Probes emit separate outcome markers; a signal in one probe does
+    /// not stop later probes. GNU Emacs and Neomacs evaluations run in parallel.
+    pub fn run_batch(
+        &self,
+        batch_name: &str,
+        cases: &[OracleBatchCase<'_>],
+    ) -> Result<Vec<OracleBatchCaseReport>, String> {
+        if cases.is_empty() {
+            return Err(format!(
+                "{} batch `{batch_name}` requires at least one probe",
+                self.package_name
+            ));
+        }
+        let probes: Vec<BatchProbe<'_>> = cases
+            .iter()
+            .map(|case| BatchProbe {
+                id: case.id,
+                probe: case.probe,
+            })
+            .collect();
+        let neomacs = EmacsRuntime::neomacs()
+            .with_env(
+                "NEOMACS_PACKAGE_USER_DIR",
+                self.package_user_dir.as_os_str(),
+            )
+            .with_env("NEOMACS_PACKAGE_SOURCE", self.source_file.as_os_str())
+            .with_timeout(self.timeout);
+        let gnu_emacs = EmacsRuntime::gnu_emacs()
+            .with_env(
+                "NEOMACS_PACKAGE_USER_DIR",
+                self.package_user_dir.as_os_str(),
+            )
+            .with_env("NEOMACS_PACKAGE_SOURCE", self.source_file.as_os_str())
+            .with_timeout(self.timeout);
+        let setup = self.package_setup_elisp();
+        let reports = run_elisp_oracle_batch(&neomacs, &gnu_emacs, batch_name, &setup, &probes)?;
+        let mut errors = Vec::new();
+        for (case, report) in cases.iter().zip(reports.iter()) {
+            if report.neomacs.is_value() != case.expect_value {
+                let expected = if case.expect_value {
+                    "a value"
+                } else {
+                    "a signal"
+                };
+                errors.push(format!(
+                    "  case `{}`: expected {expected}, got {}",
+                    case.id, report.neomacs
+                ));
+            }
+        }
+        if !errors.is_empty() {
+            return Err(format!(
+                "{} batch `{batch_name}` had expectation mismatches:\n{}",
+                self.package_name,
+                errors.join("\n")
+            ));
+        }
+        Ok(reports)
+    }
+
+    fn package_setup_elisp(&self) -> String {
+        let package_directory_list = self
+            .package_directory_list
+            .iter()
+            .map(|directory| elisp_string(&directory.to_string_lossy()))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let package_load_list = self
+            .package_load_list
+            .iter()
+            .map(|(name, version)| {
+                format!(
+                    "(list (intern {}) {})",
+                    elisp_string(name),
+                    elisp_string(version)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        format!(
+            r##"(progn
+                   (require 'package)
+                   (setq package-user-dir
+                         (getenv "NEOMACS_PACKAGE_USER_DIR")
+                         package-directory-list
+                         (list {package_directory_list})
+                         package-load-list
+                         (list 'all {package_load_list})
+                         load-suffixes '(".el"))
+                   (package-initialize)
+                   {}
+                   (load
+                    (getenv "NEOMACS_PACKAGE_SOURCE")
+                    nil t t))"##,
+            self.prelude
+        )
+    }
+
     fn run_expected(
         &self,
         name: &str,
@@ -1985,41 +2108,7 @@ impl CachedPackageOracle {
             )
             .with_env("NEOMACS_PACKAGE_SOURCE", self.source_file.as_os_str())
             .with_timeout(self.timeout);
-        let package_directory_list = self
-            .package_directory_list
-            .iter()
-            .map(|directory| elisp_string(&directory.to_string_lossy()))
-            .collect::<Vec<_>>()
-            .join(" ");
-        let package_load_list = self
-            .package_load_list
-            .iter()
-            .map(|(name, version)| {
-                format!(
-                    "(list (intern {}) {})",
-                    elisp_string(name),
-                    elisp_string(version)
-                )
-            })
-            .collect::<Vec<_>>()
-            .join(" ");
-        let setup = format!(
-            r##"(progn
-                   (require 'package)
-                   (setq package-user-dir
-                         (getenv "NEOMACS_PACKAGE_USER_DIR")
-                         package-directory-list
-                         (list {package_directory_list})
-                         package-load-list
-                         (list 'all {package_load_list})
-                         load-suffixes '(".el"))
-                   (package-initialize)
-                   {}
-                   (load
-                    (getenv "NEOMACS_PACKAGE_SOURCE")
-                    nil t t))"##,
-            self.prelude
-        );
+        let setup = self.package_setup_elisp();
         let report = run_elisp_oracle(&neomacs, &gnu_emacs, name, &setup, probe)?;
         if report.neomacs.is_value() != expect_value {
             let expected = if expect_value { "a value" } else { "a signal" };
@@ -2851,6 +2940,102 @@ pub fn run_elisp_oracle(
         neomacs: neomacs_outcome,
         gnu_emacs: gnu_outcome,
     })
+}
+
+/// Run the same setup and many named probes in one process per editor.
+///
+/// GNU Emacs and Neomacs evaluations run concurrently. Each probe id must
+/// appear exactly once in both editors' stdout, and the ordered outcomes must
+/// match pairwise.
+pub fn run_elisp_oracle_batch(
+    neomacs: &EmacsRuntime,
+    gnu_emacs: &EmacsRuntime,
+    batch_name: &str,
+    setup: &str,
+    cases: &[BatchProbe<'_>],
+) -> Result<Vec<OracleBatchCaseReport>, String> {
+    fn evaluate_batch(
+        runtime: &EmacsRuntime,
+        batch_name: &str,
+        setup: &str,
+        cases: &[BatchProbe<'_>],
+    ) -> Result<Vec<(String, EvalOutcome)>, String> {
+        let sandbox = MelpaSandbox::new(batch_name)?;
+        let form = wrap_elisp_batch_outcomes(setup, cases, OUTCOME_MARKER)?;
+        let phase =
+            run_outcome_phase(runtime, &sandbox, batch_name, ScenarioPhase::RestartProbe, &form)?;
+        let outcomes = extract_marked_batch_outcomes(&phase.stdout, OUTCOME_MARKER).map_err(
+            |error| {
+                format!(
+                    "{} batch oracle `{batch_name}` emitted invalid outcomes: {error}\nstdout:\n{}\nstderr:\n{}",
+                    runtime.name, phase.stdout, phase.stderr
+                )
+            },
+        )?;
+        let expected_ids: Vec<&str> = cases.iter().map(|case| case.id).collect();
+        let got_ids: Vec<&str> = outcomes.iter().map(|item| item.id.as_str()).collect();
+        if got_ids != expected_ids {
+            return Err(format!(
+                "{} batch oracle `{batch_name}` returned case ids {got_ids:?}, expected {expected_ids:?}\nstdout:\n{}\nstderr:\n{}",
+                runtime.name, phase.stdout, phase.stderr
+            ));
+        }
+        Ok(outcomes
+            .into_iter()
+            .map(|item| (item.id, item.outcome))
+            .collect())
+    }
+
+    let (gnu_result, neomacs_result) = thread::scope(|scope| {
+        let gnu_handle = scope.spawn(|| evaluate_batch(gnu_emacs, batch_name, setup, cases));
+        let neomacs_handle = scope.spawn(|| evaluate_batch(neomacs, batch_name, setup, cases));
+        (
+            gnu_handle
+                .join()
+                .unwrap_or_else(|_| Err("GNU Emacs batch oracle thread panicked".into())),
+            neomacs_handle
+                .join()
+                .unwrap_or_else(|_| Err("Neomacs batch oracle thread panicked".into())),
+        )
+    });
+
+    let gnu_outcomes =
+        gnu_result.map_err(|error| format!("GNU Emacs baseline failed: {error}"))?;
+    let neomacs_outcomes =
+        neomacs_result.map_err(|error| format!("Neomacs comparison failed: {error}"))?;
+
+    if gnu_outcomes.len() != neomacs_outcomes.len() {
+        return Err(format!(
+            "oracle batch `{batch_name}` length mismatch: Neomacs {} cases, GNU Emacs {} cases",
+            neomacs_outcomes.len(),
+            gnu_outcomes.len()
+        ));
+    }
+
+    let mut reports = Vec::with_capacity(cases.len());
+    let mut mismatches = Vec::new();
+    for ((gnu_id, gnu_outcome), (neo_id, neo_outcome)) in
+        gnu_outcomes.into_iter().zip(neomacs_outcomes.into_iter())
+    {
+        debug_assert_eq!(gnu_id, neo_id);
+        if neo_outcome != gnu_outcome {
+            mismatches.push(format!(
+                "  case `{gnu_id}`:\n    Neomacs: {neo_outcome}\n    GNU Emacs: {gnu_outcome}"
+            ));
+        }
+        reports.push(OracleBatchCaseReport {
+            id: gnu_id,
+            neomacs: neo_outcome,
+            gnu_emacs: gnu_outcome,
+        });
+    }
+    if !mismatches.is_empty() {
+        return Err(format!(
+            "oracle outcome mismatch for batch `{batch_name}`\n{}",
+            mismatches.join("\n")
+        ));
+    }
+    Ok(reports)
 }
 
 /// Install packages, generate `package-quickstart-file`, then load that file

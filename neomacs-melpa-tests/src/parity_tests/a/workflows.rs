@@ -1,10 +1,17 @@
 use expect_test::expect;
 
-use super::{assert_a_parity, assert_a_signal_parity};
+use super::assert_a_batch;
 
+/// All public `a` workflows in one dual-editor process pair (multi-probe batch).
+///
+/// Setup (`package-initialize` + load `a.el`) runs once per editor; each case
+/// keeps its own expect-test snapshot and OK/ERR expectation.
 #[test]
-fn a_reads_a_nested_player_profile_through_the_documented_lookup_interface() {
-    let elisp_form = r##"(let ((profile
+fn a_public_surface_batch() {
+    assert_a_batch(&[
+        (
+            "reads_nested_player_profile",
+            r##"(let ((profile
        (a-list
         :name "Ärne Brasseur"
         :handle "plexus"
@@ -40,17 +47,15 @@ fn a_reads_a_nested_player_profile_through_the_documented_lookup_interface() {
     (lambda (acc key value)
       (cons (format "%s=%d" (substring (symbol-name key) 1) value) acc))
     nil
-    (a-get profile :stats))))"##;
-    let expect = expect![[
-        r#"OK (t t nil 5 2 3 (:name :handle :stats :log :tags) (99 4) "plexus" nil :anonymous 99 42 "α-conversion" "λ" :unranked :no-entry t nil t nil ("2021-09-29" "2021-09-30") ("streak=4" "score=99"))"#
-    ]];
-
-    assert_a_parity(elisp_form, expect);
-}
-
-#[test]
-fn a_immutable_edit_pipeline_rewrites_a_sprint_board_without_touching_the_source() {
-    let elisp_form = r##"(let* ((board
+    (a-get profile :stats))))"##,
+            true,
+            expect![[
+                r#"OK (t t nil 5 2 3 (:name :handle :stats :log :tags) (99 4) "plexus" nil :anonymous 99 42 "α-conversion" "λ" :unranked :no-entry t nil t nil ("2021-09-29" "2021-09-30") ("streak=4" "score=99"))"#
+            ]],
+        ),
+        (
+            "immutable_edit_pipeline",
+            r##"(let* ((board
         (a-list
          :title "Sprint 42"
          :columns (a-list
@@ -88,17 +93,15 @@ fn a_immutable_edit_pipeline_rewrites_a_sprint_board_without_touching_the_source
            :columns (a-list
                      "todo" ["write docs" "fix parser"]
                      "doing" ["review α patch"])
-           :owners (a-list :lead "Ärne")))))"##;
-    let expect = expect![[
-        r#"OK ("Sprint 42 (final)" #1=["write docs" "fix parser"] ["write docs" "FIX PARSER"] #2=["review α patch"] "Sprint 42" ((:reviewer . "Bo") . #3=((:lead . "Ärne"))) (:title :columns :owners) ((:velocity (:median . 21))) (:metrics :title :columns :owners) (:status :title :columns :owners) "Sprint 43" :active (:reviews :title :columns :owners) t nil t ((:title . "Sprint 42") (:columns ("todo" . #1#) ("doing" . #2#)) (:owners . #3#)) t)"#
-    ]];
-
-    assert_a_parity(elisp_form, expect);
-}
-
-#[test]
-fn a_merges_layered_editor_configuration_and_combines_overlapping_values() {
-    let elisp_form = r##"(let* ((defaults (a-list :indent 2 :theme "light" :plugins ["core"]))
+           :owners (a-list :lead "Ärne")))))"##,
+            true,
+            expect![[
+                r#"OK ("Sprint 42 (final)" #1=["write docs" "fix parser"] ["write docs" "FIX PARSER"] #2=["review α patch"] "Sprint 42" ((:reviewer . "Bo") . #3=((:lead . "Ärne"))) (:title :columns :owners) ((:velocity (:median . 21))) (:metrics :title :columns :owners) (:status :title :columns :owners) "Sprint 43" :active (:reviews :title :columns :owners) t nil t ((:title . "Sprint 42") (:columns ("todo" . #1#) ("doing" . #2#)) (:owners . #3#)) t)"#
+            ]],
+        ),
+        (
+            "merges_layered_configuration",
+            r##"(let* ((defaults (a-list :indent 2 :theme "light" :plugins ["core"]))
        (user (a-hash-table :theme "dark" :font "Iosevka"))
        (project (a-list :indent 4 :strict t))
        (settings (a-merge defaults user project))
@@ -124,17 +127,15 @@ fn a_merges_layered_editor_configuration_and_combines_overlapping_values() {
     (lambda (acc key value)
       (concat acc (format "%s=%s;" key value)))
     ""
-    (a-dissoc settings :plugins))))"##;
-    let expect = expect![[
-        r#"OK (((:strict . t) (:font . "Iosevka") (:indent . 4) (:theme . "dark") #2=(:plugins . #1=["core"])) (:strict :font :indent :theme :plugins) "dark" 4 ((:gc . 3) (:parse . 19) #4=(:render . 5)) ((:release . "βα")) nil ((:plugins . #1#) (:theme . "light") (:indent . 2)) #3=((:indent . 2) (:theme . "light") #2#) #3# ((:indent . 4) (:strict . t)) ((:parse . 12) #4#) (:font :theme) ":theme=dark;:indent=4;:font=Iosevka;:strict=t;")"#
-    ]];
-
-    assert_a_parity(elisp_form, expect);
-}
-
-#[test]
-fn a_redacts_secret_keys_from_a_request_and_an_audit_record_without_mutation() {
-    let elisp_form = r##"(let* ((request
+    (a-dissoc settings :plugins))))"##,
+            true,
+            expect![[
+                r#"OK (((:strict . t) (:font . "Iosevka") (:indent . 4) (:theme . "dark") #2=(:plugins . #1=["core"])) (:strict :font :indent :theme :plugins) "dark" 4 ((:gc . 3) (:parse . 19) #4=(:render . 5)) ((:release . "βα")) nil ((:plugins . #1#) (:theme . "light") (:indent . 2)) #3=((:indent . 2) (:theme . "light") #2#) #3# ((:indent . 4) (:strict . t)) ((:parse . 12) #4#) (:font :theme) ":theme=dark;:indent=4;:font=Iosevka;:strict=t;")"#
+            ]],
+        ),
+        (
+            "redacts_secret_keys",
+            r##"(let* ((request
         (a-list
          :url "https://example.invalid/résumé"
          :token "s3cr3t"
@@ -162,17 +163,15 @@ fn a_redacts_secret_keys_from_a_request_and_an_audit_record_without_mutation() {
    (a-dissoc request :nope)
    (a-dissoc request)
    (a-dissoc request :url :token :retries :headers)
-   (a-dissoc ["keep" "me"] 0)))"##;
-    let expect = expect![[
-        r#"OK (((:headers . #1=(("Accept" . "application/json") ("Authorization" . "Bearer s3cr3t"))) (:retries . 3) (:url . "https://example.invalid/résumé")) (("Accept" . "application/json")) 3 nil :redacted "https://example.invalid/résumé" (:ip :user) 2 equal :redacted "ärne" 3 "s3cr3t" ((:url . "https://example.invalid/résumé") (:token . "s3cr3t") (:retries . 3) (:headers . #1#)) ((:headers . #1#) (:retries . 3) (:token . "s3cr3t") (:url . "https://example.invalid/résumé")) ((:headers . #1#) (:retries . 3) (:token . "s3cr3t") (:url . "https://example.invalid/résumé")) nil nil)"#
-    ]];
-
-    assert_a_parity(elisp_form, expect);
-}
-
-#[test]
-fn a_deep_equality_matches_one_record_across_alist_hash_table_and_sequence_shapes() {
-    let elisp_form = r##"(let* ((expected
+   (a-dissoc ["keep" "me"] 0)))"##,
+            true,
+            expect![[
+                r#"OK (((:headers . #1=(("Accept" . "application/json") ("Authorization" . "Bearer s3cr3t"))) (:retries . 3) (:url . "https://example.invalid/résumé")) (("Accept" . "application/json")) 3 nil :redacted "https://example.invalid/résumé" (:ip :user) 2 equal :redacted "ärne" 3 "s3cr3t" ((:url . "https://example.invalid/résumé") (:token . "s3cr3t") (:retries . 3) (:headers . #1#)) ((:headers . #1#) (:retries . 3) (:token . "s3cr3t") (:url . "https://example.invalid/résumé")) ((:headers . #1#) (:retries . 3) (:token . "s3cr3t") (:url . "https://example.invalid/résumé")) nil nil)"#
+            ]],
+        ),
+        (
+            "deep_equality_shapes",
+            r##"(let* ((expected
         (a-list
          :id 42
          :labels ["bug" "α"]
@@ -204,15 +203,13 @@ fn a_deep_equality_matches_one_record_across_alist_hash_table_and_sequence_shape
    (a-equal nil nil)
    (a-equal nil '())
    (a-count expected)
-   (a-count decoded)))"##;
-    let expect = expect![[r#"OK (t t t nil nil nil nil nil t nil t nil t nil t t t 3 3)"#]];
-
-    assert_a_parity(elisp_form, expect);
-}
-
-#[test]
-fn a_misuse_of_the_public_api_reports_exact_user_errors_and_boundary_values() {
-    let elisp_form = r##"(let ((observed nil))
+   (a-count decoded)))"##,
+            true,
+            expect![[r#"OK (t t t nil nil nil nil nil t nil t nil t nil t t t 3 3)"#]],
+        ),
+        (
+            "misuse_reports_exact_errors",
+            r##"(let ((observed nil))
   (dolist (probe
            (list
             (cons 'get-integer (lambda () (a-get 5 :nope)))
@@ -241,18 +238,17 @@ fn a_misuse_of_the_public_api_reports_exact_user_errors_and_boundary_values() {
    (a-get-in [] [])
    (a-get-in [] [2] :missing)
    (a-keys ["not" "associative"])
-   (a-vals ["not" "associative"])))"##;
-    let expect = expect![[
-        r#"OK (((get-integer signal user-error ("Not associative: 5")) (get-string signal user-error ("Not associative: \"config\"")) (has-key-integer signal user-error ("Not associative: 1")) (get-in-leaf signal user-error ("Not associative: \"/etc\"")) (assoc-odd signal user-error ("a-assoc requires an even number of arguments!"))) 2 nil :fallback t nil nil nil [1 2 3 nil nil :late] nil :not-found nil [] :missing nil nil)"#
-    ]];
-
-    assert_a_parity(elisp_form, expect);
-}
-
-#[test]
-fn a_walking_past_a_leaf_value_signals_the_documented_user_error() {
-    let elisp_form = r##"(a-get-in (a-list :config "/etc/α.conf") [:config :missing])"##;
-    let expect = expect![[r#"ERR (user-error "Not associative: \"/etc/α.conf\"")"#]];
-
-    assert_a_signal_parity(elisp_form, expect);
+   (a-vals ["not" "associative"])))"##,
+            true,
+            expect![[
+                r#"OK (((get-integer signal user-error ("Not associative: 5")) (get-string signal user-error ("Not associative: \"config\"")) (has-key-integer signal user-error ("Not associative: 1")) (get-in-leaf signal user-error ("Not associative: \"/etc\"")) (assoc-odd signal user-error ("a-assoc requires an even number of arguments!"))) 2 nil :fallback t nil nil nil [1 2 3 nil nil :late] nil :not-found nil [] :missing nil nil)"#
+            ]],
+        ),
+        (
+            "walking_past_leaf_signals",
+            r##"(a-get-in (a-list :config "/etc/α.conf") [:config :missing])"##,
+            false,
+            expect![[r#"ERR (user-error "Not associative: \"/etc/α.conf\"")"#]],
+        ),
+    ]);
 }
