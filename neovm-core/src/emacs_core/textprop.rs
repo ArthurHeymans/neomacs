@@ -376,12 +376,7 @@ fn lookup_buffer_text_property_at_char_pos(
     lookup_char_property_from_direct(
         obarray,
         buffers,
-        |name| {
-            buf.text_props_get_property_at_emacs_byte_pos(
-                buffer_char_to_emacs_byte_pos(buf, char_pos),
-                name,
-            )
-        },
+        |name| buf.text_props_get_property_at_char_pos(char_pos, name),
         prop,
         true,
     )

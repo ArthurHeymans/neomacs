@@ -2704,6 +2704,15 @@ impl Buffer {
             .text_props_get_property_at_emacs_byte_pos(self.clamped_emacs_byte_pos(pos), name)
     }
 
+    /// Char-addressed property read: callers that already hold a char
+    /// position must use this instead of converting to bytes just for the
+    /// callee to convert straight back (a measured full round trip per
+    /// property lookup on the font-lock path).
+    pub fn text_props_get_property_at_char_pos(&self, pos: CharPos0, name: Value) -> Option<Value> {
+        self.text
+            .text_props_get_property_at_char_pos(pos.min(self.total_char_end_pos()), name)
+    }
+
     /// Property `name` at char `pos` plus the `[start, end)` char run over
     /// which it is constant.  See
     /// [`BufferText::get_property_run_at_char_pos`].

@@ -401,8 +401,16 @@ impl BufferText {
     }
 
     pub(crate) fn byte_range_to_char_range(&self, range: EmacsByteRange) -> CharRange {
-        let storage = self.storage.borrow();
-        Self::byte_range_to_char_range_with_storage(&storage, range)
+        // Route through the anchored conversion (pos cache + stride anchors +
+        // marker chain + CONSIDER interpolation), NOT the raw backend: the
+        // backend path re-scans from its own sparse {0, gap, end} anchors,
+        // and this helper sits under every byte-addressed text-property
+        // query. The `_with_storage` variant remains for callers already
+        // holding the storage borrow (edit-path bookkeeping).
+        CharRange::new(
+            self.emacs_byte_pos_to_char_pos(range.start()),
+            self.emacs_byte_pos_to_char_pos(range.end()),
+        )
     }
 
     pub(crate) fn edit_range_for_emacs_byte_range(
@@ -1091,6 +1099,13 @@ impl BufferText {
         };
         Rc::make_mut(&mut self.storage.borrow_mut().text_props)
             .put_property_for_object_char_len(range, object_len, name, value)
+    }
+
+    pub fn text_props_get_property_at_char_pos(&self, pos: CharPos0, name: Value) -> Option<Value> {
+        self.storage
+            .borrow()
+            .text_props
+            .get_property_at_char_pos(pos, name)
     }
 
     pub fn text_props_get_property_at_emacs_byte_pos(
