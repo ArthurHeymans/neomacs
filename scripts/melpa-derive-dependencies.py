@@ -15,6 +15,8 @@ package.el resolves it without our help.
 Usage:
     scripts/melpa-derive-dependencies.py            # report differences
     scripts/melpa-derive-dependencies.py --write    # rewrite the manifest
+    scripts/melpa-derive-dependencies.py \
+      --manifest LOCK.tsv --cache CACHE --write     # operate on fixtures
 
 Coverage is limited to packages whose main `.el` is present in the local caches
 below `tmp/melpa`, so a full regeneration needs the packages built first.  With
@@ -32,28 +34,34 @@ import re
 import sys
 
 WORKSPACE = pathlib.Path(__file__).resolve().parent.parent
-MANIFEST = WORKSPACE / "neomacs-melpa-tests/melpa-package-lock.tsv"
-CACHES = ("tmp/melpa/source-install-cache", "tmp/melpa/package-cache")
+DEFAULT_MANIFEST = WORKSPACE / "neomacs-melpa-tests/melpa-package-lock.tsv"
+DEFAULT_CACHES = (
+    WORKSPACE / "tmp/melpa/source-install-cache",
+    WORKSPACE / "tmp/melpa/package-cache",
+)
 
 HEADER = (
     "package\tversion\tupstream\tupstream-revision\trepository\trevision\t"
     "fallback-repository\tbuild\tdependencies"
 )
-REQUIRES = re.compile(r";;\s*Package-Requires:\s*(.+)$", re.M)
+REQUIRES = re.compile(r"^;;\s*Package-Requires:\s*(.*)$", re.M)
+COMMENT_CONTINUATION = re.compile(r"^;;\s?(.*)$")
 REQUIREMENT = re.compile(r"\(\s*([A-Za-z0-9@_.+-]+)\s")
 
 
-def read_manifest() -> tuple[list[list[str]], dict[str, str], dict[str, set[str]]]:
+def read_manifest(
+    manifest: pathlib.Path,
+) -> tuple[list[list[str]], dict[str, str], dict[str, set[str]]]:
     rows: list[list[str]] = []
     versions: dict[str, str] = {}
     edges: dict[str, set[str]] = collections.defaultdict(set)
-    with MANIFEST.open(encoding="utf-8") as handle:
+    with manifest.open(encoding="utf-8") as handle:
         if next(handle).rstrip("\n") != HEADER:
-            sys.exit(f"{MANIFEST} does not start with the expected package-lock header")
+            sys.exit(f"{manifest} does not start with the expected package-lock header")
         for line in handle:
             fields = line.rstrip("\n").split("\t")
             if len(fields) != 9:
-                sys.exit(f"{MANIFEST} contains a row with {len(fields)} fields")
+                sys.exit(f"{manifest} contains a row with {len(fields)} fields")
             if fields[0] in versions:
                 sys.exit(f"{fields[0]} is pinned at more than one version")
             rows.append(fields)
@@ -66,15 +74,40 @@ def read_manifest() -> tuple[list[list[str]], dict[str, str], dict[str, set[str]
     return rows, versions, edges
 
 
-def cached_main_files(versions: dict[str, str]) -> dict[str, pathlib.Path]:
+def cached_main_files(
+    versions: dict[str, str], caches: list[pathlib.Path] | tuple[pathlib.Path, ...]
+) -> dict[str, pathlib.Path]:
     wanted = {f"{name}-{version}": name for name, version in versions.items()}
     found: dict[str, pathlib.Path] = {}
-    for cache in CACHES:
-        for directory, _, files in os.walk(WORKSPACE / cache):
+    for cache in caches:
+        for directory, _, files in os.walk(cache):
             name = wanted.get(os.path.basename(directory))
             if name and f"{name}.el" in files and name not in found:
                 found[name] = pathlib.Path(directory) / f"{name}.el"
     return found
+
+
+def package_requirements(path: pathlib.Path) -> list[str]:
+    text = path.read_text(encoding="utf-8", errors="replace")[:8000]
+    header = REQUIRES.search(text)
+    if not header:
+        return []
+
+    form = header.group(1)
+    balance = form.count("(") - form.count(")")
+    continuation = text[header.end() :].lstrip("\r\n")
+    for line in continuation.splitlines():
+        if balance <= 0:
+            break
+        comment = COMMENT_CONTINUATION.match(line)
+        if not comment:
+            break
+        fragment = comment.group(1)
+        form += "\n" + fragment
+        balance += fragment.count("(") - fragment.count(")")
+    if balance != 0:
+        sys.exit(f"{path} has an unbalanced Package-Requires header")
+    return REQUIREMENT.findall(form)
 
 
 def derived_edges(
@@ -84,10 +117,7 @@ def derived_edges(
     edges: dict[str, set[str]] = collections.defaultdict(set)
     unpinned: dict[str, set[str]] = collections.defaultdict(set)
     for name, path in sorted(sources.items()):
-        header = REQUIRES.search(path.read_text(encoding="utf-8", errors="replace")[:8000])
-        if not header:
-            continue
-        for requirement in REQUIREMENT.findall(header.group(1)):
+        for requirement in package_requirements(path):
             if requirement == "emacs" or requirement == name:
                 continue
             if requirement in versions:
@@ -99,11 +129,30 @@ def derived_edges(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--manifest",
+        type=pathlib.Path,
+        default=DEFAULT_MANIFEST,
+        help="package lock to inspect or rewrite",
+    )
+    parser.add_argument(
+        "--cache",
+        type=pathlib.Path,
+        action="append",
+        dest="caches",
+        help="package cache to scan; repeat for multiple caches",
+    )
     parser.add_argument("--write", action="store_true", help="rewrite the manifest")
     arguments = parser.parse_args()
+    manifest = arguments.manifest.resolve()
+    caches = (
+        [cache.resolve() for cache in arguments.caches]
+        if arguments.caches
+        else list(DEFAULT_CACHES)
+    )
 
-    rows, versions, committed = read_manifest()
-    sources = cached_main_files(versions)
+    rows, versions, committed = read_manifest(manifest)
+    sources = cached_main_files(versions, caches)
     derived, unpinned = derived_edges(versions, sources)
 
     missing = {
@@ -144,9 +193,13 @@ def main() -> int:
         for row in rows:
             row[8] = ",".join(sorted(merged.get(row[0], set()))) or "-"
         contents = "\n".join([HEADER, *("\t".join(row) for row in rows)]) + "\n"
-        MANIFEST.write_text(contents, encoding="utf-8")
+        manifest.write_text(contents, encoding="utf-8")
         edge_count = sum(len(dependencies) for dependencies in merged.values())
-        print(f"\nwrote {edge_count} edges to {MANIFEST.relative_to(WORKSPACE)}")
+        try:
+            destination = manifest.relative_to(WORKSPACE)
+        except ValueError:
+            destination = manifest
+        print(f"\nwrote {edge_count} edges to {destination}")
 
     return 1 if (missing or spurious) and not arguments.write else 0
 

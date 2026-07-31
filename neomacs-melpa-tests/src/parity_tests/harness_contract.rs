@@ -87,6 +87,70 @@ fn nextest_runs_melpa_infrastructure_preflight_once_before_parity_tests() {
 
 #[cfg(unix)]
 #[test]
+fn dependency_regeneration_preserves_every_source_lock_field() {
+    let fixture =
+        MelpaSandbox::new("dependency-regeneration-contract").expect("create fixture sandbox");
+    let manifest = fixture.root().join("melpa-package-lock.tsv");
+    let cache = fixture.root().join("package-cache");
+    let dependency_dir = cache.join("dependency-1.0");
+    let multiline_dir = cache.join("multiline-3.0");
+    let root_dir = cache.join("root-2.0");
+    fs::create_dir_all(&dependency_dir).expect("create dependency cache fixture");
+    fs::create_dir_all(&multiline_dir).expect("create multiline cache fixture");
+    fs::create_dir_all(&root_dir).expect("create root cache fixture");
+    fs::write(
+        dependency_dir.join("dependency.el"),
+        ";;; dependency.el --- fixture\n",
+    )
+    .expect("write dependency package fixture");
+    fs::write(
+        multiline_dir.join("multiline.el"),
+        ";;; multiline.el --- fixture\n\
+         ;; Package-Requires: (\n\
+         ;;     (emacs \"29.1\")\n\
+         ;;     (dependency \"1.0\"))\n",
+    )
+    .expect("write multiline package fixture");
+    fs::write(
+        root_dir.join("root.el"),
+        ";;; root.el --- fixture\n;; Package-Requires: ((dependency \"1.0\"))\n",
+    )
+    .expect("write root package fixture");
+
+    let before = "package\tversion\tupstream\tupstream-revision\trepository\trevision\tfallback-repository\tbuild\tdependencies\n\
+                  dependency\t1.0\thttps://upstream.invalid/dependency\t0123456789abcdef0123456789abcdef01234567\thttps://mirror.invalid/dependency\t89abcdef0123456789abcdef0123456789abcdef\t\tsource-default\t-\n\
+                  multiline\t3.0\thttps://upstream.invalid/multiline\t3333333333333333333333333333333333333333\thttps://mirror.invalid/multiline\t4444444444444444444444444444444444444444\t\tsource-default\t-\n\
+                  root\t2.0\thttps://upstream.invalid/root\t1111111111111111111111111111111111111111\thttps://mirror.invalid/root\t2222222222222222222222222222222222222222\thttps://fallback.invalid/root\tmelpa-recipe\t-\n";
+    fs::write(&manifest, before).expect("write package-lock fixture");
+
+    let output = Command::new("python3")
+        .arg(workspace_root().join("scripts/melpa-derive-dependencies.py"))
+        .args(["--manifest"])
+        .arg(&manifest)
+        .args(["--cache"])
+        .arg(&cache)
+        .arg("--write")
+        .output()
+        .expect("run dependency regeneration");
+
+    assert!(
+        output.status.success(),
+        "dependency regeneration failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let after = "package\tversion\tupstream\tupstream-revision\trepository\trevision\tfallback-repository\tbuild\tdependencies\n\
+                 dependency\t1.0\thttps://upstream.invalid/dependency\t0123456789abcdef0123456789abcdef01234567\thttps://mirror.invalid/dependency\t89abcdef0123456789abcdef0123456789abcdef\t\tsource-default\t-\n\
+                 multiline\t3.0\thttps://upstream.invalid/multiline\t3333333333333333333333333333333333333333\thttps://mirror.invalid/multiline\t4444444444444444444444444444444444444444\t\tsource-default\tdependency\n\
+                 root\t2.0\thttps://upstream.invalid/root\t1111111111111111111111111111111111111111\thttps://mirror.invalid/root\t2222222222222222222222222222222222222222\thttps://fallback.invalid/root\tmelpa-recipe\tdependency\n";
+    assert_eq!(
+        fs::read_to_string(&manifest).expect("read regenerated package lock"),
+        after
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn scenario_installs_then_probes_in_a_fresh_process() {
     use std::os::unix::fs::PermissionsExt;
 
@@ -327,6 +391,41 @@ fn exact_source_install_plan_orders_dependencies_before_the_main_package() {
             ("arxiv-citation", "20230713.627"),
         ]
     );
+}
+
+#[test]
+fn pinned_package_requirements_are_available_before_the_requesting_package() {
+    for package in [
+        ("agitjo", "20260523.2048"),
+        ("ai-code", "20260727.2322"),
+        ("aider", "20251201.133"),
+        ("aidermacs", "20260726.839"),
+        ("casual", "20260718.1803"),
+        ("magit", "20260724.2338"),
+    ] {
+        let plan = locked_melpa_install_plan(package)
+            .unwrap_or_else(|error| panic!("resolve {} {}: {error}", package.0, package.1));
+        let transient_index = plan
+            .iter()
+            .position(|source| source.package() == ("transient", "20260725.1105"))
+            .unwrap_or_else(|| {
+                panic!(
+                    "{} {} requires transient in its pinned Package-Requires header",
+                    package.0, package.1
+                )
+            });
+        let package_index = plan
+            .iter()
+            .position(|source| source.package() == package)
+            .expect("the requested package must end its own install plan");
+
+        assert!(
+            transient_index < package_index,
+            "transient must be installed before {} {}",
+            package.0,
+            package.1
+        );
+    }
 }
 
 #[test]
