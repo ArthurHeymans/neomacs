@@ -238,12 +238,13 @@ fn follows_navi2ch_mona_face_configuration() -> ParityBatchCase {
 /// One nextest case → one Neomacs process + one GNU Emacs process; six probes inside.
 #[test]
 fn aa_edit_mode_public_surface_batch() {
-    assert_aa_edit_mode_batch(&[
+    let cases: Vec<ParityBatchCase> = vec![
         opens_shift_jis_mlt_as_art_buffer(),
         page_commands_walk_split_panels(),
         saves_appended_panel_as_shift_jis(),
         customized_delimiter_page_navigation(),
         claims_mlt_files_and_leaves_other_suffixes(),
         follows_navi2ch_mona_face_configuration(),
-    ]);
+    ];
+    assert_aa_edit_mode_batch(&cases);
 }
