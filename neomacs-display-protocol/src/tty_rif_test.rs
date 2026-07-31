@@ -2165,3 +2165,62 @@ fn nearby_edits_coalesce_into_one_span() {
     );
     assert!(text.contains("AbcdefgH"));
 }
+
+#[test]
+fn scroll_plan_is_one_scroll_op_plus_exposed_row_runs() {
+    // Structural assertion on the typed plan: a one-line shift is exactly
+    // one ScrollRows op followed by write runs that touch ONLY the exposed
+    // row - no retransmission ops for shifted content.
+    let mut rif = TtyRif::new(20, 10);
+    for r in 0..10 {
+        set_row(&mut rif, r, &format!("plan-row-{r:02}"));
+    }
+    let _ = render_output(&mut rif);
+    for r in 0..9 {
+        set_row(&mut rif, r, &format!("plan-row-{:02}", r + 1));
+    }
+    set_row(&mut rif, 9, "plan-row-10");
+    let ops = rif.plan_for_test();
+    assert!(
+        matches!(ops.first(), Some(TermOp::ScrollRows { .. })),
+        "first op must be the scroll: {ops:?}"
+    );
+    for op in &ops[1..] {
+        match op {
+            TermOp::WriteRun { row, .. } | TermOp::ClearThenWriteRun { row, .. } => {
+                assert_eq!(*row, 9, "only the exposed row may be rewritten: {ops:?}");
+            }
+            other => panic!("unexpected op after scroll: {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn caps_without_scroll_region_never_plan_scroll_ops() {
+    let mut rif = TtyRif::new(20, 10);
+    rif.set_caps(TermCaps {
+        scroll_region: false,
+        synchronized_output: false,
+    });
+    for r in 0..10 {
+        set_row(&mut rif, r, &format!("dumb-term-{r:02}"));
+    }
+    let _ = render_output(&mut rif);
+    for r in 0..9 {
+        set_row(&mut rif, r, &format!("dumb-term-{:02}", r + 1));
+    }
+    set_row(&mut rif, 9, "dumb-term-10");
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    assert!(!text.contains("\x1b[?2026"), "sync gated off: {text:?}");
+    assert!(
+        !text.contains("S\x1b[r"),
+        "no region scroll on a dumb terminal"
+    );
+    // Content still arrives, just via ordinary row diffs (which transmit
+    // only the cells that changed, so assert on a changed fragment).
+    assert!(
+        text.contains("10"),
+        "changed content must be drawn: {text:?}"
+    );
+}

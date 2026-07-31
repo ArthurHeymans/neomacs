@@ -183,6 +183,10 @@ pub struct TtyRif {
     default_bg: Option<(u8, u8, u8)>,
     /// Default foreground color (r, g, b).
     default_fg: Option<(u8, u8, u8)>,
+    /// What the connected terminal can do; see [`TermCaps`].
+    caps: TermCaps,
+    /// Accounting for the most recent encoded frame.
+    frame_stats: TtyFrameStats,
     /// Force the next render to repaint every terminal cell.
     force_full_render: bool,
 }
@@ -191,6 +195,76 @@ fn terminal_cursor_cell(x: f32, y: f32, char_width: f32, char_height: f32) -> (u
     let char_width = char_width.max(1.0);
     let char_height = char_height.max(1.0);
     ((x / char_width) as u16, (y / char_height) as u16)
+}
+
+/// Terminal capabilities the update PLANNER is allowed to rely on.
+///
+/// Constructed once by the frontend from the terminal environment and handed
+/// to [`TtyRif`]; the planner never proposes an operation the terminal
+/// cannot execute, which keeps the encoder total (every planned op always
+/// encodes). Defaults are the capabilities of every modern terminal;
+/// synchronized output is additionally safe to over-claim (an unknown DEC
+/// private mode is ignored), while scroll regions are not (a terminal
+/// without DECSTBM would render SU as full-screen scroll), hence the split.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TermCaps {
+    /// DECSTBM scroll regions + SU/SD region scrolls.
+    pub scroll_region: bool,
+    /// DECSET 2026 synchronized-output bracketing.
+    pub synchronized_output: bool,
+}
+
+impl Default for TermCaps {
+    fn default() -> Self {
+        Self {
+            scroll_region: true,
+            synchronized_output: true,
+        }
+    }
+}
+
+/// Vertical scroll direction and magnitude. Zero is unrepresentable: a
+/// "scroll by nothing" cannot be planned, encoded, or replayed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ScrollDir {
+    /// Content moves up (the viewport scrolled down through the buffer).
+    Up(std::num::NonZeroU16),
+    /// Content moves down.
+    Down(std::num::NonZeroU16),
+}
+
+/// One planned terminal-update operation.
+///
+/// The planner (grid diff) decides WHAT changes; [`TtyRif::encode_ops`] is
+/// the single place deciding HOW (escape selection, SGR dedup) and the
+/// single place producing bytes — which also makes per-frame byte
+/// accounting a fold over the op stream. Golden tests can assert on the
+/// plan structurally instead of pattern-matching escape strings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TermOp {
+    /// Scroll grid rows `top..=bottom`: encoded as one balanced
+    /// DECSTBM + SU/SD + reset sequence, so an unbalanced region cannot be
+    /// expressed.
+    ScrollRows {
+        top: u16,
+        bottom: u16,
+        dir: ScrollDir,
+    },
+    /// Move the cursor and rewrite desired cells `start..end` of `row`.
+    WriteRun { row: u16, start: u16, end: u16 },
+    /// Composite-row repaint: space-clear `start..end` of `row` first, then
+    /// rewrite it — the terminal's cluster-width opinion may differ from the
+    /// cell grid, so the range is wiped before new glyphs land.
+    ClearThenWriteRun { row: u16, start: u16, end: u16 },
+}
+
+/// Byte/op accounting for the most recent frame, folded during encoding.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TtyFrameStats {
+    pub scroll_ops: u32,
+    pub write_runs: u32,
+    pub cells_written: u32,
+    pub bytes: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -214,8 +288,21 @@ impl TtyRif {
             faces: HashMap::new(),
             default_bg: None,
             default_fg: None,
+            caps: TermCaps::default(),
+            frame_stats: TtyFrameStats::default(),
             force_full_render: true,
         }
+    }
+
+    /// Declare what the connected terminal can do. The planner consults this
+    /// before proposing operations; see [`TermCaps`].
+    pub fn set_caps(&mut self, caps: TermCaps) {
+        self.caps = caps;
+    }
+
+    /// Accounting for the most recently rendered frame.
+    pub fn frame_stats(&self) -> TtyFrameStats {
+        self.frame_stats
     }
 
     /// Resize the terminal grids. Clears both grids (forces full redraw).
@@ -598,73 +685,116 @@ impl TtyRif {
     /// Retrieve the buffered output with [`take_output`].
     pub fn diff_and_render(&mut self) {
         self.output.clear();
+        self.frame_stats = TtyFrameStats::default();
 
-        // Synchronized output (DECSET 2026): the terminal buffers everything
-        // between h/l and presents it atomically, eliminating tearing during
-        // partial updates. Supported by kitty/ghostty/wezterm/tmux/Windows
-        // Terminal and ignored as an unknown private mode elsewhere; GNU's
-        // terminal update has no equivalent.
-        self.output.extend_from_slice(b"\x1b[?2026h");
+        // Plan first (pure decision + screen-model replay), then encode (the
+        // only place bytes are produced). The planner consults `self.caps`,
+        // so every planned op is encodable on the connected terminal.
+        let ops = self.plan_frame();
 
+        if self.caps.synchronized_output {
+            // Synchronized output (DECSET 2026): the terminal buffers
+            // everything between h/l and presents it atomically. Supported
+            // by kitty/ghostty/wezterm/tmux/Windows Terminal and ignored as
+            // an unknown private mode elsewhere; GNU's terminal update has
+            // no equivalent.
+            self.output.extend_from_slice(b"\x1b[?2026h");
+        }
         // Hide cursor during update to avoid flicker.
         self.output.extend_from_slice(b"\x1b[?25l");
 
-        // Vertical scroll: when a run of rows merely shifted, tell the
-        // terminal to move them (DECSTBM region + SU/SD) instead of
-        // retransmitting every row - the issue-206 case where one scroll
-        // step redrew the whole frame. See detect_scroll for the design.
-        if !self.force_full_render
+        self.encode_ops(&ops);
+
+        // Reset attributes after all updates.
+        self.output.extend_from_slice(b"\x1b[0m");
+
+        // Position cursor and show it if visible.
+        if self.cursor_visible {
+            write_cursor_goto(&mut self.output, self.cursor_row + 1, self.cursor_col + 1);
+            write_cursor_shape(&mut self.output, self.cursor_shape);
+            self.output.extend_from_slice(b"\x1b[?25h");
+        }
+
+        if self.caps.synchronized_output {
+            // End synchronized update: present the frame atomically.
+            self.output.extend_from_slice(b"\x1b[?2026l");
+        }
+
+        self.frame_stats.bytes = self.output.len() as u32;
+
+        // Swap: current now reflects what is on screen.
+        std::mem::swap(&mut self.current, &mut self.desired);
+        self.force_full_render = false;
+    }
+
+    /// Plan a frame without encoding, for structural tests: what would be
+    /// done, as typed operations. Mutates the screen model exactly like a
+    /// real render's planning stage.
+    #[cfg(test)]
+    pub(crate) fn plan_for_test(&mut self) -> Vec<TermOp> {
+        self.plan_frame()
+    }
+
+    /// Decide the frame's update operations and replay their effects on the
+    /// screen model (`self.current`), so the per-row diff below each
+    /// decision sees the post-op screen.
+    fn plan_frame(&mut self) -> Vec<TermOp> {
+        let mut ops = Vec::new();
+
+        // Vertical scroll: when a run of rows merely shifted, move them with
+        // the terminal (one region scroll) instead of retransmitting every
+        // row - the issue-206 case where one scroll step redrew the whole
+        // frame. See detect_scroll for the design.
+        if self.caps.scroll_region
+            && !self.force_full_render
             && let Some(scroll) = detect_scroll(&self.current, &self.desired)
         {
             let n = scroll.delta.unsigned_abs();
-            // Region-relative scroll: set margins, scroll, reset margins.
-            self.output.extend_from_slice(
-                format!("\x1b[{};{}r", scroll.top + 1, scroll.bottom + 1).as_bytes(),
-            );
-            // SGR reset first: SU/SD fill exposed lines with the current
-            // background (BCE); make that the default background.
-            self.output.extend_from_slice(b"\x1b[0m");
-            if scroll.delta > 0 {
-                self.output
-                    .extend_from_slice(format!("\x1b[{n}S").as_bytes());
-            } else {
-                self.output
-                    .extend_from_slice(format!("\x1b[{n}T").as_bytes());
-            }
-            self.output.extend_from_slice(b"\x1b[r");
-            // Mirror the terminal-side move in our model of the screen, and
-            // poison the exposed rows so the diff below repaints them (the
-            // terminal filled them with blank cells whose exact attributes
-            // we choose not to depend on).
-            let w = self.current.width;
-            let poison = TtyCell {
-                ch: '\0',
-                ..TtyCell::default()
-            };
-            if scroll.delta > 0 {
-                for i in scroll.top..=scroll.bottom - n {
-                    let (dst, src) = (i * w, (i + n) * w);
-                    for col in 0..w {
-                        self.current.cells[dst + col] = self.current.cells[src + col].clone();
+            let dir = std::num::NonZeroU16::new(n as u16).map(|n| {
+                if scroll.delta > 0 {
+                    ScrollDir::Up(n)
+                } else {
+                    ScrollDir::Down(n)
+                }
+            });
+            if let Some(dir) = dir {
+                ops.push(TermOp::ScrollRows {
+                    top: scroll.top as u16,
+                    bottom: scroll.bottom as u16,
+                    dir,
+                });
+                // Mirror the terminal-side move in the screen model, and
+                // poison the exposed rows so the row diff repaints them (the
+                // terminal filled them with blank cells whose exact
+                // attributes we choose not to depend on).
+                let w = self.current.width;
+                let poison = TtyCell {
+                    ch: '\0',
+                    ..TtyCell::default()
+                };
+                if scroll.delta > 0 {
+                    for i in scroll.top..=scroll.bottom - n {
+                        let (dst, src) = (i * w, (i + n) * w);
+                        for col in 0..w {
+                            self.current.cells[dst + col] = self.current.cells[src + col].clone();
+                        }
                     }
-                }
-                for i in scroll.bottom + 1 - n..=scroll.bottom {
-                    self.current.cells[i * w..(i + 1) * w].fill(poison.clone());
-                }
-            } else {
-                for i in (scroll.top + n..=scroll.bottom).rev() {
-                    let (dst, src) = (i * w, (i - n) * w);
-                    for col in 0..w {
-                        self.current.cells[dst + col] = self.current.cells[src + col].clone();
+                    for i in scroll.bottom + 1 - n..=scroll.bottom {
+                        self.current.cells[i * w..(i + 1) * w].fill(poison.clone());
                     }
-                }
-                for i in scroll.top..scroll.top + n {
-                    self.current.cells[i * w..(i + 1) * w].fill(poison.clone());
+                } else {
+                    for i in (scroll.top + n..=scroll.bottom).rev() {
+                        let (dst, src) = (i * w, (i - n) * w);
+                        for col in 0..w {
+                            self.current.cells[dst + col] = self.current.cells[src + col].clone();
+                        }
+                    }
+                    for i in scroll.top..scroll.top + n {
+                        self.current.cells[i * w..(i + 1) * w].fill(poison.clone());
+                    }
                 }
             }
         }
-
-        let mut last_attrs: Option<CellAttrs> = None;
 
         for row in 0..self.desired.height {
             let row_start = row * self.desired.width;
@@ -692,31 +822,34 @@ impl TtyRif {
                     .expect("row with first changed cell must also have a last changed cell")
             };
 
-            // GNU term.c writes contiguous glyph runs with a single cursor
-            // position update, then lets the terminal advance naturally.
-            // Repaint the changed row span the same way so wide glyphs and
-            // composed clusters are emitted as adjacent terminal text rather
-            // than broken up by per-cell cursor moves.
-            //
             // Real terminals are not uniformly reliable when a row containing
-            // grapheme clusters is rewritten with different text.  If the
-            // terminal's idea of the cluster width differs from our cell grid,
-            // stale glyphs can remain past the internal changed span.  GNU's
-            // TTY redisplay model treats the terminal as a stateful grid and
-            // clears affected ranges before writing new glyphs; for composite
-            // rows, clear and repaint the whole row tail so shrunk HELLO rows
-            // cannot leave visible residue.
+            // grapheme clusters is rewritten with different text. If the
+            // terminal's idea of the cluster width differs from our cell
+            // grid, stale glyphs can remain past the internal changed span.
+            // Clear and repaint the whole row tail for composite rows so
+            // shrunk cluster rows cannot leave visible residue; the clear
+            // also means every cell of the range must be rewritten
+            // regardless of what the model recorded.
             let composite_row =
                 row_has_composite_cells(desired_row) || row_has_composite_cells(current_row);
             if composite_row {
                 last_changed = desired_row.len() - 1;
-                write_cursor_goto(&mut self.output, row as u16 + 1, first_changed as u16 + 1);
-                write_sgr(&mut self.output, &CellAttrs::default());
-                last_attrs = Some(CellAttrs::default());
-                for _ in first_changed..=last_changed {
-                    self.output.push(b' ');
-                }
+                ops.push(TermOp::ClearThenWriteRun {
+                    row: row as u16,
+                    start: first_changed as u16,
+                    end: last_changed as u16 + 1,
+                });
+                continue;
             }
+            if self.force_full_render {
+                ops.push(TermOp::WriteRun {
+                    row: row as u16,
+                    start: first_changed as u16,
+                    end: last_changed as u16 + 1,
+                });
+                continue;
+            }
+
             // Multi-span emission (issue 206): a row with two separate
             // change regions used to be rewritten from the first to the
             // last changed cell in one span, retransmitting the untouched
@@ -727,66 +860,105 @@ impl TtyRif {
             // begmatch/endmatch span per line; per-run emission with a
             // byte-cost coalesce rule strictly dominates it.
             const GOTO_COST_CELLS: usize = 8;
-            let mut spans: Vec<(usize, usize)> = Vec::new();
-            {
-                let changed =
-                    |col: usize| !desired_row[col].padding && desired_row[col] != current_row[col];
-                let mut col = first_changed;
-                while col <= last_changed {
-                    if changed(col) {
-                        let start = col;
-                        while col <= last_changed && changed(col) {
-                            col += 1;
-                        }
-                        match spans.last_mut() {
-                            Some((_, end)) if start - *end <= GOTO_COST_CELLS => *end = col,
-                            _ => spans.push((start, col)),
-                        }
-                    } else {
+            let changed =
+                |col: usize| !desired_row[col].padding && desired_row[col] != current_row[col];
+            let mut col = first_changed;
+            let row_op_floor = ops.len();
+            while col <= last_changed {
+                if changed(col) {
+                    let start = col;
+                    while col <= last_changed && changed(col) {
                         col += 1;
                     }
-                }
-            }
-            if self.force_full_render || composite_row {
-                // The composite path just space-cleared the whole tail on
-                // the terminal, so every cell of the range must be
-                // rewritten regardless of what `current` recorded.
-                spans = vec![(first_changed, last_changed + 1)];
-            }
-
-            for &(start, end) in &spans {
-                write_cursor_goto(&mut self.output, row as u16 + 1, start as u16 + 1);
-                for desired in &desired_row[start..end] {
-                    if desired.padding {
-                        continue;
+                    let coalesced = ops.len() > row_op_floor
+                        && matches!(ops.last(), Some(TermOp::WriteRun { end, .. })
+                            if start - *end as usize <= GOTO_COST_CELLS);
+                    if coalesced {
+                        if let Some(TermOp::WriteRun { end, .. }) = ops.last_mut() {
+                            *end = col as u16;
+                        }
+                    } else {
+                        ops.push(TermOp::WriteRun {
+                            row: row as u16,
+                            start: start as u16,
+                            end: col as u16,
+                        });
                     }
-
-                    if last_attrs.as_ref() != Some(&desired.attrs) {
-                        write_sgr(&mut self.output, &desired.attrs);
-                        last_attrs = Some(desired.attrs);
-                    }
-
-                    write_cell_contents(&mut self.output, desired);
+                } else {
+                    col += 1;
                 }
             }
         }
 
-        // Reset attributes after all updates.
-        self.output.extend_from_slice(b"\x1b[0m");
+        ops
+    }
 
-        // Position cursor and show it if visible.
-        if self.cursor_visible {
-            write_cursor_goto(&mut self.output, self.cursor_row + 1, self.cursor_col + 1);
-            write_cursor_shape(&mut self.output, self.cursor_shape);
-            self.output.extend_from_slice(b"\x1b[?25h");
+    /// Encode planned operations into escape bytes. The single place bytes
+    /// are produced for grid content; owns the cross-run SGR dedup state and
+    /// folds the per-frame accounting.
+    fn encode_ops(&mut self, ops: &[TermOp]) {
+        let mut last_attrs: Option<CellAttrs> = None;
+        for op in ops {
+            match *op {
+                TermOp::ScrollRows { top, bottom, dir } => {
+                    self.frame_stats.scroll_ops += 1;
+                    // Balanced by construction: region set, scroll, reset in
+                    // one atomic encoding.
+                    self.output
+                        .extend_from_slice(format!("\x1b[{};{}r", top + 1, bottom + 1).as_bytes());
+                    // SGR reset first: SU/SD fill exposed lines with the
+                    // current background (BCE); make that the default.
+                    self.output.extend_from_slice(b"\x1b[0m");
+                    last_attrs = Some(CellAttrs::default());
+                    match dir {
+                        ScrollDir::Up(n) => self
+                            .output
+                            .extend_from_slice(format!("\x1b[{n}S").as_bytes()),
+                        ScrollDir::Down(n) => self
+                            .output
+                            .extend_from_slice(format!("\x1b[{n}T").as_bytes()),
+                    }
+                    self.output.extend_from_slice(b"\x1b[r");
+                }
+                TermOp::ClearThenWriteRun { row, start, end } => {
+                    write_cursor_goto(&mut self.output, row + 1, start + 1);
+                    write_sgr(&mut self.output, &CellAttrs::default());
+                    last_attrs = Some(CellAttrs::default());
+                    for _ in start..end {
+                        self.output.push(b' ');
+                    }
+                    self.encode_write_run(row, start, end, &mut last_attrs);
+                }
+                TermOp::WriteRun { row, start, end } => {
+                    self.encode_write_run(row, start, end, &mut last_attrs);
+                }
+            }
         }
+    }
 
-        // End synchronized update: present the frame atomically.
-        self.output.extend_from_slice(b"\x1b[?2026l");
-
-        // Swap: current now reflects what is on screen.
-        std::mem::swap(&mut self.current, &mut self.desired);
-        self.force_full_render = false;
+    fn encode_write_run(
+        &mut self,
+        row: u16,
+        start: u16,
+        end: u16,
+        last_attrs: &mut Option<CellAttrs>,
+    ) {
+        self.frame_stats.write_runs += 1;
+        write_cursor_goto(&mut self.output, row + 1, start + 1);
+        let row_start = row as usize * self.desired.width;
+        for col in start as usize..end as usize {
+            let desired = &self.desired.cells[row_start + col];
+            if desired.padding {
+                continue;
+            }
+            if last_attrs.as_ref() != Some(&desired.attrs) {
+                write_sgr(&mut self.output, &desired.attrs);
+                *last_attrs = Some(desired.attrs);
+            }
+            let cell = desired.clone();
+            write_cell_contents(&mut self.output, &cell);
+            self.frame_stats.cells_written += 1;
+        }
     }
 
     /// Take the buffered output bytes. The caller writes these to stdout.
