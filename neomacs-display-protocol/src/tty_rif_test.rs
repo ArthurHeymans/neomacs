@@ -2203,6 +2203,7 @@ fn caps_without_scroll_region_never_plan_scroll_ops() {
     rif.set_caps(TermCaps {
         scroll_region: false,
         back_color_erase: false,
+        insert_delete_char: false,
         synchronized_output: false,
     });
     for r in 0..10 {
@@ -2378,4 +2379,107 @@ fn lying_scroll_seed_falls_back_to_correct_inference() {
         }
         other => panic!("scroll expected despite lying seed: {other:?}"),
     }
+}
+
+// ---------------------------------------------------------------------------
+// In-line horizontal shifts (issue #206 phase 4b)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn typing_one_char_mid_line_uses_insert_cells() {
+    let mut rif = TtyRif::new(60, 4);
+    set_row(&mut rif, 1, "fn main() { println!(\"hello, world\"); }");
+    let _ = render_output(&mut rif);
+    set_row(&mut rif, 1, "fn mXain() { println!(\"hello, world\"); }");
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    assert!(
+        text.contains("\x1b[1@"),
+        "one typed char is one ICH: {text:?}"
+    );
+    assert!(
+        !text.contains("println"),
+        "the shifted tail must not be retransmitted: {text:?}"
+    );
+
+    // Steady state: the model matches the terminal after the shift.
+    set_row(&mut rif, 1, "fn mXain() { println!(\"hello, world\"); }");
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    assert!(
+        !text.contains('X') && !text.contains("main"),
+        "no-op after shift: {text:?}"
+    );
+}
+
+#[test]
+fn deleting_one_char_mid_line_uses_delete_cells() {
+    let mut rif = TtyRif::new(60, 4);
+    set_row(&mut rif, 1, "fn mXain() { println!(\"hello, world\"); }");
+    let _ = render_output(&mut rif);
+    set_row(&mut rif, 1, "fn main() { println!(\"hello, world\"); } ");
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    assert!(
+        text.contains("\x1b[1P"),
+        "one deleted char is one DCH: {text:?}"
+    );
+    assert!(
+        !text.contains("println"),
+        "tail not retransmitted: {text:?}"
+    );
+}
+
+#[test]
+fn rows_with_wide_chars_refuse_horizontal_shifts() {
+    let mut rif = TtyRif::new(30, 4);
+    // A wide char occupies a base cell plus a padding cell.
+    set_row(&mut rif, 1, "abc ");
+    rif.desired.set(1, 4, '日', CellAttrs::default(), false);
+    rif.desired.set(1, 5, ' ', CellAttrs::default(), true);
+    set_row_from(&mut rif, 1, 6, "-tail-content-here");
+    let _ = render_output(&mut rif);
+    rif.desired.set(1, 0, 'a', CellAttrs::default(), false);
+    rif.desired.set(1, 1, 'X', CellAttrs::default(), false);
+    set_row_from(&mut rif, 1, 2, "bc ");
+    rif.desired.set(1, 5, '日', CellAttrs::default(), false);
+    rif.desired.set(1, 6, ' ', CellAttrs::default(), true);
+    set_row_from(&mut rif, 1, 7, "-tail-content-her");
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    assert!(
+        !text.contains('@') || !text.contains("\x1b[1@"),
+        "wide-char rows must not shift: {text:?}"
+    );
+}
+
+/// Write `text` into desired row `row` starting at `col`.
+fn set_row_from(rif: &mut TtyRif, row: usize, col: usize, text: &str) {
+    for (i, ch) in text.chars().enumerate() {
+        rif.desired
+            .set(row, col + i, ch, CellAttrs::default(), false);
+    }
+}
+
+#[test]
+fn typing_echo_bytes_are_a_fraction_of_tail_rewrite() {
+    // Efficiency guard for the typing-echo case.
+    let line = "let value = compute_the_answer(question, context, options);";
+    let mut rif = TtyRif::new(80, 4);
+    set_row(&mut rif, 1, line);
+    let _ = render_output(&mut rif);
+    let edited = format!("{}X{}", &line[..4], &line[4..]);
+    set_row(&mut rif, 1, &edited);
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    // Sync wrapper + cursor hide + goto + ICH + goto + SGR + the one glyph.
+    assert!(
+        out.len() < 64,
+        "typing echo must be tens of bytes, not a tail rewrite: {} {text:?}",
+        out.len()
+    );
+    assert!(
+        !text.contains("compute_the_answer"),
+        "tail must ride the shift, not a rewrite: {text:?}"
+    );
 }

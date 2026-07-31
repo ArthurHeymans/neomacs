@@ -121,6 +121,10 @@ pub(crate) fn resolve_term_caps(
     neomacs_display_protocol::tty_rif::TermCaps {
         scroll_region: has_string(database, "cs") && has_string(database, "cm"),
         back_color_erase: database.get_flag("ut"),
+        // GNU term.c gates char insert/delete on ic/dc (multi-char IC/DC are
+        // optional refinements there; ANSI ICH/DCH is what we emit).
+        insert_delete_char: (has_string(database, "ic") || has_string(database, "IC"))
+            && (has_string(database, "dc") || has_string(database, "DC")),
         synchronized_output: true,
     }
 }

@@ -223,6 +223,9 @@ pub struct TermCaps {
     /// current SGR background rather than the terminal default, which is
     /// what makes erase-to-EOL usable under a non-default background.
     pub back_color_erase: bool,
+    /// Parameterized insert/delete character (ICH/DCH, terminfo `IC`/`DC`):
+    /// in-line horizontal shifts for the typing-echo case.
+    pub insert_delete_char: bool,
     /// DECSET 2026 synchronized-output bracketing.
     pub synchronized_output: bool,
 }
@@ -232,6 +235,7 @@ impl Default for TermCaps {
         Self {
             scroll_region: true,
             back_color_erase: true,
+            insert_delete_char: true,
             synchronized_output: true,
         }
     }
@@ -278,6 +282,25 @@ enum TermOp {
         row: u16,
         from: u16,
         bg: Option<(u8, u8, u8)>,
+    },
+    /// Shift the tail of `row` right by `count` from column `at` (ICH,
+    /// ESC[n@): the typing-echo case. The planner replays the shift on the
+    /// screen model and poisons the opened gap, so the ordinary span diff
+    /// writes exactly the inserted cells; the terminal's pushed-off tail
+    /// matches the model's dropped tail by the planner's full-suffix
+    /// equality check.
+    InsertCells {
+        row: u16,
+        at: u16,
+        count: std::num::NonZeroU16,
+    },
+    /// Shift the tail of `row` left by `count` at column `at` (DCH,
+    /// ESC[nP) — the in-line deletion case. The revealed right-edge cells
+    /// are poisoned in the model and repainted by the span diff.
+    DeleteCells {
+        row: u16,
+        at: u16,
+        count: std::num::NonZeroU16,
     },
 }
 
@@ -898,6 +921,51 @@ impl TtyRif {
                 continue;
             }
 
+            // In-line horizontal shift (ICH/DCH): one char typed or deleted
+            // mid-line shifts the whole tail; detecting it turns a
+            // tail-rewrite into one escape plus the changed cells. The
+            // shift must match to the PHYSICAL end of the row (a split
+            // window's divider breaks the suffix equality and correctly
+            // refuses), and any wide-char padding in the row refuses
+            // outright: a wide base landing on the right edge with its
+            // padding pushed off is blanked by the terminal while the model
+            // keeps it — a divergence no later diff can see. The model
+            // replays the shift and poisons the opened/revealed cells, so
+            // the ordinary span diff below emits exactly the fresh content.
+            let phys_width = self.desired.width;
+            if self.caps.insert_delete_char
+                && let Some((op, shifted_row)) = detect_row_shift(
+                    row as u16,
+                    &self.desired.cells[row_start..row_start + phys_width],
+                    &self.current.cells[row_start..row_start + phys_width],
+                    first_changed,
+                )
+            {
+                ops.push(op);
+                self.current.cells[row_start..row_start + phys_width]
+                    .clone_from_slice(&shifted_row);
+                let desired_row = &self.desired.cells[row_start..row_start + phys_width];
+                let current_row = &self.current.cells[row_start..row_start + phys_width];
+                let Some(fresh_first) = desired_row
+                    .iter()
+                    .zip(current_row.iter())
+                    .position(|(desired, current)| !desired.padding && desired != current)
+                else {
+                    continue;
+                };
+                let fresh_last = desired_row
+                    .iter()
+                    .zip(current_row.iter())
+                    .rposition(|(desired, current)| !desired.padding && desired != current)
+                    .expect("shift left at least the poisoned cells changed");
+                ops.push(TermOp::WriteRun {
+                    row: row as u16,
+                    start: fresh_first as u16,
+                    end: fresh_last as u16 + 1,
+                });
+                continue;
+            }
+
             // Erase-to-EOL: when the desired row's physical tail is one
             // uniform run of erasable blanks (see erasable_blank) and at
             // least a few of them changed, one ESC[K replaces writing them
@@ -1033,6 +1101,16 @@ impl TtyRif {
                 }
                 TermOp::WriteRun { row, start, end } => {
                     self.encode_write_run(row, start, end, &mut last_attrs);
+                }
+                TermOp::InsertCells { row, at, count } => {
+                    write_cursor_goto(&mut self.output, row + 1, at + 1);
+                    self.output
+                        .extend_from_slice(format!("\x1b[{count}@").as_bytes());
+                }
+                TermOp::DeleteCells { row, at, count } => {
+                    write_cursor_goto(&mut self.output, row + 1, at + 1);
+                    self.output
+                        .extend_from_slice(format!("\x1b[{count}P").as_bytes());
                 }
                 TermOp::EraseToEol { row, from, bg } => {
                     self.frame_stats.erase_ops += 1;
@@ -1437,6 +1515,80 @@ fn verify_delta(
         return None;
     }
     Some(DetectedScroll { top, bottom, delta })
+}
+
+/// Detect an in-line horizontal shift of the row tail (one insertion or
+/// deletion of up to MAX_SHIFT cells at `first_changed`), returning the op
+/// and the post-shift model row (shifted content with the fresh cells
+/// poisoned). Refusal rules — each one load-bearing:
+/// - any padding cell in either row: a wide base pushed against or off the
+///   right edge is blanked by the terminal but kept by the model, and no
+///   later diff can see the difference (both grids agree);
+/// - any composite cell: cluster-width bookkeeping differs per terminal
+///   (the same exclusion every other optimization applies);
+/// - the suffix equality runs to the PHYSICAL row end, never a sub-span, so
+///   vertically split windows (divider glyphs) refuse naturally.
+fn detect_row_shift(
+    row: u16,
+    desired_row: &[TtyCell],
+    current_row: &[TtyCell],
+    first_changed: usize,
+) -> Option<(TermOp, Vec<TtyCell>)> {
+    const MAX_SHIFT: usize = 8;
+    const MIN_SAVED_CELLS: usize = 8;
+    let width = desired_row.len();
+    if desired_row
+        .iter()
+        .any(|c| c.padding || c.extenders.is_some())
+        || current_row
+            .iter()
+            .any(|c| c.padding || c.extenders.is_some())
+    {
+        return None;
+    }
+    let poison = TtyCell {
+        ch: '\0',
+        ..TtyCell::default()
+    };
+    for d in 1..=MAX_SHIFT.min(width.saturating_sub(first_changed + 1)) {
+        // Insertion: desired[first+d..] == current[first..width-d].
+        let suffix = width - first_changed - d;
+        if suffix >= MIN_SAVED_CELLS
+            && desired_row[first_changed + d..] == current_row[first_changed..width - d]
+        {
+            let mut shifted = current_row.to_vec();
+            // TtyCell is not Copy (cluster extenders); rotate moves.
+            shifted[first_changed..].rotate_right(d);
+            shifted[first_changed..first_changed + d].fill(poison.clone());
+            let count = std::num::NonZeroU16::new(d as u16)?;
+            return Some((
+                TermOp::InsertCells {
+                    row,
+                    at: first_changed as u16,
+                    count,
+                },
+                shifted,
+            ));
+        }
+        // Deletion: desired[first..width-d] == current[first+d..].
+        if suffix >= MIN_SAVED_CELLS
+            && desired_row[first_changed..width - d] == current_row[first_changed + d..]
+        {
+            let mut shifted = current_row.to_vec();
+            shifted[first_changed..].rotate_left(d);
+            shifted[width - d..].fill(poison.clone());
+            let count = std::num::NonZeroU16::new(d as u16)?;
+            return Some((
+                TermOp::DeleteCells {
+                    row,
+                    at: first_changed as u16,
+                    count,
+                },
+                shifted,
+            ));
+        }
+    }
+    None
 }
 
 /// A desired cell that erase-to-EOL may paint instead of writing.
