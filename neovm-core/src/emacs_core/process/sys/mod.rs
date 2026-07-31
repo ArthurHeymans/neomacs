@@ -41,7 +41,7 @@ mod fd;
 pub use fd::{dup_fd, set_fd_nonblocking};
 
 mod fs;
-pub use fs::path_is_executable;
+pub use fs::executable_path_access;
 
 pub mod net;
 

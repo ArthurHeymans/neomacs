@@ -72,6 +72,7 @@ rayon = "1"
 
 # FFI / system
 libc = "0.2"
+rustix = { version = "1", features = ["fs"] }
 notify = "8"
 fs4 = { version = "1", features = ["sync"] }
 sysinfo = "0.39"

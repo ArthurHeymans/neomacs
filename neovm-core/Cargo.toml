@@ -13,6 +13,7 @@ neomacs-display-protocol.workspace = true
 enumflags2.workspace = true
 crossbeam-channel.workspace = true
 libc.workspace = true
+rustix.workspace = true
 notify.workspace = true
 fs4.workspace = true
 sysinfo.workspace = true

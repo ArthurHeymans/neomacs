@@ -308,7 +308,14 @@ fn tmp_file(label: &str) -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .expect("time should be monotonic")
         .as_nanos();
-    format!("/tmp/neovm-{label}-{}-{nonce}.txt", std::process::id())
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("neovm-core should be inside the workspace")
+        .join("tmp");
+    std::fs::create_dir_all(&root).expect("create workspace temp root");
+    root.join(format!("neovm-{label}-{}-{nonce}.txt", std::process::id()))
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn tmp_dir(label: &str) -> String {
@@ -316,7 +323,13 @@ fn tmp_dir(label: &str) -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .expect("time should be monotonic")
         .as_nanos();
-    let dir = format!("/tmp/neovm-{label}-{}-{nonce}", std::process::id());
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("neovm-core should be inside the workspace")
+        .join("tmp")
+        .join(format!("neovm-{label}-{}-{nonce}", std::process::id()))
+        .to_string_lossy()
+        .into_owned();
     std::fs::create_dir_all(&dir).expect("create temp dir");
     dir
 }
@@ -900,6 +913,53 @@ fn process_creation_allocates_the_smallest_available_gnu_name() {
         result,
         r#"OK (("name-allocation" "name-allocation<1>" "name-allocation<2>") "name-allocation<1>" "name-allocation")"#
     );
+}
+
+#[test]
+fn make_process_missing_program_reports_gnu_errno_data() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((exec-path nil))
+             (condition-case error-data
+                 (make-process
+                  :name "missing-program"
+                  :command '("neomacs-definitely-missing"))
+               (file-missing error-data)))"#,
+    );
+
+    assert_eq!(
+        result,
+        r#"OK (file-missing "Searching for program" "No such file or directory" "neomacs-definitely-missing")"#
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn make_process_non_executable_program_reports_gnu_errno_data() {
+    crate::test_utils::init_test_tracing();
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = tmp_dir("make-process-noexec");
+    let program = std::path::Path::new(&directory).join("noexecprog");
+    std::fs::write(&program, b"#!/bin/sh\n").expect("write non-executable program");
+    std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o644))
+        .expect("chmod non-executable program");
+
+    let result = eval_one(&format!(
+        r#"(let ((exec-path (list "{directory}")))
+             (condition-case error-data
+                 (make-process
+                  :name "non-executable-program"
+                  :command '("noexecprog"))
+               (error error-data)))"#
+    ));
+
+    assert_eq!(
+        result,
+        r#"OK (permission-denied "Searching for program" "Permission denied" "noexecprog")"#
+    );
+
+    std::fs::remove_dir_all(directory).expect("remove non-executable program fixture");
 }
 
 #[test]

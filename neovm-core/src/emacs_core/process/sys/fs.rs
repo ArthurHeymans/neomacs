@@ -1,26 +1,39 @@
 //! Filesystem access checks (per-facility platform module).
 //!
-//! `path_is_executable` answers "can this process execute this file", which is
-//! an effective-access question: on Unix it must go through `access(path,
-//! X_OK)` so the kernel honors effective uid/gid and ACLs -- a raw
-//! permission-bit inspection would get this wrong for setuid Emacs or ACL'd
-//! files, and it is exactly what GNU's `file-executable-p` does. Off Unix there
-//! is no such probe here, so it degrades to an existence check.
+//! `executable_path_access` answers "can this process execute this file", which
+//! is an effective-access question. On Unix it must go through `faccessat(path,
+//! X_OK, AT_EACCESS)` so the kernel honors effective uid/gid and ACLs; a raw
+//! permission-bit inspection would get this wrong. The returned errno is part
+//! of GNU `openp`'s observable error contract, so callers must not reduce it to
+//! a boolean.
 
 use std::path::Path;
 
-/// Whether `path` is executable by the current process.
+/// Probe `path` for executability, preserving the OS errno on failure.
+///
+/// GNU `openp` treats an executable/searchable directory as `EISDIR`, not as
+/// a runnable program, so perform that check after a successful `faccessat`.
 #[cfg(unix)]
-pub fn path_is_executable(path: &Path) -> bool {
-    use std::os::unix::ffi::OsStrExt;
-    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
-        return false;
-    };
-    // SAFETY: `c_path` is a valid C string; `access` takes no other pointers.
-    unsafe { libc::access(c_path.as_ptr(), libc::X_OK) == 0 }
+pub fn executable_path_access(path: &Path) -> Result<(), libc::c_int> {
+    match rustix::fs::accessat(
+        rustix::fs::CWD,
+        path,
+        rustix::fs::Access::EXEC_OK,
+        rustix::fs::AtFlags::EACCESS,
+    ) {
+        Ok(()) if path.is_dir() => Err(libc::EISDIR),
+        Ok(()) => Ok(()),
+        Err(errno) => Err(errno.raw_os_error()),
+    }
 }
 
 #[cfg(not(unix))]
-pub fn path_is_executable(path: &Path) -> bool {
-    path.exists()
+pub fn executable_path_access(path: &Path) -> Result<(), libc::c_int> {
+    if path.is_dir() {
+        Err(libc::EISDIR)
+    } else if path.exists() {
+        Ok(())
+    } else {
+        Err(libc::ENOENT)
+    }
 }

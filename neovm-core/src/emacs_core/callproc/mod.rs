@@ -182,71 +182,6 @@ fn lisp_string_to_output_path(string: &LispString) -> std::path::PathBuf {
     super::fileio::lisp_file_name_to_path_buf(string)
 }
 
-/// Outcome of probing one candidate path for executability, mirroring the
-/// `FIXNATP (predicate)` branch of GNU `openp` (lread.c:1912-1930) when the
-/// predicate is `X_OK`. Each variant carries the errno GNU's `openp` would
-/// record in `last_errno` for that outcome, so callers can build the
-/// `report_file_errno` triple `(MSG STRERROR PROG)` exactly like GNU.
-#[derive(Clone, Copy, Debug)]
-enum AccessResult {
-    /// The candidate is an executable, runnable file.
-    Ok,
-    /// `faccessat(X_OK)` failed; carries `errno`. ENOENT/ENOTDIR mean
-    /// "keep searching" (GNU leaves `last_errno` untouched at its ENOENT
-    /// default); any other errno (e.g. EACCES) is recorded.
-    Err(libc::c_int),
-}
-
-/// Probe PATH for X_OK like GNU `openp`'s faccessat branch, returning the
-/// errno GNU would record. Note GNU checks for a directory *before* trusting a
-/// successful `faccessat`: a directory with the execute (search) bit set passes
-/// `access(X_OK)` yet is not runnable, so it maps to EISDIR.
-#[cfg(unix)]
-fn access_executable(path: &std::path::Path) -> AccessResult {
-    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
-        return AccessResult::Err(libc::ENOENT);
-    };
-    let rc = unsafe { libc::access(c_path.as_ptr(), libc::X_OK) };
-    if rc == 0 {
-        // GNU openp: `if (file_directory_p (encoded_fn)) last_errno = EISDIR;`
-        if path.is_dir() {
-            AccessResult::Err(libc::EISDIR)
-        } else {
-            AccessResult::Ok
-        }
-    } else {
-        AccessResult::Err(
-            std::io::Error::last_os_error()
-                .raw_os_error()
-                .unwrap_or(libc::ENOENT),
-        )
-    }
-}
-
-#[cfg(not(unix))]
-fn access_executable(path: &std::path::Path) -> AccessResult {
-    if path.is_dir() {
-        AccessResult::Err(libc::EISDIR)
-    } else if path.exists() {
-        AccessResult::Ok
-    } else {
-        AccessResult::Err(libc::ENOENT)
-    }
-}
-
-/// Fold one candidate's `AccessResult` into GNU `openp`'s `last_errno`
-/// accumulator (lread.c:1768/1923-1929): ENOENT/ENOTDIR mean "keep searching"
-/// and leave the accumulator at its ENOENT default; any other errno (EISDIR,
-/// EACCES, ...) is recorded so the most informative failure is reported.
-fn record_access_errno(last_errno: &mut libc::c_int, result: AccessResult) {
-    if let AccessResult::Err(e) = result
-        && e != libc::ENOENT
-        && e != libc::ENOTDIR
-    {
-        *last_errno = e;
-    }
-}
-
 /// Signal the program-resolution failure with GNU's `report_file_errno` shape:
 /// `(SYMBOL "Searching for program" STRERROR PROGRAM)`, where SYMBOL and the
 /// libc `strerror` string are both derived from ERRNO (callproc.c:526 ->
@@ -292,9 +227,11 @@ fn resolve_call_process_program(
     // openp (lread.c:2026-2027): if the program is an absolute path,
     // check it directly and return immediately — no exec-path search.
     if program_path.is_absolute() {
-        match access_executable(&program_path) {
-            AccessResult::Ok => return Ok(program_path.into_os_string()),
-            other => record_access_errno(&mut last_errno, other),
+        match super::process::executable_path_access(&program_path) {
+            Ok(()) => return Ok(program_path.into_os_string()),
+            failure => {
+                super::process::record_executable_lookup_errno(&mut last_errno, failure);
+            }
         }
         return Err(call_process_lookup_error(program, last_errno));
     }
@@ -340,9 +277,11 @@ fn resolve_call_process_program(
                 }
                 candidate = PathBuf::from(os);
             }
-            match access_executable(&candidate) {
-                AccessResult::Ok => return Ok(candidate.into_os_string()),
-                other => record_access_errno(&mut last_errno, other),
+            match super::process::executable_path_access(&candidate) {
+                Ok(()) => return Ok(candidate.into_os_string()),
+                failure => {
+                    super::process::record_executable_lookup_errno(&mut last_errno, failure);
+                }
             }
         }
     }

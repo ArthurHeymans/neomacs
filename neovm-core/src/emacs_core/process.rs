@@ -1321,8 +1321,27 @@ fn lisp_string_to_os_string(string: &LispString) -> OsString {
     lisp_bytes_to_os_string(string.as_bytes(), string.is_multibyte())
 }
 
-fn executable_path_exists(path: &Path) -> bool {
-    sys::path_is_executable(path)
+/// Probe one executable-search candidate without discarding GNU `openp`'s
+/// observable errno. This is the shared boundary for asynchronous processes
+/// and synchronous `call-process`.
+pub(super) fn executable_path_access(path: &Path) -> Result<(), libc::c_int> {
+    sys::executable_path_access(path)
+}
+
+/// Fold a failed candidate into GNU `openp`'s `last_errno` accumulator.
+///
+/// Missing path components mean "keep searching"; a more informative failure
+/// such as `EACCES` or `EISDIR` must survive to the eventual Lisp signal.
+pub(super) fn record_executable_lookup_errno(
+    last_errno: &mut libc::c_int,
+    result: Result<(), libc::c_int>,
+) {
+    if let Err(errno) = result
+        && errno != libc::ENOENT
+        && errno != libc::ENOTDIR
+    {
+        *last_errno = errno;
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -1332,15 +1351,11 @@ struct ProcessExecLookup<'a> {
     default_directory: Option<&'a LispString>,
 }
 
-fn process_lookup_error(program: &LispString) -> Flow {
-    signal(
-        LispCondition::FileMissing,
-        vec![
-            Value::string("Searching for program"),
-            Value::string(crate::emacs_core::emacs_char::to_utf8_lossy(
-                program.as_bytes(),
-            )),
-        ],
+fn process_lookup_error(program: &LispString, errno: libc::c_int) -> Flow {
+    signal_file_errno(
+        "Searching for program",
+        Value::heap_string(program.clone()),
+        errno,
     )
 }
 
@@ -1378,10 +1393,11 @@ fn resolve_async_process_program(
         return Ok(program.clone());
     }
 
+    let mut last_errno = libc::ENOENT;
     let path_entries = if lookup.exec_path.is_nil() {
         vec![Value::NIL]
     } else {
-        list_to_vec(&lookup.exec_path).ok_or_else(|| process_lookup_error(program))?
+        list_to_vec(&lookup.exec_path).ok_or_else(|| process_lookup_error(program, last_errno))?
     };
     let suffixes = process_exec_suffixes(lookup)?;
     let program_path = super::fileio::lisp_file_name_to_path_buf(program);
@@ -1415,13 +1431,14 @@ fn resolve_async_process_program(
                 }
                 candidate = PathBuf::from(os);
             }
-            if executable_path_exists(&candidate) {
-                return Ok(os_str_to_lisp_string(candidate.as_os_str()));
+            match executable_path_access(&candidate) {
+                Ok(()) => return Ok(os_str_to_lisp_string(candidate.as_os_str())),
+                failure => record_executable_lookup_errno(&mut last_errno, failure),
             }
         }
     }
 
-    Err(process_lookup_error(program))
+    Err(process_lookup_error(program, last_errno))
 }
 
 fn visible_default_directory_lisp(eval: &super::eval::Context) -> Option<LispString> {
