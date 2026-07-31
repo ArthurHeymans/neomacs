@@ -16,6 +16,7 @@
 #   SENTINEL=path GUI_TIMEOUT=secs ATTEMPTS=n \
 #     tools/bench/gui-run.sh ./target/release/neomacs -Q -l fixture.el
 set -u
+mkdir -p ./tmp/gui-logs
 SENTINEL=${SENTINEL:?set SENTINEL to the fixture completion file}
 GUI_TIMEOUT=${GUI_TIMEOUT:-180}
 ATTEMPTS=${ATTEMPTS:-5}
@@ -42,11 +43,11 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
   # all app threads: Lisp, render, wpe). Wrapping the whole script would
   # also count Weston's compositing, muddying attribution.
   if [ -n "${GUI_PERF_RECORD:-}" ]; then
-    WAYLAND_DISPLAY="$SOCKET" timeout "$GUI_TIMEOUT"       taskset -c 0-15 perf record -F 999 --call-graph=lbr -o "$GUI_PERF_RECORD"       "$BIN" "$@" >/tmp/neomacs-gui-$$.log 2>&1
+    WAYLAND_DISPLAY="$SOCKET" timeout "$GUI_TIMEOUT"       taskset -c 0-15 perf record -F 999 --call-graph=lbr -o "$GUI_PERF_RECORD"       "$BIN" "$@" >./tmp/gui-logs/neomacs-gui-$$.log 2>&1
   elif [ -n "${GUI_PERF_OUT:-}" ]; then
-    WAYLAND_DISPLAY="$SOCKET" timeout "$GUI_TIMEOUT"       taskset -c 0-15 perf stat -o "$GUI_PERF_OUT" -e cycles:u,instructions:u       "$BIN" "$@" >/tmp/neomacs-gui-$$.log 2>&1
+    WAYLAND_DISPLAY="$SOCKET" timeout "$GUI_TIMEOUT"       taskset -c 0-15 perf stat -o "$GUI_PERF_OUT" -e cycles:u,instructions:u       "$BIN" "$@" >./tmp/gui-logs/neomacs-gui-$$.log 2>&1
   else
-    WAYLAND_DISPLAY="$SOCKET" timeout "$GUI_TIMEOUT" "$BIN" "$@"       >/tmp/neomacs-gui-$$.log 2>&1
+    WAYLAND_DISPLAY="$SOCKET" timeout "$GUI_TIMEOUT" "$BIN" "$@"       >./tmp/gui-logs/neomacs-gui-$$.log 2>&1
   fi
   APP_RC=$?
   kill "$WESTON" 2>/dev/null; wait "$WESTON" 2>/dev/null
@@ -56,7 +57,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     exit 0
   fi
   echo "gui-run: attempt $attempt failed (app rc=$APP_RC); app log tail:" >&2
-  tail -3 /tmp/neomacs-gui-$$.log >&2
+  tail -3 ./tmp/gui-logs/neomacs-gui-$$.log >&2
 done
 echo "GUI-RUN-INCOMPLETE: sentinel $SENTINEL never appeared in $ATTEMPTS attempts" >&2
 exit 2
