@@ -706,7 +706,9 @@ impl TtyRif {
             // clears affected ranges before writing new glyphs; for composite
             // rows, clear and repaint the whole row tail so shrunk HELLO rows
             // cannot leave visible residue.
-            if row_has_composite_cells(desired_row) || row_has_composite_cells(current_row) {
+            let composite_row =
+                row_has_composite_cells(desired_row) || row_has_composite_cells(current_row);
+            if composite_row {
                 last_changed = desired_row.len() - 1;
                 write_cursor_goto(&mut self.output, row as u16 + 1, first_changed as u16 + 1);
                 write_sgr(&mut self.output, &CellAttrs::default());
@@ -715,19 +717,57 @@ impl TtyRif {
                     self.output.push(b' ');
                 }
             }
-            write_cursor_goto(&mut self.output, row as u16 + 1, first_changed as u16 + 1);
-
-            for desired in &desired_row[first_changed..=last_changed] {
-                if desired.padding {
-                    continue;
+            // Multi-span emission (issue 206): a row with two separate
+            // change regions used to be rewritten from the first to the
+            // last changed cell in one span, retransmitting the untouched
+            // middle. Split the [first, last] range into changed runs and
+            // coalesce runs whose gap is cheaper to retransmit than a
+            // cursor motion (a goto costs ~8 bytes; an unchanged text cell
+            // usually 1). GNU's update_frame_line keeps one
+            // begmatch/endmatch span per line; per-run emission with a
+            // byte-cost coalesce rule strictly dominates it.
+            const GOTO_COST_CELLS: usize = 8;
+            let mut spans: Vec<(usize, usize)> = Vec::new();
+            {
+                let changed =
+                    |col: usize| !desired_row[col].padding && desired_row[col] != current_row[col];
+                let mut col = first_changed;
+                while col <= last_changed {
+                    if changed(col) {
+                        let start = col;
+                        while col <= last_changed && changed(col) {
+                            col += 1;
+                        }
+                        match spans.last_mut() {
+                            Some((_, end)) if start - *end <= GOTO_COST_CELLS => *end = col,
+                            _ => spans.push((start, col)),
+                        }
+                    } else {
+                        col += 1;
+                    }
                 }
+            }
+            if self.force_full_render || composite_row {
+                // The composite path just space-cleared the whole tail on
+                // the terminal, so every cell of the range must be
+                // rewritten regardless of what `current` recorded.
+                spans = vec![(first_changed, last_changed + 1)];
+            }
 
-                if last_attrs.as_ref() != Some(&desired.attrs) {
-                    write_sgr(&mut self.output, &desired.attrs);
-                    last_attrs = Some(desired.attrs);
+            for &(start, end) in &spans {
+                write_cursor_goto(&mut self.output, row as u16 + 1, start as u16 + 1);
+                for desired in &desired_row[start..end] {
+                    if desired.padding {
+                        continue;
+                    }
+
+                    if last_attrs.as_ref() != Some(&desired.attrs) {
+                        write_sgr(&mut self.output, &desired.attrs);
+                        last_attrs = Some(desired.attrs);
+                    }
+
+                    write_cell_contents(&mut self.output, desired);
                 }
-
-                write_cell_contents(&mut self.output, desired);
             }
         }
 

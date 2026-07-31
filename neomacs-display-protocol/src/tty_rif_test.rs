@@ -2120,3 +2120,48 @@ fn every_render_is_wrapped_in_synchronized_output() {
     assert!(begin < end, "sync begin must precede end");
     assert!(begin == 0, "sync begin must be the first bytes of a frame");
 }
+
+#[test]
+fn distant_edits_on_one_row_skip_the_untouched_middle() {
+    let mut rif = TtyRif::new(60, 4);
+    set_row(
+        &mut rif,
+        1,
+        "left-edit-here MIDDLE-STAYS-IDENTICAL right-edit-here",
+    );
+    let _ = render_output(&mut rif);
+    set_row(
+        &mut rif,
+        1,
+        "LEFT-EDIT-HERE MIDDLE-STAYS-IDENTICAL RIGHT-EDIT-HERE",
+    );
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    assert!(
+        !text.contains("MIDDLE-STAYS-IDENTICAL"),
+        "unchanged middle must not be retransmitted: {text:?}"
+    );
+    assert!(text.contains("LEFT-EDIT-HERE") && text.contains("RIGHT-EDIT-HERE"));
+    assert!(
+        text.matches("\x1b[2;").count() >= 2,
+        "two spans need two cursor motions on row 2: {text:?}"
+    );
+}
+
+#[test]
+fn nearby_edits_coalesce_into_one_span() {
+    // Two edits six unchanged cells apart: retransmitting the gap is
+    // cheaper than a second cursor motion, so one span covers both.
+    let mut rif = TtyRif::new(40, 4);
+    set_row(&mut rif, 1, "abcdefgh");
+    let _ = render_output(&mut rif);
+    set_row(&mut rif, 1, "AbcdefgH");
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    assert_eq!(
+        text.matches("\x1b[2;").count(),
+        1,
+        "a six-cell gap coalesces into one span: {text:?}"
+    );
+    assert!(text.contains("AbcdefgH"));
+}
