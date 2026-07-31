@@ -848,7 +848,7 @@ struct BufferChars<'a> {
     /// `FETCH_CHAR`, which walks byte positions directly -- instead of a
     /// char->byte conversion per char.  Random access falls back to the
     /// (cached) conversion, so this only ever helps.
-    cursor: Cell<Option<(usize, EmacsBytePos, EmacsByteLen)>>,
+    cursor: Option<(usize, EmacsBytePos, EmacsByteLen)>,
     /// Borrow-free storage window: `(logical_start, base_ptr, len)` for the
     /// contiguous physical segment (gap half) last read from. Every
     /// `char_at` used to re-enter the text storage -- a RefCell borrow, a
@@ -860,7 +860,7 @@ struct BufferChars<'a> {
     /// `BufferChars` lives inside one syntax scan that holds `&Buffer`
     /// throughout and runs no Lisp; its property/table arms only READ. The
     /// window therefore never outlives the text layout it points into.
-    window: Cell<Option<(usize, *const u8, usize)>>,
+    window: Option<(usize, *const u8, usize)>,
 }
 
 impl<'a> BufferChars<'a> {
@@ -869,21 +869,21 @@ impl<'a> BufferChars<'a> {
             buf,
             base_char,
             multibyte: buf.get_multibyte(),
-            cursor: Cell::new(None),
-            window: Cell::new(None),
+            cursor: None,
+            window: None,
         }
     }
 
     /// Decode the char code at `byte_pos` through the cached storage
     /// window, refreshing the window when the position leaves it.
     #[inline]
-    fn code_at_byte(&self, byte_pos: EmacsBytePos) -> u32 {
+    fn code_at_byte(&mut self, byte_pos: EmacsBytePos) -> u32 {
         let pos = byte_pos.get();
-        let window = match self.window.get() {
+        let window = match self.window {
             Some(w @ (start, _, len)) if pos >= start && pos < start + len => w,
             _ => match self.buf.contiguous_window_at(pos) {
                 Some(w) => {
-                    self.window.set(Some(w));
+                    self.window = Some(w);
                     w
                 }
                 // Chunked backend (or out of range): per-call accessor.
@@ -912,12 +912,12 @@ impl<'a> BufferChars<'a> {
     }
 
     #[inline]
-    fn char_at(&self, idx: usize) -> char {
+    fn char_at(&mut self, idx: usize) -> char {
         // For a forward step (or re-read of the same char) advance the byte
         // cursor directly; otherwise pay for one (cached) char->byte
         // conversion.  GNU's syntax scanners never convert per char -- they
         // carry the byte position and bump it by the char width.
-        let byte_pos = match self.cursor.get() {
+        let byte_pos = match self.cursor {
             Some((c_idx, c_byte, _)) if idx == c_idx => c_byte,
             Some((c_idx, c_byte, c_width)) if idx == c_idx + 1 => c_byte.add_len(c_width),
             _ => buffer_char_to_emacs_byte_pos(self.buf, self.base_char.add_len(CharLen::new(idx))),
@@ -939,8 +939,7 @@ impl<'a> BufferChars<'a> {
         } else {
             crate::emacs_core::emacs_char::char_bytes(code)
         };
-        self.cursor
-            .set(Some((idx, byte_pos, EmacsByteLen::new(width))));
+        self.cursor = Some((idx, byte_pos, EmacsByteLen::new(width)));
         syntax_char_from_code(code)
     }
 }
@@ -962,7 +961,7 @@ fn forward_word_with_options(
 
     let accessible_bytes = buf.accessible_emacs_byte_region();
     let accessible_chars = buf.accessible_char_region();
-    let chars = BufferChars::new(buf, accessible_chars.start());
+    let mut chars = BufferChars::new(buf, accessible_chars.start());
     let accessible_char_start = accessible_chars.start().get();
     let accessible_len = accessible_chars.len().get();
     let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp(buf.point_emacs_byte_pos()))
@@ -1073,10 +1072,10 @@ fn word_motion_with_table(
             let acc_chars = buf.accessible_char_region();
             let acc_start = acc_chars.start().get();
             let acc_len = acc_chars.len().get();
-            let chars = BufferChars::new(buf, acc_chars.start());
+            let mut chars = BufferChars::new(buf, acc_chars.start());
             let point_char = buffer_byte_to_char_pos(buf, buf.point_emacs_byte_pos());
             let mut idx = point_char.saturating_sub(acc_start);
-            let is_word = |i: usize| {
+            let mut is_word = |i: usize| {
                 matches!(
                     effective_syntax_entry_for_abs_char(
                         buf,
@@ -1243,7 +1242,7 @@ fn backward_word_with_options(
 
     let accessible_bytes = buf.accessible_emacs_byte_region();
     let accessible_chars = buf.accessible_char_region();
-    let chars = BufferChars::new(buf, accessible_chars.start());
+    let mut chars = BufferChars::new(buf, accessible_chars.start());
     let accessible_char_start = accessible_chars.start().get();
     let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp(buf.point_emacs_byte_pos()))
         .saturating_sub(accessible_char_start);
@@ -1321,7 +1320,7 @@ fn skip_syntax_forward_with_options(
 
     let accessible_bytes = buf.accessible_emacs_byte_region();
     let accessible_chars = buf.accessible_char_region();
-    let chars = BufferChars::new(buf, accessible_chars.start());
+    let mut chars = BufferChars::new(buf, accessible_chars.start());
     let accessible_char_start = accessible_chars.start().get();
     let accessible_len = accessible_chars.len().get();
     let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp(buf.point_emacs_byte_pos()))
@@ -1381,7 +1380,7 @@ fn skip_syntax_backward_with_options(
 
     let accessible_bytes = buf.accessible_emacs_byte_region();
     let accessible_chars = buf.accessible_char_region();
-    let chars = BufferChars::new(buf, accessible_chars.start());
+    let mut chars = BufferChars::new(buf, accessible_chars.start());
     let accessible_char_start = accessible_chars.start().get();
     let mut idx = buffer_byte_to_char_pos(buf, accessible_bytes.clamp(buf.point_emacs_byte_pos()))
         .saturating_sub(accessible_char_start);
@@ -1459,7 +1458,7 @@ fn scan_sexps_with_options(
         return Ok(Some(from));
     }
 
-    let chars = BufferChars::new(buf, CharPos0::ZERO);
+    let mut chars = BufferChars::new(buf, CharPos0::ZERO);
     let accessible_chars = buf.accessible_char_region();
     let start_bound = accessible_chars.start().get();
     let stop_bound = accessible_chars.end().get();
@@ -1472,7 +1471,7 @@ fn scan_sexps_with_options(
         for _ in 0..count {
             let skipped = skip_sexp_ignored_forward(
                 buf,
-                &chars,
+                &mut chars,
                 idx,
                 stop_bound,
                 table,
@@ -1489,7 +1488,7 @@ fn scan_sexps_with_options(
             }
             idx = scan_sexp_forward(
                 buf,
-                &chars,
+                &mut chars,
                 stop_bound,
                 idx,
                 table,
@@ -1502,7 +1501,7 @@ fn scan_sexps_with_options(
         for _ in 0..(-count) {
             idx = skip_sexp_ignored_backward(
                 buf,
-                &chars,
+                &mut chars,
                 idx,
                 start_bound,
                 table,
@@ -1515,7 +1514,7 @@ fn scan_sexps_with_options(
             }
             idx = scan_sexp_backward(
                 buf,
-                &chars,
+                &mut chars,
                 idx,
                 start_bound,
                 table,
@@ -1629,7 +1628,7 @@ fn maybe_skip_comment_backward(
 #[allow(clippy::too_many_arguments)] // scanner bounds and syntax policies remain explicit
 fn skip_sexp_ignored_forward(
     buf: &Buffer,
-    chars: &BufferChars,
+    chars: &mut BufferChars,
     mut idx: usize,
     stop: usize,
     table: &SyntaxTable,
@@ -1667,7 +1666,7 @@ fn skip_sexp_ignored_forward(
 #[allow(clippy::too_many_arguments)] // scanner bounds and syntax policies remain explicit
 fn skip_sexp_ignored_backward(
     buf: &Buffer,
-    chars: &BufferChars,
+    chars: &mut BufferChars,
     mut idx: usize,
     start: usize,
     table: &SyntaxTable,
@@ -1700,7 +1699,7 @@ fn skip_sexp_ignored_backward(
 #[allow(clippy::too_many_arguments)] // scanner state mirrors GNU syntax traversal
 fn skip_string_forward(
     buf: &Buffer,
-    chars: &BufferChars,
+    chars: &mut BufferChars,
     mut idx: usize,
     stop: usize,
     table: &SyntaxTable,
@@ -1731,7 +1730,7 @@ fn skip_string_forward(
 #[allow(clippy::too_many_arguments)] // scanner state mirrors GNU syntax traversal
 fn skip_string_backward(
     buf: &Buffer,
-    chars: &BufferChars,
+    chars: &mut BufferChars,
     mut idx: usize,
     stop: usize,
     table: &SyntaxTable,
@@ -1770,7 +1769,7 @@ fn scan_lists_with_options(
     let prop_cache = SyntaxPropRange::new();
     let prop_cache = &prop_cache;
 
-    let chars = BufferChars::new(buf, CharPos0::ZERO);
+    let mut chars = BufferChars::new(buf, CharPos0::ZERO);
     let mut idx = from;
     let accessible_chars = buf.accessible_char_region();
     let start = accessible_chars.start().get();
@@ -1831,7 +1830,7 @@ fn scan_lists_with_options(
                     SyntaxClass::StringDelim | SyntaxClass::StringFence => {
                         idx = skip_string_forward(
                             buf,
-                            &chars,
+                            &mut chars,
                             idx,
                             stop,
                             table,
@@ -1914,7 +1913,7 @@ fn scan_lists_with_options(
                     SyntaxClass::StringDelim | SyntaxClass::StringFence => {
                         idx = skip_string_backward(
                             buf,
-                            &chars,
+                            &mut chars,
                             idx,
                             start,
                             table,
@@ -1981,7 +1980,7 @@ impl ScanListError {
 /// `char_quoted` in syntax.c.
 fn char_quoted_at(
     buf: &Buffer,
-    chars: &BufferChars,
+    chars: &mut BufferChars,
     idx: usize,
     start_bound: usize,
     table: &SyntaxTable,
@@ -2008,7 +2007,7 @@ fn char_quoted_at(
 #[allow(clippy::too_many_arguments)] // scanner state mirrors GNU syntax traversal
 fn scan_sexp_forward(
     buf: &Buffer,
-    chars: &BufferChars,
+    chars: &mut BufferChars,
     len: usize,
     start: usize,
     table: &SyntaxTable,
@@ -2204,7 +2203,7 @@ fn scan_sexp_forward(
 #[allow(clippy::too_many_arguments)] // scanner state mirrors GNU syntax traversal
 fn scan_sexp_backward(
     buf: &Buffer,
-    chars: &BufferChars,
+    chars: &mut BufferChars,
     start: usize,
     start_bound: usize,
     table: &SyntaxTable,
@@ -5100,7 +5099,7 @@ fn parse_state_from_range_with_options(
         .to_char_pos()
         .get()
         .clamp(point_min, point_max);
-    let chars = BufferChars::new(buf, offset_char_pos(CharPos0::ZERO, from_char));
+    let mut chars = BufferChars::new(buf, offset_char_pos(CharPos0::ZERO, from_char));
     let to_idx = to_char - from_char;
     // `prop_cache` carries both the `syntax-table` property run cache and the
     // lazily-filled ASCII syntax memo consumed by
