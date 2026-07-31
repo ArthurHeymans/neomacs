@@ -1204,7 +1204,11 @@ pub(crate) fn builtin_run_window_scroll_functions(
     let hook_sym = hook_runtime::hook_symbol_by_name(eval, "window-scroll-functions");
     let saved_buffer_id = eval.buffers.current_buffer_id();
     if let Some(buffer_id) = window_buffer_id_in_state(eval, frame_id, window_id) {
-        let _ = eval.switch_current_buffer(buffer_id);
+        // GNU `set_window_buffer` temporarily enters the displayed buffer
+        // with `Fset_buffer` before running `window-scroll-functions`
+        // (window.c), which does not call `record_buffer` or change
+        // `buffer-list` recency.
+        let _ = eval.set_current_buffer_unrecorded(buffer_id);
     }
     let hook_value = hook_runtime::hook_value_by_id(eval, hook_sym).unwrap_or(Value::NIL);
     let result = hook_runtime::run_hook_value(

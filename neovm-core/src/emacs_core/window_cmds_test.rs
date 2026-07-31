@@ -6556,6 +6556,28 @@ fn set_window_buffer_runs_buffer_list_update_hook_for_normal_windows() {
 }
 
 #[test]
+fn set_window_buffer_does_not_record_the_displayed_buffer_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one_with_frame(
+        r#"(let ((a (get-buffer-create "swb-order-a"))
+                 (b (get-buffer-create "swb-order-b")))
+             (unwind-protect
+                 (progn
+                   (set-window-buffer (selected-window) b)
+                   (list (eq (window-buffer (selected-window)) b)
+                         (delq nil
+                               (mapcar
+                                (lambda (buffer)
+                                  (and (memq buffer (list a b))
+                                       (buffer-name buffer)))
+                                (buffer-list)))))
+               (kill-buffer a)
+               (kill-buffer b)))"#,
+    );
+    assert_eq!(result, r#"OK (t ("swb-order-a" "swb-order-b"))"#);
+}
+
+#[test]
 fn set_window_buffer_restores_saved_window_point_and_keep_margins() {
     crate::test_utils::init_test_tracing();
     let results = eval_with_frame(
